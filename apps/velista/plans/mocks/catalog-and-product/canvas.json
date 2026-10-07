@@ -1,0 +1,72 @@
+{
+  "title": "Velista: the catalog tools, adding from the catalog, and the product page",
+  "lede": "The catalog keeps its search and puts the supermarket and the category in one row, with the order on the line that heads the list. A line above the tab bar says which list the plus on a row adds to. A product opens a page of its own: the price at each supermarket, how the price has moved, the lists it is in, and similar products. Plan <code>0134</code>. Drawn on Day. Every price is a sample value. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Catalog, nothing chosen" },
+    { "file": "CatalogChosen.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "A chain and a category chosen, by price" },
+    { "file": "CatalogOrder.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "The order menu" },
+    { "file": "CatalogAdding.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844, "title": "Adding products to a list" },
+    { "file": "CatalogLists.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844, "title": "Choosing the list" },
+    { "file": "CatalogAdded.dc.html", "x": 2350, "y": 0, "w": 390, "h": 844, "title": "What was added in this visit" },
+    { "file": "Product.dc.html", "x": 2820, "y": 0, "w": 390, "h": 1848, "title": "The product page" },
+    { "file": "ProductHidden.dc.html", "x": 3290, "y": 0, "w": 390, "h": 452, "title": "The history with one supermarket hidden" }
+  ],
+  "annotations": [
+    {
+      "id": "t1",
+      "x": 0,
+      "y": -470,
+      "w": 420,
+      "text": "RULE T1: THE TOOLS ARE THE SEARCH AND ONE ROW. Under the field sit two selectors of equal width, Supermarket and Category. Each one names what the list shows now: 'All supermarkets', 'All categories'. Each opens the picker page that exists today.\nThe tools were four stacked rows, about 250 pixels. They are now about 155, and the first product row starts that much higher."
+    },
+    {
+      "id": "t2",
+      "x": 470,
+      "y": -470,
+      "w": 420,
+      "text": "RULE T2: A CHOSEN SELECTOR IS FILLED AND IS TWO CONTROLS. It takes the amber edge and the amber text, and it shows the chain logo or the category name. The body opens the picker to change the choice. The cross is its own button and clears the choice, and the other selector keeps its value.\nA category shows the leaf alone, because half a row has no room for 'Drinks · Coffee'. The accessible name says both. The field still says where it searches: 'Search in Coffee at Mercadona'."
+    },
+    {
+      "id": "t3",
+      "x": 940,
+      "y": -470,
+      "w": 420,
+      "text": "RULE T3: THE ORDER SITS ON THE LINE THAT HEADS THE LIST. The line says where the prices are from on the left and 'Order: Catalog' on the right. The word opens a menu of three: Catalog order, Lowest price, Lowest price per kilo or litre. A to Z and Newest are gone. Best match joins the menu while the field has text.\nA product with several prices is ordered by its lowest. A product with no price goes last, under a small 'Without a price' line, in every price order."
+    },
+    {
+      "id": "a1",
+      "x": 1410,
+      "y": -470,
+      "w": 420,
+      "text": "RULE A1: ONE LINE SAYS WHICH LIST THE PLUS ADDS TO. 'Adding to Weekly shop' sits above the tab bar on a raised surface. It opens on the list the person used last, so the first plus adds with no choice before it. The name opens the sheet of lists to change it, and the change makes that list the last used one.\nThe plus on a row adds one. The plus then shows the count, and the count opens a stepper in the row. Every tap saves, as a line does today. The right end of the line counts what was added and leads to the list."
+    },
+    {
+      "id": "a2",
+      "x": 1880,
+      "y": -470,
+      "w": 420,
+      "text": "RULE A2: ONE SHEET CHOOSES THE LIST, EVERYWHERE. The name on the line opens a sheet of every list the person can add to, under its group, with the chosen one marked. A press chooses and closes. The heading of Similar products on the product page opens the same sheet, and the choice is one value for the catalog and the product page.\nA list the person only reads is not in the sheet."
+    },
+    {
+      "id": "a3",
+      "x": 2350,
+      "y": -470,
+      "w": 420,
+      "text": "RULE A3: THE COUNT OPENS WHAT THIS VISIT ADDED. '3 products added' opens a sheet with one row for each product added since the person came to the catalog, with a stepper. The minus at one takes the product back, and one button takes all of them back. Products added to two lists sit under two headings.\nThe record survives a visit to a product page, and what the product page adds joins it. It is erased when the person leaves the catalog for another tab. The lines stay on their lists, and only the record goes."
+    },
+    {
+      "id": "d1",
+      "x": 2820,
+      "y": -470,
+      "w": 420,
+      "text": "RULE D1: A PRODUCT IS A PAGE. The header carries the product name on one line. The name is repeated whole under the photograph, because a header cuts a long name. The price at each supermarket of the shopping profile comes first, cheapest first, and is on screen as the page opens.\nIn your lists shows every list of every group, with the last used list first. Each list has a stepper that starts at the quantity of the line with this exact name, or at zero. A line that holds the product under another name sits on its own inset row under its list, with its own stepper. A list the person only reads has no stepper."
+    },
+    {
+      "id": "d2",
+      "x": 3290,
+      "y": -470,
+      "w": 420,
+      "text": "RULE D2: THE HISTORY DRAWS EVERY SUPERMARKET, AND THE LEGEND HIDES ONE. One stepped line per chain, with the legend above the chart. A legend entry is a button: pressed off, its name is struck through and its line and value leave the chart. The entry also carries the price on the day the chart is read at.\nThe plus on a similar product adds to the list that the heading of that section names. The page has no line above the tab bar, because the table already shows every list."
+    }
+  ]
+}

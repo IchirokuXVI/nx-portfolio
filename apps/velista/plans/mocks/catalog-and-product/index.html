@@ -1,0 +1,2058 @@
+<title>Velista: the catalog tools, adding from the catalog, and the product page</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Main .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-Main .app *, #ab-Main .app *::before, #ab-Main .app *::after { box-sizing: border-box; }
+#ab-Main .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-Main .app a { color: inherit; text-decoration: none; }
+#ab-Main .app h1, #ab-Main .app h2, #ab-Main .app p, #ab-Main .app ul { margin: 0; padding: 0; }
+#ab-Main .app ul { list-style: none; }
+#ab-Main .app button:focus-visible, #ab-Main .app a:focus-visible, #ab-Main .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-Main .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-Main .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-Main .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-Main .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-Main .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-Main .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-Main .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-Main .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-Main .app .tab .i { font-size: 24px; }
+#ab-Main .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-Main .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-Main .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-Main .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-Main .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-Main .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-Main .app .picks { display: flex; gap: 8px; }
+#ab-Main .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-Main .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-Main .app .pick:first-child { flex-grow: 1.2; }
+#ab-Main .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-Main .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-Main .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-Main .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-Main .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-Main .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-Main .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-Main .app .head-order .i { font-size: 17px; }
+#ab-Main .app .head-order.set b { color: var(--amber-fg); }
+#ab-Main .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-Main .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-Main .app .row.tight { padding-right: 8px; }
+#ab-Main .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-Main .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-Main .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Main .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-Main .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-Main .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-Main .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-Main .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-Main .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-Main .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-Main .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-Main .app .add-dot .i { stroke-width: 2.3; }
+#ab-Main .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-Main .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-Main .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-Main .app .step button .i { stroke-width: 2.3; }
+#ab-Main .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-Main .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-Main .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-Main .app .step .off { opacity: 0.35; }
+#ab-Main .app .step.small button { width: 40px; height: 40px; }
+#ab-Main .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-Main .app .word.ok { color: var(--ok); }
+#ab-Main .app .word.last { color: var(--amber-fg); }
+#ab-Main .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-Main .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-Main .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-Main .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-Main .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-Main .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-Main .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-Main .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-Main .app .opt.on { font-weight: 650; }
+#ab-Main .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-Main .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-Main .app .page { overflow: hidden; }
+#ab-Main .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-Main .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-Main .app .bar-list .i { font-size: 17px; }
+#ab-Main .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-Main .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-Main .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-Main .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-Main .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-Main .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-Main .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-Main .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-Main .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-Main .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-Main .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-CatalogChosen .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-CatalogChosen .app *, #ab-CatalogChosen .app *::before, #ab-CatalogChosen .app *::after { box-sizing: border-box; }
+#ab-CatalogChosen .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-CatalogChosen .app a { color: inherit; text-decoration: none; }
+#ab-CatalogChosen .app h1, #ab-CatalogChosen .app h2, #ab-CatalogChosen .app p, #ab-CatalogChosen .app ul { margin: 0; padding: 0; }
+#ab-CatalogChosen .app ul { list-style: none; }
+#ab-CatalogChosen .app button:focus-visible, #ab-CatalogChosen .app a:focus-visible, #ab-CatalogChosen .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-CatalogChosen .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-CatalogChosen .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-CatalogChosen .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogChosen .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-CatalogChosen .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-CatalogChosen .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogChosen .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-CatalogChosen .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogChosen .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-CatalogChosen .app .tab .i { font-size: 24px; }
+#ab-CatalogChosen .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-CatalogChosen .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-CatalogChosen .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-CatalogChosen .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-CatalogChosen .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-CatalogChosen .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-CatalogChosen .app .picks { display: flex; gap: 8px; }
+#ab-CatalogChosen .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-CatalogChosen .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-CatalogChosen .app .pick:first-child { flex-grow: 1.2; }
+#ab-CatalogChosen .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-CatalogChosen .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-CatalogChosen .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogChosen .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-CatalogChosen .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-CatalogChosen .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-CatalogChosen .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-CatalogChosen .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-CatalogChosen .app .head-order .i { font-size: 17px; }
+#ab-CatalogChosen .app .head-order.set b { color: var(--amber-fg); }
+#ab-CatalogChosen .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-CatalogChosen .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-CatalogChosen .app .row.tight { padding-right: 8px; }
+#ab-CatalogChosen .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-CatalogChosen .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-CatalogChosen .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-CatalogChosen .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-CatalogChosen .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-CatalogChosen .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-CatalogChosen .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogChosen .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogChosen .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogChosen .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogChosen .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-CatalogChosen .app .add-dot .i { stroke-width: 2.3; }
+#ab-CatalogChosen .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-CatalogChosen .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-CatalogChosen .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-CatalogChosen .app .step button .i { stroke-width: 2.3; }
+#ab-CatalogChosen .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-CatalogChosen .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-CatalogChosen .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-CatalogChosen .app .step .off { opacity: 0.35; }
+#ab-CatalogChosen .app .step.small button { width: 40px; height: 40px; }
+#ab-CatalogChosen .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-CatalogChosen .app .word.ok { color: var(--ok); }
+#ab-CatalogChosen .app .word.last { color: var(--amber-fg); }
+#ab-CatalogChosen .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-CatalogChosen .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-CatalogChosen .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-CatalogChosen .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-CatalogChosen .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-CatalogChosen .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogChosen .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-CatalogChosen .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-CatalogChosen .app .opt.on { font-weight: 650; }
+#ab-CatalogChosen .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-CatalogChosen .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-CatalogChosen .app .page { overflow: hidden; }
+#ab-CatalogChosen .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-CatalogChosen .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-CatalogChosen .app .bar-list .i { font-size: 17px; }
+#ab-CatalogChosen .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-CatalogChosen .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-CatalogChosen .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-CatalogChosen .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-CatalogChosen .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogChosen .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-CatalogChosen .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-CatalogChosen .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-CatalogChosen .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-CatalogChosen .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-CatalogChosen .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-CatalogOrder .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-CatalogOrder .app *, #ab-CatalogOrder .app *::before, #ab-CatalogOrder .app *::after { box-sizing: border-box; }
+#ab-CatalogOrder .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-CatalogOrder .app a { color: inherit; text-decoration: none; }
+#ab-CatalogOrder .app h1, #ab-CatalogOrder .app h2, #ab-CatalogOrder .app p, #ab-CatalogOrder .app ul { margin: 0; padding: 0; }
+#ab-CatalogOrder .app ul { list-style: none; }
+#ab-CatalogOrder .app button:focus-visible, #ab-CatalogOrder .app a:focus-visible, #ab-CatalogOrder .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-CatalogOrder .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-CatalogOrder .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-CatalogOrder .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogOrder .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-CatalogOrder .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-CatalogOrder .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogOrder .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-CatalogOrder .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogOrder .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-CatalogOrder .app .tab .i { font-size: 24px; }
+#ab-CatalogOrder .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-CatalogOrder .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-CatalogOrder .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-CatalogOrder .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-CatalogOrder .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-CatalogOrder .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-CatalogOrder .app .picks { display: flex; gap: 8px; }
+#ab-CatalogOrder .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-CatalogOrder .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-CatalogOrder .app .pick:first-child { flex-grow: 1.2; }
+#ab-CatalogOrder .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-CatalogOrder .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-CatalogOrder .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogOrder .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-CatalogOrder .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-CatalogOrder .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-CatalogOrder .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-CatalogOrder .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-CatalogOrder .app .head-order .i { font-size: 17px; }
+#ab-CatalogOrder .app .head-order.set b { color: var(--amber-fg); }
+#ab-CatalogOrder .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-CatalogOrder .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-CatalogOrder .app .row.tight { padding-right: 8px; }
+#ab-CatalogOrder .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-CatalogOrder .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-CatalogOrder .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-CatalogOrder .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-CatalogOrder .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-CatalogOrder .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-CatalogOrder .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogOrder .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogOrder .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogOrder .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogOrder .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-CatalogOrder .app .add-dot .i { stroke-width: 2.3; }
+#ab-CatalogOrder .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-CatalogOrder .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-CatalogOrder .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-CatalogOrder .app .step button .i { stroke-width: 2.3; }
+#ab-CatalogOrder .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-CatalogOrder .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-CatalogOrder .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-CatalogOrder .app .step .off { opacity: 0.35; }
+#ab-CatalogOrder .app .step.small button { width: 40px; height: 40px; }
+#ab-CatalogOrder .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-CatalogOrder .app .word.ok { color: var(--ok); }
+#ab-CatalogOrder .app .word.last { color: var(--amber-fg); }
+#ab-CatalogOrder .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-CatalogOrder .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-CatalogOrder .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-CatalogOrder .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-CatalogOrder .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-CatalogOrder .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogOrder .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-CatalogOrder .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-CatalogOrder .app .opt.on { font-weight: 650; }
+#ab-CatalogOrder .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-CatalogOrder .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-CatalogOrder .app .page { overflow: hidden; }
+#ab-CatalogOrder .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-CatalogOrder .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-CatalogOrder .app .bar-list .i { font-size: 17px; }
+#ab-CatalogOrder .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-CatalogOrder .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-CatalogOrder .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-CatalogOrder .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-CatalogOrder .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogOrder .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-CatalogOrder .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-CatalogOrder .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-CatalogOrder .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-CatalogOrder .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-CatalogOrder .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdding .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-CatalogAdding .app *, #ab-CatalogAdding .app *::before, #ab-CatalogAdding .app *::after { box-sizing: border-box; }
+#ab-CatalogAdding .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-CatalogAdding .app a { color: inherit; text-decoration: none; }
+#ab-CatalogAdding .app h1, #ab-CatalogAdding .app h2, #ab-CatalogAdding .app p, #ab-CatalogAdding .app ul { margin: 0; padding: 0; }
+#ab-CatalogAdding .app ul { list-style: none; }
+#ab-CatalogAdding .app button:focus-visible, #ab-CatalogAdding .app a:focus-visible, #ab-CatalogAdding .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-CatalogAdding .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-CatalogAdding .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-CatalogAdding .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogAdding .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-CatalogAdding .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-CatalogAdding .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogAdding .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-CatalogAdding .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogAdding .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-CatalogAdding .app .tab .i { font-size: 24px; }
+#ab-CatalogAdding .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-CatalogAdding .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-CatalogAdding .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-CatalogAdding .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-CatalogAdding .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-CatalogAdding .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-CatalogAdding .app .picks { display: flex; gap: 8px; }
+#ab-CatalogAdding .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdding .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-CatalogAdding .app .pick:first-child { flex-grow: 1.2; }
+#ab-CatalogAdding .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-CatalogAdding .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-CatalogAdding .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogAdding .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-CatalogAdding .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-CatalogAdding .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-CatalogAdding .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdding .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-CatalogAdding .app .head-order .i { font-size: 17px; }
+#ab-CatalogAdding .app .head-order.set b { color: var(--amber-fg); }
+#ab-CatalogAdding .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-CatalogAdding .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-CatalogAdding .app .row.tight { padding-right: 8px; }
+#ab-CatalogAdding .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-CatalogAdding .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-CatalogAdding .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-CatalogAdding .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-CatalogAdding .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-CatalogAdding .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-CatalogAdding .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogAdding .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogAdding .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogAdding .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogAdding .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-CatalogAdding .app .add-dot .i { stroke-width: 2.3; }
+#ab-CatalogAdding .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-CatalogAdding .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-CatalogAdding .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-CatalogAdding .app .step button .i { stroke-width: 2.3; }
+#ab-CatalogAdding .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-CatalogAdding .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-CatalogAdding .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-CatalogAdding .app .step .off { opacity: 0.35; }
+#ab-CatalogAdding .app .step.small button { width: 40px; height: 40px; }
+#ab-CatalogAdding .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-CatalogAdding .app .word.ok { color: var(--ok); }
+#ab-CatalogAdding .app .word.last { color: var(--amber-fg); }
+#ab-CatalogAdding .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-CatalogAdding .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-CatalogAdding .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-CatalogAdding .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-CatalogAdding .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-CatalogAdding .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogAdding .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-CatalogAdding .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-CatalogAdding .app .opt.on { font-weight: 650; }
+#ab-CatalogAdding .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-CatalogAdding .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-CatalogAdding .app .page { overflow: hidden; }
+#ab-CatalogAdding .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-CatalogAdding .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-CatalogAdding .app .bar-list .i { font-size: 17px; }
+#ab-CatalogAdding .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-CatalogAdding .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-CatalogAdding .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-CatalogAdding .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-CatalogAdding .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogAdding .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-CatalogAdding .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-CatalogAdding .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-CatalogAdding .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-CatalogAdding .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-CatalogAdding .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-CatalogLists .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-CatalogLists .app *, #ab-CatalogLists .app *::before, #ab-CatalogLists .app *::after { box-sizing: border-box; }
+#ab-CatalogLists .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-CatalogLists .app a { color: inherit; text-decoration: none; }
+#ab-CatalogLists .app h1, #ab-CatalogLists .app h2, #ab-CatalogLists .app p, #ab-CatalogLists .app ul { margin: 0; padding: 0; }
+#ab-CatalogLists .app ul { list-style: none; }
+#ab-CatalogLists .app button:focus-visible, #ab-CatalogLists .app a:focus-visible, #ab-CatalogLists .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-CatalogLists .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-CatalogLists .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-CatalogLists .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogLists .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-CatalogLists .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-CatalogLists .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogLists .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-CatalogLists .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogLists .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-CatalogLists .app .tab .i { font-size: 24px; }
+#ab-CatalogLists .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-CatalogLists .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-CatalogLists .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-CatalogLists .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-CatalogLists .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-CatalogLists .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-CatalogLists .app .picks { display: flex; gap: 8px; }
+#ab-CatalogLists .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-CatalogLists .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-CatalogLists .app .pick:first-child { flex-grow: 1.2; }
+#ab-CatalogLists .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-CatalogLists .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-CatalogLists .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogLists .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-CatalogLists .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-CatalogLists .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-CatalogLists .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-CatalogLists .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-CatalogLists .app .head-order .i { font-size: 17px; }
+#ab-CatalogLists .app .head-order.set b { color: var(--amber-fg); }
+#ab-CatalogLists .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-CatalogLists .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-CatalogLists .app .row.tight { padding-right: 8px; }
+#ab-CatalogLists .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-CatalogLists .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-CatalogLists .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-CatalogLists .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-CatalogLists .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-CatalogLists .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-CatalogLists .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogLists .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogLists .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogLists .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogLists .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-CatalogLists .app .add-dot .i { stroke-width: 2.3; }
+#ab-CatalogLists .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-CatalogLists .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-CatalogLists .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-CatalogLists .app .step button .i { stroke-width: 2.3; }
+#ab-CatalogLists .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-CatalogLists .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-CatalogLists .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-CatalogLists .app .step .off { opacity: 0.35; }
+#ab-CatalogLists .app .step.small button { width: 40px; height: 40px; }
+#ab-CatalogLists .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-CatalogLists .app .word.ok { color: var(--ok); }
+#ab-CatalogLists .app .word.last { color: var(--amber-fg); }
+#ab-CatalogLists .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-CatalogLists .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-CatalogLists .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-CatalogLists .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-CatalogLists .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-CatalogLists .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogLists .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-CatalogLists .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-CatalogLists .app .opt.on { font-weight: 650; }
+#ab-CatalogLists .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-CatalogLists .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-CatalogLists .app .page { overflow: hidden; }
+#ab-CatalogLists .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-CatalogLists .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-CatalogLists .app .bar-list .i { font-size: 17px; }
+#ab-CatalogLists .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-CatalogLists .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-CatalogLists .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-CatalogLists .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-CatalogLists .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogLists .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-CatalogLists .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-CatalogLists .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-CatalogLists .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-CatalogLists .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-CatalogLists .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdded .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-CatalogAdded .app *, #ab-CatalogAdded .app *::before, #ab-CatalogAdded .app *::after { box-sizing: border-box; }
+#ab-CatalogAdded .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-CatalogAdded .app a { color: inherit; text-decoration: none; }
+#ab-CatalogAdded .app h1, #ab-CatalogAdded .app h2, #ab-CatalogAdded .app p, #ab-CatalogAdded .app ul { margin: 0; padding: 0; }
+#ab-CatalogAdded .app ul { list-style: none; }
+#ab-CatalogAdded .app button:focus-visible, #ab-CatalogAdded .app a:focus-visible, #ab-CatalogAdded .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-CatalogAdded .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-CatalogAdded .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-CatalogAdded .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogAdded .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-CatalogAdded .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-CatalogAdded .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogAdded .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-CatalogAdded .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-CatalogAdded .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-CatalogAdded .app .tab .i { font-size: 24px; }
+#ab-CatalogAdded .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-CatalogAdded .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-CatalogAdded .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-CatalogAdded .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-CatalogAdded .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-CatalogAdded .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-CatalogAdded .app .picks { display: flex; gap: 8px; }
+#ab-CatalogAdded .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdded .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-CatalogAdded .app .pick:first-child { flex-grow: 1.2; }
+#ab-CatalogAdded .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-CatalogAdded .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-CatalogAdded .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogAdded .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-CatalogAdded .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-CatalogAdded .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-CatalogAdded .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-CatalogAdded .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-CatalogAdded .app .head-order .i { font-size: 17px; }
+#ab-CatalogAdded .app .head-order.set b { color: var(--amber-fg); }
+#ab-CatalogAdded .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-CatalogAdded .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-CatalogAdded .app .row.tight { padding-right: 8px; }
+#ab-CatalogAdded .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-CatalogAdded .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-CatalogAdded .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-CatalogAdded .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-CatalogAdded .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-CatalogAdded .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-CatalogAdded .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogAdded .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogAdded .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-CatalogAdded .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogAdded .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-CatalogAdded .app .add-dot .i { stroke-width: 2.3; }
+#ab-CatalogAdded .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-CatalogAdded .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-CatalogAdded .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-CatalogAdded .app .step button .i { stroke-width: 2.3; }
+#ab-CatalogAdded .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-CatalogAdded .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-CatalogAdded .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-CatalogAdded .app .step .off { opacity: 0.35; }
+#ab-CatalogAdded .app .step.small button { width: 40px; height: 40px; }
+#ab-CatalogAdded .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-CatalogAdded .app .word.ok { color: var(--ok); }
+#ab-CatalogAdded .app .word.last { color: var(--amber-fg); }
+#ab-CatalogAdded .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-CatalogAdded .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-CatalogAdded .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-CatalogAdded .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-CatalogAdded .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-CatalogAdded .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-CatalogAdded .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-CatalogAdded .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-CatalogAdded .app .opt.on { font-weight: 650; }
+#ab-CatalogAdded .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-CatalogAdded .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-CatalogAdded .app .page { overflow: hidden; }
+#ab-CatalogAdded .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-CatalogAdded .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-CatalogAdded .app .bar-list .i { font-size: 17px; }
+#ab-CatalogAdded .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-CatalogAdded .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-CatalogAdded .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-CatalogAdded .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-CatalogAdded .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-CatalogAdded .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-CatalogAdded .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-CatalogAdded .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-CatalogAdded .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-CatalogAdded .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-CatalogAdded .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-Product .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-Product .app *, #ab-Product .app *::before, #ab-Product .app *::after { box-sizing: border-box; }
+#ab-Product .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-Product .app a { color: inherit; text-decoration: none; }
+#ab-Product .app h1, #ab-Product .app h2, #ab-Product .app p, #ab-Product .app ul { margin: 0; padding: 0; }
+#ab-Product .app ul { list-style: none; }
+#ab-Product .app button:focus-visible, #ab-Product .app a:focus-visible, #ab-Product .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-Product .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-Product .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-Product .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-Product .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-Product .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-Product .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Product .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-Product .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-Product .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-Product .app .tab .i { font-size: 24px; }
+#ab-Product .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-Product .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-Product .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-Product .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-Product .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-Product .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-Product .app .picks { display: flex; gap: 8px; }
+#ab-Product .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-Product .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-Product .app .pick:first-child { flex-grow: 1.2; }
+#ab-Product .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-Product .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-Product .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Product .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-Product .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-Product .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-Product .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-Product .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-Product .app .head-order .i { font-size: 17px; }
+#ab-Product .app .head-order.set b { color: var(--amber-fg); }
+#ab-Product .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-Product .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-Product .app .row.tight { padding-right: 8px; }
+#ab-Product .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-Product .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-Product .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Product .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-Product .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-Product .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-Product .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-Product .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-Product .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-Product .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-Product .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-Product .app .add-dot .i { stroke-width: 2.3; }
+#ab-Product .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-Product .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-Product .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-Product .app .step button .i { stroke-width: 2.3; }
+#ab-Product .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-Product .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-Product .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-Product .app .step .off { opacity: 0.35; }
+#ab-Product .app .step.small button { width: 40px; height: 40px; }
+#ab-Product .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-Product .app .word.ok { color: var(--ok); }
+#ab-Product .app .word.last { color: var(--amber-fg); }
+#ab-Product .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-Product .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-Product .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-Product .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-Product .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-Product .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-Product .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-Product .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-Product .app .opt.on { font-weight: 650; }
+#ab-Product .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-Product .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-Product .app .page { overflow: hidden; }
+#ab-Product .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-Product .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-Product .app .bar-list .i { font-size: 17px; }
+#ab-Product .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-Product .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-Product .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-Product .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-Product .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-Product .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-Product .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-Product .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-Product .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-Product .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-Product .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-Product .app .sec { padding:0 16px }
+#ab-Product .app .h2 { font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Product .app .card { border:1px solid var(--line);border-radius:16px;background:var(--raised) }
+#ab-Product .app .pr { display:flex;align-items:center;gap:12px;min-height:56px;padding:0 16px 0 12px;border-bottom:1px solid var(--line) }
+#ab-Product .app .pr:last-child { border-bottom:0 }
+#ab-Product .app .pr-name { flex:1;min-width:0 }
+#ab-Product .app .pr.gone .pr-name { color:var(--muted) }
+#ab-Product .app .seen { margin-top:12px;font-size:12px;color:var(--muted) }
+#ab-Product .app .lg { display:flex;align-items:center;gap:8px;min-height:44px;padding:0 8px;border-radius:8px;font-size:14px;font-weight:600 }
+#ab-Product .app .sw { flex:none;width:14px;height:4px;border-radius:999px;border:2px solid transparent;box-sizing:content-box }
+#ab-Product .app .lg-name { flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Product .app .lg-val { font-weight:650;font-variant-numeric:tabular-nums }
+#ab-Product .app .lg.off .lg-name { color:var(--muted);font-weight:500;text-decoration:line-through }
+#ab-Product .app .lg.off .sw { background:transparent !important;border-color:var(--strong);height:0 }
+#ab-Product .app .b1 { background:#2a78d6 }
+#ab-Product .app .b2 { background:#eb6834 }
+#ab-Product .app .b3 { background:#1baf7a }
+#ab-Product .app .b4 { background:#eda100 }
+#ab-Product .app .ln { fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round }
+#ab-Product .app .s1 { stroke:#2a78d6 }
+#ab-Product .app .s2 { stroke:#eb6834 }
+#ab-Product .app .s3 { stroke:#1baf7a }
+#ab-Product .app .s4 { stroke:#eda100 }
+#ab-Product .app .f1 { fill:#2a78d6 }
+#ab-Product .app .f2 { fill:#eb6834 }
+#ab-Product .app .f3 { fill:#1baf7a }
+#ab-Product .app .f4 { fill:#eda100 }
+#ab-Product .app .dot { stroke:#ffffff;stroke-width:2 }
+#ab-Product .app .grid { stroke:var(--line);stroke-width:1 }
+#ab-Product .app .cross { stroke:var(--strong);stroke-width:1;stroke-dasharray:3 3 }
+#ab-Product .app .tick { fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums }
+#ab-Product .app .end { fill:var(--text);font-size:10px;font-weight:650;font-variant-numeric:tabular-nums }
+#ab-Product .app .range { display:flex;border-top:1px solid var(--line);margin-top:8px }
+#ab-Product .app .range button { flex:1;height:44px;text-align:center;font-size:14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;border-radius:0 }
+#ab-Product .app .range button.on { color:var(--text);border-bottom-color:var(--amber) }
+#ab-Product .app .grp { font-size:14px;font-weight:600;color:var(--text2);margin:16px 0 8px }
+#ab-Product .app .lr { display:flex;align-items:center;gap:12px;min-height:64px;padding:8px 8px 8px 16px;border-bottom:1px solid var(--line) }
+#ab-Product .app .lr:last-child { border-bottom:0 }
+#ab-Product .app .lr-what { flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.25 }
+#ab-Product .app .lr-sub { font-size:12px;color:var(--muted) }
+#ab-ProductHidden .app { --ground: #f7f8fc;
+  --raised: #ffffff;
+  --sunken: #eef0f7;
+  --text: #11141f;
+  --text2: #525a78;
+  --muted: #616a8a;
+  --line: #dde1ed;
+  --strong: #6f7899;
+  --amber: #ffb454;
+  --amber-edge: #e89a35;
+  --amber-fg: #8a5a12;
+  --amber-bg: rgba(255, 180, 84, 0.1);
+  --amber-line: rgba(255, 180, 84, 0.26);
+  --ok: #047857;
+  --focus: #2563eb;
+  --lift: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  position: relative;
+  width: 390px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ground);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden; }
+#ab-ProductHidden .app *, #ab-ProductHidden .app *::before, #ab-ProductHidden .app *::after { box-sizing: border-box; }
+#ab-ProductHidden .app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: start; }
+#ab-ProductHidden .app a { color: inherit; text-decoration: none; }
+#ab-ProductHidden .app h1, #ab-ProductHidden .app h2, #ab-ProductHidden .app p, #ab-ProductHidden .app ul { margin: 0; padding: 0; }
+#ab-ProductHidden .app ul { list-style: none; }
+#ab-ProductHidden .app button:focus-visible, #ab-ProductHidden .app a:focus-visible, #ab-ProductHidden .app input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#ab-ProductHidden .app .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ab-ProductHidden .app .i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#ab-ProductHidden .app .ph { flex: none; height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+#ab-ProductHidden .app .ph-icon { font-size: 24px; margin-right: 8px; display: flex; }
+#ab-ProductHidden .app .ph-back { width: 44px; height: 44px; margin-left: -12px; border-radius: 999px; display: grid; place-items: center; color: var(--text2); font-size: 20px; }
+#ab-ProductHidden .app .ph-title { flex: 1; min-width: 0; font-family: 'Marcellus', Georgia, serif; font-size: 20px; font-weight: 400; line-height: 1.4; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ProductHidden .app .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ab-ProductHidden .app .nav { flex: none; display: flex; gap: 4px; padding: 8px 8px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+#ab-ProductHidden .app .tab { flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 12px; font-weight: 600; line-height: 1.2; }
+#ab-ProductHidden .app .tab .i { font-size: 24px; }
+#ab-ProductHidden .app .tab.on { background: var(--amber-bg); color: var(--amber-fg); font-weight: 700; }
+#ab-ProductHidden .app .tools { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+#ab-ProductHidden .app .field { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); }
+#ab-ProductHidden .app .field .i { font-size: 20px; color: var(--muted); }
+#ab-ProductHidden .app .field input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: var(--text); padding: 0; }
+#ab-ProductHidden .app .field input::placeholder { color: var(--muted); opacity: 1; }
+#ab-ProductHidden .app .picks { display: flex; gap: 8px; }
+#ab-ProductHidden .app .pick { flex: 1; min-width: 0; height: 44px; display: flex; align-items: stretch; border: 1px solid var(--strong); border-radius: 12px; background: var(--raised); color: var(--text); font-size: 14px; font-weight: 600; }
+#ab-ProductHidden .app .pick-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; }
+#ab-ProductHidden .app .pick:first-child { flex-grow: 1.2; }
+#ab-ProductHidden .app .pick-body > .i { font-size: 17px; color: var(--muted); }
+#ab-ProductHidden .app .pick-body > .i:last-child { margin-left: auto; }
+#ab-ProductHidden .app .pick-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ProductHidden .app .pick.set { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-weight: 650; }
+#ab-ProductHidden .app .pick-clear { width: 40px; flex: none; display: grid; place-items: center; font-size: 17px; border-left: 1px solid var(--amber-line); }
+#ab-ProductHidden .app .head { display: flex; align-items: center; min-height: 44px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#ab-ProductHidden .app .head-order { margin-left: auto; height: 44px; display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; font-weight: 600; }
+#ab-ProductHidden .app .head-order b { color: var(--text); font-weight: 650; }
+#ab-ProductHidden .app .head-order .i { font-size: 17px; }
+#ab-ProductHidden .app .head-order.set b { color: var(--amber-fg); }
+#ab-ProductHidden .app .rows { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+#ab-ProductHidden .app .row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+#ab-ProductHidden .app .row.tight { padding-right: 8px; }
+#ab-ProductHidden .app .row-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+#ab-ProductHidden .app .thumb { flex: none; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 20px; }
+#ab-ProductHidden .app .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-ProductHidden .app .name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+#ab-ProductHidden .app .detail { font-size: 12px; line-height: 1.3; color: var(--muted); }
+#ab-ProductHidden .app .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-variant-numeric: tabular-nums; }
+#ab-ProductHidden .app .amount { font-size: 16px; font-weight: 650; line-height: 1.2; }
+#ab-ProductHidden .app .caption { font-size: 11px; line-height: 1.2; color: var(--muted); }
+#ab-ProductHidden .app .none { font-size: 14px; line-height: 1.2; color: var(--muted); }
+#ab-ProductHidden .app .add { flex: none; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; }
+#ab-ProductHidden .app .add-dot { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--strong); display: grid; place-items: center; color: var(--text2); font-size: 18px; }
+#ab-ProductHidden .app .add-dot .i { stroke-width: 2.3; }
+#ab-ProductHidden .app .add.has .add-dot { border-color: var(--amber-edge); background: var(--amber-bg); color: var(--amber-fg); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ab-ProductHidden .app .step { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--sunken); }
+#ab-ProductHidden .app .step button { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; font-size: 18px; color: var(--text2); }
+#ab-ProductHidden .app .step button .i { stroke-width: 2.3; }
+#ab-ProductHidden .app .step output { min-width: 2ch; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+#ab-ProductHidden .app .step.has { border-color: var(--amber-edge); background: var(--amber-bg); }
+#ab-ProductHidden .app .step.has output { color: var(--amber-fg); font-size: 16px; font-weight: 700; }
+#ab-ProductHidden .app .step .off { opacity: 0.35; }
+#ab-ProductHidden .app .step.small button { width: 40px; height: 40px; }
+#ab-ProductHidden .app .word { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; line-height: 1.2; }
+#ab-ProductHidden .app .word.ok { color: var(--ok); }
+#ab-ProductHidden .app .word.last { color: var(--amber-fg); }
+#ab-ProductHidden .app .logo { flex: none; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 27%; background: var(--sunken); display: grid; place-items: center; font-size: 12px; font-weight: 750; letter-spacing: -0.02em; color: var(--text); }
+#ab-ProductHidden .app .logo.sm { width: 20px; height: 20px; font-size: 9px; }
+#ab-ProductHidden .app .pop { position: absolute; z-index: 3; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--lift); }
+#ab-ProductHidden .app .pop-title { font-size: 14px; font-weight: 650; padding: 0 4px 8px; }
+#ab-ProductHidden .app .opt { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 4px; border-radius: 8px; font-size: 16px; }
+#ab-ProductHidden .app .opt-radio { flex: none; width: 22px; height: 22px; border: 1.5px solid var(--strong); border-radius: 999px; display: grid; place-items: center; }
+#ab-ProductHidden .app .opt.on .opt-radio { border-color: var(--amber-edge); }
+#ab-ProductHidden .app .opt.on .opt-radio::after { content: ''; width: 12px; height: 12px; border-radius: 999px; background: var(--amber-edge); }
+#ab-ProductHidden .app .opt.on { font-weight: 650; }
+#ab-ProductHidden .app .opt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+#ab-ProductHidden .app .opt-text small { font-size: 12px; font-weight: 400; color: var(--muted); }
+#ab-ProductHidden .app .page { overflow: hidden; }
+#ab-ProductHidden .app .bar { flex: none; position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px; border-top: 1px solid var(--line); background: var(--raised); box-shadow: 0 -6px 16px rgba(17, 20, 31, 0.06); font-size: 14px; color: var(--muted); }
+#ab-ProductHidden .app .bar-list { height: 44px; display: flex; align-items: center; gap: 2px; color: var(--text); font-size: 16px; font-weight: 650; }
+#ab-ProductHidden .app .bar-list .i { font-size: 17px; }
+#ab-ProductHidden .app .bar-count { margin-left: auto; height: 44px; display: flex; align-items: center; color: var(--amber-fg); font-weight: 600; }
+#ab-ProductHidden .app .scrim { position: absolute; inset: 0; z-index: 5; background: rgba(17, 20, 31, 0.42); }
+#ab-ProductHidden .app .sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: 12px 20px 24px; border-radius: 22px 22px 0 0; background: var(--raised); box-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16); }
+#ab-ProductHidden .app .sheet-handle { display: block; width: 48px; height: 5px; margin: 4px auto 16px; border-radius: 999px; background: var(--strong); }
+#ab-ProductHidden .app .sheet-title { font-size: 18px; font-weight: 650; line-height: 1.2; }
+#ab-ProductHidden .app .sheet-note { margin-top: 4px; font-size: 14px; color: var(--muted); }
+#ab-ProductHidden .app .sheet-group { margin: 16px 0 4px; font-size: 14px; font-weight: 600; color: var(--text2); }
+#ab-ProductHidden .app .sheet .opt { min-height: 56px; border-bottom: 1px solid var(--line); border-radius: 0; }
+#ab-ProductHidden .app .sheet-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--line); }
+#ab-ProductHidden .app .sheet-close { width: 100%; min-height: 52px; margin-top: 20px; border: 1px solid var(--strong); border-radius: 12px; text-align: center; font-weight: 600; }
+#ab-ProductHidden .app .sheet-quiet { min-height: 44px; margin-top: 8px; color: var(--amber-fg); font-size: 14px; font-weight: 600; }
+#ab-ProductHidden .app .sec { padding:0 16px }
+#ab-ProductHidden .app .h2 { font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-ProductHidden .app .card { border:1px solid var(--line);border-radius:16px;background:var(--raised) }
+#ab-ProductHidden .app .pr { display:flex;align-items:center;gap:12px;min-height:56px;padding:0 16px 0 12px;border-bottom:1px solid var(--line) }
+#ab-ProductHidden .app .pr:last-child { border-bottom:0 }
+#ab-ProductHidden .app .pr-name { flex:1;min-width:0 }
+#ab-ProductHidden .app .pr.gone .pr-name { color:var(--muted) }
+#ab-ProductHidden .app .seen { margin-top:12px;font-size:12px;color:var(--muted) }
+#ab-ProductHidden .app .lg { display:flex;align-items:center;gap:8px;min-height:44px;padding:0 8px;border-radius:8px;font-size:14px;font-weight:600 }
+#ab-ProductHidden .app .sw { flex:none;width:14px;height:4px;border-radius:999px;border:2px solid transparent;box-sizing:content-box }
+#ab-ProductHidden .app .lg-name { flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-ProductHidden .app .lg-val { font-weight:650;font-variant-numeric:tabular-nums }
+#ab-ProductHidden .app .lg.off .lg-name { color:var(--muted);font-weight:500;text-decoration:line-through }
+#ab-ProductHidden .app .lg.off .sw { background:transparent !important;border-color:var(--strong);height:0 }
+#ab-ProductHidden .app .b1 { background:#2a78d6 }
+#ab-ProductHidden .app .b2 { background:#eb6834 }
+#ab-ProductHidden .app .b3 { background:#1baf7a }
+#ab-ProductHidden .app .b4 { background:#eda100 }
+#ab-ProductHidden .app .ln { fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round }
+#ab-ProductHidden .app .s1 { stroke:#2a78d6 }
+#ab-ProductHidden .app .s2 { stroke:#eb6834 }
+#ab-ProductHidden .app .s3 { stroke:#1baf7a }
+#ab-ProductHidden .app .s4 { stroke:#eda100 }
+#ab-ProductHidden .app .f1 { fill:#2a78d6 }
+#ab-ProductHidden .app .f2 { fill:#eb6834 }
+#ab-ProductHidden .app .f3 { fill:#1baf7a }
+#ab-ProductHidden .app .f4 { fill:#eda100 }
+#ab-ProductHidden .app .dot { stroke:#ffffff;stroke-width:2 }
+#ab-ProductHidden .app .grid { stroke:var(--line);stroke-width:1 }
+#ab-ProductHidden .app .cross { stroke:var(--strong);stroke-width:1;stroke-dasharray:3 3 }
+#ab-ProductHidden .app .tick { fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums }
+#ab-ProductHidden .app .end { fill:var(--text);font-size:10px;font-weight:650;font-variant-numeric:tabular-nums }
+#ab-ProductHidden .app .range { display:flex;border-top:1px solid var(--line);margin-top:8px }
+#ab-ProductHidden .app .range button { flex:1;height:44px;text-align:center;font-size:14px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;border-radius:0 }
+#ab-ProductHidden .app .range button.on { color:var(--text);border-bottom-color:var(--amber) }
+#ab-ProductHidden .app .grp { font-size:14px;font-weight:600;color:var(--text2);margin:16px 0 8px }
+#ab-ProductHidden .app .lr { display:flex;align-items:center;gap:12px;min-height:64px;padding:8px 8px 8px 16px;border-bottom:1px solid var(--line) }
+#ab-ProductHidden .app .lr:last-child { border-bottom:0 }
+#ab-ProductHidden .app .lr-what { flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.25 }
+#ab-ProductHidden .app .lr-sub { font-size:12px;color:var(--muted) }
+</style>
+
+<header>
+  <h1>Velista: the catalog tools, adding from the catalog, and the product page</h1>
+  <p class="lede">The catalog keeps its search and puts the supermarket and the category in one row, with the order on the line that heads the list. A line above the tab bar says which list the plus on a row adds to. A product opens a page of its own: the price at each supermarket, how the price has moved, the lists it is in, and similar products. Plan <code>0134</code>. Drawn on Day. Every price is a sample value. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 3710px; height: 2318px;">
+      <figure class="board" style="left: 0px; top: 470px; width: 390px;">
+        <figcaption>Catalog, nothing chosen</figcaption>
+        <div class="frame" id="ab-Main" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search every supermarket">
+                </span>
+                <div class="picks">
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Supermarket: all supermarkets. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg>
+                      <span class="pick-text">All supermarkets</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Category: all categories. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">All categories</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>near 28013</span>
+                <button class="head-order" type="button">Order: <b>Catalog</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Plátano de Canarias</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,89 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Plátano de Canarias to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,75 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Tomate pera to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">Central Lechera Asturiana · 1 L</span></span>
+                    <span class="price"><span class="amount">1,09 €</span><span class="caption">Carrefour</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Leche semidesnatada to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Yogur natural</span><span class="detail">Danone · 4 units</span></span>
+                    <span class="price"><span class="amount">1,45 €</span><span class="caption">El Jamón</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Yogur natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g</span></span>
+                    <span class="price"><span class="amount">2,19 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Pan de molde integral to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 470px; width: 390px;">
+        <figcaption>A chain and a category chosen, by price</figcaption>
+        <div class="frame" id="ab-CatalogChosen" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search in Coffee at Mercadona">
+                </span>
+                <div class="picks">
+                  <span class="pick set">
+                    <button class="pick-body" type="button" aria-label="Supermarket: Mercadona, any shop. Change">
+                      <span class="logo sm" aria-hidden="true">M</span>
+                      <span class="pick-text">Mercadona</span>
+                    </button>
+                    <button class="pick-clear" type="button" aria-label="Show every supermarket"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+                  </span>
+                  <span class="pick set">
+                    <button class="pick-body" type="button" aria-label="Category: Drinks, Coffee. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: inherit"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">Coffee</span>
+                    </button>
+                    <button class="pick-clear" type="button" aria-label="Clear the category"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>Any Mercadona near 28013</span>
+                <button class="head-order set" type="button">Order: <b>Lowest price</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Hacendado · 250 g</span></span>
+                    <span class="price"><span class="amount">2,10 €</span><span class="caption">8,40 € / kg</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural, Hacendado, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido mezcla</span><span class="detail">Hacendado · 250 g</span></span>
+                    <span class="price"><span class="amount">2,15 €</span><span class="caption">8,60 € / kg</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido mezcla to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Bonka · 250 g</span></span>
+                    <span class="price"><span class="amount">2,95 €</span><span class="caption">11,80 € / kg</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural, Bonka, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,45 €</span><span class="caption">13,80 € / kg</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural, Marcilla, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li style="padding: 8px 0 0; font-size: 12px; color: var(--muted)">Without a price</li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café en grano natural</span><span class="detail">Saimaza · 500 g</span></span>
+                    <span class="none">no price</span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café en grano natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café soluble descafeinado</span><span class="detail">Nescafé · 200 g</span></span>
+                    <span class="none">no price</span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café soluble descafeinado to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 470px; width: 390px;">
+        <figcaption>The order menu</figcaption>
+        <div class="frame" id="ab-CatalogOrder" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search every supermarket">
+                </span>
+                <div class="picks">
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Supermarket: all supermarkets. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg>
+                      <span class="pick-text">All supermarkets</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Category: all categories. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">All categories</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>near 28013</span>
+                <button class="head-order" type="button">Order: <b>Catalog</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Plátano de Canarias</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,89 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Plátano de Canarias to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,75 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Tomate pera to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">Central Lechera Asturiana · 1 L</span></span>
+                    <span class="price"><span class="amount">1,09 €</span><span class="caption">Carrefour</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Leche semidesnatada to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Yogur natural</span><span class="detail">Danone · 4 units</span></span>
+                    <span class="price"><span class="amount">1,45 €</span><span class="caption">El Jamón</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Yogur natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g</span></span>
+                    <span class="price"><span class="amount">2,19 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Pan de molde integral to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="pop" role="radiogroup" aria-label="Order" style="top: 222px; right: 16px; width: 288px">
+              <button class="opt on" type="button" role="radio" aria-checked="true"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Catalog order<small>By aisle, the way a shop is laid out</small></span></button>
+              <button class="opt" type="button" role="radio" aria-checked="false"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Lowest price<small>Products with no price go last</small></span></button>
+              <button class="opt" type="button" role="radio" aria-checked="false"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Lowest price per kilo or litre<small>Compares a big pack with a small one</small></span></button>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 470px; width: 390px;">
+        <figcaption>Adding products to a list</figcaption>
+        <div class="frame" id="ab-CatalogAdding" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search every supermarket">
+                </span>
+                <div class="picks">
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Supermarket: all supermarkets. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg>
+                      <span class="pick-text">All supermarkets</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Category: all categories. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">All categories</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>near 28013</span>
+                <button class="head-order" type="button">Order: <b>Catalog</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Plátano de Canarias</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,89 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Plátano de Canarias to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,75 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Tomate pera, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">1 L · 1,09 € at Carrefour</span></span>
+                    </button>
+                  <span class="step has small" role="group" aria-label="Leche semidesnatada in Weekly shop">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>2</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Yogur natural</span><span class="detail">Danone · 4 units</span></span>
+                    <span class="price"><span class="amount">1,45 €</span><span class="caption">El Jamón</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Yogur natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g</span></span>
+                    <span class="price"><span class="amount">2,19 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Pan de molde integral, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <a class="bar-count" href="#">3 products added</a>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 470px; width: 390px;">
+        <figcaption>Choosing the list</figcaption>
+        <div class="frame" id="ab-CatalogLists" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search every supermarket">
+                </span>
+                <div class="picks">
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Supermarket: all supermarkets. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg>
+                      <span class="pick-text">All supermarkets</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Category: all categories. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">All categories</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>near 28013</span>
+                <button class="head-order" type="button">Order: <b>Catalog</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Plátano de Canarias</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,89 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Plátano de Canarias to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,75 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Tomate pera, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">1 L · 1,09 € at Carrefour</span></span>
+                    </button>
+                  <span class="step has small" role="group" aria-label="Leche semidesnatada in Weekly shop">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>2</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Yogur natural</span><span class="detail">Danone · 4 units</span></span>
+                    <span class="price"><span class="amount">1,45 €</span><span class="caption">El Jamón</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Yogur natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g</span></span>
+                    <span class="price"><span class="amount">2,19 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Pan de molde integral, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <a class="bar-count" href="#">3 products added</a>
+            </div>
+
+            <div class="scrim" aria-hidden="true"></div>
+            <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lists-title">
+              <span class="sheet-handle" aria-hidden="true"></span>
+              <h2 class="sheet-title" id="lists-title">Add to which list?</h2>
+              <div role="radiogroup" aria-labelledby="lists-title">
+                <p class="sheet-group">Home</p>
+                <button class="opt on" type="button" role="radio" aria-checked="true"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Weekly shop<small>14 to buy</small></span></button>
+                <button class="opt" type="button" role="radio" aria-checked="false"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Barbecue Saturday<small>6 to buy</small></span></button>
+                <p class="sheet-group">Parents' house</p>
+                <button class="opt" type="button" role="radio" aria-checked="false"><span class="opt-radio" aria-hidden="true"></span><span class="opt-text">Mum's list<small>9 to buy</small></span></button>
+              </div>
+              <button class="sheet-close" type="button">Close</button>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 2350px; top: 470px; width: 390px;">
+        <figcaption>What was added in this visit</figcaption>
+        <div class="frame" id="ab-CatalogAdded" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+            <header class="ph">
+              <span class="ph-icon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+              <h1 class="ph-title">Catalog</h1>
+            </header>
+
+            <div class="page">
+              <div class="tools">
+                <label class="vh" for="q">Search the catalog</label>
+                <span class="field">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  <input id="q" type="search" placeholder="Search every supermarket">
+                </span>
+                <div class="picks">
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Supermarket: all supermarkets. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg>
+                      <span class="pick-text">All supermarkets</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                  <span class="pick">
+                    <button class="pick-body" type="button" aria-label="Category: all categories. Change">
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                      <span class="pick-text">All categories</span>
+                      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                  </span>
+                </div>
+              </div>
+
+              <div class="head">
+                <span>near 28013</span>
+                <button class="head-order" type="button">Order: <b>Catalog</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              </div>
+
+              <ul class="rows">
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Plátano de Canarias</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,89 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Plátano de Canarias to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg</span></span>
+                    <span class="price"><span class="amount">1,75 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Tomate pera, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">1 L · 1,09 € at Carrefour</span></span>
+                    </button>
+                  <span class="step has small" role="group" aria-label="Leche semidesnatada in Weekly shop">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>2</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Yogur natural</span><span class="detail">Danone · 4 units</span></span>
+                    <span class="price"><span class="amount">1,45 €</span><span class="caption">El Jamón</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Yogur natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g</span></span>
+                    <span class="price"><span class="amount">2,19 €</span><span class="caption">Mercadona</span></span>
+                  </button>
+                  <button class="add has" type="button" aria-label="Pan de molde integral, 1 in Weekly shop. Change how many"><span class="add-dot">1</span></button>
+                </li>
+                <li class="row tight">
+                  <button class="row-open" type="button">
+                    <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                    <span class="what"><span class="name">Café molido natural</span><span class="detail">Marcilla · 250 g</span></span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">DIA</span></span>
+                  </button>
+                  <button class="add" type="button" aria-label="Add Café molido natural to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="bar">
+              Adding to
+              <button class="bar-list" type="button" aria-label="Adding to Weekly shop. Change the list">Weekly shop<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <a class="bar-count" href="#">3 products added</a>
+            </div>
+
+            <div class="scrim" aria-hidden="true"></div>
+            <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="added-title">
+              <span class="sheet-handle" aria-hidden="true"></span>
+              <h2 class="sheet-title" id="added-title">Added to Weekly shop</h2>
+              <p class="sheet-note">Change how many, or take one back with the minus.</p>
+              <ul style="margin-top: 8px">
+                <li class="sheet-row">
+                  <span class="what"><span class="name">Tomate pera</span><span class="detail">1 kg · 1,75 € at Mercadona</span></span>
+                  <span class="step has small" role="group" aria-label="How many of Tomate pera">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>1</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+                <li class="sheet-row">
+                  <span class="what"><span class="name">Leche semidesnatada</span><span class="detail">Central Lechera Asturiana · 1 L · 1,09 € at Carrefour</span></span>
+                  <span class="step has small" role="group" aria-label="How many of Leche semidesnatada">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>2</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+                <li class="sheet-row">
+                  <span class="what"><span class="name">Pan de molde integral</span><span class="detail">Bimbo · 460 g · 2,19 € at Mercadona</span></span>
+                  <span class="step has small" role="group" aria-label="How many of Pan de molde integral">
+                    <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <output>1</output>
+                    <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+              <button class="sheet-quiet" type="button">Take all three back</button>
+              <a class="sheet-close" href="#" style="display: flex; align-items: center; justify-content: center; margin-top: 8px">Open Weekly shop</a>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="#" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 2820px; top: 470px; width: 390px;">
+        <figcaption>The product page</figcaption>
+        <div class="frame" id="ab-Product" style="width: 390px; height: 1848px;">
+          <div class="app" style="height: 1848px">
+            <header class="ph">
+              <a class="ph-back" href="Main.dc.html" aria-label="Back to the catalog"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width: 2"><path d="m15 6-6 6 6 6"/></svg></a>
+              <h1 class="ph-title">Café molido natural</h1>
+            </header>
+
+            <div class="page">
+              <div class="sec" style="display: flex; gap: 16px; padding-top: 16px">
+                <span aria-hidden="true" style="flex: none; width: 96px; height: 96px; border: 1px solid var(--line); border-radius: 16px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); font-size: 30px"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                  <p style="font-size: 20px; font-weight: 650; line-height: 1.2">Café molido natural</p>
+                  <p style="margin-top: 4px; font-size: 14px; color: var(--muted)">Marcilla · 250 g</p>
+                  <a href="CatalogChosen.dc.html" style="margin-top: auto; min-height: 44px; display: inline-flex; align-items: center; gap: 2px; align-self: flex-start; font-size: 14px; font-weight: 600; color: var(--amber-fg)">Drinks · Coffee<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="font-size: 17px; stroke-width: 2"><path d="m9 6 6 6-6 6"/></svg></a>
+                </div>
+              </div>
+
+              <section class="sec" aria-labelledby="h-price">
+                <h2 class="h2" id="h-price" style="margin-top: 16px">Price at your supermarkets</h2>
+                <ul class="card">
+                  <li class="pr">
+                    <span class="logo" aria-hidden="true">D</span>
+                    <span class="pr-name">DIA</span>
+                    <span class="word ok">CHEAPEST</span>
+                    <span class="price"><span class="amount">3,25 €</span><span class="caption">13,00 € / kg</span></span>
+                  </li>
+                  <li class="pr">
+                    <span class="logo" aria-hidden="true">J</span>
+                    <span class="pr-name">El Jamón</span>
+                    <span class="price"><span class="amount">3,35 €</span><span class="caption">13,40 € / kg</span></span>
+                  </li>
+                  <li class="pr">
+                    <span class="logo" aria-hidden="true">M</span>
+                    <span class="pr-name">Mercadona</span>
+                    <span class="price"><span class="amount">3,45 €</span><span class="caption">13,80 € / kg</span></span>
+                  </li>
+                  <li class="pr">
+                    <span class="logo" aria-hidden="true">C</span>
+                    <span class="pr-name">Carrefour</span>
+                    <span class="price"><span class="amount">3,59 €</span><span class="caption">14,36 € / kg</span></span>
+                  </li>
+                  <li class="pr gone">
+                    <span class="logo" aria-hidden="true">L</span>
+                    <span class="pr-name">Lidl</span>
+                    <span class="none">not sold here</span>
+                  </li>
+                </ul>
+                <p class="seen">Seen 2 days ago. Velista reads the shops, so a price can be behind the shelf.</p>
+              </section>
+
+              <section class="sec" aria-labelledby="h-history">
+                <h2 class="h2" id="h-history">How the price has moved</h2>
+                <div class="card" style="padding: 8px 8px 0">
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px">
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b3" aria-hidden="true"></span><span class="lg-name">DIA</span><span class="lg-val">3,15 €</span></button>
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b4" aria-hidden="true"></span><span class="lg-name">El Jamón</span><span class="lg-val">3,42 €</span></button>
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b1" aria-hidden="true"></span><span class="lg-name">Mercadona</span><span class="lg-val">3,45 €</span></button>
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b2" aria-hidden="true"></span><span class="lg-name">Carrefour</span><span class="lg-val">3,69 €</span></button>
+                  </div>
+                  <p style="padding: 4px 8px 8px; font-size: 12px; color: var(--muted)">Prices on 9 September. Press a supermarket to hide its line.</p>
+
+                  <svg viewBox="0 0 326 176" width="326" height="176" role="img" aria-label="Price of Café molido natural at four supermarkets over the last three months" style="display: block; margin: 0 8px">
+                    <path class="grid" d="M36 20H288M36 63.3H288M36 106.7H288M36 150H288"/>
+                    <text class="tick" x="0" y="23">3,90 €</text>
+                    <text class="tick" x="0" y="66">3,60 €</text>
+                    <text class="tick" x="0" y="110">3,30 €</text>
+                    <text class="tick" x="0" y="153">3,00 €</text>
+                    <path class="cross" d="M204 14V150"/>
+                    <path class="ln s1" d="M36 99.4H57V99.4H78V99.4H99V99.4H120V99.4H141V85H162V85H183V85H204V85H225V85H246V85H267V85H288V85"/>
+                    <path class="ln s2" d="M36 41.7H57V41.7H78V41.7H99V64.8H120V64.8H141V64.8H162V64.8H183V50.3H204V50.3H225V50.3H246V64.8H267V64.8H288V64.8"/>
+                    <path class="ln s3" d="M36 85H57V85H78V113.9H99V113.9H120V85H141V85H162V85H183V85H204V128.3H225V128.3H246V113.9H267V113.9H288V113.9"/>
+                    <path class="ln s4" d="M36 70.6H57V70.6H78V70.6H99V70.6H120V70.6H141V89.3H162V89.3H183V89.3H204V89.3H225V89.3H246V89.3H267V99.4H288V99.4"/>
+                    <circle class="dot f1" cx="204" cy="85" r="4"/>
+                    <circle class="dot f2" cx="204" cy="50.3" r="4"/>
+                    <circle class="dot f3" cx="204" cy="128.3" r="4"/>
+                    <circle class="dot f4" cx="204" cy="89.3" r="4"/>
+                    <text class="end" x="294" y="88.5">3,45</text>
+                    <text class="end" x="294" y="68.3">3,59</text>
+                    <text class="end" x="294" y="117.4">3,25</text>
+                    <text class="end" x="294" y="102.9">3,35</text>
+                    <text class="tick" x="36" y="170">15 Jul</text>
+                    <text class="end" x="204" y="170" text-anchor="middle">9 Sep</text>
+                    <text class="tick" x="288" y="170" text-anchor="end">today</text>
+                  </svg>
+
+                  <div class="range" role="tablist" aria-label="How far back">
+                    <button type="button" role="tab" aria-selected="false">1 month</button>
+                    <button class="on" type="button" role="tab" aria-selected="true">3 months</button>
+                    <button type="button" role="tab" aria-selected="false">1 year</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="sec" aria-labelledby="h-lists">
+                <h2 class="h2" id="h-lists">In your lists</h2>
+
+                <h3 class="grp" style="margin-top: 0">Home</h3>
+                <ul class="card">
+                  <li class="lr">
+                    <span class="lr-what"><span>Weekly shop</span><span class="word last">LAST USED</span></span>
+                    <span class="step has" role="group" aria-label="How many in Weekly shop">
+                      <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                      <output>2</output>
+                      <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                    </span>
+                  </li>
+                  <li class="lr">
+                    <span class="lr-what"><span>Barbecue Saturday</span></span>
+                    <span class="step" role="group" aria-label="How many in Barbecue Saturday">
+                      <button class="off" type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                      <output>0</output>
+                      <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                    </span>
+                  </li>
+                </ul>
+
+                <h3 class="grp">Parents' house</h3>
+                <ul class="card">
+                  <li style="border-bottom: 1px solid var(--line)">
+                    <div class="lr" style="border-bottom: 0">
+                      <span class="lr-what"><span>Mum's list</span></span>
+                      <span class="step" role="group" aria-label="How many in Mum's list">
+                        <button class="off" type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                        <output>0</output>
+                        <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                      </span>
+                    </div>
+                    <div class="lr" style="border-bottom: 0; min-height: 52px; margin: -4px 0 8px 16px; padding: 4px 8px 4px 12px; border-radius: 12px 0 0 12px; background: var(--sunken)">
+                      <span class="lr-what"><span style="font-size: 14px">Café para la cafetera</span><span class="lr-sub">Already on this list, with this product</span></span>
+                      <span class="step small has" role="group" aria-label="How many of Café para la cafetera in Mum's list" style="background: var(--raised)">
+                        <button type="button" aria-label="One fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                        <output>1</output>
+                        <button type="button" aria-label="One more"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                      </span>
+                    </div>
+                  </li>
+                  <li class="lr" style="padding-right: 16px">
+                    <span class="lr-what"><span style="color: var(--text2)">Dad's errands</span><span class="lr-sub">You can read this list. Only its owner adds to it.</span></span>
+                  </li>
+                </ul>
+              </section>
+
+              <section aria-labelledby="h-similar">
+                <div style="display: flex; align-items: center; gap: 8px; margin: 16px 16px 4px">
+                  <h2 class="h2" id="h-similar" style="margin: 0; flex: 1">Similar products</h2>
+                  <button type="button" aria-label="Adding to Weekly shop. Change the list" style="height: 44px; display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted)">Adding to <b style="font-size: 14px; font-weight: 650; color: var(--text)">Weekly shop</b><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="font-size: 17px"><path d="m6 9 6 6 6-6"/></svg></button>
+                </div>
+                <ul class="rows">
+                  <li class="row tight">
+                    <a class="row-open" href="#">
+                      <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                      <span class="what"><span class="name">Café molido natural</span><span class="detail">Hacendado · 250 g</span></span>
+                      <span class="price"><span class="amount">2,10 €</span><span class="caption">8,40 € / kg</span></span>
+                    </a>
+                    <button class="add" type="button" aria-label="Add Café molido natural, Hacendado, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                  </li>
+                  <li class="row tight">
+                    <a class="row-open" href="#">
+                      <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                      <span class="what"><span class="name">Café molido natural</span><span class="detail">Bonka · 250 g</span></span>
+                      <span class="price"><span class="amount">2,95 €</span><span class="caption">11,80 € / kg</span></span>
+                    </a>
+                    <button class="add" type="button" aria-label="Add Café molido natural, Bonka, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                  </li>
+                  <li class="row tight">
+                    <a class="row-open" href="#">
+                      <span class="thumb" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+                      <span class="what"><span class="name">Café molido mezcla</span><span class="detail">Marcilla · 250 g</span></span>
+                      <span class="price"><span class="amount">3,15 €</span><span class="caption">12,60 € / kg</span></span>
+                    </a>
+                    <button class="add" type="button" aria-label="Add Café molido mezcla, Marcilla, to a list"><span class="add-dot"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></button>
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            <nav class="nav" aria-label="Main sections">
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>Home</a>
+              <a class="tab on" href="Main.dc.html" aria-current="page"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Catalog</a>
+              <a class="tab" href="#"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.84 11 9.36 4M18.16 11 14.64 4M3.2 11h17.6M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4M5.4 15.5h13.2M9.36 11l.88 9M14.64 11l-.88 9"/></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 3290px; top: 470px; width: 390px;">
+        <figcaption>The history with one supermarket hidden</figcaption>
+        <div class="frame" id="ab-ProductHidden" style="width: 390px; height: 452px;">
+          <div class="app" style="height: 452px">
+            <div class="page">
+              <section class="sec" aria-labelledby="h-history">
+                <h2 class="h2" id="h-history">How the price has moved</h2>
+                <div class="card" style="padding: 8px 8px 0">
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px">
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b3" aria-hidden="true"></span><span class="lg-name">DIA</span><span class="lg-val">3,15 €</span></button>
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b4" aria-hidden="true"></span><span class="lg-name">El Jamón</span><span class="lg-val">3,42 €</span></button>
+                    <button class="lg" type="button" aria-pressed="true"><span class="sw b1" aria-hidden="true"></span><span class="lg-name">Mercadona</span><span class="lg-val">3,45 €</span></button>
+                    <button class="lg off" type="button" aria-pressed="false"><span class="sw b2" aria-hidden="true"></span><span class="lg-name">Carrefour</span><span class="lg-val"></span></button>
+                  </div>
+                  <p style="padding: 4px 8px 8px; font-size: 12px; color: var(--muted)">Prices on 9 September. Press a supermarket to hide its line.</p>
+
+                  <svg viewBox="0 0 326 176" width="326" height="176" role="img" aria-label="Price of Café molido natural at four supermarkets over the last three months" style="display: block; margin: 0 8px">
+                    <path class="grid" d="M36 20H288M36 63.3H288M36 106.7H288M36 150H288"/>
+                    <text class="tick" x="0" y="23">3,90 €</text>
+                    <text class="tick" x="0" y="66">3,60 €</text>
+                    <text class="tick" x="0" y="110">3,30 €</text>
+                    <text class="tick" x="0" y="153">3,00 €</text>
+                    <path class="cross" d="M204 14V150"/>
+                    <path class="ln s1" d="M36 99.4H57V99.4H78V99.4H99V99.4H120V99.4H141V85H162V85H183V85H204V85H225V85H246V85H267V85H288V85"/>
+                    <path class="ln s2" d="M0 0"/>
+                    <path class="ln s3" d="M36 85H57V85H78V113.9H99V113.9H120V85H141V85H162V85H183V85H204V128.3H225V128.3H246V113.9H267V113.9H288V113.9"/>
+                    <path class="ln s4" d="M36 70.6H57V70.6H78V70.6H99V70.6H120V70.6H141V89.3H162V89.3H183V89.3H204V89.3H225V89.3H246V89.3H267V99.4H288V99.4"/>
+                    <circle class="dot f1" cx="204" cy="85" r="4"/>
+                    <circle class="dot f2" cx="204" cy="50.3" r="0"/>
+                    <circle class="dot f3" cx="204" cy="128.3" r="4"/>
+                    <circle class="dot f4" cx="204" cy="89.3" r="4"/>
+                    <text class="end" x="294" y="88.5">3,45</text>
+                    <text class="end" x="294" y="68.3"></text>
+                    <text class="end" x="294" y="117.4">3,25</text>
+                    <text class="end" x="294" y="102.9">3,35</text>
+                    <text class="tick" x="36" y="170">15 Jul</text>
+                    <text class="end" x="204" y="170" text-anchor="middle">9 Sep</text>
+                    <text class="tick" x="288" y="170" text-anchor="end">today</text>
+                  </svg>
+
+                  <div class="range" role="tablist" aria-label="How far back">
+                    <button type="button" role="tab" aria-selected="false">1 month</button>
+                    <button class="on" type="button" role="tab" aria-selected="true">3 months</button>
+                    <button type="button" role="tab" aria-selected="false">1 year</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>RULE T1: THE TOOLS ARE THE SEARCH AND ONE ROW. Under the field sit two selectors of equal width, Supermarket and Category. Each one names what the list shows now: 'All supermarkets', 'All categories'. Each opens the picker page that exists today.</p><p>The tools were four stacked rows, about 250 pixels. They are now about 155, and the first product row starts that much higher.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>RULE T2: A CHOSEN SELECTOR IS FILLED AND IS TWO CONTROLS. It takes the amber edge and the amber text, and it shows the chain logo or the category name. The body opens the picker to change the choice. The cross is its own button and clears the choice, and the other selector keeps its value.</p><p>A category shows the leaf alone, because half a row has no room for 'Drinks · Coffee'. The accessible name says both. The field still says where it searches: 'Search in Coffee at Mercadona'.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 420px;"><p>RULE T3: THE ORDER SITS ON THE LINE THAT HEADS THE LIST. The line says where the prices are from on the left and 'Order: Catalog' on the right. The word opens a menu of three: Catalog order, Lowest price, Lowest price per kilo or litre. A to Z and Newest are gone. Best match joins the menu while the field has text.</p><p>A product with several prices is ordered by its lowest. A product with no price goes last, under a small 'Without a price' line, in every price order.</p></aside>
+      <aside class="note" style="left: 1410px; top: 0px; width: 420px;"><p>RULE A1: ONE LINE SAYS WHICH LIST THE PLUS ADDS TO. 'Adding to Weekly shop' sits above the tab bar on a raised surface. It opens on the list the person used last, so the first plus adds with no choice before it. The name opens the sheet of lists to change it, and the change makes that list the last used one.</p><p>The plus on a row adds one. The plus then shows the count, and the count opens a stepper in the row. Every tap saves, as a line does today. The right end of the line counts what was added and leads to the list.</p></aside>
+      <aside class="note" style="left: 1880px; top: 0px; width: 420px;"><p>RULE A2: ONE SHEET CHOOSES THE LIST, EVERYWHERE. The name on the line opens a sheet of every list the person can add to, under its group, with the chosen one marked. A press chooses and closes. The heading of Similar products on the product page opens the same sheet, and the choice is one value for the catalog and the product page.</p><p>A list the person only reads is not in the sheet.</p></aside>
+      <aside class="note" style="left: 2350px; top: 0px; width: 420px;"><p>RULE A3: THE COUNT OPENS WHAT THIS VISIT ADDED. '3 products added' opens a sheet with one row for each product added since the person came to the catalog, with a stepper. The minus at one takes the product back, and one button takes all of them back. Products added to two lists sit under two headings.</p><p>The record survives a visit to a product page, and what the product page adds joins it. It is erased when the person leaves the catalog for another tab. The lines stay on their lists, and only the record goes.</p></aside>
+      <aside class="note" style="left: 2820px; top: 0px; width: 420px;"><p>RULE D1: A PRODUCT IS A PAGE. The header carries the product name on one line. The name is repeated whole under the photograph, because a header cuts a long name. The price at each supermarket of the shopping profile comes first, cheapest first, and is on screen as the page opens.</p><p>In your lists shows every list of every group, with the last used list first. Each list has a stepper that starts at the quantity of the line with this exact name, or at zero. A line that holds the product under another name sits on its own inset row under its list, with its own stepper. A list the person only reads has no stepper.</p></aside>
+      <aside class="note" style="left: 3290px; top: 0px; width: 420px;"><p>RULE D2: THE HISTORY DRAWS EVERY SUPERMARKET, AND THE LEGEND HIDES ONE. One stepped line per chain, with the legend above the chart. A legend entry is a button: pressed off, its name is struck through and its line and value leave the chart. The entry also carries the price on the day the chart is read at.</p><p>The plus on a similar product adds to the list that the heading of that section names. The page has no line above the tab bar, because the table already shows every list.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 3710;
+    var h = 2318;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>
