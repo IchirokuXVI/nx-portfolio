@@ -1,4 +1,4 @@
-> **PR:** [#679](https://github.com/IchirokuXVI/nx-portfolio/pull/679) (stage 1. Stage 2 waits for the backend plan of section 9.)
+> **PR:** [#679](https://github.com/IchirokuXVI/nx-portfolio/pull/679) (both stages. Backend plan `0196`, which stage 2 reads, is [#681](https://github.com/IchirokuXVI/nx-portfolio/pull/681).)
 
 # 0134: the catalog tools, adding from the catalog, and the product page
 
