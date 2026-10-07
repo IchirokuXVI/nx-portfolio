@@ -1,0 +1,515 @@
+<title>Velista: what the shopping list costs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Main .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Main .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Main .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Main .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Main .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Main .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+#ab-Main .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+#ab-Main .chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+#ab-Main .fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ab-Main .fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#ab-Main .rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+#ab-Main .row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Main .settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+#ab-Main .settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+#ab-Main .settle.none { color: var(--app-text-secondary); }
+#ab-Main .row .text { flex: 1; min-width: 0; }
+#ab-Main .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+#ab-Main .row .text span em.na { color: var(--app-status-danger-fg); }
+#ab-Main .row.done .text b { color: var(--app-text-muted); }
+#ab-Main .qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+#ab-Main .row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+#ab-Main .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-Main .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-Main .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-Main .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Main .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Main .est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Main .track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+#ab-Main .track i { display: block; height: 100%; background: var(--app-action-bg); }
+#ab-Main .ends { flex: none; padding: 0 16px 10px; }
+#ab-Main .ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Info .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Info .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Info .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Info .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Info .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Info .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Info .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Info .ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Info .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+#ab-Info .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+#ab-Info .chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+#ab-Info .fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ab-Info .fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#ab-Info .rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+#ab-Info .row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Info .settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+#ab-Info .settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+#ab-Info .settle.none { color: var(--app-text-secondary); }
+#ab-Info .row .text { flex: 1; min-width: 0; }
+#ab-Info .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Info .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Info .row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+#ab-Info .row .text span em.na { color: var(--app-status-danger-fg); }
+#ab-Info .row.done .text b { color: var(--app-text-muted); }
+#ab-Info .qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+#ab-Info .row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+#ab-Info .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Info .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-Info .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-Info .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Info .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-Info .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Info .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Info .est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Info .est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Info .track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+#ab-Info .track i { display: block; height: 100%; background: var(--app-action-bg); }
+#ab-Info .ends { flex: none; padding: 0 16px 10px; }
+#ab-Info .ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Info .ledger { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+#ab-Info .lr { display: flex; justify-content: space-between; font-size: 14px; line-height: 24px; color: var(--app-text-secondary); }
+#ab-Info .lr.t { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--app-border-subtle); color: var(--app-text-primary); font-weight: 600; }
+#ab-Info .est.open { background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Info .pop { position: absolute; top: 106px; right: 50px; width: 286px; box-sizing: border-box; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); font-size: 14px; line-height: 20px; color: var(--app-text-secondary); }
+#ab-Info .pop p { margin: 0; }
+#ab-Info .pop .pt { font-size: 16px; font-weight: 600; color: var(--app-text-primary); }
+#ab-Info .pop .facts { display: flex; flex-direction: column; gap: 2px; color: var(--app-text-primary); }
+#ab-Info .pop .facts b { font-weight: 700; }
+#ab-States .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-States .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-States .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-States .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-States .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-States .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-States .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-States .ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-States .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+#ab-States .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+#ab-States .chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+#ab-States .fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ab-States .fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#ab-States .rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+#ab-States .row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-States .settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+#ab-States .settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+#ab-States .settle.none { color: var(--app-text-secondary); }
+#ab-States .row .text { flex: 1; min-width: 0; }
+#ab-States .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-States .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-States .row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+#ab-States .row .text span em.na { color: var(--app-status-danger-fg); }
+#ab-States .row.done .text b { color: var(--app-text-muted); }
+#ab-States .qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+#ab-States .row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+#ab-States .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-States .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-States .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-States .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-States .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-States .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-States .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-States .est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+#ab-States .est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-States .track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+#ab-States .track i { display: block; height: 100%; background: var(--app-action-bg); }
+#ab-States .ends { flex: none; padding: 0 16px 10px; }
+#ab-States .ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-States .ledger { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+#ab-States .lr { display: flex; justify-content: space-between; font-size: 14px; line-height: 24px; color: var(--app-text-secondary); }
+#ab-States .lr.t { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--app-border-subtle); color: var(--app-text-primary); font-weight: 600; }
+#ab-States .est.open { background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-States .pop { position: absolute; top: 106px; right: 50px; width: 286px; box-sizing: border-box; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); font-size: 14px; line-height: 20px; color: var(--app-text-secondary); }
+#ab-States .pop p { margin: 0; }
+#ab-States .pop .pt { font-size: 16px; font-weight: 600; color: var(--app-text-primary); }
+#ab-States .pop .facts { display: flex; flex-direction: column; gap: 2px; color: var(--app-text-primary); }
+#ab-States .pop .facts b { font-weight: 700; }
+#ab-States .sheet { width: 390px; min-height: 1010px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-ground); }
+#ab-States .lab { flex: none; margin: 0; height: 26px; box-sizing: border-box; padding: 7px 16px 0; font: 600 10px/16px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; color: var(--app-text-secondary); background: var(--app-surface-sunken); }
+#ab-States .pop.inline { position: static; align-self: flex-end; margin: 4px 16px 20px; box-shadow: none; }
+#ab-NoPrices .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-NoPrices .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-NoPrices .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPrices .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-NoPrices .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPrices .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-NoPrices .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoPrices .ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-NoPrices .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+#ab-NoPrices .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+#ab-NoPrices .chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+#ab-NoPrices .fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ab-NoPrices .fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#ab-NoPrices .rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+#ab-NoPrices .row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-NoPrices .settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+#ab-NoPrices .settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+#ab-NoPrices .settle.none { color: var(--app-text-secondary); }
+#ab-NoPrices .row .text { flex: 1; min-width: 0; }
+#ab-NoPrices .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPrices .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPrices .row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+#ab-NoPrices .row .text span em.na { color: var(--app-status-danger-fg); }
+#ab-NoPrices .row.done .text b { color: var(--app-text-muted); }
+#ab-NoPrices .qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+#ab-NoPrices .row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+#ab-NoPrices .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPrices .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-NoPrices .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-NoPrices .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPrices .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-NoPrices .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-NoPrices .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-NoPrices .est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoPrices .est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-NoPrices .track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+#ab-NoPrices .track i { display: block; height: 100%; background: var(--app-action-bg); }
+#ab-NoPrices .ends { flex: none; padding: 0 16px 10px; }
+#ab-NoPrices .ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-NoPrices .noprice { flex: none; padding: 0 4px 0 16px; border-top: 1px solid var(--app-border-subtle); font-size: 14px; line-height: 20px; color: var(--app-text-secondary); }
+#ab-NoPrices .noprice .head { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+#ab-NoPrices .noprice .head > svg { flex: none; color: var(--app-text-muted); }
+#ab-NoPrices .noprice .head > span { flex: 1; min-width: 0; }
+#ab-NoPrices .noprice .linkb { flex: none; height: 44px; padding: 0 12px; border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--app-action-quiet-fg); white-space: nowrap; cursor: pointer; }
+#ab-NoPrices .noprice .body { padding: 0 28px 2px 28px; display: flex; flex-direction: column; gap: 8px; }
+#ab-NoPrices .noprice .body p { margin: 0; }
+#ab-NoPrices .noprice .body ol { margin: 0; padding-left: 20px; color: var(--app-text-primary); }
+#ab-NoPricesMore .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-NoPricesMore .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-NoPricesMore .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPricesMore .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-NoPricesMore .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPricesMore .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-NoPricesMore .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoPricesMore .ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-NoPricesMore .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+#ab-NoPricesMore .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+#ab-NoPricesMore .chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+#ab-NoPricesMore .fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ab-NoPricesMore .fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+#ab-NoPricesMore .rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+#ab-NoPricesMore .row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-NoPricesMore .settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+#ab-NoPricesMore .settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+#ab-NoPricesMore .settle.none { color: var(--app-text-secondary); }
+#ab-NoPricesMore .row .text { flex: 1; min-width: 0; }
+#ab-NoPricesMore .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPricesMore .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoPricesMore .row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+#ab-NoPricesMore .row .text span em.na { color: var(--app-status-danger-fg); }
+#ab-NoPricesMore .row.done .text b { color: var(--app-text-muted); }
+#ab-NoPricesMore .qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+#ab-NoPricesMore .row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+#ab-NoPricesMore .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPricesMore .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-NoPricesMore .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-NoPricesMore .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoPricesMore .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-NoPricesMore .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-NoPricesMore .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-NoPricesMore .est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoPricesMore .est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-NoPricesMore .track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+#ab-NoPricesMore .track i { display: block; height: 100%; background: var(--app-action-bg); }
+#ab-NoPricesMore .ends { flex: none; padding: 0 16px 10px; }
+#ab-NoPricesMore .ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-NoPricesMore .noprice { flex: none; padding: 0 4px 0 16px; border-top: 1px solid var(--app-border-subtle); font-size: 14px; line-height: 20px; color: var(--app-text-secondary); }
+#ab-NoPricesMore .noprice .head { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+#ab-NoPricesMore .noprice .head > svg { flex: none; color: var(--app-text-muted); }
+#ab-NoPricesMore .noprice .head > span { flex: 1; min-width: 0; }
+#ab-NoPricesMore .noprice .linkb { flex: none; height: 44px; padding: 0 12px; border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--app-action-quiet-fg); white-space: nowrap; cursor: pointer; }
+#ab-NoPricesMore .noprice .body { padding: 0 28px 2px 28px; display: flex; flex-direction: column; gap: 8px; }
+#ab-NoPricesMore .noprice .body p { margin: 0; }
+#ab-NoPricesMore .noprice .body ol { margin: 0; padding-left: 20px; color: var(--app-text-primary); }
+</style>
+
+<header>
+  <h1>Velista: what the shopping list costs</h1>
+  <p class="lede">The shopping list tab shows an estimated total of the lines on screen, with a thin bar of how much of it is bought. Pressing the number says what is behind it. With no priced line there is one small row that says why. Plan <code>0132</code>. Drawn on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2270px; height: 1430px;">
+      <figure class="board" style="left: 0px; top: 420px; width: 390px;">
+        <figcaption>The total and its bar</figcaption>
+        <div class="frame" id="ab-Main" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span><h1 class="ph-title">Shopping list</h1><div class="ph-actions"><button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button><button class="ph-act" type="button" aria-label="Map of the shop"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button><button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button></div></header>
+          <div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 24,07 €. See what is behind it"><b>~24,07 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 1 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">1</span></button></div>
+          <div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove the shop"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+          <div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 24,07 €"><i style="width: 48%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~12,47 € left</span></div></div>
+          <div class="rows">
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Plátanos</b><span>Plátano de Canarias · 1,45 €</span></div><span class="qty">0</span></div>
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Pan de molde integral</b><span>Pan de molde integral Hacendado · 1,20 €</span></div><span class="qty">0</span></div>
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Aceite de oliva virgen extra</b><span>Aceite de oliva virgen extra Hacendado · 8,95 €</span></div><span class="qty">0</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Velas</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Yogur natural</b><span>Yogur natural Hacendado · 1,35 €</span></div><span class="qty">2</span></div>
+          <div class="row done"><span class="settle none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 18 18 6"></path></svg></span><div class="text"><b>Tomate frito</b><span>Tomate frito Hacendado · 0,95 €</span></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Queso en lonchas</b><span>Queso havarti García Baquero · <em>Not listed</em></span></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Café molido</b><span>Café molido Marcilla · <em class="na">Not available</em></span></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Leche semidesnatada</b><span>Leche semidesnatada Hacendado · 0,92 €</span></div><span class="qty">6</span></div>
+          </div>
+          <div class="composer"><span class="field">Add or find something</span><span class="send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></div>
+          <nav class="nav" aria-label="Main sections"><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span><span class="tab on"><span class="badge">8</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span></nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 420px; width: 390px;">
+        <figcaption>The total, pressed</figcaption>
+        <div class="frame" id="ab-Info" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span><h1 class="ph-title">Shopping list</h1><div class="ph-actions"><button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button><button class="ph-act" type="button" aria-label="Map of the shop"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button><button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button></div></header>
+          <div class="tools"><span class="count">8 to get</span><button class="est open" type="button" aria-label="Estimated total, about 24,07 €. See what is behind it"><b>~24,07 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 1 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">1</span></button></div>
+          <div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove the shop"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+          <div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 24,07 €"><i style="width: 48%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~12,47 € left</span></div></div>
+          <div class="rows">
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Plátanos</b><span>Plátano de Canarias · 1,45 €</span></div><span class="qty">0</span></div>
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Pan de molde integral</b><span>Pan de molde integral Hacendado · 1,20 €</span></div><span class="qty">0</span></div>
+          <div class="row done"><span class="settle got"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><div class="text"><b>Aceite de oliva virgen extra</b><span>Aceite de oliva virgen extra Hacendado · 8,95 €</span></div><span class="qty">0</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Velas</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Yogur natural</b><span>Yogur natural Hacendado · 1,35 €</span></div><span class="qty">2</span></div>
+          <div class="row done"><span class="settle none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 18 18 6"></path></svg></span><div class="text"><b>Tomate frito</b><span>Tomate frito Hacendado · 0,95 €</span></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Queso en lonchas</b><span>Queso havarti García Baquero · <em>Not listed</em></span></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Café molido</b><span>Café molido Marcilla · <em class="na">Not available</em></span></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Leche semidesnatada</b><span>Leche semidesnatada Hacendado · 0,92 €</span></div><span class="qty">6</span></div>
+          </div>
+          <div class="composer"><span class="field">Add or find something</span><span class="send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></div>
+          <nav class="nav" aria-label="Main sections"><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span><span class="tab on"><span class="badge">8</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span></nav>
+          <div class="pop" role="dialog" aria-labelledby="est-title"><p class="pt" id="est-title">Estimated total</p><div class="ledger"><div class="lr"><span>Bought</span><span>~11,60 €</span></div><div class="lr"><span>Still to buy</span><span>~12,47 €</span></div><div class="lr t"><span>Total</span><span>~24,07 €</span></div></div><p class="facts"><span><b>9</b> of <b>12</b> lines have a product.</span><span><b>7</b> of those <b>9</b> have a price at Mercadona.</span></p><p>These prices are not final. Shops change their prices, and some shops do not publish them or keep them up to date.</p></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 420px; width: 390px;">
+        <figcaption>The total follows the filter</figcaption>
+        <div class="frame" id="ab-States" style="width: 390px; height: 1010px;">
+          <div class="vel sheet">
+          <p class="lab">NO FILTER</p>
+          <div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 26,17 €. See what is behind it"><b>~26,17 €</b></button><button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button></div>
+          <div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 26,17 €"><i style="width: 44%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~14,57 € left</span></div></div>
+          <div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~11,60 €</span></div><div class="lr"><span>Still to buy</span><span>~14,57 €</span></div><div class="lr t"><span>Total</span><span>~26,17 €</span></div></div><p class="facts"><span><b>9</b> of <b>12</b> lines have a product.</span><span><b>8</b> of those <b>9</b> have a price.</span></p></div>
+          <p class="lab">ONE SHOP: WHAT IT DOES NOT LIST OR HAVE ADDS NOTHING</p>
+          <div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 24,07 €. See what is behind it"><b>~24,07 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 1 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">1</span></button></div>
+          <div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove Mercadona · Gran Vía 12"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+          <div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 24,07 €"><i style="width: 48%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~12,47 € left</span></div></div>
+          <div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~11,60 €</span></div><div class="lr"><span>Still to buy</span><span>~12,47 €</span></div><div class="lr t"><span>Total</span><span>~24,07 €</span></div></div><p class="facts"><span><b>9</b> of <b>12</b> lines have a product.</span><span><b>7</b> of those <b>9</b> have a price at Mercadona.</span></p></div>
+          <p class="lab">ONE SHOP AND ONE LIST, NOTHING BOUGHT YET</p>
+          <div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 4,60 €. See what is behind it"><b>~4,60 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">2</span></button></div>
+          <div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove Mercadona · Gran Vía 12"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span><span class="fchip">Cena del sábado<button type="button" aria-label="Remove Cena del sábado"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+          <div class="ends"><div class="track" role="img" aria-label="About 0,00 € bought of about 4,60 €"><i style="width: 0%"></i></div><div class="cap"><span>~0,00 € bought</span><span>~4,60 € left</span></div></div>
+          <div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~0,00 €</span></div><div class="lr"><span>Still to buy</span><span>~4,60 €</span></div><div class="lr t"><span>Total</span><span>~4,60 €</span></div></div><p class="facts"><span><b>2</b> of <b>3</b> lines have a product.</span><span><b>2</b> of those <b>2</b> have a price at Mercadona.</span></p></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 420px; width: 390px;">
+        <figcaption>No line has a price</figcaption>
+        <div class="frame" id="ab-NoPrices" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span><h1 class="ph-title">Shopping list</h1><div class="ph-actions"><button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button><button class="ph-act" type="button" aria-label="Map of the shop"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button><button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button></div></header>
+          <div class="tools"><span class="count">12 to get</span><button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button></div>
+          <div class="noprice"><div class="head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5"></path><path d="M12 7.6v.01"></path></svg><span>No prices yet.</span><button class="linkb" type="button" aria-expanded="false">See more</button></div></div>
+          <div class="rows">
+          <div class="row"><span class="settle"></span><div class="text"><b>Plátanos</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Pan de molde integral</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Aceite de oliva virgen extra</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Velas</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Yogur natural</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Tomate frito</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Queso en lonchas</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Café molido</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Leche semidesnatada</b></div><span class="qty">6</span></div>
+          </div>
+          <div class="composer"><span class="field">Add or find something</span><span class="send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></div>
+          <nav class="nav" aria-label="Main sections"><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span><span class="tab on"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span></nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 420px; width: 390px;">
+        <figcaption>No line has a price, after See more</figcaption>
+        <div class="frame" id="ab-NoPricesMore" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span><h1 class="ph-title">Shopping list</h1><div class="ph-actions"><button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button><button class="ph-act" type="button" aria-label="Map of the shop"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button><button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button></div></header>
+          <div class="tools"><span class="count">12 to get</span><button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button></div>
+          <div class="noprice"><div class="head"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5"></path><path d="M12 7.6v.01"></path></svg><span>No prices yet.</span><button class="linkb" type="button" aria-expanded="true">See less</button></div><div class="body"><p>A price comes from a product. These lines are only words, so there is nothing to add up.</p><ol><li>Open a line.</li><li>Choose the product you buy.</li><li>Its price shows on the line and joins the total.</li></ol><p>With a shop chosen, only the prices of that shop count.</p></div></div>
+          <div class="rows">
+          <div class="row"><span class="settle"></span><div class="text"><b>Plátanos</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Pan de molde integral</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Aceite de oliva virgen extra</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Velas</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Yogur natural</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Tomate frito</b></div><span class="qty">2</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Queso en lonchas</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Café molido</b></div><span class="qty">1</span></div>
+          <div class="row"><span class="settle"></span><div class="text"><b>Leche semidesnatada</b></div><span class="qty">6</span></div>
+          </div>
+          <div class="composer"><span class="field">Add or find something</span><span class="send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></div>
+          <nav class="nav" aria-label="Main sections"><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span><span class="tab on"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span></nav>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>WHAT THE NUMBER IS.</p><p>The total of every line on screen that has a price: bought, still to buy, or marked not available by the shopper. Each line counts its price times the whole quantity asked for.</p><p>Always a ~ before it. No word and no glyph beside it, and no container around it. It is in the secondary text colour, the weight of the count at the other end of the row.</p><p>The number is a button. That is the only way into the popover.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>THE BAR AND THE POPOVER.</p><p>The bar is the list page's progress bar, thinner. Its whole length is the total and the amber part is what is bought. Under it, the bought amount at the leading end and what is left at the trailing end.</p><p>The popover is the only place that says Estimated. It gives bought, still to buy and the total, then how many lines have a product and how many of those have a price, then why the prices are not final.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 420px;"><p>IT FOLLOWS THE FILTER.</p><p>The number, the bar and the counts are about the lines the filter leaves on screen, never the whole basket.</p><p>With a shop chosen, a line the shop does not list (Queso) or is known not to have (Café, in red) adds nothing. A line the shopper marked not available (Tomate frito) still counts, on the left side.</p><p>The count at the start of the row keeps counting the whole basket, as it does today.</p></aside>
+      <aside class="note" style="left: 1410px; top: 0px; width: 420px;"><p>WHEN NO LINE HAS A PRICE.</p><p>No number and no bar. One small row under the tools says so. See more opens the reason and the three steps in place, and See less closes them.</p><p>The row has no close button. It is small, and it goes away by itself when the first line gets a price.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2270;
+    var h = 1430;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

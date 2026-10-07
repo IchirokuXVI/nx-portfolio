@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shopping list: the total under three filters</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+body { margin: 0; }
+/* Tokens copied from libs/velista/ui/src/lib/styles, Day values. */
+.vel {
+  --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-danger-fg: #b3261e;
+  --app-elevation-2: 0 8px 28px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary);
+}
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+.ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+.tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+.chips { flex: none; display: flex; gap: 8px; padding: 0 16px 10px; }
+.fchip { height: 32px; box-sizing: border-box; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.fchip button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.rows { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--app-border-subtle); }
+.row { display: flex; align-items: center; gap: 12px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+.settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 2px; display: flex; align-items: center; justify-content: center; }
+.settle.got { border: 0; background: var(--app-action-quiet-fg); color: #ffffff; }
+.settle.none { color: var(--app-text-secondary); }
+.row .text { flex: 1; min-width: 0; }
+.row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .text span em { font-style: normal; color: var(--app-text-secondary); font-weight: 600; }
+.row .text span em.na { color: var(--app-status-danger-fg); }
+.row.done .text b { color: var(--app-text-muted); }
+.qty { flex: none; width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; }
+.row.done .qty { border-color: transparent; background: transparent; color: var(--app-text-muted); font-weight: 400; }
+.composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+.send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+.nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+.tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+.badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+/* the total: a number that is also a button, in the secondary text role. No glyph beside it. */
+.est { flex: none; height: 44px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; border-radius: 999px; background: transparent; font: inherit; color: var(--app-text-secondary); cursor: pointer; }
+.est b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* the bar: its whole length is the total, the amber part is what is bought. The list page progress bar, thinner. */
+.track { height: 4px; border-radius: 2px; background: var(--app-border-subtle); overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--app-action-bg); }
+.ends { flex: none; padding: 0 16px 10px; }
+.ends .cap { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.ledger { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.lr { display: flex; justify-content: space-between; font-size: 14px; line-height: 24px; color: var(--app-text-secondary); }
+.lr.t { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--app-border-subtle); color: var(--app-text-primary); font-weight: 600; }
+/* what pressing the number opens: an anchored popover, no scrim */
+.est.open { background: var(--app-surface-sunken); color: var(--app-text-primary); }
+.pop { position: absolute; top: 106px; right: 50px; width: 286px; box-sizing: border-box; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); font-size: 14px; line-height: 20px; color: var(--app-text-secondary); }
+.pop p { margin: 0; }
+.pop .pt { font-size: 16px; font-weight: 600; color: var(--app-text-primary); }
+.pop .facts { display: flex; flex-direction: column; gap: 2px; color: var(--app-text-primary); }
+.pop .facts b { font-weight: 700; }
+.sheet { width: 390px; min-height: 1010px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-ground); }
+.lab { flex: none; margin: 0; height: 26px; box-sizing: border-box; padding: 7px 16px 0; font: 600 10px/16px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; color: var(--app-text-secondary); background: var(--app-surface-sunken); }
+.pop.inline { position: static; align-self: flex-end; margin: 4px 16px 20px; box-shadow: none; }
+</style>
+</helmet>
+<div class="vel sheet">
+<p class="lab">NO FILTER</p>
+<div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 26,17 €. See what is behind it"><b>~26,17 €</b></button><button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button></div>
+<div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 26,17 €"><i style="width: 44%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~14,57 € left</span></div></div>
+<div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~11,60 €</span></div><div class="lr"><span>Still to buy</span><span>~14,57 €</span></div><div class="lr t"><span>Total</span><span>~26,17 €</span></div></div><p class="facts"><span><b>9</b> of <b>12</b> lines have a product.</span><span><b>8</b> of those <b>9</b> have a price.</span></p></div>
+<p class="lab">ONE SHOP: WHAT IT DOES NOT LIST OR HAVE ADDS NOTHING</p>
+<div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 24,07 €. See what is behind it"><b>~24,07 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 1 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">1</span></button></div>
+<div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove Mercadona · Gran Vía 12"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+<div class="ends"><div class="track" role="img" aria-label="About 11,60 € bought of about 24,07 €"><i style="width: 48%"></i></div><div class="cap"><span>~11,60 € bought</span><span>~12,47 € left</span></div></div>
+<div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~11,60 €</span></div><div class="lr"><span>Still to buy</span><span>~12,47 €</span></div><div class="lr t"><span>Total</span><span>~24,07 €</span></div></div><p class="facts"><span><b>9</b> of <b>12</b> lines have a product.</span><span><b>7</b> of those <b>9</b> have a price at Mercadona.</span></p></div>
+<p class="lab">ONE SHOP AND ONE LIST, NOTHING BOUGHT YET</p>
+<div class="tools"><span class="count">8 to get</span><button class="est" type="button" aria-label="Estimated total, about 4,60 €. See what is behind it"><b>~4,60 €</b></button><button class="ph-act" type="button" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="ph-badge">2</span></button></div>
+<div class="chips"><span class="fchip">Mercadona · Gran Vía 12<button type="button" aria-label="Remove Mercadona · Gran Vía 12"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span><span class="fchip">Cena del sábado<button type="button" aria-label="Remove Cena del sábado"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></span></div>
+<div class="ends"><div class="track" role="img" aria-label="About 0,00 € bought of about 4,60 €"><i style="width: 0%"></i></div><div class="cap"><span>~0,00 € bought</span><span>~4,60 € left</span></div></div>
+<div class="pop inline"><div class="ledger"><div class="lr"><span>Bought</span><span>~0,00 €</span></div><div class="lr"><span>Still to buy</span><span>~4,60 €</span></div><div class="lr t"><span>Total</span><span>~4,60 €</span></div></div><p class="facts"><span><b>2</b> of <b>3</b> lines have a product.</span><span><b>2</b> of those <b>2</b> have a price at Mercadona.</span></p></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1010}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
