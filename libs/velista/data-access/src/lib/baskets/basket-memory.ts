@@ -57,6 +57,14 @@ const COMBINING_MARKS = new RegExp(
 );
 
 /**
+ * A product set as one comparable string, whatever order it was given in. Empty
+ * for free text. It stands in for the digest the server compares.
+ */
+function productSetKey(itemIds: readonly string[]): string {
+  return [...new Set(itemIds)].sort().join(',');
+}
+
+/**
  * A line's words as the merge rule compares them, which is the server's
  * `normalizeContent` (backend `0091`).
  *
@@ -1172,10 +1180,13 @@ export class BasketMemory implements BasketServiceI {
    * section 7).
    *
    * **It merges**, because the list's own add does (backend `0091`): a line
-   * whose normalized content matches one the target list already holds raises
-   * that line rather than making a second. So the answer can be a row that was
-   * already on the screen, under a key the caller never named, which is exactly
-   * what the store has to fold correctly.
+   * whose normalized content **and products** match one the target list already
+   * holds raises that line rather than making a second. So the answer can be a
+   * row that was already on the screen, under a key the caller never named, which
+   * is exactly what the store has to fold correctly.
+   *
+   * The name alone is not a match. Two products of one name that differ in brand
+   * or in format are two lines, and free text meets only free text.
    *
    * A list this reader was not served is refused, which is the redaction being a
    * rule rather than a caption: a target you were not told about is one you may
@@ -1196,11 +1207,13 @@ export class BasketMemory implements BasketServiceI {
 
     const quantity = Math.max(1, Math.trunc(body.quantity));
     const key = normalizeContent(content);
+    const wanted = productSetKey(body.itemIds ?? []);
     const held = this._lines.find(
       (line) =>
         !line.deleted &&
         line.listId === body.targetListId &&
-        normalizeContent(line.content) === key
+        normalizeContent(line.content) === key &&
+        productSetKey(line.optionIds) === wanted
     );
 
     if (held !== undefined) {

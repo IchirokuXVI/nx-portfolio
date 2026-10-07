@@ -1770,6 +1770,12 @@ describe('BasketStore: skip, demand and the add', () => {
       targetListId: 'list-weekly',
       content: 'milk',
       quantity: 2,
+      // The products that line holds: the name alone is not a match.
+      itemIds: [
+        'item-milk-hacendado',
+        'item-milk-pascual',
+        'item-milk-central',
+      ],
     });
 
     expect(store.rows()).toHaveLength(rows);

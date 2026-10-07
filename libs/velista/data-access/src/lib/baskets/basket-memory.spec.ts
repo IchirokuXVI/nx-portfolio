@@ -732,10 +732,34 @@ describe('BasketMemory: adding a line', () => {
       targetListId: 'list-weekly',
       content: '  milk ',
       quantity: 2,
+      // The products the list's Milk holds, in another order. The name alone
+      // is not a match.
+      itemIds: [
+        'item-milk-central',
+        'item-milk-hacendado',
+        'item-milk-pascual',
+      ],
     });
 
     expect(result.row?.rowKey).toBe('zl-1');
     expect(result.row?.entries[0].left).toBe(4);
+  });
+
+  it('makes a second line for the same name with another product', async () => {
+    // Two products of one name are two things to buy, so the list's Milk keeps
+    // its quantity and the add is a line of its own.
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 2,
+      itemIds: ['item-milk-pascual'],
+    });
+
+    const weekly = result.row?.entries.filter(
+      (entry) => entry.listId === 'list-weekly'
+    );
+    expect(weekly?.map((entry) => entry.left)).toEqual([2, 2]);
   });
 
   it('refuses a list this reader was not served', async () => {
