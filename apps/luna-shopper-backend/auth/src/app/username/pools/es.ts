@@ -30,7 +30,6 @@ const nouns: NounEntry[] = [
   { word: 'Estela', gender: 'f' },
   { word: 'Rumbo', gender: 'm' },
   { word: 'Travesía', gender: 'f' },
-  { word: 'Sextante', gender: 'm' },
   { word: 'Foque', gender: 'm' },
   { word: 'Cubierta', gender: 'f' },
   { word: 'Proa', gender: 'f' },
