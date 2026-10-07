@@ -1,0 +1,37 @@
+{
+  "title": "Velista: the strip of a support session",
+  "lede": "An operator can open the app as a user to see a bug that needs that user's data. While that lasts, a strip at the top of every screen says whose account is open and how long is left, and it cannot be put away. Plan <code>0133</code>, with backend <code>0194</code> behind it. Drawn on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1314,
+      "h": 944,
+      "title": "The strip on home, a list and the Shopping list tab"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "strip",
+      "x": 0,
+      "y": -300,
+      "w": 420,
+      "text": "THE STRIP IS THE FIRST THING ON EVERY SCREEN.\n44px tall, above the header. It says whose account is open and how long the session has left. End is the only control on it.\nIt has no close button and no setting hides it. It stays above a sheet's scrim and above every cover."
+    },
+    {
+      "id": "cost",
+      "x": 470,
+      "y": -300,
+      "w": 420,
+      "text": "WHAT IT COSTS.\nThe app is 44px shorter while the strip is drawn. The bar at the bottom and the field above it stay where they are, so the page slot loses one row at most.\nIt covers nothing. Three other placements were compared and each covered a title or a row."
+    },
+    {
+      "id": "colour",
+      "x": 940,
+      "y": -300,
+      "w": 420,
+      "text": "THE COLOUR IS THE INK OF THE THEME.\nDark on Day, light on Night, from two tokens of its own. Amber stays the colour of an action, so nothing on the strip reads as something to press except End.\nNo frame round the screen: the owner declined it."
+    }
+  ]
+}
