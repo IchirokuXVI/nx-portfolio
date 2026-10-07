@@ -15,10 +15,9 @@ is backend backlog plan `0019`.
 once in production. The steps below are what that task does, and they are the
 way to run it by hand, on the VPS as `deploy`.
 
-**The task is armed for staging and disarmed for production.** Its `task.env`
-gives staging a window until 2026-10-09, and the production window says
-`never`. The owner arms production in a pull request that writes that date and
-the production release.
+**The task is armed for staging and for production.** Its `task.env` gives
+staging a window until 2026-10-09 and production a window until 2026-10-14.
+Release `0.13.2` is the one version that runs it in production.
 
 | File                       | What it is                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------ |
