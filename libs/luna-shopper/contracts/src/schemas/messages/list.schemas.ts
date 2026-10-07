@@ -65,6 +65,10 @@ export const LIST_SCHEMA_IDS = {
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
   listsHoldingItemRequest: schemaId('msg/list.holdingItem/request'),
   listsHoldingItemResult: schemaId('msg/list.holdingItem/response'),
+  itemLineView: schemaId('list/ItemLineView'),
+  listWithItemLinesView: schemaId('list/ListWithItemLinesView'),
+  listsWithItemLinesRequest: schemaId('msg/list.linesHoldingItem/request'),
+  listsWithItemLinesResult: schemaId('msg/list.linesHoldingItem/response'),
   tripView: schemaId('list/TripView'),
   tripPage: schemaId('list/TripPage'),
   tripRowView: schemaId('list/TripRowView'),
@@ -690,6 +694,57 @@ const listsHoldingItemResult = object(
   },
   ['lists', 'hasMore']
 );
+
+// Every readable list with its lines that hold one product (plan 0196,
+// section 3). `lines` is required and can be empty: a list that does not hold
+// the product is still in the answer.
+const listsWithItemLinesRequest = object(
+  LIST_SCHEMA_IDS.listsWithItemLinesRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+  },
+  ['userId', 'itemId']
+);
+const itemLineView = object(
+  LIST_SCHEMA_IDS.itemLineView,
+  {
+    id: nonEmptyString(),
+    content: string(),
+    quantity: integer({ minimum: 0 }),
+    approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
+  },
+  ['id', 'content', 'quantity', 'approvalStatus']
+);
+const listWithItemLinesView = object(
+  LIST_SCHEMA_IDS.listWithItemLinesView,
+  {
+    listId: nonEmptyString(),
+    name: string(),
+    zoneId: nonEmptyString(),
+    zoneName: string(),
+    autoApproveLines: boolean(),
+    myPermissions: array(ref(ENUM_IDS.listPermission)),
+    lines: array(ref(LIST_SCHEMA_IDS.itemLineView)),
+  },
+  [
+    'listId',
+    'name',
+    'zoneId',
+    'zoneName',
+    'autoApproveLines',
+    'myPermissions',
+    'lines',
+  ]
+);
+const listsWithItemLinesResult = object(
+  LIST_SCHEMA_IDS.listsWithItemLinesResult,
+  {
+    lists: array(ref(LIST_SCHEMA_IDS.listWithItemLinesView)),
+    hasMore: boolean(),
+  },
+  ['lists', 'hasMore']
+);
 // One trip that touched a list (plan 0122, section 3). The name and id of a
 // basket are served here on purpose, which is section 5's narrow reversal of plan
 // 0052: these reads and the list room only, behind the list's `READ` check.
@@ -944,6 +999,10 @@ export const listSchemas: JsonSchema[] = [
   listHoldingItemView,
   listsHoldingItemRequest,
   listsHoldingItemResult,
+  itemLineView,
+  listWithItemLinesView,
+  listsWithItemLinesRequest,
+  listsWithItemLinesResult,
   tripView,
   tripPage,
   tripRowView,
@@ -995,6 +1054,10 @@ export const listMessageContracts: Record<
   [LIST_PATTERNS.holdingItem]: {
     request: LIST_SCHEMA_IDS.listsHoldingItemRequest,
     response: LIST_SCHEMA_IDS.listsHoldingItemResult,
+  },
+  [LIST_PATTERNS.linesHoldingItem]: {
+    request: LIST_SCHEMA_IDS.listsWithItemLinesRequest,
+    response: LIST_SCHEMA_IDS.listsWithItemLinesResult,
   },
   [LIST_PATTERNS.trips]: {
     request: LIST_SCHEMA_IDS.listTripsRequest,

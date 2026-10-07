@@ -12,6 +12,7 @@ import {
   CATALOG_SCHEMA_IDS,
   CATEGORY_PATTERNS,
   ITEM_PATTERNS,
+  PRICE_HISTORY_LIMITS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
   SECTION_PATTERNS,
@@ -25,6 +26,8 @@ import {
   type GetItemsRequest,
   type GetItemsResult,
   type ItemPage,
+  type ItemPriceHistoryRequest,
+  type ItemPriceHistoryView,
   type ItemView,
   type LocationSectionsRequest,
   type LocationSectionsView,
@@ -68,6 +71,7 @@ import {
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   LookupItemsDto,
+  PriceHistoryQueryDto,
   PriceScopedQueryDto,
   SearchItemsQueryDto,
   SearchOffersQueryDto,
@@ -615,6 +619,47 @@ export class CatalogItemsController {
         cursor: query.cursor,
         limit: query.limit,
       }
+    );
+  }
+
+  /**
+   * The price a shopper saw for one product, over a range of time (plan
+   * 0196, section 2).
+   *
+   * One series for each scope of the read. The scopes are resolved as the
+   * listing resolves them, from the selectors of the query or from the
+   * profile of the caller, and the catalog service replays the price rule
+   * over the stored rows of each one. Nothing is written.
+   *
+   * At most 50 scopes are sent, the first of the resolution. A profile that
+   * resolves to none answers an empty `series`, as a listing with no scope
+   * answers a page with no price.
+   *
+   * An unknown product is the 404 that `GET :id` answers, and a `from` after
+   * `to` is a 400 from the catalog service.
+   */
+  @Get(':id/price-history')
+  @ApiContractResponse(ITEM_PATTERNS.priceHistory)
+  @ApiProblemResponses({ body: true })
+  async priceHistory(
+    @AuthUser() user: CurrentUser,
+    @UuidParam('id') id: string,
+    @Query() query: PriceHistoryQueryDto
+  ): Promise<ItemPriceHistoryView> {
+    const scopeIds = await this.scopes.forRead(
+      user.userId,
+      toScopeQuery(query)
+    );
+    const req: ItemPriceHistoryRequest = {
+      userId: user.userId,
+      itemId: id,
+      priceScopeIds: scopeIds.slice(0, PRICE_HISTORY_LIMITS.maxScopes),
+      from: query.from,
+      to: query.to,
+    };
+    return this.nats.send<ItemPriceHistoryView>(
+      ITEM_PATTERNS.priceHistory,
+      req
     );
   }
 }

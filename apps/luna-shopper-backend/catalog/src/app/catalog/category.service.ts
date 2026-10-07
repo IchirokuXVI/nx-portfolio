@@ -108,6 +108,27 @@ export class CategoryService {
   }
 
   /**
+   * The place of each category in the tree, for the listing ordered by
+   * category (plan 0196, section 1): the ids in the order of
+   * {@link orderAsTree}, and the rank of each beside it.
+   *
+   * Two arrays of one length and not a map, because that is how the listing
+   * hands them to its statement. A product sits on leaves alone (R2), and
+   * the leaves come grouped under their root in the order of the roots, so
+   * the rank of a leaf sorts by the position of its root and then by its
+   * own. One read of a hundred rows for the request.
+   */
+  async treeRanks(): Promise<{ ids: string[]; ranks: number[] }> {
+    const rows = await orderAsTree(this.categories.createQueryBuilder('c'))
+      .select('c.id')
+      .getMany();
+    return {
+      ids: rows.map((row) => row.id),
+      ranks: rows.map((_, index) => index),
+    };
+  }
+
+  /**
    * The back office's list: the tree's rows in the tree's order, filtered and
    * paged. Every filter narrows, so two that contradict each other answer an
    * empty page rather than one of them winning.

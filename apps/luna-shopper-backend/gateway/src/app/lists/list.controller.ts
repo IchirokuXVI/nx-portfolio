@@ -46,6 +46,8 @@ import {
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
   type ListSuggestionsRequest,
+  type ListsWithItemLinesRequest,
+  type ListsWithItemLinesResult,
   type ListTripRowsRequest,
   type ListTripsRequest,
   type ListView,
@@ -208,6 +210,40 @@ export class ItemHistoryController {
     };
     return this.nats.send<ListsHoldingItemResult>(
       LIST_PATTERNS.holdingItem,
+      req
+    );
+  }
+
+  /**
+   * Every list the caller can read, with the lines of each one that hold this
+   * product (plan 0196, section 3).
+   *
+   * The read behind the sheet that adds a product from the catalog tab of
+   * velista: one row for each list, with a stepper. A list that does not hold
+   * the product is in the answer with `lines: []`, which is the difference
+   * from `:id/lists` above. That route did not change, and the line page
+   * still reads it.
+   *
+   * Here for the reason the two routes above are: it is keyed on a catalog
+   * item, it spans every zone of the caller, and core holds the access that
+   * decides which lists may be named.
+   *
+   * It takes no query at all. The answer is capped at 100 lists and says so
+   * in `hasMore`.
+   */
+  @Get(':id/list-lines')
+  @ApiContractResponse(LIST_PATTERNS.linesHoldingItem)
+  @ApiProblemResponses({ body: true })
+  listLines(
+    @AuthUser() user: CurrentUser,
+    @UuidParam('id') id: string
+  ): Promise<ListsWithItemLinesResult> {
+    const req: ListsWithItemLinesRequest = {
+      userId: user.userId,
+      itemId: id,
+    };
+    return this.nats.send<ListsWithItemLinesResult>(
+      LIST_PATTERNS.linesHoldingItem,
       req
     );
   }
