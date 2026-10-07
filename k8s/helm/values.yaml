@@ -725,6 +725,20 @@ lunaShopperBackend:
     # and connections. Raise these and the limit together, never one alone.
     sharedBuffers: 64MB
     workMem: 4MB
+    # One instance can take numbers of its own, keyed by its name. Each key that
+    # an entry leaves out falls back to the value above. It is a map and not a
+    # field on `instances` because Helm replaces a list whole: an environment
+    # file that wanted to change one instance would have to restate all four.
+    #
+    #   instanceOverrides:
+    #     luna-shopper-backend-catalog-db:
+    #       resources: { requests: {...}, limits: {...} }
+    #       sharedBuffers: 256MB
+    #       workMem: 8MB
+    #
+    # `resources` is taken whole, so state requests and limits together and keep
+    # them equal. That is what keeps the pod Guaranteed.
+    instanceOverrides: {}
     instances:
       - name: luna-shopper-backend-auth-db
         database: luna_auth
