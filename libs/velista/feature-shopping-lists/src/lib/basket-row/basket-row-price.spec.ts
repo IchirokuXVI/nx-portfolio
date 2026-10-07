@@ -121,12 +121,27 @@ describe('BasketRowComponent: the price on the caption line', () => {
       new Map([product('i-milk', offer(0.95))])
     );
 
-    // The name, the separator the app already uses, and the money string. One
-    // string on one line, in the same muted treatment the name already has.
+    // The name, the brand and the money string, each after the separator the
+    // app already uses. One string on one line, in the same muted treatment the
+    // name already has. The format is absent here only because this spec's
+    // translator has no words for a unit, and a key never reaches the screen.
+    expect(caption(fixture)).toBe(
+      'Hacendado whole milk 1 L · Hacendado · €0.95'
+    );
+  });
+
+  it('draws the name and the price alone for a product with no brand', async () => {
+    const [id, milk] = product('i-milk', offer(0.95));
+    const fixture = await render(
+      line({ optionIds: ['i-milk'] }),
+      new Map([[id, { ...milk, brand: null }]])
+    );
+
+    // A field the catalog does not know leaves no gap and no second separator.
     expect(caption(fixture)).toBe('Hacendado whole milk 1 L · €0.95');
   });
 
-  it('renders exactly the caption it rendered before when there is no price', async () => {
+  it('renders no price and no placeholder when there is no price', async () => {
     const unpriced = await render(
       line({ optionIds: ['i-milk'] }),
       new Map([product('i-milk', null)])
@@ -139,8 +154,8 @@ describe('BasketRowComponent: the price on the caption line', () => {
     // No placeholder, no dash, no "price unknown": a product with no price says
     // nothing about price (section 2). A scope that carries the product with no
     // price on it reads the same way.
-    expect(caption(unpriced)).toBe('Hacendado whole milk 1 L');
-    expect(caption(priceless)).toBe('Hacendado whole milk 1 L');
+    expect(caption(unpriced)).toBe('Hacendado whole milk 1 L · Hacendado');
+    expect(caption(priceless)).toBe('Hacendado whole milk 1 L · Hacendado');
   });
 
   /**

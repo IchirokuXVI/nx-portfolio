@@ -147,6 +147,10 @@ lib-list-tools {
   inset-block-start: calc(var(--app-space-3) * -1);
   margin-block-start: calc(var(--app-space-3) * -1);
   padding-block-start: var(--app-space-3);
+  // Room under the count, the total and its bar, so the first line does not start
+  // against them. On the bar and not on the list, so it holds while the lines
+  // scroll under.
+  padding-block-end: var(--app-space-3);
   // The column's own inline padding is zero, so its rows reach the edges. The bar is
   // not a row: without this its count, its chips and the bar of the total started on
   // the edge of the screen. The trailing side is the filter button's, which keeps its

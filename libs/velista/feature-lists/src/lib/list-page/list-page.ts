@@ -90,6 +90,7 @@ import {
   ListNotice,
   PageHeader,
   PageHeaderAction,
+  productDetailText,
   RowSkeleton,
   SpinnerIcon,
   type SuggestionChoice,
@@ -327,6 +328,21 @@ export class ListPage {
    */
   readonly markedLine = signal<string | null>(null);
 
+  /**
+   * What tells a product from another of its name, or null for a product the
+   * catalog has not answered about or knows neither fact of.
+   */
+  private _detailOf(itemId: string): string | null {
+    const item = this._itemNames.nameOf(itemId);
+    if (item === null) {
+      return null;
+    }
+    const locale = this._locale();
+    return productDetailText(item, locale, (key, args) =>
+      this._translator.t(key, undefined, locale, args)
+    );
+  }
+
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
     const zoneId = this.zoneId();
@@ -362,6 +378,9 @@ export class ListPage {
       // somebody in it (plan 0022, sections 2.1 and 3.4).
       viewers: this._viewers(),
       editorOf: (lineId) => this._editors().get(lineId) ?? null,
+      // The format and the brand of a line's one product. `ItemNames` is a signal,
+      // so a row gains its detail the moment its product resolves.
+      detailOf: (itemId) => this._detailOf(itemId),
       // Not live means the room was refused or the connection dropped. What is on
       // screen is correct and will not update itself, which is worth saying: looking
       // live while being stale is worse than looking broken.

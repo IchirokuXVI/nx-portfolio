@@ -171,6 +171,18 @@
         -->
         <span class="product">
           <span>{{ product }}</span>
+          <!--
+            The format, then the brand, between the name and the price. Each is
+            drawn only when the catalog knows it, with the separator the price
+            already takes, and neither is labelled: "1 L" and a brand read as what
+            they are. They are what tells two rows of one name apart.
+          -->
+          @if (productFormat(); as format) {
+            <span> · {{ format }}</span>
+          }
+          @if (productBrand(); as brand) {
+            <span> · {{ brand }}</span>
+          }
           @if (productPrice(); as price) {
             <span> · {{ price }}</span>
           }

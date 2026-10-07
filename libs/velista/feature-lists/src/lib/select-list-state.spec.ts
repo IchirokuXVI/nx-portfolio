@@ -200,6 +200,54 @@ describe('selectListState', () => {
   });
 
   /**
+   * A list can hold two lines of one name that differ in brand or in format, so a
+   * line that names exactly one product states both under its name.
+   */
+  describe('what tells two lines of one name apart', () => {
+    const detailOf = (itemId: string) =>
+      itemId === 'item-oat' ? '1 L · Oatly' : null;
+
+    it('states the format and the brand of a line that names one product', () => {
+      const state = select({
+        lines: [line({ itemIds: ['item-oat'] })],
+        detailOf,
+      });
+
+      expect(loaded(state).lines[0].detail).toBe('1 L · Oatly');
+    });
+
+    it('states none for a line of several products, which has no single one', () => {
+      const state = select({
+        lines: [line({ itemIds: ['item-oat', 'item-whole'] })],
+        detailOf,
+      });
+
+      expect(loaded(state).lines[0].detail).toBeNull();
+    });
+
+    it('states none for free text, and none for a product nothing is known of', () => {
+      const state = select({
+        lines: [
+          line({ id: 'ln-text', itemIds: [], position: 1 }),
+          line({ id: 'ln-gone', itemIds: ['item-gone'], position: 2 }),
+        ],
+        detailOf,
+      });
+
+      expect(loaded(state).lines.map((row) => row.detail)).toEqual([
+        null,
+        null,
+      ]);
+    });
+
+    it('draws no detail at all for a page that resolves none', () => {
+      const state = select({ lines: [line({ itemIds: ['item-oat'] })] });
+
+      expect(loaded(state).lines[0].detail).toBeNull();
+    });
+  });
+
+  /**
    * The quantity and the history, which replaced the two state machines `0012` had
    * (velista plan 0043, section 3.2).
    *
@@ -222,7 +270,13 @@ describe('selectListState', () => {
 
     it('marks a line at zero that has been bought, and never strikes it through', () => {
       const state = select({
-        lines: [line({ quantity: 0, boughtCount: 2, lastSettlementOutcome: 'BOUGHT' })],
+        lines: [
+          line({
+            quantity: 0,
+            boughtCount: 2,
+            lastSettlementOutcome: 'BOUGHT',
+          }),
+        ],
       });
 
       expect(loaded(state).lines[0]).toMatchObject({
@@ -522,7 +576,10 @@ describe('selectListState', () => {
       // refuses them a pending one's (backend plan 0076, section 4.1). Offering the
       // fields here would draw a save that is a 403. What they keep is the reel,
       // which asks `canDecide` on its own.
-      expect(offered(DECIDER)).toEqual({ actions: ['comments'], editScope: null });
+      expect(offered(DECIDER)).toEqual({
+        actions: ['comments'],
+        editScope: null,
+      });
       expect(row(DECIDER).adjustable).toBe(true);
     });
 
