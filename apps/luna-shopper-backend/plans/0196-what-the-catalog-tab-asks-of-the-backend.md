@@ -1,3 +1,5 @@
+> **PR:** [#681](https://github.com/IchirokuXVI/nx-portfolio/pull/681)
+
 # 0196: what the catalog tab asks of the backend
 
 > Asked for by the owner on 2026-10-08 ("Implement the backend plan, then go back to stage
