@@ -19,7 +19,7 @@ import {
 } from './catalog-admin.controller';
 
 /**
- * A shop reference that another shop holds, over real HTTP (plan 0194).
+ * A shop reference that another shop holds, over real HTTP (plan 0195).
  *
  * Catalog refuses it, and the refusal reaches the gateway as the problem
  * object that crossed NATS, never as an exception class. What is proved here
@@ -131,7 +131,7 @@ const refuse = () => {
   throw REFUSED;
 };
 
-describe('a shop reference that another shop holds (plan 0194)', () => {
+describe('a shop reference that another shop holds (plan 0195)', () => {
   let context: Awaited<ReturnType<typeof boot>> | undefined;
 
   afterEach(async () => {

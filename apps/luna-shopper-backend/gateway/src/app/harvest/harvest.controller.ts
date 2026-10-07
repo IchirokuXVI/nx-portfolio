@@ -408,7 +408,7 @@ export class AdminHarvestPlacesController {
    *
    * A reference that a shop of another chain or of another provider holds
    * answers 409 `location_external_ref_taken` with that shop in
-   * `details.heldBy`, and writes nothing (plan 0194). With `force` the shop is
+   * `details.heldBy`, and writes nothing (plan 0195). With `force` the shop is
    * created with no reference.
    */
   @Post(':id/import')
@@ -468,7 +468,7 @@ export class AdminHarvestPlacesController {
    * `name`) and writes nothing; send `acrossChains` to link anyway. An
    * imported place answers 409 `place_already_imported`.
    *
-   * A reference that another shop holds does not stop the link (plan 0194).
+   * A reference that another shop holds does not stop the link (plan 0195).
    * The reference of the shop stays empty, `filled` lacks `EXTERNAL_REF`, and
    * `refHeldBy` names the shop that holds it.
    */

@@ -96,7 +96,7 @@ export interface ProblemResponseOptions {
    */
   eanHeld?: boolean;
   /**
-   * The route can give a shop an external reference (plan 0194), so a
+   * The route can give a shop an external reference (plan 0195), so a
    * reference another shop holds answers 409 with a code of its own. It is
    * told apart from a plain conflict because the client names the shop that
    * holds it.

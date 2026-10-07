@@ -227,7 +227,7 @@ export const ERROR_CATALOG: Record<
     en: 'This chain already has a section with that slug.',
     es: 'Esta cadena ya tiene una sección con ese identificador.',
   },
-  // One shop for each external reference (plan 0194).
+  // One shop for each external reference (plan 0195).
   [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: {
     en: 'Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.',
     es: 'Otra tienda ya tiene esa referencia externa. Una referencia nombra una sola tienda: usa esa tienda o quítale antes la referencia.',

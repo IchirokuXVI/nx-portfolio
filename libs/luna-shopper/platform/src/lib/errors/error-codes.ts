@@ -360,7 +360,7 @@ export const ERROR_CODES = {
   SECTION_SLUG_TAKEN: 'section_slug_taken',
   /**
    * A shop was given an external reference that another shop holds (plan
-   * 0194).
+   * 0195).
    *
    * The catalog holds one shop for each reference, across chains and
    * providers. Nothing was written. The reference travels in `details` as
@@ -553,7 +553,7 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
-  // 409: the reference is well formed, and another shop holds it (plan 0194).
+  // 409: the reference is well formed, and another shop holds it (plan 0195).
   [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: HttpStatus.CONFLICT,
   // Plan 0170: a malformed combination of query parameters, and a shop that
   // does not exist.

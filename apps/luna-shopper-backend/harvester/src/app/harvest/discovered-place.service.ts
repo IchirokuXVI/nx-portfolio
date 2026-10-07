@@ -264,7 +264,7 @@ function placeGroupName(places: DiscoveredPlace[]): string | null {
 
 /**
  * Whether catalog refused a write because another shop holds the reference
- * (plan 0194), and which shop that is.
+ * (plan 0195), and which shop that is.
  *
  * Undefined for any other failure. Null inside is a holder that catalog could
  * not name. The error crossed NATS, so it is the problem object of catalog
@@ -289,7 +289,7 @@ function refTakenBy(
 
 /**
  * A write of a shop with its reference left out, and the provider with it:
- * the provider only says whose reference that is (plan 0194).
+ * the provider only says whose reference that is (plan 0195).
  */
 function withoutRef<
   T extends { externalRef?: unknown; externalProvider?: unknown },
@@ -771,7 +771,7 @@ export class DiscoveredPlaceService {
    * nothing is written: {@link link} binds the place to one of them, and
    * `force` creates a new shop anyway.
    *
-   * **A reference that another shop holds stops it too** (plan 0194). The
+   * **A reference that another shop holds stops it too** (plan 0195). The
    * matching above reads one chain and one provider, and the catalog holds
    * one shop for each reference across all of them. That holder is thus not
    * always a candidate. The answer is the 409 `location_external_ref_taken`
@@ -969,7 +969,7 @@ export class DiscoveredPlaceService {
    * linking it again sends the same fields.
    *
    * **A reference that another shop holds is left unfilled, and the link is
-   * made** (plan 0194). The reference is one of the fields a link fills if
+   * made** (plan 0195). The reference is one of the fields a link fills if
    * empty, and a field it cannot fill is no reason to refuse the others or
    * the mark: the place names its shop through `supermarketLocationId`. The
    * refusal of catalog wrote nothing, so the same patch is sent again with no
@@ -1063,7 +1063,7 @@ export class DiscoveredPlaceService {
    * which `CatalogClient` stamps on every call, so the catalog audit says a run
    * did this and not a person.
    *
-   * **A reference that another shop holds** (plan 0194) is the refusal of
+   * **A reference that another shop holds** (plan 0195) is the refusal of
    * catalog, thrown on as it came. A run logs it and leaves the place in the
    * queue, and a hand import answers it. Only `withoutTakenRef`, which is the
    * `force` of a person, creates the shop with no reference and no provider.

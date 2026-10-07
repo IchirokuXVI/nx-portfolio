@@ -89,7 +89,7 @@ function isRefTaken(error: unknown): boolean {
   );
 }
 
-/** The refusal of a reference that another shop holds (plan 0194). */
+/** The refusal of a reference that another shop holds (plan 0195). */
 function refTaken(
   externalRef: string,
   holder: SupermarketLocation | null
@@ -231,7 +231,7 @@ export class SupermarketLocationService {
   }
 
   /**
-   * The shop that holds a reference, or null (plan 0194).
+   * The shop that holds a reference, or null (plan 0195).
    *
    * The index `uq_locations_external_ref` is on the reference alone, so the
    * holder is looked for across chains and providers, exactly as the database
@@ -252,7 +252,7 @@ export class SupermarketLocationService {
 
   /**
    * Refuse a reference that another shop holds, before anything is written
-   * (plan 0194). A shop with no reference is never refused: the index is
+   * (plan 0195). A shop with no reference is never refused: the index is
    * partial, and most hand made shops have none.
    */
   private async requireFreeRef(
@@ -270,7 +270,7 @@ export class SupermarketLocationService {
 
   /**
    * Run a write of a shop, and answer a reference the database refused with
-   * the code {@link requireFreeRef} answers (plan 0194).
+   * the code {@link requireFreeRef} answers (plan 0195).
    *
    * The check runs first, so this is the write that lost a race: another
    * write took the reference between the check and the statement. The
@@ -462,7 +462,7 @@ export class SupermarketLocationService {
     if (req.externalRef !== undefined) {
       row.externalRef = req.externalRef;
     }
-    // Plan 0194: only a reference that this write changes is checked. A shop
+    // Plan 0195: only a reference that this write changes is checked. A shop
     // keeps the one it holds through any other edit.
     if (row.externalRef !== before.externalRef) {
       await this.requireFreeRef(row.externalRef, row.id);

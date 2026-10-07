@@ -260,7 +260,7 @@ export class AdminCatalogSupermarketsController {
   /**
    * An `externalRef` that another shop holds answers 409
    * `location_external_ref_taken` and names that shop in `details.heldBy`
-   * (plan 0194). The catalog holds one shop for each reference, across
+   * (plan 0195). The catalog holds one shop for each reference, across
    * chains and providers. Nothing is written.
    */
   @Post(':id/locations')
@@ -419,7 +419,7 @@ export class AdminCatalogLocationsController {
    *
    * An `externalRef` that another shop holds answers 409
    * `location_external_ref_taken` and names that shop in `details.heldBy`
-   * (plan 0194). Nothing is written.
+   * (plan 0195). Nothing is written.
    */
   @Patch(':id')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.update)

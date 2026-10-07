@@ -1091,13 +1091,13 @@ describe('DiscoveredPlaceService.import, the label it writes (plan 0193)', () =>
 });
 
 /**
- * A reference that another shop holds (plan 0194).
+ * A reference that another shop holds (plan 0195).
  *
  * Catalog holds one shop for each reference and refuses a second one with
  * `location_external_ref_taken`. The refusal crosses NATS, so it reaches this
  * service as the problem object of catalog and not as an `Error`.
  */
-describe('DiscoveredPlaceService, a reference another shop holds (plan 0194)', () => {
+describe('DiscoveredPlaceService, a reference another shop holds (plan 0195)', () => {
   const HOLDER = {
     supermarketLocationId: 'loc-holder',
     supermarketId: DIA.id,

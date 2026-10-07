@@ -1336,7 +1336,7 @@ export interface PlaceLinkResult {
   place: DiscoveredPlaceView;
   filled: PlaceLinkField[];
   /**
-   * The shop that already holds the reference of the place (plan 0194).
+   * The shop that already holds the reference of the place (plan 0195).
    *
    * Present only when the shop linked had no reference and the link could not
    * give it this one, because the catalog holds one shop for each reference.

@@ -805,7 +805,7 @@ describe('SupermarketLocationService.priceStack', () => {
 });
 
 /**
- * One shop for each external reference (plan 0194).
+ * One shop for each external reference (plan 0195).
  *
  * The index `uq_locations_external_ref` is on the reference alone. These
  * cases are about the answer: the code and the shop that holds the reference,

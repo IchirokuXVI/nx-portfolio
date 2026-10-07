@@ -96,7 +96,7 @@ describe('gatewayErrorKey', () => {
     ]);
   });
 
-  /** A shop reference that another shop holds (backend plan 0194). */
+  /** A shop reference that another shop holds (backend plan 0195). */
   it('names a shop reference that is taken apart from a conflict', () => {
     expect(
       gatewayErrorKey(

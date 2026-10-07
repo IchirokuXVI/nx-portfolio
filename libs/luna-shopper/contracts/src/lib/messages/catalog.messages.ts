@@ -738,7 +738,7 @@ export interface SupermarketView {
 }
 
 /**
- * The shop that holds an external reference (plan 0194).
+ * The shop that holds an external reference (plan 0195).
  *
  * What the 409 `location_external_ref_taken` names under `details.heldBy`,
  * and what a link of a place answers when it left the reference of the shop

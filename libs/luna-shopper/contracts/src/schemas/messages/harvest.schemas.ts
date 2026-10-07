@@ -87,7 +87,7 @@ export const HARVEST_SCHEMA_IDS = {
   placeLinkSkipReason: schemaId('enums/PlaceLinkSkipReason'),
   placeLocationCandidate: schemaId('harvest/PlaceLocationCandidate'),
   placeLinkResult: schemaId('harvest/PlaceLinkResult'),
-  // The shop a link could not take a reference from (plan 0194).
+  // The shop a link could not take a reference from (plan 0195).
   locationRefHolder: schemaId('harvest/LocationRefHolder'),
   placeRefLink: schemaId('harvest/PlaceRefLink'),
   placeRefSkip: schemaId('harvest/PlaceRefSkip'),
@@ -442,7 +442,7 @@ const discoveredPlaceView = object(
 );
 
 /**
- * The shop that holds an external reference (plan 0194): its chain, its label
+ * The shop that holds an external reference (plan 0195): its chain, its label
  * and its address, which is what a person tells one shop from another by.
  */
 const locationRefHolder = object(
@@ -474,7 +474,7 @@ const locationRefHolder = object(
  * the shop because the shop lacked it.
  *
  * `refHeldBy` is present only when the link left the reference of the shop
- * empty, because another shop holds the reference of the place (plan 0194).
+ * empty, because another shop holds the reference of the place (plan 0195).
  */
 const placeLinkResult = object(
   HARVEST_SCHEMA_IDS.placeLinkResult,

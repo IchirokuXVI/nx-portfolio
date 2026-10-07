@@ -1,4 +1,6 @@
-# 0194: a shop reference that is taken answers its own refusal
+> **PR:** [#665](https://github.com/IchirokuXVI/nx-portfolio/pull/665)
+
+# 0195: a shop reference that is taken answers its own refusal
 
 > Asked for by the owner on 2026-10-07 ("the other small plan (implement it) for the
 > defect"). The defect was found in the walk of plan `0193` on a real catalog (PR #660), and

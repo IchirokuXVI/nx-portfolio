@@ -24,7 +24,7 @@ import { SupermarketLocationService } from './supermarket-location.service';
 import { SupermarketService } from './supermarket.service';
 
 /**
- * One shop for each external reference, on real Postgres (plan 0194).
+ * One shop for each external reference, on real Postgres (plan 0195).
  *
  * The unit spec proves which answer the service gives. Only a database proves
  * the three things that answer rests on: that `uq_locations_external_ref`
@@ -36,8 +36,8 @@ import { SupermarketService } from './supermarket.service';
  *   LUNA_INTEGRATION=1 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:<port>/luna_catalog \
  *     npx nx run luna-shopper-backend-catalog:test-integration --testFile=location-external-ref
  */
-const SCHEMA = 'plan0194_location_ref_test';
-const OWNER = 'ac790000-0000-4000-a000-000000000194';
+const SCHEMA = 'plan0195_location_ref_test';
+const OWNER = 'ac790000-0000-4000-a000-000000000195';
 const REF = 'node/1156230891';
 
 describeIntegration(

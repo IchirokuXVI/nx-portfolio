@@ -549,7 +549,7 @@ export class SectionSlugTakenException extends DomainException {
 }
 
 /**
- * A shop was given an external reference that another shop holds (plan 0194).
+ * A shop was given an external reference that another shop holds (plan 0195).
  *
  * It publishes its details, for the reason {@link ItemEanHeldException} does:
  * only an admin reaches a route that raises it, and what the admin does next
