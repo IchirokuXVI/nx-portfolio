@@ -18,12 +18,13 @@
 # These dumps are the ones that ship, unless slot 1 is written again. A later
 # write means new dumps and new values here (README.md, "When slot 1 is
 # final"). One such write is known: the brand Eden waits for a label from the
-# owner. The owner has NOT yet said that slot 1 is final. The copy that the
-# owner restored onto the owner's own machine on 2026-10-07 is older: it is the
-# restore of the dumps of 2026-10-06T22:33:14Z, and it holds none of the three
-# data stages of 2026-10-07.
-# The two files are NOT uploaded to a bucket yet. A file with other bytes is
-# refused at the checksum, which is the intended failure.
+# owner. On 2026-10-07 the owner said that slot 1 is final for now, so these
+# dumps go to staging without that write.
+# The two files are in the bucket `velista-staging` since 2026-10-07, under the
+# keys below. Each object was downloaded again, and its size and SHA-256 are the
+# ones stated here. They are NOT in the bucket `velista` of production yet. A
+# file with other bytes is refused at the checksum, which is the intended
+# failure.
 #
 # The object keys, under a prefix that the nightly dumps never use.
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"

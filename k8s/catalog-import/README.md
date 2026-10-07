@@ -15,8 +15,10 @@ is backend backlog plan `0019`.
 once in production. The steps below are what that task does, and they are the
 way to run it by hand, on the VPS as `deploy`.
 
-**The task is disarmed.** Both windows in its `task.env` say `never`. The owner
-arms it in a pull request that writes the two dates and the production release.
+**The task is armed for staging and disarmed for production.** Its `task.env`
+gives staging a window until 2026-10-09, and the production window says
+`never`. The owner arms production in a pull request that writes that date and
+the production release.
 
 | File                       | What it is                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -116,8 +118,9 @@ hold the same schema, and they compare equal.
 ## Before the release
 
 1. Upload both dumps to the backup bucket of the cluster, under the keys of the
-   manifest. This is the owner's step. **On 2026-10-07 it is not done: neither
-   bucket holds the two files.**
+   manifest. This is the owner's step. **On 2026-10-07 it is done for staging
+   and not for production: `velista-staging` holds the two files, with the
+   sizes and checksums of the manifest, and `velista` does not.**
 
    ```
    imports/2026-10-first-catalog/catalog.dump
@@ -353,20 +356,29 @@ stages and not the third, those of 2026-10-06T23:32:21Z (01:32), those of
 known.** The owner decided that the brand Eden is two brands. The registry
 cannot hold two brands with one label, so nothing was written, and the step
 waits for the owner to name the second label. That write means one more pair
-of dumps. The owner has not said in words that slot 1 is final. The owner is
-checking the data first: on 2026-10-07 the dumps of 00:33 were restored onto
-the owner's own slot 0 for that. That copy is not these dumps. It holds none
-of the three stages, so it lacks 2,430 products, its tenth Deza shop has no
-coordinates, and 14 of its El Jamón shops lack an address, a city or a postal
-code. What the owner still has to do:
+of dumps. On 2026-10-07 the owner said that slot 1 is final for now, so these
+dumps go to staging without that write.
 
-1. Say that slot 1 is final, or ask for more work on it. More work means new
-   dumps, and the steps below again.
-2. Upload both files to both buckets, under the keys of the manifest.
-3. Check the SHA-256 of each object after the upload ("Before the release",
+**Staging is ready (2026-10-07).** Both files are in `velista-staging`, and
+each object, downloaded again, has the size and the SHA-256 of the table above.
+The dry run on the staging VPS ran after the deploy of `main` at `02373347`:
+
+- Step 1 found 0 products and 0 queue rows, with 2 catalog replicas and 1
+  harvester replica.
+- Step 2 restored the catalog in 118 seconds and the harvester in 49 seconds.
+- Step 3 matched all eight counts and both `migrations` tables.
+- Step 4 named one row that the live catalog holds and the dump does not: the
+  brand "D.O.". `expected-losses.txt` accepts it, with the reason. The live
+  catalog held 5 chains, 102 price scopes, 40 shops and 139 brands, and every
+  other id is in the dump.
+
+What is still to do, for production:
+
+1. Upload both files to `velista`, under the keys of the manifest.
+2. Check the SHA-256 of each object after the upload ("Before the release",
    step 1).
-4. Run the dry run on each VPS, then arm the task ("Before the release", steps 2
-   and 3).
+3. Run the dry run on the production VPS, then arm the task for production
+   ("Before the release", steps 2 and 3).
 
 After any later write to slot 1, take the dumps again:
 
