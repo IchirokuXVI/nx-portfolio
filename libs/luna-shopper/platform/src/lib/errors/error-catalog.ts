@@ -174,6 +174,11 @@ export const ERROR_CATALOG: Record<
     en: 'The catalog already holds a shop that may be this place. Link it, or create a new shop anyway.',
     es: 'El catálogo ya tiene una tienda que puede ser este lugar. Enlázala o crea una tienda nueva de todos modos.',
   },
+  // The one question a link asks (plan 0193).
+  [ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN]: {
+    en: 'That place names another chain than the shop belongs to. Link it anyway only if they are the same shop.',
+    es: 'Ese lugar nombra una cadena distinta de la cadena de la tienda. Enlázalo de todos modos solo si son la misma tienda.',
+  },
   [ERROR_CODES.SCOPE_NOT_FOUND]: {
     en: 'The chain has no price scope with the key this place declares. Create that scope first.',
     es: 'La cadena no tiene un ámbito de precios con la clave que declara este lugar. Crea ese ámbito primero.',

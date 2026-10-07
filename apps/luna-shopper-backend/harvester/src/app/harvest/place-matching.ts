@@ -13,6 +13,17 @@ import { normalizeName } from './matching';
 export const SAME_SHOP_METRES = 50;
 
 /**
+ * How near a shop of the same chain has to be to be worth a look (plan 0193).
+ *
+ * A hint and never a verdict. Two real shops of the first catalog sit 54.9 m
+ * and 61.8 m from their place, just outside {@link SAME_SHOP_METRES}, and that
+ * bound stays where it is: two shops of one chain 60 m apart exist, and a
+ * wider strict rung would make every import beside one of them ask for
+ * `force`.
+ */
+export const NEAR_SHOP_METRES = 250;
+
+/**
  * The tags a store discovery runner wrote the declared scope key under, before
  * the key had a column of its own (plan 0152, section 1). Each runner writes at
  * most one of them.
@@ -55,9 +66,59 @@ export interface PlaceMatchSubject {
 }
 
 /**
+ * How far a shop is from a place, in metres. Null for a shop with no
+ * position, which is how a seeded shop looks.
+ */
+function metresFrom(
+  place: Pick<PlaceMatchSubject, 'latitude' | 'longitude'>,
+  location: SupermarketLocationView
+): number | null {
+  if (location.latitude === null || location.longitude === null) {
+    return null;
+  }
+  return distanceMetres(
+    { lat: place.latitude, lon: place.longitude },
+    { lat: location.latitude, lon: location.longitude }
+  );
+}
+
+/**
+ * The shops that carry the place's own `externalRef`, which is rung 1.
+ *
+ * A shop that names another provider does not count, because two providers
+ * may use the same string. A shop that names none does: a shop written before
+ * the provider was recorded carries a bare ref.
+ *
+ * It is the one rung that needs no chain (plan 0193). A reference of the same
+ * provider is an identity, so the caller may hand it the shops of every chain.
+ */
+export function locationsCarryingRef(
+  place: Pick<PlaceMatchSubject, 'provider' | 'externalRef'>,
+  locations: readonly SupermarketLocationView[]
+): SupermarketLocationView[] {
+  return locations.filter(
+    (location) =>
+      location.externalRef === place.externalRef &&
+      (location.externalProvider === null ||
+        location.externalProvider === place.provider)
+  );
+}
+
+/** Rung 1 alone, as candidates. For a place that resolves to no chain. */
+export function matchReference(
+  place: PlaceMatchSubject,
+  locations: readonly SupermarketLocationView[]
+): PlaceLocationCandidate[] {
+  return locationsCarryingRef(place, locations).map((location) =>
+    toPlaceCandidate(place, location, PlaceMatchRung.EXTERNAL_REF)
+  );
+}
+
+/**
  * The shops of a chain that a place may be (plan 0152, section 2).
  *
- * Three rungs, tried in order, and the first that finds anything answers:
+ * The three strict rungs, tried in order, and the first that finds anything
+ * answers:
  *
  * 1. The shop carries the place's own `externalRef`. A shop that names another
  *    provider does not count, because two providers may use the same string.
@@ -73,28 +134,17 @@ export function matchLocations(
   place: PlaceMatchSubject,
   locations: readonly SupermarketLocationView[]
 ): PlaceLocationCandidate[] {
-  const byRef = locations.filter(
-    (location) =>
-      location.externalRef === place.externalRef &&
-      (location.externalProvider === null ||
-        location.externalProvider === place.provider)
-  );
+  const byRef = matchReference(place, locations);
   if (byRef.length > 0) {
-    return byRef.map((l) => candidate(l, PlaceMatchRung.EXTERNAL_REF));
+    return byRef;
   }
 
-  const point = { lat: place.latitude, lon: place.longitude };
-  const nearby = locations.filter(
-    (location) =>
-      location.latitude !== null &&
-      location.longitude !== null &&
-      distanceMetres(point, {
-        lat: location.latitude,
-        lon: location.longitude,
-      }) <= SAME_SHOP_METRES
-  );
+  const nearby = locations.filter((location) => {
+    const metres = metresFrom(place, location);
+    return metres !== null && metres <= SAME_SHOP_METRES;
+  });
   if (nearby.length > 0) {
-    return nearby.map((l) => candidate(l, PlaceMatchRung.NEARBY));
+    return nearby.map((l) => toPlaceCandidate(place, l, PlaceMatchRung.NEARBY));
   }
 
   const street = normalizeName(place.street ?? '');
@@ -109,18 +159,69 @@ export function matchLocations(
         location.postalCode?.trim() === postalCode &&
         normalizeName(location.address ?? '') === street
     )
-    .map((l) => candidate(l, PlaceMatchRung.ADDRESS));
+    .map((l) => toPlaceCandidate(place, l, PlaceMatchRung.ADDRESS));
 }
 
-function candidate(
+/**
+ * The shops of a chain that a person should look at before deciding a place
+ * (plan 0193): what {@link matchLocations} answers, then the shops of the
+ * chain farther than {@link SAME_SHOP_METRES} and within
+ * {@link NEAR_SHOP_METRES}. Best first, so the nearest shop of each part
+ * leads it.
+ *
+ * **The fourth rung is a hint and nothing else.** The places list shows it,
+ * and a trusted import waits on it, because a person who looks costs nothing.
+ * The 409 of a hand import does not read it, and no code path links on a
+ * distance.
+ *
+ * Pure, like the function it extends.
+ */
+export function suggestLocations(
+  place: PlaceMatchSubject,
+  locations: readonly SupermarketLocationView[]
+): PlaceLocationCandidate[] {
+  const strict = matchLocations(place, locations);
+  const found = new Set(strict.map((held) => held.supermarketLocationId));
+  const near = locations
+    .filter((location) => {
+      const metres = metresFrom(place, location);
+      return (
+        !found.has(location.id) &&
+        metres !== null &&
+        metres > SAME_SHOP_METRES &&
+        metres <= NEAR_SHOP_METRES
+      );
+    })
+    .map((l) => toPlaceCandidate(place, l, PlaceMatchRung.SAME_CHAIN_NEAR));
+  return [...strict.sort(nearestFirst), ...near.sort(nearestFirst)];
+}
+
+/** Nearest first, and a shop with no position after every shop that has one. */
+function nearestFirst(
+  a: PlaceLocationCandidate,
+  b: PlaceLocationCandidate
+): number {
+  return (
+    (a.metres ?? Number.POSITIVE_INFINITY) -
+      (b.metres ?? Number.POSITIVE_INFINITY) || 0
+  );
+}
+
+/** One shop, as the candidate a person reads. */
+export function toPlaceCandidate(
+  place: Pick<PlaceMatchSubject, 'latitude' | 'longitude'>,
   location: SupermarketLocationView,
   rung: PlaceMatchRung
 ): PlaceLocationCandidate {
+  const metres = metresFrom(place, location);
   return {
     supermarketLocationId: location.id,
+    supermarketId: location.supermarketId,
     label: location.label,
     address: location.address,
+    city: location.city,
     postalCode: location.postalCode,
     rung,
+    metres: metres === null ? null : Math.round(metres),
   };
 }

@@ -5,6 +5,7 @@ import type {
   HarvestRunPresetView,
   HarvestRunView,
   ItemPriceDetails,
+  PlaceLocationCandidate,
   PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
   SourceEntryPriceView,
@@ -120,8 +121,13 @@ export function toHarvestRunPresetView(
   };
 }
 
+/**
+ * `candidates` is what the list read worked out for a `NEW` place (plan
+ * 0193). Every other read answers none, so the default is the empty list.
+ */
 export function toDiscoveredPlaceView(
-  row: DiscoveredPlace
+  row: DiscoveredPlace,
+  candidates: PlaceLocationCandidate[] = []
 ): DiscoveredPlaceView {
   return {
     id: row.id,
@@ -147,6 +153,7 @@ export function toDiscoveredPlaceView(
     supermarketLocationId: row.supermarketLocationId,
     firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
+    candidates,
   };
 }
 

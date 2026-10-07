@@ -852,9 +852,11 @@ export class PlacesQueuePage {
    */
   async link(candidate: PlaceCandidate): Promise<void> {
     await this.queue.decide((place) =>
-      this._service.linkPlace(place.id, {
-        supermarketLocationId: candidate.supermarketLocationId,
-      })
+      this._service
+        .linkPlace(place.id, {
+          supermarketLocationId: candidate.supermarketLocationId,
+        })
+        .then((result) => result.place)
     );
     if (this.queue.error() === null) {
       this._decided();

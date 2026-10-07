@@ -1,5 +1,6 @@
 import {
   DiscoveredPlaceStatus,
+  PlaceLinkField,
   PlaceMatchRung,
   PostalCodeSource,
   PriceScopeKind,
@@ -12,6 +13,7 @@ import {
   NotFoundException,
   PlaceAlreadyImportedException,
   PlaceMatchesLocationException,
+  PlaceNamesAnotherChainException,
   ScopeNotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -623,10 +625,14 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
       candidates: [
         {
           supermarketLocationId: 'loc-ref',
+          supermarketId: 'chain-lidl',
           label: { es: 'LIDL Libertador' },
           address: 'Avenida del Libertador Simón Bolívar 5',
+          city: 'Córdoba',
           postalCode: '14013',
           rung: PlaceMatchRung.EXTERNAL_REF,
+          // The fixture shop is 0.02 degrees of latitude north of the place.
+          metres: 2224,
         },
       ],
     });
@@ -671,6 +677,9 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
   });
 
   it('does not match a shop 100 metres away', async () => {
+    // Plan 0193: that shop is a hint on the places list and it keeps a
+    // trusted run waiting, and it still does not stop a hand import. The 409
+    // reads the three strict rungs only.
     const harness = build({
       known: [LIDL],
       locations: [shop({ latitude: 37.8809, longitude: -4.77 })],
@@ -798,7 +807,7 @@ describe('DiscoveredPlaceService link (plan 0152, section 3)', () => {
     });
     harness.add(place({ id: 'p1', postalCodeSource: PostalCodeSource.SOURCE }));
 
-    const view = await harness.service.link({
+    const { place: view, filled } = await harness.service.link({
       userId: ADMIN,
       placeId: 'p1',
       supermarketLocationId: 'loc-seeded',
@@ -814,6 +823,10 @@ describe('DiscoveredPlaceService link (plan 0152, section 3)', () => {
     });
     expect(view.status).toBe(DiscoveredPlaceStatus.IMPORTED);
     expect(view.supermarketLocationId).toBe('loc-seeded');
+    expect(filled).toEqual([
+      PlaceLinkField.COORDINATES,
+      PlaceLinkField.EXTERNAL_REF,
+    ]);
     expect(harness.catalog.createLocation).not.toHaveBeenCalled();
   });
 
@@ -853,8 +866,11 @@ describe('DiscoveredPlaceService link (plan 0152, section 3)', () => {
       supermarketLocationId: 'loc-seeded',
     });
 
+    // The shop lacks its ref too, so there is a write to look at.
     const [input] = harness.catalog.updateLocation.mock.calls[0];
+    expect(input).toHaveProperty('externalRef', 'node/1');
     expect(input).not.toHaveProperty('postalCode');
+    expect(input).not.toHaveProperty('postalCodeSource');
   });
 
   it('overwrites nothing on a shop that has every field', async () => {
@@ -874,7 +890,9 @@ describe('DiscoveredPlaceService link (plan 0152, section 3)', () => {
     expect(harness.rows.get('p1')?.status).toBe(DiscoveredPlaceStatus.IMPORTED);
   });
 
-  it('refuses a shop of another chain', async () => {
+  it('asks once before it links a place to a shop of another chain', async () => {
+    // A 400 before plan 0193, with no way past it. The cases of the new rule
+    // are in `discovered-place.link.spec.ts`.
     const harness = build({
       known: [LIDL, chain('chain-other', 'Dia')],
       locations: [shop({ supermarketId: 'chain-other' })],
@@ -887,7 +905,7 @@ describe('DiscoveredPlaceService link (plan 0152, section 3)', () => {
         placeId: 'p1',
         supermarketLocationId: 'loc-seeded',
       })
-    ).rejects.toBeInstanceOf(ValidationException);
+    ).rejects.toBeInstanceOf(PlaceNamesAnotherChainException);
     expect(harness.rows.get('p1')?.status).toBe(DiscoveredPlaceStatus.NEW);
   });
 

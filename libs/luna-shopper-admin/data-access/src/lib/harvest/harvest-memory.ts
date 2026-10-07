@@ -422,9 +422,13 @@ export class HarvestMemory implements HarvestServiceI {
   async linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+  ): Promise<Wire.HarvestPlaceLinkResult> {
     this._undecidedPlace(id);
-    return this._decidePlace(id, 'IMPORTED', input.supermarketLocationId);
+    return {
+      place: this._decidePlace(id, 'IMPORTED', input.supermarketLocationId),
+      // The double holds no shop to fill, so a link here writes only the mark.
+      filled: [],
+    };
   }
 
   /**

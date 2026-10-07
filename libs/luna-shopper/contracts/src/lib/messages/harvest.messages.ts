@@ -15,6 +15,8 @@ import type {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceLinkField,
+  PlaceLinkSkipReason,
   PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
@@ -120,6 +122,12 @@ export const DISCOVERED_PLACE_PATTERNS = {
    * It fills only the fields the shop lacks, and never creates one.
    */
   link: 'place.link',
+  /**
+   * Link every undecided place to the one shop that carries its own reference
+   * (plan 0193). Without `apply` it answers what it would do and writes
+   * nothing.
+   */
+  linkByRef: 'place.linkByRef',
   reject: 'place.reject',
 } as const;
 
@@ -728,6 +736,16 @@ export interface DiscoveredPlaceView {
   supermarketLocationId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /**
+   * The catalog shops this place may be, best first (plan 0193).
+   *
+   * Filled for a `NEW` place on the list read only. It is empty for every
+   * other status and on every other read. It is worked out on the read and
+   * stored nowhere, so a shop that was linked, edited or created a moment ago
+   * is already in the answer. A candidate is a hint for a person: nothing
+   * links on one.
+   */
+  candidates: PlaceLocationCandidate[];
 }
 
 /**
@@ -1294,21 +1312,84 @@ export interface NewChainInput {
 /** Bind a place to a shop the catalog already holds (plan 0152, section 3). */
 export interface LinkDiscoveredPlaceRequest extends AdminCredential {
   placeId: string;
-  /** A shop of the place's own chain. */
+  /**
+   * The shop the person named. It decides the chain (plan 0193): a place that
+   * resolves to no chain links to it with no question.
+   */
   supermarketLocationId: string;
+  /**
+   * Link although the place resolves to another chain than the shop belongs
+   * to (plan 0193). Without it that case answers 409
+   * `place_names_another_chain` and writes nothing. It mirrors `force` on
+   * import.
+   */
+  acrossChains?: boolean;
 }
 
 /**
- * One catalog shop a discovered place may be, as the 409
- * `place_matches_location` lists it under `details.candidates` (plan 0152,
- * section 2).
+ * What a link did (plan 0193): the place, now imported and naming its shop,
+ * and each thing the link wrote on the shop because the shop lacked it. An
+ * empty `filled` is a link that wrote only the mark.
+ */
+export interface PlaceLinkResult {
+  place: DiscoveredPlaceView;
+  filled: PlaceLinkField[];
+}
+
+/**
+ * One catalog shop a discovered place may be. The places list carries them on
+ * a `NEW` place (plan 0193), and the 409 `place_matches_location` lists them
+ * under `details.candidates` (plan 0152, section 2).
  */
 export interface PlaceLocationCandidate {
   supermarketLocationId: string;
+  /** The chain of the shop, which a place with no chain cannot say itself. */
+  supermarketId: string;
   label: LocalizedText | null;
   address: string | null;
+  city: string | null;
   postalCode: string | null;
   rung: PlaceMatchRung;
+  /**
+   * How far the shop is from the place, in whole metres. Null for a shop with
+   * no position.
+   */
+  metres: number | null;
+}
+
+/**
+ * Link every `NEW` place to the shop that was made from it (plan 0193).
+ *
+ * A place is linked when exactly one catalog shop carries its `externalRef`
+ * and that shop names the same `externalProvider`. Nothing else links here,
+ * and no distance does.
+ */
+export interface LinkPlacesByRefRequest extends AdminCredential {
+  /** Write the links. Absent or false answers what a call would do. */
+  apply?: boolean;
+}
+
+/** One place the bulk act links, or would link without `apply`. */
+export interface PlaceRefLink {
+  place: DiscoveredPlaceView;
+  /** The one shop that carries the reference of the place. */
+  shop: PlaceLocationCandidate;
+  /** What the link fills on the shop, or would fill. */
+  filled: PlaceLinkField[];
+}
+
+/** One place the bulk act left alone, with the shops that made it do so. */
+export interface PlaceRefSkip {
+  place: DiscoveredPlaceView;
+  reason: PlaceLinkSkipReason;
+  shops: PlaceLocationCandidate[];
+}
+
+export interface LinkPlacesByRefResult {
+  /** Whether this call wrote. False is the dry answer. */
+  applied: boolean;
+  linked: PlaceRefLink[];
+  skipped: PlaceRefSkip[];
 }
 
 export interface DiscoveredPlaceIdRequest extends AdminCredential {

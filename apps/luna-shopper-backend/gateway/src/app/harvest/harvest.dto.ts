@@ -355,14 +355,48 @@ export class ImportDiscoveredPlaceDto {
   newChain?: NewChainDto;
 }
 
+/**
+ * A body flag exactly as the caller spelled it (plan 0193).
+ *
+ * The pipe converts implicitly, and its conversion of a boolean is
+ * `Boolean(value)`: the string `"false"` arrives as `true`. For a flag that
+ * decides whether a call writes, that turns a caller's typo into the write it
+ * meant to withhold. Handing `@IsBoolean` the raw value makes it refuse
+ * anything but a real `true` or `false`.
+ */
+const asSent = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
+  obj[key];
+
 /** Bind a discovered place to a shop the catalog already holds (plan 0152). */
 export class LinkDiscoveredPlaceDto {
   @ApiProperty({
     format: 'uuid',
-    description: 'A shop of the place’s own chain.',
+    description:
+      'The shop this place is. It decides the chain: a place that resolves to no chain links with no question.',
   })
   @IsUUID()
   supermarketLocationId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Link although the place resolves to another chain than the shop belongs to. Without it that case answers 409 `place_names_another_chain` and writes nothing.',
+  })
+  @IsOptional()
+  @Transform(asSent)
+  @IsBoolean()
+  acrossChains?: boolean;
+}
+
+/** The bulk link of places to the shops made from them (plan 0193). */
+export class LinkPlacesByRefDto {
+  @ApiPropertyOptional({
+    description:
+      'Write the links. Absent or false changes nothing and answers what a call with it would do.',
+  })
+  @IsOptional()
+  @Transform(asSent)
+  @IsBoolean()
+  apply?: boolean;
 }
 
 /**

@@ -417,3 +417,157 @@ Every step goes through the gateway as an admin. No step is SQL.
 | A rejected or imported place reopened       | No run writes `status`. Candidates, the bulk act and `autoImport` read `NEW` only.              |
 | A link by distance with nobody looking      | A distance makes a candidate. Only a person, or an equal reference, makes a link.               |
 | A label that is the name of the chain       | The link writes no label. An import writes none for a provider that prints the banner.          |
+
+## 6. What was built, and what the owner must decide
+
+Targets 1 to 10 are built, with the recommended answer of decisions A to E. Target 11 is
+out of the plan. Section 4 and decision F are data steps and were not run: no slot that
+holds data was read or written. The points below are the choices the builder made where
+the plan left room, and what only the owner can settle.
+
+### The routes, as calls
+
+- `POST /v1/admin/harvest/places/:id/link` with `{ "supermarketLocationId": "<uuid>" }`,
+  and `"acrossChains": true` to link a place that resolves to another chain. The message
+  is `place.link`. The answer is `PlaceLinkResult`: `place` and `filled`.
+- `POST /v1/admin/harvest/places/link-by-ref` with `{}` for the dry answer and
+  `{ "apply": true }` to write. The message is `place.linkByRef`. The answer is
+  `LinkPlacesByRefResult`: `applied`, `linked` and `skipped`.
+- `GET /v1/admin/harvest/places` answers `candidates` on each item, and now honours
+  `country` and `postalCode`.
+
+### Where the rule of the fields lives
+
+`missingFields` and `postalCodeFields` moved out of `discovered-place.service.ts` into
+`place-link-fields.ts`. The function is pure and answers the patch together with the
+`filled` list, so the hand link, the bulk link and the dry answer of the bulk link read one
+rule. Its table of cases is `place-link-fields.spec.ts`.
+
+Three readings the plan did not spell out:
+
+- A field of the place that is itself null or blank is never sent. A shop with no city and
+  a place with no city is a link that fills no city.
+- A `DERIVED` code on the shop is replaced also when the stated code of the place is the
+  same code. The link then changes only the provenance, and it reports `POSTAL_CODE`.
+- A place row written before the provenance column has a code and a null source.
+  `postalCodeFields` reads that as stated, as it does for an import, so such a code does
+  replace a `DERIVED` one.
+
+### What "best first" means
+
+`suggestLocations` in `place-matching.ts` answers what `matchLocations` answers, then the
+shops of the fourth rung. Each part is ordered by distance, nearest first, and a shop with
+no position comes after every shop that has one. A shop is named once: a shop that the
+strict part found is not repeated in the near part. `matchLocations` itself keeps the order
+it had, so the 409 of an import did not change.
+
+The fourth rung is exactly the band of the plan: farther than 50 m and at most 250 m. When
+rung 1 answers, a second shop within 50 m is thus in neither part. That is the existing
+rule of plan `0152` (the first strict rung that finds a shop answers alone), and this plan
+does not change it.
+
+`supermarketId`, `city` and `metres` are on the type `PlaceLocationCandidate`, so the
+candidates in the details of `place_matches_location` carry them too.
+
+### The bulk link, where the plan left room
+
+- **The answer.** `applied` says whether the call wrote. `linked[].shop` is a
+  `PlaceLocationCandidate` with the rung `EXTERNAL_REF`. `skipped[]` carries `shops`, the
+  candidates that made the act stop, beside `place` and `reason`. The plan asks the data
+  stage to stop when a place has two shops, and the answer then names both.
+- **The dry answer shows a place as it is**, with the status `NEW` and no shop, and
+  `filled` says what the link would write. With `apply` the same row comes back `IMPORTED`.
+- **"A shop carries its reference"** is read as rung 1 reads it. A shop that names
+  another provider is not a shop of that place: it is neither linked nor listed as
+  skipped. One shop that names no provider is `PROVIDER_NOT_NAMED`.
+- **A catalog write that fails stops the call with its error.** The links made before it
+  stay, because each one is complete by itself, and a second call continues with the
+  places that are still `NEW`. The plan names two skip reasons, and a failed write is not
+  a third.
+- The act reads the chains once and the shops of each chain once, for any number of
+  places.
+
+**For the owner: `SEVERAL_SHOPS` cannot happen on the catalog as it is.** Catalog has the
+unique index `uq_locations_external_ref` on `externalRef` alone, across chains and
+providers. Two shops with one reference thus cannot exist. The reason stays in the
+contract and in the code as the guard the plan asks for, and it costs nothing.
+
+### A reference that another shop holds: a 500 that this plan did not cause
+
+The same index has a consequence for a hand link, and it was found in the walk on a real
+catalog. A link fills `externalRef` on a shop that has none. When another shop already
+holds that reference, the catalog update violates the index and the gateway answers 500
+`internal`. Nothing is written and the place stays `NEW`.
+
+Plan `0152` built that fill, and an import with `force` meets the same index on create.
+This plan makes the case easier to reach, because a place can now be linked to a shop of
+any chain. The repair is in catalog (a refusal with its own code in place of the 500),
+and catalog is out of this plan.
+
+**For the owner:** say whether that refusal is a plan of its own. The data steps of
+section 4 do not meet the case: the bulk act links a place to the shop that already holds
+its reference, and each El Jamón shop of step 3 already holds an OpenStreetMap reference,
+so the link fills none.
+
+### A trusted run waits on its own new shops too
+
+`autoImport` matches a place against the shops of the chain, and that list includes each
+shop the same run created a moment before (plan `0152`). With the fourth rung, a trusted
+chain whose list names two shops within 250 m of each other imports the first and leaves
+the second in the queue. That is the rule of target 6 applied with no exception, and the
+person who looks imports the second one with one press.
+
+**For the owner:** say so if a shop that the same run created must count on the strict
+rungs only.
+
+### The chain question
+
+- `details.chain` is `{ id, name }`, and `name` is the localized name of the chain as
+  catalog holds it (`{ "es": "Dia" }`), not one string.
+- With `acrossChains` the link does not read the chains at all.
+- A rejected place links as before (decision E).
+
+### A flag in a body is refused unless it is a boolean
+
+The validation pipe converts implicitly, and its conversion of a boolean is
+`Boolean(value)`. The string `"false"` thus arrives as `true`. `apply` and `acrossChains`
+carry a transform that hands the validator the value as it was sent, so `"false"`, `"true"`,
+`0` and `1` answer 400. `places.http.spec.ts` holds the cases.
+
+**For the owner:** `force` on `POST .../places/:id/import` has the same defect and was
+left alone, because that route is not in this plan. `"force": "false"` creates a second
+shop today.
+
+### The list read asks catalog, so it can fail with it
+
+A page that holds a `NEW` place reads the chains and the shops from catalog. When catalog
+does not answer, the list read fails, as the shop queue of plan `0154` does. A page with
+no `NEW` place asks catalog nothing.
+
+### The admin, as far as it had to change
+
+The three files of build order 5 changed, and `harvest-seed.ts` with them: the generated
+type of a place now requires `candidates`, so the five seeded places carry an empty list.
+The label of the rung `SAME_CHAIN_NEAR` and the sentence for `place_names_another_chain`
+are screens, and they are admin plan `0061`. Until then the back office has no label for
+the new rung and no sentence of its own for the new code.
+
+### What was proved, and how
+
+- Unit specs for every rule of section 5: `place-link-fields.spec.ts`,
+  `place-matching.spec.ts`, `discovered-place.link.spec.ts`, and cases added to
+  `discovered-place.auto-import.spec.ts`, `discovered-place.import.spec.ts` and the
+  gateway's `places.http.spec.ts`.
+- `place-link.integration.spec.ts` on a real harvester database: the bulk act reads `NEW`
+  rows only, a rejected and an imported row keep every column, the list filters on
+  `country` and `postalCode`, and each catalog write carries `HARVESTER_ACTOR_ID`.
+- A walk over the gateway of an ephemeral slot with the gateway, auth, catalog and the
+  harvester, on a catalog built for it (3 chains, 5 shops, 10 places): the candidates on
+  the list, the dry answer, the apply, a second apply that found nothing, a derived code
+  replaced by a stated one, the 409 and `acrossChains`. The counts of shops, price scopes
+  and chains did not move across the dry call and the apply, and the audit rows of the
+  links name the service actor.
+
+**Not done: the rehearsal on copies of the two dumps** (build order 6 and the last line of
+"Progress evidence"). The stage that runs section 4 does it, with the dumps. The numbers
+27, 57 and "no count of the manifest moved" are thus not yet read by this build.

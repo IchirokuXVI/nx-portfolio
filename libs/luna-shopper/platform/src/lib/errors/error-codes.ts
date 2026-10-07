@@ -261,6 +261,16 @@ export const ERROR_CODES = {
    */
   PLACE_MATCHES_LOCATION: 'place_matches_location',
   /**
+   * A link named a shop of one chain for a place that resolves to another
+   * (plan 0193).
+   *
+   * Nothing was written. The chain the place resolves to travels in
+   * `details` as `chain`, with its id and its name, so the back office can
+   * ask once and send `acrossChains`. A place that resolves to no chain never
+   * gets this: the shop a person named is then the statement.
+   */
+  PLACE_NAMES_ANOTHER_CHAIN: 'place_names_another_chain',
+  /**
    * The run declared a price scope the chain does not hold (plan 0152,
    * section 1). The key travels in `details` as `scopeKey`, so the operator
    * can create that scope first.
@@ -507,6 +517,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // (plan 0152).
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: HttpStatus.CONFLICT,
   [ERROR_CODES.PLACE_MATCHES_LOCATION]: HttpStatus.CONFLICT,
+  // 409 for the same reason (plan 0193): what refuses the link is the chain
+  // the place resolves to, and the same request with `acrossChains` succeeds.
+  [ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SCOPE_NOT_FOUND]: HttpStatus.CONFLICT,
   // 409 for the three rules of the tree that turn on another row (plan 0166):
   // the request is well formed, and what refuses it is where the named rows

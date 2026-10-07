@@ -24712,6 +24712,102 @@
         ]
       }
     },
+    "/v1/admin/harvest/places/link-by-ref": {
+      "post": {
+        "operationId": "AdminHarvestPlacesController_linkPlacesByRef_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkPlacesByRefDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `place.linkByRef` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.LinkPlacesByRefResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
     "/v1/admin/harvest/places/{id}/link": {
       "post": {
         "operationId": "AdminHarvestPlacesController_linkPlace_v1",
@@ -24741,7 +24837,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+                  "$ref": "#/components/schemas/harvest.PlaceLinkResult"
                 }
               }
             }
@@ -30120,13 +30216,26 @@
           }
         }
       },
+      "LinkPlacesByRefDto": {
+        "type": "object",
+        "properties": {
+          "apply": {
+            "type": "boolean",
+            "description": "Write the links. Absent or false changes nothing and answers what a call with it would do."
+          }
+        }
+      },
       "LinkDiscoveredPlaceDto": {
         "type": "object",
         "properties": {
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "A shop of the place’s own chain."
+            "description": "The shop this place is. It decides the chain: a place that resolves to no chain links with no question."
+          },
+          "acrossChains": {
+            "type": "boolean",
+            "description": "Link although the place resolves to another chain than the shop belongs to. Without it that case answers 409 `place_names_another_chain` and writes nothing."
           }
         },
         "required": [
@@ -37836,6 +37945,34 @@
           "shopMap.record"
         ]
       },
+      "enums.PlaceLinkField": {
+        "type": "string",
+        "enum": [
+          "COORDINATES",
+          "EXTERNAL_REF",
+          "POSTAL_CODE",
+          "FOOTPRINT",
+          "ADDRESS",
+          "CITY",
+          "COUNTRY"
+        ]
+      },
+      "enums.PlaceLinkSkipReason": {
+        "type": "string",
+        "enum": [
+          "SEVERAL_SHOPS",
+          "PROVIDER_NOT_NAMED"
+        ]
+      },
+      "enums.PlaceMatchRung": {
+        "type": "string",
+        "enum": [
+          "EXTERNAL_REF",
+          "NEARBY",
+          "ADDRESS",
+          "SAME_CHAIN_NEAR"
+        ]
+      },
       "enums.PostalCodeDiscoveryStatus": {
         "type": "string",
         "enum": [
@@ -38509,6 +38646,12 @@
           "lastSeenAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+            }
           }
         },
         "required": [
@@ -38533,7 +38676,8 @@
           "status",
           "supermarketLocationId",
           "firstSeenAt",
-          "lastSeenAt"
+          "lastSeenAt",
+          "candidates"
         ],
         "additionalProperties": false
       },
@@ -39192,6 +39336,158 @@
           "prices",
           "eanSharedBy",
           "scopeSharedWith"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.LinkPlacesByRefResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "linked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceRefLink"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceRefSkip"
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "linked",
+          "skipped"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceLinkResult": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "filled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.PlaceLinkField"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "filled"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceLocationCandidate": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rung": {
+            "$ref": "#/components/schemas/enums.PlaceMatchRung"
+          },
+          "metres": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "supermarketId",
+          "label",
+          "address",
+          "city",
+          "postalCode",
+          "rung",
+          "metres"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceRefLink": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "shop": {
+            "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+          },
+          "filled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.PlaceLinkField"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "shop",
+          "filled"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceRefSkip": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/enums.PlaceLinkSkipReason"
+          },
+          "shops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "reason",
+          "shops"
         ],
         "additionalProperties": false
       },
@@ -41765,6 +42061,7 @@
               "brand_in_use",
               "place_already_imported",
               "place_matches_location",
+              "place_names_another_chain",
               "scope_not_found",
               "category_too_deep",
               "category_not_a_leaf",

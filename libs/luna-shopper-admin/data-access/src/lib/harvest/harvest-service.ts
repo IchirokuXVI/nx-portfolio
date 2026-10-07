@@ -93,12 +93,13 @@ export interface HarvestServiceI {
    *
    * The other answer to an import refused with `place_matches_location`. It
    * never creates a shop: it fills only what the named shop lacks and marks
-   * the place imported. The shop must be one of the place's own chain.
+   * the place imported. The answer is the place and what was filled (backend
+   * plan 0193).
    */
   linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView>;
+  ): Promise<Wire.HarvestPlaceLinkResult>;
 
   /**
    * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).
