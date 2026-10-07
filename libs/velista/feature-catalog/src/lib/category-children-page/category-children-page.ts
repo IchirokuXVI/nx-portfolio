@@ -18,16 +18,17 @@ import { CategoryStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, categoryName } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import { PageHeader } from '@portfolio/velista/ui';
-import {
-  CATEGORY_PARAM,
-  formatCount,
-  visibleBranches,
-} from '../category-choice';
+import { formatCount, visibleBranches } from '../category-choice';
 import {
   CategoryRows,
   categoryRowView,
   type CategoryRowView,
 } from '../category-rows/category-rows';
+import {
+  catalogChoiceOf,
+  catalogQueryOf,
+  type CatalogChoice,
+} from '../supermarket-choice';
 
 /** The route parameter naming the root, by slug. */
 export const PARENT_SLUG_PARAM = 'parentSlug';
@@ -51,6 +52,11 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
  * The chip's body links here with the tab's own `?category=`, so the page marks the
  * category the tab is narrowed to with a tick, the quiet amber and `aria-current`.
  * The choice still lives only in the URL: this page reads it and never holds it.
+ *
+ * ## A row changes the category and nothing else
+ *
+ * The rest of what the tab was narrowed by (the supermarket, the text, the order)
+ * arrives in the same query, and every row hands it back beside its own slug.
  *
  * ## A slug the tree does not hold
  *
@@ -82,9 +88,12 @@ export class CategoryChildrenPage {
     this._route.snapshot.paramMap.get(PARENT_SLUG_PARAM)
   );
 
-  /** The category the tab is narrowed to, when the chip opened this page. */
-  private readonly _current = signal<string | null>(
-    this._route.snapshot.queryParamMap.get(CATEGORY_PARAM)
+  /**
+   * The tab's choice as this page was handed it. Its category is the one the tab is
+   * narrowed to, when the chip opened this page.
+   */
+  private readonly _choice = signal<CatalogChoice>(
+    catalogChoiceOf(this._route.snapshot.queryParamMap)
   );
 
   /** The branch this page draws, hidden rows already dropped. */
@@ -115,6 +124,7 @@ export class CategoryChildrenPage {
     const locale = this._locale();
     this._translator.loaded();
     const root = branch.root;
+    const choice = this._choice();
     return [
       categoryRowView(
         {
@@ -127,8 +137,8 @@ export class CategoryChildrenPage {
           ),
           itemCount: root.itemCount,
           link: this._tabPath(locale),
-          queryParams: { [CATEGORY_PARAM]: root.slug },
-          current: this._current() === root.slug,
+          queryParams: catalogQueryOf({ ...choice, category: root.slug }),
+          current: choice.category === root.slug,
         },
         formatCount(root.itemCount, locale),
         this._translate(locale)
@@ -143,7 +153,7 @@ export class CategoryChildrenPage {
     }
     const locale = this._locale();
     this._translator.loaded();
-    const current = this._current();
+    const choice = this._choice();
     return branch.children.map((child) =>
       categoryRowView(
         {
@@ -151,8 +161,8 @@ export class CategoryChildrenPage {
           name: categoryName(child, locale),
           itemCount: child.itemCount,
           link: this._tabPath(locale),
-          queryParams: { [CATEGORY_PARAM]: child.slug },
-          current: current === child.slug,
+          queryParams: catalogQueryOf({ ...choice, category: child.slug }),
+          current: choice.category === child.slug,
         },
         formatCount(child.itemCount, locale),
         this._translate(locale)
@@ -167,7 +177,9 @@ export class CategoryChildrenPage {
     }
     untracked(() => {
       void this._router.navigateByUrl(
-        appPath(this._locale(), this._basePath, 'catalog', 'categories'),
+        this._url(
+          appPath(this._locale(), this._basePath, 'catalog', 'categories')
+        ),
         { replaceUrl: true }
       );
     });
@@ -178,7 +190,7 @@ export class CategoryChildrenPage {
       this._parentSlug.set(map.get(PARENT_SLUG_PARAM))
     );
     const query = this._route.queryParamMap.subscribe((map) =>
-      this._current.set(map.get(CATEGORY_PARAM))
+      this._choice.set(catalogChoiceOf(map))
     );
     inject(DestroyRef).onDestroy(() => {
       params.unsubscribe();
@@ -192,9 +204,19 @@ export class CategoryChildrenPage {
     void this._store.ensure();
   }
 
-  /** The chevron: one step back, or the tab on a cold load (target 4). */
+  /**
+   * The chevron: one step back, or the tab on a cold load (target 4), narrowed as
+   * it was.
+   */
   protected async back(): Promise<void> {
-    await this._pages.back(this._tabPath(this._locale()));
+    await this._pages.back(this._url(this._tabPath(this._locale())));
+  }
+
+  /** This path with the tab's choice, unchanged, in its query. */
+  private _url(path: string): string {
+    const url = this._router.parseUrl(path);
+    url.queryParams = catalogQueryOf(this._choice());
+    return this._router.serializeUrl(url);
   }
 
   private _tabPath(locale: string): string {

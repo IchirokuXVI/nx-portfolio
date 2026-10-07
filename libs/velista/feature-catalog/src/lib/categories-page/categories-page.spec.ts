@@ -1,6 +1,10 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -25,7 +29,11 @@ async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   fixture.detectChanges();
 }
 
-async function render(tree: FakeCategoryStore) {
+async function render(
+  tree: FakeCategoryStore,
+  /** What the tab was narrowed by when it opened this page. */
+  query: Record<string, string> = {}
+) {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
 
@@ -35,6 +43,10 @@ async function render(tree: FakeCategoryStore) {
       provideVelistaTesting({ basePath: '/velista' }),
       provideRouter([]),
       provideFakeCategoryStore(tree),
+      {
+        provide: ActivatedRoute,
+        useValue: { snapshot: { queryParamMap: convertToParamMap(query) } },
+      },
       { provide: PageNavigation, useValue: pages },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
@@ -141,6 +153,24 @@ describe('CategoriesPage (velista 0119)', () => {
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/velista/en/catalog');
+  });
+
+  it('hands what the tab was narrowed by on to every row, and to the fallback', async () => {
+    const { fixture, pages } = await render(
+      fakeCategoryStore(MEMORY_CATEGORIES),
+      { chain: 'chain-deza', q: 'leche', order: 'created' }
+    );
+
+    expect(links(fixture)[0]?.getAttribute('href')).toBe(
+      '/velista/en/catalog/categories/eggs-milk-and-butter?chain=chain-deza&q=leche&order=created'
+    );
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('lib-page-header button.lead')
+      ?.click();
+    expect(pages.back).toHaveBeenCalledWith(
+      '/velista/en/catalog?chain=chain-deza&q=leche&order=created'
+    );
   });
 
   it('draws bones and a polite status while the tree is on its way', async () => {

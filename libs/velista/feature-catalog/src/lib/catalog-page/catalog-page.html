@@ -61,7 +61,7 @@
         <span class="category-chip">
           <a
             [attr.aria-label]="categoryChipLabel()"
-            [queryParams]="categoryChipQuery()"
+            [queryParams]="choiceQuery()"
             [routerLink]="categoryChipPath()"
             class="category-chip-body"
           >
@@ -81,7 +81,11 @@
           </button>
         </span>
       } @else {
-        <a [routerLink]="categoriesPath()" class="categories-link">
+        <a
+          [queryParams]="choiceQuery()"
+          [routerLink]="categoriesPath()"
+          class="categories-link"
+        >
           <lib-list-lines-icon class="categories-link-lead" />
           {{ 'catalog.categories.open' | rokuT }}
           <lib-chevron-right-icon class="categories-link-chevron" />
