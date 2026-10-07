@@ -725,6 +725,56 @@ lunaShopperBackend:
     # and connections. Raise these and the limit together, never one alone.
     sharedBuffers: 64MB
     workMem: 4MB
+    # One instance can take numbers of its own, keyed by its name. Each key that
+    # an entry leaves out falls back to the value above. It is a map and not a
+    # field on `instances` because Helm replaces a list whole: an environment
+    # file that wanted to change one instance would have to restate all four.
+    #
+    #   instanceOverrides:
+    #     luna-shopper-backend-catalog-db:
+    #       resources: { requests: {...}, limits: {...} }
+    #       sharedBuffers: 256MB
+    #       workMem: 8MB
+    #       jit: 'off'
+    #
+    # `resources` is taken whole, so state requests and limits together and keep
+    # them equal. That is what keeps the pod Guaranteed. `jit` has no shared
+    # value: an instance that does not name it keeps the default of Postgres.
+    #
+    # The catalog database is the one heavy instance, in each cluster. These
+    # numbers come from measurements on staging on 2026-10-07, with 22,203 items
+    # and 330,733 supermarket items.
+    #
+    # Memory. The database is 349 MB. Of that, 189 MB is `catalog_audit`, which
+    # is appended to and almost never read. All other tables and indexes are
+    # 152 MB together. 256MB of shared buffers holds them with room to grow by
+    # two thirds. The 1Gi limit leaves the rest for the connections of two
+    # catalog replicas, autovacuum, and the page cache that a restore or a dump
+    # fills. At 256Mi the cgroup reached its limit 27,394 times and the cache hit
+    # rate was 68%.
+    #
+    # CPU. The search filter has a fuzzy branch that no index serves, so one
+    # search statement reads all items. That is 0.4 s of CPU on a staging core
+    # with no JIT, and 1.1 s with it: the planner prices the statement above
+    # `jit_above_cost`, and the compile then costs twice what the scan does. JIT
+    # helps an analytic query of many seconds, and this database runs none.
+    #
+    # One statement is one process, so a limit below one core only makes each
+    # search slower. At 250m the 1.1 s took 4 s, and `GET /v1/catalog/suggest`
+    # answered in 6 to 9 seconds. One core is the least that does not throttle a
+    # single search. Production takes two in its own file.
+    instanceOverrides:
+      luna-shopper-backend-catalog-db:
+        resources:
+          requests:
+            cpu: '1'
+            memory: 1Gi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        sharedBuffers: 256MB
+        workMem: 8MB
+        jit: 'off'
     instances:
       - name: luna-shopper-backend-auth-db
         database: luna_auth

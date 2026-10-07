@@ -4,6 +4,12 @@
 {{- $pg := $ls.postgres }}
 {{- range $pg.instances }}
 {{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
+{{- /* The numbers of this instance: its entry in `instanceOverrides`, and the
+       shared value for each key that the entry leaves out. */}}
+{{- $own := get ($pg.instanceOverrides | default dict) .name | default dict }}
+{{- $resources := $own.resources | default $pg.resources }}
+{{- $sharedBuffers := $own.sharedBuffers | default $pg.sharedBuffers }}
+{{- $workMem := $own.workMem | default $pg.workMem }}
 ---
 # Headless Service for the StatefulSet's stable network identity, and the name
 # services connect to (e.g. AUTH_DB_URL host = {{ .name }}).
@@ -63,9 +69,13 @@ spec:
           args:
             - postgres
             - -c
-            - shared_buffers={{ $pg.sharedBuffers }}
+            - shared_buffers={{ $sharedBuffers }}
             - -c
-            - work_mem={{ $pg.workMem }}
+            - work_mem={{ $workMem }}
+            {{- with $own.jit }}
+            - -c
+            - jit={{ . }}
+            {{- end }}
           ports:
             - containerPort: 5432
           env:
@@ -105,7 +115,7 @@ spec:
           # volumeClaimTemplate and sizes the PVC. It is not this one, which is
           # how the omission went unnoticed.
           resources:
-            {{- toYaml $pg.resources | nindent 12 }}
+            {{- toYaml $resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

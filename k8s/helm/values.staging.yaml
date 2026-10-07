@@ -136,6 +136,12 @@ lunaShopperBackend:
     enabled: true
     harvestEnabled: true
 
+  # The catalog database keeps the one core that values.yaml gives it, and Redis
+  # keeps its 100m. Both would take more, and this node has four cores: 3,310m of
+  # the 4,000m is requested, and a deploy needs the rest for the pods that it
+  # surges. A stateful pod cannot take a higher limit alone, because its request
+  # must equal its limit to stay Guaranteed (plan 0004).
+
   # No nightly backups in staging: it is disposable by design. The CronJobs render
   # suspended, because a release task (`k8s/release-tasks`) dumps every database
   # it touches before it runs, and it starts that dump from them. That needs
