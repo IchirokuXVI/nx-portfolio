@@ -528,6 +528,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:02:00.000Z',
       lastSeenAt: '2026-09-01T08:02:00.000Z',
+      candidates: [],
     },
     {
       id: 'place-dia-2',
@@ -552,6 +553,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:02:00.000Z',
       lastSeenAt: '2026-09-01T08:02:00.000Z',
+      candidates: [],
     },
     {
       id: 'place-carrefour-1',
@@ -576,6 +578,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:03:00.000Z',
       lastSeenAt: '2026-09-01T08:03:00.000Z',
+      candidates: [],
     },
     {
       // The shop the catalog already holds (backend plan 0152). The run that
@@ -606,6 +609,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:04:00.000Z',
       lastSeenAt: '2026-09-01T08:04:00.000Z',
+      candidates: [],
     },
     {
       // An OpenStreetMap place with no brand key, whose chain the catalog does
@@ -633,6 +637,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:05:00.000Z',
       lastSeenAt: '2026-09-01T08:05:00.000Z',
+      candidates: [],
     },
   ];
 

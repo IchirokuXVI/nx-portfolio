@@ -38,6 +38,8 @@ import {
   type ImportDiscoveredPlaceRequest,
   type ItemSourceEntryPage,
   type LinkDiscoveredPlaceRequest,
+  type LinkPlacesByRefRequest,
+  type LinkPlacesByRefResult,
   type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunPresetsRequest,
@@ -48,6 +50,7 @@ import {
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
+  type PlaceLinkResult,
   type PostalCodeDiscoveryIdRequest,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
@@ -316,8 +319,15 @@ export class HarvestController {
   @MessagePattern(DISCOVERED_PLACE_PATTERNS.link)
   linkPlace(
     @Payload() req: LinkDiscoveredPlaceRequest
-  ): Promise<DiscoveredPlaceView> {
+  ): Promise<PlaceLinkResult> {
     return this.places.link(req);
+  }
+
+  @MessagePattern(DISCOVERED_PLACE_PATTERNS.linkByRef)
+  linkPlacesByRef(
+    @Payload() req: LinkPlacesByRefRequest
+  ): Promise<LinkPlacesByRefResult> {
+    return this.places.linkByRef(req);
   }
 
   @MessagePattern(DISCOVERED_PLACE_PATTERNS.reject)

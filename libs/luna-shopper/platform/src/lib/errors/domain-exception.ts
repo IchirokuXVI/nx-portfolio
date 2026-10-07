@@ -394,6 +394,23 @@ export class PlaceMatchesLocationException extends DomainException {
 export const PLACE_CANDIDATES_DETAIL = 'candidates';
 
 /**
+ * A link named a shop of one chain for a place that resolves to another (plan
+ * 0193).
+ *
+ * It publishes its details, because the back office cannot ask the question
+ * without the name of that chain: it travels under {@link PLACE_CHAIN_DETAIL}
+ * as `{ id, name }`. Nothing was written when this is thrown, and the same
+ * link with `acrossChains` succeeds.
+ */
+export class PlaceNamesAnotherChainException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link PlaceNamesAnotherChainException} names the chain under. */
+export const PLACE_CHAIN_DETAIL = 'chain';
+
+/**
  * The run declared a price scope the chain does not hold (plan 0152, section
  * 1). It publishes the key under {@link SCOPE_KEY_DETAIL}, which is what the
  * operator types when they create the scope.

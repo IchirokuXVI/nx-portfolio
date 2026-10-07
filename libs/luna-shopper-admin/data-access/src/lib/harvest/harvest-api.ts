@@ -163,11 +163,15 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
-  /** A POST to a verb, like import and reject beside it (backend plan 0152). */
+  /**
+   * A POST to a verb, like import and reject beside it (backend plan 0152).
+   * It answers the place and what the link filled on the shop (backend plan
+   * 0193).
+   */
   linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+  ): Promise<Wire.HarvestPlaceLinkResult> {
     return this._send('post', `${ROOT}/places/${segment(id)}/link`, {
       body: input,
     });

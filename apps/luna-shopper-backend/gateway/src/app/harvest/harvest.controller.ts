@@ -39,6 +39,8 @@ import {
   type HarvestRunPresetView,
   type HarvestRunView,
   type ItemSourceEntryPage,
+  type LinkPlacesByRefResult,
+  type PlaceLinkResult,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
@@ -77,6 +79,7 @@ import {
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
   LinkDiscoveredPlaceDto,
+  LinkPlacesByRefDto,
   MapSourceLocationDto,
   PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
@@ -363,6 +366,10 @@ export class AdminHarvestPlacesController {
       runId: query.runId,
       brandKey: query.brandKey,
       status: query.status,
+      // Both were declared on the query and never sent (plan 0193), so the
+      // places queue of a postal code listed the places of every code.
+      country: query.country,
+      postalCode: query.postalCode,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -416,10 +423,45 @@ export class AdminHarvestPlacesController {
   }
 
   /**
-   * Bind the place to a shop of its chain that the catalog already holds (plan
-   * 0152, section 3). It fills only the fields the shop lacks: coordinates, the
-   * provider's ref and a postal code. It never creates a shop. An imported
-   * place answers 409 `place_already_imported`.
+   * Link every undecided place to the shop that was made from it (plan 0193).
+   *
+   * A place is linked when exactly one catalog shop carries its `externalRef`
+   * and that shop names the same `externalProvider`. Nothing links on a
+   * distance. Without `apply` it writes nothing and answers what it would do:
+   * `linked` with what each link would fill, and `skipped` with the reason
+   * (`SEVERAL_SHOPS` or `PROVIDER_NOT_NAMED`) and the shops. A second call with
+   * `apply` finds nothing to link.
+   *
+   * Declared before the `:id` routes for the reader. Its path has one segment
+   * after `places` and theirs have two, so the order decides nothing.
+   */
+  @Post('link-by-ref')
+  @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.linkByRef, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  linkPlacesByRef(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: LinkPlacesByRefDto
+  ): Promise<LinkPlacesByRefResult> {
+    return this.nats.send<LinkPlacesByRefResult>(
+      DISCOVERED_PLACE_PATTERNS.linkByRef,
+      { ...adminCredential(admin), apply: dto.apply }
+    );
+  }
+
+  /**
+   * Bind the place to a shop that the catalog already holds (plan 0152,
+   * section 3, and plan 0193). It fills only the fields the shop lacks:
+   * coordinates, the provider's ref, a postal code, the size, the address,
+   * the city and the country. A postal code that catalog derived counts as
+   * lacking against one the source stated. It never creates a shop and never
+   * writes a label. The answer is the place and the list of what was filled.
+   *
+   * The shop named decides the chain. A place that resolves to another chain
+   * answers 409 `place_names_another_chain` with `details.chain` (`id` and
+   * `name`) and writes nothing; send `acrossChains` to link anyway. An
+   * imported place answers 409 `place_already_imported`.
    */
   @Post(':id/link')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.link, {
@@ -430,11 +472,12 @@ export class AdminHarvestPlacesController {
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
     @Body() dto: LinkDiscoveredPlaceDto
-  ): Promise<DiscoveredPlaceView> {
-    return this.nats.send<DiscoveredPlaceView>(DISCOVERED_PLACE_PATTERNS.link, {
+  ): Promise<PlaceLinkResult> {
+    return this.nats.send<PlaceLinkResult>(DISCOVERED_PLACE_PATTERNS.link, {
       ...adminCredential(admin),
       placeId: id,
       supermarketLocationId: dto.supermarketLocationId,
+      acrossChains: dto.acrossChains,
     });
   }
 

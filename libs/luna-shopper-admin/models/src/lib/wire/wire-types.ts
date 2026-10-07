@@ -465,6 +465,14 @@ export type JoinZoneDto = {
  */
 export type LinkDiscoveredPlaceDto = {
   supermarketLocationId: string;
+  acrossChains?: boolean;
+};
+
+/**
+ * `LinkPlacesByRefDto` in the gateway's OpenAPI document.
+ */
+export type LinkPlacesByRefDto = {
+  apply?: boolean;
 };
 
 /**
@@ -581,6 +589,7 @@ export type ProblemDetails = {
     | 'brand_in_use'
     | 'place_already_imported'
     | 'place_matches_location'
+    | 'place_names_another_chain'
     | 'scope_not_found'
     | 'category_too_deep'
     | 'category_not_a_leaf'
@@ -3643,6 +3652,32 @@ export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
 export type EnumsPermission = 'shopMap.record';
 
 /**
+ * `enums.PlaceLinkField` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceLinkField =
+  | 'COORDINATES'
+  | 'EXTERNAL_REF'
+  | 'POSTAL_CODE'
+  | 'FOOTPRINT'
+  | 'ADDRESS'
+  | 'CITY'
+  | 'COUNTRY';
+
+/**
+ * `enums.PlaceLinkSkipReason` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceLinkSkipReason = 'SEVERAL_SHOPS' | 'PROVIDER_NOT_NAMED';
+
+/**
+ * `enums.PlaceMatchRung` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceMatchRung =
+  | 'EXTERNAL_REF'
+  | 'NEARBY'
+  | 'ADDRESS'
+  | 'SAME_CHAIN_NEAR';
+
+/**
  * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
  */
 export type EnumsPostalCodeDiscoveryStatus =
@@ -4023,6 +4058,7 @@ export type HarvestDiscoveredPlaceView = {
   supermarketLocationId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  candidates: HarvestPlaceLocationCandidate[];
 };
 
 /**
@@ -4192,6 +4228,55 @@ export type HarvestItemSourceEntryView = {
   prices: HarvestSourceEntryPriceView[];
   eanSharedBy: number | null;
   scopeSharedWith: string[];
+};
+
+/**
+ * `harvest.LinkPlacesByRefResult` in the gateway's OpenAPI document.
+ */
+export type HarvestLinkPlacesByRefResult = {
+  applied: boolean;
+  linked: HarvestPlaceRefLink[];
+  skipped: HarvestPlaceRefSkip[];
+};
+
+/**
+ * `harvest.PlaceLinkResult` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceLinkResult = {
+  place: HarvestDiscoveredPlaceView;
+  filled: EnumsPlaceLinkField[];
+};
+
+/**
+ * `harvest.PlaceLocationCandidate` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceLocationCandidate = {
+  supermarketLocationId: string;
+  supermarketId: string;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  rung: EnumsPlaceMatchRung;
+  metres: number | null;
+};
+
+/**
+ * `harvest.PlaceRefLink` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceRefLink = {
+  place: HarvestDiscoveredPlaceView;
+  shop: HarvestPlaceLocationCandidate;
+  filled: EnumsPlaceLinkField[];
+};
+
+/**
+ * `harvest.PlaceRefSkip` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceRefSkip = {
+  place: HarvestDiscoveredPlaceView;
+  reason: EnumsPlaceLinkSkipReason;
+  shops: HarvestPlaceLocationCandidate[];
 };
 
 /**

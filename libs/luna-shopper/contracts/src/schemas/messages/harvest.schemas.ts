@@ -7,6 +7,9 @@ import {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceLinkField,
+  PlaceLinkSkipReason,
+  PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -78,6 +81,15 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunExportResult: schemaId('harvest/HarvestRunExportResult'),
   harvestDocument: schemaId('harvest/HarvestDocument'),
   discoveredPlaceView: schemaId('harvest/DiscoveredPlaceView'),
+  // The link, its candidates and the bulk link by reference (plan 0193).
+  placeMatchRung: schemaId('enums/PlaceMatchRung'),
+  placeLinkField: schemaId('enums/PlaceLinkField'),
+  placeLinkSkipReason: schemaId('enums/PlaceLinkSkipReason'),
+  placeLocationCandidate: schemaId('harvest/PlaceLocationCandidate'),
+  placeLinkResult: schemaId('harvest/PlaceLinkResult'),
+  placeRefLink: schemaId('harvest/PlaceRefLink'),
+  placeRefSkip: schemaId('harvest/PlaceRefSkip'),
+  linkPlacesByRefResult: schemaId('harvest/LinkPlacesByRefResult'),
   discoveredPlaceGroup: schemaId('harvest/DiscoveredPlaceGroup'),
   discoveredPlaceGroupsResult: schemaId('harvest/DiscoveredPlaceGroupsResult'),
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
@@ -131,6 +143,7 @@ export const HARVEST_SCHEMA_IDS = {
   groupPlacesRequest: schemaId('msg/place.groups/request'),
   importPlaceRequest: schemaId('msg/place.import/request'),
   linkPlaceRequest: schemaId('msg/place.link/request'),
+  linkPlacesByRefRequest: schemaId('msg/place.linkByRef/request'),
   placeIdRequest: schemaId('msg/place.id/request'),
   listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
   mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
@@ -329,6 +342,37 @@ const harvestRunWarning = object(
   ['code', 'offerId', 'page', 'name', 'message']
 );
 
+/**
+ * One catalog shop a place may be (plans 0152 and 0193). A hint for a person:
+ * nothing links on a candidate.
+ */
+const placeLocationCandidate = object(
+  HARVEST_SCHEMA_IDS.placeLocationCandidate,
+  {
+    supermarketLocationId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+    rung: ref(HARVEST_SCHEMA_IDS.placeMatchRung),
+    // Whole metres from the place. Null for a shop with no position.
+    metres: integerOrNull(),
+  },
+  [
+    'supermarketLocationId',
+    'supermarketId',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'rung',
+    'metres',
+  ]
+);
+
 const discoveredPlaceView = object(
   HARVEST_SCHEMA_IDS.discoveredPlaceView,
   {
@@ -364,6 +408,9 @@ const discoveredPlaceView = object(
     supermarketLocationId: nullableString(),
     firstSeenAt: string({ format: 'date-time' }),
     lastSeenAt: string({ format: 'date-time' }),
+    // The shops a `NEW` place may be, best first, on the list read only (plan
+    // 0193). Empty for every other status and on every other read.
+    candidates: array(ref(HARVEST_SCHEMA_IDS.placeLocationCandidate)),
   },
   [
     'id',
@@ -388,7 +435,55 @@ const discoveredPlaceView = object(
     'supermarketLocationId',
     'firstSeenAt',
     'lastSeenAt',
+    'candidates',
   ]
+);
+
+/**
+ * What a link did (plan 0193): the place, and each thing the link wrote on
+ * the shop because the shop lacked it.
+ */
+const placeLinkResult = object(
+  HARVEST_SCHEMA_IDS.placeLinkResult,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    filled: array(ref(HARVEST_SCHEMA_IDS.placeLinkField)),
+  },
+  ['place', 'filled']
+);
+
+const placeRefLink = object(
+  HARVEST_SCHEMA_IDS.placeRefLink,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    shop: ref(HARVEST_SCHEMA_IDS.placeLocationCandidate),
+    filled: array(ref(HARVEST_SCHEMA_IDS.placeLinkField)),
+  },
+  ['place', 'shop', 'filled']
+);
+
+const placeRefSkip = object(
+  HARVEST_SCHEMA_IDS.placeRefSkip,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    reason: ref(HARVEST_SCHEMA_IDS.placeLinkSkipReason),
+    shops: array(ref(HARVEST_SCHEMA_IDS.placeLocationCandidate)),
+  },
+  ['place', 'reason', 'shops']
+);
+
+/**
+ * The bulk link by reference (plan 0193). `applied: false` is the dry answer:
+ * the same lists, and nothing written.
+ */
+const linkPlacesByRefResult = object(
+  HARVEST_SCHEMA_IDS.linkPlacesByRefResult,
+  {
+    applied: boolean(),
+    linked: array(ref(HARVEST_SCHEMA_IDS.placeRefLink)),
+    skipped: array(ref(HARVEST_SCHEMA_IDS.placeRefSkip)),
+  },
+  ['applied', 'linked', 'skipped']
 );
 
 const discoveredPlaceGroup = object(
@@ -1269,8 +1364,15 @@ const linkPlaceRequest = object(
     ...adminCredentialProperties,
     placeId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
+    // Link although the place resolves to another chain (plan 0193).
+    acrossChains: boolean(),
   },
   ['userId', 'placeId', 'supermarketLocationId']
+);
+const linkPlacesByRefRequest = object(
+  HARVEST_SCHEMA_IDS.linkPlacesByRefRequest,
+  { ...adminCredentialProperties, apply: boolean() },
+  ['userId']
 );
 const placeIdRequest = object(
   HARVEST_SCHEMA_IDS.placeIdRequest,
@@ -1614,6 +1716,12 @@ export const harvestSchemas: JsonSchema[] = [
     HARVEST_SCHEMA_IDS.sourceLocationStatus,
     Object.values(SourceLocationStatus)
   ),
+  enumOf(HARVEST_SCHEMA_IDS.placeMatchRung, Object.values(PlaceMatchRung)),
+  enumOf(HARVEST_SCHEMA_IDS.placeLinkField, Object.values(PlaceLinkField)),
+  enumOf(
+    HARVEST_SCHEMA_IDS.placeLinkSkipReason,
+    Object.values(PlaceLinkSkipReason)
+  ),
   enumOf(HARVEST_SCHEMA_IDS.adapterKey, ADAPTER_KEYS),
   enumOf(
     HARVEST_SCHEMA_IDS.harvestWarningCode,
@@ -1633,7 +1741,12 @@ export const harvestSchemas: JsonSchema[] = [
   harvestRunView,
   harvestDocument,
   harvestRunExportResult,
+  placeLocationCandidate,
   discoveredPlaceView,
+  placeLinkResult,
+  placeRefLink,
+  placeRefSkip,
+  linkPlacesByRefResult,
   discoveredPlaceGroup,
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
@@ -1677,6 +1790,7 @@ export const harvestSchemas: JsonSchema[] = [
   groupPlacesRequest,
   importPlaceRequest,
   linkPlaceRequest,
+  linkPlacesByRefRequest,
   placeIdRequest,
   listSourceLocationsRequest,
   mapSourceLocationRequest,
@@ -1772,9 +1886,14 @@ export const harvestMessageContracts: Record<
     request: HARVEST_SCHEMA_IDS.importPlaceRequest,
     response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
   },
+  // The place and what the link wrote on the shop (plan 0193).
   [DISCOVERED_PLACE_PATTERNS.link]: {
     request: HARVEST_SCHEMA_IDS.linkPlaceRequest,
-    response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
+    response: HARVEST_SCHEMA_IDS.placeLinkResult,
+  },
+  [DISCOVERED_PLACE_PATTERNS.linkByRef]: {
+    request: HARVEST_SCHEMA_IDS.linkPlacesByRefRequest,
+    response: HARVEST_SCHEMA_IDS.linkPlacesByRefResult,
   },
   [DISCOVERED_PLACE_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.placeIdRequest,
