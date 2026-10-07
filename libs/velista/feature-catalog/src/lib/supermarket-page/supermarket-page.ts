@@ -394,13 +394,17 @@ export class CatalogSupermarketPage {
     );
   }
 
-  /** Go to the catalog with this answer, replacing the picker's entry. */
+  /**
+   * Go to the catalog with this answer, replacing the picker's entry. Only the
+   * supermarket is answered: the category, the text and the order go back as they
+   * came.
+   */
   private _answer(answer: {
     readonly chain: string | null;
     readonly shop: string | null;
   }): void {
     void this._router.navigateByUrl(
-      this._catalogUrl({ category: this._choice.category, ...answer }),
+      this._catalogUrl({ ...this._choice, ...answer }),
       { replaceUrl: true }
     );
   }

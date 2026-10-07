@@ -4,6 +4,7 @@ import {
   computed,
   inject,
 } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -19,6 +20,7 @@ import {
   categoryRowView,
   type CategoryRowView,
 } from '../category-rows/category-rows';
+import { catalogChoiceOf, catalogQueryOf } from '../supermarket-choice';
 
 /** The bones drawn while the tree is on its way: about a phone's worth. */
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5, 6, 7];
@@ -37,6 +39,10 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5, 6, 7];
  *
  * The chosen category lives in the tab's URL and nowhere else (target 5), so this page
  * only lists places to go. The tree is `CategoryStore`'s, read once per session.
+ *
+ * What the tab was narrowed by when it opened this page (the supermarket, the text,
+ * the order) arrives in the query and is handed on to every row, so choosing a
+ * category changes the category and nothing else.
  */
 @Component({
   selector: 'lib-categories-page',
@@ -51,6 +57,12 @@ export class CategoriesPage {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _pages = inject(PageNavigation);
+  private readonly _router = inject(Router);
+
+  /** The tab's choice as this page was handed it, passed on and never changed. */
+  private readonly _query = catalogQueryOf(
+    catalogChoiceOf(inject(ActivatedRoute).snapshot.queryParamMap)
+  );
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -76,7 +88,7 @@ export class CategoriesPage {
             'categories',
             root.slug
           ),
-          queryParams: null,
+          queryParams: this._query,
           current: false,
         },
         formatCount(root.itemCount, locale),
@@ -93,8 +105,15 @@ export class CategoriesPage {
     void this._store.ensure();
   }
 
-  /** The chevron: one step back, or the tab on a cold load (target 4). */
+  /**
+   * The chevron: one step back, or the tab on a cold load (target 4), narrowed as
+   * it was.
+   */
   protected async back(): Promise<void> {
-    await this._pages.back(appPath(this._locale(), this._basePath, 'catalog'));
+    const url = this._router.parseUrl(
+      appPath(this._locale(), this._basePath, 'catalog')
+    );
+    url.queryParams = this._query;
+    await this._pages.back(this._router.serializeUrl(url));
   }
 }
