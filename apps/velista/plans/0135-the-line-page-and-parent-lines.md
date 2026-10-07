@@ -122,8 +122,9 @@ Stage 2, after the backend plan of section 12:
   hold for a parent.
 - `libs/velista/ui`: the product card rail, the link rows, the card of lines, the amount
   control, the cost figures, the pick rows of the add page, the nested rows of the list.
-- `libs/velista/feature-lists`: the line page, the history page, the add page, the menu,
-  rename, copy and info sheets, the delete sheet.
+- `libs/velista/feature-lists`: the line page, the history page, the products page, the
+  add page, the menu, rename, copy and info sheets, the delete sheet, and the detail
+  sheet of a parent.
 - `libs/velista/feature-shell`: the routes of section 11.
 - `libs/shared/ui`: any icon that does not exist yet (look first: the three dots, the
   info mark, the grip).
@@ -154,7 +155,8 @@ Stage 2, after the backend plan of section 12:
 ### Action boundaries
 
 - Do not change the backend, the contracts or `openapi.json`. That is the backend plan.
-- Do not change what a row tap on the list opens. Section 14 asks the owner.
+- Do not change what a row tap on the list opens. It opens the detail sheet for every
+  line, a parent too. The owner decided it.
 - Do not build the product page. Plan `0134` builds it. A product card opens whatever a
   product opens on your base branch.
 - Do not remove `LineDetailSheet`. It keeps its settle actions.
@@ -195,6 +197,10 @@ Stage 2, after the backend plan of section 12:
 | Adding lines | A full page, because of the keyboard. It searches the list and the catalog |
 | "Also on" | Lists that hold a line with exactly the same products, whatever its name. For a parent, exactly the same lines |
 | "Add to another list" | A line, also a parent with all its lines, is copied to other lists |
+| The number of a parent | Always the largest number that every line under it can cover (section 7.2). Confirmed on 2026-10-08 |
+| How much a buy of a parent buys | The whole number of each line under it, also what was added to a line by hand |
+| A row tap on the list | Opens the detail sheet for every line, a parent too. The sheet has the buy button, the stepper and the name |
+| The basket | Lines under parents merge across lists like any lines. The parents merge too: the merged parent holds every line of both, and equal lines add their numbers |
 | Extras | The cost of a parent, the order of its lines. A parent is always open when the list loads, and a close is not remembered |
 
 ## 2. The line page of a line with products
@@ -208,7 +214,8 @@ Artboard `Main.dc.html`. Top to bottom:
    `LineStore.addQuantity(lineId, ±1)`. A reader without `DECIDE` sees the number with no
    buttons. Minus is disabled at 0.
 3. **The parent row** (stage 2, section 10). Absent in stage 1.
-4. **"Any of these will do"**, with "Add a product" on the right. Section 3.
+4. **"Any of these will do"**, with "Change" on the right. The link reads "Add a
+   product" while the line has none. Section 3.
 5. **Two rows**: "Buy history" with the count of purchases, and "Comments" with the
    count. The first opens the history page. The second opens the comments sheet over the
    line page.
@@ -237,12 +244,19 @@ will do."), and "Add a product". It has no empty card.
 - A press opens the product (the sheet today, the page after plan `0134`).
 - **Prices come from the read the product sheet uses** (`ProductShopPrice`). Ask for the
   cards on screen and the next two, not for all hundred. Cache by item and profile.
-- **Editing.** "Add a product" opens the search that the page has today
-  (`startAdding`), moved into a sheet over the page, because the keyboard would cover a
-  field at this height. Removing a product and "Keep" (plan `0065`) move into that same
-  sheet, as a list of the products with their two controls. The cards carry no buttons.
-- The clusters of plan `0065` ("From {group}", "Added by you") become two headings in
-  the sheet. The rail does not split.
+- **Editing is a page**, `lines/:lineId/products`, artboard `Products.dc.html`. "Change"
+  opens it. It is a page and not a sheet because of the keyboard, the same reason as the
+  add page of section 8. The cards carry no buttons.
+- The page has one field, "Search the catalog to add a product", which is not focused on
+  arrival, so the products are in sight first. Under it are the products of the line,
+  each with its cross. A product that the catalog put there also has "Keep" (plan
+  `0065`).
+- Typing replaces the list with catalog results, drawn like the catalog rows of the add
+  page, each with "Add". This is the search that the page has today (`startAdding`),
+  moved here. The refusal of a full line (`productsFull`) is one sentence under the
+  field.
+- The clusters of plan `0065` ("From {group}", "Added by you") are the two headings of
+  that page. The rail does not split.
 - The counter `count/cap` is drawn only from 90 products up.
 
 ## 4. Loading the page
@@ -312,7 +326,7 @@ and stepper, and then:
   sentence says so.
 - **Comments**, "Also on" and "Add to another list" as on any line.
 
-A parent has no "Any of these will do" section, no "Add a product" and no "Buy history"
+A parent has no "Any of these will do" section, no products page and no "Buy history"
 row.
 
 ### 7.2 The amounts
@@ -392,10 +406,13 @@ Artboard `Rows.dc.html`.
   The state is a set of ids in the page. It is not stored anywhere.
 - The reel of a parent row sends the same delta as any row. The rows under it update
   from the answer.
-- A press on a parent row opens the line page of the parent, not the detail sheet. The
-  sheet has nothing to offer a line with no products but its settle actions, and those
-  are on the page as "Bought all of it".
-- **"Bought all of it"** on the parent page settles every line under it (section 12).
+- A press on a parent row opens the detail sheet, like any other line. For a parent the
+  sheet keeps the name, the stepper and the buy button, and its link to the page. It
+  drops what a parent cannot have: the product names, "which one did you get" and the
+  rate facts.
+- **The buy button of that sheet buys every line under the parent**, each for the whole
+  number it has on the list (section 12). "Not available" is absent for a parent. The
+  parent page has no buy button of its own.
 - While searching, the list is flat as today. A line under a parent says "Under {name}"
   in its small text.
 - Reordering the list moves a parent with its lines. A line under a parent has no grip
@@ -427,14 +444,14 @@ All under `zones/:zoneId/lists/:listId/lines/:lineId`.
 | `history` | page | 1 |
 | `sheet/menu` | sheet | 1 |
 | `sheet/name` | sheet | 1 |
-| `sheet/products` | sheet | 1 |
+| `products` | page | 1 |
 | `sheet/comments` | sheet | 1 |
 | `sheet/confirm/delete` | sheet, exists | 1 |
 | `add` | page | 2 |
 | `sheet/amounts` | sheet | 2 |
 | `sheet/copy` | sheet | 2 |
 
-Declare the two pages as their own routes before the line page, as the line page is
+Declare the three pages as their own routes before the line page, as the line page is
 declared before the list page. `routes.spec.ts` has to keep both of its assertions.
 
 ## 12. What the backend has to serve
@@ -459,16 +476,21 @@ design.
    would put them above the rest of the list.
 6. **Deleting a parent** with or without its lines.
 7. **Buying a parent**: every line under it settled in one request, each as its own
-   `LineSettlement`. Nothing for the parent.
-8. **The identity of a line gains its parent.** An add under a parent merges only into a
-   line under that parent. An add with no parent never merges into a line under one. The
-   basket's `mergeKey` follows the same rule (section 14, question 3).
-9. **"Also on" by the whole product set**, answering the line id, the line name and the
-   number, and for a parent by its lines and amounts.
-10. **Copying a line to other lists**, a parent with its lines, starting at 0.
-11. **The cost of a parent**: for 1 of it and for what is on the list, with the count of
+   `LineSettlement`, each for the whole number it has on the list. Nothing for the
+   parent.
+8. **The identity of a line gains its parent, inside a list.** An add under a parent
+   merges only into a line under that parent. An add with no parent never merges into a
+   line under one.
+9. **The basket merges across parents.** Lines under parents of different lists merge
+   into one basket row by today's `mergeKey`, as if they had no parent. The parents
+   merge too. The merged parent holds every line of all of them, and lines that are the
+   same add their numbers. What makes two parents the same is open (section 14).
+10. **"Also on" by the whole product set**, answering the line id, the line name and the
+    number, and for a parent by its lines and amounts.
+11. **Copying a line to other lists**, a parent with its lines, starting at 0.
+12. **The cost of a parent**: for 1 of it and for what is on the list, with the count of
     lines that have no price, by the rules of backend `0132`'s estimate.
-12. **Realtime**: one event for a write that moves several lines, so that a second
+13. **Realtime**: one event for a write that moves several lines, so that a second
     person's list does not show half of it.
 
 ## 13. Strings and tests
@@ -499,17 +521,12 @@ parent, a note on a line whose number no longer matches its parent, the shop map
 Open questions:
 
 1. **Can a parent be under a parent?** The mock refuses it ("Has lines of its own").
-2. **What does a row tap on the list open?** Today it opens the detail sheet, and the
-   line page is one more press away. This plan keeps that for a line with products and
-   opens the page for a parent. With the number and the rename now on the page, the page
-   could take the tap for every line.
-3. **What is "the same parent" for the basket?** The basket merges lines of several
-   lists into one row. Two lists that each hold "Bathroom things" have two different
-   parents. Do their Toothpaste lines merge into one basket row?
-4. **How many does "buying a parent" buy?** This plan buys the whole number of each line
-   under it, also what was added to a line by hand.
-5. **Where does a line go when it is bought and its parent is not?** This plan keeps it
+2. **What makes two parents the same in the basket?** The owner decided that parents
+   merge and that the merged parent holds every line of both. A parent has no products,
+   so this plan reads "the same" as the same name, by the rule that lines with no
+   products follow today (`text:` plus the normalized name).
+3. **Where does a line go when it is bought and its parent is not?** This plan keeps it
    under its parent, with the bought mark that a row has today.
-6. **The parent's number is the smallest of what its lines can cover (section 7.2).** It
-   follows from the three rules, and it means a parent can never be set higher than its
-   lines allow without raising them. Confirm that this is the rule.
+
+Answered by the owner on 2026-10-08, and now in section 1: the number of a parent, how
+much a buy of a parent buys, what a row tap opens, and the basket.

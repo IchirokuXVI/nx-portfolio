@@ -12,7 +12,8 @@
     { "file": "Rows.dc.html", "x": 3290, "y": 0, "w": 390, "h": 770, "title": "Rows on the list" },
     { "file": "AddPage.dc.html", "x": 0, "y": 1560, "w": 390, "h": 844, "title": "The add page, typing" },
     { "file": "AddPagePicked.dc.html", "x": 470, "y": 1560, "w": 390, "h": 844, "title": "The add page, lines picked" },
-    { "file": "Info.dc.html", "x": 940, "y": 1560, "w": 390, "h": 900, "title": "The info button" }
+    { "file": "Info.dc.html", "x": 940, "y": 1560, "w": 390, "h": 900, "title": "The info button" },
+    { "file": "Products.dc.html", "x": 1410, "y": 1560, "w": 390, "h": 844, "title": "The products of a line, on their own page" }
   ],
   "annotations": [
     {
@@ -91,6 +92,13 @@
       "y": 1050,
       "w": 420,
       "text": "RULE Q1: THE AMOUNTS, IN THE WORDS OF THE APP. Raising the parent adds each amount to its line. Lowering it takes each amount away and stops at 0. A line can be changed alone. The parent then follows: down when a line no longer holds enough, up when every line holds enough for one more. Buying the parent buys every line under it."
+    },
+    {
+      "id": "e1",
+      "x": 1410,
+      "y": 1050,
+      "w": 420,
+      "text": "RULE E1: THE PRODUCTS ARE CHANGED ON A PAGE. 'Change' beside 'Any of these will do' opens it. The field searches the catalog and is not focused on arrival, so the products are in sight first. Each product has its cross, and a product the catalog put there has 'Keep'. Typing shows catalog results under the field, drawn like those of the add page.\nIt is a page and not a sheet for the reason of rule A1: the keyboard."
     }
   ]
 }
