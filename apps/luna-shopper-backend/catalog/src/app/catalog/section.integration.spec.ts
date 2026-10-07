@@ -13,8 +13,8 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
-import { categoryId } from '../db/reference/ids';
-import { seedTaxonomy } from '../db/reference/taxonomy-seed';
+import { categoryId } from '../db/taxonomy/ids';
+import { seedTaxonomy } from '../db/taxonomy/taxonomy-seed';
 import {
   CATALOG_ENTITIES,
   Category,

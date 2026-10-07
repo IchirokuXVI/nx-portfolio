@@ -15,6 +15,10 @@ import { DiscoveredPlaceScopeKey1757500000000 } from './1757500000000-Discovered
 import { SharedEan1757600000000 } from './1757600000000-SharedEan';
 import { SourceEntryPackCount1757700000000 } from './1757700000000-SourceEntryPackCount';
 import { DiscoveredPlaceFootprint1757900000000 } from './1757900000000-DiscoveredPlaceFootprint';
+import { SourceEntrySizeUnit1758000000000 } from './1758000000000-SourceEntrySizeUnit';
+import { SourceEntrySoldByWeight1758100000000 } from './1758100000000-SourceEntrySoldByWeight';
+import { SourceEntryAvailability1758200000000 } from './1758200000000-SourceEntryAvailability';
+import { SourceEntryPriceKind1759200000000 } from './1759200000000-SourceEntryPriceKind';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -42,4 +46,8 @@ export const HARVESTER_MIGRATIONS = [
   SharedEan1757600000000,
   SourceEntryPackCount1757700000000,
   DiscoveredPlaceFootprint1757900000000,
+  SourceEntrySizeUnit1758000000000,
+  SourceEntrySoldByWeight1758100000000,
+  SourceEntryAvailability1758200000000,
+  SourceEntryPriceKind1759200000000,
 ];

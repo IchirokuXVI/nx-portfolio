@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: a new product</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<form class="ab ph" style="width: 390px; height: 844px" aria-label="Add a product">
+
+<header class="phead">
+<a class="pb" href="Phone-Product.dc.html" aria-label="Back to Products"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div class="grow col"><h1>New product</h1></div>
+<button type="button" class="pb" aria-label="How to add a product"><i>i</i></button>
+</header>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="pc-name">
+<div class="sec-h"><h2 id="pc-name">Name and codes</h2></div>
+<div class="fr ed"><span class="fl" id="pc-name-l">Name <span class="req" aria-hidden="true">*</span></span><div class="fv">
+<div class="loc" role="group" aria-labelledby="pc-name-l">
+<div><span class="lang" aria-hidden="true">ES</span><input class="inp" aria-label="Name in Spanish" value="Leche semidesnatada" required></div>
+<div><span class="lang" aria-hidden="true">EN</span><input class="inp focus" aria-label="Name in English"></div>
+</div>
+<span class="help">Without the brand and without the size. Spanish is required.</span>
+</div></div>
+<div class="fr ed"><label class="fl" for="pc-brand">Brand</label><div class="fv"><span class="pick"><button type="button" id="pc-brand" class="inp" aria-haspopup="listbox">None</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+<div class="fr ed"><label class="fl" for="pc-ean">Barcode</label><div class="fv"><input id="pc-ean" class="inp mono" inputmode="numeric" aria-describedby="pc-ean-h"><span class="help" id="pc-ean-h">8 or 13 digits.</span></div></div>
+</section>
+
+<section class="sec" aria-labelledby="pc-where">
+<div class="sec-h"><h2 id="pc-where">Where it belongs</h2></div>
+<div class="fr ed"><label class="fl" for="pc-cat">Categories <span class="req" aria-hidden="true">*</span></label><div class="fv">
+<span class="pick"><button type="button" id="pc-cat" class="inp mut" aria-haspopup="listbox">Add a category</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+<span class="help">The first one you add is the main category.</span>
+</div></div>
+<div class="fr ed"><label class="fl" for="pc-group">Product group</label><div class="fv"><span class="pick"><button type="button" id="pc-group" class="inp" aria-haspopup="listbox">None</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+</section>
+
+</div>
+</div>
+
+<div class="save">
+<a class="btn" href="Phone-Product.dc.html" style="color: #14171a">Cancel</a>
+<button type="submit" class="btn pri grow">Add product</button>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Phone-Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</form>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

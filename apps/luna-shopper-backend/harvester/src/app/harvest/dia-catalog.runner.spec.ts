@@ -181,6 +181,7 @@ describe('DiaCatalogRunner', () => {
       ean: null,
       sizeFormat: '2 L',
       unitSize: 2,
+      sizeUnit: 'LITER',
       packCount: null,
       categoryPath: ['Agua y refrescos', 'Cola'],
       url: 'https://www.dia.es/agua-y-refrescos/cola/p/659',
@@ -215,7 +216,66 @@ describe('DiaCatalogRunner', () => {
     expect(pack).toMatchObject({
       sizeFormat: '2 x 2 L',
       unitSize: 4,
+      sizeUnit: 'LITER',
       packCount: 2,
+    });
+  });
+
+  it('reads a dimension as one object and no pack (plan 0183)', async () => {
+    const foil: FakeDiaRow = {
+      sku: '70001',
+      name: 'Papel de horno Dia 2 x 30 m',
+      brand: 'Dia',
+      price: 1.99,
+      unitPrice: 0.03,
+    };
+    const cloth: FakeDiaRow = {
+      sku: '70002',
+      name: 'Mantel de papel Dia 60 x 40 cm',
+      brand: 'Dia',
+      price: 2.49,
+      unitPrice: 2.49,
+    };
+    const beer: FakeDiaRow = {
+      sku: '70003',
+      name: 'Cerveza especial 6 x 33 cl',
+      brand: 'Dia',
+      price: 3.3,
+      unitPrice: 1.67,
+    };
+    const runner = new TestRunner(
+      world({
+        leaves: [COLA],
+        listings: { '13835': { L2108: [foil, cloth, beer] }, '959': {} },
+      })
+    );
+    await runner.run(context(), report, input(), source());
+
+    const byId = new Map(
+      report.products.map((product) => [product.externalId, product])
+    );
+    // The printed text is the key and stays. The numbers are the sides of one
+    // roll and of one cloth, so there is no size and no pack of 2 or of 60.
+    expect(byId.get('70001')).toMatchObject({
+      name: 'Papel de horno Dia',
+      sizeFormat: '2 x 30 m',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+    expect(byId.get('70002')).toMatchObject({
+      name: 'Mantel de papel Dia',
+      sizeFormat: '60 x 40 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+    // A volume is content, so six cans are still six.
+    expect(byId.get('70003')).toMatchObject({
+      sizeFormat: '6 x 33 cl',
+      unitSize: 1980,
+      sizeUnit: 'MILLILITER',
+      packCount: 6,
     });
   });
 

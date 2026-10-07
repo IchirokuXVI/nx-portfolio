@@ -145,8 +145,7 @@ function build(
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     changes: (id, ctx, cursor) => memory.changes(id, ctx, cursor),
-    acknowledgeChanges: (id, through) =>
-      memory.acknowledgeChanges(id, through),
+    acknowledgeChanges: (id, through) => memory.acknowledgeChanges(id, through),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
     ensureShareLink: () => memory.ensureShareLink(),
@@ -203,7 +202,10 @@ describe('BasketStore', () => {
 
       expect(rowOf(store, 'Sourdough loaf').state).toBe('NOT_AVAILABLE');
       expect(store.progress().unavailable).toBe(1);
-      expect(store.progress().done).toBe(0);
+      // One, and it is not the loaf: the butter somebody bought through another
+      // basket is done (velista `0131`).
+      expect(rowOf(store, 'Butter').state).toBe('DONE');
+      expect(store.progress().done).toBe(1);
     });
 
     /**
@@ -1721,9 +1723,9 @@ describe('BasketStore: skip, demand and the add', () => {
     // Not a failure: the list now asks for nothing, which is what was asked for.
     // The caller reads the null row to know which of the two happened.
     expect(result?.row).toBeNull();
-    expect(
-      store.rows().some((row) => row.content === 'Sourdough loaf')
-    ).toBe(false);
+    expect(store.rows().some((row) => row.content === 'Sourdough loaf')).toBe(
+      false
+    );
   });
 
   it('takes the counts from the answer even when the row went away', async () => {
@@ -1768,6 +1770,12 @@ describe('BasketStore: skip, demand and the add', () => {
       targetListId: 'list-weekly',
       content: 'milk',
       quantity: 2,
+      // The products that line holds: the name alone is not a match.
+      itemIds: [
+        'item-milk-hacendado',
+        'item-milk-pascual',
+        'item-milk-central',
+      ],
     });
 
     expect(store.rows()).toHaveLength(rows);

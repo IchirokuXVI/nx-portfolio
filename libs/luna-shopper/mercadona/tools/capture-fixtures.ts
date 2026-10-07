@@ -9,14 +9,17 @@
  * It makes real requests to a third party, one at a time and paced, so it obeys
  * the same politeness rules the runtime does (section 8.1): one honest
  * User-Agent naming a contact address, a low fixed rate, and a small fixed list
- * of products rather than a crawl. The whole run is fewer than a dozen requests.
+ * of products rather than a crawl. The whole run is about twenty requests.
  *
  * Every product below is here because a test needs that exact shape. Changing the
  * list means changing what the tests can prove, so add rather than replace.
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MercadonaClient } from '../src/lib/mercadona.client';
+import {
+  MERCADONA_BASE_URL,
+  MercadonaClient,
+} from '../src/lib/mercadona.client';
 import {
   MERCADONA_STORES_TOTAL_URL,
   MERCADONA_STORES_URL,
@@ -49,6 +52,85 @@ const PRODUCTS: Array<{
     id: '4241',
     lang: 'en',
     why: 'the same product in English (section 2.3)',
+  },
+  {
+    file: 'product-box-of-capsules.json',
+    id: '11801',
+    lang: 'es',
+    why: 'a box priced as one piece that prints how many capsules it holds (plan 0177)',
+  },
+  {
+    file: 'product-pack-of-pads.json',
+    id: '16566',
+    lang: 'es',
+    why: 'a pack of pads sized `1 ud` whose count is in total_units (plan 0183)',
+  },
+  {
+    file: 'product-pack-of-wipes.json',
+    id: '47293',
+    lang: 'es',
+    why: 'a pack of wipes sized `1 ud` whose count is in total_units (plan 0183)',
+  },
+  {
+    file: 'product-single-razor.json',
+    id: '22083',
+    lang: 'es',
+    why: 'a single object sized `1 ud` with no total_units (plan 0183)',
+  },
+  {
+    file: 'product-roll-of-services.json',
+    id: '49173',
+    lang: 'es',
+    why: 'one roll sized `1 ud` whose total_units counts sheets and not pieces (plan 0183)',
+  },
+  {
+    file: 'product-approximate-weight.json',
+    id: '50946',
+    lang: 'es',
+    why: 'a piece of cheese sold by approximate weight, with an in-store barcode (plan 0181)',
+  },
+  {
+    file: 'product-fixed-pack-in-store-barcode.json',
+    id: '84692',
+    lang: 'es',
+    why: 'a fixed pack that also carries an in-store barcode (plan 0181)',
+  },
+  {
+    file: 'product-reference-format-100ml.json',
+    id: '46815',
+    lang: 'es',
+    why: 'a body oil whose reference_format reads `100 ml` (plan 0189)',
+  },
+  {
+    file: 'product-reference-format-100g.json',
+    id: '34149',
+    lang: 'es',
+    why: 'a ground spice whose reference_format reads `100 g` (plan 0189)',
+  },
+  {
+    file: 'product-eggs-per-dozen.json',
+    id: '15768',
+    lang: 'es',
+    why: 'a dozen eggs whose reference_format reads `dc` (plan 0189)',
+  },
+  {
+    file: 'product-detergent-per-wash.json',
+    id: '86400',
+    lang: 'es',
+    why: 'a detergent whose reference_format reads `lv`, a wash (plan 0189)',
+  },
+];
+
+/**
+ * file name -> the category whose listing that fixture pins, as the walk
+ * fetches it: `GET /categories/<id>/`, the products inline with their price
+ * block and no `ean`.
+ */
+const LISTINGS: Array<{ file: string; id: string; why: string }> = [
+  {
+    file: 'category-listing-cheese.json',
+    id: '54',
+    why: 'a listing that carries approx_size, holding product 50946 (plan 0181)',
   },
 ];
 
@@ -84,6 +166,25 @@ async function main(): Promise<void> {
   if (firstLevelOne) {
     const expanded = await client.getProduct(String(firstLevelOne.id));
     write('category-expanded.json', expanded);
+  }
+
+  for (const { file, id, why } of LISTINGS) {
+    // The same pacing the client keeps, on the one request it has no raw
+    // method for: the client answers a listing already normalized.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const query = new URLSearchParams({ lang: 'es', wh: warehouse });
+    const response = await fetch(
+      `${MERCADONA_BASE_URL}/categories/${id}/?${query.toString()}`,
+      { headers: { accept: 'application/json', 'user-agent': USER_AGENT } }
+    );
+    if (!response.ok) {
+      process.stderr.write(
+        `category ${id} answered ${response.status} in warehouse ${warehouse}; ` +
+          `the fixture for "${why}" was left as it was\n`
+      );
+      continue;
+    }
+    write(file, await response.json());
   }
 
   for (const { file, id, lang, why } of PRODUCTS) {

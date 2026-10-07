@@ -4,17 +4,16 @@ import {
   BULK_DECISION_MAX_OPERATIONS,
   BulkOperationErrorCode,
   SourceEntryStatus,
-  UnitOfMeasure,
   type ApplySourceEntryDecisionsRequest,
   type ApplySourceEntryDecisionsResult,
   type CreateItemFromSourceEntryOperation,
   type CreateItemInput,
   type ItemView,
+  type LocalizedText,
   type SourceEntryDecisionOperation,
   type SourceEntryDecisionOutcome,
   type SourceEntryPriceSkip,
 } from '@portfolio/luna-shopper/contracts';
-import { mapSizeFormat } from '@portfolio/luna-shopper/mercadona';
 import {
   describeError,
   ValidationException,
@@ -24,8 +23,19 @@ import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
-import { acceptedName } from './source-entry-name';
-import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
+import { acceptedName, lacksEnglish } from './source-entry-name';
+import { createdSize } from './source-entry-size';
+import {
+  barcodesOf,
+  bindFields,
+  chainEanCounts,
+  createdEan,
+  eanHeldDetail,
+  sharesEanInChain,
+  SourceEntryPriceWriter,
+  taughtEan,
+} from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 /** The two statuses a decision may be made about (plan 0086, D7). */
@@ -56,7 +66,8 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * 3. **Bind every row**, in one transaction, re-checking the `expect`s against
  *    rows it has locked again. The re-check is not paranoia: step 2 is a round
  *    trip to another service, and step 1's lock was released before it.
- * 4. **Write the prices, per row, skipping failures.**
+ * 4. **Write the prices, per row, skipping failures.** Then the availability
+ *    the bound rows are owed (plan 0182), under the same rule.
  *
  * ## Step 4 is the one place this is not atomic, and that was decided
  *
@@ -65,6 +76,23 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * prices, is named in the answer, and leaves the bind standing. The alternative
  * is a cross service rollback to undo a price, which is a saga for something an
  * operator can simply write again.
+ *
+ * **Availability follows the prices, in the same step and under the same rule**
+ * (plan 0182). It crosses into catalog too, so it cannot join the bind either.
+ * It is written after every price, in one pass over the whole file rather than
+ * a row at a time: a row of DEZA has no price and up to ten shops, and a call
+ * per row and shop for a thousand rows is longer than the route's timeout. A
+ * failure leaves every bind standing and names the rows in `priceSkips`, with
+ * a reason that says it was the availability.
+ *
+ * **The barcodes follow the availability, under the same rule** (plan 0185).
+ * A decided row whose real EAN no product holds gives it to its product, in
+ * one call for the whole file. That is an accepted row, and a row whose
+ * product is created with another EAN or with none. Whether another product
+ * holds a row's barcode is decided in step 1, where it refuses the file before
+ * anything is written.
+ * What is left for step 4 is the write itself, and a barcode that could not be
+ * written is named in `priceSkips` with a reason that says it was the barcode.
  *
  * ## A failed step 3 leaves orphans, and says so
  *
@@ -91,7 +119,8 @@ export class SourceEntryBatchService {
     private readonly catalog: CatalogClient,
     private readonly prices: SourceEntryPriceWriter,
     private readonly admin: PlatformAdminService,
-    private readonly sources: SupermarketSourceService
+    private readonly sources: SupermarketSourceService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   async applyDecisions(
@@ -132,20 +161,41 @@ export class SourceEntryBatchService {
       return refusedAt('VALIDATE', runId, checked, null);
     }
     const creates = operations.filter(isCreate);
-    const rows =
-      creates.length > 0
-        ? await this.entries.find({
-            where: { id: In(creates.map((operation) => operation.entryId)) },
-          })
-        : [];
+    // Every row the file names. A create reads its row for the product's
+    // defaults, and both kinds read it for the barcode it prints (plan 0185).
+    const rows = await this.entries.find({
+      where: { id: In(operations.map((operation) => operation.entryId)) },
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
+    // What each chain prints its own text in, so a row accepted with no name
+    // of its own files the printed string under the right language (plan
+    // 0111, section 7), and how its category is read (plan 0174, section 7).
+    // One read per chain on the file rather than one per row: a thousand row
+    // file names a handful of chains.
+    const adapterKeys = await this.adapterKeysOf(rows);
+    // Before anything that crosses to catalog, because it reads nothing: a
+    // product with no English name is refused here, on its own operation.
+    const unnamed = checkNames(operations, byId, adapterKeys);
+    if (unnamed.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, unnamed, null);
+    }
     const taken = await this.checkEans(operations, byId);
     if (taken.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, taken, null);
     }
-    const { outcomes: unplaced, idsOf } = await this.checkCategories(
+    // The barcode each decided row prints (plan 0185): refused here when
+    // another product holds it, and remembered for step 4 when nobody does.
+    const { outcomes: held, teach } = await this.checkBarcodes(
       operations,
       byId
+    );
+    if (held.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, held, null);
+    }
+    const { outcomes: unplaced, idsOf } = await this.checkCategories(
+      operations,
+      byId,
+      adapterKeys
     );
     if (unplaced.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, unplaced, null);
@@ -154,11 +204,6 @@ export class SourceEntryBatchService {
     // --- Step 2: create every product ---------------------------------------
     let created: ItemView[] = [];
     if (creates.length > 0) {
-      // What each chain prints its own text in, so a row accepted with no name
-      // of its own files the printed string under the right language (plan
-      // 0111, section 7). One read per chain on the file rather than one per
-      // row: a thousand row file names a handful of chains.
-      const adapterKeys = await this.adapterKeysOf(rows);
       try {
         const result = await this.catalog.createItems(
           creates.map((operation) => {
@@ -258,7 +303,26 @@ export class SourceEntryBatchService {
         continue;
       }
       try {
-        outcomes[index].pricesWritten = await this.prices.write(row);
+        const prices = await this.prices.writeNamed(row);
+        outcomes[index].pricesWritten = prices.written;
+        // Plan 0191, decision 2A: another bound row of the chain states
+        // another amount at that scope, so the writer sent neither. The bind
+        // stands, and the row is named here like any price that did not land.
+        for (const withheld of prices.withheld) {
+          priceSkips.push({
+            entryId: row.id,
+            itemId: outcomes[index].itemId ?? '',
+            reason: withheld.kindUnknown
+              ? `No price was written at scope ${withheld.priceScopeId}: ` +
+                'the row holds a price there from before plan 0190 whose ' +
+                'source kind is not known, and a price is never written ' +
+                'under a guessed kind.'
+              : `No price was written at scope ${withheld.priceScopeId}: ` +
+                `another row bound to this product ` +
+                `(${withheld.otherEntryIds.join(', ')}) states another amount ` +
+                'there.',
+          });
+        }
       } catch (error) {
         // The bind stands. Naming the row is what lets the operator write the
         // prices again without replaying a decision that already landed.
@@ -270,6 +334,73 @@ export class SourceEntryBatchService {
         this.logger.warn(
           `Bound entry ${row.id} but could not write its prices: ` +
             describeError(error).message
+        );
+      }
+    }
+
+    // The availability the bound rows are owed (plan 0182): the stored claims
+    // for the shops that are mapped, and an offer with no price for a row that
+    // holds none. After the prices and under their rule: the binds stand
+    // whatever happens here, and what could not be written is named.
+    try {
+      await this.availability.writeForEntries(bound);
+    } catch (error) {
+      const reason = `Availability: ${describeError(error).message}`;
+      const named = new Set(priceSkips.map((skip) => skip.entryId));
+      for (const outcome of outcomes) {
+        if (!named.has(outcome.entryId)) {
+          priceSkips.push({
+            entryId: outcome.entryId,
+            itemId: outcome.itemId ?? '',
+            reason,
+          });
+        }
+      }
+      this.logger.warn(
+        `Bound ${bound.length} entries but could not write their ` +
+          `availability: ${describeError(error).message}`
+      );
+    }
+
+    // The barcodes the decided rows teach their products (plan 0185). Last,
+    // and under the rule of this step: every bind stands, and a barcode that
+    // could not be written is named with a reason that says so.
+    if (teach.size > 0) {
+      const pairs = [...teach].map(([index, ean]) => ({
+        entryId: outcomes[index].entryId,
+        itemId: outcomes[index].itemId ?? '',
+        ean,
+      }));
+      const skip = (pair: (typeof pairs)[number], why: string) =>
+        priceSkips.push({
+          entryId: pair.entryId,
+          itemId: pair.itemId,
+          reason: `Barcode ${pair.ean}: ${why}`,
+        });
+      try {
+        const { refused } = await this.catalog.teachItemEans(
+          pairs.map(({ itemId, ean }) => ({ itemId, ean }))
+        );
+        for (const refusal of refused) {
+          for (const pair of pairs) {
+            if (pair.itemId === refusal.itemId && pair.ean === refusal.ean) {
+              skip(
+                pair,
+                refusal.reason === 'HELD' && refusal.heldBy
+                  ? eanHeldDetail(pair.ean, refusal.heldBy, pair.itemId)
+                  : `it could not be added to the product (${refusal.reason}).`
+              );
+            }
+          }
+        }
+      } catch (error) {
+        const message = describeError(error).message;
+        for (const pair of pairs) {
+          skip(pair, message);
+        }
+        this.logger.warn(
+          `Bound ${pairs.length} entries but could not add their barcodes: ` +
+            message
         );
       }
     }
@@ -369,8 +500,9 @@ export class SourceEntryBatchService {
         continue;
       }
       const entry = rows.get(operation.entryId);
-      const ean =
-        operation.item.ean === undefined ? entry?.ean : operation.item.ean;
+      // Only the barcode the product will actually hold (plan 0184). An
+      // in-store or invalid code is not written, so it cannot be taken.
+      const ean = entry ? createdEan(entry, operation.item.ean) : null;
       if (ean) {
         eanOf.set(index, ean);
       }
@@ -382,10 +514,12 @@ export class SourceEntryBatchService {
     const { items } = await this.catalog.findItemsByEans([
       ...new Set(eanOf.values()),
     ]);
+    // Keyed by every barcode of each product (plan 0185): the lookup finds a
+    // product by any of them, so the one asked about may not be its first.
     const holders = new Map<string, string>();
     for (const item of items) {
-      if (item.ean) {
-        holders.set(item.ean, item.id);
+      for (const held of barcodesOf(item)) {
+        holders.set(held, item.id);
       }
     }
     for (const [index, ean] of eanOf) {
@@ -400,6 +534,143 @@ export class SourceEntryBatchService {
       }
     }
     return outcomes;
+  }
+
+  /**
+   * The barcode every decision teaches its product, and the decisions that are
+   * refused because another product holds the row's barcode (plan 0185).
+   *
+   * **A create follows the rule of an accept.** A `createItem` is an accept
+   * onto the product it creates. That product is created with the EAN the
+   * operation names, or the row's when it names none ({@link checkEans}
+   * answers for that one). When it names another EAN, or none at all, the new
+   * product does not hold the barcode its own row prints, and the three cases
+   * below apply to that barcode, with the created product as the target.
+   *
+   * **Part of validation, so a refusal writes nothing.** The file applies
+   * completely or not at all, and the one barcode conflict a person has to
+   * settle must stop it here, with the row, the barcode and the product that
+   * holds it, like a taken barcode on a create ({@link checkEans}).
+   *
+   * Three cases for a decided row that prints a real barcode:
+   *
+   * - The product it is bound to holds the barcode: nothing to do.
+   * - Another product holds it, in catalog or by a create of this same file:
+   *   refused with `EAN_HELD`.
+   * - Nobody holds it: remembered, and written in step 4.
+   *
+   * Two decisions of one file that give one barcode to two products are the
+   * second case for the later of the two. A row with an in-store code, an
+   * invalid code or no code teaches nothing and is never refused here.
+   *
+   * **Neither is a row whose EAN another row of its chain prints.** That
+   * barcode names no single product (plan 0155), so the row is left out of
+   * all three cases: it is bound, and nothing is taught or refused for it. Two
+   * such sibling rows accepted onto two products in one file both land.
+   * "Shared" is the ingest's own count, read in one query for the whole file.
+   *
+   * One round trip to catalog for the whole file, outside any transaction, for
+   * the reasons {@link checkEans} gives.
+   */
+  private async checkBarcodes(
+    operations: readonly SourceEntryDecisionOperation[],
+    rows: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<{
+    outcomes: SourceEntryDecisionOutcome[];
+    /** Operation index to the barcode its row teaches. */
+    teach: Map<number, string>;
+  }> {
+    const outcomes = blank(operations);
+    const teach = new Map<number, string>();
+
+    // Who this file gives each barcode to: `id:<item>` or `ref:<create>`.
+    const claims = new Map<string, string>();
+    for (const operation of operations) {
+      if (!isCreate(operation)) {
+        continue;
+      }
+      const entry = rows.get(operation.entryId);
+      const ean = entry ? createdEan(entry, operation.item.ean) : null;
+      if (ean && !claims.has(ean)) {
+        claims.set(ean, `ref:${operation.ref}`);
+      }
+    }
+
+    const decided = operations
+      .map((operation) => rows.get(operation.entryId))
+      .filter(
+        (entry): entry is SourceCatalogEntry =>
+          entry !== undefined && taughtEan(entry) !== null
+      );
+    const shared = await chainEanCounts(this.entries, decided);
+
+    const accepts: { index: number; ean: string; target: string }[] = [];
+    for (const [index, operation] of operations.entries()) {
+      const entry = rows.get(operation.entryId);
+      const ean =
+        entry && !sharesEanInChain(entry, shared) ? taughtEan(entry) : null;
+      if (!entry || !ean) {
+        continue;
+      }
+      if (isCreate(operation)) {
+        // Created with the row's own barcode: the product holds it from the
+        // start, and `checkEans` already asked whether catalog holds it.
+        if (createdEan(entry, operation.item.ean) !== ean) {
+          accepts.push({ index, ean, target: `ref:${operation.ref}` });
+        }
+        continue;
+      }
+      accepts.push({
+        index,
+        ean,
+        target: operation.itemId
+          ? `id:${operation.itemId}`
+          : `ref:${operation.itemRef}`,
+      });
+    }
+    if (accepts.length === 0) {
+      return { outcomes, teach };
+    }
+
+    const { items } = await this.catalog.findItemsByEans([
+      ...new Set(accepts.map((accept) => accept.ean)),
+    ]);
+    const holders = new Map<string, string>();
+    for (const item of items) {
+      for (const held of barcodesOf(item)) {
+        holders.set(held, item.id);
+      }
+    }
+
+    for (const accept of accepts) {
+      const holder = holders.get(accept.ean);
+      if (holder !== undefined) {
+        if (accept.target !== `id:${holder}`) {
+          fail(
+            outcomes[accept.index],
+            BulkOperationErrorCode.EAN_HELD,
+            eanHeldDetail(accept.ean, holder, null)
+          );
+        }
+        continue;
+      }
+      const claimed = claims.get(accept.ean);
+      if (claimed === undefined) {
+        claims.set(accept.ean, accept.target);
+        teach.set(accept.index, accept.ean);
+      } else if (claimed !== accept.target) {
+        fail(
+          outcomes[accept.index],
+          BulkOperationErrorCode.EAN_HELD,
+          `The row prints the barcode ${accept.ean}, and another operation ` +
+            'of this file gives that barcode to another product. A barcode ' +
+            'names one product.'
+        );
+      }
+      // Claimed by the same target: the product this row is bound to is
+      // created with the barcode, or an earlier decision already teaches it.
+    }
+    return { outcomes, teach };
   }
 
   /**
@@ -466,7 +737,10 @@ export class SourceEntryBatchService {
    */
   private async checkCategories(
     operations: readonly SourceEntryDecisionOperation[],
-    rows: ReadonlyMap<string, SourceCatalogEntry>
+    rows: ReadonlyMap<string, SourceCatalogEntry>,
+    // The chain's adapter decides how a row's category is read (plan 0174,
+    // section 7). One read per chain on the file, as for the names.
+    adapterKeys: ReadonlyMap<string, string | null>
   ): Promise<{
     outcomes: SourceEntryDecisionOutcome[];
     idsOf: Map<string, string[]>;
@@ -477,9 +751,6 @@ export class SourceEntryBatchService {
       return { outcomes, idsOf };
     }
     const index = new CategorySlugIndex(await this.catalog.categoryTree());
-    // The chain's adapter decides how a row's category is read (plan 0174,
-    // section 7). One read per chain on the file, as for the names.
-    const adapterKeys = await this.adapterKeysOf([...rows.values()]);
     for (const [position, operation] of operations.entries()) {
       if (!isCreate(operation)) {
         continue;
@@ -529,7 +800,11 @@ export class SourceEntryBatchService {
  * **The English name is not fetched**, which is the one way the two differ:
  * that route pays one request to the chain for the one product an operator is
  * looking at, and a thousand of them inside one call would be a thousand
- * requests. The file already carries the name it decided.
+ * requests. The file carries both names instead, and {@link checkNames} has
+ * already refused one that does not (plan 0184).
+ *
+ * **The EAN is a real barcode or null** (plan 0184), whether the file or the
+ * row supplied it.
  */
 function itemFrom(
   operation: CreateItemFromSourceEntryOperation,
@@ -538,19 +813,17 @@ function itemFrom(
   categoryIds: string[]
 ): CreateItemInput {
   const item = operation.item;
+  // The row's size in a base unit, unless the operation names its own (plan
+  // 0183), as on the per row route.
+  const size = createdSize(entry, item);
   return {
     // Plan 0079: a product with no English name gets no `en` key rather than a
     // copy of the Spanish one, so the gap stays visible and a reader still sees
     // the Spanish string through the fallback. Plan 0111 says the same of `es`.
     name: acceptedName(item.name, entry.name, adapterKey),
     brand: item.brand === undefined ? entry.brand : item.brand,
-    ean: item.ean === undefined ? entry.ean : item.ean,
-    unitSize:
-      item.unitSize === undefined
-        ? entry.unitSize === null
-          ? null
-          : Number(entry.unitSize)
-        : item.unitSize,
+    ean: createdEan(entry, item.ean),
+    unitSize: size.unitSize,
     // The row's count unless the operation names one (plan 0162).
     packCount:
       item.packCount === undefined ? (entry.packCount ?? null) : item.packCount,
@@ -560,11 +833,65 @@ function itemFrom(
     // Resolved from slugs by `checkCategories`, through one read of the tree
     // for the whole file (plan 0166, section 7).
     categoryIds,
-    defaultUnit:
-      (item.defaultUnit as UnitOfMeasure | undefined) ??
-      mapSizeFormat(entry.sizeFormat) ??
-      UnitOfMeasure.UNIT,
+    defaultUnit: size.unit,
   };
+}
+
+/**
+ * Every `createItem` whose product would have no English name, refused on its
+ * own operation with `NAME_EN_MISSING` (plan 0184).
+ *
+ * **This route translates nothing, and that was decided.** The one at a time
+ * route fills a missing English name with one request to the chain, spaced a
+ * quarter of a second from the next. A file is up to a thousand operations,
+ * so the same fetch here is minutes of requests inside a call the gateway
+ * times out, between a validation that has passed and a bind that has not
+ * happened. It also answers for one chain only: every other chain publishes no
+ * English at all. So the file states both names, and one that does not is
+ * refused before anything is written, like every other thing a file gets
+ * wrong.
+ *
+ * The name judged is the one the product would be created with:
+ * {@link acceptedName}, so a file that names nothing falls back to what the
+ * chain printed, in the language that chain prints in. A row with no name at
+ * all is left for the create to refuse, in the words it always has.
+ */
+function checkNames(
+  operations: readonly SourceEntryDecisionOperation[],
+  rows: ReadonlyMap<string, SourceCatalogEntry>,
+  adapterKeys: ReadonlyMap<string, string | null>
+): SourceEntryDecisionOutcome[] {
+  const outcomes = blank(operations);
+  for (const [index, operation] of operations.entries()) {
+    if (!isCreate(operation)) {
+      continue;
+    }
+    const entry = rows.get(operation.entryId);
+    if (!entry) {
+      continue;
+    }
+    let name: LocalizedText;
+    try {
+      name = acceptedName(
+        operation.item.name,
+        entry.name,
+        adapterKeys.get(entry.supermarketId) ?? null
+      );
+    } catch {
+      continue;
+    }
+    if (lacksEnglish(name)) {
+      fail(
+        outcomes[index],
+        BulkOperationErrorCode.NAME_EN_MISSING,
+        `The product "${operation.ref}" would be created with no English ` +
+          'name. This route translates nothing: state `item.name.en` beside ' +
+          '`item.name.es`. A brand name, a range word and a foreign product ' +
+          'name are written the same in both.'
+      );
+    }
+  }
+  return outcomes;
 }
 
 /** Everything the file gets wrong on its own, with no database read. */

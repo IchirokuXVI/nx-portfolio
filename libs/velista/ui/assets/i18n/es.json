@@ -1268,6 +1268,9 @@
       "none": "{{name}} dice que no había",
       "you": "tú"
     },
+    "elsewhere": {
+      "caption": "Comprado en otra cesta"
+    },
     "from": {
       "one": "de {{first}}",
       "two": "de {{first}} y {{second}}",
@@ -1609,6 +1612,33 @@
       "changed": "Cambiada",
       "addedLabel": "{{name}}, nueva en la lista",
       "changedLabel": "{{name}}, ha cambiado"
+    },
+    "total": {
+      "amount": "~{{amount}}",
+      "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
+      "barLabel": "Unos {{bought}} comprados de unos {{total}}",
+      "boughtEnd": "{{amount}} comprado",
+      "leftEnd": "{{amount}} por comprar",
+      "title": "Total estimado",
+      "bought": "Comprado",
+      "left": "Por comprar",
+      "total": "Total",
+      "withProduct": "{{count}} de {{lines}} líneas tienen un producto.",
+      "withPrice": "{{count}} de esas {{products}} tienen precio.",
+      "withPriceAt": "{{count}} de esas {{products}} tienen precio en {{chain}}.",
+      "why": "Estos precios no son definitivos. Las tiendas cambian sus precios, y algunas no los publican o no los mantienen al día.",
+      "none": {
+        "title": "Aún no hay precios.",
+        "more": "Ver más",
+        "less": "Ver menos",
+        "words": "Un precio viene de un producto. Estas líneas son solo palabras, así que no hay nada que sumar.",
+        "step1": "Abre una línea.",
+        "step2": "Elige el producto que compras.",
+        "step3": "Su precio aparece en la línea y se suma al total.",
+        "shop": "Con una tienda elegida, solo cuentan los precios de esa tienda.",
+        "unpriced": "Aún no tenemos precio para estos productos. Las tiendas cambian lo que publican, así que puede aparecer más adelante.",
+        "otherShop": "Elige otra tienda en el filtro para ver sus precios."
+      }
     },
     "changes": {
       "banner_one": "{{count}} cambio en tus listas",

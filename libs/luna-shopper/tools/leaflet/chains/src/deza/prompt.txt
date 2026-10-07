@@ -9,7 +9,7 @@ every element MUST have exactly these keys:
 
 {
   "name": "product description as printed, without the price",
-  "brand": "manufacturer brand, or null",
+  "brand": "the brand line printed on the pack, or null",
   "unitSize": 0.0,
   "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
   "price": 0.00,
@@ -96,7 +96,7 @@ Rules, in order of importance:
      "lata 33 cl."  -> unitSize 330,  sizeFormat "ml"
      "1,5 L"        -> unitSize 1.5,  sizeFormat "l"
      "400 g."       -> unitSize 400,  sizeFormat "g"
-     "kilo"         -> unitSize 1,    sizeFormat "kg"
+     "Bolsa 1 kg"   -> unitSize 1,    sizeFormat "kg"
      "Pack-6"       -> unitSize 6,    sizeFormat "ud"
      "2x1,5 L"      -> unitSize 3,    sizeFormat "l"
      "6x25 cl"      -> unitSize 1500, sizeFormat "ml"
@@ -106,6 +106,12 @@ Rules, in order of importance:
    states its TOTAL content, so two bottles of 1.5 L are 3 L.
    When the page prints no size at all, set both to null. Never guess a size
    from the photograph.
+   A TILE THAT PRINTS ONLY A PER KILO PRICE HAS NO SIZE. "EUR/KILO" or
+   "€/KILO" under the price says what the price is per. It is not a pack of
+   1 kg, because the shop weighs the product. On such a tile answer
+   "unitSize" null and "sizeFormat" null, and "leaflet.format" null as well.
+   Write 1 kg only when the tile prints a pack of that size in its own text,
+   such as "Bolsa 1 kg" or "1 kg".
 
 5. "price" is always the price of ONE unit as the tile advertises it. When a
    tile prints a promotion, that is the promotional price per unit, not the
@@ -174,6 +180,12 @@ Rules, in order of importance:
     not compute a value the page does not print. Never divide one printed
     number by another to produce a price.
 
+16. THE BRAND IS THE LINE PRINTED ON THE PACK, NOT ITS MAKER. Copy the brand
+    name the tile or the pack prints: "Elvive", "Fructis". Never replace it
+    with the company that makes the line, so never "L'Oréal" for Elvive and
+    never "Garnier" for Fructis. Write the maker only when its own name is
+    the brand the tile prints.
+
 EXAMPLE OF A WHOLE ANSWER
 
 These tiles are invented, and come from more than one page, to show the shape
@@ -224,15 +236,15 @@ of you.
   {
     "name": "Filete de pechuga de pollo",
     "brand": null,
-    "unitSize": 1,
-    "sizeFormat": "kg",
+    "unitSize": null,
+    "sizeFormat": null,
     "price": 6.95,
     "unitPrice": null,
     "unitPriceLabel": "EUR/KILO",
     "category": "Pollo",
     "categoryPath": ["CARNICERÍA"],
     "leaflet": {
-      "format": "kilo",
+      "format": null,
       "basis": "kg",
       "wasPrice": null,
       "loyalty": false,

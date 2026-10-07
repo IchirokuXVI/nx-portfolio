@@ -3,17 +3,27 @@
 This procedure empties the catalog and harvester databases of one cluster. The
 auth and core databases, which hold the users' data, stay as they are.
 
-**It runs by itself** as release task
+**It ran by itself** as release task
 `k8s/release-tasks/tasks/0001-reset-catalog-and-harvester`, once in staging and
-once in production, at the first deploy that carries it. The steps below are
-what that task does, and they are the way to run it by hand, on the VPS as
-`deploy`.
+once in production, on 2026-09-25. The steps below are what that task did, and
+they are the way to run it by hand, on the VPS as `deploy`.
+
+**The task does not run again** (k8s plan 0011). Its window is the day it ran.
+A deploy that finds no entry for it in the ledger records it as expired. Its
+`check.sh` also refuses a catalog that holds a product. The same is true of
+task `0002-remove-catalog-products` below, which ran on 2026-10-02.
+`k8s/release-tasks/README.md` describes both guards.
+
+**By hand, nothing protects the data.** The two scripts in this directory read
+no window and no ceiling. They do what they are told, on whatever the databases
+hold. Run each one without arguments first, and read the counts it prints.
 
 ## What changes
 
 - **Catalog and harvester start empty.** The next deploy runs the migrations,
   which recreate the schema, the postal code points and the six price policies.
-  The reference seed is off in both clusters, so nothing else comes back.
+  The reference seed no longer exists (backend plan 0180), so nothing else
+  comes back.
 - **Lost for good in catalog:** every chain, shop, price scope, product,
   product group, brand, price, alias and audit row.
 - **Lost for good in the harvester:** every harvest run, preset, uploaded
@@ -61,7 +71,8 @@ what that task does, and they are the way to run it by hand, on the VPS as
      psql -U luna_harvester -d postgres -c 'DROP DATABASE luna_harvester WITH (FORCE)' -c 'CREATE DATABASE luna_harvester OWNER luna_harvester'
    ```
 
-4. Deploy again, with a chart that has `referenceSeed.enabled: false`. A
+4. Deploy again. The chart has had no reference seed since backend plan 0180,
+   so there is no switch to check first. A
    service does not migrate its database at startup. The migration Jobs are Helm
    hooks, so an upgrade is what rebuilds the schema, and it also scales the two
    services back up.

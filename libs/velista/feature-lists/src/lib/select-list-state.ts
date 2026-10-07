@@ -84,6 +84,14 @@ export interface ListStateInput {
    * it. Advisory throughout: it changes nothing about what the row does.
    */
   readonly editorOf: (lineId: string) => string | null;
+  /**
+   * The format and the brand of a line's one product, or null.
+   *
+   * Resolved by the container, which holds the catalog, the reader's language and
+   * the translator. Asked only of a line that names exactly one product. Absent
+   * draws no detail on any row.
+   */
+  readonly detailOf?: (itemId: string) => string | null;
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
@@ -253,6 +261,12 @@ function toRow(
   return {
     id: line.id,
     content: line.content,
+    // One product is the only case with one format and one brand to state. It is
+    // what tells two lines of the same name apart.
+    detail:
+      line.itemIds.length === 1
+        ? (input.detailOf?.(line.itemIds[0]) ?? null)
+        : null,
     quantity: line.quantity,
     approvalStatus: line.approvalStatus,
     settled: isSettled(line),

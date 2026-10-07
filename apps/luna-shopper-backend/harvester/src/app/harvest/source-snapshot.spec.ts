@@ -1,4 +1,7 @@
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import {
+  PriceSourceKind,
+  UnitOfMeasure,
+} from '@portfolio/luna-shopper/contracts';
 import type { SourceCatalogEntry } from '../entities';
 import {
   applySourceGroup,
@@ -24,6 +27,8 @@ function row(packCount: number | null): SourceCatalogEntry {
     brandKey: null,
     ean: null,
     unitSize: 6,
+    sizeUnit: UnitOfMeasure.LITER,
+    soldByWeight: false,
     sizeFormat: 'pack de 6 unidades de 1 l.',
     packCount,
     categoryPath: [],
@@ -41,6 +46,8 @@ function fields(over: Partial<SourceEntryFields> = {}): SourceEntryFields {
     brandKey: null,
     ean: null,
     unitSize: 6,
+    sizeUnit: UnitOfMeasure.LITER,
+    soldByWeight: false,
     sizeFormat: 'pack de 6 unidades de 1 l.',
     categoryPath: [],
     url: null,
@@ -48,6 +55,65 @@ function fields(over: Partial<SourceEntryFields> = {}): SourceEntryFields {
     ...over,
   };
 }
+
+describe('the size unit in the source group (plan 0177)', () => {
+  it('writes the unit a run stated, and a new unit is a change', () => {
+    // A row written before the plan: the number is there and nothing says
+    // what it counts.
+    const stored = { ...row(null), sizeUnit: null } as SourceCatalogEntry;
+    expect(sourceGroupChanged(stored, fields())).toBe(true);
+    applySourceGroup(stored, fields());
+    expect(stored.sizeUnit).toBe(UnitOfMeasure.LITER);
+    expect(sourceGroupChanged(stored, fields())).toBe(false);
+  });
+
+  it('writes the size and its unit together, and never touches the key', () => {
+    const stored = row(null);
+    const before = {
+      externalId: stored.externalId,
+      sizeFormat: stored.sizeFormat,
+    };
+    applySourceGroup(
+      stored,
+      fields({ unitSize: 6000, sizeUnit: UnitOfMeasure.MILLILITER })
+    );
+    expect(Number(stored.unitSize)).toBe(6000);
+    expect(stored.sizeUnit).toBe(UnitOfMeasure.MILLILITER);
+    expect({
+      externalId: stored.externalId,
+      sizeFormat: stored.sizeFormat,
+    }).toEqual(before);
+  });
+
+  it('clears the unit when a run states no size', () => {
+    const stored = row(null);
+    applySourceGroup(stored, fields({ unitSize: null, sizeUnit: null }));
+    expect(stored.unitSize).toBeNull();
+    expect(stored.sizeUnit).toBeNull();
+  });
+});
+
+describe('sold by weight in the source group (plan 0181)', () => {
+  it('writes what a run stated, and a new answer is a change', () => {
+    const stored = row(null);
+    const weighed = fields({
+      unitSize: null,
+      sizeUnit: null,
+      soldByWeight: true,
+    });
+    expect(sourceGroupChanged(stored, weighed)).toBe(true);
+    applySourceGroup(stored, weighed);
+    expect(stored.soldByWeight).toBe(true);
+    expect(sourceGroupChanged(stored, weighed)).toBe(false);
+  });
+
+  it('reads a row written before the column as not sold by weight', () => {
+    // The object a spec or an old read builds carries no such key at all.
+    const stored = row(null);
+    delete (stored as Partial<SourceCatalogEntry>).soldByWeight;
+    expect(sourceGroupChanged(stored, fields())).toBe(false);
+  });
+});
 
 describe('the pack count in the source group (plan 0162)', () => {
   it('writes the count a run read, and a new count is a change', () => {

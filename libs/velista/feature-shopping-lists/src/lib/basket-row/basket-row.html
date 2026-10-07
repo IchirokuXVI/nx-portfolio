@@ -73,11 +73,12 @@
       </button>
     } @else {
       <!--
-        Two ways to have nothing to press, and one treatment. The whole trip is
+        Three ways to have nothing to press, and one treatment. The whole trip is
         finished (velista `0057`), where every write on every row is refused at once.
         Or the row is `REMOVED`, which is information about the basket rather than a
-        thing to act on. Either way this says what the row **is** and offers no act,
-        which is the absence rule again (`0030`).
+        thing to act on. Or somebody closed it through another basket (velista
+        `0131`), and a revert from this one is refused. Each time this says what the
+        row **is** and offers no act, which is the absence rule again (`0030`).
 
         The third way is gone with the route behind it: `BASKET_REOPEN_AVAILABLE`
         guarded a reopen backend `0136` replaced with a revert that is always
@@ -170,6 +171,18 @@
         -->
         <span class="product">
           <span>{{ product }}</span>
+          <!--
+            The format, then the brand, between the name and the price. Each is
+            drawn only when the catalog knows it, with the separator the price
+            already takes, and neither is labelled: "1 L" and a brand read as what
+            they are. They are what tells two rows of one name apart.
+          -->
+          @if (productFormat(); as format) {
+            <span> · {{ format }}</span>
+          }
+          @if (productBrand(); as brand) {
+            <span> · {{ brand }}</span>
+          }
           @if (productPrice(); as price) {
             <span> · {{ price }}</span>
           }
@@ -240,6 +253,16 @@
       -->
       @if (touched(); as caption) {
         <span class="touched">{{ caption }}</span>
+      }
+
+      <!--
+        Somebody bought it through another basket (velista 0131). In the slot and
+        the style of the caption above, because it answers the same question, who
+        got it, with the only answer the server gives: not this basket. It names
+        nobody and says no time.
+      -->
+      @if (elsewhereCaption(); as said) {
+        <span class="touched">{{ said }}</span>
       }
 
       <!--

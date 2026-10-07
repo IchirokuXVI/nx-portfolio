@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The parts, all of them</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.sheet .fr{grid-template-columns:112px minmax(0,1fr)}
+</style>
+</helmet>
+<div class="ab sheet" style="width: 1360px; height: 860px; gap: 14px">
+
+<p class="mut" style="font-size: 13px">Each panel is one part: first as it reads, then as it changes. A control is 36 px high here and 44 px on a phone. Focus is a 2 px pine ring. Corners are 6 px on a control, 10 px on a panel and 4 px on a state.</p>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; align-items: start">
+
+<div class="col" style="gap: 14px">
+
+<section class="sec"><div class="sec-h"><h2>1. Section and field row</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Address</dt><dd class="fv">Av. de la Constitución 12</dd></div>
+<div class="fr"><dt class="fl">Name</dt><dd class="fv none">None</dd></div>
+</dl>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>2. Text</h2></div>
+<div class="fr ed"><label class="fl" for="pt-a">City <span class="req" aria-hidden="true">*</span></label><div class="fv"><input id="pt-a" class="inp focus" value="Sevilla" required><span class="help">At most 120 characters.</span></div></div>
+<div class="fr ed"><label class="fl" for="pt-b">Website</label><div class="fv"><input id="pt-b" class="inp bad" value="mercadona" aria-invalid="true" aria-describedby="pt-b-e"><p class="err" id="pt-b-e"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg>Start it with https://</p></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>3. Longer text</h2></div>
+<div class="fr ed"><label class="fl" for="pt-c">Note</label><div class="fv"><textarea id="pt-c" class="inp">Closed on Sundays in August.</textarea></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>4. Number, money, date</h2></div>
+<div class="fr ed"><label class="fl" for="pt-d">Size</label><div class="fv"><input id="pt-d" class="inp s num" inputmode="decimal" value="1"></div></div>
+<div class="fr ed"><label class="fl" for="pt-e">Price</label><div class="fv rowx" style="gap: 8px"><input id="pt-e" class="inp s num" inputmode="decimal" value="1.35"><span class="mut">€</span></div></div>
+<div class="fr ed"><label class="fl" for="pt-f">Held until</label><div class="fv"><input id="pt-f" class="inp s num" type="date" value="2026-10-09"></div></div>
+</section>
+
+</div>
+
+<div class="col" style="gap: 14px">
+
+<section class="sec"><div class="sec-h"><h2>5. Switch</h2></div>
+<dl><div class="fr"><dt class="fl">On sale</dt><dd class="fv">Yes</dd></div></dl>
+<div class="fr ed"><span class="fl" id="pt-g">On sale</span><div class="fv"><span class="swrow"><button class="sw on" role="switch" aria-checked="true"><span class="vh">On sale</span></button>Yes</span></div></div>
+<div class="fr ed"><span class="fl" id="pt-h">May be fetched</span><div class="fv"><span class="swrow"><button class="sw" role="switch" aria-checked="false"><span class="vh">May be fetched</span></button>No</span></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>6. Select</h2></div>
+<dl><div class="fr"><dt class="fl">Sold by</dt><dd class="fv">Litre</dd></div></dl>
+<div class="fr ed"><label class="fl" for="pt-i">Sold by</label><div class="fv"><span class="pick"><select id="pt-i" class="inp"><option>Unit</option><option>Kilogram</option><option selected>Litre</option></select><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>7. Picker, for one reference</h2></div>
+<dl><div class="fr"><dt class="fl">Brand</dt><dd class="fv"><a href="Main.dc.html">Hacendado</a></dd></div></dl>
+<div class="fr ed"><label class="fl" for="pt-j">Brand</label><div class="fv"><span class="pick"><button id="pt-j" class="inp" aria-haspopup="listbox">Hacendado</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span><span class="help">Open it on the second board.</span></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>8. Rows, for several references</h2></div>
+<dl><div class="fr"><dt class="fl">Categories</dt><dd class="fv col" style="gap: 4px"><span class="rowx" style="gap: 8px"><a href="#">Lácteos, Leche</a><span class="chip">Main</span></span><a href="#">Desayuno, Leche</a></dd></div></dl>
+<div class="fr ed"><span class="fl" id="pt-k">Categories</span><div class="fv">
+<ul class="refs" aria-labelledby="pt-k">
+<li class="rrow"><span class="grow" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Lácteos, Leche</span><span class="chip">Main</span><button class="xb" aria-label="Move Lácteos, Leche down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="xb" aria-label="Take Lácteos, Leche away"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>
+<li><span class="pick"><button class="inp mut" aria-haspopup="listbox">Add a category</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></li>
+</ul>
+</div></div>
+</section>
+
+</div>
+
+<div class="col" style="gap: 14px">
+
+<section class="sec"><div class="sec-h"><h2>9. Text in several languages</h2></div>
+<dl><div class="fr"><dt class="fl">Name</dt><dd class="fv"><div class="loc"><div><span class="lang">ES</span><span>Leche entera</span></div><div><span class="lang">EN</span><span class="none">Not written yet</span></div></div></dd></div></dl>
+<div class="fr ed"><span class="fl" id="pt-l">Name</span><div class="fv"><div class="loc" role="group" aria-labelledby="pt-l"><div><span class="lang" aria-hidden="true">ES</span><input class="inp" aria-label="Name in Spanish" value="Leche entera"></div><div><span class="lang" aria-hidden="true">EN</span><input class="inp" aria-label="Name in English"></div></div></div></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2>10. Value that cannot be changed</h2></div>
+<div class="fr ed"><span class="fl">Chain</span><div class="fv"><span class="locked"><a href="Shop.dc.html">Mercadona</a><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v9H6zM9 11V8a3 3 0 016 0v3"/></svg><span class="mut" style="font-size: 12.5px">Fixed when the shop was added</span></span></div></div>
+<div class="fr" style="align-items: center"><span class="fl">ID</span><span class="fv rowx" style="gap: 10px"><code class="mut">9d2c06f4…77aa</code><button class="btn sm" aria-label="Copy the ID">Copy</button></span></div>
+</section>
+
+<section class="sec"><div class="sec-h"><h2 class="grow">11. Collection <span class="cnt">3</span></h2><button class="btn sm">Link a spelling</button></div>
+<a class="li" href="#" style="color: #14171a"><span class="grow">HACENDADO</span><span class="mut num">41 products</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="li" href="#" style="color: #0b6b53; font-weight: 500">See all 3</a>
+</section>
+
+<div class="col" style="gap: 5px"><span class="cap">12. Save bar</span>
+<div class="frame"><div class="save" style="padding: 0 16px"><span class="grow" role="status">1 unsaved change</span><button class="btn">Cancel</button><button class="btn pri">Save</button></div></div></div>
+
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

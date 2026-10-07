@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chains: a chain, its shops, one shop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.ab input[type=checkbox]{width:16px;height:16px;accent-color:#0b6b53;margin:0;flex:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rail{width:76px;background:#6b4605;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.rail a.on{background:#8a5d0c;color:#fff}
+.rail svg,.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #a67a2a;background:none;color:#f6e7c8 !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fdf3e0;color:#7a4f05}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.inp{height:36px;padding:0 10px;border-radius:6px;border:1px solid #c3c8c0;background:#fff;font:inherit;font-size:14px;color:#14171a;min-width:0}
+.inp::placeholder{color:#6a7178}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:44px}
+.li.sel{background:#e3f1ec}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.sw{width:36px;height:20px;border-radius:10px;background:#8d948c;position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:#0b6b53}.sw.on::after{left:18px}
+.bar{height:6px;border-radius:3px;background:#e9ebe6;overflow:hidden}.bar b{display:block;height:100%;background:#0b6b53}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<aside class="col" style="width: 216px; flex: none; background: #fcfcfa; border-right: 1px solid #d9dcd6">
+<div class="rowx" style="height: 52px; padding: 0 14px; gap: 8px; border-bottom: 1px solid #d9dcd6">
+<h1 class="grow">Chains</h1>
+<button class="btn sm" aria-label="Add a chain">Add</button>
+</div>
+<div style="padding: 10px 12px">
+<input class="inp" style="width: 100%" placeholder="Find a chain" aria-label="Find a chain">
+</div>
+<a class="li sel" style="color: #14171a"><span class="grow" style="font-weight: 600">Mercadona</span><span class="mut num">1,612</span></a>
+<a class="li" style="color: #14171a"><span class="grow">DIA</span><span class="mut num">2,304</span></a>
+<a class="li" style="color: #14171a"><span class="grow">Lidl</span><span class="mut num">681</span></a>
+<a class="li" style="color: #14171a"><span class="grow">Carrefour</span><span class="mut num">1,145</span></a>
+<a class="li" style="color: #14171a"><span class="grow">DEZA</span><span class="mut num">9</span></a>
+<a class="li" style="color: #14171a"><span class="grow">El Jamón</span><span class="mut num">237</span></a>
+<a class="li" style="color: #14171a; border-bottom: 1px solid #e6e8e3"><span class="grow">Aldi</span><span class="mut num">452</span></a>
+<p class="mut" style="padding: 10px 14px; font-size: 12px">The number is the shops each chain holds.</p>
+</aside>
+
+<div class="main">
+<header class="head">
+<h1>Mercadona</h1>
+<span class="chip ok">Fetched by the harvester</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How this page works">i</button>
+<button class="btn">Edit chain</button>
+</header>
+<nav class="tabs" aria-label="Mercadona">
+<a class="tab on">Shops <span class="cnt">1,612</span></a>
+<a class="tab">Sections <span class="cnt">24</span></a>
+<a class="tab">Price scopes <span class="cnt">3</span></a>
+<a class="tab">Details</a>
+</nav>
+
+<div class="grow" style="display: flex; min-height: 0">
+
+<section class="col" style="width: 340px; flex: none; border-right: 1px solid #d9dcd6; background: #fcfcfa">
+<div class="rowx" style="padding: 10px 12px; gap: 8px">
+<input class="inp grow" placeholder="Address, city or postal code" aria-label="Find a shop">
+<button class="btn" aria-label="Filter shops"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
+</div>
+<div class="rowx" style="padding: 0 12px 10px; gap: 6px">
+<span class="chip">Sevilla <svg class="ic" style="width: 12px; height: 12px" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+<span class="mut" style="font-size: 12px">38 shops</span>
+<div class="grow"></div>
+<button class="btn sm">Add a shop</button>
+</div>
+<a class="li sel col" style="align-items: stretch; gap: 2px; color: #14171a"><span style="font-weight: 600">Av. de la Constitución 12</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41004</span><span class="chip ok">Own section order</span><span class="chip">Map</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Feria 98</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41002</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. Kansas City 32</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41007</span><span class="chip">Map</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Asunción 44</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41011</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Ronda de Triana 5</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41010</span><span class="chip wait">Postal code guessed</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. de la Palmera 61</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41013</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Luis Montoto 120</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41005</span><span class="chip ok">Own section order</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. de Andalucía 7</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41006</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Arroyo 55</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41008</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. Reina Mercedes 19</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41012</span></span></a>
+</section>
+
+<section class="grow col" style="padding: 18px 20px; gap: 14px; min-height: 0">
+<div class="rowx" style="gap: 12px">
+<div class="grow col" style="gap: 2px">
+<h2 style="font-size: 17px">Av. de la Constitución 12</h2>
+<span class="mut">Sevilla 41004, Spain</span>
+</div>
+<button class="btn">Edit shop</button>
+</div>
+
+<div class="panel rowx" style="padding: 10px 14px; gap: 10px">
+<h3 style="width: 80px">Priced by</h3>
+<span class="chip"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span>Nationwide</span>
+<span class="chip"><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span>Andalucía</span>
+<span class="chip"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>This shop only</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How price scopes decide a price">i</button>
+<button class="btn sm">Change</button>
+</div>
+
+<nav class="rowx" style="gap: 4px; border-bottom: 1px solid #d9dcd6" aria-label="Shop">
+<a class="tab">Details</a>
+<a class="tab on">Sections <span class="cnt">9</span></a>
+<a class="tab">Products <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="panel col grow" style="min-height: 0; overflow: hidden">
+<div class="rowx" style="padding: 8px 14px; gap: 10px">
+<span class="grow mut" style="font-size: 13px">The order a shopper walks this shop. Drag a row to move it.</span>
+<span class="chip wait">A map writes this list</span>
+<button class="ibtn" aria-label="What a map does to this list">i</button>
+</div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Fruta y verdura is in this shop"><span class="mut num" style="width: 18px">1</span><span class="grow">Fruta y verdura</span><span class="mut" style="font-size: 12.5px">4 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Panadería is in this shop"><span class="mut num" style="width: 18px">2</span><span class="grow">Panadería</span><span class="mut" style="font-size: 12.5px">3 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Carnicería is in this shop"><span class="mut num" style="width: 18px">3</span><span class="grow">Carnicería</span><span class="mut" style="font-size: 12.5px">5 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Charcutería is in this shop"><span class="mut num" style="width: 18px">4</span><span class="grow">Charcutería</span><span class="mut" style="font-size: 12.5px">2 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Lácteos is in this shop"><span class="mut num" style="width: 18px">5</span><span class="grow">Lácteos</span><span class="mut" style="font-size: 12.5px">6 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Congelados is in this shop"><span class="mut num" style="width: 18px">6</span><span class="grow">Congelados</span><span class="mut" style="font-size: 12.5px">4 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Bebidas is in this shop"><span class="mut num" style="width: 18px">7</span><span class="grow">Bebidas</span><span class="mut" style="font-size: 12.5px">7 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" checked aria-label="Limpieza is in this shop"><span class="mut num" style="width: 18px">8</span><span class="grow">Limpieza</span><span class="mut" style="font-size: 12.5px">5 categories</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg><input type="checkbox" aria-label="Pescadería is in this shop"><span class="mut num" style="width: 18px"></span><span class="grow mut">Pescadería</span><span class="mut" style="font-size: 12.5px">Not in this shop</span></div>
+<div class="grow"></div>
+<div class="rowx" style="padding: 10px 14px; gap: 8px; border-top: 1px solid #d9dcd6">
+<button class="btn">Use the chain's order</button>
+<div class="grow"></div>
+<button class="btn">Discard</button>
+<button class="btn pri">Save this order</button>
+</div>
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

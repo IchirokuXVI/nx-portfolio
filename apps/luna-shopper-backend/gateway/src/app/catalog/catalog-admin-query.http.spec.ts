@@ -7,6 +7,7 @@ import {
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
   AdminCatalogPriceScopesController,
+  AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 
@@ -48,6 +49,7 @@ async function boot() {
         AdminCatalogPriceScopesController,
         AdminCatalogLocationItemsController,
         AdminCatalogItemsController,
+        AdminCatalogSupermarketItemsController,
       ],
       providers: [
         {
@@ -316,6 +318,168 @@ describe('the products in no group, over HTTP', () => {
       );
 
       expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+/**
+ * The two reads the product list of the back office gained (admin plan 0043,
+ * section 2). Over HTTP for the reason every test in this file is: a literal
+ * the validator does not accept, or a parameter the DTO does not carry, is a
+ * 400 the handler never sees.
+ */
+describe('the product list of the back office, over HTTP', () => {
+  const CATEGORY = '0c7e2f4a-6b1d-5e3f-8a9b-4c5d6e7f8a9b';
+  const SCOPE = '3f2a1b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
+  const PRODUCTS = [
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-5222-8222-222222222222',
+  ];
+
+  it('passes a category id through as the category', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      // A version 5 id, which is what a seeded category carries.
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?categoryId=${CATEGORY}`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['categoryId']).toBe(CATEGORY);
+      expect(sent[0].payload['withoutCategory']).toBe(false);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('turns the literal none on the category into the flag catalog reads', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?categoryId=none`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['categoryId']).toBeUndefined();
+      expect(sent[0].payload['withoutCategory']).toBe(true);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  /** Plan 0187: the worklist of one price scope. */
+  it('passes the scope of the worklist through, beside every other filter', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?withoutPriceAtScopeId=${SCOPE}&categoryId=${CATEGORY}&productGroupId=none&query=leche&order=name`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload).toMatchObject({
+        withoutPriceAtScopeId: SCOPE,
+        categoryId: CATEGORY,
+        withoutProductGroup: true,
+        query: 'leche',
+        order: 'name',
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('sends no scope of a worklist when none is named', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/items`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['withoutPriceAtScopeId']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('takes a uuid for the worklist and nothing else', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      // The literal the reference filters take has no meaning here, and
+      // neither has a flag.
+      for (const value of ['none', 'true', 'nothing', '']) {
+        const res = await fetch(
+          `${origin}/v1/admin/catalog/items?withoutPriceAtScopeId=${value}`
+        );
+        expect(res.status).toBe(400);
+      }
+      expect(sent).toHaveLength(0);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses a category that is neither a uuid nor the literal', async () => {
+    const { nest, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?categoryId=nothing`
+      );
+
+      expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('prices the products named, repeated, at one scope', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/supermarket-items?priceScopeId=${SCOPE}` +
+          PRODUCTS.map((id) => `&itemIds=${id}`).join('')
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['priceScopeId']).toBe(SCOPE);
+      expect(sent[0].payload['itemIds']).toEqual(PRODUCTS);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  /** One product is one parameter, which arrives as a string and not a list. */
+  it('reads one product named once as a list of one', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/supermarket-items?itemIds=${PRODUCTS[0]}`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['itemIds']).toEqual([PRODUCTS[0]]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses more products than one page holds, and one that is no uuid', async () => {
+    const { nest, origin } = await boot();
+    try {
+      const many = Array.from(
+        { length: 101 },
+        (_, index) =>
+          `itemIds=00000000-0000-4000-a000-${String(index).padStart(12, '0')}`
+      ).join('&');
+      const tooMany = await fetch(
+        `${origin}/v1/admin/catalog/supermarket-items?${many}`
+      );
+      const notAnId = await fetch(
+        `${origin}/v1/admin/catalog/supermarket-items?itemIds=milk`
+      );
+
+      expect(tooMany.status).toBe(400);
+      expect(notAnId.status).toBe(400);
     } finally {
       await nest.close();
     }

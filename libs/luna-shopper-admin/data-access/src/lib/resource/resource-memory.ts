@@ -104,7 +104,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
 
     const matching = this._rows.filter((row) =>
       matches(row, filters, (param, value) =>
-        this._source.memory?.matches?.(row, param, value)
+        this._source.memory?.matches?.(row, param, value, this._tables)
       )
     );
     const from = cursorIndex(query.cursor);
@@ -115,6 +115,10 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
     return {
       items,
       nextCursor: next < matching.length ? String(next) : null,
+      // Only where the route this table stands for counts its rows.
+      ...(this._source.memory?.counts?.(filters) === true
+        ? { total: matching.length }
+        : {}),
     };
   }
 

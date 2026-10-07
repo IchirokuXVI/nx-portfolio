@@ -2,11 +2,14 @@ import { computed, signal, type Signal } from '@angular/core';
 import {
   appendPage,
   idOf,
+  searchedRecordId,
   type ResourceDescriptor,
   type ResourceGateway,
+  type ResourcePage,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { GatewayError, toGatewayError } from '../gateway-error';
+import { readRecordById } from './read-record-by-id';
 
 /**
  * The rows one list is showing, and everything it knows about how they got
@@ -29,9 +32,12 @@ export class ResourceListStore<T extends ResourceRow> {
   private readonly _status = signal<ListStatus>('loading');
   private readonly _error = signal<GatewayError | null>(null);
   private readonly _cursor = signal<string | null>(null);
+  private readonly _total = signal<number | null>(null);
   private readonly _loadingMore = signal(false);
   private readonly _filters = signal<Readonly<Record<string, string>>>({});
   private readonly _order = signal<string | undefined>(undefined);
+  /** Counts the reads from the start, so a read that was overtaken is dropped. */
+  private _reads = 0;
 
   constructor(
     private readonly _descriptor: ResourceDescriptor<T>,
@@ -43,7 +49,17 @@ export class ResourceListStore<T extends ResourceRow> {
      * that still holds products links to its products (admin plan 0036), and
      * the list has to open already filtered or the link says nothing.
      */
-    initialFilters: Readonly<Record<string, string>> = {}
+    initialFilters: Readonly<Record<string, string>> = {},
+    /**
+     * What the address already decided, sent on every read (admin plan 0042).
+     *
+     * A chain's shops sit at `/chains/{chainId}/shops`, so the chain is not a
+     * choice the operator makes on the list. It is kept apart from the filters
+     * for that reason: it is no control, clearing the filters keeps it, and a
+     * list narrowed by nothing else is still an empty list and not a list
+     * whose filter needs clearing.
+     */
+    private readonly _fixed: Readonly<Record<string, string>> = {}
   ) {
     this._filters.set(initialFilters);
   }
@@ -67,6 +83,15 @@ export class ResourceListStore<T extends ResourceRow> {
   readonly hasMore = computed(() => this._cursor() !== null);
 
   /**
+   * How many rows match what the list shows, or `null` where the route does
+   * not count them, which is nearly every route (backend plan 0187).
+   *
+   * From the last page read, since each page of one query carries the same
+   * number. It never decides whether there is more: that is {@link hasMore}.
+   */
+  readonly total: Signal<number | null> = this._total.asReadonly();
+
+  /**
    * Whether the operator has narrowed the list.
    *
    * Filters only. An order does not exclude anything, so a sorted empty list is
@@ -77,37 +102,36 @@ export class ResourceListStore<T extends ResourceRow> {
   );
 
   /**
-   * The filters this list cannot be read without, that are still unset.
+   * The record ID typed into the search box, or `null` (admin plan 0051).
    *
-   * A chain's shops are read at `/supermarkets/{id}/locations` and what is in
-   * one shop is read with a shop named, so before either is chosen there is no
-   * collection to ask for. Empty for every resource that lists from nothing,
-   * which is most of them.
+   * While there is one the list is not a search. It holds the one row of this
+   * resource that has the ID, read by the resource's own read route, and no
+   * other filter takes part: an ID names one record, and a record that a
+   * filter hid would be an ID that "does not exist" while it does.
    */
-  readonly missingFilters = computed(() => {
-    const filters = this._filters();
-    return (this._descriptor.requires ?? []).filter(
-      (param) => (filters[param] ?? '') === ''
-    );
-  });
+  readonly searchedId = computed(() =>
+    searchedRecordId(this._descriptor, this._filters())
+  );
 
   /**
-   * Whether the list is waiting to be told what to read.
+   * No row of this resource has the typed ID.
    *
-   * A **third** state beside empty and no match, and it needs to be: "there are
-   * no shops" and "you have not said whose shops" are different sentences, and
-   * only one of them is true. Drawing the first would be a claim nothing
-   * checked.
+   * Its own state, because neither sentence beside it is true: the list is
+   * not empty, and no filter is hiding the row.
    */
-  readonly blocked = computed(() => this.missingFilters().length > 0);
+  readonly idNotFound = computed(
+    () =>
+      this._status() === 'ready' &&
+      this._rows().length === 0 &&
+      this.searchedId() !== null
+  );
 
   /** Nothing is here, and nothing was excluded. */
   readonly empty = computed(
     () =>
       this._status() === 'ready' &&
       this._rows().length === 0 &&
-      !this.narrowed() &&
-      !this.blocked()
+      !this.narrowed()
   );
 
   /**
@@ -122,21 +146,16 @@ export class ResourceListStore<T extends ResourceRow> {
       this._status() === 'ready' &&
       this._rows().length === 0 &&
       this.narrowed() &&
-      !this.blocked()
+      this.searchedId() === null
   );
 
   /** The first page, from the current filters and order. Replaces the rows. */
   async load(): Promise<void> {
+    this._reads += 1;
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
-
-    // Nothing to ask for yet. The request would answer 400, and a spinner while
-    // it did would suggest the screen was busy rather than waiting.
-    if (this.blocked()) {
-      this._status.set('ready');
-      return;
-    }
+    this._total.set(null);
 
     this._status.set('loading');
     await this._fetch(undefined, (page) => this._rows.set(page));
@@ -169,6 +188,58 @@ export class ResourceListStore<T extends ResourceRow> {
     this._loadingMore.set(false);
   }
 
+  /**
+   * Read again what is on screen, and keep as many rows as were loaded.
+   *
+   * For a list that stays drawn while one of its rows is written (admin plan
+   * 0042). `load` answers the first page alone, so a row the operator had
+   * reached with "Load more", and had open beside the list, left the column
+   * on every save. This reads page after page until it holds as many rows as
+   * were shown, and swaps them in at once: the rows on screen stay until the
+   * new ones are here, so nothing blinks.
+   *
+   * A list with nothing loaded has nothing to keep, and is read from the
+   * start. A failure leaves the rows that are shown and says so in a line,
+   * as a failed "Load more" does.
+   */
+  async refresh(): Promise<void> {
+    const wanted = this._rows().length;
+    if (this._status() !== 'ready' || wanted === 0) {
+      return this.load();
+    }
+
+    this._reads += 1;
+    const read = this._reads;
+    let rows: readonly T[] = [];
+    let cursor: string | null = null;
+    let total: number | null = null;
+
+    try {
+      do {
+        const page: ResourcePage<T> = await this._page(cursor ?? undefined);
+        if (read !== this._reads) {
+          // A filter or an order changed meanwhile, and its own read is what
+          // the screen shows.
+          return;
+        }
+        rows = appendPage(rows, page.items, (row) =>
+          idOf(this._descriptor, row)
+        );
+        cursor = page.nextCursor;
+        total = page.total ?? null;
+      } while (cursor !== null && rows.length < wanted);
+
+      this._rows.set(rows);
+      this._cursor.set(cursor);
+      this._total.set(total);
+      this._error.set(null);
+    } catch (error) {
+      if (read === this._reads) {
+        this._error.set(toGatewayError(error));
+      }
+    }
+  }
+
   /** Set one filter and read the first page again. */
   setFilter(param: string, value: string): Promise<void> {
     this._filters.update((filters) => ({ ...filters, [param]: value }));
@@ -195,6 +266,10 @@ export class ResourceListStore<T extends ResourceRow> {
    * operator's scroll position and every page they have loaded survive. A
    * failure leaves the row exactly where it was and answers the error, which
    * the caller shows.
+   *
+   * The count, where the route gave one, goes down with the row. Nothing reads
+   * the list again here, so a count left alone would say one more than there
+   * is until the next read.
    */
   async remove(id: string): Promise<GatewayError | null> {
     try {
@@ -203,27 +278,67 @@ export class ResourceListStore<T extends ResourceRow> {
       return toGatewayError(error);
     }
 
-    this._rows.update((rows) =>
-      rows.filter((row) => idOf(this._descriptor, row) !== id)
-    );
+    const shown = this._rows();
+    const kept = shown.filter((row) => idOf(this._descriptor, row) !== id);
+    this._rows.set(kept);
+    if (kept.length < shown.length) {
+      this._total.update((total) =>
+        total === null ? null : Math.max(0, total - 1)
+      );
+    }
     return null;
+  }
+
+  /**
+   * One page of what the list shows, and the one place it is read.
+   *
+   * A typed record ID is read as that record, in a page of one or of none.
+   * The fixed values still hold: under a chain, the ID of another chain's
+   * shop finds nothing.
+   */
+  private async _page(cursor: string | undefined): Promise<ResourcePage<T>> {
+    const id = this.searchedId();
+    if (id !== null) {
+      const row = await readRecordById(
+        this._descriptor,
+        this._gateway,
+        id,
+        this._fixed,
+        { ...this._filters(), ...this._fixed }
+      );
+      return { items: row === null ? [] : [row], nextCursor: null };
+    }
+
+    return this._gateway.list({
+      cursor,
+      order: this._order(),
+      filters: { ...this._filters(), ...this._fixed },
+    });
   }
 
   private async _fetch(
     cursor: string | undefined,
     apply: (items: readonly T[]) => void
   ): Promise<void> {
+    // A filter that changes while a read is out starts its own read, and that
+    // one is what the screen shows. A slow search by name must not land over
+    // the record a typed ID found after it (admin plan 0051), and a "Load
+    // more" of the old filter must not append to the new rows.
+    const read = this._reads;
     try {
-      const page = await this._gateway.list({
-        cursor,
-        order: this._order(),
-        filters: this._filters(),
-      });
+      const page = await this._page(cursor);
+      if (read !== this._reads) {
+        return;
+      }
 
       apply(page.items);
       this._cursor.set(page.nextCursor);
+      this._total.set(page.total ?? null);
       this._status.set('ready');
     } catch (error) {
+      if (read !== this._reads) {
+        return;
+      }
       // A failure while appending leaves the rows already shown alone: they are
       // still true, and clearing them would turn a failed request for more into
       // the loss of everything the operator had. So the whole screen becomes an

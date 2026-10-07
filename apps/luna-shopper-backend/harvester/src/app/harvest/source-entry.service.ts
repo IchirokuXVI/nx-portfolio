@@ -9,7 +9,6 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
-  UnitOfMeasure,
   type AcceptSourceEntryRequest,
   type BrandSpellingsRequest,
   type BrandSpellingsResult,
@@ -23,15 +22,14 @@ import {
   type ListBrandSuggestionsRequest,
   type ListSourceEntriesByItemRequest,
   type ListSourceEntriesRequest,
+  type SettleItemAtChainRequest,
+  type SettleItemAtChainResult,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
   type SourceEntryIdRequest,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  mapSizeFormat,
-  MercadonaClient,
-} from '@portfolio/luna-shopper/mercadona';
+import { MercadonaClient } from '@portfolio/luna-shopper/mercadona';
 import {
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotFoundException,
@@ -40,10 +38,13 @@ import {
   decodeCursor,
   describeError,
   encodeCursor,
+  ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
@@ -54,8 +55,24 @@ import {
 } from './harvest-export';
 import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
-import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import { SourceEntrySettler } from './source-entry-settle';
+import { createdSize } from './source-entry-size';
+import {
+  bindFields,
+  chainEanCounts,
+  chainEanKey,
+  createdEan,
+  eanHeldDetail,
+  eanStaysDetail,
+  openPrices,
+  sharesEanInChain,
+  SourceEntryPriceWriter,
+  taughtEan,
+  type PriceWriteOutcome,
+} from './source-entry-write';
+import { suggestedBrandRows } from './suggested-brand-rows';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface EntryCursor {
@@ -96,6 +113,75 @@ function toBrandSuggestionView(row: SuggestionRow): BrandSuggestionView {
     firstSeenAt: new Date(row.firstSeenAt).toISOString(),
     chains: row.chains ?? [],
   };
+}
+
+/**
+ * The barcode a decision gives the row's product (plan 0185), and the product
+ * it has to leave first when the row is moving (plan 0191).
+ */
+interface BarcodePlan {
+  ean: string;
+  /** The product the row leaves, when it holds the barcode on this row's word alone. */
+  takeFrom: string | null;
+}
+
+/**
+ * The product a decision takes a row off (plan 0191): the one it was bound to,
+ * unless the decision binds it to that same product again.
+ *
+ * Only an `ACTIVE` row is bound. A `CANDIDATE` row carries a product too, as a
+ * proposal, and wrote nothing on it.
+ */
+function leftItemOf(
+  entry: SourceCatalogEntry,
+  nextItemId: string | null
+): string | null {
+  if (entry.status !== SourceEntryStatus.ACTIVE || !entry.itemId) {
+    return null;
+  }
+  return entry.itemId === nextItemId ? null : entry.itemId;
+}
+
+/**
+ * Add to an error the product a decision took its row off, and the chain
+ * (plan 0191), and answer the error to throw.
+ *
+ * A decision on a bound row cannot be asked again for the old product: once
+ * the row is saved it names the new product, or none, and nothing remembers
+ * the one it left. So an error after that save says which product that was
+ * and whether it was settled, and a person can call the settle route.
+ *
+ * The error keeps its class and its code. Only its sentence grows.
+ */
+export function namingLeftProduct(
+  error: unknown,
+  left: { itemId: string; supermarketId: string; settled: boolean }
+): unknown {
+  const sentence = left.settled
+    ? `The row was taken off product ${left.itemId}, and that product was ` +
+      `settled at chain ${left.supermarketId} before this failed.`
+    : `The row was taken off product ${left.itemId}, and that product was ` +
+      `NOT settled at chain ${left.supermarketId}: it still holds what the ` +
+      `row wrote. Call POST /v1/admin/harvest/items/${left.itemId}/settle ` +
+      `with { "supermarketId": "${left.supermarketId}" } to finish it.`;
+  if (error instanceof Error) {
+    error.message = `${error.message} ${sentence}`;
+    return error;
+  }
+  if (error !== null && typeof error === 'object') {
+    // A problem object from catalog over NATS: `detail` is what the thrower
+    // wrote, and `message` the sentence for its code.
+    const problem = error as Record<string, unknown>;
+    const field = typeof problem['detail'] === 'string' ? 'detail' : 'message';
+    return {
+      ...problem,
+      [field]:
+        typeof problem[field] === 'string'
+          ? `${problem[field]} ${sentence}`
+          : sentence,
+    };
+  }
+  return new Error(`${describeError(error).message} ${sentence}`);
 }
 
 /** The two statuses that are waiting for a person: the queue (plan 0086, D7). */
@@ -155,7 +241,9 @@ export class SourceEntryService {
     private readonly sources: SupermarketSourceService,
     private readonly admin: PlatformAdminService,
     private readonly priceWriter: SourceEntryPriceWriter,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly availability: SourceEntryAvailabilityWriter,
+    private readonly settler: SourceEntrySettler
   ) {}
 
   /**
@@ -247,6 +335,9 @@ export class SourceEntryService {
    * The count is over every row of the chain, this one included, whatever
    * their status, because a barcode the chain lists twice is the finding
    * whether or not somebody rejected one of the two.
+   *
+   * Each row also names the other bound rows of its chain that price a scope
+   * it prices (plan 0191, {@link scopeSharers}).
    */
   async listByItem(
     req: ListSourceEntriesByItemRequest
@@ -275,12 +366,12 @@ export class SourceEntryService {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     const shared = await this.eanCounts(page);
+    const sharers = await this.scopeSharers(req.itemId, page);
     return {
       items: page.map((row) => ({
         ...toSourceCatalogEntryView(row),
-        eanSharedBy: row.ean
-          ? (shared.get(`${row.supermarketId}|${row.ean}`) ?? 1)
-          : null,
+        eanSharedBy: row.ean ? (shared.get(chainEanKey(row)) ?? 1) : null,
+        scopeSharedWith: sharers.get(row.id) ?? [],
       })),
       nextCursor:
         hasMore && last
@@ -289,49 +380,135 @@ export class SourceEntryService {
     };
   }
 
-  /** How many rows each (chain, EAN) of these rows has, in one query. */
-  private async eanCounts(
-    rows: readonly SourceCatalogEntry[]
-  ): Promise<Map<string, number>> {
-    const eans = [
-      ...new Set(
-        rows.map((row) => row.ean).filter((ean): ean is string => !!ean)
-      ),
-    ];
-    const counts = new Map<string, number>();
-    if (eans.length === 0) {
-      return counts;
+  /**
+   * For each bound row of a page, the other bound rows of its chain that
+   * hold an open price at a scope it holds one at, of the same kind (plan
+   * 0191).
+   *
+   * The kind is the kind of each price and not of the row (plan 0190): two
+   * rows compete for one price in catalog only where both state a price of
+   * one kind for one scope. A price with no kind is sent nowhere, so it
+   * shares nothing.
+   *
+   * Read over every bound row of the product and not over the page, because
+   * the row a page row shares a scope with can be on another page. A product
+   * has a handful of rows, so that is one small read.
+   */
+  private async scopeSharers(
+    itemId: string,
+    page: readonly SourceCatalogEntry[]
+  ): Promise<Map<string, string[]>> {
+    const sharers = new Map<string, string[]>();
+    if (!page.some((row) => row.status === SourceEntryStatus.ACTIVE)) {
+      return sharers;
     }
-    const found: { supermarketId: string; ean: string; count: number }[] =
-      await this.entries.query(
-        `
-        SELECT e."supermarketId"::text AS "supermarketId",
-               e."ean"                 AS "ean",
-               count(*)::int           AS "count"
-          FROM "source_catalog_entries" e
-         WHERE e."ean" = ANY($1::varchar[])
-         GROUP BY e."supermarketId", e."ean"
-        `,
-        [eans]
+    const bound = await this.entries.find({
+      where: { itemId, status: SourceEntryStatus.ACTIVE },
+      relations: { prices: true },
+      order: { decidedAt: 'ASC', id: 'ASC' },
+    });
+    const now = new Date();
+    const scopesOf = new Map(
+      bound.map((row) => [
+        row.id,
+        new Set(
+          openPrices(row, now)
+            .filter((price) => price.sourceKind !== null)
+            .map((price) => `${price.priceScopeId}|${price.sourceKind}`)
+        ),
+      ])
+    );
+    for (const row of page) {
+      const mine = scopesOf.get(row.id);
+      if (!mine || mine.size === 0) {
+        continue;
+      }
+      const others = bound.filter(
+        (other) =>
+          other.id !== row.id &&
+          other.supermarketId === row.supermarketId &&
+          [...(scopesOf.get(other.id) ?? [])].some((scope) => mine.has(scope))
       );
-    for (const row of found) {
-      counts.set(`${row.supermarketId}|${row.ean}`, row.count);
+      if (others.length > 0) {
+        sharers.set(
+          row.id,
+          others.map((other) => other.id)
+        );
+      }
     }
-    return counts;
+    return sharers;
   }
 
-  /** Bind a queued row to a product the catalog already holds, then the prices. */
+  /** How many rows each (chain, EAN) of these rows has, in one query. */
+  private eanCounts(
+    rows: readonly SourceCatalogEntry[]
+  ): Promise<Map<string, number>> {
+    return chainEanCounts(this.entries, rows);
+  }
+
+  /**
+   * Bind a queued row to a product the catalog already holds, then the prices.
+   *
+   * **Accepting a row teaches its barcode** (plan 0185). A maker prints a new
+   * barcode on the same product, so a row whose real EAN no product holds
+   * gives that EAN to the product it is accepted onto, and the next run binds
+   * the row's siblings by themselves. When **another** product holds it, the
+   * accept is refused with `item_ean_held` before anything is written: either
+   * the row belongs to that product, or the barcode sits on the wrong one, and
+   * a person settles which.
+   *
+   * **A row whose EAN another row of its chain prints does neither.** That
+   * barcode names no single product (plan 0155), so the row is bound and its
+   * prices are written as before the plan, with no teach and no refusal.
+   *
+   * The barcode is written before the prices and the availability
+   * ({@link afterLeaving} says why), and under the rule they follow on this
+   * route: the bind stands, every later step still runs, and the first write
+   * that failed is the error the request answers with.
+   *
+   * **A bound row can be accepted again, onto another product** (plan 0191).
+   * That is a move, and the row takes with it what it wrote on the product it
+   * leaves:
+   *
+   * - Its barcode, when that product holds it on this row's word alone
+   *   ({@link barcodeToTeach}). It is taken off the old product and taught to
+   *   the new one.
+   * - Its prices, offers and shop rows, which {@link SourceEntrySettler}
+   *   withdraws from the old product **right after the bind is saved**
+   *   ({@link afterLeaving}). It depends on the bind alone, and a retry of
+   *   the decision cannot do it: the saved row no longer names the product
+   *   it left. So it runs before any step that can fail, and every error
+   *   after the save names the old product and the chain.
+   *
+   * **A second article of the chain on the product writes no price where the
+   * two disagree** (plan 0191, decision 2A). The row is bound, `pricesWritten`
+   * counts what was written, and `pricesWithheld` names the row it met.
+   */
   async accept(
     req: AcceptSourceEntryRequest
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
+    // Read before the bind, which overwrites it.
+    const left = leftItemOf(entry, req.itemId);
+    const teach = await this.barcodeToTeach(
+      entry,
+      { itemId: req.itemId },
+      left
+    );
     const bound = await this.bind(entry, req.itemId);
-    const pricesWritten = await this.writeRowPrices(bound);
+    const { settled, value: prices } = await this.afterLeaving(
+      left,
+      bound,
+      teach === null ? null : () => this.teachBarcode(req.itemId, teach),
+      () => this.writeRowPrices(bound)
+    );
     return {
       entry: toSourceCatalogEntryView(bound),
-      pricesWritten,
+      pricesWritten: prices.written,
       createdItem: null,
+      pricesWithheld: prices.withheld,
+      settled,
     };
   }
 
@@ -351,25 +528,60 @@ export class SourceEntryService {
    * this moment for this one product. A leaflet row of the Mercadona chain is
    * never fetched by its key, which is the hazard plan 0081 section 2 named and
    * the reason `sourceKind` exists.
+   *
+   * **A create teaches and refuses like an accept** (plan 0185). The product is
+   * created with the EAN the request names, or the row's when it names none.
+   * When the request names another EAN, or none at all, the new product does
+   * not hold the barcode its own row prints. The rule of {@link accept} then
+   * applies to that barcode: another product that holds it refuses the create
+   * with `item_ean_held` before anything is written, and otherwise the barcode
+   * is added to the new product after the bind. A row whose EAN another row of
+   * its chain prints does neither, as on an accept.
+   *
+   * **A create from a bound row is a move too** (plan 0191): a person finds
+   * that the row is a product of its own. Everything {@link accept} says about
+   * a move holds here. The one difference is the barcode the product would be
+   * created with: when the product the row leaves holds it on this row's word
+   * alone, the new product is created with no barcode, and the barcode is
+   * taken off the old product and taught to the new one after the bind.
+   * Catalog holds a barcode on one product, so it cannot be on both even for
+   * the length of this call.
    */
   async createItem(
     req: CreateItemFromSourceEntryRequest
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const ean = req.ean === undefined ? entry.ean : req.ean;
+    // Read before the bind, which overwrites it.
+    const left = leftItemOf(entry, null);
+    // A real barcode or none (plan 0184). The row keeps what the chain
+    // printed; an in-store code or an invalid one never reaches the product.
+    let ean = createdEan(entry, req.ean);
 
     // EAN is unique in catalog, so a duplicate would be refused by the database
     // anyway. Asking first turns that into a sentence naming the existing item.
     if (ean) {
       const { item } = await this.catalog.findItemByEan(ean);
-      if (item) {
+      if (
+        item &&
+        item.id === left &&
+        ean === taughtEan(entry) &&
+        !sharesEanInChain(entry, await this.eanCounts([entry]))
+      ) {
+        // The row's own barcode, on the product the row is leaving. Whether
+        // it may move is `barcodeToTeach`'s to say, just below. Until it has
+        // moved the new product cannot be created with it.
+        ean = null;
+      } else if (item) {
         throw new ConflictException(
           `Catalog already holds an item with EAN ${ean} (${item.id}). ` +
             'Accept this row onto that product instead of creating a second one.'
         );
       }
     }
+    // The row's own barcode, when the product is not created with it (plan
+    // 0185). Asked before anything is created, so a refusal writes nothing.
+    const teach = await this.barcodeToTeach(entry, { createdWith: ean }, left);
 
     // Slugs on the way in, ids on the way to catalog (plan 0166, section 7).
     // Resolved before the English name is fetched, so a typo in an override
@@ -397,6 +609,12 @@ export class SourceEntryService {
       }
     }
 
+    // The row's size in a base unit, unless the request names its own (plan
+    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
+    // unit the row states comes before the guess from the printed text (plan
+    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
+    // nothing, which made the product 750 units.
+    const size = createdSize(entry, req);
     const item: ItemView = await this.catalog.createItem({
       // Plan 0079 reverses plan 0038 section 11: a product the source does not
       // translate gets no `en` key rather than a copy of the Spanish string. A
@@ -408,12 +626,7 @@ export class SourceEntryService {
       name,
       brand: req.brand === undefined ? entry.brand : req.brand,
       ean,
-      unitSize:
-        req.unitSize === undefined
-          ? entry.unitSize === null
-            ? null
-            : Number(entry.unitSize)
-          : req.unitSize,
+      unitSize: size.unitSize,
       // The row's count unless the request names one (plan 0162).
       packCount:
         req.packCount === undefined ? (entry.packCount ?? null) : req.packCount,
@@ -423,18 +636,22 @@ export class SourceEntryService {
       imageUrl: null,
       sku: null,
       categoryIds,
-      defaultUnit:
-        (req.defaultUnit as UnitOfMeasure | undefined) ??
-        mapSizeFormat(entry.sizeFormat) ??
-        UnitOfMeasure.UNIT,
+      defaultUnit: size.unit,
     });
 
     const bound = await this.bind(entry, item.id);
-    const pricesWritten = await this.writeRowPrices(bound);
+    const { settled, value: prices } = await this.afterLeaving(
+      left,
+      bound,
+      teach === null ? null : () => this.teachBarcode(item.id, teach),
+      () => this.writeRowPrices(bound)
+    );
     return {
       entry: toSourceCatalogEntryView(bound),
-      pricesWritten,
+      pricesWritten: prices.written,
       createdItem: item,
+      pricesWithheld: prices.withheld,
+      settled,
     };
   }
 
@@ -445,10 +662,24 @@ export class SourceEntryService {
    * the key touches the row and asks nobody. The status is the owner's, and a
    * run does not get to overwrite a decision; plan 0082 keeps it through a
    * revert for the same reason.
+   *
+   * **Rejecting a bound row takes back what it wrote** (plan 0191). The
+   * product it was bound to is settled at the row's chain after the save: the
+   * prices this row stated go, and when no other row of the chain names the
+   * product, so do its offers and the shop rows runs wrote. A failure there
+   * leaves the row rejected and is the error the request answers with, and
+   * the error names the product and the chain: a second reject cannot settle
+   * it, because the saved row names no product.
+   *
+   * The barcode stays on the product. A rejected row names no product, so
+   * there is nowhere for it to go, and whether the product keeps a barcode
+   * nothing prints any more is a person's call.
    */
   async reject(req: SourceEntryIdRequest): Promise<SourceCatalogEntryView> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
+    // Read before the fields below clear it.
+    const left = leftItemOf(entry, null);
     entry.status = SourceEntryStatus.REJECTED;
     entry.itemId = null;
     entry.candidateEntryId = null;
@@ -456,7 +687,107 @@ export class SourceEntryService {
     entry.confidence = 1;
     entry.decidedAt = new Date();
     // name, brand and sizeFormat are deliberately untouched (D8).
-    return toSourceCatalogEntryView(await this.entries.save(entry));
+    const saved = await this.entries.save(entry);
+    await this.afterLeaving(left, saved, null, async () => undefined);
+    return toSourceCatalogEntryView(saved);
+  }
+
+  /**
+   * Settle a product at a chain, for a person (plan 0191).
+   *
+   * The one time repair of the rows that left a product before the plan
+   * landed, and the retry of a decision whose own settle failed. `dryRun`
+   * answers what a call would do and writes nothing.
+   *
+   * An unknown chain is refused by catalog, as `not_found`. An unknown
+   * product is not: the harvester does not own products, no row names it, and
+   * catalog holds nothing for it, so the answer is zeros.
+   */
+  async settleItem(
+    req: SettleItemAtChainRequest
+  ): Promise<SettleItemAtChainResult> {
+    await this.admin.requireAdmin(req);
+    await this.catalog.getSupermarket(req.supermarketId);
+    return this.settler.settle(req.itemId, req.supermarketId, {
+      dryRun: req.dryRun === true,
+    });
+  }
+
+  /**
+   * The steps of a decision that follow the save of the row (plan 0191): the
+   * settle of the product the row left, the barcode, and `rest`, which is
+   * the prices and the availability.
+   *
+   * **Each step runs whatever happened to the one before it**, and the first
+   * error is the one the request answers with. The steps do not depend on
+   * each other, and each one is owed to a different product or table.
+   *
+   * **The settle comes first because nothing can ask for it again.** The
+   * decision reads the old product off the row before it saves. After the
+   * save the row names the new product, or none, so a retry of the same
+   * decision finds no product to settle. It is told the prices of the row
+   * that left (`leaving`), which is how catalog knows what that row wrote.
+   *
+   * **The barcode comes before the prices for the same reason.** A move takes
+   * the barcode off the old product and teaches it to the new one. If the
+   * price write failed first and the barcode never moved, the retry would
+   * find the barcode on a product that is neither the new one nor, any more,
+   * the one the row is leaving, and would be refused with `item_ean_held`
+   * before it wrote the price it owes.
+   *
+   * **Every failure after the save names the old product and the chain**
+   * ({@link namingLeftProduct}), and says whether it was settled.
+   *
+   * A decision that takes the row off no product runs the barcode and `rest`
+   * and nothing else.
+   */
+  private async afterLeaving<T>(
+    left: string | null,
+    entry: SourceCatalogEntry,
+    barcode: (() => Promise<void>) | null,
+    rest: () => Promise<T>
+  ): Promise<{ settled: SettleItemAtChainResult | null; value: T }> {
+    const failures: unknown[] = [];
+    const attempt = async <R>(
+      what: string,
+      step: () => Promise<R>
+    ): Promise<R | undefined> => {
+      try {
+        return await step();
+      } catch (error) {
+        failures.push(error);
+        this.logger.error(
+          `Row ${entry.id}, bound to ${entry.itemId ?? 'no product'}` +
+            `${left ? ` after leaving ${left}` : ''}: ${what} failed: ` +
+            describeError(error).message
+        );
+        return undefined;
+      }
+    };
+
+    const settled =
+      left === null
+        ? null
+        : ((await attempt('settling the product it left', () =>
+            this.settler.settle(left, entry.supermarketId, {
+              leaving: entry.prices ?? [],
+            })
+          )) ?? null);
+    if (barcode !== null) {
+      await attempt('moving its barcode', barcode);
+    }
+    const value = await attempt('writing its prices', rest);
+
+    if (failures.length > 0) {
+      throw left === null
+        ? failures[0]
+        : namingLeftProduct(failures[0], {
+            itemId: left,
+            supermarketId: entry.supermarketId,
+            settled: settled !== null,
+          });
+    }
+    return { settled, value: value as T };
   }
 
   // --- Brands (plan 0115, sections 7 and 8) ---------------------------------
@@ -537,9 +868,7 @@ export class SourceEntryService {
                      ) chain
                  )                                      AS "chains"
             FROM "source_catalog_entries" e
-           WHERE e."status" IN ('CANDIDATE', 'UNRESOLVED')
-             AND e."brandKey" IS NOT NULL
-             AND NOT (e."brandKey" = ANY(${registered}::text[]))
+           WHERE ${suggestedBrandRows(registered)}
              ${filters.length ? `AND ${filters.join(' AND ')}` : ''}
            GROUP BY e."brandKey"
         ) g
@@ -779,9 +1108,151 @@ export class SourceEntryService {
     return saved;
   }
 
-  /** Section 7's last paragraph, in {@link SourceEntryPriceWriter}. */
-  private writeRowPrices(entry: SourceCatalogEntry): Promise<number> {
-    return this.priceWriter.write(entry);
+  /**
+   * The barcode this decision will give the row's product, or null when there
+   * is nothing to give (plan 0185). One rule for an accept and for a create.
+   *
+   * The product is `itemId` for an accept. A create has no product yet, and
+   * names the EAN it will be created with instead.
+   *
+   * Null for a row with no real barcode, for one whose barcode the product
+   * already holds or is created with, and for one whose EAN another row of
+   * its chain prints. Refuses with `item_ean_held` when another product holds
+   * it. Asked before anything is written, so a refusal writes nothing.
+   *
+   * **The barcode moves with the row** (plan 0191). `left` is the product the
+   * decision takes the row off. When that is the product holding the barcode,
+   * the row itself may be the only reason it does: accepting the row there
+   * taught it. So the barcode leaves the old product and goes to the new one,
+   * unless another row still bound to the old product prints it too. That
+   * row is a second reason for the barcode to be where it is, and the refusal
+   * then names it. A barcode the row's own chain prints on another row was
+   * never taught, so it never moves: the shared rule above answers first.
+   */
+  private async barcodeToTeach(
+    entry: SourceCatalogEntry,
+    product: { itemId: string } | { createdWith: string | null },
+    left: string | null = null
+  ): Promise<BarcodePlan | null> {
+    const itemId = 'itemId' in product ? product.itemId : null;
+    const ean = taughtEan(entry);
+    if (ean === null) {
+      return null;
+    }
+    if ('createdWith' in product && product.createdWith === ean) {
+      return null;
+    }
+    // Shared inside its chain: no teach and no refusal, and catalog is not
+    // asked. The count is the ingest's own (`ChainEanIndex`).
+    if (sharesEanInChain(entry, await this.eanCounts([entry]))) {
+      return null;
+    }
+    const { item } = await this.catalog.findItemByEan(ean);
+    if (item === null) {
+      return { ean, takeFrom: null };
+    }
+    if (item.id === itemId) {
+      return null;
+    }
+    if (item.id === left) {
+      const others = await this.othersPrinting(entry, ean, left);
+      if (others.length === 0) {
+        return { ean, takeFrom: left };
+      }
+      throw new ItemEanHeldException(
+        eanStaysDetail(ean, left, itemId, others),
+        {
+          details: { [ITEM_EAN_DETAIL]: ean, [ITEM_EAN_HOLDER_DETAIL]: left },
+        }
+      );
+    }
+    throw new ItemEanHeldException(eanHeldDetail(ean, item.id, itemId), {
+      details: { [ITEM_EAN_DETAIL]: ean, [ITEM_EAN_HOLDER_DETAIL]: item.id },
+    });
+  }
+
+  /**
+   * The other rows, of any chain, that are bound to `itemId` and print this
+   * barcode (plan 0191). The row prints what its chain printed, so both the
+   * printed text and the barcode read from it are asked for.
+   */
+  private async othersPrinting(
+    entry: SourceCatalogEntry,
+    ean: string,
+    itemId: string
+  ): Promise<string[]> {
+    const printed = [...new Set([ean, ...(entry.ean ? [entry.ean] : [])])];
+    const rows = await this.entries.find({
+      where: {
+        id: Not(entry.id),
+        itemId,
+        status: SourceEntryStatus.ACTIVE,
+        ean: In(printed),
+      },
+      order: { id: 'ASC' },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Give the product the barcode its row printed (plan 0185), after an accept
+   * or a create.
+   *
+   * The check before the bind already found nobody holding it, so a refusal
+   * here is another write that took it in between, and it is answered as the
+   * conflict it is. The bind stands either way.
+   *
+   * **For a row that is moving, the barcode leaves the old product first**
+   * (plan 0191). Catalog holds a barcode on one product, so the teach would
+   * be refused while the old one has it.
+   */
+  private async teachBarcode(itemId: string, plan: BarcodePlan): Promise<void> {
+    const { ean } = plan;
+    if (plan.takeFrom !== null) {
+      await this.catalog.removeItemEan(plan.takeFrom, ean);
+    }
+    const { refused } = await this.catalog.teachItemEans([{ itemId, ean }]);
+    const [refusal] = refused;
+    if (!refusal) {
+      return;
+    }
+    if (refusal.reason === 'HELD' && refusal.heldBy) {
+      throw new ItemEanHeldException(
+        eanHeldDetail(ean, refusal.heldBy, itemId),
+        {
+          details: {
+            [ITEM_EAN_DETAIL]: ean,
+            [ITEM_EAN_HOLDER_DETAIL]: refusal.heldBy,
+          },
+        }
+      );
+    }
+    throw new ConflictException(
+      `The row is bound to ${itemId}, but its barcode ${ean} could not be ` +
+        `added to the product (${refusal.reason}).`
+    );
+  }
+
+  /**
+   * What a bound row owes catalog, and the one step both decisions make.
+   *
+   * Its prices first, which is section 7's last paragraph in
+   * {@link SourceEntryPriceWriter}. Then what the runs said about where the
+   * product is sold (plan 0182): the stored claims for the shops that are
+   * mapped, and for a row that holds no price an offer with no price in the
+   * chain's default scope, because a chain that lists a product sells it. A
+   * DEZA row has no price by design, so before this step existed accepting one
+   * wrote nothing at all and the product was sold nowhere.
+   *
+   * Answers the prices written and the ones withheld (plan 0191), which is
+   * what the caller reports.
+   */
+  private async writeRowPrices(
+    entry: SourceCatalogEntry
+  ): Promise<PriceWriteOutcome> {
+    const outcome = await this.priceWriter.writeNamed(entry);
+    await this.availability.writeForEntries([entry]);
+    return outcome;
   }
 
   /**

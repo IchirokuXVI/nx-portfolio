@@ -4,6 +4,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
@@ -42,6 +43,7 @@ interface CatalogItem {
 interface PriceRow {
   entryId: string;
   priceScopeId: string;
+  sourceKind: PriceSourceKind;
   price: number | null;
   currency: string;
   unitPrice: number | null;
@@ -108,7 +110,9 @@ function build(options: {
         const held = priceRows.findIndex(
           (each) =>
             each.entryId === row.entryId &&
-            each.priceScopeId === row.priceScopeId
+            each.priceScopeId === row.priceScopeId &&
+            // The key holds the kind since plan 0190.
+            each.sourceKind === row.sourceKind
         );
         if (held === -1) {
           priceRows.push(row);
@@ -180,6 +184,7 @@ function observation(
     brand: null,
     ean: null,
     unitSize: null,
+    sizeUnit: null,
     sizeFormat: null,
     categoryPath: [],
     url: null,
@@ -262,6 +267,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       rows: [
         {
           externalId: 'k1',
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
           name: 'Cerveza',
           status: SourceEntryStatus.REJECTED,
           itemId: null,
@@ -763,6 +769,8 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
         {
           id: 'row-1',
           externalId: 'k1',
+          // A row of the kind that observes it, so the run writes its group.
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
           name: 'Leche',
           status: SourceEntryStatus.ACTIVE,
           itemId: 'item-1',
@@ -1456,7 +1464,9 @@ describe('SourceIngest, a partial observation (plan 0119)', () => {
  */
 describe('SourceIngest, an EAN that several rows of one chain share', () => {
   const OTHER_CHAIN = '55555555-5555-4555-8555-555555555555';
-  const DORADA = '2300000000017';
+  // A real barcode. It was an in-store code, which no longer reaches rung 2
+  // at all (plan 0184): the item index leaves those out of its EAN map.
+  const DORADA = '8436000000016';
   const dorada = {
     id: 'item-dorada',
     name: { es: 'Dorada', en: null },
@@ -1774,6 +1784,544 @@ describe('SourceIngest, two entries of one item in one batch', () => {
     );
     expect(counters.pricesConflicted).toBe(0);
   });
+
+  it('names the two entries of a conflict, and says that neither was sent', async () => {
+    const { ingest, context } = build({
+      rows: [
+        { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+        { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+      ],
+    });
+
+    const { priceConflicts } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({
+          externalId: 'b',
+          name: 'Dos',
+          price: { ...PRICE, price: 2.5 },
+        }),
+      ],
+    });
+
+    expect(priceConflicts).toEqual([
+      {
+        itemId: 'item-1',
+        priceScopeId: SCOPE,
+        entryIds: ['entry-a', 'entry-b'],
+        firstWasSent: false,
+      },
+    ]);
+  });
+
+  it('sends the one amount two entries agree on, and counts no conflict', async () => {
+    // Two barcodes of one product at one price (plan 0185). Withholding it
+    // left a product unpriced that every row priced the same.
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+        { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters, priceConflicts } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({ externalId: 'b', name: 'Dos', price: PRICE }),
+      ],
+    });
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: PRICE.price })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(0);
+    expect(priceConflicts).toEqual([]);
+  });
+});
+
+/**
+ * The same rule across the chunks of one run (plan 0191).
+ *
+ * The sink pushes four hundred products at a time. Before the plan the map
+ * the comparison read was built per chunk, so two rows of one product in two
+ * chunks were both sent, and which one a shopper saw was decided by which
+ * chunk came last.
+ */
+describe('SourceIngest, two entries of one item in two chunks of one run (plan 0191)', () => {
+  const accepted = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+  const rows = [
+    { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+    { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+  ];
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+  const small = observation({ externalId: 'a', name: 'Uno', price: PRICE });
+  const king = observation({
+    externalId: 'b',
+    name: 'Dos',
+    price: { ...PRICE, price: 2.95 },
+  });
+
+  it('counts one conflict, names both entries, and does not take back the first', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([king]);
+    const { counters, priceConflicts } = await open.close();
+
+    // The first chunk sent its price before the run knew there was a second
+    // article. The second chunk sends nothing.
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: PRICE.price })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(1);
+    expect(priceConflicts).toEqual([
+      {
+        itemId: 'item-1',
+        priceScopeId: SCOPE,
+        entryIds: ['entry-a', 'entry-b'],
+        firstWasSent: true,
+      },
+    ]);
+  });
+
+  it('counts the pair once, however many chunks see it again', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([king]);
+    await open.push([small]);
+    await open.push([king]);
+    const { counters, priceConflicts } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesConflicted).toBe(1);
+    expect(priceConflicts).toHaveLength(1);
+  });
+
+  it('counts no conflict for a second entry of the same amount, and sends it once', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([
+      observation({ externalId: 'b', name: 'Dos', price: PRICE }),
+    ]);
+    const { counters, priceConflicts } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesConflicted).toBe(0);
+    expect(priceConflicts).toEqual([]);
+  });
+
+  it('keeps an item one entry prices out of it', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        ...rows,
+        {
+          id: 'entry-c',
+          externalId: 'c',
+          name: 'Tres',
+          ...accepted,
+          itemId: 'item-2',
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([
+      king,
+      observation({ externalId: 'c', name: 'Tres', price: PRICE }),
+    ]);
+    const { counters } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(2);
+    expect(catalog.addPrices).toHaveBeenLastCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-2' })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(1);
+  });
+});
+
+describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', () => {
+  const accepted = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+  /** One piece of the cheese, priced by the kilo. */
+  const piece = (externalId: string, perKilo: number) =>
+    observation({
+      externalId,
+      name: 'Queso semicurado mezcla',
+      sizeFormat: 'kg',
+      soldByWeight: true,
+      price: {
+        ...PRICE,
+        price: perKilo,
+        unitPrice: perKilo,
+        unitPriceLabel: 'kg',
+      },
+    });
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+
+  it('writes one price for a scope, the lower per kilo figure', async () => {
+    const { ingest, context, catalog, priceRows } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      // The dearer piece first, so the answer is not the one reported last.
+      observations: [piece('50943', 9.7), piece('50946', 9.41)],
+    });
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [
+        expect.objectContaining({
+          itemId: 'item-1',
+          price: 9.41,
+          unitPrice: 9.41,
+        }),
+      ],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    // Both rows keep the price the chain stated for them, side by side.
+    expect(priceRows.map((row) => [row.entryId, row.price])).toEqual([
+      ['entry-b', 9.7],
+      ['entry-a', 9.41],
+    ]);
+    // Chosen, not refused: this is not a conflict a person has to settle.
+    expect(counters).toMatchObject({
+      pricesRecorded: 2,
+      pricesWritten: 1,
+      pricesConflicted: 0,
+    });
+  });
+
+  it('keeps the lower figure when the second piece arrives in a later chunk', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50946', 9.41)]);
+    // Sent last, this would be the price a shopper saw. It is not sent.
+    await open.push([piece('50943', 9.7)]);
+    await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 9.41 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('replaces the figure when a later chunk carries a lower one', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50943', 9.7)]);
+    await open.push([piece('50946', 9.41)]);
+    await open.close();
+
+    expect(
+      (catalog.addPrices as jest.Mock).mock.calls.map(
+        (call) => call[1][0].price
+      )
+    ).toEqual([9.7, 9.41]);
+  });
+
+  it('lets one piece reported again replace its own figure, lower or not', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50946', 9.41)]);
+    await open.push([piece('50946', 9.95)]);
+    await open.close();
+
+    expect(
+      (catalog.addPrices as jest.Mock).mock.calls.map(
+        (call) => call[1][0].price
+      )
+    ).toEqual([9.41, 9.95]);
+  });
+
+  it('still refuses when one of the rows is a pack', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '51630', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        piece('50946', 9.41),
+        // A fixed pack of 0.3 kg at 2.95: a pack price, not a price per kilo.
+        observation({
+          externalId: '51630',
+          name: 'Queso',
+          sizeFormat: 'kg',
+          unitSize: 0.3,
+          price: { ...PRICE, price: 2.95, unitPrice: 9.83 },
+        }),
+      ],
+    });
+
+    // The lowest of a pack price and a price per kilo means nothing, so plan
+    // 0155 still answers: nothing is sent and a person decides.
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(counters.pricesConflicted).toBe(1);
+  });
+
+  describe('a known row seen from the listing alone', () => {
+    /** The row plan 0181 found in the queue: a fixed pack of 1.54 kg. */
+    const stale = {
+      externalId: '50946',
+      name: 'Queso semicurado mezcla Hacendado',
+      brand: 'Hacendado',
+      ean: '2105600509460',
+      unitSize: 1.54,
+      sizeUnit: UnitOfMeasure.KILOGRAM as const,
+      sizeFormat: 'kg',
+      soldByWeight: false,
+    };
+    const seen = (
+      externalId: string,
+      perKilo: number,
+      soldByWeight: boolean | null = true
+    ): PartialSourceObservation => ({
+      externalId,
+      detailFetched: false,
+      observedAt: new Date('2026-10-04T06:00:00.000Z'),
+      ...(soldByWeight === null ? {} : { soldByWeight }),
+      prices: [
+        {
+          scopeKey: null,
+          ...PRICE,
+          price: perKilo,
+          unitPrice: perKilo,
+          unitPriceLabel: 'kg',
+        },
+      ],
+    });
+
+    it('ends sold by weight with no size, and keeps its key and its identity', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 9.41)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        // Nothing else moved: the key, the name, the brand and the EAN are
+        // what the last whole read wrote.
+        sizeFormat: 'kg',
+        externalId: '50946',
+        name: 'Queso semicurado mezcla Hacendado',
+        brand: 'Hacendado',
+        ean: '2105600509460',
+      });
+      // The row now says something it did not say before, so it is counted.
+      expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+    });
+
+    it('writes one price for two known pieces bound to one product, the lower per kilo figure', async () => {
+      const { ingest, context, catalog } = build({
+        rows: [
+          { id: 'entry-a', ...stale, ...accepted },
+          {
+            id: 'entry-b',
+            ...stale,
+            externalId: '50943',
+            ean: '2105600509439',
+            unitSize: 0.42,
+            ...accepted,
+          },
+        ],
+        batch: { inserted: 1, confirmed: 0 },
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50943', 9.7), seen('50946', 9.41)],
+      });
+
+      // Both rows said `soldByWeight: false` when the run started. The listing
+      // corrected them before the prices were settled, so this is not the
+      // conflict plan 0155 refuses.
+      expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+      expect(catalog.addPrices).toHaveBeenCalledWith(
+        SCOPE,
+        [expect.objectContaining({ itemId: 'item-1', price: 9.41 })],
+        RUN,
+        PriceSourceKind.OFFICIAL_API,
+        null
+      );
+      expect(counters.pricesConflicted).toBe(0);
+    });
+
+    it('clears the flag when the listing says it is a pack again, and invents no size', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          { ...stale, soldByWeight: true, unitSize: null, sizeUnit: null },
+        ],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, false)],
+      });
+
+      // A partial read never writes a size, so the row holds none until the
+      // next whole read states one.
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('leaves the row alone when the listing does not say', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, null)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 1.54,
+        sizeUnit: UnitOfMeasure.KILOGRAM,
+      });
+      expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+    });
+  });
+
+  it('writes a row sold by weight with no size, and leaves its key alone', async () => {
+    const { ingest, context, saved } = build({});
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: 'k-1',
+          name: 'Chuleta de cerdo',
+          // What a leaflet tile can print beside a price per kilo.
+          sizeFormat: 'bandeja 1 kg aprox',
+          unitSize: 1,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          soldByWeight: true,
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      externalId: 'k-1',
+      soldByWeight: true,
+      unitSize: null,
+      sizeUnit: null,
+      sizeFormat: 'bandeja 1 kg aprox',
+    });
+  });
+
+  it('says a row is not sold by weight when the source does not say', async () => {
+    const { ingest, context, saved } = build({
+      rows: [{ externalId: 'k-2', name: 'Chuleta', soldByWeight: true }],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [observation({ externalId: 'k-2', name: 'Chuleta' })],
+    });
+
+    // The source's own field, so the next whole read rewrites it, and the
+    // change is counted.
+    expect(saved[0].soldByWeight).toBe(false);
+    expect(counters.updated).toBe(1);
+  });
 });
 
 describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
@@ -1826,5 +2374,450 @@ describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
       status: SourceEntryStatus.CANDIDATE,
       itemId: 'item-bottle',
     });
+  });
+});
+
+describe('SourceIngest, a row that a website and a leaflet both print (plan 0190)', () => {
+  const LEAFLET_RUN = '77777777-7777-4777-8777-777777777777';
+  const WEB_RUN = '88888888-8888-4888-8888-888888888888';
+
+  /** What the website walk stored, as the Deza rows of the first catalog. */
+  const WALKED = {
+    id: 'covap',
+    externalId: 'k-covap',
+    sourceKind: PriceSourceKind.OFFICIAL_WEB,
+    name: 'Leche COVAP entera',
+    brand: 'COVAP',
+    brandKey: 'covap',
+    ean: '8411327052016',
+    unitSize: 1,
+    sizeUnit: UnitOfMeasure.LITER,
+    soldByWeight: false,
+    sizeFormat: '1 L',
+    packCount: 6,
+    categoryPath: ['Lácteos', 'Leche'],
+    url: 'https://example.test/leche-covap-entera',
+    extra: { listing: 'web' },
+    firstRunId: OTHER_RUN,
+    lastRunId: OTHER_RUN,
+    timesSeen: 1,
+  } as Partial<SourceCatalogEntry>;
+
+  /** The same product as the leaflet printed it: other case, no link, by the kilo. */
+  const TILE = {
+    externalId: 'k-covap',
+    name: 'Leche COVAP Entera',
+    brand: 'Covap',
+    ean: null,
+    unitSize: 30,
+    sizeUnit: null,
+    sizeFormat: '1 L',
+    categoryPath: [],
+    url: null,
+    extra: { page: 4 },
+    price: { ...PRICE, price: 1.15, unitPrice: null, unitPriceLabel: null },
+  };
+
+  const SOURCE_GROUP = [
+    'externalId',
+    'sourceKind',
+    'name',
+    'brand',
+    'brandKey',
+    'ean',
+    'unitSize',
+    'sizeUnit',
+    'soldByWeight',
+    'sizeFormat',
+    'packCount',
+    'categoryPath',
+    'url',
+    'extra',
+  ] as const;
+
+  const groupOf = (row: Partial<SourceCatalogEntry>) =>
+    Object.fromEntries(SOURCE_GROUP.map((key) => [key, row[key]]));
+
+  it('a leaflet leaves the text and the kind of a row that a walk owns', async () => {
+    const { ingest, context, saved, stored, priceRows } = build({
+      rows: [{ ...WALKED }],
+      runId: LEAFLET_RUN,
+    });
+    const before = groupOf(stored[0]);
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+
+    // The key, the review text, the size, the link and the bag are the walk's.
+    expect(groupOf(saved[0])).toEqual(before);
+    // The seen fields moved.
+    expect(saved[0]).toMatchObject({
+      timesSeen: 2,
+      lastRunId: LEAFLET_RUN,
+      firstRunId: OTHER_RUN,
+    });
+    // It counts as a row the run left alone.
+    expect(counters).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+    // And the leaflet's price is on it, as a leaflet price with the leaflet's
+    // own bag.
+    expect(priceRows).toEqual([
+      expect.objectContaining({
+        entryId: 'covap',
+        priceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        price: 1.15,
+        runId: LEAFLET_RUN,
+        details: { page: 4 },
+      }),
+    ]);
+  });
+
+  it('does not touch the decision of a bound row, and writes its leaflet price to catalog as one', async () => {
+    const decidedAt = new Date('2026-10-03T02:00:00.000Z');
+    const { ingest, context, saved, catalog } = build({
+      rows: [
+        {
+          ...WALKED,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: 'item-1',
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt,
+        },
+      ],
+      runId: LEAFLET_RUN,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+
+    expect(saved[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      decidedAt,
+    });
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 1.15 })],
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
+  });
+
+  it('a walk takes over a row that only a leaflet has described, once', async () => {
+    const { ingest, context, saved, stored } = build({
+      rows: [
+        {
+          id: 'covap',
+          externalId: 'k-covap',
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          name: 'Leche COVAP Entera',
+          brand: 'Covap',
+          sizeFormat: '1 L',
+          firstRunId: LEAFLET_RUN,
+          lastRunId: LEAFLET_RUN,
+        },
+      ],
+      runId: WEB_RUN,
+    });
+    const walk = observation({
+      externalId: 'k-covap',
+      name: 'Leche COVAP entera',
+      brand: 'COVAP',
+      sizeFormat: '1 L',
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.LITER,
+      url: 'https://example.test/leche-covap-entera',
+    });
+
+    const first = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [walk],
+    });
+
+    expect(first.counters).toMatchObject({ updated: 1, unchanged: 0 });
+    expect(saved[0]).toMatchObject({
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      name: 'Leche COVAP entera',
+      brand: 'COVAP',
+      unitSize: 1,
+      url: 'https://example.test/leche-covap-entera',
+    });
+
+    // A second leaflet import changes nothing in the source group.
+    const taken = groupOf(stored[0]);
+    const second = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+    expect(second.counters).toMatchObject({ updated: 0, unchanged: 1 });
+    expect(groupOf(stored[0])).toEqual(taken);
+
+    // And the next walk finds its own text, so the row is not taken twice.
+    const third = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [walk],
+    });
+    expect(third.counters).toMatchObject({ updated: 0, unchanged: 1 });
+  });
+
+  it('keeps a website price and a leaflet price for one scope, and replaces each by its own kind', async () => {
+    const { ingest, context, priceRows } = build({ rows: [{ ...WALKED }] });
+    const walk = (price: number) =>
+      observation({
+        externalId: 'k-covap',
+        name: WALKED.name as string,
+        brand: WALKED.brand,
+        ean: WALKED.ean,
+        unitSize: 1,
+        sizeUnit: UnitOfMeasure.LITER,
+        sizeFormat: '1 L',
+        packCount: 6,
+        categoryPath: ['Lácteos', 'Leche'],
+        url: WALKED.url,
+        price: { ...PRICE, price },
+      });
+    const run = (
+      sourceKind: PriceSourceKind,
+      each: SourceObservation
+    ): Promise<unknown> =>
+      ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind,
+        observations: [each],
+      });
+
+    await run(PriceSourceKind.OFFICIAL_WEB, walk(1.25));
+    await run(PriceSourceKind.OFFICIAL_LEAFLET, observation(TILE));
+
+    const held = () =>
+      priceRows
+        .map((row) => [row.sourceKind, row.price])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    expect(held()).toEqual([
+      [PriceSourceKind.OFFICIAL_LEAFLET, 1.15],
+      [PriceSourceKind.OFFICIAL_WEB, 1.25],
+    ]);
+
+    // The next walk replaces the website price and leaves the leaflet's.
+    await run(PriceSourceKind.OFFICIAL_WEB, walk(1.29));
+    expect(held()).toEqual([
+      [PriceSourceKind.OFFICIAL_LEAFLET, 1.15],
+      [PriceSourceKind.OFFICIAL_WEB, 1.29],
+    ]);
+  });
+
+  it('does not let a leaflet tile with no barcode take the barcode of a walked row out of the count', async () => {
+    // Two walked rows of the chain share one barcode, so neither binds by it
+    // (plan 0155). A leaflet prints the first with no barcode. Before the
+    // plan that observation wrote a null EAN onto the row. Under the plan the
+    // row keeps its EAN, so the count must keep it too: the second row,
+    // which waits, is asked the EAN rung by a later chunk and must still
+    // find the barcode shared.
+    const { ingest, context, saved } = build({
+      items: [
+        {
+          id: 'item-ean',
+          name: { es: 'Otra cosa', en: null },
+          brand: null,
+          ean: '8411327052016',
+          unitSize: null,
+        },
+      ],
+      rows: [
+        { ...WALKED },
+        {
+          id: 'twin',
+          externalId: 'k-twin',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          name: 'Leche COVAP entera pack',
+          ean: '8411327052016',
+        },
+      ],
+      runId: LEAFLET_RUN,
+    });
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+    });
+
+    await session.push([observation(TILE)]);
+    await session.push([
+      observation({
+        externalId: 'k-twin',
+        name: 'Leche COVAP entera pack',
+        price: PRICE,
+      }),
+    ]);
+    await session.close();
+
+    expect(saved.find((row) => row.id === 'covap')?.ean).toBe('8411327052016');
+    expect(saved.find((row) => row.id === 'twin')).toMatchObject({
+      ean: '8411327052016',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+  });
+
+  describe('a leaflet offer sold another way than the row a walk owns', () => {
+    /** The tile again, by the kilo: every figure on it is the price of a kilo. */
+    const BY_THE_KILO = {
+      ...TILE,
+      soldByWeight: true,
+      price: { ...PRICE, price: 9.41, unitPrice: 9.41, unitPriceLabel: 'kg' },
+    };
+
+    it('writes no price, counts the observation and names the row in a warning', async () => {
+      const { ingest, context, saved, priceRows, catalog, warnings } = build({
+        rows: [
+          {
+            ...WALKED,
+            status: SourceEntryStatus.ACTIVE,
+            itemId: 'item-1',
+            matchedBy: ItemSourceMatch.MANUAL,
+          },
+        ],
+        runId: LEAFLET_RUN,
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(BY_THE_KILO)],
+      });
+
+      // The per kilo figure is neither stored on the row nor sent to catalog
+      // as the price of the row's fixed pack.
+      expect(priceRows).toEqual([]);
+      expect(catalog.addPrices).not.toHaveBeenCalled();
+      expect(counters).toMatchObject({
+        unchanged: 1,
+        pricesRecorded: 0,
+        pricesSoldAnotherWay: 1,
+      });
+      // The row was seen, and still says what the walk said.
+      expect(saved[0]).toMatchObject({
+        timesSeen: 2,
+        lastRunId: LEAFLET_RUN,
+        soldByWeight: false,
+        unitSize: 1,
+      });
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          code: HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+          offerId: 'k-covap',
+          name: 'Leche COVAP Entera',
+          message: expect.stringContaining('covap'),
+        }),
+      ]);
+    });
+
+    it('does the same for a fixed pack offer on a row a walk sells by weight', async () => {
+      const { ingest, context, priceRows, warnings } = build({
+        rows: [{ ...WALKED, soldByWeight: true, unitSize: null }],
+        runId: LEAFLET_RUN,
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(TILE)],
+      });
+
+      expect(priceRows).toEqual([]);
+      expect(counters.pricesSoldAnotherWay).toBe(1);
+      expect(warnings.map((warning) => warning.code)).toEqual([
+        HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+      ]);
+    });
+
+    it('leaves alone an earlier leaflet price of the row', async () => {
+      const { ingest, context, priceRows } = build({
+        rows: [{ ...WALKED }],
+        runId: LEAFLET_RUN,
+      });
+      const run = (each: SourceObservation) =>
+        ingest.ingest(context, {
+          supermarketId: CHAIN,
+          defaultPriceScopeId: SCOPE,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          observations: [each],
+        });
+
+      await run(observation(TILE));
+      await run(observation(BY_THE_KILO));
+
+      expect(priceRows.map((row) => row.price)).toEqual([1.15]);
+    });
+
+    it('says nothing when the offer states no price, or when the run writes the row', async () => {
+      // No price: nothing to withhold.
+      const quiet = build({ rows: [{ ...WALKED }] });
+      const first = await quiet.ingest.ingest(quiet.context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation({ ...BY_THE_KILO, price: null })],
+      });
+      expect(first.counters.pricesSoldAnotherWay).toBe(0);
+      expect(quiet.warnings).toEqual([]);
+
+      // A leaflet row: the leaflet owns its text, writes the flag with the
+      // price, and the two agree.
+      const own = build({
+        rows: [{ ...WALKED, sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }],
+      });
+      const second = await own.ingest.ingest(own.context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(BY_THE_KILO)],
+      });
+      expect(second.counters.pricesSoldAnotherWay).toBe(0);
+      expect(own.priceRows).toHaveLength(1);
+      expect(own.saved[0].soldByWeight).toBe(true);
+    });
+  });
+
+  it('lets a walk of one kind write a row that a walk of another kind owns', async () => {
+    // Both are a walk. Which of two walks owns a row is not this plan's
+    // question, so the last one writes, as before the plan.
+    const { ingest, context, saved } = build({
+      rows: [{ ...WALKED, sourceKind: PriceSourceKind.OFFICIAL_API }],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({ externalId: 'k-covap', name: 'Leche COVAP entera' }),
+      ],
+    });
+
+    expect(saved[0].sourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
+    expect(counters.updated).toBe(1);
   });
 });

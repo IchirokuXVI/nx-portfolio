@@ -19,6 +19,14 @@ module.exports = {
   // their UMD builds instead would reach the app bundle too, and tree shaking is
   // the reason those three were taken rather than `d3` itself.
   transformIgnorePatterns: ['node_modules/(?!(?:.*\\.mjs$|d3-|internmap))'],
+  // An icon component inlines its drawing with a bundler only `.svg?raw`
+  // import, which Jest would try to resolve as a file path and fail. Every
+  // project that reaches `@portfolio/luna-shopper-admin/ui` reaches the icons
+  // through it, so this line is the same in every config here.
+  moduleNameMapper: {
+    '\\.svg(\\?.*)?$':
+      '<rootDir>/../../libs/luna-shopper-admin/ui/src/asset-file-mock.ts',
+  },
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
     'jest-preset-angular/build/serializers/ng-snapshot',

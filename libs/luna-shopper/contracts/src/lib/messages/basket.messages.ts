@@ -108,6 +108,14 @@ export interface BasketRowEntryView {
   listId?: string;
   left: number;
   bought: number;
+  /**
+   * Units of this line bought lately through **another** basket, or through no
+   * basket (plan 0188). Zero when there are none.
+   *
+   * A count and nothing else: it names no person, no account and no basket.
+   * `bought` and `left` keep their meaning and count this basket's purchases.
+   */
+  boughtElsewhere: number;
   /** This entry's own state, by the table of 0130 section 4. Never `REMOVED`. */
   state: BasketRowState;
   /** `APPROVED` or `PENDING`. A `REJECTED` line is not covered, so never a row. */
@@ -132,6 +140,15 @@ export interface BasketRowView {
   bought: number;
   /** `bought + left`, computed, never stored. */
   asked: number;
+  /**
+   * The sum of the entries' `boughtElsewhere` (plan 0188): units somebody bought
+   * lately through another basket or through none. Zero when there are none.
+   *
+   * It is in neither `bought` nor `asked`, which count this basket alone. A row
+   * with nothing left and nothing bought here is `DONE` when this is above
+   * zero, and `note` then says `BOUGHT_ON_ANOTHER_BASKET`.
+   */
+  boughtElsewhere: number;
   state: BasketRowState;
   note: BasketRowNote | null;
   /** When the fact behind `note` happened, on the server clock. Null exactly when `note` is. */

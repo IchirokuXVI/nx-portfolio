@@ -3,15 +3,28 @@ import {
   ADMIN_BASKETS_PATH,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { BasketDetailPage } from './basket-detail-page';
+import {
+  defineResource,
+  type AnyResourceDescriptor,
+  type InfoContent,
+  type ResourceParent,
+} from '@portfolio/luna-shopper-admin/models';
+import { BASKET_LINES_PANEL, BasketLinesPanel } from './basket-lines-panel';
+import { madeAt } from './people-format';
 import { BASKET_SEED, type BasketRow } from './people-seed';
+import { PERSON_PARAM, ZONE_PARAM } from './shopper-params';
 
 /** A generated shopping list, as the back office reads one. */
 export type Basket = BasketRow;
 
+/** What the info button of a shopping list says (admin plan 0045, target 7). */
+export const BASKET_INFO: InfoContent = {
+  title: 'people.baskets.info.title',
+  points: ['people.baskets.info.record', 'people.baskets.info.correct'],
+};
+
 /** Where a basket is in its life, which is the whole of `BasketStatus`. */
-export const BASKET_STATUS_OPTIONS = [
+const BASKET_STATUS_OPTIONS = [
   { value: 'OPEN', label: 'people.baskets.status.OPEN' },
   { value: 'FINISHED', label: 'people.baskets.status.FINISHED' },
   { value: 'ARCHIVED', label: 'people.baskets.status.ARCHIVED' },
@@ -25,7 +38,7 @@ export const BASKET_STATUS_OPTIONS = [
  * from one that does, which is the difference that decides whether an old open
  * basket is a forgotten trip or the ordinary state of things.
  */
-export const BASKET_KIND_OPTIONS = [
+const BASKET_KIND_OPTIONS = [
   { value: 'LIVE', label: 'people.baskets.kind.LIVE' },
   { value: 'GENERATED', label: 'people.baskets.kind.GENERATED' },
 ] as const;
@@ -33,12 +46,22 @@ export const BASKET_KIND_OPTIONS = [
 /**
  * The shopping lists people take round the shop (plan 0007, section 2).
  *
- * Read only, by zone and by owner, with the lines on the detail screen alone.
+ * Read only, by zone and by owner, with the rows on the shopping list's own
+ * page alone. That page is the record page (admin plan 0058): it has no
+ * "Edit" and no More menu, because the resource has no action.
  *
- * A basket belongs to a **person** rather than to a zone, so the zone filter
- * matches through the line origins: the zones a basket's lines were drawn from.
- * That is why a basket carries several `zoneIds` and why filtering by one of
- * them is not the same question as filtering a list by its zone.
+ * A basket belongs to a **person** rather than to a zone, so it lives under
+ * its owner (admin plan 0045): `/shoppers/people/{userId}/shopping-lists/{id}`.
+ * The zone filter matches through the line origins: the zones a basket's lines
+ * were drawn from. That is why a basket carries several `zoneIds` and why
+ * filtering by one of them is not the same question as filtering a list by its
+ * zone.
+ *
+ * **Two descriptors over one collection.** The same rows are a tab of a person
+ * and a tab of a zone, and each tab takes a different filter from its address.
+ * A descriptor has one parent, so there is one descriptor per tab, built from
+ * the same fields and the same gateway. A row of the zone's tab opens under
+ * its owner, which the route table does by reading the row.
  *
  * **It stayed read only when plan 0009 made the rest of the app editable**, and
  * the screen says so rather than looking unfinished. A basket is output: it is
@@ -52,81 +75,141 @@ export const BASKET_KIND_OPTIONS = [
  * can do instead is correct the list it came from (backend plan 0077, section
  * 6.4).
  */
-export const BASKETS = defineResource<Basket>({
-  name: 'baskets',
-  segment: 'shopping-lists',
-  labels: { one: 'people.baskets.one', many: 'people.baskets.many' },
+function basketResource(
+  name: string,
+  parent: ResourceParent
+): AnyResourceDescriptor {
+  return defineResource<Basket>({
+    name,
+    segment: 'shopping-lists',
+    parent,
+    labels: { one: 'people.baskets.one', many: 'people.baskets.many' },
 
-  // A basket needs no name, and an unnamed one is the ordinary case: velista
-  // generates it and the shopper never titles it. So the fallback is its id,
-  // which is the only other thing that tells two of them apart.
-  title: (row) => row.name ?? row.id,
+    // A basket needs no name, and an unnamed one is the ordinary case: velista
+    // generates it and the shopper never titles it. So the fallback is when
+    // it was made, to the minute, and the heading of its page is this title
+    // too. It was the ID, and an ID is never what a row
+    // is called (admin plan 0051): the list drew a column of uuids as its
+    // names.
+    title: (row, locales) => row.name ?? madeAt(row.generatedAt, locales),
 
-  detail: BasketDetailPage,
+    fields: [
+      { kind: 'text', name: 'id', label: 'people.baskets.id', editable: false },
+      {
+        kind: 'text',
+        name: 'name',
+        label: 'people.baskets.name',
+        editable: false,
+      },
+      {
+        kind: 'enum',
+        name: 'kind',
+        label: 'people.baskets.kind.label',
+        options: BASKET_KIND_OPTIONS,
+        editable: false,
+      },
+      {
+        kind: 'enum',
+        name: 'status',
+        label: 'people.baskets.status.label',
+        options: BASKET_STATUS_OPTIONS,
+        editable: false,
+      },
+      {
+        kind: 'number',
+        name: 'lineCount',
+        label: 'people.baskets.lineCount',
+        editable: false,
+      },
+      {
+        kind: 'date',
+        name: 'generatedAt',
+        label: 'people.baskets.generatedAt',
+        time: true,
+        editable: false,
+      },
+      {
+        // The zones the lines were drawn from, each a link to that zone.
+        kind: 'references',
+        name: 'zoneIds',
+        label: 'people.baskets.zoneIds',
+        resource: 'zones',
+        editable: false,
+      },
+    ],
 
-  fields: [
-    { kind: 'text', name: 'id', label: 'people.baskets.id', editable: false },
-    {
-      kind: 'text',
-      name: 'name',
-      label: 'people.baskets.name',
-      editable: false,
+    list: {
+      columns: ['name', 'kind', 'status', 'lineCount', 'generatedAt'],
+      compact: ['status', 'lineCount'],
     },
-    {
-      kind: 'enum',
-      name: 'kind',
-      label: 'people.baskets.kind.label',
-      options: BASKET_KIND_OPTIONS,
-      editable: false,
-    },
-    {
-      kind: 'enum',
-      name: 'status',
-      label: 'people.baskets.status.label',
-      options: BASKET_STATUS_OPTIONS,
-      editable: false,
-    },
-    {
-      kind: 'number',
-      name: 'lineCount',
-      label: 'people.baskets.lineCount',
-      editable: false,
-    },
-    {
-      kind: 'date',
-      name: 'generatedAt',
-      label: 'people.baskets.generatedAt',
-      time: true,
-      editable: false,
-    },
-  ],
 
-  list: {
-    columns: ['name', 'kind', 'status', 'lineCount', 'generatedAt'],
-    compact: ['status', 'lineCount'],
-  },
+    // Why there is nothing to press here, where an operator would look for it.
+    info: BASKET_INFO,
 
-  // Why there is nothing to press here, where an operator would look for it.
-  note: 'people.baskets.note',
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'ownerUserId',
-      label: 'people.baskets.filter.ownerUserId',
-      resource: 'users',
+    /**
+     * The page of a shopping list (admin plan 0058, section 2.3). The block
+     * is also what makes a row open: nothing of a shopping list can be
+     * changed, so no action says that it has a page.
+     *
+     * The owner is the parent, so the way back names the person. The view
+     * carries nobody who made the list, so the Record block says when it was
+     * made and no "by".
+     */
+    record: {
+      sections: [
+        {
+          title: 'people.baskets.section.list',
+          fields: ['name', 'kind', 'status', 'lineCount'],
+        },
+      ],
+      children: [
+        {
+          as: 'panel',
+          name: BASKET_LINES_PANEL,
+          label: 'people.baskets.record.lines',
+          component: BasketLinesPanel,
+        },
+      ],
+      facts: {
+        added: 'generatedAt',
+        labels: { added: 'people.baskets.record.made' },
+        also: ['zoneIds'],
+      },
     },
-    {
-      kind: 'reference',
-      param: 'zoneId',
-      label: 'people.baskets.filter.zoneId',
-      resource: 'zones',
-    },
-  ],
 
-  gateway: () =>
-    inject(RESOURCE_GATEWAYS).for<Basket>({
-      path: ADMIN_BASKETS_PATH,
-      seed: BASKET_SEED,
-    }),
+    filters: [
+      {
+        kind: 'reference',
+        param: 'ownerUserId',
+        label: 'people.baskets.filter.ownerUserId',
+        resource: 'users',
+      },
+      {
+        kind: 'reference',
+        param: 'zoneId',
+        label: 'people.baskets.filter.zoneId',
+        resource: 'zones',
+      },
+    ],
+
+    gateway: () =>
+      inject(RESOURCE_GATEWAYS).for<Basket>({
+        path: ADMIN_BASKETS_PATH,
+        seed: BASKET_SEED,
+      }),
+  });
+}
+
+/** The shopping lists of one person: a tab of that person, and where one is. */
+export const BASKETS = basketResource('baskets', {
+  resource: 'users',
+  param: PERSON_PARAM,
+  filter: 'ownerUserId',
+});
+
+/** The shopping lists with lines from one zone: a tab of that zone. */
+export const ZONE_BASKETS = basketResource('zone-baskets', {
+  resource: 'zones',
+  param: ZONE_PARAM,
+  filter: 'zoneId',
 });

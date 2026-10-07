@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colors, type and parts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;flex-direction:column;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.swt{width:104px;display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.swt b{display:block;height:52px;border-radius:8px;border:1px solid #c3c8c0}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.sw{width:36px;height:20px;border-radius:10px;background:#8d948c;position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:#0b6b53}.sw.on::after{left:18px}
+.env{font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px}
+</style>
+</helmet>
+<div class="ab" style="width: 1000px; height: 860px; padding: 28px 32px; gap: 22px">
+
+<section class="col" style="gap: 10px">
+<h2>Colors</h2>
+<div class="rowx" style="gap: 14px; align-items: flex-start; flex-wrap: wrap">
+<div class="swt"><b style="background: #f3f4f1"></b><span>Ground</span><span class="mono mut">#F3F4F1</span></div>
+<div class="swt"><b style="background: #fcfcfa"></b><span>Surface</span><span class="mono mut">#FCFCFA</span></div>
+<div class="swt"><b style="background: #d9dcd6"></b><span>Line</span><span class="mono mut">#D9DCD6</span></div>
+<div class="swt"><b style="background: #555c63"></b><span>Quiet text</span><span class="mono mut">#555C63</span></div>
+<div class="swt"><b style="background: #14171a"></b><span>Text</span><span class="mono mut">#14171A</span></div>
+<div class="swt"><b style="background: linear-gradient(90deg, #6e1a1f 0 33.3%, #6b4605 33.3% 66.6%, #173f5c 66.6%)"></b><span>Navigation</span><span class="mono mut">by deployment</span></div>
+<div class="swt"><b style="background: #0b6b53"></b><span>Accent, pine</span><span class="mono mut">#0B6B53</span></div>
+<div class="swt"><b style="background: #e3f1ec"></b><span>Accent wash</span><span class="mono mut">#E3F1EC</span></div>
+</div>
+<div class="rowx" style="gap: 14px; align-items: flex-start">
+<div class="swt"><b style="background: #fdf3e0"></b><span>Waiting wash</span><span class="mono mut">#FDF3E0</span></div>
+<div class="swt"><b style="background: #7a4f05"></b><span>Waiting text</span><span class="mono mut">#7A4F05</span></div>
+<div class="swt"><b style="background: #8f1b21"></b><span>Danger text</span><span class="mono mut">#8F1B21</span></div>
+<div class="swt"><b style="background: #fbeaeb"></b><span>Danger wash</span><span class="mono mut">#FBEAEB</span></div>
+<div class="swt"><b style="background: #b4232a"></b><span>Danger</span><span class="mono mut">#B4232A</span></div>
+<div class="col" style="gap: 6px; padding-left: 12px">
+<h3>Which deployment this is</h3>
+<div class="rowx" style="gap: 8px"><span class="env" style="background: #6e1a1f; color: #fff">PRODUCTION</span><span class="env" style="background: #6b4605; color: #fff">STAGING</span><span class="env" style="background: #173f5c; color: #fff">LOCAL</span></div>
+<span class="mut" style="font-size: 13px">The navigation takes this color. The accent stays pine.</span>
+</div>
+</div>
+</section>
+
+<section class="rowx" style="gap: 28px; align-items: flex-start">
+<div class="col grow" style="gap: 8px">
+<h2>Type</h2>
+<div class="panel col" style="padding: 14px 16px; gap: 8px">
+<div class="rowx" style="gap: 14px"><span class="mut" style="width: 150px; font-size: 13px">Page title, 20 / 600</span><span style="font-size: 20px; font-weight: 600; letter-spacing: -.01em">Mercadona</span></div>
+<div class="rowx" style="gap: 14px"><span class="mut" style="width: 150px; font-size: 13px">Panel title, 15 / 600</span><span style="font-size: 15px; font-weight: 600">Earlier runs</span></div>
+<div class="rowx" style="gap: 14px"><span class="mut" style="width: 150px; font-size: 13px">Text, 14 / 400</span><span>Av. de la Constitución 12, Sevilla 41004</span></div>
+<div class="rowx" style="gap: 14px"><span class="mut" style="width: 150px; font-size: 13px">Label, 12 / 600</span><span style="font-size: 12px; font-weight: 600; color: #555c63">Priced by</span></div>
+<div class="rowx" style="gap: 14px"><span class="mut" style="width: 150px; font-size: 13px">Codes, Plex Mono 12.5</span><span class="mono">8480000100115  mercadona-api</span></div>
+<p class="mut" style="font-size: 13px">IBM Plex Sans and IBM Plex Mono. Text is 15 px on a phone, and a field is 16 px there.</p>
+</div>
+</div>
+<div class="col" style="width: 380px; gap: 8px">
+<h2>How specific a price scope is</h2>
+<div class="panel col" style="padding: 14px 16px; gap: 9px">
+<div class="rowx" style="gap: 12px"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span>Nationwide</div>
+<div class="rowx" style="gap: 12px"><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span>Chain region</div>
+<div class="rowx" style="gap: 12px"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span>Local area</div>
+<div class="rowx" style="gap: 12px"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>Single shop</div>
+<p class="mut" style="font-size: 13px">The mark goes with every scope name and every price.</p>
+</div>
+</div>
+</section>
+
+<section class="col" style="gap: 8px">
+<h2>Parts</h2>
+<div class="panel col" style="padding: 16px; gap: 14px">
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">Buttons</span><button class="btn pri">Save this order</button><button class="btn">Edit shop</button><button class="btn dan">Stop this run</button><button class="btn sm">Start</button><button class="ibtn" aria-label="Info">i</button></div>
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">States</span><span class="chip ok">Finished</span><span class="chip wait">Held until 9 Oct</span><span class="chip bad">Out of date</span><span class="chip">Ended</span><span class="cnt">1,612</span><span class="cnt wait">96</span></div>
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">Switch</span><button class="sw on" aria-label="On"></button><span>On</span><button class="sw" aria-label="Off" style="margin-left: 12px"></button><span>Off</span></div>
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">Corners</span><span>6 px on a control, 10 px on a panel, 4 px on a state.</span></div>
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">Fixed chrome</span><span>Wide: a 76 px rail at the side and a 52 px page header. Phone: a 48 px header and a 58 px bar at the bottom.</span></div>
+<div class="rowx" style="gap: 10px"><span class="mut" style="width: 130px; font-size: 13px">Touch</span><span>Every control is 44 px high on a phone and 36 px on a wide screen.</span></div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

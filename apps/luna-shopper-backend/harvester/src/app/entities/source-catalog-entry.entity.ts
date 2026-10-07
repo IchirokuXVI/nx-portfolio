@@ -2,6 +2,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from './base.entity';
@@ -60,6 +61,13 @@ export class SourceCatalogEntry extends BaseEntity {
    * path reads. One of the three official kinds today; backlog 0008's till
    * receipts are `USER_RECEIPT` when that plan is picked up, on this same
    * table, which is the `kind` column it asked for.
+   *
+   * **It names the source that owns the text of the row, and not the source
+   * of its prices** (plan 0190). A website and a leaflet of one chain can
+   * share a row, and a walk owns its text: `writesSourceGroup` in
+   * `source-snapshot.ts` is the rule. A leaflet that observes a row a walk
+   * owns leaves this column and the rest of the source group alone. Each
+   * price says its own kind, on `source_entry_prices.sourceKind`.
    */
   @Column({
     type: 'enum',
@@ -111,6 +119,31 @@ export class SourceCatalogEntry extends BaseEntity {
 
   @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
   unitSize!: number | null;
+
+  /**
+   * The catalog unit {@link unitSize} is in, as the source's own adapter
+   * stated it (plan 0177). The source's, like `sizeFormat`: every run rewrites
+   * it, and it is never part of a matching key.
+   *
+   * Null when there is no size, on a row no run has seen since that plan, and
+   * for a size printed in a unit the catalog does not hold, such as a length.
+   * `chk_source_catalog_entries_size_unit` holds it to the five units a size
+   * is measured in.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  sizeUnit!: SourceSizeUnit | null;
+
+  /**
+   * Whether the source sells the product by weight (plan 0181): a piece of
+   * cheese, a tray of meat, loose fruit. The weight is not the same on every
+   * pack, so the row states no size ({@link unitSize} and {@link sizeUnit} are
+   * null) and every price it holds is the price of a kilo.
+   *
+   * The source's, like `sizeFormat`: every run that reads the product whole
+   * rewrites it. False on a row no such run has seen since that plan.
+   */
+  @Column({ type: 'boolean', default: false })
+  soldByWeight!: boolean;
 
   /** The source's own token (`kg`, `l`, `ud`, `m`), not a `UnitOfMeasure`. */
   @Column({ type: 'varchar', nullable: true })

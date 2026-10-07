@@ -10,7 +10,7 @@ import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
 import { Basket, ListLine } from '../entities';
-import { toEntries } from './basket-read.service';
+import { elsewhereGapOf, toEntries } from './basket-read.service';
 import { type BasketEntry } from './basket-rows';
 import {
   BASKET_SESSION_LOOKBACK_MS,
@@ -42,9 +42,12 @@ import { mergeKey, normalizeContent } from './line-dedup';
  *
  * ## It agrees with the read by construction
  *
- * It narrows the same query the read runs, with the same four parameters and the
+ * It narrows the same query the read runs, with the same five parameters and the
  * same scope, so a line the read left out of a row is a line this cannot find
- * either. The fold for a free text row is `normalizeContent` in TypeScript,
+ * either. That includes the line somebody else bought to zero (plan 0188): the
+ * read draws it, so a demand raised on it has to find it.
+ *
+ * The fold for a free text row is `normalizeContent` in TypeScript,
  * never a second definition in SQL, for the reason `WALK_HISTORY_SQL` gives
  * about its own key: a fold written twice is free to drift, and the two
  * definitions would disagree exactly on the rows that are hardest to reason
@@ -94,6 +97,7 @@ export class BasketRowResolver {
       basket.id,
       scope.startedAt,
       scope.enabled,
+      elsewhereGapOf(basket),
     ];
     let lines: CoveredLineRow[];
     if (named.itemSetHash) {
@@ -113,8 +117,8 @@ export class BasketRowResolver {
 
     if (lines.length === 0) {
       // The line exists and is covered, so it was filtered out by the read's own
-      // rules: rejected, or at zero with nothing bought in scope. Either way
-      // there is no row to write on.
+      // rules: rejected, or at zero with nothing bought in scope and nothing
+      // bought lately by anybody else. Either way there is no row to write on.
       throw new NotFoundException('Row not found');
     }
 

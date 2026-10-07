@@ -1,0 +1,107 @@
+{
+  "id": "84692",
+  "ean": "2105972846927",
+  "slug": "croissant-mantequilla-26-pieza",
+  "brand": "",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": null,
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/e3db82c4bd5fc7b2e956d3e76b1e8c62.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/e3db82c4bd5fc7b2e956d3e76b1e8c62.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/e3db82c4bd5fc7b2e956d3e76b1e8c62.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "",
+    "origin": null,
+    "suppliers": [
+      {
+        "name": "Europastry S.A."
+      }
+    ],
+    "legal_name": "Bollería prefermentada ultracongelada",
+    "description": "Croissant de mantequilla",
+    "counter_info": "Ingredientes: Masa: harina de trigo (gluten), mantequilla (25.8%) (leche), agua, azúcar, levadura, glutende trigo, sal, fibra de trigo (gluten), grasa vegetal (palma). Cobertura (1,2%): huevolíquido pasteurizado, dextrosa.\n\nAlérgenos: gluten, leche, huevo.\n\nPuede contener trazas de: Soja, Altramuces, Mostaza, Frutos de cáscara y derivados, Moluscos, Pescado, Sésamo, Crustáceos, Apio, Cacahuetes, Sulfitos.\n\nProducto preparado por Mercadona, S.A. (C/ Alfonso Roig Alfonso, s/n. Albalat dels Sorells 46135, Valencia).",
+    "danger_mentions": "",
+    "alcohol_by_volume": null,
+    "mandatory_mentions": "",
+    "production_variant": "",
+    "usage_instructions": "",
+    "storage_instructions": "Conservar a temperatura ambiente.",
+    "is_prepared_by_mercadona": true
+  },
+  "is_bulk": false,
+  "packaging": "Pieza",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/84692/croissant-mantequilla-26-pieza",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/e3db82c4bd5fc7b2e956d3e76b1e8c62.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 5,
+      "name": "Panadería y pastelería",
+      "level": 0,
+      "order": 515,
+      "categories": [
+        {
+          "id": 65,
+          "name": "Bollería de horno",
+          "level": 1,
+          "order": 515,
+          "categories": [
+            {
+              "id": 330,
+              "name": "Bollería dulce",
+              "level": 2,
+              "order": 515
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    ""
+  ],
+  "display_name": "Croissant de mantequilla",
+  "main_feature": "",
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": null,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": null,
+    "unit_size": 0.05,
+    "bulk_price": "11.00",
+    "unit_price": "0.55",
+    "approx_size": false,
+    "size_format": "kg",
+    "total_units": null,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "10.000",
+    "price_decreased": false,
+    "reference_price": "11.000",
+    "min_bunch_amount": 1,
+    "reference_format": "kg",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": "Puede contener <strong>soja y productos a base de soja</strong>. Contiene <strong>cereales que contengan gluten</strong>. Contiene <strong>frutos de cáscara</strong>. Contiene <strong>leche y sus derivados (incluida la lactosa)</strong>. Contiene <strong>huevos y productos a base de huevo</strong>.",
+    "ingredients": "Masa: harina de trigo (<strong>GLUTEN</strong>), mantequilla (25.8%) (<strong>LECHE</strong>), agua, azúcar, levadura, <strong>GLUTEN </strong>de trigo, sal, fibra de trigo (<strong>GLUTEN</strong>),grasa vegetal (palma). Cobertura (1,2%): <strong>HUEVO </strong>líquido pasteurizado, dextrosa. <strong>Puede contener trazas de: soja, frutos de cáscara, mostaza.</strong>"
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

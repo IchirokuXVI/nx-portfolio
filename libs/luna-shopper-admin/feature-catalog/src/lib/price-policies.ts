@@ -15,9 +15,10 @@ export type PricePolicy = Wire.CatalogPricePolicyView;
  * competes for the price a shopper sees.
  *
  * The smallest screen in the back office, and a plain descriptor: six rows,
- * edit only, three editable columns. Lower `priority` wins. `maxAgeDays` is
+ * edit only, two editable columns. Lower `priority` wins. `maxAgeDays` is
  * how old a row of that kind may be before it stops being eligible, and null
- * means never. `enabled` off removes the kind from every read at once.
+ * means never. `enabled` off removes the kind from every read at once, and
+ * the switch on the row is what sets it.
  *
  * **A change here recomputes every effective price** in the catalog, inside
  * the request, which is why the form says so above its fields. It is rare
@@ -32,7 +33,8 @@ export type PricePolicy = Wire.CatalogPricePolicyView;
  */
 export const PRICE_POLICIES = defineResource<PricePolicy>({
   name: 'price-policies',
-  segment: 'price-policies',
+  // The Price rules tab of the Products section (admin plan 0043).
+  segment: 'price-rules',
   labels: {
     one: 'catalog.pricePolicies.one',
     many: 'catalog.pricePolicies.many',
@@ -69,21 +71,38 @@ export const PRICE_POLICIES = defineResource<PricePolicy>({
       min: 1,
       nullable: true,
     },
-    {
-      kind: 'boolean',
-      name: 'enabled',
-      label: 'catalog.pricePolicies.enabled',
-      help: 'catalog.pricePolicies.enabledHelp',
-    },
+    // `enabled` is not a field here (admin plan 0049, target 4). The switch
+    // on the rule's row turns it on and off, and it sends the change itself.
+    // A checkbox in the form under that row was the same answer twice, and
+    // the two could disagree until the form was saved.
   ],
 
   list: {
-    columns: ['sourceKind', 'priority', 'maxAgeDays', 'enabled'],
-    compact: ['priority', 'maxAgeDays', 'enabled'],
+    columns: ['sourceKind', 'priority', 'maxAgeDays'],
+    compact: ['priority', 'maxAgeDays'],
   },
 
-  note: 'catalog.pricePolicies.note',
-  formNote: 'catalog.pricePolicies.formNote',
+  info: {
+    title: 'catalog.pricePolicies.many',
+    points: [
+      'catalog.pricePolicies.info.wins',
+      'catalog.pricePolicies.info.age',
+      'catalog.pricePolicies.info.off',
+    ],
+  },
+  caution: 'catalog.pricePolicies.caution',
+
+  // What the form under a row draws (admin plan 0060, section 2.1): the two
+  // columns a rule can change. `sourceKind` is the ID of a rule and the
+  // heading of its row, so it is in no section.
+  record: {
+    sections: [
+      {
+        title: 'record.section.details',
+        fields: ['priority', 'maxAgeDays'],
+      },
+    ],
+  },
 
   // Six rows, seeded by the migration. Nothing creates a seventh and nothing
   // deletes one: a kind with no policy would be a kind no read could rank.

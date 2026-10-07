@@ -9,7 +9,7 @@ import {
   LANDING_LEAVES,
   ROOTS,
 } from './migrations/1758100000000-CategoryTree';
-import { categoryId } from './reference/ids';
+import { categoryId } from './taxonomy/ids';
 
 /**
  * The category tree migration against real Postgres (plan 0166, section 6),

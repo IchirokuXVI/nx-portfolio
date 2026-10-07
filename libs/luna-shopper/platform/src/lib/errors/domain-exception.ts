@@ -334,13 +334,40 @@ export class BrandLinkKeepsKeyException extends DomainException {
 }
 
 /**
- * A brand that is nobody's spelling cannot be deleted (plan 0124).
+ * A brand cannot be deleted while something points at it (the follow up of
+ * plan 0178).
+ *
+ * It publishes its details, because the number is what the back office says
+ * next: how many products hold the brand, under {@link BRAND_IN_USE_ITEMS_DETAIL},
+ * and how many spellings are linked to it, under
+ * {@link BRAND_IN_USE_LINKS_DETAIL}. Both are always present, and at least one
+ * is above zero. Nothing was written when this is thrown.
+ */
+export class BrandInUseException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_IN_USE;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` key a {@link BrandInUseException} counts the products that
+ * hold the brand under. The same word a brand view counts them with.
+ */
+export const BRAND_IN_USE_ITEMS_DETAIL = 'itemCount';
+
+/**
+ * The `details` key a {@link BrandInUseException} counts the spellings linked
+ * to the brand under. The same word a brand view counts them with.
+ */
+export const BRAND_IN_USE_LINKS_DETAIL = 'linkCount';
+
+/**
+ * A homonym's printed key is the brand's own key (plan 0178).
  *
  * No details: the brand is the one the client asked about, and what it does
- * next is either link it to the brand it spells, or leave it alone.
+ * next is type the key of the other brand that shares the printed name.
  */
-export class BrandNotLinkedException extends DomainException {
-  readonly code = ERROR_CODES.BRAND_NOT_LINKED;
+export class BrandHomonymIsOwnKeyException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY;
 }
 
 /**
@@ -365,6 +392,23 @@ export class PlaceMatchesLocationException extends DomainException {
 
 /** The `details` key a {@link PlaceMatchesLocationException} lists its candidates under. */
 export const PLACE_CANDIDATES_DETAIL = 'candidates';
+
+/**
+ * A link named a shop of one chain for a place that resolves to another (plan
+ * 0193).
+ *
+ * It publishes its details, because the back office cannot ask the question
+ * without the name of that chain: it travels under {@link PLACE_CHAIN_DETAIL}
+ * as `{ id, name }`. Nothing was written when this is thrown, and the same
+ * link with `acrossChains` succeeds.
+ */
+export class PlaceNamesAnotherChainException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link PlaceNamesAnotherChainException} names the chain under. */
+export const PLACE_CHAIN_DETAIL = 'chain';
 
 /**
  * The run declared a price scope the chain does not hold (plan 0152, section
@@ -406,6 +450,39 @@ export class CategoryNotALeafException extends DomainException {
  */
 export class ItemNeedsACategoryException extends DomainException {
   readonly code = ERROR_CODES.ITEM_NEEDS_A_CATEGORY;
+}
+
+/** The key the refused EAN travels under in {@link ItemEanInvalidException}. */
+export const ITEM_EAN_DETAIL = 'ean';
+
+/** The key that says why, as `readGtin` named it: `IN_STORE`, `LENGTH`, ... */
+export const ITEM_EAN_REASON_DETAIL = 'reason';
+
+/**
+ * A product was given an EAN that is not a real barcode (plan 0184).
+ *
+ * The details are public: the code the request carried and the reason
+ * `readGtin` gave for it. Both come straight from the request, so publishing
+ * them tells the caller nothing it did not send.
+ */
+export class ItemEanInvalidException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EAN_INVALID;
+  override readonly exposesDetails = true;
+}
+
+/** The key the product that holds the barcode travels under (plan 0185). */
+export const ITEM_EAN_HOLDER_DETAIL = 'heldBy';
+
+/**
+ * A barcode was given to a product while another product holds it (plan 0185).
+ *
+ * The details are public: the barcode under {@link ITEM_EAN_DETAIL} and the id
+ * of the product that holds it under {@link ITEM_EAN_HOLDER_DETAIL}. Only an
+ * admin reaches a route that raises it, and the id is what the admin needs.
+ */
+export class ItemEanHeldException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EAN_HELD;
+  override readonly exposesDetails = true;
 }
 
 /**
@@ -470,6 +547,29 @@ export class SectionSlugTakenException extends DomainException {
   readonly code = ERROR_CODES.SECTION_SLUG_TAKEN;
   override readonly exposesDetails = true;
 }
+
+/**
+ * A shop was given an external reference that another shop holds (plan 0195).
+ *
+ * It publishes its details, for the reason {@link ItemEanHeldException} does:
+ * only an admin reaches a route that raises it, and what the admin does next
+ * is open the shop that holds the reference. The reference travels under
+ * {@link LOCATION_REF_DETAIL} and that shop under
+ * {@link LOCATION_REF_HOLDER_DETAIL}, as a `LocationRefHolder` of the
+ * contracts. The holder is null only when it left between the refusal of the
+ * database and the read that names it. Nothing was written when this is
+ * thrown.
+ */
+export class LocationExternalRefTakenException extends DomainException {
+  readonly code = ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link LocationExternalRefTakenException} names the reference under. */
+export const LOCATION_REF_DETAIL = 'externalRef';
+
+/** The `details` key a {@link LocationExternalRefTakenException} names the holding shop under. */
+export const LOCATION_REF_HOLDER_DETAIL = 'heldBy';
 
 /**
  * The catalog read was sent `locationId` beside another selector of where a

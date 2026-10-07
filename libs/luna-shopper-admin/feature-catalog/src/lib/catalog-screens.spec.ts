@@ -14,7 +14,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
-  provideResources,
+  provideSections,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type {
@@ -26,15 +26,12 @@ import {
   ReferencePicker,
   ReferencesControl,
 } from '@portfolio/luna-shopper-admin/ui';
-import { ITEMS } from './items';
-import { LOCATION_ITEMS } from './location-items';
-import { LOCATIONS } from './locations';
-import { PRICE_POLICIES } from './price-policies';
-import { PriceScopeNotice } from './price-scope-notice';
-import { PRICE_SCOPES } from './price-scopes';
-import { PRICES } from './prices';
-import { PRODUCT_GROUPS } from './product-groups';
-import { SUPERMARKETS } from './supermarkets';
+import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
+import {
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
+} from './products/products-routes';
 
 /**
  * The catalog screens, rendered (plan 0005, section 6).
@@ -57,26 +54,39 @@ import { SUPERMARKETS } from './supermarkets';
 })
 class TestHost {}
 
-const ALL = [
-  SUPERMARKETS,
-  LOCATIONS,
-  PRICE_SCOPES,
-  ITEMS,
-  PRODUCT_GROUPS,
-  PRICES,
-  PRICE_POLICIES,
-  LOCATION_ITEMS,
+/**
+ * The two sections these screens live in.
+ *
+ * **The chains are the real thing** (admin plan 0042): the five resources a
+ * chain holds are named as `held` and mounted by `chainsRoutes()`, so a shop
+ * is drawn where the app draws it, under its chain, and never as a flat list
+ * this spec made up.
+ *
+ * **The products are the real thing as well** (admin plan 0043). A shop's
+ * product row names its product through the registry, so the product has to
+ * be where the app mounts it. The product screens have a spec of their own
+ * beside them, under `products/`.
+ */
+const SECTIONS: readonly AdminSection[] = [
+  {
+    key: 'chains',
+    label: '',
+    held: CHAIN_RESOURCES,
+    screens: chainsRoutes(),
+  },
+  {
+    key: 'products',
+    label: '',
+    segment: PRODUCTS_SEGMENT,
+    held: PRODUCT_RESOURCES,
+    heldTabs: true,
+    screens: productsRoutes(),
+  },
 ];
 
-/**
- * The catalog's resources, mounted at the root rather than under `/catalog`.
- *
- * This file is about the screens, not about where the app hangs them: admin
- * plan 0022's own mount is asserted in `shell-sections.spec.ts` and in the app's
- * route spec, against the real sections. Leaving the segment off here keeps
- * every URL below reading as the screen it opens.
- */
-const SECTION: AdminSection = { key: 'catalog', label: '', resources: ALL };
+/** The chain and the shop most of the cases below stand on. */
+const MERCADONA_SHOPS = '/chains/sm_mercadona/shops';
+const CENTRO = `${MERCADONA_SHOPS}/loc_cordoba_centro`;
 
 async function boot(url: string) {
   TestBed.resetTestingModule();
@@ -85,9 +95,9 @@ async function boot(url: string) {
     providers: [
       ContentLocaleStore,
       ServerReachability,
-      provideRouter(adminRoutes([SECTION])),
+      provideRouter(adminRoutes(SECTIONS)),
       provideLocationMocks(),
-      provideResources(...ALL),
+      provideSections(...SECTIONS),
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -126,7 +136,7 @@ const text = (fixture: ComponentFixture<TestHost>) =>
  * guess. Asserting on that would pass with an empty table.
  */
 const rowsText = (fixture: ComponentFixture<TestHost>) =>
-  [...fixture.nativeElement.querySelectorAll('tbody tr, .card')]
+  [...fixture.nativeElement.querySelectorAll('tbody tr, .card, [data-row]')]
     .map((row) => (row as HTMLElement).textContent ?? '')
     .join(' ') as string;
 
@@ -138,17 +148,38 @@ const buttonSaying = (
     (button) => (button as HTMLButtonElement).textContent?.trim() === label
   ) as HTMLButtonElement | undefined;
 
+/**
+ * The id of one filter's control.
+ *
+ * A list that is part of a larger page names its resource in the id, because
+ * two lists can be on screen at once: the chains are a column beside the
+ * shops, and both have a search called `query`. A list that is the whole page
+ * has no such neighbour and keeps the short id.
+ */
+function filterId(param: string, resource?: string): string {
+  return resource === undefined
+    ? `filter-${param}`
+    : `filter-${resource}-${param}`;
+}
+
+/** Any control, of any list, that filters by this parameter. */
+const anyFilterFor = (fixture: ComponentFixture<TestHost>, param: string) =>
+  fixture.nativeElement.querySelector(
+    `[id^="filter-"][id$="${param}"]`
+  ) as HTMLElement | null;
+
 /** Choose a value in one filter, the way its control would. */
 async function chooseFilter(
   fixture: ComponentFixture<TestHost>,
   param: string,
-  value: string
+  value: string,
+  resource?: string
 ) {
   // `select#...` and not `#...`: a reference filter's own search box carries the
   // same id, so a bare id lookup finds a text input and setting its value does
   // nothing at all.
   const select = fixture.nativeElement.querySelector(
-    `select#filter-${param}`
+    `select#${filterId(param, resource)}`
   ) as HTMLSelectElement | null;
 
   if (select !== null) {
@@ -162,271 +193,200 @@ async function chooseFilter(
   // its debounce here would be testing the picker instead of the screen.
   const picker = fixture.debugElement
     .queryAll(By.directive(ReferencePicker))
-    .find((found) => found.componentInstance.controlId() === `filter-${param}`);
+    .find(
+      (found) =>
+        found.componentInstance.controlId() === filterId(param, resource)
+    );
 
   picker?.componentInstance.valueChange.emit(value);
   await settle(fixture);
 }
 
-describe('the effective price list', () => {
-  it('draws every effective price, whichever source won', async () => {
-    const fixture = await boot('/prices');
-
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(3);
-  });
-
-  /** "What have I overridden": the effective rows an operator's price won. */
-  it('narrows to the prices somebody typed in', async () => {
-    const fixture = await boot('/prices');
-
-    await chooseFilter(fixture, 'sourceKind', 'ADMIN');
-
-    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(2);
-    expect(rowsText(fixture)).not.toContain(
-      'catalog.priceSourceKind.OFFICIAL_API'
-    );
-  });
-
-  /**
-   * Backend plan 0080, section 5: the server flags a price shown on
-   * sufferance, and the screen draws the flag rather than working it out from
-   * the date.
-   */
-  /**
-   * Admin plan 0023, section 3: the admin read joins the product's name on,
-   * and the row's own heading draws it, so the operator reads "Whole milk"
-   * where a uuid used to be.
-   */
-  it('names the product rather than printing its id', async () => {
-    const fixture = await boot('/prices');
-
-    expect(rowsText(fixture)).toContain('Whole milk 1 L');
-    expect(rowsText(fixture)).not.toContain('it_milk_1l');
-  });
-
-  it('shows the source, the date and the stale flag', async () => {
-    const fixture = await boot('/prices');
-
-    const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
-      (cell) => (cell as HTMLElement).textContent?.trim()
-    );
-
-    expect(headers).toContain('catalog.prices.sourceKind');
-    expect(headers).toContain('catalog.prices.observedAt');
-    expect(headers).toContain('catalog.prices.stale');
-  });
-
-  /**
-   * Admin plan 0029, section 5: a price a run copied names the scope it was
-   * read at, through the price scopes lookup rather than as its id.
-   */
-  it('names the scope a copied price was read at', async () => {
-    const fixture = await boot('/prices');
+/**
+ * The Price scopes tab of a chain (admin plan 0042, target 7).
+ *
+ * The list used to name its chain in a column, by lookup. The chain is the
+ * page the list is a tab of now, so the column is gone and so is the request
+ * that named it.
+ */
+describe('the price scopes of a chain', () => {
+  it('lists that chain’s scopes and no other chain’s', async () => {
+    const fixture = await boot('/chains/sm_consum/scopes');
     await settle(fixture);
+
+    // Consum has one scope in the seed, and Mercadona has six.
+    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
+    expect(rowsText(fixture)).toContain('loc_consum_centro');
+    expect(rowsText(fixture)).not.toContain('4661');
+  });
+
+  it('draws no column and no filter for the chain the address names', async () => {
+    const fixture = await boot('/chains/sm_mercadona/scopes');
     await settle(fixture);
 
     const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
       (cell) => (cell as HTMLElement).textContent?.trim()
     );
-    expect(headers).toContain('catalog.prices.priceCopiedFromScopeId');
-    expect(rowsText(fixture)).toContain('REGION 3421');
-  });
-});
-
-describe('a price and its history', () => {
-  /**
-   * The second screen of plan 0080, section 10: the effective row at the top
-   * and every row a source gave below it, with the override line beside the
-   * typed row that is still inside its protection window.
-   */
-  it('draws the effective row and the rows behind it', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(text(fixture)).toContain('catalog.prices.history.effective');
-    // Two rows behind the olive oil price: the typed one and the crawl it
-    // overrode.
-    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(2);
-    expect(text(fixture)).toContain('catalog.priceSourceKind.ADMIN');
-    expect(text(fixture)).toContain('catalog.priceSourceKind.OFFICIAL_API');
-    // The typed row says what it is overriding, from its own snapshot.
-    expect(text(fixture)).toContain('catalog.prices.history.overriding');
-  });
-
-  /**
-   * Editing a price is inserting a price: the only write on a row is its
-   * removal, and it asks first. The effective row is read again afterwards
-   * rather than guessed, because the server recomputes it.
-   */
-  it('removes a row after asking, and re-reads what is shown', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-    await settle(fixture);
-
-    [...fixture.nativeElement.querySelectorAll('.rows li button')][0]?.click();
-    await settle(fixture);
-    expect(text(fixture)).toContain('catalog.prices.confirm.remove.heading');
-
-    buttonSaying(fixture, 'catalog.prices.confirm.remove.confirm')?.click();
-    await settle(fixture);
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(1);
-  });
-
-  /** Admin plan 0029, section 5, on the detail: the row and the history. */
-  it('names where a copied price was read, and says nothing for one that was not', async () => {
-    const copied = await boot('/prices/it_milk_1l~ps_mercadona_4661');
-    await settle(copied);
-    await settle(copied);
-
-    expect(copied.nativeElement.querySelector('dd.copied')?.textContent).toBe(
-      'REGION 3421'
-    );
+    expect(headers).not.toContain('catalog.priceScopes.supermarketId');
+    expect(anyFilterFor(fixture, 'supermarketId')).toBeNull();
+    expect(rowsText(fixture)).not.toContain('sm_mercadona');
+    // The one filter it keeps is the kind.
     expect(
-      copied.nativeElement.querySelector('.rows li .copied')?.textContent
-    ).toContain('REGION 3421');
-
-    const read = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(read);
-    await settle(read);
-
-    expect(text(read)).not.toContain('catalog.prices.priceCopiedFromScopeId');
-  });
-
-  it('offers to add a price, which is the form and not an edit', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-
-    buttonSaying(fixture, 'catalog.prices.history.add')?.click();
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(TestBed.inject(Router).url).toBe('/prices/new');
-  });
-});
-
-describe('the price form', () => {
-  /**
-   * Section 2 of plan 0005 still: a price is keyed on `(itemId, priceScopeId)`,
-   * and twelve shops served by one warehouse share one row, so the screen has
-   * to say which scope and how many shops that is. With no scope chosen yet
-   * the notice says so, and it is on the screen.
-   */
-  it('draws the scope notice on the add a price form', async () => {
-    const fixture = await boot('/prices/new');
-    await settle(fixture);
-
-    const notice = fixture.debugElement.query(By.directive(PriceScopeNotice));
-    expect(notice).not.toBeNull();
-    expect(
-      (notice.componentInstance as PriceScopeNotice).scopeName()
-    ).toBeNull();
-  });
-
-  /**
-   * There is no control on this screen a shop could be chosen in, and that is
-   * the descriptor's doing rather than a check inside the form: `priceScopeId`
-   * is a reference to `price-scopes`.
-   */
-  it('offers scopes to choose from, and never shops', async () => {
-    const fixture = await boot('/prices/new');
-
-    const resources = fixture.debugElement
-      .queryAll(By.directive(ReferencePicker))
-      .map((found) => found.componentInstance.resource() as string);
-
-    expect(resources).toContain('price-scopes');
-    expect(resources).not.toContain('locations');
+      fixture.nativeElement.querySelector(
+        `select#${filterId('kind', 'price-scopes')}`
+      )
+    ).not.toBeNull();
   });
 });
 
 /**
- * The two lookup columns (admin plan 0023, section 4): a group and a chain are
- * small targets, so the page resolves each distinct id once through the
- * reference lookup and the cell becomes the target's name and a link to it.
+ * The Shops tab of a chain (admin plan 0042, target 4).
+ *
+ * The list is the column beside the open shop, so a shop is one row of a few
+ * words: its address, its town and postal code, and its states.
  */
-describe('the looked up reference columns', () => {
-  it('names the group on the product list, as a link to it', async () => {
-    const fixture = await boot('/items');
-    await settle(fixture);
-
-    const anchors = [
-      ...fixture.nativeElement.querySelectorAll('tbody td a'),
-    ].map((anchor) => (anchor as HTMLElement).textContent?.trim());
-
-    expect(anchors).toContain('Olive oil');
-    expect(rowsText(fixture)).not.toContain('pg_olive_oil');
-  });
-
-  it('names the chain on the price scopes list', async () => {
-    const fixture = await boot('/price-scopes');
-    await settle(fixture);
-
-    expect(rowsText(fixture)).toContain('Mercadona');
-    expect(rowsText(fixture)).not.toContain('sm_mercadona');
-  });
-});
-
-describe('the price policies', () => {
-  it('lists the six rows of the plan', async () => {
-    const fixture = await boot('/price-policies');
-
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(6);
-    // The kind is the row's title, drawn as the value it is keyed on.
-    expect(rowsText(fixture)).toContain('OFFICIAL_LEAFLET');
-    expect(rowsText(fixture)).toContain('USER_REPORTED');
-  });
-});
-
-describe('the shops list', () => {
+describe('the shops of a chain', () => {
   /**
-   * A third state beside empty and no match. "There are no shops" and "you have
-   * not said whose shops" are different sentences, and drawing the first would
-   * be a claim nothing had checked.
+   * The chain's page, which holds the shops.
+   *
+   * Every query below starts here, because the chains are a column of the
+   * same kind of rows beside it: hidden on a narrow screen, and never removed.
    */
-  it('says which filter it is waiting for before it reads anything', async () => {
-    const fixture = await boot('/locations');
+  const page = (fixture: ComponentFixture<TestHost>) =>
+    fixture.nativeElement.querySelector('lib-record-page') as HTMLElement;
 
-    expect(text(fixture)).toContain('resource.list.blocked');
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(0);
+  const rowsOf = (fixture: ComponentFixture<TestHost>) =>
+    [...page(fixture).querySelectorAll('[data-row]')] as HTMLElement[];
+
+  const shopsText = (fixture: ComponentFixture<TestHost>) =>
+    rowsOf(fixture)
+      .map((row) => row.textContent ?? '')
+      .join(' ');
+
+  /** A column keeps its search in view and the other filters under a button. */
+  async function openFilters(fixture: ComponentFixture<TestHost>) {
+    (
+      page(fixture).querySelector('[data-more-filters]') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+  }
+
+  /** The chain is the address, so the list reads at once. */
+  it('reads the chain’s shops from the address, with nothing to choose first', async () => {
+    const fixture = await boot(MERCADONA_SHOPS);
+
     expect(text(fixture)).not.toContain('resource.list.empty');
+    expect(rowsOf(fixture)).toHaveLength(3);
   });
 
-  it('draws one chain’s shops once the chain is named', async () => {
-    const fixture = await boot('/locations');
+  it('lists that chain’s shops only', async () => {
+    const mercadona = await boot(MERCADONA_SHOPS);
+    expect(shopsText(mercadona)).toContain('Avenida del Gran Capitán 12');
+    expect(shopsText(mercadona)).not.toContain('Consum Centro');
 
-    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
+    const consum = await boot('/chains/sm_consum/shops');
+    expect(rowsOf(consum)).toHaveLength(1);
+    expect(shopsText(consum)).toContain('Consum Centro');
+  });
 
-    expect(text(fixture)).not.toContain('resource.list.blocked');
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(3);
+  it('offers no control for the chain, and keeps its other filters', async () => {
+    const fixture = await boot(MERCADONA_SHOPS);
+    await openFilters(fixture);
+
+    expect(anyFilterFor(fixture, 'supermarketId')).toBeNull();
+    // The search by address, city or postal code, the postal code source and
+    // the price scope (admin plan 0042, target 4).
+    expect(
+      page(fixture).querySelector(`#${filterId('query', 'locations')}`)
+    ).not.toBeNull();
+    expect(
+      page(fixture).querySelector(
+        `select#${filterId('postalCodeSource', 'locations')}`
+      )
+    ).not.toBeNull();
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(ReferencePicker))
+        .map((found) => found.componentInstance.controlId() as string)
+    ).toEqual([filterId('priceScopeId', 'locations')]);
   });
 
   /**
-   * Section 3: three states, kept apart. A guess is a guess, a known code is
-   * known, and a shop with neither is deliberate rather than missing.
+   * The chains are a column beside the shops, and both lists have a search
+   * called `query`. A label points at its control by id, so two controls with
+   * one id would leave one of them unlabelled.
+   */
+  it('shares no control id with the column of chains beside it', async () => {
+    const fixture = await boot(MERCADONA_SHOPS);
+    await openFilters(fixture);
+
+    const ids = [...fixture.nativeElement.querySelectorAll('[id]')].map(
+      (element) => (element as HTMLElement).id
+    );
+
+    expect(ids).toContain(filterId('query', 'supermarkets'));
+    expect(ids).toContain(filterId('query', 'locations'));
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+  });
+
+  /**
+   * Section 3 of plan 0005, as a column of rows says it: the town and the
+   * postal code under the address, and a state on the one code that is a
+   * guess. A shop with no code at all says nothing where the code would be
+   * and carries no state, because a missing code is deliberate and not a
+   * guess to go and check.
    */
   it('tells a known postal code from a guess and from none at all', async () => {
-    const fixture = await boot('/locations');
-    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
+    const fixture = await boot(MERCADONA_SHOPS);
 
-    const body = rowsText(fixture);
-    expect(body).toContain('catalog.postalCodeSource.SOURCE');
-    expect(body).toContain('catalog.postalCodeSource.DERIVED');
-    // The shop with no code at all reads as nothing, not as a guess to check.
-    expect(body).toContain('resource.value.none');
+    const row = (address: string) =>
+      rowsOf(fixture).find((found) => found.textContent?.includes(address))
+        ?.textContent ?? '';
+    const guessed = 'catalog.locations.state.postalCodeGuessed';
+
+    expect(row('Gran Capitán')).toContain('14001');
+    expect(row('Gran Capitán')).not.toContain(guessed);
+    expect(row('Domínguez Ortiz')).toContain('14005');
+    expect(row('Domínguez Ortiz')).toContain(guessed);
+    expect(row('Trassierra')).not.toContain(guessed);
+    expect(row('Trassierra')).not.toContain('resource.value.none');
+  });
+
+  it('marks the one shop that has a map', async () => {
+    const fixture = await boot(MERCADONA_SHOPS);
+
+    const marked = rowsOf(fixture).filter((row) =>
+      row.textContent?.includes('catalog.locations.state.map')
+    );
+
+    expect(marked).toHaveLength(1);
+    expect(marked[0].textContent).toContain('Gran Capitán');
   });
 
   it('narrows to the guessed ones', async () => {
-    const fixture = await boot('/locations');
-    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
-    await chooseFilter(fixture, 'postalCodeSource', 'DERIVED');
+    const fixture = await boot(MERCADONA_SHOPS);
+    await openFilters(fixture);
+    await chooseFilter(fixture, 'postalCodeSource', 'DERIVED', 'locations');
 
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
-    expect(rowsText(fixture)).toContain('14005');
+    expect(rowsOf(fixture)).toHaveLength(1);
+    expect(shopsText(fixture)).toContain('14005');
+    // The button that holds the filters says how many are narrowing the list.
+    expect(
+      page(fixture).querySelector('[data-more-filters] .filter-count')
+        ?.textContent
+    ).toBe('1');
+  });
+
+  it('opens a shop under its chain, on its details', async () => {
+    const fixture = await boot(MERCADONA_SHOPS);
+
+    rowsOf(fixture)
+      .find((row) => row.textContent?.includes('Gran Capitán'))
+      ?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe(`${CENTRO}/details`);
   });
 });
 
@@ -459,24 +419,49 @@ describe('the shop price scopes', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('lists each shop’s scopes by name', async () => {
-    const fixture = await boot('/locations');
-    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
+  /** The shop's Details tab as a form: the address that opens it so. */
+  async function editing(): Promise<ComponentFixture<TestHost>> {
+    const fixture = await boot(`${CENTRO}/details?edit=1`);
+    await settle(fixture);
+    await settle(fixture);
+    await settle(fixture);
+    return fixture;
+  }
+
+  /**
+   * The list is a column of addresses now, so the scopes are named where the
+   * shop is open: on its Details tab, as the rows of the field (chips until admin plan
+   * 0052).
+   */
+  it('names the shop’s scopes on its Details tab', async () => {
+    const fixture = await boot(`${CENTRO}/details`);
+    await settle(fixture);
     await settle(fixture);
 
-    const body = rowsText(fixture);
-    expect(body).toContain('Córdoba warehouse');
-    expect(body).not.toContain('ps_mercadona_4661');
+    // Reading, each scope is a name, and nothing on the page can change one.
+    expect(
+      fixture.debugElement.query(By.directive(ReferencesControl))
+    ).toBeNull();
+    const read = fixture.nativeElement.querySelector(
+      'lib-record-view .references'
+    ) as HTMLElement;
+    expect(read.textContent).toContain('Córdoba warehouse');
+    expect(read.textContent).not.toContain('ps_mercadona_4661');
+
+    const form = await editing();
+    const control = form.debugElement.query(By.directive(ReferencesControl));
+    const chips = control.nativeElement.textContent as string;
+    expect(chips).toContain('Córdoba warehouse');
+    expect(chips).not.toContain('ps_mercadona_4661');
   });
 
   it('keeps the store scope when a region is removed, and sends the stack whole', async () => {
     const sent = recordUpdates();
-    const fixture = await boot('/locations/loc_cordoba_centro');
-    await settle(fixture);
+    const fixture = await editing();
 
     const control = fixture.debugElement.query(By.directive(ReferencesControl));
     const chips = [
-      ...control.nativeElement.querySelectorAll('li.chip'),
+      ...control.nativeElement.querySelectorAll('li.row'),
     ] as HTMLElement[];
     expect(chips).toHaveLength(2);
 
@@ -486,24 +471,48 @@ describe('the shop price scopes', () => {
     region.querySelector('button')?.click();
     await settle(fixture);
 
-    buttonSaying(fixture, 'resource.action.save')?.click();
+    (
+      fixture.nativeElement.querySelector(
+        'lib-save-bar [data-save]'
+      ) as HTMLButtonElement
+    ).click();
+    await settle(fixture);
     await settle(fixture);
 
     expect(sent).toEqual([{ priceScopeIds: ['ps_store_loc_cordoba_centro'] }]);
   });
 });
 
-describe('the per shop rows', () => {
-  it('waits to be told which shop, like the shops wait for a chain', async () => {
-    const fixture = await boot('/location-items');
+/**
+ * The Products tab of a shop (admin plan 0042, target 5).
+ *
+ * The rows used to wait to be told which shop, the way the shops waited for a
+ * chain. The shop is the address now.
+ */
+describe('the products of a shop', () => {
+  it('reads the shop’s rows from the address, with nothing to choose first', async () => {
+    const fixture = await boot(`${CENTRO}/products`);
+    await settle(fixture);
 
-    expect(text(fixture)).toContain('resource.list.blocked');
+    // The seed holds two rows for this shop and one for another.
+    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(anyFilterFor(fixture, 'supermarketLocationId')).toBeNull();
+  });
+
+  it('names the product and its brand, and never prints the id', async () => {
+    const fixture = await boot(`${CENTRO}/products`);
+    await settle(fixture);
+
+    expect(rowsText(fixture)).toContain('Whole milk 1 L');
+    expect(rowsText(fixture)).toContain('Hacendado');
+    expect(rowsText(fixture)).not.toContain('it_milk_1l');
   });
 
   it('offers no delete, because the gateway has no route for one', async () => {
-    const fixture = await boot('/location-items');
-    await chooseFilter(fixture, 'supermarketLocationId', 'loc_cordoba_centro');
+    const fixture = await boot(`${CENTRO}/products`);
+    await settle(fixture);
 
+    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(buttonSaying(fixture, 'resource.action.delete')).toBeUndefined();
   });
 });

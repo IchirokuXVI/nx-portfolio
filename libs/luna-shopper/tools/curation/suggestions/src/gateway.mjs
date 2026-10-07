@@ -7,7 +7,7 @@
  * only which paths, which query parameters and how a page is walked.
  */
 
-import { capSearchText } from './rules.mjs';
+import { barcodesOf, capSearchText } from './rules.mjs';
 
 /** The gateway's own cap. Asking for more is a 400. */
 const PAGE_SIZE = 100;
@@ -125,13 +125,17 @@ export function makeGateway(session) {
      * what the back office uses, and it matches a whole barcode exactly and
      * ranks that row first. The answer is filtered on equality here, so a text
      * hit that merely scored well is not mistaken for the barcode's owner.
+     *
+     * **Any barcode of the product** (backend plan 0185): the search finds a
+     * product by every barcode it holds, and the owner is the product that
+     * lists this one, as its first barcode or as any other.
      */
     async findByEan(ean) {
       if (!ean) {
         return null;
       }
       const items = await this.searchItems(ean, 5);
-      return items.find((item) => item.ean === ean) ?? null;
+      return items.find((item) => barcodesOf(item).includes(ean)) ?? null;
     },
 
     /**
@@ -178,8 +182,25 @@ export function withCategoryIds(item, rows) {
   return { ...item, categoryIds: slugs.map((slug) => ids.get(slug)) };
 }
 
-/** The body `CreateItemDto` names: the catalog create, with category ids. */
-export function toCreateItemBody(item) {
+/**
+ * The body `CreateItemDto` names: the catalog create, with category ids.
+ *
+ * `rowPackCount` is the count the queue row itself read (backend plan 0162).
+ * The bulk route falls back to it when a decision states none, and this
+ * rehearsal create knows no row, so the caller passes it: the product a later
+ * entry of the same run is compared against then carries the count the real
+ * create will write.
+ *
+ * **A recorded item carries that count itself, as `rowPackCount`.** A resume
+ * recreates the rehearsal products from `decisions.jsonl` alone
+ * (`cli/src/run-files.mjs` calls this with the recorded item and nothing
+ * else), and the row is not in that file. Without the count on the record a
+ * resumed product had none, and a later `16 ud` row was refused against it.
+ * `toBulkCreateItem` never reads the key, so it never reaches the main
+ * catalog: there the route reads the row for itself.
+ */
+export function toCreateItemBody(item, rowPackCount = null) {
+  const packCount = item.packCount ?? rowPackCount ?? item.rowPackCount ?? null;
   return {
     name: item.nameEn
       ? { es: item.nameEs, en: item.nameEn }
@@ -187,6 +208,7 @@ export function toCreateItemBody(item) {
     brand: item.brand,
     ean: item.ean,
     unitSize: item.unitSize,
+    ...(packCount === null ? {} : { packCount }),
     categoryIds: item.categoryIds,
     defaultUnit: item.defaultUnit,
   };
@@ -195,6 +217,12 @@ export function toCreateItemBody(item) {
 /**
  * The `item` of the harvest bulk `createItem` op, which takes category slugs
  * as they are and resolves them itself (backend plan 0166, section 3).
+ *
+ * **Both names, always** (backend plan 0184): `checkDecisionShape` refuses a
+ * CREATE without `nameEn`, so every decision made since carries one. A
+ * decision recorded before that plan may hold none, and it is sent with `es`
+ * alone, as it was decided. The route then refuses that operation with
+ * `NAME_EN_MISSING`, which names the row a person has to finish.
  */
 export function toBulkCreateItem(item) {
   return {
@@ -204,6 +232,12 @@ export function toBulkCreateItem(item) {
     brand: item.brand,
     ean: item.ean,
     unitSize: item.unitSize,
+    // Only a count the decision stated (backend plan 0177). Absent is how the
+    // bulk route is told to take the count the row itself read, and a null
+    // here would create the product with none.
+    ...(item.packCount === null || item.packCount === undefined
+      ? {}
+      : { packCount: item.packCount }),
     categorySlugs: item.categorySlugs,
     defaultUnit: item.defaultUnit,
   };

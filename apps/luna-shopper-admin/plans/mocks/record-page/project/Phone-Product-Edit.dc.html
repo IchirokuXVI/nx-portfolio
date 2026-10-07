@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: changing a product</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<form class="ab ph" style="width: 390px; height: 844px" aria-label="Change the product Leche entera">
+
+<header class="phead">
+<a class="pb" href="Phone-Product.dc.html" aria-label="Back to Products"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div class="grow col"><h1>Leche entera</h1><span>Editing</span></div>
+<button type="button" class="pb" aria-label="How a product page works"><i>i</i></button>
+</header>
+<nav class="tabs" aria-label="Leche entera">
+<a class="tab on" href="#" aria-current="page">Details</a>
+<a class="tab" href="#">Prices <span class="cnt">14</span></a>
+<a class="tab" href="#">Shops <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="pe-name">
+<div class="sec-h"><h2 id="pe-name">Name and codes</h2></div>
+<div class="fr ed"><span class="fl" id="pe-name-l">Name <span class="req" aria-hidden="true">*</span> <span class="chip ok" style="margin-left: 4px">Changed</span></span><div class="fv">
+<div class="loc" role="group" aria-labelledby="pe-name-l">
+<div><span class="lang" aria-hidden="true">ES</span><input class="inp bad focus" aria-label="Name in Spanish" aria-invalid="true" aria-describedby="pe-name-e" required></div>
+<div><span class="lang" aria-hidden="true">EN</span><input class="inp" aria-label="Name in English" value="Whole milk"></div>
+</div>
+<p class="err" id="pe-name-e" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg>Write the name in Spanish.</p>
+</div></div>
+<div class="fr ed"><label class="fl" for="pe-brand">Brand</label><div class="fv"><span class="pick"><button type="button" id="pe-brand" class="inp" aria-haspopup="listbox">Hacendado</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+<div class="fr ed"><label class="fl" for="pe-ean">Barcode <span class="chip ok" style="margin-left: 4px">Changed</span></label><div class="fv"><input id="pe-ean" class="inp mono bad" inputmode="numeric" value="84800001001" aria-invalid="true" aria-describedby="pe-ean-e"><p class="err" id="pe-ean-e" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg>A barcode has 8 or 13 digits. This one has 11.</p></div></div>
+<div class="fr ed"><label class="fl" for="pe-sku">Chain's code</label><div class="fv"><input id="pe-sku" class="inp mono" value="10379"></div></div>
+</section>
+
+<section class="sec" aria-labelledby="pe-where">
+<div class="sec-h"><h2 id="pe-where">Where it belongs</h2></div>
+<div class="fr ed"><span class="fl" id="pe-cat-l">Categories <span class="req" aria-hidden="true">*</span></span><div class="fv">
+<ul class="refs" aria-labelledby="pe-cat-l">
+<li class="rrow"><span class="grow" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Lácteos y huevos, Leche</span><span class="chip">Main</span><button type="button" class="xb" aria-label="Move Lácteos y huevos, Leche down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button type="button" class="xb" aria-label="Take Lácteos y huevos, Leche away"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>
+</ul>
+</div></div>
+</section>
+
+</div>
+</div>
+
+<div class="save">
+<a class="btn" href="Phone-Product.dc.html" style="color: #14171a">Cancel</a>
+<button type="submit" class="btn pri grow">Save 2 changes</button>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Phone-Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</form>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

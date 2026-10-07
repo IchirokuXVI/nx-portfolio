@@ -362,6 +362,10 @@ $app-content-max: 480px;
 
   // The progress bar on the resume card.
   --app-progress-height: 6px;
+  // The bar under the basket's tools row, of how much of the estimated total is
+  // bought (velista 0132, section 4). Thinner than the resume card's bar because it
+  // lives in a sticky bar, where every pixel is taken from the lines under it.
+  --app-total-track-height: 4px;
 
   // Padding for a chip, whose vertical inset is smaller than any space step: a
   // status pill that used --app-space-1 would be a lozenge.

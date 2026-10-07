@@ -15,18 +15,23 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
-  provideResources,
-  ResourceFormPage,
+  provideSections,
+  RecordPage,
+  RecordView,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { categorySource, itemSource } from './catalog-sources';
-import { CATEGORIES } from './categories';
-import { ITEMS } from './items';
 import {
   ProductCategoriesBatch,
   toBatchAnswer,
 } from './product-categories-batch';
+import { CategoriesPage } from './products/categories-page';
+import {
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
+} from './products/products-routes';
 import { SetCategoriesPanel } from './set-categories-panel';
 
 /**
@@ -45,8 +50,15 @@ import { SetCategoriesPanel } from './set-categories-panel';
 })
 class TestHost {}
 
-const ALL = [ITEMS, CATEGORIES];
-const SECTION: AdminSection = { key: 'catalog', label: '', resources: ALL };
+/** The Products section, as the app declares it (admin plan 0043). */
+const SECTION: AdminSection = {
+  key: 'products',
+  label: '',
+  segment: PRODUCTS_SEGMENT,
+  held: PRODUCT_RESOURCES,
+  heldTabs: true,
+  screens: productsRoutes(),
+};
 
 async function boot(url: string) {
   TestBed.resetTestingModule();
@@ -57,7 +69,7 @@ async function boot(url: string) {
       ServerReachability,
       provideRouter(adminRoutes([SECTION])),
       provideLocationMocks(),
-      provideResources(...ALL),
+      provideSections(SECTION),
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -130,7 +142,7 @@ async function picked(
 
 describe('Set categories on the product list', () => {
   it('reviews every ticked product, now and after, and sends nothing yet', async () => {
-    const { fixture, batch } = await boot('/items');
+    const { fixture, batch } = await boot('/products');
     // Whole milk 1 L (on milk) and the dish soap (on dishwasher).
     await picked(
       fixture,
@@ -155,7 +167,7 @@ describe('Set categories on the product list', () => {
   });
 
   it('replaces each product’s set in one request, and says what each has now', async () => {
-    const { fixture, batch } = await boot('/items');
+    const { fixture, batch } = await boot('/products');
     await picked(fixture, [0, 3], ['cat_ice-creams-and-ice']);
     await click(fixture, '[data-set-categories-review]');
 
@@ -181,7 +193,7 @@ describe('Set categories on the product list', () => {
   });
 
   it('leaves out a product that already has exactly the picked set', async () => {
-    const { fixture, batch } = await boot('/items');
+    const { fixture, batch } = await boot('/products');
     await picked(fixture, [0], ['cat_milk']);
     await click(fixture, '[data-set-categories-review]');
 
@@ -199,7 +211,7 @@ describe('Set categories on the product list', () => {
    * deleted between the review and the press is the real way to get one.
    */
   it('refuses the whole request, says why, and changes nothing', async () => {
-    const { fixture } = await boot('/items');
+    const { fixture } = await boot('/products');
     await picked(fixture, [0, 3], ['cat_ice-creams-and-ice']);
     await click(fixture, '[data-set-categories-review]');
 
@@ -228,7 +240,7 @@ describe('Set categories on the product list', () => {
   });
 
   it('refuses a root, which no product may go on', async () => {
-    await boot('/items');
+    await boot('/products');
 
     await expect(
       TestBed.inject(ProductCategoriesBatch).set([
@@ -243,48 +255,138 @@ describe('Set categories on the product list', () => {
 });
 
 describe('the category tree', () => {
-  it('lists the tree with its parent, slug and product count', async () => {
-    const { fixture } = await boot('/categories');
+  /** Admin plan 0043, target 5: the two levels, drawn as the tree they are. */
+  it('draws the two levels as a tree, each with its handle and product count', async () => {
+    const { fixture } = await boot('/products/categories');
+    const page = fixture.debugElement.query(By.directive(CategoriesPage))
+      .componentInstance as CategoriesPage;
 
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Eggs, milk, and butter');
     expect(text).toContain('uncategorised');
-    expect(all(fixture, 'tbody tr').length).toBeGreaterThan(10);
+
+    const root = page
+      .shown()
+      .find((node) => node.id === 'cat_eggs-milk-and-butter');
+    expect(root?.children.map((child) => child.id)).toContain('cat_milk');
+    // A top level category is one row, and the ones inside it are under it.
+    expect(all(fixture, '.row.root').length).toBe(page.shown().length);
+    expect(all(fixture, '.row.child').length).toBe(
+      page.shown().reduce((sum, node) => sum + node.children.length, 0)
+    );
+    expect(all(fixture, '.row.child').length).toBeGreaterThan(5);
+    // No category sits a third level down.
+    expect(
+      page.shown().flatMap((node) => node.children.flatMap((c) => c.children))
+    ).toEqual([]);
+  });
+
+  it('opens the product list narrowed to a category from its count', async () => {
+    const { fixture } = await boot('/products/categories');
+
+    const milk = q(fixture, '[data-category="cat_milk"]')?.closest('.row');
+    const count = milk?.querySelector('[data-category-count]');
+
+    expect(count?.textContent?.trim()).toBe('2');
+    expect(count?.getAttribute('href')).toBe('/products?categoryId=cat_milk');
+  });
+
+  it('narrows the tree by what is typed, keeping the category a match is inside', async () => {
+    const { fixture } = await boot('/products/categories');
+    const page = fixture.debugElement.query(By.directive(CategoriesPage))
+      .componentInstance as CategoriesPage;
+
+    page.term.set('milk');
+    await settle(fixture);
+
+    const shown = page.shown();
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(page.tree.nodes().length);
+    for (const root of shown) {
+      const own = `${root.name} ${root.row.slug}`.toLowerCase();
+      expect(
+        own.includes('milk') ||
+          root.children.every((child) =>
+            `${child.name} ${child.row.slug}`.toLowerCase().includes('milk')
+          )
+      ).toBe(true);
+    }
+
+    page.term.set('no such category');
+    await settle(fixture);
+    expect(page.shown()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain(
+      'resource.list.noMatch'
+    );
+  });
+
+  it('closes and opens a top level category', async () => {
+    const { fixture } = await boot('/products/categories');
+    const before = all(fixture, '.row.child').length;
+
+    await click(fixture, '.row.root button.twist');
+
+    expect(all(fixture, '.row.child').length).toBeLessThan(before);
+  });
+
+  it('opens a category to be read, and the page that adds a new one', async () => {
+    const { fixture } = await boot('/products/categories');
+    const router = TestBed.inject(Router);
+
+    await click(fixture, '[data-category="cat_milk"]');
+    expect(router.url).toBe('/products/categories/cat_milk');
+    expect(fixture.debugElement.query(By.directive(RecordPage))).not.toBeNull();
+    // A record opens to be read (admin plan 0053): no control on the page.
+    expect(
+      fixture.nativeElement.querySelector(
+        'lib-record-view input, lib-record-view select, lib-record-view textarea'
+      )
+    ).toBeNull();
+
+    await router.navigateByUrl('/products/categories');
+    await settle(fixture);
+    await click(fixture, 'lib-page-header button.primary');
+    expect(router.url).toBe('/products/categories/new');
   });
 
   /** A third level is said under the parent, not at the foot of the form. */
   it('says a third level under the parent it is about', async () => {
-    const { fixture } = await boot('/categories/new');
-    const page = fixture.debugElement.query(By.directive(ResourceFormPage))
-      .componentInstance as ResourceFormPage;
+    const { fixture } = await boot('/products/categories/new');
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+    const view = fixture.debugElement.query(By.directive(RecordView))
+      .componentInstance as RecordView;
+    const store = page.store();
 
-    page.store.set('name', { en: 'Tubs', es: 'Tarrinas' });
-    page.store.set('slug', 'tubs');
-    page.store.set('parentId', 'cat_ice-creams-and-ice');
-    await page.store.submit();
+    store.set('name', { en: 'Tubs', es: 'Tarrinas' });
+    store.set('slug', 'tubs');
+    store.set('parentId', 'cat_ice-creams-and-ice');
+    await store.submit();
     await settle(fixture);
 
-    expect(page.messages()['parentId']).toEqual([
+    expect(view.messages()['parentId']).toEqual([
       { kind: 'key', key: 'resource.error.categoryTooDeep' },
     ]);
-    expect(page.bannerKey()).toBeNull();
+    // Said under the field, so not above the sections as well.
+    expect(view.shownRefusal()).toBeNull();
+    expect(store.bar()).toEqual({ kind: 'invalid', fields: 1 });
   });
 
   it('refuses to delete a category holding products, and links to them', async () => {
-    const { fixture } = await boot('/categories');
-    const row = all(fixture, 'tbody tr').find((tr) =>
-      tr.textContent?.includes('Milk')
-    );
-    expect(row).toBeDefined();
+    const { fixture } = await boot('/products/categories');
+    const row = q(fixture, '[data-category="cat_milk"]')?.closest('.row');
+    expect(row).not.toBeNull();
 
-    (row?.querySelector('button.danger') as HTMLButtonElement | null)?.click();
+    (
+      row?.querySelector('[data-category-delete]') as HTMLButtonElement | null
+    )?.click();
     await settle(fixture);
     await click(fixture, 'lib-confirm-dialog .controls button:first-child');
 
     const refusal = q(fixture, '[data-refusal]');
     expect(refusal?.textContent).toContain('resource.error.categoryInUse');
     const link = refusal?.querySelector('a');
-    expect(link?.getAttribute('href')).toBe('/items?categoryId=cat_milk');
+    expect(link?.getAttribute('href')).toBe('/products?categoryId=cat_milk');
     // Still there.
     await expect(
       TestBed.inject(RESOURCE_GATEWAYS)
@@ -294,7 +396,7 @@ describe('the category tree', () => {
   });
 
   it('opens the product list already filtered by the category it links to', async () => {
-    const { fixture } = await boot('/items?categoryId=cat_milk');
+    const { fixture } = await boot('/products?categoryId=cat_milk');
 
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Whole milk 1 L');
@@ -302,7 +404,7 @@ describe('the category tree', () => {
   });
 
   it('narrows the products by a root to every product under its children', async () => {
-    await boot('/items');
+    await boot('/products');
     const page = await TestBed.inject(RESOURCE_GATEWAYS)
       .for<Wire.CatalogItemView>(itemSource())
       .list({ filters: { categoryId: 'cat_eggs-milk-and-butter' } });
@@ -314,7 +416,7 @@ describe('the category tree', () => {
   });
 
   it('refuses a product with no category, as catalog does', async () => {
-    await boot('/items');
+    await boot('/products');
 
     await expect(
       TestBed.inject(RESOURCE_GATEWAYS)

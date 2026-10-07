@@ -1,5 +1,6 @@
-import { inject } from '@angular/core';
+import { inject, Injector } from '@angular/core';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
+import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
   defineResource,
@@ -8,11 +9,25 @@ import {
   type FieldMessage,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { PRICE_SCOPE_KIND_OPTIONS } from './catalog-enums';
+import { PRICE_SCOPE_KIND_OPTIONS, priceScopeMark } from './catalog-enums';
 import { priceScopeSource } from './catalog-sources';
+import { ChainCounts } from './chains/chain-context';
 
 /** A set of shops that share one price, as the gateway describes it. */
 export type PriceScope = Wire.CatalogPriceScopeView;
+
+/**
+ * The page of the chain a list of scopes is a tab of, or `null` anywhere
+ * else (admin plan 0056, section 3.1).
+ *
+ * Asked when a row is drawn and not when the descriptor's states and actions
+ * are built: the page of one scope builds them while it is itself being
+ * built, and it cannot be asked for its own record then.
+ */
+function chainPage(injector: Injector) {
+  const page = injector.get(RECORD_CONTEXT, null, { optional: true });
+  return page !== null && page.descriptor.name === 'supermarkets' ? page : null;
+}
 
 /**
  * What a priority reads as (plan 0105, section 6).
@@ -63,17 +78,21 @@ export function priorityBand(priority: number): FieldMessage {
  * walks a bounded number of pages and then answers not found, which is what the
  * screen would have said anyway.
  *
- * **No `sorts`.** `GET /v1/admin/catalog/price-scopes` accepts a cursor, a limit
- * and a chain, and nothing else. It orders by creation and a control offering
- * anything else would be a control that changes nothing.
+ * **No `sorts`.** `GET /v1/admin/catalog/price-scopes` accepts a cursor, a
+ * limit, a chain and kinds, and nothing that orders. It orders by creation and
+ * a control offering anything else would be a control that changes nothing.
  */
 export const PRICE_SCOPES = defineResource<PriceScope>({
   name: 'price-scopes',
-  segment: 'price-scopes',
+  // The Price scopes tab of a chain (admin plan 0042).
+  segment: 'scopes',
   labels: {
     one: 'catalog.priceScopes.one',
     many: 'catalog.priceScopes.many',
+    create: 'catalog.priceScopes.add',
   },
+  // No `GET /price-scopes/{id}`, so a typed ID stays text (admin plan 0051).
+  readById: false,
 
   /**
    * What one scope is called, which is mostly not its label.
@@ -122,6 +141,7 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
       label: 'catalog.priceScopes.kind',
       help: 'catalog.priceScopes.kindHelp',
       options: PRICE_SCOPE_KIND_OPTIONS,
+      scope: (row) => priceScopeMark(row.kind),
       required: true,
     },
     {
@@ -158,23 +178,90 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
   ],
 
   list: {
-    columns: ['label', 'kind', 'priority', 'externalKey', 'supermarketId'],
+    // The chain is the page this list is a tab of, so it is not a column.
+    columns: ['label', 'kind', 'externalKey', 'priority'],
     // A scope is told from its siblings by what kind it is and which warehouse
-    // it stands for. Its chain is the thing the filter above already fixed, so
-    // repeating it on every card would spend the width saying one answer twice.
+    // it stands for.
     compact: ['kind', 'externalKey'],
   },
 
+  // The chain is in the address: `/chains/{chainId}/scopes`.
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
+
+  // The one question the list answers besides "which chain": the general
+  // scopes of a chain are a handful, and its single shop scopes are one per
+  // shop. The route takes `kind`, and takes nothing that orders by it.
   filters: [
     {
-      kind: 'reference',
-      param: 'supermarketId',
-      label: 'catalog.priceScopes.filter.supermarketId',
-      resource: 'supermarkets',
+      kind: 'enum',
+      param: 'kind',
+      label: 'catalog.priceScopes.filter.kind',
+      options: PRICE_SCOPE_KIND_OPTIONS,
     },
   ],
 
-  actions: { create: true, edit: true, delete: true },
+  /**
+   * "Default" on the scope its chain falls back to (admin plan 0042, target
+   * 7). A fact about the chain, so it is read from the chain's page and drawn
+   * only on a list that is a tab of one.
+   */
+  rowStates: () => {
+    const injector = inject(Injector);
+
+    return (row) =>
+      chainPage(injector)?.row()?.['defaultPriceScopeId'] === row.id
+        ? [{ label: 'catalog.priceScopes.state.default', tone: 'good' }]
+        : [];
+  },
+
+  actions: {
+    create: true,
+    edit: true,
+    delete: true,
+    /**
+     * "Make default", on every scope but the one that already is.
+     *
+     * It writes the chain and not the scope: the default is the chain's
+     * `defaultPriceScopeId`. So it exists only on a list under a chain's page,
+     * which is what holds the chain and reads it again afterwards.
+     *
+     * Not on a single shop scope. The default is what a shop of the chain
+     * falls back to when nothing more specific holds a price, and one shop's
+     * own scope is the most specific there is. The gateway accepts it, so
+     * this is the screen declining to offer a mistake.
+     */
+    named: () => {
+      const injector = inject(Injector);
+      const counts = inject(ChainCounts);
+
+      return [
+        {
+          name: 'makeDefault',
+          label: 'catalog.priceScopes.makeDefault',
+          available: (row) => {
+            // Until the chain is read nobody knows which scope is the
+            // default, so nothing is offered.
+            const chain = chainPage(injector)?.row() ?? null;
+            return (
+              chain !== null &&
+              row.kind !== 'STORE' &&
+              chain['defaultPriceScopeId'] !== row.id
+            );
+          },
+          run: async (row) => {
+            const chain = chainPage(injector);
+            if (chain !== null) {
+              await counts.setDefaultScope(chain.id, row.id);
+            }
+          },
+        },
+      ];
+    },
+  },
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource()),
 });

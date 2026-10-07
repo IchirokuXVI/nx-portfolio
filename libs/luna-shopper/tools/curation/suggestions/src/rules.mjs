@@ -76,6 +76,96 @@ export function carriesSize(name) {
   return SIZE_PATTERN.test(String(name ?? ''));
 }
 
+/**
+ * A name whose last word is `pack` (backend plan 0184).
+ *
+ * `Cerveza pack` states that the product is a multipack and not how many it
+ * holds, so {@link SIZE_PATTERN} has no number to find. The size and the pack
+ * count already say it, and 103 names of the first catalog ended this way
+ * while most multipacks did not, so the word told a shopper nothing either.
+ * A word that merely contains it (`Backpack`) is not the word.
+ */
+const ENDS_IN_PACK = /(?:^|[^\p{L}\p{N}])pack[^\p{L}\p{N}]*$/iu;
+
+/** True when the name ends in the word `pack`. */
+export function endsInPack(name) {
+  return ENDS_IN_PACK.test(String(name ?? ''));
+}
+
+// ---------------------------------------------------------------------------
+// Barcodes, character for character the contracts function
+// ---------------------------------------------------------------------------
+
+const GTIN_LENGTHS = new Set([8, 12, 13, 14]);
+
+function hasValidCheckDigit(code) {
+  let sum = 0;
+  let weight = 3;
+  for (let index = code.length - 2; index >= 0; index--) {
+    sum += Number(code[index]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  return (10 - (sum % 10)) % 10 === Number(code[code.length - 1]);
+}
+
+/**
+ * What a string is, read as a barcode (backend plan 0184).
+ *
+ * A copy of `readGtin` in
+ * `libs/luna-shopper/contracts/src/lib/barcodes/gtin.ts`, for the reason
+ * {@link brandKey} is a copy: this library is plain `.mjs` with no build step.
+ * The two are held together by `gtin.cases.json`, and every pair in that file
+ * is asserted against this function in `rules.test.mjs`.
+ *
+ * Digits only after a trim. 13 digits starting with 2 is a code one shop
+ * prints on its own scales, `IN_STORE`. Anything else is 8, 12, 13 or 14
+ * digits with a valid check digit, or `INVALID`.
+ */
+export function readGtin(text) {
+  const code = typeof text === 'string' ? text.trim() : '';
+  if (code === '') {
+    return { kind: 'INVALID', reason: 'EMPTY' };
+  }
+  if (!/^[0-9]+$/.test(code)) {
+    return { kind: 'INVALID', reason: 'NOT_DIGITS' };
+  }
+  if (code.length === 13 && code.startsWith('2')) {
+    return { kind: 'IN_STORE', code };
+  }
+  if (!GTIN_LENGTHS.has(code.length)) {
+    return { kind: 'INVALID', reason: 'LENGTH' };
+  }
+  if (!hasValidCheckDigit(code)) {
+    return { kind: 'INVALID', reason: 'CHECK_DIGIT' };
+  }
+  return { kind: 'GTIN', gtin: code };
+}
+
+/**
+ * The barcode a product may hold: the real one `text` is, or null.
+ *
+ * The catalog refuses a product whose EAN is an in-store or invalid code, and
+ * the bulk route creates such a product with no EAN. A decision is read
+ * through this, so the rehearsal create and the real one write the same thing.
+ */
+export function productGtin(text) {
+  const reading = readGtin(text);
+  return reading.kind === 'GTIN' ? reading.gtin : null;
+}
+
+/**
+ * Every barcode a catalog product holds (backend plan 0185).
+ *
+ * A maker prints a new barcode when it changes a factory, a supplier or a
+ * label, so a product holds several, and the item view lists them in `eans`,
+ * the first one leading. A view from a gateway that predates that plan carries
+ * `ean` alone, and answers the one barcode it has.
+ */
+export function barcodesOf(item) {
+  const held = Array.isArray(item?.eans) ? item.eans.filter(Boolean) : [];
+  return item?.ean && !held.includes(item.ean) ? [...held, item.ean] : held;
+}
+
 /** True when the normalized brand appears as a run of tokens inside the name. */
 export function carriesBrand(name, brand) {
   const brandKey = normalizeName(brand);
@@ -209,6 +299,13 @@ export const UNIT_BASES = {
  * catalog vocabulary and are millilitres times ten, which is a conversion and
  * not a guess. A word that is not here (`m`, `Paquete`) answers no unit, and
  * the comparison then falls back to the raw numbers.
+ *
+ * **Read only for a row with no `sizeUnit`** (backend plan 0177). The factor
+ * here assumes the number is still in the printed unit, which is wrong for
+ * every source that already converted it: LIDL and the leaflets write `75cl`
+ * as 750, so this table read a correct link as 7,500 ml against 750 ml. A row
+ * a run has seen since that plan states its own unit, and `entryBaseSize` in
+ * `decision.mjs` reads that and never this.
  */
 const PRINTED_UNITS = {
   g: { unit: 'GRAM', factor: 1 },
@@ -269,6 +366,55 @@ export function toBaseSize(size, unit, extra = 1) {
   }
   return { family: base.family, value: number * extra * base.factor };
 }
+
+/**
+ * The size and unit a created product may carry, in a base unit (backend plan
+ * 0183): grams, millilitres or a count.
+ *
+ * A copy of `toBaseUnit` in
+ * `libs/luna-shopper/contracts/src/lib/units/source-size.ts`. This library is
+ * plain `.mjs` and cannot import the TypeScript, and `rules.test.mjs` holds
+ * the two to the same table of cases.
+ *
+ * A sized `KILOGRAM` is `GRAM` and a `LITER` is `MILLILITER`, both times a
+ * thousand. A `KILOGRAM` with no size stays as it is: that is a product sold
+ * by weight. A `PACK` is a `UNIT`, because how many a pack holds is
+ * `packCount`. Any other unit, one the vocabulary does not hold included, is
+ * answered as it came, and `UNKNOWN_UNIT` is what speaks about that.
+ */
+export function toBaseUnit(size, unit) {
+  const number = Number(size);
+  const unitSize =
+    size === null || size === undefined || !Number.isFinite(number)
+      ? null
+      : number;
+  const scaled =
+    unitSize === null ? null : Math.round(unitSize * 1000 * 10_000) / 10_000;
+  switch (String(unit ?? '').toUpperCase()) {
+    case 'KILOGRAM':
+      return unitSize === null
+        ? { unitSize: null, unit: 'KILOGRAM' }
+        : { unitSize: scaled, unit: 'GRAM' };
+    case 'LITER':
+      return { unitSize: scaled, unit: 'MILLILITER' };
+    case 'PACK':
+      return { unitSize, unit: 'UNIT' };
+    default:
+      return { unitSize, unit };
+  }
+}
+
+/**
+ * The bounds of a pack count, a copy of `PACK_COUNT_MIN` and `PACK_COUNT_MAX`
+ * in `libs/luna-shopper/contracts` (backend plan 0162).
+ *
+ * The gateway refuses a count outside them, so a decision that carried one
+ * would fail the whole bulk request it is part of. This library is plain
+ * `.mjs` and cannot import the TypeScript, and `rules.test.mjs` holds the two
+ * to the committed OpenAPI document, which is generated from the contracts.
+ */
+export const PACK_COUNT_MIN = 2;
+export const PACK_COUNT_MAX = 1000;
 
 /** Two base sizes are one format when the family and the number agree. */
 export function sameBaseSize(a, b) {
@@ -428,6 +574,52 @@ export function canonicalBrand(brands, brand) {
 /** The canonical brand a spelling names, through a link if there is one. */
 export function findCanonicalBrand(brands, text) {
   return canonicalBrand(brands, findBrand(brands, text));
+}
+
+/**
+ * Every registered brand an entry's printed brand names, the key's own brand
+ * first (backend plan 0178).
+ *
+ * One printed name can belong to two businesses. El Jamón prints `Poseidón` on
+ * salmon loins, which is Poseidon Food, and the registered `Poseidon` is a
+ * cologne. The registry key is unique, so the second brand is reached through a
+ * homonym a person registered, and the queue answers both in the entry's
+ * `brandMatches`.
+ *
+ * Two sources, and each is trusted for what it knows:
+ *
+ * - **The key's own brand comes from the snapshot**, exactly as it did before
+ *   homonyms existed, so a gateway that predates the plan and sends no
+ *   `brandMatches` reads as it always has.
+ * - **A homonym comes from the entry**, because the snapshot is the list of
+ *   brands and holds no pointer between a printed key and a second brand. It
+ *   is still resolved against the snapshot: a brand registered after this run
+ *   started is not seen by this run, by a homonym or any other way.
+ *
+ * Each answer is `{ brand, printedAs }`, the brand always a canonical one.
+ * `printedAs` is the linked spelling the chain printed, on the key's own brand
+ * only, and null everywhere else.
+ */
+export function sourceBrands(brands, entry) {
+  const found = [];
+  const add = (brand, printedAs) => {
+    if (brand && !found.some((held) => held.brand.key === brand.key)) {
+      found.push({ brand, printedAs });
+    }
+  };
+
+  const registered = findBrand(brands, entry?.brand);
+  if (registered) {
+    const canonical = canonicalBrand(brands, registered);
+    add(canonical, canonical === registered ? null : registered.label);
+  }
+
+  const matches = Array.isArray(entry?.brandMatches) ? entry.brandMatches : [];
+  for (const match of matches) {
+    const held = brands?.get(match?.key ?? brandKey(match?.label));
+    add(canonicalBrand(brands, held ?? null), null);
+  }
+  return found;
 }
 
 /**
@@ -668,9 +860,19 @@ export function buildDecisionSchema({ categories, units }) {
     type: ['object', 'null'],
     properties: {
       nameEs: { type: 'string' },
-      nameEn: nullableString,
+      // Always written (backend plan 0184), so non null and required like the
+      // three fields the paragraph above is about.
+      nameEn: { type: 'string' },
       brand: nullableString,
       unitSize: { type: ['number', 'null'] },
+      // How many the pack holds (backend plans 0162 and 0177). Optional and
+      // nullable: most products are not packs, and a decision that states none
+      // lets the create take the count the row itself read.
+      packCount: {
+        type: ['integer', 'null'],
+        minimum: PACK_COUNT_MIN,
+        maximum: PACK_COUNT_MAX,
+      },
       defaultUnit: { type: 'string', enum: [...units] },
       // One or more leaf slugs (backend plan 0166), most fitting first. A
       // product in two aisles names both, and an empty list is ungrammatical
@@ -682,7 +884,7 @@ export function buildDecisionSchema({ categories, units }) {
       },
       ean: nullableString,
     },
-    required: ['nameEs', 'categorySlugs', 'defaultUnit'],
+    required: ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit'],
   };
 
   /**

@@ -23,6 +23,7 @@ import {
 import { CatalogAuditService } from './catalog-audit.service';
 import { LocationScopeService, setStack } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
+import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 
 /**
@@ -50,6 +51,7 @@ const BATCH = 3_000;
 describeIntegration('per shop availability (real Postgres)', () => {
   let dataSource: DataSource;
   let shopItems: SupermarketLocationItemService;
+  let admin: PlatformAdminService;
 
   beforeAll(async () => {
     const url = requiredEnv('CATALOG_DB_URL');
@@ -71,7 +73,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
     await dataSource.initialize();
     await dataSource.runMigrations();
 
-    const admin = new PlatformAdminService(new JwtService({}), {
+    admin = new PlatformAdminService(new JwtService({}), {
       getOrThrow: () => ({
         authJwtPublicKey: '',
         adminJwtPublicKey: '',
@@ -257,6 +259,127 @@ describeIntegration('per shop availability (real Postgres)', () => {
   }, 300_000);
 
   /**
+   * The harvester's offer with no price (plan 0182) says a chain lists a
+   * product, at the end of every run. The flag of a row that exists is derived
+   * from the shops, so the offer creates a row and never changes one.
+   */
+  it('leaves a derived false alone under onlyIfMissing, and creates the row of a product that has none', async () => {
+    const scopeItems = new SupermarketItemService(
+      dataSource.getRepository(SupermarketItem),
+      dataSource.getRepository(Item),
+      dataSource.getRepository(PriceScope),
+      dataSource.getRepository(SupermarketLocation),
+      admin,
+      new CatalogAuditService(dataSource),
+      new LocationScopeService()
+    );
+    const scopeRows = dataSource.getRepository(SupermarketItem);
+    const flagOf = async (itemId: string) =>
+      (await scopeRows.findOneBy({ itemId, priceScopeId: scopeId }))?.available;
+    // Two products of their own: the first test gave every shared one a row.
+    const items = dataSource.getRepository(Item);
+    const [soldNowhere, neverSeen] = (
+      await items.save(
+        ['Sold nowhere', 'Never seen'].map((name) =>
+          items.create({
+            name: { en: name, es: name },
+            defaultUnit: UnitOfMeasure.UNIT,
+          })
+        )
+      )
+    ).map((item) => item.id);
+
+    // Both shops say no, so catalog derives a false for the scope.
+    await crawl(shopA, [{ itemId: soldNowhere, available: false }]);
+    await crawl(shopB, [{ itemId: soldNowhere, available: false }]);
+    expect(await flagOf(soldNowhere)).toBe(false);
+    expect(await flagOf(neverSeen)).toBeUndefined();
+
+    const offer = () =>
+      scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [
+          { itemId: soldNowhere, available: true },
+          { itemId: neverSeen, available: true },
+        ],
+        onlyIfMissing: true,
+      });
+
+    // One row created, and the derived false is still false.
+    expect(await offer()).toEqual({ updated: 1 });
+    expect(await flagOf(soldNowhere)).toBe(false);
+    expect(await flagOf(neverSeen)).toBe(true);
+    const created = await scopeRows.findOneByOrFail({
+      itemId: neverSeen,
+      priceScopeId: scopeId,
+    });
+    expect(created.price).toBeNull();
+    expect(created.priceSourceKind).toBeNull();
+
+    // The offer of the next run writes nothing at all.
+    expect(await offer()).toEqual({ updated: 0 });
+    expect(await flagOf(soldNowhere)).toBe(false);
+
+    // A row that got there first wins, and a product catalog does not hold
+    // creates nothing. Neither fails the other products of the batch.
+    const [taken, fresh, deleted] = (
+      await items.save(
+        ['Taken', 'Fresh', 'Deleted'].map((name) =>
+          items.create({
+            name: { en: name, es: name },
+            defaultUnit: UnitOfMeasure.UNIT,
+          })
+        )
+      )
+    ).map((item) => item.id);
+    await scopeRows.save(
+      scopeRows.create({
+        itemId: taken,
+        priceScopeId: scopeId,
+        available: false,
+        priceSourceKind: null,
+      })
+    );
+    await items.delete({ id: deleted });
+    expect(
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [taken, deleted, fresh, 'not-a-uuid'].map((itemId) => ({
+          itemId,
+          available: true,
+        })),
+        onlyIfMissing: true,
+      })
+    ).toEqual({ updated: 1 });
+    expect(await flagOf(taken)).toBe(false);
+    expect(await flagOf(fresh)).toBe(true);
+    expect(await flagOf(deleted)).toBeUndefined();
+    // The row that was created is in the trail, as a create.
+    const freshRow = await scopeRows.findOneByOrFail({
+      itemId: fresh,
+      priceScopeId: scopeId,
+    });
+    const [trail]: { action: string }[] = await dataSource.query(
+      `SELECT "action"::text AS "action" FROM "catalog_audit"
+          WHERE "entityId" = $1`,
+      [freshRow.id]
+    );
+    expect(trail?.action).toBe('CREATE');
+
+    // Without the option the same message is the plain write it always was.
+    expect(
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [{ itemId: soldNowhere, available: true }],
+      })
+    ).toEqual({ updated: 1 });
+    expect(await flagOf(soldNowhere)).toBe(true);
+  }, 300_000);
+
+  /**
    * The read a basket at a shop makes (plan 0163, section 2): the three stored
    * states come back as they are, and a product with no row is absent rather
    * than false, because nobody said anything about it.
@@ -295,6 +418,96 @@ describeIntegration('per shop availability (real Postgres)', () => {
     expect(byItem.has(unknown)).toBe(true);
     expect(byItem.get(unknown)).toBe(null);
     expect(byItem.has(noRow)).toBe(false);
+  });
+
+  /**
+   * The product's name and brand, joined onto every read of the row (admin plan
+   * 0042, section 2). A shop of its own, so the page holds exactly these rows
+   * and the assertion is about all of them.
+   */
+  it('names the product and its brand on every read of a row', async () => {
+    const locations = dataSource.getRepository(SupermarketLocation);
+    const shopD = (
+      await locations.save(
+        locations.create({ supermarketId: (await chainOf(shopA)) as string })
+      )
+    ).id;
+    await setStack(dataSource.manager, shopD, [scopeId]);
+
+    const items = dataSource.getRepository(Item);
+    const [branded, unbranded, spanishOnly] = await items.save(
+      [
+        { name: { en: 'Whole milk', es: 'Leche entera' }, brand: 'Hacendado' },
+        { name: { en: 'Loose apples', es: 'Manzanas a granel' }, brand: null },
+        { name: { es: 'Arroz redondo' }, brand: 'SOS' },
+      ].map((fields) =>
+        items.create({ ...fields, defaultUnit: UnitOfMeasure.UNIT })
+      )
+    );
+
+    // The upsert answers the same view, so it names the product too.
+    const written = await shopItems.upsert({
+      userId: OPERATOR,
+      itemId: branded.id,
+      supermarketLocationId: shopD,
+      positionInStore: 'Aisle 4',
+    });
+    expect(written.itemName).toEqual({ en: 'Whole milk', es: 'Leche entera' });
+    expect(written.itemBrand).toBe('Hacendado');
+
+    await crawl(shopD, [
+      { itemId: unbranded.id, available: true },
+      { itemId: spanishOnly.id, available: false },
+    ]);
+
+    // Two rows a page, so the batched read runs once per page and not once.
+    const seen = new Map<
+      string,
+      { itemName: unknown; itemBrand: string | null }
+    >();
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 5; guard += 1) {
+      const page = await shopItems.listByLocation({
+        userId: OPERATOR,
+        supermarketLocationId: shopD,
+        limit: 2,
+        cursor,
+      });
+      for (const row of page.items) {
+        seen.set(row.itemId, {
+          itemName: row.itemName,
+          itemBrand: row.itemBrand,
+        });
+      }
+      if (page.nextCursor === null) {
+        break;
+      }
+      cursor = page.nextCursor;
+    }
+
+    expect(seen.size).toBe(3);
+    expect(seen.get(branded.id)).toEqual({
+      itemName: { en: 'Whole milk', es: 'Leche entera' },
+      itemBrand: 'Hacendado',
+    });
+    // A product with no brand keeps its name and a null brand.
+    expect(seen.get(unbranded.id)).toEqual({
+      itemName: { en: 'Loose apples', es: 'Manzanas a granel' },
+      itemBrand: null,
+    });
+    // The stored text, both languages or one: the reader picks, not this read.
+    expect(seen.get(spanishOnly.id)).toEqual({
+      itemName: { es: 'Arroz redondo' },
+      itemBrand: 'SOS',
+    });
+
+    const one = await shopItems.get({
+      userId: OPERATOR,
+      itemId: spanishOnly.id,
+      supermarketLocationId: shopD,
+    });
+    expect(one.itemName).toEqual({ es: 'Arroz redondo' });
+    expect(one.itemBrand).toBe('SOS');
   });
 
   it('answers not found for a shop that does not exist', async () => {

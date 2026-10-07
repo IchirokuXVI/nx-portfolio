@@ -1,4 +1,10 @@
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import {
+  isPrintedLength,
+  measuresContent,
+  packCountOf,
+  sourceSizeOf,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 
 /**
  * The size after the last comma of a printed name (plan 0169, section 6).
@@ -9,18 +15,29 @@ import { packCountOf } from '@portfolio/luna-shopper/contracts';
  * guessed about where a size starts. A name with no comma states no size.
  *
  * The size is stored verbatim as `sizeFormat`. The number read from it is
- * `unitSize`, in the unit the chain printed, the way the LIDL adapter reads
- * one: `6x33cl` is 198. A form that states no quantity (`ud`, `kg`, `pk 3`)
- * answers null, because a sold by weight row has no pack to measure and `ud`
- * is a count, not a size.
+ * `unitSize`, and `sizeUnit` is the catalog unit that number is in (plan
+ * 0177), the way the LIDL adapter reads one: `6x33cl` is 1980 `MILLILITER`,
+ * because the catalog holds no centilitre, and `1,5l` is 1.5 `LITER`. A form
+ * that states no quantity (`ud`, `kg`, `pk 3`) answers null, because a sold by
+ * weight row has no pack to measure and `ud` is a count, not a size.
+ *
+ * **A length is a dimension, not a size (plan 0183).** `30m` is how long the
+ * roll is and `125x157cm` is the two sides of one tablecloth, so a size
+ * printed in `m`, `cm` or `mm` answers no `unitSize` and no `packCount`. Only
+ * a weight, a volume or a count is multiplied, and only its `N` is a pack.
  */
 export interface ElJamonSize {
   /** The printed name without its size. Never empty. */
   name: string;
   /** Everything after the last comma, verbatim, or null. */
   sizeFormat: string | null;
-  /** The quantity the size states, in its printed unit, or null. */
+  /** The quantity the size states, in {@link sizeUnit}, or null. */
   unitSize: number | null;
+  /**
+   * The catalog unit {@link unitSize} is in (plan 0177). Null when there is
+   * no size, which a length (`m`, `cm`, `mm`) is one case of.
+   */
+  sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds (plan 0162), or null. */
   packCount: number | null;
   /** `kg` alone: the price is per kilogram and the pack has no fixed weight. */
@@ -72,6 +89,7 @@ export function splitSize(printed: string): ElJamonSize {
       name: name || text,
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
       soldByWeight: false,
     };
@@ -84,20 +102,35 @@ export function splitSize(printed: string): ElJamonSize {
       name,
       sizeFormat,
       unitSize: null,
+      sizeUnit: null,
       packCount: packCountOf(packOnly[1]),
       soldByWeight: false,
     };
   }
 
   const quantity = QUANTITY.exec(lower);
+  if (quantity && UNITS.has(quantity[3]) && isPrintedLength(quantity[3])) {
+    // The printed text is kept, because it is half of the row's key. The
+    // number is not: it measures the object and not what is inside it.
+    return {
+      name,
+      sizeFormat,
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+      soldByWeight: false,
+    };
+  }
   if (quantity && UNITS.has(quantity[3])) {
     const count = quantity[1] ? Number(quantity[1]) : null;
     const amount = Number(quantity[2].replace(',', '.'));
     return {
       name,
       sizeFormat,
-      unitSize: round(count ? count * amount : amount),
-      packCount: packCountOf(count),
+      // The amount through the one conversion every adapter shares, so a
+      // centilitre is written as ten millilitres here as it is everywhere.
+      ...sourceSizeOf(round(count ? count * amount : amount), quantity[3]),
+      packCount: measuresContent(quantity[3]) ? packCountOf(count) : null,
       soldByWeight: false,
     };
   }
@@ -106,6 +139,7 @@ export function splitSize(printed: string): ElJamonSize {
     name,
     sizeFormat,
     unitSize: null,
+    sizeUnit: null,
     packCount: null,
     // `kg` with no number: the row is priced per kilogram and weighed at the
     // till, which is what the unit price label `Kilo` says beside it.

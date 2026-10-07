@@ -162,10 +162,4 @@ describe('harvestSwitches', () => {
       'harvestEnabled',
     ]);
   });
-
-  it('says where every state came from', () => {
-    for (const item of harvestSwitches(evidence())) {
-      expect(item.source).toMatch(/^harvest\.switch\.from\./);
-    }
-  });
 });

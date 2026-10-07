@@ -1,0 +1,119 @@
+{
+  "id": "16566",
+  "ean": "8001090370587",
+  "slug": "compresa-super-evax-liberty-con-alas-caja",
+  "brand": "Evax",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": null,
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/a237dd9b538f1831652997b950a570ac.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/a237dd9b538f1831652997b950a570ac.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/a237dd9b538f1831652997b950a570ac.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/9d8e87015e825456cd0e872bf5165749.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/9d8e87015e825456cd0e872bf5165749.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/9d8e87015e825456cd0e872bf5165749.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/bd4454178c87411ebef835fd69d144f5.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/bd4454178c87411ebef835fd69d144f5.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/bd4454178c87411ebef835fd69d144f5.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Evax",
+    "origin": null,
+    "suppliers": [
+      {
+        "name": "Procter & Gamble España"
+      }
+    ],
+    "legal_name": "",
+    "description": "Compresa super Evax Liberty con alas",
+    "counter_info": null,
+    "danger_mentions": "",
+    "alcohol_by_volume": null,
+    "mandatory_mentions": "",
+    "production_variant": "",
+    "usage_instructions": "",
+    "storage_instructions": "",
+    "is_prepared_by_mercadona": false
+  },
+  "is_bulk": false,
+  "packaging": "Caja",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/16566/compresa-super-evax-liberty-con-alas-caja",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/a237dd9b538f1831652997b950a570ac.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 20,
+      "name": "Cuidado facial y corporal",
+      "level": 0,
+      "order": 241,
+      "categories": [
+        {
+          "id": 190,
+          "name": "Higiene íntima",
+          "level": 1,
+          "order": 241,
+          "categories": [
+            {
+              "id": 615,
+              "name": "Compresas",
+              "level": 2,
+              "order": 241
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    ""
+  ],
+  "display_name": "Compresa super Evax Liberty con alas",
+  "main_feature": "Liberty con alas",
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": null,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": "ud.",
+    "unit_size": 1,
+    "bulk_price": "0.32",
+    "unit_price": "3.20",
+    "approx_size": false,
+    "size_format": "ud",
+    "total_units": 10,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "4.000",
+    "price_decreased": false,
+    "reference_price": "0.320",
+    "min_bunch_amount": 1,
+    "reference_format": "ud",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": null,
+    "ingredients": ""
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

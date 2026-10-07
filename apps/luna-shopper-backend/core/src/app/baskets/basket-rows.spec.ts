@@ -9,6 +9,7 @@ import {
 import { canChangeDemand } from '../lists/list-acts';
 import {
   allocateOldestFirst,
+  boughtElsewhereOf,
   boughtOf,
   groupEntries,
   newestSettlement,
@@ -49,6 +50,8 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
     createdAt: new Date(2026, 0, 1, 0, 0, seq),
     itemIds: [],
     settlements: [],
+    // Nobody else bought it, which is every row before plan 0188.
+    elsewhere: null,
     ...over,
   };
 }
@@ -593,5 +596,197 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
     expect(
       noteOf([only], BasketRowState.DONE, facts({ [only.lineId]: skip() }))
     ).toBeNull();
+  });
+});
+
+/**
+ * A line somebody bought through another basket (plan 0188).
+ *
+ * The read hands these rules a count and a time per line and never a person, so
+ * what is stated here is arithmetic: what the row says, what state it is in and
+ * whether a shopper's progress moves when somebody else does the buying.
+ */
+describe('bought through another basket (plan 0188)', () => {
+  const at = new Date(2026, 0, 1, 12, 0, 0);
+  const later = new Date(2026, 0, 1, 13, 0, 0);
+
+  it('is DONE with nothing left and nothing bought here', () => {
+    const only = entry({
+      quantity: 0,
+      elsewhere: { quantity: 2, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.DONE);
+    expect(view.boughtElsewhere).toBe(2);
+    // This basket's own numbers keep their meaning: it bought none, and it
+    // was never asked for the units somebody else took.
+    expect(view.bought).toBe(0);
+    expect(view.left).toBe(0);
+    expect(view.asked).toBe(0);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+    expect(view.noteAt).toBe(at.toISOString());
+    // Nobody of this basket touched the row, and nobody else is named on it.
+    expect(view.touchedBy).toBeNull();
+    expect(view.touchedAt).toBeNull();
+    expect(view.entries[0]).toMatchObject({
+      boughtElsewhere: 2,
+      bought: 0,
+      left: 0,
+      state: BasketRowState.DONE,
+    });
+  });
+
+  it('keeps the state of today while something is left, and adds the note', () => {
+    const only = entry({
+      quantity: 1,
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    // Another basket's purchase is not this basket's: nothing bought here and
+    // one left is `WANTED`, exactly as the table of plan 0130 section 4 says.
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.left).toBe(1);
+    expect(view.bought).toBe(0);
+    expect(view.boughtElsewhere).toBe(1);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+  });
+
+  it('is PARTLY when this basket bought some too and something is left', () => {
+    const only = entry({
+      quantity: 1,
+      settlements: [bought(1)],
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.PARTLY);
+    expect(view.bought).toBe(1);
+    expect(view.asked).toBe(2);
+    expect(view.boughtElsewhere).toBe(1);
+  });
+
+  it('sums the entries and dates the note by the newest purchase', () => {
+    const rows = [
+      entry({ quantity: 0, elsewhere: { quantity: 2, settledAt: at } }),
+      entry({ quantity: 0, elsewhere: { quantity: 3, settledAt: later } }),
+      entry({ quantity: 1 }),
+    ];
+    const view = toRowView(groupEntries(rows)[0], OPEN_CONTEXT);
+
+    expect(boughtElsewhereOf(rows)).toBe(5);
+    expect(view.boughtElsewhere).toBe(5);
+    expect(view.entries.map((row) => row.boughtElsewhere)).toEqual([2, 3, 0]);
+    expect(view.noteAt).toBe(later.toISOString());
+    // One household still asks for one, so the row is not done.
+    expect(view.state).toBe(BasketRowState.WANTED);
+  });
+
+  it('lets SKIPPED_EARLIER win when both notes apply', () => {
+    const only = entry({
+      quantity: 1,
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const stale = skip({ fresh: false });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: facts({ [only.lineId]: stale }),
+    });
+
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
+    expect(view.noteAt).toBe(stale.skippedAt.toISOString());
+    // The count is still on the row, so nothing about the purchase is lost.
+    expect(view.boughtElsewhere).toBe(1);
+  });
+
+  it('says so on a row that is skipped now, where the skip has no note', () => {
+    const only = entry({
+      quantity: 1,
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: facts({ [only.lineId]: skip() }),
+    });
+
+    expect(view.state).toBe(BasketRowState.SKIPPED);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+  });
+
+  it('says so on a row this basket finished itself', () => {
+    const only = entry({
+      quantity: 0,
+      settlements: [bought(1)],
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.DONE);
+    expect(view.bought).toBe(1);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+    // `touchedBy` stays about this basket's own act.
+    expect(view.touchedBy).toBe('p1');
+  });
+
+  it('does not let another basket’s purchase hide that the shop had none', () => {
+    const only = entry({
+      quantity: 1,
+      settlements: [closed()],
+      elsewhere: { quantity: 1, settledAt: at },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.NOT_AVAILABLE);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+  });
+
+  it('counts the row in total and in done, so progress does not fall', () => {
+    const wanted = toRowView(
+      groupEntries([entry({ content: 'Bread', quantity: 1 })])[0],
+      OPEN_CONTEXT
+    );
+    const before = toRowView(
+      groupEntries([entry({ content: 'Milk', quantity: 2 })])[0],
+      OPEN_CONTEXT
+    );
+    const after = toRowView(
+      groupEntries([
+        entry({
+          content: 'Milk',
+          quantity: 0,
+          elsewhere: { quantity: 2, settledAt: at },
+        }),
+      ])[0],
+      OPEN_CONTEXT
+    );
+
+    expect(progressOf([wanted, before])).toEqual({
+      done: 0,
+      unavailable: 0,
+      total: 2,
+      pending: 2,
+    });
+    // Somebody else bought the milk. The total holds and one row is done,
+    // where before plan 0188 the row left and the total fell to one.
+    expect(progressOf([wanted, after])).toEqual({
+      done: 1,
+      unavailable: 0,
+      total: 2,
+      pending: 1,
+    });
+  });
+
+  it('leaves a row with no such purchase exactly as it was', () => {
+    const only = entry({ quantity: 2 });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.boughtElsewhere).toBe(0);
+    expect(view.entries[0].boughtElsewhere).toBe(0);
+    expect(view.note).toBeNull();
+    expect(stateOf([entry({ quantity: 0 })], 0, 0, null, NO_FACTS)).toBe(
+      BasketRowState.WANTED
+    );
   });
 });

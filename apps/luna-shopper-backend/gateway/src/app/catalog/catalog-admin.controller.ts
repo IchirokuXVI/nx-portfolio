@@ -30,6 +30,7 @@ import {
   SUPERMARKET_PATTERNS,
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsResult,
+  type BrandHomonymsView,
   type BrandKeysResult,
   type BrandPage,
   type BrandSpellingsResult,
@@ -75,6 +76,7 @@ import {
 import {
   MAX_PAGE_SIZE,
   PageQueryDto,
+  requireProductEan,
   UuidParam,
 } from '@portfolio/luna-shopper/platform';
 import { adminCredential } from '../admin/admin-credential';
@@ -102,6 +104,8 @@ import {
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
 import {
+  AddBrandHomonymDto,
+  AddItemEanDto,
   AddItemPriceDto,
   ApplyProductGroupAssignmentsDto,
   CreateBrandDto,
@@ -253,11 +257,17 @@ export class AdminCatalogSupermarketsController {
     });
   }
 
+  /**
+   * An `externalRef` that another shop holds answers 409
+   * `location_external_ref_taken` and names that shop in `details.heldBy`
+   * (plan 0195). The catalog holds one shop for each reference, across
+   * chains and providers. Nothing is written.
+   */
   @Post(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.create, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, locationRefTaken: true })
   createLocation(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -406,10 +416,14 @@ export class AdminCatalogLocationsController {
    * **Editing a postal code does not move the shop's price scope**, which the
    * entity says and which is a real trap: an operator correcting an address may
    * reasonably expect the pricing to follow, and it does not.
+   *
+   * An `externalRef` that another shop holds answers 409
+   * `location_external_ref_taken` and names that shop in `details.heldBy`
+   * (plan 0195). Nothing is written.
    */
   @Patch(':id')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, locationRefTaken: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -557,16 +571,22 @@ export class AdminCatalogSectionsController {
 export class AdminCatalogItemsController {
   constructor(private readonly nats: NatsClient) {}
 
+  /**
+   * **The EAN is a real barcode or null, and it is refused here** (plan 0184)
+   * with `item_ean_invalid`, before anything crosses the broker. Catalog makes
+   * the same check for every other writer, with the same function.
+   */
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true, conflict: true })
-  create(
+  async create(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemDto
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(ITEM_PATTERNS.create, {
       ...adminCredential(admin),
       ...dto,
+      ean: requireProductEan(dto.ean),
     });
   }
 
@@ -586,13 +606,17 @@ export class AdminCatalogItemsController {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ body: true, conflict: true })
-  createMany(
+  async createMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemsDto
   ): Promise<CreateItemsResult> {
     return this.nats.send<CreateItemsResult>(ITEM_PATTERNS.createMany, {
       ...adminCredential(admin),
-      items: dto.items,
+      // Each EAN a real barcode or null, as on the single create (plan 0184).
+      items: dto.items.map((item) => ({
+        ...item,
+        ean: requireProductEan(item.ean),
+      })),
     });
   }
 
@@ -636,6 +660,10 @@ export class AdminCatalogItemsController {
    * the ones curation has not reached are found. Catalog knows the question as
    * `withoutProductGroup`, and this is where the literal becomes the flag
    * (admin plan 0012, section 2).
+   *
+   * `withoutPriceAtScopeId` is the worklist of one price scope (plan 0187):
+   * the products that scope shows no price for. It is the one parameter that
+   * puts `total` on the page, and an id that names no scope is a 404.
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
@@ -644,12 +672,17 @@ export class AdminCatalogItemsController {
     @Query() query: AdminSearchItemsQueryDto
   ): Promise<ItemPage> {
     const group = referenceFilter(query.productGroupId);
+    // The same literal on the category (admin plan 0043, section 2): `none`
+    // becomes the flag catalog knows the question by.
+    const category = referenceFilter(query.categoryId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: admin.adminId,
       query: query.query,
-      categoryId: query.categoryId,
+      categoryId: category.id,
+      withoutCategory: category.none,
       productGroupId: group.id,
       withoutProductGroup: group.none,
+      withoutPriceAtScopeId: query.withoutPriceAtScopeId,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -693,7 +726,17 @@ export class AdminCatalogItemsController {
     });
   }
 
-  /** The only place an item joins a product group, and it is a person doing it. */
+  /**
+   * The only place an item joins a product group, and it is a person doing it.
+   *
+   * **An EAN that is not a real barcode is refused with `item_ean_invalid`, by
+   * catalog and not here** (plan 0184). Only catalog holds the product, and
+   * the check runs only on a write that changes the EAN. A product that already
+   * holds an in-store code keeps it, so an edit that sends that code back
+   * unchanged must still save, and this route cannot tell that edit from one
+   * that sets the code. The back office sends only the fields that changed;
+   * any other client may send the whole product.
+   */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
   @ApiProblemResponses({ body: true, conflict: true })
@@ -718,6 +761,56 @@ export class AdminCatalogItemsController {
     return this.nats.send(ITEM_PATTERNS.delete, {
       ...adminCredential(admin),
       itemId: id,
+    });
+  }
+
+  /**
+   * Give a product one more barcode (plan 0185).
+   *
+   * A maker prints a new barcode when it changes a factory, a supplier or a
+   * label, and the product on the shelf is the same. The product is then found
+   * by any of its barcodes, and the next harvest run binds a row that prints
+   * the new one by itself.
+   *
+   * **A real barcode, refused here** with `item_ean_invalid` before anything
+   * crosses the broker, as on the create. A barcode another product holds
+   * answers 409 `item_ean_held` and names that product in `details`. One the
+   * product already holds changes nothing. Answers the product, with every
+   * barcode it now holds in `eans`.
+   */
+  @Post(':id/eans')
+  @ApiContractResponse(ITEM_PATTERNS.addEan, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, eanHeld: true })
+  addEan(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AddItemEanDto
+  ): Promise<ItemView> {
+    return this.nats.send<ItemView>(ITEM_PATTERNS.addEan, {
+      ...adminCredential(admin),
+      itemId: id,
+      ean: requireProductEan(dto.ean),
+    });
+  }
+
+  /**
+   * Take one barcode off a product (plan 0185).
+   *
+   * The barcode travels in the path, and one the product does not hold answers
+   * 404. When it was the product's first barcode, the oldest of the rest
+   * becomes the first. Answers the product as it now is.
+   */
+  @Delete(':id/eans/:ean')
+  @ApiContractResponse(ITEM_PATTERNS.removeEan)
+  removeEan(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Param('ean') ean: string
+  ): Promise<ItemView> {
+    return this.nats.send<ItemView>(ITEM_PATTERNS.removeEan, {
+      ...adminCredential(admin),
+      itemId: id,
+      ean,
     });
   }
 }
@@ -938,9 +1031,10 @@ export class AdminCatalogCategoriesController {
  * the brands the catalog holds because there was no such list. These routes are
  * the list, plus the one read that says how each chain spells a brand.
  *
- * **The only brand that can be deleted is a spelling of another** (plan 0124).
- * Everything else still cannot be removed, by section 9 of plan 0115, because
- * its products have nowhere to go.
+ * **A brand can be deleted when it is a spelling of another** (plan 0124), **or
+ * when nothing points at it** (the follow up of plan 0178). A brand that a
+ * product holds still cannot be removed, by section 9 of plan 0115, because its
+ * products have nowhere to go.
  *
  * There is no `key` anywhere in a request body: the key is made from the label,
  * and editing the label is the only thing that changes it.
@@ -1123,14 +1217,20 @@ export class AdminCatalogBrandsController {
   }
 
   /**
-   * Remove a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * **The only brand that can be deleted is one linked to another**, and every
-   * other brand answers 409 `brand_not_linked`. Deleting a spelling puts its
-   * products back where it found them, unbranded and still carrying the text
-   * the chain printed, so the key returns to the suggestions list on its own and
+   * **A brand linked to another is a spelling.** Deleting it puts its products
+   * back where it found them, unbranded and still carrying the text the chain
+   * printed, so the key returns to the suggestions list on its own and
    * registering it again picks the same products up. `movedItems` is how many
    * went back.
+   *
+   * **Any other brand is deleted only when nothing points at it**, which is how
+   * a registry row that was never a brand leaves. Its homonyms go with it and
+   * `movedItems` is zero. While a product holds it or a spelling is linked to
+   * it, the answer is 409 `brand_in_use`, with `itemCount` and `linkCount` in
+   * `details`, and nothing is written: the delete never unbrands a product and
+   * never moves one. Move the products and the spellings first.
    */
   @Delete(':id')
   @ApiContractResponse(BRAND_PATTERNS.delete)
@@ -1142,6 +1242,55 @@ export class AdminCatalogBrandsController {
     return this.nats.send<DeleteBrandResult>(BRAND_PATTERNS.delete, {
       ...adminCredential(admin),
       brandId: id,
+    });
+  }
+
+  /**
+   * Say that a printed name also names this brand (plan 0178).
+   *
+   * One name can belong to two businesses, and the key is unique, so the second
+   * brand gets a pointer from that printed key rather than a key of its own.
+   * The key's own brand stays the first answer, no product moves, and the queue
+   * then answers both brands for a row printing that name. Answers 400
+   * `brand_homonym_is_own_key` for the brand's own key, and the brand's whole
+   * list of homonyms otherwise. Adding one that is already there changes
+   * nothing.
+   */
+  @Post(':id/homonyms')
+  @ApiContractResponse(BRAND_PATTERNS.addHomonym, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  addHomonym(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AddBrandHomonymDto
+  ): Promise<BrandHomonymsView> {
+    return this.nats.send<BrandHomonymsView>(BRAND_PATTERNS.addHomonym, {
+      ...adminCredential(admin),
+      brandId: id,
+      printedKey: dto.printedKey,
+    });
+  }
+
+  /**
+   * Take a homonym back (plan 0178).
+   *
+   * Only the pointer goes: the brand, the key's own brand and every product
+   * stay as they were. The printed key travels in the path, keyed the same way
+   * as on the way in, and one this brand does not hold answers 404.
+   */
+  @Delete(':id/homonyms/:printedKey')
+  @ApiContractResponse(BRAND_PATTERNS.removeHomonym)
+  removeHomonym(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Param('printedKey') printedKey: string
+  ): Promise<BrandHomonymsView> {
+    return this.nats.send<BrandHomonymsView>(BRAND_PATTERNS.removeHomonym, {
+      ...adminCredential(admin),
+      brandId: id,
+      printedKey,
     });
   }
 }
@@ -1236,6 +1385,7 @@ export class AdminCatalogSupermarketItemsController {
       {
         ...adminCredential(admin),
         itemId: query.itemId,
+        itemIds: query.itemIds,
         priceScopeId: query.priceScopeId,
         sourceKind: query.sourceKind,
         stale: query.stale,

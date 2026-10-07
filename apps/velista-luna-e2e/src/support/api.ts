@@ -243,6 +243,8 @@ export interface BasketRowView {
   content: string;
   left: number;
   bought: number;
+  /** Units bought through another basket, or through none (backend `0188`). */
+  boughtElsewhere?: number;
   state: string;
 }
 
@@ -255,6 +257,42 @@ export async function readBasketRows(
     `/v1/baskets/${basketId}`
   );
   return body.rows;
+}
+
+/**
+ * `GET /v1/baskets/live`: the caller's own permanent basket, which covers every
+ * list they can write (backend `0133`).
+ */
+export async function readLiveBasket(
+  s: Session
+): Promise<{ id: string; rows: BasketRowView[] }> {
+  return s.get<{ id: string; rows: BasketRowView[] }>('/v1/baskets/live');
+}
+
+/** `POST /v1/baskets/:id/lines`: a line added from a basket onto a covered list. */
+export async function addBasketLine(
+  s: Session,
+  basketId: string,
+  body: { targetListId: string; content: string; quantity: number }
+): Promise<BasketRowView> {
+  const result = await s.post<{ row: BasketRowView }>(
+    `/v1/baskets/${basketId}/lines`,
+    body
+  );
+  return result.row;
+}
+
+/** `POST /v1/baskets/:id/rows/:rowKey/settle`: buy units of one row. */
+export async function buyBasketRow(
+  s: Session,
+  basketId: string,
+  rowKey: string,
+  body: { quantity: number; from: number }
+): Promise<void> {
+  await s.post(`/v1/baskets/${basketId}/rows/${rowKey}/settle`, {
+    outcome: 'BOUGHT',
+    ...body,
+  });
 }
 
 /** `GET /v1/baskets/:id/share-link`: the link, if one exists. */

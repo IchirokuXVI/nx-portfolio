@@ -1,11 +1,22 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import capsules from './__fixtures__/product-capsules-per-unit.json';
-import categoryExpanded from './__fixtures__/category-expanded.json';
 import categoriesTree from './__fixtures__/categories-tree.json';
+import categoryExpanded from './__fixtures__/category-expanded.json';
+import cheeseListing from './__fixtures__/category-listing-cheese.json';
+import approximateWeight from './__fixtures__/product-approximate-weight.json';
+import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
+import capsules from './__fixtures__/product-capsules-per-unit.json';
+import oliveOil from './__fixtures__/product-detail-es.json';
+import detergent from './__fixtures__/product-detergent-per-wash.json';
+import eggs from './__fixtures__/product-eggs-per-dozen.json';
+import fixedPackInStoreBarcode from './__fixtures__/product-fixed-pack-in-store-barcode.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
-import oliveOil from './__fixtures__/product-detail-es.json';
+import packOfPads from './__fixtures__/product-pack-of-pads.json';
+import packOfWipes from './__fixtures__/product-pack-of-wipes.json';
+import per100g from './__fixtures__/product-reference-format-100g.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
+import rollOfServices from './__fixtures__/product-roll-of-services.json';
+import singleRazor from './__fixtures__/product-single-razor.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
 import {
   normalizeCategories,
@@ -27,6 +38,7 @@ describe('normalizeProduct', () => {
       ean: '8480000135636',
       name: { es: 'Aceite de oliva 0,4º Hacendado' },
       brand: 'Hacendado',
+      soldByWeight: false,
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
@@ -64,10 +76,10 @@ describe('normalizeProduct', () => {
   describe('bulk_price is stored verbatim and never recomputed (section 2.4)', () => {
     it('keeps the value even when it equals unit_price / unit_size', () => {
       const product = normalizeProduct(referenceFormat);
-      expect(product.price).toBe(1.8);
-      expect(product.unitSize).toBe(0.4);
-      // 1.80 / 0.4 is 4.50, so deriving would agree here. It is still not derived.
-      expect(product.unitPrice).toBe(4.5);
+      expect(product.price).toBe(3.4);
+      expect(product.unitSize).toBe(0.2);
+      // 3.40 / 0.2 is 17.00, so deriving would agree here. It is still not derived.
+      expect(product.unitPrice).toBe(17);
     });
 
     it('keeps a value normalized per pack unit rather than per kilo', () => {
@@ -89,12 +101,177 @@ describe('normalizeProduct', () => {
     });
   });
 
-  it('keeps reference_format as the source wrote it, label and number disagreeing', () => {
-    // `100 ml` sits on a number that is per LITRE. It is a price tag for a human
-    // and cannot be parsed into a unit, which is why it is stored as text.
-    const product = normalizeProduct(referenceFormat);
-    expect(product.unitPriceLabel).toBe('100 ml');
-    expect(product.unit).toBe(UnitOfMeasure.LITER);
+  describe('the label names what the figure is (plan 0189)', () => {
+    /** A captured product with some fields of its price block replaced. */
+    const withPrice = (
+      raw: { price_instructions: object },
+      fields: Record<string, unknown>
+    ) => ({
+      ...raw,
+      price_instructions: { ...raw.price_instructions, ...fields },
+    });
+
+    it('is what the four captures say it is', () => {
+      // As served on 2026-10-06. `reference_format` names `reference_price`,
+      // and `bulk_price` is another figure on each of the four.
+      expect(referenceFormat.price_instructions).toMatchObject({
+        unit_price: '3.40',
+        unit_size: 0.2,
+        size_format: 'l',
+        bulk_price: '17.00',
+        reference_price: '1.700',
+        reference_format: '100 ml',
+      });
+      expect(per100g.price_instructions).toMatchObject({
+        unit_price: '1.60',
+        unit_size: 0.049,
+        size_format: 'kg',
+        bulk_price: '32.65',
+        reference_price: '3.266',
+        reference_format: '100 g',
+      });
+      expect(eggs.price_instructions).toMatchObject({
+        unit_price: '3.35',
+        unit_size: 12,
+        size_format: 'ud',
+        bulk_price: '0.28',
+        reference_price: '3.350',
+        reference_format: 'dc',
+      });
+      expect(detergent.price_instructions).toMatchObject({
+        unit_price: '5.85',
+        unit_size: 3,
+        size_format: 'l',
+        total_units: 50,
+        unit_name: 'lavados',
+        bulk_price: '1.95',
+        reference_price: '0.117',
+        reference_format: 'lv',
+      });
+    });
+
+    it('keeps the label as sent when the two prices are one figure', () => {
+      // The olive oil: `bulk_price` and `reference_price` are both 8.75.
+      expect(normalizeProduct(oliveOil).unitPriceLabel).toBe('L');
+    });
+
+    it('writes L beside the price of a litre that the chain labels per 100 ml', () => {
+      const product = normalizeProduct(referenceFormat);
+      // The figure is `bulk_price`, untouched: 17 a litre and not 1.70.
+      expect(product.unitPrice).toBe(17);
+      expect(product.unitPriceLabel).toBe('L');
+      expect(product.unit).toBe(UnitOfMeasure.LITER);
+    });
+
+    it('writes kg beside the price of a kilo that the chain labels per 100 g', () => {
+      // 32.65 over ten is 3.265 and the chain prints 3.266: each field is
+      // rounded on its own, so the two agree within a step.
+      const product = normalizeProduct(per100g);
+      expect(product.unitPrice).toBe(32.65);
+      expect(product.unitPriceLabel).toBe('kg');
+    });
+
+    it('writes ud beside the price of one egg that the chain labels per dozen', () => {
+      const product = normalizeProduct(eggs);
+      expect(product.unitPrice).toBe(0.28);
+      expect(product.unitPriceLabel).toBe('ud');
+      // `dz` is the same label in another spelling.
+      expect(
+        normalizeProduct(withPrice(eggs, { reference_format: 'dz' }))
+          .unitPriceLabel
+      ).toBe('ud');
+    });
+
+    it('writes L beside the price of a litre that the chain labels per wash', () => {
+      const product = normalizeProduct(detergent);
+      expect(product.unitPrice).toBe(1.95);
+      expect(product.unitPriceLabel).toBe('L');
+    });
+
+    it('writes kg for a detergent sized in kilos', () => {
+      // No captured product shows it, so this is the detergent with its size
+      // format changed: the same evidence, on a powder.
+      expect(
+        normalizeProduct(withPrice(detergent, { size_format: 'kg' }))
+          .unitPriceLabel
+      ).toBe('kg');
+    });
+
+    it('keeps lv when both prices are the price of a wash', () => {
+      // A pack of tablets: the chain compares it per wash in both fields.
+      expect(
+        normalizeProduct(
+          withPrice(detergent, { bulk_price: '0.12', reference_price: '0.117' })
+        ).unitPriceLabel
+      ).toBe('lv');
+    });
+
+    it('keeps lv when the payload does not say what the figure is', () => {
+      for (const fields of [
+        { total_units: null },
+        { total_units: 40 },
+        { bulk_price: '2.40' },
+        { size_format: 'ud' },
+      ]) {
+        expect(
+          normalizeProduct(withPrice(detergent, fields)).unitPriceLabel
+        ).toBe('lv');
+      }
+    });
+
+    it('keeps the label as sent when the numbers agree with no rule', () => {
+      // The 110 products of plan 0038: 2.45 for 0.15 kg beside 16.75.
+      const product = normalizeProduct(inconsistent);
+      expect(product.unitPrice).toBe(16.75);
+      expect(product.unitPriceLabel).toBe('kg');
+      // A nail polish of 11 ml at 2.50 carries 2.50 under `100 ml`. Whatever
+      // `reference_price` holds, nothing says the figure is per litre.
+      for (const reference_price of ['2.500', '22.727']) {
+        expect(
+          normalizeProduct(
+            withPrice(referenceFormat, {
+              unit_price: '2.50',
+              unit_size: 0.011,
+              bulk_price: '2.50',
+              reference_price,
+            })
+          ).unitPriceLabel
+        ).toBe('100 ml');
+      }
+    });
+
+    it('keeps the label as sent when the payload has no reference_price', () => {
+      expect(
+        normalizeProduct(withPrice(referenceFormat, { reference_price: null }))
+          .unitPriceLabel
+      ).toBe('100 ml');
+    });
+
+    it('reads the same label from a category listing', () => {
+      const [listed] = normalizeCategoryProducts({
+        id: 1,
+        name: 'Cuidado corporal',
+        products: [referenceFormat],
+      });
+      expect(listed).toMatchObject({
+        externalId: '46815',
+        unitPrice: 17,
+        unitPriceLabel: 'L',
+      });
+    });
+
+    it('sorts the captured cheese listing by rule', () => {
+      // 38 products, each compared per kilo: the label as sent on every one.
+      // The listing holds no product of the other rules.
+      const labels = normalizeCategoryProducts(cheeseListing).map(
+        (product) => product.unitPriceLabel
+      );
+      const sent = cheeseListing.categories
+        .flatMap((category) => category.products)
+        .map((product) => product.price_instructions.reference_format);
+      expect(labels).toHaveLength(38);
+      expect(labels).toEqual(sent);
+    });
   });
 
   it('reads a missing EAN and an empty brand as null, not as empty strings', () => {
@@ -103,10 +280,10 @@ describe('normalizeProduct', () => {
     expect(product.brand).toBeNull();
   });
 
-  it('leaves the unit null for size_format "m", which has no UnitOfMeasure', () => {
+  it('states no size and no unit for size_format "m": a length is not a size (plan 0183)', () => {
     const product = normalizeProduct(sizeFormatM);
     expect(product.unit).toBeNull();
-    expect(product.unitSize).toBe(30);
+    expect(product.unitSize).toBeNull();
     expect(isImportableSizeFormat('m')).toBe(false);
   });
 
@@ -159,6 +336,56 @@ describe('normalizeProduct', () => {
       }
     });
 
+    describe('a box priced as one piece (plan 0177)', () => {
+      /** Product 11801 with its price block changed, for the cases around it. */
+      const boxWith = (fields: Record<string, unknown>) => ({
+        ...boxOfCapsules,
+        price_instructions: { ...boxOfCapsules.price_instructions, ...fields },
+      });
+
+      it('is what the captured product says it is', () => {
+        // The fields the rule reads, pinned, so a recapture that moves one of
+        // them fails here rather than quietly changing what the rule means.
+        expect(boxOfCapsules.price_instructions).toMatchObject({
+          is_pack: false,
+          pack_size: null,
+          total_units: 16,
+          unit_size: 0.16,
+          size_format: 'kg',
+          reference_format: 'ud',
+        });
+      });
+
+      it('reads total_units as the count of a box the chain compares per piece', () => {
+        const product = normalizeProduct(boxOfCapsules);
+        expect(product.packCount).toBe(16);
+        // The size is what the box weighs, and the count is beside it.
+        expect(product.unitSize).toBe(0.16);
+        expect(product.unit).toBe(UnitOfMeasure.KILOGRAM);
+      });
+
+      it('reads nothing when the comparison price is not per piece', () => {
+        expect(
+          normalizeProduct(boxWith({ reference_format: 'kg' })).packCount
+        ).toBeNull();
+      });
+
+      it('reads nothing when the size is itself a count', () => {
+        expect(
+          normalizeProduct(boxWith({ size_format: 'ud' })).packCount
+        ).toBeNull();
+      });
+
+      it('reads nothing when total_units is not set, or is 1', () => {
+        expect(
+          normalizeProduct(boxWith({ total_units: null })).packCount
+        ).toBeNull();
+        expect(
+          normalizeProduct(boxWith({ total_units: 1 })).packCount
+        ).toBeNull();
+      });
+    });
+
     it('reads the same count from a category listing', () => {
       const [cheese] = normalizeCategoryProducts(categoryExpanded);
       expect(cheese.packCount).toBeNull();
@@ -188,7 +415,10 @@ describe('the category tree', () => {
   it('normalizes the two levels', () => {
     const roots = normalizeCategories(categoriesTree);
     expect(roots).toHaveLength(2);
-    expect(roots[0]).toMatchObject({ id: 12, name: 'Aceite, especias y salsas' });
+    expect(roots[0]).toMatchObject({
+      id: 12,
+      name: 'Aceite, especias y salsas',
+    });
     expect(roots[0].children.map((c) => c.id)).toEqual([112, 113]);
   });
 
@@ -224,6 +454,340 @@ describe('the category tree', () => {
       id: 4,
       name: 'Charcutería y quesos',
     });
+  });
+});
+
+describe('the unit a size is in (plan 0177)', () => {
+  // Mercadona prints the unit alone and never a centilitre: `kg`, `l`, `ud`
+  // and `m` are the four values of the whole assortment. A run writes `unit`
+  // as the row's `sizeUnit`, so these are the three it can state.
+  it('is the litre of a product sized in l', () => {
+    expect(normalizeProduct(oliveOil)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.LITER,
+    });
+  });
+
+  it('is the kilogram of a product sized in kg', () => {
+    expect(normalizeProduct(inconsistent)).toMatchObject({
+      unitSize: 0.15,
+      unit: UnitOfMeasure.KILOGRAM,
+    });
+  });
+
+  it('is the unit of a product sized in ud', () => {
+    expect(normalizeProduct(noEan)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+});
+
+describe('a size of one unit (plan 0183)', () => {
+  /** The pad fixture with its price block changed, for the cases no capture shows. */
+  const padsWith = (fields: Record<string, unknown>) => ({
+    ...packOfPads,
+    price_instructions: { ...packOfPads.price_instructions, ...fields },
+  });
+
+  it('is what the captured pack of pads says it is', () => {
+    expect(packOfPads.id).toBe('16566');
+    expect(packOfPads.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 10,
+      unit_name: 'ud.',
+      unit_price: '3.20',
+      reference_price: '0.320',
+      reference_format: 'ud',
+      is_pack: false,
+      pack_size: null,
+    });
+  });
+
+  it('reads the real count of a pack of pads from total_units', () => {
+    expect(normalizeProduct(packOfPads)).toMatchObject({
+      unitSize: 10,
+      unit: UnitOfMeasure.UNIT,
+      packCount: null,
+    });
+  });
+
+  it('reads the real count of a pack of wipes from total_units', () => {
+    expect(packOfWipes.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 15,
+      unit_price: '0.80',
+      reference_price: '0.054',
+    });
+    expect(normalizeProduct(packOfWipes)).toMatchObject({
+      unitSize: 15,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+
+  it('keeps 1 for a single razor, whose comparison price is its own price', () => {
+    expect(singleRazor.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: null,
+      unit_price: '3.00',
+      reference_price: '3.000',
+    });
+    expect(normalizeProduct(singleRazor)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+
+  it('keeps 1 for one roll whose total_units counts sheets and not pieces', () => {
+    expect(rollOfServices.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 600,
+      unit_name: 'servicios',
+      unit_price: '3.75',
+      reference_price: '3.750',
+    });
+    expect(normalizeProduct(rollOfServices).unitSize).toBe(1);
+  });
+
+  it('states no size when the comparison price matches neither reading', () => {
+    expect(
+      normalizeProduct(
+        padsWith({ reference_price: '0.800', bulk_price: '0.80' })
+      ).unitSize
+    ).toBeNull();
+    expect(
+      normalizeProduct(
+        padsWith({ total_units: null, reference_price: '0.320' })
+      ).unitSize
+    ).toBeNull();
+  });
+
+  it('states no size when the payload carries no comparison price at all', () => {
+    expect(
+      normalizeProduct(padsWith({ reference_price: null, bulk_price: null }))
+        .unitSize
+    ).toBeNull();
+  });
+
+  it('falls back to bulk_price when reference_price is absent', () => {
+    expect(
+      normalizeProduct(padsWith({ reference_price: undefined })).unitSize
+    ).toBe(10);
+  });
+
+  it('leaves every other size as the chain stated it', () => {
+    // A size that is already a count, and a weight, are not placeholders.
+    expect(normalizeProduct(padsWith({ unit_size: 20 })).unitSize).toBe(20);
+    expect(normalizeProduct(boxOfCapsules).unitSize).toBe(0.16);
+  });
+
+  it('reads the same count from a category listing', () => {
+    const [listed] = normalizeCategoryProducts({
+      id: 190,
+      name: 'Higiene íntima',
+      products: [packOfPads],
+    });
+    expect(listed).toMatchObject({ unitSize: 10, unit: UnitOfMeasure.UNIT });
+  });
+});
+
+describe('a product sold by weight (plan 0181)', () => {
+  it('is what the captured piece of cheese says it is', () => {
+    // The fixture's own fields, so a recapture that changes the product fails
+    // here and not in the rule below.
+    expect(approximateWeight.ean).toBe('2105600509460');
+    expect(approximateWeight.price_instructions).toMatchObject({
+      approx_size: true,
+      unit_size: 1.54,
+      size_format: 'kg',
+      unit_price: '14.49',
+      bulk_price: '9.41',
+      reference_format: 'kg',
+      selling_method: 0,
+    });
+  });
+
+  it('is what the captured fixed pack says it is', () => {
+    expect(fixedPackInStoreBarcode.ean).toBe('2105972846927');
+    expect(fixedPackInStoreBarcode.price_instructions).toMatchObject({
+      approx_size: false,
+      unit_size: 0.05,
+      size_format: 'kg',
+      unit_price: '0.55',
+      bulk_price: '11.00',
+      reference_format: 'kg',
+      selling_method: 0,
+    });
+  });
+
+  it('prices an approximate weight piece by the kilo and gives it no size', () => {
+    const product = normalizeProduct(approximateWeight);
+    expect(product).toMatchObject({
+      externalId: '50946',
+      soldByWeight: true,
+      // `bulk_price`, verbatim. Not the 14.49 of one estimated piece.
+      price: 9.41,
+      unitPrice: 9.41,
+      unitSize: null,
+      unit: UnitOfMeasure.KILOGRAM,
+      packCount: null,
+    });
+  });
+
+  it('keeps the piece price of a fixed pack, in-store barcode or not', () => {
+    const product = normalizeProduct(fixedPackInStoreBarcode);
+    expect(product).toMatchObject({
+      externalId: '84692',
+      ean: '2105972846927',
+      soldByWeight: false,
+      price: 0.55,
+      unitPrice: 11,
+      unitSize: 0.05,
+      unit: UnitOfMeasure.KILOGRAM,
+    });
+  });
+
+  describe('the listing, which is where a price comes from', () => {
+    /** The raw listing row of one product, wherever the category nests it. */
+    const rawRow = (id: string) =>
+      cheeseListing.categories
+        .flatMap((category) => category.products)
+        .find((product) => product.id === id);
+    const listed = (id: string) =>
+      normalizeCategoryProducts(cheeseListing).find(
+        (product) => product.externalId === id
+      );
+
+    it('is what the captured listing says it is', () => {
+      // `GET /categories/54/` as served on 2026-10-04. The listing row carries
+      // the price block whole, `approx_size` included, and no `ean`.
+      const weighed = rawRow('50946');
+      expect(weighed).not.toHaveProperty('ean');
+      expect(weighed?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 1.54,
+        size_format: 'kg',
+        unit_price: '14.49',
+        bulk_price: '9.41',
+      });
+      // A second piece of the same cheese, and a fixed pack beside them.
+      expect(rawRow('50943')?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 0.42,
+        unit_price: '4.07',
+        bulk_price: '9.70',
+      });
+      expect(rawRow('23561')?.price_instructions).toMatchObject({
+        approx_size: false,
+        unit_size: 0.35,
+        size_format: 'kg',
+        unit_price: '3.00',
+        bulk_price: '8.57',
+      });
+    });
+
+    it('prices each piece sold by weight by the kilo, with no size', () => {
+      expect(listed('50946')).toMatchObject({
+        soldByWeight: true,
+        price: 9.41,
+        unitPrice: 9.41,
+        unitSize: null,
+        // The chain's own token, untouched: it is what the row already holds.
+        sizeFormat: 'kg',
+      });
+      expect(listed('50943')).toMatchObject({
+        soldByWeight: true,
+        price: 9.7,
+        unitPrice: 9.7,
+        unitSize: null,
+      });
+    });
+
+    it('keeps the pack price and the size of a fixed pack', () => {
+      expect(listed('23561')).toMatchObject({
+        soldByWeight: false,
+        price: 3,
+        unitPrice: 8.57,
+        unitSize: 0.35,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('answers the price of a kilo for every row the listing calls approximate', () => {
+      const raw = cheeseListing.categories.flatMap(
+        (category) => category.products
+      );
+      const approximate = raw.filter(
+        (product) => product.price_instructions.approx_size
+      );
+      expect(approximate.length).toBeGreaterThan(0);
+      expect(approximate.length).toBeLessThan(raw.length);
+      for (const product of approximate) {
+        expect(listed(product.id)).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          price: Number(product.price_instructions.bulk_price),
+        });
+      }
+    });
+  });
+
+  it('reads the same from a detail payload laid into a listing', () => {
+    const [weighed, fixed] = normalizeCategoryProducts({
+      id: 54,
+      name: 'Queso curado, semicurado y tierno',
+      products: [approximateWeight, fixedPackInStoreBarcode],
+    });
+    expect(weighed).toMatchObject({
+      soldByWeight: true,
+      price: 9.41,
+      unitPrice: 9.41,
+      unitSize: null,
+      // The chain's own token, untouched: it is what the row already holds.
+      sizeFormat: 'kg',
+    });
+    expect(fixed).toMatchObject({
+      soldByWeight: false,
+      price: 0.55,
+      unitPrice: 11,
+      unitSize: 0.05,
+      sizeFormat: 'kg',
+    });
+  });
+
+  it('never recomputes the price of a kilo', () => {
+    // 14.49 over 1.54 is 9.409. The chain says 9.41, and that is what is kept.
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        bulk_price: '9.99',
+      },
+    });
+    expect(product.price).toBe(9.99);
+  });
+
+  it('is not sold by weight when the approximate size is not in kilos', () => {
+    // No captured product shows this. The price of a kilo is `bulk_price`
+    // only when the size format is `kg`, so anything else keeps its price.
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        size_format: 'ud',
+      },
+    });
+    expect(product.soldByWeight).toBe(false);
+    expect(product.price).toBe(14.49);
+  });
+
+  it('is not sold by weight when the payload does not say', () => {
+    // Every fixture authored before the field was known carries none.
+    expect(normalizeProduct(oliveOil).soldByWeight).toBe(false);
   });
 });
 

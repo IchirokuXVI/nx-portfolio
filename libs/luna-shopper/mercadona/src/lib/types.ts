@@ -30,6 +30,13 @@ export interface MercadonaProduct {
   name: LocalizedText;
   /** Detail only. Empty on the handful of novelty products that carry no brand. */
   brand: string | null;
+  /**
+   * `approx_size` on a product sized in `kg` (plan 0181): a piece whose
+   * weight is not the same on every pack. Its {@link unitSize} is null and its
+   * {@link price} is the price of a kilo.
+   */
+  soldByWeight: boolean;
+  /** Null for a product sold by weight, whose stated weight is an estimate. */
   unitSize: number | null;
   /** Null for `size_format: 'm'`, which has no `UnitOfMeasure` value. */
   unit: UnitOfMeasure | null;
@@ -46,11 +53,20 @@ export interface MercadonaProduct {
   categorySlug: string | null;
   /** The path the walk took to reach it, deepest last. Drives the category map. */
   categoryPath: string[];
-  /** `unit_price`: the price of the pack. This is the price. */
+  /**
+   * `unit_price`: the price of the pack. This is the price. For a product
+   * sold by weight it is `bulk_price`, the price of a kilo (plan 0181).
+   */
   price: number | null;
   /** `bulk_price`, stored verbatim and never recomputed (section 2.4). */
   unitPrice: number | null;
-  /** `reference_format`, verbatim. A price tag for a human, not a machine unit. */
+  /**
+   * The label that is true of {@link unitPrice} (plan 0189). It is
+   * `reference_format` as sent when the chain's `reference_price` is the
+   * same figure, and `L`, `kg` or `ud` when `reference_format` names a
+   * figure that `bulk_price` is not: per 100 ml, per 100 g, per dozen or per
+   * wash.
+   */
   unitPriceLabel: string | null;
   currency: 'EUR';
   /** False when the detail call answered 404: not stocked in this warehouse. */
@@ -78,11 +94,14 @@ export interface MercadonaListProduct {
   packaging: string | null;
   shareUrl: string | null;
   published: boolean;
+  /** As on {@link MercadonaProduct.soldByWeight}: the listing carries the field. */
+  soldByWeight: boolean;
   unitSize: number | null;
   unit: UnitOfMeasure | null;
   sizeFormat: string | null;
   /** As on {@link MercadonaProduct.packCount}: the listing carries the same block. */
   packCount: number | null;
+  /** The price of the pack, or of a kilo when {@link soldByWeight}. */
   price: number | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;

@@ -13,7 +13,12 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
-  provideResources,
+  provideSections,
+  RecordPage,
+  RecordView,
+  sectionLink,
+  sectionScreens,
+  type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   draftFor,
@@ -23,18 +28,23 @@ import {
   type FieldName,
 } from '@portfolio/luna-shopper-admin/models';
 import { FieldControl } from '@portfolio/luna-shopper-admin/ui';
-import { PRICE_SCOPES } from './price-scopes';
+import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
 import { SUPERMARKETS, type Supermarket } from './supermarkets';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /**
- * The exit criterion of plan 0004, asserted rather than claimed.
+ * The exit criterion of plan 0004, asserted rather than claimed, as it stands
+ * after admin plan 0042.
  *
- * Supermarkets is the simplest entity, and it works end to end through the
- * generic list and the generic form with no component of its own. Everything
- * below runs against the in-memory gateway, which is the default behind
- * `RESOURCE_GATEWAYS`, so there is no backend and no `HttpClient` anywhere in
- * this file.
+ * Supermarkets was the simplest entity: a flat list and the generic form, with
+ * no component of its own. A chain is a page now, and its list is the column
+ * beside that page, so what is asserted is that the same descriptor still
+ * drives both: the generic list draws the column, and the generic form draws
+ * the Details tab and the page of a new chain.
+ *
+ * Everything below runs against the in-memory gateway, which is the default
+ * behind `RESOURCE_GATEWAYS`, so there is no backend and no `HttpClient`
+ * anywhere in this file.
  */
 
 @Component({
@@ -44,6 +54,14 @@ import { SUPERMARKET_SEED } from './supermarkets-seed';
 })
 class TestHost {}
 
+/** The Chains section, as the app declares it. */
+const CHAINS: AdminSection = {
+  key: 'chains',
+  label: '',
+  held: CHAIN_RESOURCES,
+  screens: chainsRoutes(),
+};
+
 async function boot(url: string): Promise<ComponentFixture<TestHost>> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -51,17 +69,9 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
     providers: [
       ContentLocaleStore,
       ServerReachability,
-      provideRouter(
-        adminRoutes([
-          {
-            key: 'catalog',
-            label: '',
-            resources: [SUPERMARKETS, PRICE_SCOPES],
-          },
-        ])
-      ),
+      provideRouter(adminRoutes([CHAINS])),
       provideLocationMocks(),
-      provideResources(SUPERMARKETS, PRICE_SCOPES),
+      provideSections(CHAINS),
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -198,52 +208,130 @@ describe('the supermarkets descriptor', () => {
 });
 
 describe('supermarkets through the generic machinery', () => {
-  it('lists the chains, with no component of its own', async () => {
-    const fixture = await boot('/supermarkets');
+  const rowsOf = (fixture: ComponentFixture<TestHost>) =>
+    [...fixture.nativeElement.querySelectorAll('[data-row]')] as HTMLElement[];
 
-    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(SUPERMARKET_SEED.length);
+  /** The form's text boxes, by what they hold. */
+  const page = (fixture: ComponentFixture<TestHost>) =>
+    fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+  const view = (fixture: ComponentFixture<TestHost>) =>
+    fixture.debugElement.query(By.directive(RecordView))
+      .componentInstance as RecordView;
+
+  const typed = (fixture: ComponentFixture<TestHost>) =>
+    (
+      [
+        ...fixture.nativeElement.querySelectorAll('input[type="text"]'),
+      ] as HTMLInputElement[]
+    ).map((input) => input.value);
+
+  it('lists the chains, with the generic list as a column', async () => {
+    const fixture = await boot('/chains');
+
+    expect(rowsOf(fixture)).toHaveLength(SUPERMARKET_SEED.length);
+    expect(fixture.nativeElement.querySelector('table')).toBeNull();
     expect(text(fixture)).toContain('Mercadona');
     expect(text(fixture)).toContain('Carrefour Express');
   });
 
-  it('shows the brand key that tells two lookalike chains apart', async () => {
-    const fixture = await boot('/supermarkets');
+  /**
+   * In the column a chain is its name and the shops it holds (admin plan 0042,
+   * section 2). The count is the one catalog gave on the read.
+   */
+  it('shows how many shops each chain holds, as the gateway counted them', async () => {
+    const fixture = await boot('/chains');
 
-    expect(text(fixture)).toContain('Q217599');
-    expect(text(fixture)).toContain('Q2940602');
+    const trailing = (name: string) =>
+      rowsOf(fixture)
+        .find((row) => row.querySelector('.row-heading')?.textContent === name)
+        ?.querySelector('.row-trailing')
+        ?.textContent?.trim();
+
+    expect(trailing('Mercadona')).toBe('3');
+    expect(trailing('Consum')).toBe('1');
   });
 
-  it('lands the empty path on the one resource there is', async () => {
-    await boot('/');
+  /**
+   * The brand key was a column of the flat list. A column of names has no room
+   * for it, so it is read where the chain is open: on its Details tab.
+   */
+  it('shows the brand key that tells two lookalike chains apart', async () => {
+    const carrefour = await boot('/chains/sm_carrefour/details');
+    expect(text(carrefour)).toContain('Q217599');
 
-    expect(TestBed.inject(Router).url).toBe('/supermarkets');
+    const express = await boot('/chains/sm_carrefour_express/details');
+    expect(text(express)).toContain('Q2940602');
+  });
+
+  /**
+   * The section has no home and no tab of its own, so its entry on the rail
+   * opens the one resource it holds that has no parent. It used to be the
+   * empty path that landed on the one resource there was.
+   */
+  it('opens the section on the chains, which every other resource is under', () => {
+    expect(sectionLink(CHAINS)).toBe('/chains');
+    // None of the five is a flat list with a link of its own.
+    expect(sectionScreens(CHAINS)).toEqual([]);
+  });
+
+  it('opens a chain from the column, on its shops', async () => {
+    const fixture = await boot('/chains');
+
+    rowsOf(fixture)
+      .find((row) => row.textContent?.includes('Mercadona'))
+      ?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe('/chains/sm_mercadona/shops');
   });
 
   it('answers an address that is not a screen without losing the chrome', async () => {
     const fixture = await boot('/supermarkets-of-mars');
 
     expect(text(fixture)).toContain('notFound.heading');
-    expect(text(fixture)).toContain('shell.signOut');
+    // The rail is still there: the way to the account, and through it the
+    // way out, is one of its two buttons (admin plan 0041).
+    expect(
+      fixture.nativeElement.querySelector('[data-menu="account"]')
+    ).not.toBeNull();
   });
 
-  it('opens one chain on a form built from the descriptor', async () => {
-    const fixture = await boot('/supermarkets/sm_mercadona');
+  /** Admin plan 0056: a chain is read first, on the record page. */
+  it('opens one chain to be read, and as a form on Edit', async () => {
+    const fixture = await boot('/chains/sm_mercadona/details');
+    const view = () =>
+      fixture.nativeElement.querySelector('lib-record-view') as HTMLElement;
+
+    // Reading: the values, and no control anywhere under the header.
+    expect(view().textContent).toContain('Mercadona');
+    expect(view().textContent).toContain('https://www.mercadona.es');
+    expect(view().textContent).toContain('Q1888874');
+    expect(view().querySelector('lib-field-control')).toBeNull();
+
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
 
     // One box per content locale for the name, plus the two url fields and the
-    // brand key. The default scope is a picker now, so only the id is shown
-    // and not edited.
-    const inputs = fixture.nativeElement.querySelectorAll('input[type="text"]');
-    expect(inputs).toHaveLength(5);
-    expect(fixture.nativeElement.querySelectorAll('.readonly')).toHaveLength(1);
-    expect(
-      fixture.nativeElement.querySelector('lib-reference-picker')
-    ).not.toBeNull();
+    // brand key. The default scope is a picker.
+    expect(typed(fixture)).toEqual(
+      expect.arrayContaining([
+        'Mercadona',
+        'https://www.mercadona.es',
+        'Q1888874',
+      ])
+    );
+    expect(view().querySelector('lib-reference-picker')).not.toBeNull();
   });
 
   /** Admin plan 0034, section 2: the picker reads this chain's scopes only. */
   it('offers the default scope as a picker over this chain', async () => {
-    const fixture = await boot('/supermarkets/sm_mercadona');
+    const fixture = await boot('/chains/sm_mercadona/details');
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
 
     const control = fixture.debugElement
       .queryAll(By.directive(FieldControl))
@@ -255,29 +343,57 @@ describe('supermarkets through the generic machinery', () => {
 
   /**
    * A chain with no default scope is a gap to fix, and chains made before
-   * backend plan 0153 have none. The list flags each one; a chain with a
-   * default shows its scope instead.
+   * backend plan 0153 have none. The flat list flagged each one in a column.
+   * The column of names has no such cell, so the gap is read on the chain's
+   * Price scopes tab, where one scope is made the default: `chain-record.spec.ts`
+   * asserts that. What stays here is that the field still says what an unset
+   * default reads as, for any list that draws the column.
    */
-  it('flags every chain that has no default scope', async () => {
-    const fixture = await boot('/supermarkets');
-
-    const flags = fixture.nativeElement.querySelectorAll('tbody .flag');
+  it('still names what a chain with no default scope reads as', () => {
+    const field = fieldOf(SUPERMARKETS, 'defaultPriceScopeId');
     const without = SUPERMARKET_SEED.filter(
       (chain) => chain.defaultPriceScopeId === null
     );
+
     expect(without.length).toBeGreaterThan(0);
     expect(without.length).toBeLessThan(SUPERMARKET_SEED.length);
-    expect(flags).toHaveLength(without.length);
-    expect(flags[0].textContent).toContain(
+    expect(field?.kind === 'reference' ? field.unsetFlag : null).toBe(
       'catalog.supermarkets.noDefaultScope'
     );
   });
 
   it('offers a create form at `new` rather than reading a row called new', async () => {
-    const fixture = await boot('/supermarkets/new');
+    const fixture = await boot('/chains/new');
 
+    expect(page(fixture).store().mode()).toBe('create');
     expect(text(fixture)).toContain('resource.form.create');
     expect(text(fixture)).not.toContain('resource.error.notFound');
+  });
+
+  /** Admin plan 0056, target 9: a new chain is open in its pane afterwards. */
+  it('opens the chain that was made, and stays on the tab after a change', async () => {
+    const created = await boot('/chains/new');
+
+    page(created).store().set('name', { en: 'Deza', es: 'Deza' });
+    await view(created).save();
+    await settle(created);
+    await settle(created);
+
+    expect(TestBed.inject(Router).url).toMatch(/^\/chains\/[^/]+\/details$/);
+    expect(TestBed.inject(Router).url).not.toBe('/chains/new/details');
+
+    const changed = await boot('/chains/sm_mercadona/details');
+    page(changed).edit();
+    await settle(changed);
+    await settle(changed);
+
+    page(changed).store().set('externalBrandKey', 'Q0');
+    await view(changed).save();
+    await settle(changed);
+
+    expect(TestBed.inject(Router).url).toBe('/chains/sm_mercadona/details');
+    expect(page(changed).store().mode()).toBe('read');
+    expect(changed.nativeElement.querySelector('[data-saved]')).not.toBeNull();
   });
 
   /**
@@ -297,7 +413,11 @@ describe('supermarkets through the generic machinery', () => {
       'logoUrl',
       'externalBrandKey',
       'defaultPriceScopeId',
+      // Counted by catalog on the read, and never typed (admin plan 0042).
+      'locationCount',
     ]);
+    const count = fieldOf(SUPERMARKETS, 'locationCount');
+    expect(count === undefined ? null : isEditable(count, 'edit')).toBe(false);
     expect(SUPERMARKETS.actions).toEqual({
       create: true,
       edit: true,

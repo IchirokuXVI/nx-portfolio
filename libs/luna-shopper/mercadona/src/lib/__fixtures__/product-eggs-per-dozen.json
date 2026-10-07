@@ -1,0 +1,128 @@
+{
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "brand": "",
+  "categories": [
+    {
+      "categories": [
+        {
+          "categories": [
+            {
+              "id": 354,
+              "level": 2,
+              "name": "Huevos",
+              "order": 373
+            }
+          ],
+          "id": 77,
+          "level": 1,
+          "name": "Huevos",
+          "order": 373
+        }
+      ],
+      "id": 6,
+      "level": 0,
+      "name": "Huevos, leche y mantequilla",
+      "order": 373
+    }
+  ],
+  "color_variants": null,
+  "details": {
+    "alcohol_by_volume": null,
+    "brand": "",
+    "counter_info": null,
+    "danger_mentions": "",
+    "description": "Huevos de gallinas camperas",
+    "is_prepared_by_mercadona": false,
+    "legal_name": "12 Huevos de gallinas camperas",
+    "mandatory_mentions": "Huevos de gallinas camperas. Código marcado en el huevo: Primer dígito: forma de cría de las gallinas. Dos letras siguiente: Estado miembro de producción. Resto de dígitos: granja de producción. Alimentación basada en cereales. Categoría A Frescos.",
+    "origin": null,
+    "production_variant": "Este producto tiene diferentes Registros Sanitarios: ES 14.003329/GC; ES 14.00983/TF",
+    "storage_instructions": "Conservar refrigerado después de la compra",
+    "suppliers": [
+      {
+        "name": "Aviman Explotaciones Ganaderas S.L."
+      },
+      {
+        "name": "Granja Pinilla"
+      },
+      {
+        "name": "Huevos Guillen Canarias, S.L.U."
+      },
+      {
+        "name": "Huevos Guillen S.L."
+      },
+      {
+        "name": "Mercadona"
+      },
+      {
+        "name": "Sat 1733 Granja San Miguel"
+      }
+    ],
+    "usage_instructions": ""
+  },
+  "display_name": "Huevos de gallinas camperas",
+  "ean": "8410603125215",
+  "extra_info": [
+    ""
+  ],
+  "id": "15768",
+  "is_bulk": false,
+  "is_new_arrival": false,
+  "is_variable_weight": false,
+  "limit": 999,
+  "main_feature": "",
+  "nutrition_information": {
+    "allergens": "Contiene <strong>huevos y productos a base de huevo</strong>.",
+    "ingredients": "<strong>Huevo</strong>"
+  },
+  "origin": null,
+  "packaging": "Paquete",
+  "photos": [
+    {
+      "perspective": 1,
+      "regular": "https://prod-mercadona.imgix.net/images/50933500ef69e4c4cc91733c48e4e909.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/50933500ef69e4c4cc91733c48e4e909.jpg?fit=crop&h=300&w=300",
+      "zoom": "https://prod-mercadona.imgix.net/images/50933500ef69e4c4cc91733c48e4e909.jpg?fit=crop&h=3600&w=3600"
+    },
+    {
+      "perspective": 9,
+      "regular": "https://prod-mercadona.imgix.net/images/e6ed342222d4b239073c4eea124fde5d.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/e6ed342222d4b239073c4eea124fde5d.jpg?fit=crop&h=300&w=300",
+      "zoom": "https://prod-mercadona.imgix.net/images/e6ed342222d4b239073c4eea124fde5d.jpg?fit=crop&h=3600&w=3600"
+    }
+  ],
+  "price_instructions": {
+    "approx_size": false,
+    "bulk_price": "0.28",
+    "bunch_selector": false,
+    "drained_weight": null,
+    "increment_bunch_amount": 1,
+    "is_new": false,
+    "is_pack": false,
+    "iva": null,
+    "min_bunch_amount": 1,
+    "pack_size": null,
+    "previous_unit_price": null,
+    "price_decreased": false,
+    "reference_format": "dc",
+    "reference_price": "3.350",
+    "selling_method": 0,
+    "size_format": "ud",
+    "tax_percentage": "4.000",
+    "total_units": null,
+    "unit_name": null,
+    "unit_price": "3.35",
+    "unit_selector": true,
+    "unit_size": 12
+  },
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/15768/huevos-gallinas-camperas-paquete",
+  "slug": "huevos-gallinas-camperas-paquete",
+  "status": null,
+  "thumbnail": "https://prod-mercadona.imgix.net/images/50933500ef69e4c4cc91733c48e4e909.jpg?fit=crop&h=300&w=300",
+  "unavailable_from": null,
+  "unavailable_weekdays": []
+}

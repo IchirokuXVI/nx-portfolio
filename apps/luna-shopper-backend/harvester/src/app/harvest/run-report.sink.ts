@@ -22,6 +22,11 @@ import type {
   ScopeDeclaration,
 } from './run-report';
 import type {
+  SourceEntryAvailabilityWriter,
+  StoredClaim,
+} from './source-entry-availability';
+import type {
+  PriceConflict,
   ReportedObservation,
   SourceEntryOutcome,
   SourceIngest,
@@ -54,6 +59,12 @@ const PLACE_CHUNK = 100;
 
 /** How many availability rows go to catalog in one call. */
 const AVAILABILITY_BATCH = 200;
+
+/**
+ * How many price conflicts a run's report names (plan 0191). The count beside
+ * them is always the whole number, so a report that names fewer says so.
+ */
+const PRICE_CONFLICTS_NAMED = 200;
 
 export interface RunReportSinkInput {
   /** The chain this run writes for, and null for a run that names none. */
@@ -108,10 +119,16 @@ export interface RunReportResult {
   /** Prices catalog already held at that value and only moved the clock on. */
   pricesConfirmed: number;
   /**
-   * Items two entries of the chain priced at one scope in one batch, whose
-   * prices were withheld (plan 0155).
+   * Items two entries of the chain priced at one scope with two amounts,
+   * whose prices were withheld (plan 0155), counted once per run (plan 0191).
    */
   pricesConflicted: number;
+  /**
+   * Those items, named with the rows that disagree (plan 0191), so a person
+   * finds the pair without a query. The first {@link PRICE_CONFLICTS_NAMED}
+   * of them: {@link pricesConflicted} is the whole number.
+   */
+  priceConflicts: PriceConflict[];
   placesCreated: number;
   placesRefreshed: number;
   /** Catalog locations this run wrote itself, which only a trusted chain earns. */
@@ -130,6 +147,41 @@ export interface RunReportResult {
   shopsUnmapped: { code: string; name: string }[];
   shopsWritten: number;
   availabilityWritten: number;
+  /**
+   * Per shop claims this run stored on the source's own rows (plan 0182).
+   *
+   * Every claim that named a shop and a product the run reported, whether or
+   * not the row is bound and whether or not the shop is mapped. It is the sum
+   * of {@link claimsWritten} and {@link claimsWaiting}.
+   */
+  claimsStored: number;
+  /**
+   * Of those, the claims whose row is bound to a product and whose shop names a
+   * location, which is what reached catalog. Not {@link availabilityWritten}:
+   * that one counts the rows catalog changed, and a claim catalog already held
+   * changes nothing.
+   */
+  claimsWritten: number;
+  /** Of those, the claims still waiting, which is the next two added up. */
+  claimsWaiting: number;
+  /** Claims whose row is not bound yet, a `CANDIDATE` proposal included. */
+  claimsWaitingForBinding: number;
+  /** Claims whose row is bound and whose shop no location is mapped to yet. */
+  claimsWaitingForShop: number;
+  /**
+   * Offers with no price this run created (plan 0182): one per product whose
+   * bound row the run saw, that holds no price in any scope, and that had no
+   * row yet in the chain's default scope. A product that already had a row is
+   * left alone and is not counted, so this is zero on a run that follows one
+   * which wrote them.
+   */
+  pricelessOffersWritten: number;
+  /**
+   * Products this run could not offer, because the call to catalog that
+   * carried them failed. The run does not fail for it: every price and claim
+   * has landed by then, and the next run offers them again.
+   */
+  pricelessOffersFailed: number;
   /** Availability rows a person had typed, which the run left alone. */
   conflicts: Record<string, unknown>[];
   /** Every scope that received at least one price read at it (plan 0118). */
@@ -174,16 +226,16 @@ export class RunReportSink implements RunReport {
   /** Every external id the run named, for the negative availability diff. */
   private readonly observedIds = new Set<string>();
   /**
-   * The item each row points at, whatever its status.
+   * The row each external id was written to, bound or not.
    *
-   * **Per shop availability uses this and per scope availability does not**, and
-   * the difference is deliberate. A price is written only for an `ACTIVE` row,
-   * because a wrong number on a real product is worse than no number. Stock is
-   * not a number: DEZA publishes no EAN at all, so an `ACTIVE` row there would
-   * only ever be one a person accepted by hand, and reading availability from
-   * `ACTIVE` alone would silence the whole crawl (plan 0085).
+   * **Per shop availability is kept against the row, not against the item**
+   * (plan 0182). A claim is stored for every row this run reported, and which
+   * of them reach catalog is decided from the table by
+   * `SourceEntryAvailabilityWriter`, at the end of this run and again whenever
+   * a row is bound or a shop is mapped. Per scope availability below still
+   * reads the item, and only an `ACTIVE` one.
    */
-  private readonly itemByExternalId = new Map<string, string>();
+  private readonly entryIdByExternalId = new Map<string, string>();
   /** The item each `ACTIVE` row resolved to, which is what a scope claim uses. */
   private readonly activeItemByExternalId = new Map<string, string>();
 
@@ -193,6 +245,7 @@ export class RunReportSink implements RunReport {
     pricesPublished: 0,
     pricesConfirmed: 0,
     pricesConflicted: 0,
+    priceConflicts: [],
     placesCreated: 0,
     placesRefreshed: 0,
     placesImported: 0,
@@ -202,6 +255,13 @@ export class RunReportSink implements RunReport {
     shopsUnmapped: [],
     shopsWritten: 0,
     availabilityWritten: 0,
+    claimsStored: 0,
+    claimsWritten: 0,
+    claimsWaiting: 0,
+    claimsWaitingForBinding: 0,
+    claimsWaitingForShop: 0,
+    pricelessOffersWritten: 0,
+    pricelessOffersFailed: 0,
     conflicts: [],
     pricedScopes: [],
     pricesCopied: {},
@@ -220,6 +280,8 @@ export class RunReportSink implements RunReport {
       shops: SourceLocationService;
       catalog: CatalogClient;
       entries: Repository<SourceCatalogEntry>;
+      /** Where per shop claims are kept, and what sends them (plan 0182). */
+      availability: SourceEntryAvailabilityWriter;
     }
   ) {}
 
@@ -293,11 +355,16 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies } = await this.session.close();
+      const { outcomes, counters, copies, priceConflicts } =
+        await this.session.close();
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
       this.result.pricesConflicted += counters.pricesConflicted;
+      this.result.priceConflicts = priceConflicts.slice(
+        0,
+        PRICE_CONFLICTS_NAMED
+      );
       this.result.pricedScopes = [...copies.pricedScopes];
       this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
       await this.fillPackCounts(outcomes);
@@ -309,6 +376,7 @@ export class RunReportSink implements RunReport {
     if (this.input.writes !== HarvestRunWrites.PRICES) {
       await this.writeShopAvailability();
       await this.writeScopeAvailability();
+      await this.writePricelessOffers();
     }
     return this.result;
   }
@@ -389,16 +457,12 @@ export class RunReportSink implements RunReport {
     const outcomes = await this.session.push(chunk);
     this.result.products += chunk.length;
 
-    // Which item each row resolved to, for the availability the run states
-    // afterwards. Only an `ACTIVE` row answers one, which is the same rule that
-    // decides whether the row is owed a price.
+    // Which row each product was written to, for the per shop claims the run
+    // states afterwards, and which item each `ACTIVE` row resolved to, for the
+    // per scope ones. Only an `ACTIVE` row answers an item, which is the same
+    // rule that decides whether the row is owed a price.
     for (const outcome of outcomes) {
-      if (outcome.entry.itemId) {
-        this.itemByExternalId.set(
-          outcome.entry.externalId,
-          outcome.entry.itemId
-        );
-      }
+      this.entryIdByExternalId.set(outcome.entry.externalId, outcome.entry.id);
       if (outcome.itemId) {
         this.activeItemByExternalId.set(
           outcome.entry.externalId,
@@ -432,32 +496,31 @@ export class RunReportSink implements RunReport {
   /**
    * Availability a source stated per shop of its own (plan 0103, section 6.3).
    *
-   * The codes are resolved through `SourceLocationService`, which is the queue a
-   * person works: a shop nothing is bound to yet writes no availability, is
-   * counted and named, and the run finishes. Mapping it later does not backfill
-   * what this run skipped.
+   * **Every claim is stored first, and what is ready is sent from the table**
+   * (plan 0182). The codes are resolved through `SourceLocationService`, which
+   * is the queue a person works, and a claim is kept against the source's own
+   * row and the source's own shop whether or not either is decided yet. A row
+   * nobody has bound and a shop nobody has mapped write nothing to catalog
+   * now, are counted, and are sent the moment the row is bound or the shop is
+   * mapped. The first run of a chain used to lose every claim it made here,
+   * because on a first run nothing is bound.
+   *
+   * A claim about a product this run did not report has no row to be kept
+   * against and is dropped, which no runner does today: each of them reports
+   * the product before it states where the product is.
    */
   private async writeShopAvailability(): Promise<void> {
-    const byShop = new Map<string, AvailabilityClaim[]>();
-    for (const claim of this.claims) {
-      if (!claim.shopCode) {
-        continue;
-      }
-      const held = byShop.get(claim.shopCode) ?? [];
-      held.push(claim);
-      byShop.set(claim.shopCode, held);
-    }
-    const supermarketId = this.input.supermarketId;
-    if (byShop.size === 0 || !supermarketId) {
-      return;
-    }
-
     const names = new Map<string, string>();
     for (const claim of this.claims) {
       if (claim.shopCode) {
         names.set(claim.shopCode, claim.shopName ?? claim.shopCode);
       }
     }
+    const supermarketId = this.input.supermarketId;
+    if (names.size === 0 || !supermarketId) {
+      return;
+    }
+
     const rows = await this.deps.shops.observe(
       supermarketId,
       [...names].map(([externalId, printedName]) => ({
@@ -467,42 +530,78 @@ export class RunReportSink implements RunReport {
       this.context.runId
     );
 
-    const observedAt = new Date();
+    const shopIdByCode = new Map<string, string>();
     for (const row of rows) {
+      shopIdByCode.set(row.externalId, row.id);
       if (!row.supermarketLocationId) {
         this.result.shopsUnmapped.push({
           code: row.externalId,
           name: row.printedName,
         });
-        continue;
-      }
-      const entries = (byShop.get(row.externalId) ?? [])
-        .map((claim) => ({
-          itemId: this.itemByExternalId.get(claim.externalId),
-          available: claim.available,
-        }))
-        .filter(
-          (entry): entry is { itemId: string; available: boolean } =>
-            entry.itemId !== undefined
-        );
-      if (entries.length === 0) {
-        continue;
-      }
-      this.result.shopsWritten += 1;
-      for (let i = 0; i < entries.length; i += AVAILABILITY_BATCH) {
-        const result = await this.deps.catalog.setLocationAvailability(
-          row.supermarketLocationId,
-          entries.slice(i, i + AVAILABILITY_BATCH),
-          this.context.runId,
-          this.input.sourceKind,
-          observedAt
-        );
-        this.result.availabilityWritten += result.written;
-        for (const conflict of result.conflicts) {
-          this.result.conflicts.push({ shop: row.externalId, ...conflict });
-        }
       }
     }
+
+    const stored: StoredClaim[] = [];
+    for (const claim of this.claims) {
+      const sourceLocationId = claim.shopCode
+        ? shopIdByCode.get(claim.shopCode)
+        : undefined;
+      const entryId = this.entryIdByExternalId.get(claim.externalId);
+      if (sourceLocationId && entryId) {
+        stored.push({ entryId, sourceLocationId, available: claim.available });
+      }
+    }
+    await this.deps.availability.store(stored, this.context.runId, new Date());
+
+    // Read back from the table and not from memory, so the end of a run sends
+    // exactly what binding a row or mapping a shop would send afterwards.
+    const sent = await this.deps.availability.writeForRun(
+      this.context.runId,
+      supermarketId
+    );
+    this.result.shopsWritten += sent.shops;
+    this.result.availabilityWritten += sent.written;
+    this.result.conflicts.push(...sent.conflicts);
+
+    const counts = await this.deps.availability.countsForRun(
+      this.context.runId
+    );
+    this.result.claimsStored = counts.stored;
+    this.result.claimsWritten = counts.written;
+    this.result.claimsWaitingForBinding = counts.waitingForBinding;
+    this.result.claimsWaitingForShop = counts.waitingForShop;
+    this.result.claimsWaiting =
+      counts.waitingForBinding + counts.waitingForShop;
+  }
+
+  /**
+   * The offer with no price for every bound row this run saw (plan 0182).
+   *
+   * A chain that lists a product sells it. A row bound today gets the offer
+   * when it is bound; a row bound before the offer existed gets it here, and
+   * both go through `SourceEntryAvailabilityWriter`. Last, after the two
+   * availability writes, so a row they created is one this leaves alone. The
+   * offer never changes a row that exists, so a run that follows one which
+   * wrote them reads and writes nothing.
+   *
+   * **A call to catalog that fails here does not fail the run**, unlike the
+   * two availability writes above it, which reject the drain. Those state
+   * what this run read and nothing sends them again. The offer is sent again
+   * by every run, so the products of a failed call are counted and the rest
+   * is kept.
+   */
+  private async writePricelessOffers(): Promise<void> {
+    const supermarketId = this.input.supermarketId;
+    if (!supermarketId || !this.session) {
+      // No chain, or a run that reported no product: it saw no row.
+      return;
+    }
+    const sent = await this.deps.availability.writePricelessOffersForRun(
+      this.context.runId,
+      supermarketId
+    );
+    this.result.pricelessOffersWritten = sent.written;
+    this.result.pricelessOffersFailed = sent.failed;
   }
 
   /**

@@ -1,5 +1,7 @@
 import {
   ItemSourceMatch,
+  productGtin,
+  readGtin,
   SourceEntryStatus,
   type ItemView,
   type LocalizedText,
@@ -93,8 +95,19 @@ export class ItemMatchIndex {
 
   constructor(items: ItemView[]) {
     for (const item of items) {
-      if (item.ean) {
+      // An in-store code is left out (plan 0184). 13 digits starting with 2
+      // are one shop's own numbering, so the same code on a row of another
+      // chain is another product, and rung 2 would bind it with confidence 1.
+      // No product is created with one any more, but 211 already hold one.
+      if (item.ean && readGtin(item.ean).kind !== 'IN_STORE') {
         this.byEan.set(item.ean, item);
+      }
+      // Every other barcode of the product too (plan 0185). A maker prints a
+      // new one when it changes a factory or a label, so a row that prints
+      // the second barcode is the same product and binds by itself on rung 2.
+      // Catalog never lists an in-store code here.
+      for (const ean of item.eans ?? []) {
+        this.byEan.set(ean, item);
       }
       // The Spanish name, because what a Spanish chain states is Spanish (plan
       // 0038, section 6.2). An English only item (plan 0079) lands in a bucket a
@@ -112,6 +125,19 @@ export class ItemMatchIndex {
         this.byNameKey.set(key, [item]);
       }
     }
+  }
+
+  /**
+   * The product that holds this barcode, or null (plan 0185).
+   *
+   * Rung 2 alone, for a row that is already in the queue: the name rungs are
+   * not asked, because a waiting row already carries whatever they proposed.
+   * Only a real barcode is looked up (`productGtin`), so an in-store code that
+   * 211 products still hold on `items.ean` binds nothing here.
+   */
+  holderOf(ean: string | null): string | null {
+    const gtin = productGtin(ean);
+    return gtin === null ? null : (this.byEan.get(gtin)?.id ?? null);
   }
 
   /**

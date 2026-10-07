@@ -1743,6 +1743,15 @@
             }
           },
           {
+            "name": "hasPending",
+            "required": false,
+            "in": "query",
+            "description": "True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "createdAfter",
             "required": false,
             "in": "query",
@@ -15078,7 +15087,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15829,6 +15838,16 @@
               }
             }
           },
+          "409": {
+            "description": "`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -16387,9 +16406,8 @@
             "name": "categoryId",
             "required": false,
             "in": "query",
-            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.",
+            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children. The literal `none` instead of a uuid asks for the products on no category at all.",
             "schema": {
-              "format": "uuid",
               "type": "string"
             }
           },
@@ -16399,6 +16417,16 @@
             "in": "query",
             "description": "Only this group’s members. The literal `none` instead of a uuid asks for the products belonging to no group, which is what curation has not reached yet.",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "withoutPriceAtScopeId",
+            "required": false,
+            "in": "query",
+            "description": "Only the products this price scope shows no price for: the scope holds no row for the product, or a row with no price that still says the product is sold. A row that says the scope does not sell the product is an answer, and keeps the product out. It combines with every other filter of this route. With it the page carries `total`, the number of products that match the whole request, on every page of it. An id that names no price scope answers 404.",
+            "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
@@ -16986,6 +17014,214 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemScopePricesPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/eans": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_addEan_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddItemEanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.ean.add` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`item_ean_held` — Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/eans/{ean}": {
+      "delete": {
+        "operationId": "AdminCatalogItemsController_removeEan_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ean",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `item.ean.remove` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemView"
                 }
               }
             }
@@ -19205,6 +19441,204 @@
         ]
       }
     },
+    "/v1/admin/catalog/brands/{id}/homonyms": {
+      "post": {
+        "operationId": "AdminCatalogBrandsController_addHomonym_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddBrandHomonymDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `brand.addHomonym` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.BrandHomonymsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/brands/{id}/homonyms/{printedKey}": {
+      "delete": {
+        "operationId": "AdminCatalogBrandsController_removeHomonym_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "printedKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `brand.removeHomonym` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.BrandHomonymsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/brand-suggestions": {
       "get": {
         "operationId": "AdminCatalogBrandSuggestionsController_list_v1",
@@ -19315,6 +19749,19 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "name": "itemIds",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable, at most 100. Only the prices of these products: with priceScopeId, the price of every product on one page of the product list in one read (admin plan 0043). Empty and absent both mean every product.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
             }
           },
           {
@@ -23832,6 +24279,111 @@
         ]
       }
     },
+    "/v1/admin/harvest/items/{itemId}/settle": {
+      "post": {
+        "operationId": "AdminHarvestItemsController_settle_v1",
+        "parameters": [
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleItemAtChainDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceEntry.settleItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SettleItemAtChainResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
     "/v1/admin/harvest/places": {
       "get": {
         "operationId": "AdminHarvestPlacesController_list_v1",
@@ -24130,7 +24682,103 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/places/link-by-ref": {
+      "post": {
+        "operationId": "AdminHarvestPlacesController_linkPlacesByRef_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkPlacesByRefDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `place.linkByRef` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.LinkPlacesByRefResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24199,7 +24847,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+                  "$ref": "#/components/schemas/harvest.PlaceLinkResult"
                 }
               }
             }
@@ -24918,11 +25566,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The `sourceEntry.list` contract response.",
+            "description": "The queue, newest observation first, each row with every registered brand its printed brand names. Composed: the rows are the harvester’s, and the brands are read from catalog’s registry for the keys the page prints.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/harvest.SourceCatalogEntryPage"
+                  "$ref": "#/components/schemas/harvest.QueuedSourceEntryPage"
                 }
               }
             }
@@ -25062,6 +25710,16 @@
               }
             }
           },
+          "409": {
+            "description": "`item_ean_held` — Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -25168,7 +25826,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_ean_held` — Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27989,7 +28647,7 @@
             "type": "string",
             "nullable": true,
             "maxLength": 32,
-            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present."
+            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A real barcode or null (plan 0184): 8, 12, 13 or 14 digits with a valid check digit. Anything else, and a 13 digit in-store code that starts with 2, is refused with `item_ean_invalid`."
           },
           "unitSize": {
             "type": "number",
@@ -28076,7 +28734,7 @@
             "type": "string",
             "nullable": true,
             "maxLength": 32,
-            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present."
+            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A value that changes the EAN is a real barcode or null (plan 0184), and anything else is refused with `item_ean_invalid`. Absent, or the EAN the product already holds, is never refused, so a product that holds an old in-store code still saves its other fields."
           },
           "unitSize": {
             "type": "number",
@@ -28165,7 +28823,7 @@
             "type": "string",
             "nullable": true,
             "maxLength": 32,
-            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present."
+            "description": "The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A value that changes the EAN is a real barcode or null (plan 0184), and anything else is refused with `item_ean_invalid`. Absent, or the EAN the product already holds, is never refused, so a product that holds an old in-store code still saves its other fields."
           },
           "unitSize": {
             "type": "number",
@@ -28208,6 +28866,19 @@
             "description": "Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1)."
           }
         }
+      },
+      "AddItemEanDto": {
+        "type": "object",
+        "properties": {
+          "ean": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "A barcode to add to the product (plan 0185): 8, 12, 13 or 14 digits with a valid check digit. A 13 digit in-store code that starts with 2 is refused with `item_ean_invalid`, and a barcode another product holds with `item_ean_held`."
+          }
+        },
+        "required": [
+          "ean"
+        ]
       },
       "LocalizedSynonymsDto": {
         "type": "object",
@@ -28568,6 +29239,19 @@
             "description": "The brand this one is really a spelling of, or null to unlink it. The products follow either way: linking moves them onto that brand, unlinking brings back the ones carrying this brand’s own key."
           }
         }
+      },
+      "AddBrandHomonymDto": {
+        "type": "object",
+        "properties": {
+          "printedKey": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The printed name, or its key. It is keyed before it is stored, a text with no letter or digit is refused, and so is the brand’s own key."
+          }
+        },
+        "required": [
+          "printedKey"
+        ]
       },
       "AvailabilityEntryDto": {
         "type": "object",
@@ -29477,6 +30161,23 @@
           "document"
         ]
       },
+      "SettleItemAtChainDto": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chain whose rows are read. Catalog is made to agree with the rows of this chain that are bound to the product now."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "True answers what a call would remove and write, and writes nothing. The answer has the shape of a real call and counts the same things. Absent is false."
+          }
+        },
+        "required": [
+          "supermarketId"
+        ]
+      },
       "NewChainDto": {
         "type": "object",
         "properties": {
@@ -29525,13 +30226,26 @@
           }
         }
       },
+      "LinkPlacesByRefDto": {
+        "type": "object",
+        "properties": {
+          "apply": {
+            "type": "boolean",
+            "description": "Write the links. Absent or false changes nothing and answers what a call with it would do."
+          }
+        }
+      },
       "LinkDiscoveredPlaceDto": {
         "type": "object",
         "properties": {
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "A shop of the place’s own chain."
+            "description": "The shop this place is. It decides the chain: a place that resolves to no chain links with no question."
+          },
+          "acrossChains": {
+            "type": "boolean",
+            "description": "Link although the place resolves to another chain than the shop belongs to. Without it that case answers 409 `place_names_another_chain` and writes nothing."
           }
         },
         "required": [
@@ -29601,7 +30315,8 @@
           "ean": {
             "type": "string",
             "maxLength": 32,
-            "nullable": true
+            "nullable": true,
+            "description": "Override the EAN the row printed. The product holds a real barcode or none (plan 0184): an in-store code (13 digits that start with 2) or an invalid code, from here or from the row, creates the product with no EAN. The row keeps what the chain printed."
           },
           "unitSize": {
             "type": "number",
@@ -29691,7 +30406,7 @@
             "description": "createItem: this file’s own name for the product it creates."
           },
           "item": {
-            "description": "createItem: the product to create. Every field is optional, because the row already holds a default for each.",
+            "description": "createItem: the product to create. Every field is optional, because the row already holds a default for each, with one exception (plan 0184): the product needs an English name, and this route translates nothing, so `item.name.en` is stated here. A createItem that ends with no English name is refused with `NAME_EN_MISSING`.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/CreateItemFromEntryDto"
@@ -30520,6 +31235,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -30562,6 +31281,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
@@ -30692,6 +31412,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -30720,6 +31444,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
@@ -31127,7 +31852,8 @@
             "required": [
               "entries",
               "places",
-              "shops"
+              "shops",
+              "brands"
             ],
             "properties": {
               "entries": {
@@ -31145,6 +31871,18 @@
                 "items": {
                   "$ref": "#/components/schemas/admin-dashboard.AdminHarvestShopQueue"
                 }
+              },
+              "brands": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The suggested brands: brand keys that queued source rows carry and no registered brand holds. Null when the brand registry did not answer."
               }
             }
           },
@@ -32482,6 +33220,13 @@
               "null"
             ]
           },
+          "eans": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "unitSize": {
             "type": [
               "number",
@@ -32553,6 +33298,7 @@
           "imageUrl",
           "sku",
           "ean",
+          "eans",
           "unitSize",
           "packCount",
           "categories",
@@ -32723,6 +33469,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "boughtElsewhere": {
+            "type": "integer",
+            "minimum": 0
+          },
           "state": {
             "$ref": "#/components/schemas/enums.BasketRowState"
           },
@@ -32737,6 +33487,7 @@
           "lineId",
           "left",
           "bought",
+          "boughtElsewhere",
           "state",
           "approvalStatus",
           "demandEditable"
@@ -32810,6 +33561,10 @@
             "minimum": 0
           },
           "asked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "boughtElsewhere": {
             "type": "integer",
             "minimum": 0
           },
@@ -32887,6 +33642,7 @@
           "left",
           "bought",
           "asked",
+          "boughtElsewhere",
           "state",
           "note",
           "noteAt",
@@ -33396,6 +34152,68 @@
         ],
         "additionalProperties": false
       },
+      "catalog.BrandHomonymsView": {
+        "type": "object",
+        "properties": {
+          "brandId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "printedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The printed keys that also name this brand, sorted. Never its own key."
+          }
+        },
+        "required": [
+          "brandId",
+          "printedKeys"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.BrandMatchView": {
+        "type": "object",
+        "properties": {
+          "brandId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "That brand’s own key, which differs from the printed key for a homonym."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The brand to write."
+          },
+          "privateLabelSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "printedAs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The registered spelling the printed key names, when the registry holds it as a spelling of `label`. Null when the two are the same brand, and on a homonym."
+          }
+        },
+        "required": [
+          "brandId",
+          "key",
+          "label",
+          "privateLabelSupermarketId",
+          "printedAs"
+        ],
+        "additionalProperties": false
+      },
       "catalog.BrandPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -33769,7 +34587,7 @@
           },
           "movedItems": {
             "type": "integer",
-            "description": "Products that went back to unbranded, keeping the text this spelling was printed as."
+            "description": "Products that went back to unbranded, keeping the text this spelling was printed as. Always zero for a brand that was not a spelling."
           }
         },
         "required": [
@@ -33917,6 +34735,11 @@
               "string",
               "null"
             ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many products match the whole request, on every page of it. Present only when the request named `withoutPriceAtScopeId`, and absent on every other read."
           }
         }
       },
@@ -34413,6 +35236,13 @@
               "null"
             ]
           },
+          "eans": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "unitSize": {
             "type": [
               "number",
@@ -34467,6 +35297,7 @@
           "imageUrl",
           "sku",
           "ean",
+          "eans",
           "unitSize",
           "packCount",
           "categories",
@@ -36372,6 +37203,22 @@
               "string",
               "null"
             ]
+          },
+          "itemName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itemBrand": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -36382,7 +37229,9 @@
           "available",
           "availabilitySourceKind",
           "availabilityObservedAt",
-          "availabilitySourceRunId"
+          "availabilitySourceRunId",
+          "itemName",
+          "itemBrand"
         ],
         "additionalProperties": false
       },
@@ -36663,6 +37512,11 @@
               "string",
               "null"
             ]
+          },
+          "locationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view."
           }
         },
         "required": [
@@ -36854,7 +37708,8 @@
       "enums.BasketRowNote": {
         "type": "string",
         "enum": [
-          "SKIPPED_EARLIER"
+          "SKIPPED_EARLIER",
+          "BOUGHT_ON_ANOTHER_BASKET"
         ]
       },
       "enums.BasketRowState": {
@@ -36902,7 +37757,9 @@
           "DUPLICATE_SUBJECT",
           "UNKNOWN_REFERENCE",
           "MALFORMED_OPERATION",
-          "ALREADY_TAKEN"
+          "ALREADY_TAKEN",
+          "NAME_EN_MISSING",
+          "EAN_HELD"
         ]
       },
       "enums.CommentTranscription": {
@@ -36985,7 +37842,8 @@
           "COPY_TARGET_GONE",
           "COPY_SOURCE_NOT_WRITTEN",
           "SCOPE_KIND_MISMATCH",
-          "DETAIL_SKIPPED_UNKNOWN"
+          "DETAIL_SKIPPED_UNKNOWN",
+          "PRICE_SOLD_ANOTHER_WAY"
         ]
       },
       "enums.ItemPriceWrittenBy": {
@@ -37095,6 +37953,34 @@
         "type": "string",
         "enum": [
           "shopMap.record"
+        ]
+      },
+      "enums.PlaceLinkField": {
+        "type": "string",
+        "enum": [
+          "COORDINATES",
+          "EXTERNAL_REF",
+          "POSTAL_CODE",
+          "FOOTPRINT",
+          "ADDRESS",
+          "CITY",
+          "COUNTRY"
+        ]
+      },
+      "enums.PlaceLinkSkipReason": {
+        "type": "string",
+        "enum": [
+          "SEVERAL_SHOPS",
+          "PROVIDER_NOT_NAMED"
+        ]
+      },
+      "enums.PlaceMatchRung": {
+        "type": "string",
+        "enum": [
+          "EXTERNAL_REF",
+          "NEARBY",
+          "ADDRESS",
+          "SAME_CHAIN_NEAR"
         ]
       },
       "enums.PostalCodeDiscoveryStatus": {
@@ -37770,6 +38656,12 @@
           "lastSeenAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+            }
           }
         },
         "required": [
@@ -37794,7 +38686,8 @@
           "status",
           "supermarketLocationId",
           "firstSeenAt",
-          "lastSeenAt"
+          "lastSeenAt",
+          "candidates"
         ],
         "additionalProperties": false
       },
@@ -38288,6 +39181,26 @@
               "null"
             ]
           },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "soldByWeight": {
+            "type": "boolean"
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -38393,6 +39306,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "scopeSharedWith": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The other rows of this chain and source kind that are bound to the same product and hold an open price at a scope this row also holds one at (plan 0191). Catalog keeps one current price per product, scope and kind, so when the amounts differ and the rows are not both sold by weight, neither price is written. Empty for a row that is not ACTIVE."
           }
         },
         "required": [
@@ -38404,6 +39325,8 @@
           "brand",
           "ean",
           "unitSize",
+          "sizeUnit",
+          "soldByWeight",
           "sizeFormat",
           "packCount",
           "categoryPath",
@@ -38421,7 +39344,224 @@
           "confidence",
           "decidedAt",
           "prices",
-          "eanSharedBy"
+          "eanSharedBy",
+          "scopeSharedWith"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.LinkPlacesByRefResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "linked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceRefLink"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceRefSkip"
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "linked",
+          "skipped"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.LocationRefHolder": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalProvider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "supermarketId",
+          "supermarketName",
+          "label",
+          "address",
+          "city",
+          "externalProvider"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceLinkResult": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "filled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.PlaceLinkField"
+            }
+          },
+          "refHeldBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.LocationRefHolder"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "place",
+          "filled"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceLocationCandidate": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rung": {
+            "$ref": "#/components/schemas/enums.PlaceMatchRung"
+          },
+          "metres": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "supermarketId",
+          "label",
+          "address",
+          "city",
+          "postalCode",
+          "rung",
+          "metres"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceRefLink": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "shop": {
+            "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+          },
+          "filled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.PlaceLinkField"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "shop",
+          "filled"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PlaceRefSkip": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/harvest.DiscoveredPlaceView"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/enums.PlaceLinkSkipReason"
+          },
+          "shops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.PlaceLocationCandidate"
+            }
+          }
+        },
+        "required": [
+          "place",
+          "reason",
+          "shops"
         ],
         "additionalProperties": false
       },
@@ -38583,7 +39723,7 @@
         ],
         "additionalProperties": false
       },
-      "harvest.SourceCatalogEntryPage": {
+      "harvest.QueuedSourceEntryPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
         "additionalProperties": false,
@@ -38595,7 +39735,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/harvest.SourceCatalogEntryView"
+              "$ref": "#/components/schemas/harvest.QueuedSourceEntryView"
             }
           },
           "nextCursor": {
@@ -38605,6 +39745,433 @@
             ]
           }
         }
+      },
+      "harvest.QueuedSourceEntryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ean": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "soldByWeight": {
+            "type": "boolean"
+          },
+          "sizeFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "categoryPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "timesSeen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidateEntryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.SourceEntryStatus"
+          },
+          "matchedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemSourceMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "decidedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
+            }
+          },
+          "brandMatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.BrandMatchView"
+            },
+            "description": "Every registered brand the row’s printed brand names, the key’s own brand first and then each brand a homonym points that key at. Empty when the row prints no brand or nothing registered answers to it. Several brands is an ordinary answer: which one made the product is read from the product."
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "externalId",
+          "sourceKind",
+          "name",
+          "brand",
+          "ean",
+          "unitSize",
+          "sizeUnit",
+          "soldByWeight",
+          "sizeFormat",
+          "packCount",
+          "categoryPath",
+          "url",
+          "extra",
+          "timesSeen",
+          "firstSeenAt",
+          "lastSeenAt",
+          "firstRunId",
+          "lastRunId",
+          "itemId",
+          "candidateEntryId",
+          "status",
+          "matchedBy",
+          "confidence",
+          "decidedAt",
+          "prices",
+          "brandMatches"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SettleItemAtChainResult": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "boundEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The rows of the chain that are bound to the product now. Catalog is made to agree with these."
+          },
+          "pricesWithdrawn": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows a harvest run wrote that were removed from the product. A row a person typed is never one of them."
+          },
+          "pricesWithdrawnAt": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "deleted": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "deleted"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "pricesRestated": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Prices of the bound rows that are the current price of their scope and kind after the call, one per scope and kind. It counts what is stated and current, not what changed."
+          },
+          "pricesNotCurrent": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Prices a bound row states that are not the current price of their scope and kind. Catalog holds a newer row there that says something else, written by a run that no bound row and no leaving row names. That row stays."
+          },
+          "pricesNotWritable": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "copiedFromScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "copiedFromScopeId"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Prices a bound row states that catalog cannot write, because the scope the price was copied from is gone. Nothing at that scope and kind changed."
+          },
+          "pricesWritten": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows catalog inserted for those statements. Zero on a product that was already settled."
+          },
+          "pricesKeptAsWritten": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "heldAs": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "heldAs"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Statements catalog did not apply, because it holds the price of that run at that scope under another kind (heldAs) than the kind of the run (sourceKind). The price stays as it was written."
+          },
+          "pricesWithheld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceWithheld"
+            }
+          },
+          "offersRemoved": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The price scopes whose offer was removed. Always empty while a bound row of the chain names the product."
+          },
+          "offersKept": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "PRICED",
+                    "SHOP_ROW",
+                    "PERSON",
+                    "NO_TRAIL"
+                  ]
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "shopRowsRemoved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shopRowsCleared": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shopRowConflicts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "supermarketLocationId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "held": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "supermarketLocationId",
+                "held"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Shop rows whose availability a person wrote. They are left alone."
+          }
+        },
+        "required": [
+          "itemId",
+          "supermarketId",
+          "dryRun",
+          "boundEntryIds",
+          "pricesWithdrawn",
+          "pricesWithdrawnAt",
+          "pricesRestated",
+          "pricesNotCurrent",
+          "pricesNotWritable",
+          "pricesWritten",
+          "pricesKeptAsWritten",
+          "pricesWithheld",
+          "offersRemoved",
+          "offersKept",
+          "shopRowsRemoved",
+          "shopRowsCleared",
+          "shopRowConflicts"
+        ],
+        "additionalProperties": false
       },
       "harvest.SourceCatalogEntryView": {
         "type": "object",
@@ -38645,6 +40212,26 @@
               "number",
               "null"
             ]
+          },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "soldByWeight": {
+            "type": "boolean"
           },
           "sizeFormat": {
             "type": [
@@ -38755,6 +40342,8 @@
           "brand",
           "ean",
           "unitSize",
+          "sizeUnit",
+          "soldByWeight",
           "sizeFormat",
           "packCount",
           "categoryPath",
@@ -38794,12 +40383,32 @@
                 "type": "null"
               }
             ]
+          },
+          "pricesWithheld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceWithheld"
+            },
+            "description": "The scopes whose price was not written, because another bound row of the chain states another amount there (plan 0191). The row is bound all the same."
+          },
+          "settled": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.SettleItemAtChainResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What settling the product the row left did (plan 0191). Null when the row was not bound before, or was bound to this same product."
           }
         },
         "required": [
           "entry",
           "pricesWritten",
-          "createdItem"
+          "createdItem",
+          "pricesWithheld",
+          "settled"
         ],
         "additionalProperties": false
       },
@@ -38890,6 +40499,17 @@
             "type": "string",
             "minLength": 1
           },
+          "sourceKind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceSourceKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The kind of the run that stated this price (plan 0190), which is the kind an accept writes it to catalog under. It can differ from the kind of the row: a row that a website walk owns can hold a leaflet price. Null only for a price from before plan 0190 whose kind could not be read. Such a price is not written by an accept."
+          },
           "price": {
             "type": [
               "number",
@@ -38910,6 +40530,23 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "validFrom": {
@@ -38945,6 +40582,7 @@
         "required": [
           "id",
           "priceScopeId",
+          "sourceKind",
           "price",
           "currency",
           "unitPrice",
@@ -38954,6 +40592,39 @@
           "details",
           "observedAt",
           "runId"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceEntryPriceWithheld": {
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "otherEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "kindUnknown": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Present and true when the price was not sent because it is a price from before plan 0190 whose kind could not be read. A price is never sent under a guessed kind. otherEntryIds is then empty."
+          }
+        },
+        "required": [
+          "entryId",
+          "priceScopeId",
+          "otherEntryIds"
         ],
         "additionalProperties": false
       },
@@ -40460,17 +42131,23 @@
               "brand_link_owns_no_chain",
               "brand_link_keeps_key",
               "brand_not_linked",
+              "brand_homonym_is_own_key",
+              "brand_in_use",
               "place_already_imported",
               "place_matches_location",
+              "place_names_another_chain",
               "scope_not_found",
               "category_too_deep",
               "category_not_a_leaf",
               "item_needs_a_category",
+              "item_ean_invalid",
+              "item_ean_held",
               "category_in_use",
               "category_not_found",
               "section_not_found",
               "section_of_another_chain",
               "section_slug_taken",
+              "location_external_ref_taken",
               "catalog_location_exclusive",
               "supermarket_location_not_found",
               "permission_required",

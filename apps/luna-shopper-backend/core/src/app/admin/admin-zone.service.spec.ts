@@ -42,7 +42,7 @@ function zoneRow(over: Partial<Zone> = {}): Zone {
 }
 
 /** Records every `andWhere` so the predicate can be read back. */
-function makeQueryBuilder(rows: unknown[]) {
+function makeQueryBuilder(rows: unknown[], raw: unknown[] = []) {
   const clauses: { sql: string; params?: Record<string, unknown> }[] = [];
   const qb = {
     clauses,
@@ -61,7 +61,7 @@ function makeQueryBuilder(rows: unknown[]) {
       return qb;
     },
     getMany: async () => rows,
-    getRawMany: async () => [],
+    getRawMany: async () => raw,
   };
   return qb;
 }
@@ -72,6 +72,8 @@ function makeService(over: {
   membershipService?: Partial<MembershipService>;
   reaper?: Partial<ZoneReaperService>;
   zoneRepoOver?: Record<string, unknown>;
+  /** What the grouped membership count answers, one row per zone and status. */
+  memberCounts?: unknown[];
 }) {
   const qb = makeQueryBuilder(over.zones ?? []);
   const zones = {
@@ -80,7 +82,7 @@ function makeService(over: {
     ...over.zoneRepoOver,
   };
   const memberships = {
-    createQueryBuilder: () => makeQueryBuilder([]),
+    createQueryBuilder: () => makeQueryBuilder([], over.memberCounts ?? []),
     find: async () => [],
   };
   const lists = { createQueryBuilder: () => makeQueryBuilder([]) };
@@ -168,7 +170,49 @@ describe('AdminZoneService.list', () => {
 
     // No counts came back from the grouped queries, so the row reports zero
     // rather than undefined: a zone with no members is a real state.
-    expect(page.items[0]).toMatchObject({ memberCount: 0, listCount: 0 });
+    expect(page.items[0]).toMatchObject({
+      memberCount: 0,
+      listCount: 0,
+      pendingCount: 0,
+    });
+  });
+
+  /** Admin plan 0045, section 2: the join requests that wait, per zone. */
+  it('counts the members and the requests of a zone apart', async () => {
+    const { service } = makeService({
+      zones: [zoneRow({ id: 'z1' }), zoneRow({ id: 'z2' })],
+      memberCounts: [
+        { zoneId: 'z1', status: MembershipStatus.APPROVED, count: '3' },
+        { zoneId: 'z1', status: MembershipStatus.PENDING, count: '2' },
+        { zoneId: 'z2', status: MembershipStatus.APPROVED, count: '1' },
+      ],
+    });
+
+    const page = await service.list(CREDENTIAL);
+
+    expect(page.items[0]).toMatchObject({ memberCount: 3, pendingCount: 2 });
+    expect(page.items[1]).toMatchObject({ memberCount: 1, pendingCount: 0 });
+  });
+
+  it('reaches only the zones where a request waits', async () => {
+    const { service, qb } = makeService({ zones: [] });
+
+    await service.list({ ...CREDENTIAL, hasPending: true });
+
+    const filter = qb.clauses.find(
+      (c) => c.params?.pending === MembershipStatus.PENDING
+    );
+    expect(filter?.sql).toContain('EXISTS');
+    expect(filter?.sql).toContain('zone_memberships');
+    expect(filter?.sql).toContain('p.status = :pending');
+  });
+
+  it('treats a filter that is off as no predicate at all', async () => {
+    const { service, qb } = makeService({ zones: [] });
+
+    await service.list({ ...CREDENTIAL, hasPending: false });
+
+    expect(qb.clauses).toEqual([]);
   });
 
   it('never carries the join code on a listing row', async () => {

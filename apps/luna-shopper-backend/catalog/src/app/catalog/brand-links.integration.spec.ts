@@ -1,12 +1,12 @@
 import { JwtService } from '@nestjs/jwt';
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import {
+  BrandInUseException,
   BrandKeyTakenException,
   BrandLinkKeepsKeyException,
   BrandLinkOwnsNoChainException,
   BrandLinkTooDeepException,
   BrandLinkToSelfException,
-  BrandNotLinkedException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -14,7 +14,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
-import { categoryId } from '../db/reference/ids';
+import { categoryId } from '../db/taxonomy/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
@@ -28,6 +28,7 @@ import type { CatalogEventsPublisher } from '../events/catalog-events.publisher'
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -108,7 +109,8 @@ describeIntegration(
         admin,
         audit,
         events,
-        new CategoryService(dataSource.getRepository(Category), admin, audit)
+        new CategoryService(dataSource.getRepository(Category), admin, audit),
+        itemEanStoreOf(dataSource)
       );
     }, 180_000);
 
@@ -723,14 +725,8 @@ describeIntegration(
         expect((await itemRow(printed.id)).brandId).toBe(answer.brand.id);
       }, 180_000);
 
-      it('refuses a brand that is nobody’s spelling', async () => {
-        const brand = await register('Deborah');
-
-        await expect(
-          brands.remove({ userId: OWNER, brandId: brand.id })
-        ).rejects.toBeInstanceOf(BrandNotLinkedException);
-      }, 180_000);
-
+      // A brand that is nobody's spelling is `brand-delete.integration.spec.ts`:
+      // it goes when nothing points at it, and a spelling is one such thing.
       it('refuses a canonical brand other brands are spellings of', async () => {
         const answer = await brands.registerSuggestion({
           userId: OWNER,
@@ -740,7 +736,7 @@ describeIntegration(
 
         await expect(
           brands.remove({ userId: OWNER, brandId: answer.brand.id })
-        ).rejects.toBeInstanceOf(BrandNotLinkedException);
+        ).rejects.toBeInstanceOf(BrandInUseException);
       }, 180_000);
     });
   }

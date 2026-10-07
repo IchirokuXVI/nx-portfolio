@@ -464,6 +464,9 @@ describeIntegration(
           randomUUID(),
           null,
           false,
+          // No window either, so a purchase somebody else made lately cannot
+          // (plan 0188).
+          null,
         ]);
         expect(covered.map((row: { id: string }) => row.id)).toEqual([
           standing.id,

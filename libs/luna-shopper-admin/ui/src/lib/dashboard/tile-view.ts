@@ -1,8 +1,4 @@
-import type {
-  ChartBar,
-  ChartDelta,
-  ChartSeriesInfo,
-} from '../chart/chart-types';
+import type { ChartBar, ChartSeriesInfo } from '../chart/chart-types';
 
 /**
  * The two shapes every dashboard builds, whichever section it belongs to.
@@ -19,7 +15,7 @@ import type {
  * consumes it belongs beside that component anyway.
  */
 
-/** One headline number, as `lib-stat-tile` takes it plus the caption beneath. */
+/** One headline number, with the caption beneath it. */
 export interface TileView {
   /** Stable across renders: what `@for` tracks. */
   readonly key: string;
@@ -27,8 +23,6 @@ export interface TileView {
   readonly value: number;
   /** A line under the tile, already translated. */
   readonly caption: string | null;
-  readonly delta: ChartDelta | null;
-  readonly trend: readonly number[] | null;
   readonly link: readonly string[] | null;
   /**
    * Query parameters the link carries, for the one screen that reads one.

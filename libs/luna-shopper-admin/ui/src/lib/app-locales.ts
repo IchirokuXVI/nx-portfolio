@@ -10,10 +10,6 @@
  * other app in this workspace. The only thing that segment buys is a shareable URL
  * that opens in a stated language, and there is nothing here to share: one
  * operator, one browser, no links sent to anyone. If a second locale is ever added,
- * the choice lives in `localStorage` under {@link APP_KEY} and is changed inside the
- * app.
+ * the choice is changed inside the app.
  */
-export { APP_KEY } from '@portfolio/luna-shopper-admin/models';
-
 export const APP_AVAILABLE_LOCALES: string[] = ['en'];
-export const APP_DEFAULT_LOCALE = 'en';

@@ -17,6 +17,7 @@ import { CategoryService } from './category.service';
 import { CatalogDashboardService } from './dashboard.service';
 import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
+import { ItemEanStore } from './item-ean.store';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { LocationScopeService } from './location-scopes';
@@ -97,6 +98,9 @@ import { SupermarketService } from './supermarket.service';
     // A chain's aisles, a shop's list of them, pins, and where a product is in
     // a shop (plan 0167).
     SectionService,
+    // Every barcode of every product (plan 0185), read and written by the
+    // item service alone.
+    ItemEanStore,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

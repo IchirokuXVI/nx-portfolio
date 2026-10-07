@@ -216,12 +216,33 @@ export const ERROR_CODES = {
   /**
    * A brand that is nobody's spelling was asked to be deleted (plan 0124).
    *
-   * A spelling can go away, because deleting it puts its products back exactly
-   * where they were before it was registered and its key returns to the
-   * suggestions list by itself. Every other brand still cannot be removed, by
-   * section 9 of plan 0115: there is nowhere for its products to go.
+   * **Nothing raises this any more.** Such a brand is now deleted when nothing
+   * points at it and refused with {@link BRAND_IN_USE} when something does. The
+   * code stays in the list because clients were built against it, and a code
+   * that leaves the list breaks their build for no gain.
    */
   BRAND_NOT_LINKED: 'brand_not_linked',
+  /**
+   * A brand was given its own key as a homonym (plan 0178).
+   *
+   * A homonym says that a printed key also names this brand, beside the brand
+   * that holds the key. A brand's own key already names it, so the row would
+   * say nothing, and it would make the brand answer twice for one printed
+   * name.
+   */
+  BRAND_HOMONYM_IS_OWN_KEY: 'brand_homonym_is_own_key',
+  /**
+   * A brand was asked to be deleted while something still points at it (the
+   * follow up of plan 0178).
+   *
+   * A brand that is nobody's spelling may be deleted, and only when no product
+   * holds it and no spelling is linked to it. The delete never decides for a
+   * product: it does not unbrand one and it does not move one to another
+   * brand. A person moves the products and the spellings first, and the counts
+   * that say how many are left travel in the envelope's `details` as
+   * `itemCount` and `linkCount`.
+   */
+  BRAND_IN_USE: 'brand_in_use',
   /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
@@ -239,6 +260,16 @@ export const ERROR_CODES = {
    * offer to link one or to create a new shop anyway.
    */
   PLACE_MATCHES_LOCATION: 'place_matches_location',
+  /**
+   * A link named a shop of one chain for a place that resolves to another
+   * (plan 0193).
+   *
+   * Nothing was written. The chain the place resolves to travels in
+   * `details` as `chain`, with its id and its name, so the back office can
+   * ask once and send `acrossChains`. A place that resolves to no chain never
+   * gets this: the shop a person named is then the statement.
+   */
+  PLACE_NAMES_ANOTHER_CHAIN: 'place_names_another_chain',
   /**
    * The run declared a price scope the chain does not hold (plan 0152,
    * section 1). The key travels in `details` as `scopeKey`, so the operator
@@ -265,6 +296,29 @@ export const ERROR_CODES = {
    * 0166, rule R3). Every product has at least one.
    */
   ITEM_NEEDS_A_CATEGORY: 'item_needs_a_category',
+  /**
+   * A product was given an EAN that is not a real barcode (plan 0184): not 8,
+   * 12, 13 or 14 digits, a wrong check digit, or a code a shop prints on its
+   * own scales (13 digits starting with 2).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence is particular: the operator typed a number that looks like a
+   * barcode, and has to be told that this one names no product. Only a write
+   * that sets or changes the EAN meets it. A product that already holds such
+   * a code still loads and still saves every other field.
+   */
+  ITEM_EAN_INVALID: 'item_ean_invalid',
+  /**
+   * A barcode was given to a product while another product holds it (plan
+   * 0185). A product has several barcodes, and a barcode names one product.
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because it is the one
+   * conflict a queue decision can meet that a person has to settle: the row
+   * prints a barcode the catalog already knows as another product, so either
+   * the row belongs to that product or the barcode sits on the wrong one. The
+   * barcode and the product that holds it travel in `details`.
+   */
+  ITEM_EAN_HELD: 'item_ean_held',
   /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
@@ -304,6 +358,16 @@ export const ERROR_CODES = {
    * office can offer to open it rather than only say no.
    */
   SECTION_SLUG_TAKEN: 'section_slug_taken',
+  /**
+   * A shop was given an external reference that another shop holds (plan
+   * 0195).
+   *
+   * The catalog holds one shop for each reference, across chains and
+   * providers. Nothing was written. The reference travels in `details` as
+   * `externalRef`, and the shop that holds it as `heldBy`, with its id, its
+   * chain, its label and its address, so the back office can name that shop.
+   */
+  LOCATION_EXTERNAL_REF_TAKEN: 'location_external_ref_taken',
   /**
    * `GET /v1/catalog/items` was sent `locationId` beside another way of saying
    * where a price comes from, or beside a `soldBy` naming another chain (plan
@@ -452,11 +516,20 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 again: the request is well formed and the caller may make it, and what
   // refuses it is that this brand is not a spelling of anything.
   [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
+  // 400, because what is wrong is a value in the body: the printed key is the
+  // brand's own key (plan 0178).
+  [ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY]: HttpStatus.BAD_REQUEST,
+  // 409: the request is well formed and the caller may make it, and what
+  // refuses it is the products and the spellings that still point at the brand.
+  [ERROR_CODES.BRAND_IN_USE]: HttpStatus.CONFLICT,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: HttpStatus.CONFLICT,
   [ERROR_CODES.PLACE_MATCHES_LOCATION]: HttpStatus.CONFLICT,
+  // 409 for the same reason (plan 0193): what refuses the link is the chain
+  // the place resolves to, and the same request with `acrossChains` succeeds.
+  [ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SCOPE_NOT_FOUND]: HttpStatus.CONFLICT,
   // 409 for the three rules of the tree that turn on another row (plan 0166):
   // the request is well formed, and what refuses it is where the named rows
@@ -466,6 +539,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.CATEGORY_IN_USE]: HttpStatus.CONFLICT,
   // 400, because what is wrong is a value in the body: an empty list.
   [ERROR_CODES.ITEM_NEEDS_A_CATEGORY]: HttpStatus.BAD_REQUEST,
+  // 400 for the same reason: what is wrong is a value in the body, a number
+  // that is not a barcode (plan 0184).
+  [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
+  // 409: the barcode is a real one, and another product holds it (plan 0185).
+  [ERROR_CODES.ITEM_EAN_HELD]: HttpStatus.CONFLICT,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,
@@ -475,6 +553,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
+  // 409: the reference is well formed, and another shop holds it (plan 0195).
+  [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: HttpStatus.CONFLICT,
   // Plan 0170: a malformed combination of query parameters, and a shop that
   // does not exist.
   [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: HttpStatus.BAD_REQUEST,

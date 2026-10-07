@@ -1,3 +1,4 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   HarvestRunMode,
   HarvestRunStatus,
@@ -10,7 +11,6 @@ import {
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
-import type { ConfigService } from '@nestjs/config';
 import {
   HARVESTER_ENTITIES,
   HarvestRun,
@@ -78,7 +78,10 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       {
         requireAdmin: async () => ADMIN,
       } as unknown as PlatformAdminService,
-      undefined as unknown as ConfigService
+      undefined as never,
+      undefined as unknown as ConfigService,
+      undefined as never,
+      undefined as never
     );
   });
 
@@ -218,9 +221,7 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       ).rejects.toThrow(/uq_source_catalog_entry/);
 
       // The same string for another chain is another product's row.
-      const elsewhere = await entries.save(
-        row({ supermarketId: OTHER_CHAIN })
-      );
+      const elsewhere = await entries.save(row({ supermarketId: OTHER_CHAIN }));
       expect(elsewhere.id).not.toBe(saved.id);
     });
 
@@ -271,11 +272,12 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       expect(held.map((each) => Number(each.price))).toEqual([0.53, 0.59]);
     });
 
-    it('replaces a scope its own row rather than adding a second', async () => {
+    it('replaces a scope its own row of one kind rather than adding a second', async () => {
       const entry = await entries.save(row());
       const first = prices.create({
         entryId: entry.id,
         priceScopeId: NORTH,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
         price: 0.53,
         currency: 'EUR',
         runId: RUN,
@@ -287,29 +289,97 @@ describeIntegration('the one source product schema (real Postgres)', () => {
           prices.create({
             entryId: entry.id,
             priceScopeId: NORTH,
+            sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
             price: 0.59,
             currency: 'EUR',
             runId: LATER_RUN,
           })
         )
-      ).rejects.toThrow(/uq_source_entry_prices_scope/);
+      ).rejects.toThrow(/uq_source_entry_prices_scope_kind/);
 
-      // Which is why the ingest upserts on that pair.
+      // Which is why the ingest upserts on those three (plan 0190).
       await prices.upsert(
         [
           {
             entryId: entry.id,
             priceScopeId: NORTH,
+            sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
             price: 0.59,
             currency: 'EUR',
             runId: LATER_RUN,
           },
         ],
-        { conflictPaths: ['entryId', 'priceScopeId'] }
+        { conflictPaths: ['entryId', 'priceScopeId', 'sourceKind'] }
       );
       const held = await prices.find({ where: { entryId: entry.id } });
       expect(held).toHaveLength(1);
       expect(Number(held[0].price)).toBe(0.59);
+    });
+
+    it('holds a website price and a leaflet price for one scope side by side (plan 0190)', async () => {
+      // A website and a leaflet of one chain print one product the same
+      // way, and share the row. Each states its own price.
+      const entry = await entries.save(
+        row({ sourceKind: PriceSourceKind.OFFICIAL_WEB })
+      );
+      await prices.save([
+        prices.create({
+          entryId: entry.id,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          price: 1.25,
+          currency: 'EUR',
+          runId: RUN,
+        }),
+        prices.create({
+          entryId: entry.id,
+          priceScopeId: NORTH,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          price: 1.15,
+          currency: 'EUR',
+          runId: LATER_RUN,
+        }),
+      ]);
+
+      const held = await prices.find({
+        where: { entryId: entry.id },
+        order: { price: 'ASC' },
+      });
+      expect(held.map((each) => [each.sourceKind, Number(each.price)])).toEqual(
+        [
+          [PriceSourceKind.OFFICIAL_LEAFLET, 1.15],
+          [PriceSourceKind.OFFICIAL_WEB, 1.25],
+        ]
+      );
+    });
+
+    it('holds one price of no kind per scope at most, as before the plan', async () => {
+      // Only a row from before plan 0190 has no kind. The key counts two
+      // nulls as equal, so such rows cannot multiply.
+      const entry = await entries.save(row());
+      await prices.save(
+        prices.create({
+          entryId: entry.id,
+          priceScopeId: NORTH,
+          sourceKind: null,
+          price: 0.53,
+          currency: 'EUR',
+          runId: null,
+        })
+      );
+
+      await expect(
+        prices.save(
+          prices.create({
+            entryId: entry.id,
+            priceScopeId: NORTH,
+            sourceKind: null,
+            price: 0.59,
+            currency: 'EUR',
+            runId: null,
+          })
+        )
+      ).rejects.toThrow(/uq_source_entry_prices_scope_kind/);
     });
 
     it('takes its rows with the entry, by the cascade', async () => {

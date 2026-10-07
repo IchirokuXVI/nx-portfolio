@@ -1,4 +1,9 @@
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import {
+  measuresContent,
+  packCountOf,
+  sourceSizeOf,
+  type SourceSize,
+} from '@portfolio/luna-shopper/contracts';
 
 /**
  * Splitting the trailing size off a description (plan 0085, section 7).
@@ -132,9 +137,53 @@ export function splitSize(description: string): SplitDescription {
   return { name, sizeFormat: trimmed.slice(start).trim() };
 }
 
+/** `75 cl`, `1.5 L`, `3x187 ml`: one optional count, one number, one word. */
+const STATED_SIZE =
+  /^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})$/i;
+
+/**
+ * The number a trailing size states and the catalog unit it is in (plan 0177).
+ *
+ * `75 cl` is 750 `MILLILITER`, because the catalog holds no centilitre, `1.5 L`
+ * is 1.5 `LITER` and `10 ud` is 10 `UNIT`. A multiplied pack is stated as one
+ * pack, the way the LIDL adapter states one: `3x187 ml` is 561 millilitres,
+ * which is what the shopper carries out.
+ *
+ * Two shapes answer no size at all, and both on purpose. A sum, `23+12
+ * lavados`, is a bonus pack whose arithmetic the chain did not state, so the
+ * pattern does not match it. A length, `30 m`, has no catalog unit, and a
+ * number with no unit beside it is what this plan exists to stop writing. The
+ * printed text is untouched either way: `sizeFormat` is half of the row's key.
+ */
+export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
+  const match = STATED_SIZE.exec((sizeFormat ?? '').trim());
+  if (!match) {
+    return { unitSize: null, sizeUnit: null };
+  }
+  const count = match[1] === undefined ? 1 : Number(match[1]);
+  const each = Number(match[2].replace(',', '.'));
+  const size = sourceSizeOf(count * each, match[3]);
+  return size.sizeUnit === null || !size.unitSize || size.unitSize <= 0
+    ? { unitSize: null, sizeUnit: null }
+    : size;
+}
+
 /** One count times one quantity and a unit, `3x187 ml`, and nothing else. */
 const COUNT_TIMES_QUANTITY =
-  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*[A-Za-zÀ-ſ]{1,10}$/i;
+  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})$/i;
+
+/**
+ * The `N` of a trailing `NxQ`, when `Q` measures what is inside (plan 0183).
+ *
+ * The pattern alone takes any word for the unit, so it read `125x157 cm` as a
+ * pack of 125 and `5x1.2 m` as a pack of 5. Those are the two sides of one
+ * tablecloth and of one sheet. A count needs a unit of content: a weight, a
+ * volume or a count. A length is a dimension and states no pack.
+ */
+function multipliedCount(sizeFormat: string | null): string | null {
+  const match = sizeFormat ? COUNT_TIMES_QUANTITY.exec(sizeFormat) : null;
+  return match && measuresContent(match[2]) ? match[1] : null;
+}
 
 /**
  * A pack phrase at the end of what is left once the size is split off:
@@ -153,15 +202,16 @@ const TRAILING_PACK =
  * is null, because it prints a pack of packs and neither number alone is the
  * count. Everything else is null, a summed `23+12 lavados` and a bare `6 ud`
  * included: the first is a sum and the second is a size, and reading either as
- * a pack is the guess the plan refuses. Proved by the `3x187 ml` row of
+ * a pack is the guess the plan refuses. Neither is a dimension, `125x157 cm`:
+ * see {@link multipliedCount}. Proved by the `3x187 ml` row of
  * `landing-page.html` and by the literals in `size.spec.ts`.
  */
 export function packCountIn(description: string): number | null {
   const { name, sizeFormat } = splitSize(description);
-  const multiplied = sizeFormat ? COUNT_TIMES_QUANTITY.exec(sizeFormat) : null;
+  const multiplied = multipliedCount(sizeFormat);
   const phrase = TRAILING_PACK.exec(name);
   if (multiplied && phrase) {
     return null;
   }
-  return packCountOf(multiplied?.[1] ?? phrase?.[1] ?? null);
+  return packCountOf(multiplied ?? phrase?.[1] ?? null);
 }

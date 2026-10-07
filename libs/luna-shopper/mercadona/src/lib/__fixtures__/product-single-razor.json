@@ -1,0 +1,107 @@
+{
+  "id": "22083",
+  "ean": "8480000220837",
+  "slug": "maquinilla-afeitar-recargable-deliplus-precision-system-3-hojas-caja",
+  "brand": "Deliplus",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": null,
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/5ea5ad8adb7a0b54c506d859c5357c36.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/5ea5ad8adb7a0b54c506d859c5357c36.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/5ea5ad8adb7a0b54c506d859c5357c36.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/68b9aa41e4097a77cf934da6367479d0.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/68b9aa41e4097a77cf934da6367479d0.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/68b9aa41e4097a77cf934da6367479d0.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Deliplus",
+    "origin": null,
+    "suppliers": [],
+    "legal_name": null,
+    "description": "Maquinilla de afeitar recargable Deliplus Precision System 3 hojas",
+    "counter_info": null,
+    "danger_mentions": null,
+    "alcohol_by_volume": null,
+    "mandatory_mentions": null,
+    "production_variant": null,
+    "usage_instructions": null,
+    "storage_instructions": null
+  },
+  "is_bulk": false,
+  "packaging": "Caja",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/22083/maquinilla-afeitar-recargable-deliplus-precision-system-3-hojas-caja",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/5ea5ad8adb7a0b54c506d859c5357c36.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 20,
+      "name": "Cuidado facial y corporal",
+      "level": 0,
+      "order": 241,
+      "categories": [
+        {
+          "id": 192,
+          "name": "Afeitado y cuidado para hombre",
+          "level": 1,
+          "order": 241,
+          "categories": [
+            {
+              "id": 623,
+              "name": "Maquinillas de afeitar",
+              "level": 2,
+              "order": 241
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    null
+  ],
+  "display_name": "Maquinilla de afeitar recargable Deliplus Precision System 3 hojas",
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": 21,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": null,
+    "unit_size": 1,
+    "bulk_price": "3.00",
+    "unit_price": "3.00",
+    "approx_size": false,
+    "size_format": "ud",
+    "total_units": null,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "21.000",
+    "price_decreased": false,
+    "reference_price": "3.000",
+    "min_bunch_amount": 1,
+    "reference_format": "ud",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": null,
+    "ingredients": null
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

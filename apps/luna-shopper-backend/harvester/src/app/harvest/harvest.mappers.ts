@@ -5,6 +5,7 @@ import type {
   HarvestRunPresetView,
   HarvestRunView,
   ItemPriceDetails,
+  PlaceLocationCandidate,
   PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
   SourceEntryPriceView,
@@ -12,6 +13,7 @@ import type {
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
+import { unitBasisOf } from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
   HarvestRun,
@@ -119,8 +121,13 @@ export function toHarvestRunPresetView(
   };
 }
 
+/**
+ * `candidates` is what the list read worked out for a `NEW` place (plan
+ * 0193). Every other read answers none, so the default is the empty list.
+ */
 export function toDiscoveredPlaceView(
-  row: DiscoveredPlace
+  row: DiscoveredPlace,
+  candidates: PlaceLocationCandidate[] = []
 ): DiscoveredPlaceView {
   return {
     id: row.id,
@@ -146,6 +153,7 @@ export function toDiscoveredPlaceView(
     supermarketLocationId: row.supermarketLocationId,
     firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
+    candidates,
   };
 }
 
@@ -169,6 +177,8 @@ export function toSourceCatalogEntryView(
     brand: row.brand,
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
+    sizeUnit: row.sizeUnit ?? null,
+    soldByWeight: row.soldByWeight ?? false,
     sizeFormat: row.sizeFormat,
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
@@ -196,10 +206,12 @@ export function toSourceEntryPriceView(
   return {
     id: row.id,
     priceScopeId: row.priceScopeId,
+    sourceKind: row.sourceKind ?? null,
     price: toNumber(row.price),
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
+    unitBasis: unitBasisOf(row.unitPriceLabel),
     validFrom: iso(row.validFrom),
     validUntil: iso(row.validUntil),
     details: row.details ?? null,

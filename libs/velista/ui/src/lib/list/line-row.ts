@@ -265,10 +265,17 @@ export class LineRow {
    * quantity is the line's state rather than an annotation on it, and a name that said
    * "Olive oil" for a line at zero and "Olive oil, 2" for the same line a moment later
    * would hide the only thing that changed.
+   *
+   * **The format and the brand are in it when the row draws them**, between the
+   * two: two lines of one name are told apart by exactly that, and a name without
+   * it would read both rows out as the same thing.
    */
   accessibleName(): string {
     const line = this.line();
-    return `${line.content}, ${line.quantity}`;
+    const detail = line.detail ?? null;
+    return detail === null
+      ? `${line.content}, ${line.quantity}`
+      : `${line.content}, ${detail}, ${line.quantity}`;
   }
 
   /**

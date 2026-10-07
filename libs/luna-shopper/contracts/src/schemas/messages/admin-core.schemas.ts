@@ -95,6 +95,7 @@ const zoneFields = {
   ownerUserId: nullableString(),
   memberCount: integer({ minimum: 0 }),
   listCount: integer({ minimum: 0 }),
+  pendingCount: integer({ minimum: 0 }),
   markedForDeletionAt: nullableString(),
   ...timestamps,
 };
@@ -105,6 +106,7 @@ const zoneKeys = [
   'ownerUserId',
   'memberCount',
   'listCount',
+  'pendingCount',
   'markedForDeletionAt',
   ...timestampKeys,
 ];
@@ -336,6 +338,7 @@ const listZonesRequest = object(
   {
     ...adminCredentialProperties,
     targetUserId: string(),
+    hasPending: boolean(),
     createdAfter: string({ format: 'date-time' }),
     createdBefore: string({ format: 'date-time' }),
     cursor: string(),

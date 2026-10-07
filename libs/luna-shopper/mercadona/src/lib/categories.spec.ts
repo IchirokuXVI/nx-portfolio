@@ -17,10 +17,10 @@ import { normalizeCategoryProducts, normalizeProduct } from './normalize';
 /** A path of bare names, which is what the harvester stores and resolves. */
 const names = (...path: string[]) => path.map((name) => ({ name }));
 
-describe('the leaves this library holds a copy of (plan 0173, appendix A)', () => {
-  it('has the 29 roots and their 246 leaves, uncategorised among them', () => {
-    expect(Object.keys(CATEGORY_LEAVES)).toHaveLength(29);
-    expect(CATEGORY_LEAF_SLUGS.size).toBe(246);
+describe('the leaves this library holds a copy of (plans 0173 and 0179)', () => {
+  it('has the 29 + 4 roots and their 246 + 30 leaves, uncategorised among them', () => {
+    expect(Object.keys(CATEGORY_LEAVES)).toHaveLength(29 + 4);
+    expect(CATEGORY_LEAF_SLUGS.size).toBe(246 + 30);
     for (const [root, leaves] of Object.entries(CATEGORY_LEAVES)) {
       expect(leaves.length).toBeGreaterThan(0);
       // A root is never a leaf: a product only ever sits on a child.
@@ -105,6 +105,26 @@ describe('resolveCategory', () => {
     // can: read as a section, `Carne` would answer `uncategorised` here.
     expect(resolveCategory(names('Fitoterapia y parafarmacia', 'Carne'))).toBe(
       'parapharmacy'
+    );
+  });
+
+  it('files make-up on the leaves plan 0179 added, and nails with them', () => {
+    expect(resolveCategory(names('Maquillaje', 'Labios'))).toBe('lip-makeup');
+    expect(resolveCategory(names('Maquillaje', 'Ojos'))).toBe('eye-makeup');
+    expect(
+      resolveCategory(names('Maquillaje', 'Bases de maquillaje y corrector'))
+    ).toBe('face-makeup');
+    expect(resolveCategory(names('Maquillaje', 'Colorete y polvos'))).toBe(
+      'powders-and-blush'
+    );
+    // Mercadona files nails under body care, and the leaf is a make-up one.
+    expect(
+      resolveCategory(names('Cuidado facial y corporal', 'Manicura y pedicura'))
+    ).toBe('nail-care');
+    // The section spans every make-up leaf, so alone it names none of them.
+    expect(resolveCategory(names('Maquillaje'))).toBe('uncategorised');
+    expect(resolveCategory(names('Maquillaje', 'Un pasillo nuevo'))).toBe(
+      'uncategorised'
     );
   });
 
@@ -215,7 +235,7 @@ describe('the checked in fixtures (plan 0166, section 7)', () => {
       'compatible-nespresso-capsules',
       'serrano-ham',
       'batteries-kitchenware-and-bags',
-      'cream',
+      'body-and-hand-hydration',
       'film-aluminum-and-preservation',
     ]);
     expect(

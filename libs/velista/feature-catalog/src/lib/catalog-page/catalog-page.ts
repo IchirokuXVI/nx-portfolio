@@ -60,10 +60,13 @@ import {
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
-import { CATEGORY_PARAM, categoryChoice } from '../category-choice';
+import { categoryChoice } from '../category-choice';
 import {
+  CATALOG_PARAMS,
   catalogChoiceOf,
+  catalogOrderAfter,
   catalogQueryOf,
+  defaultCatalogOrder,
   type CatalogChoice,
 } from '../supermarket-choice';
 
@@ -121,11 +124,15 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * parameter and opens the tab plain. Clearing the choice is a navigation to the tab
  * without it, never a pop.
  *
- * ## State lives here, not in a store
+ * ## State lives in the URL, not in a store
  *
- * `ShopStore`'s reasoning: the query, the chain and the pages are about the
- * screen that is open and are thrown away with it. The category is the exception,
- * because it is chosen rather than typed (section 2), and it is the URL's.
+ * The pages of products are about the screen that is open and are thrown away with
+ * it. Every filter is the URL's: the category, the chain, the shop, and the text and
+ * the order too (`?q=`, `?order=`). The pickers are pages of their own, so the tab is
+ * destroyed while one is open, and a filter held only in a signal here came back
+ * reset from choosing a supermarket or a category. The text and the order are
+ * written in place of the entry as they change, so a pop back onto the tab finds
+ * them as well. A visit from the bar opens the tab plain, as before.
  */
 @Component({
   selector: 'lib-catalog-page',
@@ -188,6 +195,12 @@ export class CatalogPage {
 
   /** Whether the URL has been read once, so its first emission always reads. */
   private _urlRead = false;
+
+  /**
+   * The page's own writes of the text and the order that have not landed yet. While
+   * one is on its way the field is ahead of the URL, so the URL does not overrule it.
+   */
+  private _writes = 0;
 
   /** Set when the tab is left, so an answer arriving later writes no URL. */
   private _destroyed = false;
@@ -343,11 +356,29 @@ export class CatalogPage {
         );
   });
 
-  /** The tab's own choice, carried to the children page so it can mark it. */
-  protected readonly categoryChipQuery = computed(() => {
-    const slug = this.categorySlug();
-    return slug === null ? null : { [CATEGORY_PARAM]: slug };
+  /**
+   * What the URL holds, or is about to: the text is the field's, so a link followed
+   * before the debounce carries what was typed, in the order that text settles on.
+   */
+  private readonly _choice = computed<CatalogChoice>(() => {
+    const typed = this.typed();
+    const order = catalogOrderAfter(this.query(), typed, this.order());
+    return {
+      category: this.categorySlug(),
+      chain: this.chain(),
+      shop: this.shop(),
+      query: typed.trim() === '' ? null : typed,
+      order: order === defaultCatalogOrder(typed) ? null : order,
+    };
   });
+
+  /**
+   * The whole choice, carried to both category pages: the children page marks the
+   * category with it, and whichever row is chosen comes back with the rest of it.
+   */
+  protected readonly choiceQuery = computed(() =>
+    catalogQueryOf(this._choice())
+  );
 
   /** The first postal code, for `near 14013`. */
   protected readonly near = computed(
@@ -504,6 +535,7 @@ export class CatalogPage {
       return;
     }
     this.order.set(order);
+    this._writeChoice();
     void this._firstPage();
   }
 
@@ -569,27 +601,33 @@ export class CatalogPage {
   private _search(words: string): void {
     const before = this.query().trim();
     const after = words.trim();
+    this.order.set(catalogOrderAfter(before, after, this.order()));
     this.query.set(words);
 
-    if (before === '' && after !== '') {
-      this.order.set('relevance');
-    } else if (after === '' && this.order() === 'relevance') {
-      this.order.set('name');
-    }
     if (before === after) {
       return;
     }
+    this._writeChoice();
     void this._firstPage();
   }
 
   /** A choice arriving from the URL. The same choice again changes nothing. */
   private _readChoice(choice: CatalogChoice): void {
+    const held = this._choice();
     const shopChanged = choice.shop !== this.shop();
+    // The text and the order are read on arrival and on a pop onto another entry
+    // of the tab. The page's own write of them is not news to it.
+    const typedHere = this._urlRead && this._writes > 0;
+    const wordsChanged =
+      !typedHere &&
+      ((choice.query ?? '').trim() !== (held.query ?? '').trim() ||
+        choice.order !== held.order);
     if (
       this._urlRead &&
       choice.category === this.categorySlug() &&
       choice.chain === this.chain() &&
-      !shopChanged
+      !shopChanged &&
+      !wordsChanged
     ) {
       return;
     }
@@ -597,6 +635,13 @@ export class CatalogPage {
     this.categorySlug.set(choice.category);
     this.chain.set(choice.chain);
     this.shop.set(choice.shop);
+    if (wordsChanged) {
+      const words = choice.query ?? '';
+      this._clearDebounce();
+      this.typed.set(words);
+      this.query.set(words);
+      this.order.set(choice.order ?? defaultCatalogOrder(words));
+    }
     if (shopChanged) {
       this._readLocation(choice.shop);
     }
@@ -636,13 +681,30 @@ export class CatalogPage {
     });
   }
 
-  /** What the URL holds now, for the links that keep part of it. */
-  private _choice(): CatalogChoice {
-    return {
-      category: this.categorySlug(),
-      chain: this.chain(),
-      shop: this.shop(),
+  /**
+   * The text or the order changed: the current URL, whatever covers the tab, with
+   * the choice as it now is, in place of this entry. A change of either is not a
+   * step somebody walks back through, and a pop onto the tab must find them.
+   */
+  private _writeChoice(): void {
+    const url = this._router.parseUrl(this._router.url);
+    const kept: Params = {};
+    for (const [name, value] of Object.entries(url.queryParams)) {
+      if (!CATALOG_PARAMS.includes(name)) {
+        kept[name] = value;
+      }
+    }
+    url.queryParams = { ...kept, ...catalogQueryOf(this._choice()) };
+    if (this._router.serializeUrl(url) === this._router.url) {
+      return;
+    }
+    this._writes++;
+    const landed = () => {
+      this._writes--;
     };
+    void this._router
+      .navigateByUrl(url, { replaceUrl: true })
+      .then(landed, landed);
   }
 
   private _tabPath(): string {
@@ -652,7 +714,7 @@ export class CatalogPage {
   /** The tab with this choice in its URL. */
   private _tabUrl(choice: CatalogChoice) {
     const url = this._router.parseUrl(this._tabPath());
-    url.queryParams = catalogQueryOf(choice) as Params;
+    url.queryParams = catalogQueryOf(choice);
     return url;
   }
 

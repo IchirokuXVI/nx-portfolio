@@ -50,7 +50,7 @@
 |---|---------|------------|-------|
 | 20 | **No scope boundary** | "fix my app" | "Fix only the login form validation in `src/auth.js`. Touch nothing else." |
 | 21 | **No stack constraints** | "build a React component" | "React 18, TypeScript strict, no external libraries, Tailwind only" |
-| 22 | **No stop condition for agents** | "build the whole feature" | Explicit stop conditions + ✅ checkpoint output after each step |
+| 22 | **No stop condition for agents** | "build the whole feature" | Explicit stop conditions + a progress report at each checkpoint |
 | 23 | **No file path for IDE AI** | "update the login function" | "Update `handleLogin()` in `src/pages/Login.tsx` only" |
 | 24 | **Wrong template for tool** | GPT-style prose prompt used in Cursor | Adapt to File-Scope Template (Template G) |
 | 25 | **Pasting entire codebase** | Full repo context every prompt | Scope to only the relevant function and file |
@@ -75,7 +75,7 @@
 |---|---------|------------|-------|
 | 31 | **No starting state** | "build me a REST API" | "Empty Node.js project, Express installed, `src/app.js` exists" |
 | 32 | **No target state** | "add authentication" | "`/src/middleware/auth.js` with JWT verify. `POST /login` and `POST /register` in `/src/routes/auth.js`" |
-| 33 | **Silent agent** | No progress output | "After each step output: ✅ [what was completed]" |
+| 33 | **Silent agent** | No progress output | "Report progress when a checkpoint is reached or the plan changes" |
 | 34 | **Unlocked filesystem** | No file restrictions | "Only edit files inside `src/`. Do not touch `package.json`, `.env`, or any config file." |
 | 35 | **No human review trigger** | Agent decides everything autonomously | "Stop and ask before: deleting any file, adding any dependency, or changing the database schema" |
 | 36 | **Vague first turn for an agentic model** | "fix the auth bug" with no scope, files, or criteria | Use Template M. Front-load the outcome, relevant context, file scope, constraints, action boundaries, and acceptance criteria. |

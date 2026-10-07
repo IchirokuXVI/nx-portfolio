@@ -1,3 +1,4 @@
+import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
@@ -12,10 +13,14 @@ import { SourceCatalogEntry } from './source-catalog-entry.entity';
  * the row were one price with no scope on a row that several scopes describe,
  * and the second region's leaflet overwrote the first's.
  *
- * A run observing a price for a scope replaces that scope's row. A run observing
- * no price, a DEZA crawl or a leaflet tile whose only number is one a shopper
- * cannot pay for one unit, writes nothing here and leaves what an earlier run
- * said.
+ * A run observing a price for a scope replaces that scope's row **of its own
+ * kind** (plan 0190). A website and a leaflet of one chain can print one
+ * product the same way, and they then share one row of
+ * `source_catalog_entries`. Each states its own price, so the key holds the
+ * kind: a leaflet price and a website price for one scope are two rows here,
+ * and neither run overwrites the other's. A run observing no price, a DEZA
+ * crawl or a leaflet tile whose only number is one a shopper cannot pay for
+ * one unit, writes nothing here and leaves what an earlier run said.
  *
  * This is **not** where a shopper's price lives. Every price a source gives is a
  * row of `item_prices` in catalog, stamped with the run that wrote it, and plan
@@ -24,7 +29,11 @@ import { SourceCatalogEntry } from './source-catalog-entry.entity';
  * call per scope, each with its own run id.
  */
 @Entity({ name: 'source_entry_prices' })
-@Unique('uq_source_entry_prices_scope', ['entryId', 'priceScopeId'])
+@Unique('uq_source_entry_prices_scope_kind', [
+  'entryId',
+  'priceScopeId',
+  'sourceKind',
+])
 export class SourceEntryPrice extends BaseEntity {
   @Column({ type: 'uuid' })
   entryId!: string;
@@ -38,6 +47,29 @@ export class SourceEntryPrice extends BaseEntity {
   /** The scope the run was started for. Opaque: catalog owns the scope. */
   @Column({ type: 'uuid' })
   priceScopeId!: string;
+
+  /**
+   * What stated this price: the kind of the run that observed it (plan 0190).
+   *
+   * An accept writes the price to catalog under this kind and never under the
+   * kind of the row, which says who owns the text of the row and nothing
+   * about one price. Plan 0080 decides the shown price by kind, so a leaflet
+   * price on a row that a website walk owns must still arrive as a leaflet
+   * price.
+   *
+   * **Every run writes it. Null is only a row from before the plan whose kind
+   * the migration could not read**: the row names no run, its run is gone, or
+   * the run does not say. Such a price is not guessed at. It is shown, it is
+   * not sent to catalog, and the settle of plan 0191 keeps everything at its
+   * scope.
+   */
+  @Column({
+    type: 'enum',
+    enum: PriceSourceKind,
+    enumName: 'price_source_kind',
+    nullable: true,
+  })
+  sourceKind!: PriceSourceKind | null;
 
   /**
    * The till price for one unit.

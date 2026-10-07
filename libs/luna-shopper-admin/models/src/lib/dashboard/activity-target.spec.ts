@@ -2,13 +2,12 @@ import type { PathOf } from '../resource/resource-path';
 import { activityTarget } from './activity-target';
 
 /**
- * A resolver that mounts the five screens the way admin plan 0022 does, so the
+ * A resolver that mounts the four screens the way admin plan 0022 does, so the
  * assertions read as the URLs an operator would land on.
  */
 const mounted: PathOf = (name) => {
   const section: Record<string, string | undefined> = {
     items: 'catalog',
-    prices: 'catalog',
     users: 'shoppers',
     zones: 'shoppers',
     lists: 'shoppers',
@@ -24,10 +23,8 @@ const nothing: PathOf = () => null;
 describe('activityTarget', () => {
   it.each([
     ['zones', ['/', 'shoppers', 'zones']],
-    ['shopping_lists', ['/', 'shoppers', 'lists']],
     ['users', ['/', 'shoppers', 'users']],
     ['items', ['/', 'catalog', 'items']],
-    ['item_prices', ['/', 'catalog', 'prices']],
   ])(
     'sends a %s row to its own screen, wherever it is mounted',
     (entity, path) => {
@@ -44,12 +41,19 @@ describe('activityTarget', () => {
    * uuid. A link built from it would land on the not found page, which costs a
    * navigation to learn that the answer was no.
    */
-  it.each(['supermarket_items', 'list_lines', 'zone_memberships'])(
-    'has no target for a %s row',
-    (entity) => {
-      expect(activityTarget({ entity, entityId: 'row-1' }, mounted)).toBeNull();
-    }
-  );
+  it.each([
+    'supermarket_items',
+    'list_lines',
+    'zone_memberships',
+    // A price is read on its product's page (admin plan 0043), and the audit
+    // row names the price and not the product.
+    'item_prices',
+    // A list is a page under its zone (admin plan 0045), and the audit row
+    // names the list and not the zone.
+    'shopping_lists',
+  ])('has no target for a %s row', (entity) => {
+    expect(activityTarget({ entity, entityId: 'row-1' }, mounted)).toBeNull();
+  });
 
   it('has no target for a table this app has no screen for', () => {
     expect(

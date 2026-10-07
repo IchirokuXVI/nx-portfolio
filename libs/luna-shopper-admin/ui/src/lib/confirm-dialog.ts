@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,10 +27,10 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
  */
 @Component({
   selector: 'lib-confirm-dialog',
-  imports: [RokuTranslatorPipe],
+  imports: [NgTemplateOutlet, RokuTranslatorPipe],
   template: `
     <div class="panel">
-      <h2 id="confirm-heading">{{ headingKey() | rokuT }}</h2>
+      <h2 id="confirm-heading">{{ headingKey() | rokuT: headingArgs() }}</h2>
       <p>{{ bodyKey() | rokuT: bodyArgs() }}</p>
 
       <!-- Whatever the caller has to put beside the sentence. The shop mapping
@@ -38,7 +39,27 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
            act on it is an apology. -->
       <ng-content />
 
+      <!-- The button that dismisses, drawn in one place and put before or
+           after the other one. -->
+      <ng-template #dismissing>
+        @if (dismissKey(); as key) {
+          <button
+            (click)="dismiss.emit()"
+            [class.primary]="prefer() === 'dismiss'"
+            [disabled]="busy()"
+            #dismissButton
+            type="button"
+            data-dismiss
+          >
+            {{ key | rokuT }}
+          </button>
+        }
+      </ng-template>
+
       <div class="controls">
+        @if (order() === 'dismiss-first') {
+          <ng-container [ngTemplateOutlet]="dismissing" />
+        }
         <button
           (click)="confirm.emit()"
           [class.danger]="tone() === 'danger'"
@@ -46,12 +67,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
           [disabled]="busy()"
           #confirmButton
           type="button"
+          data-confirm
         >
-          {{ (busy() ? busyKey() : confirmKey()) | rokuT }}
+          {{ (busy() ? busyKey() : confirmKey()) | rokuT: confirmArgs() }}
         </button>
-        <button (click)="dismiss.emit()" [disabled]="busy()" type="button">
-          {{ 'resource.action.cancel' | rokuT }}
-        </button>
+        @if (order() === 'confirm-first') {
+          <ng-container [ngTemplateOutlet]="dismissing" />
+        }
       </div>
     </div>
   `,
@@ -99,13 +121,8 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -151,17 +168,42 @@ export class ConfirmDialog implements AfterViewInit {
    * and a red button on a reversible act teaches an operator to ignore red.
    */
   readonly tone = input<'danger' | 'primary'>('danger');
+  /** What to put into the heading: "Delete the brand Hdo.?" */
+  readonly headingArgs = input<Record<string, string | number>>({});
+  /** What to put into the words of the button that goes through with it. */
+  readonly confirmArgs = input<Record<string, string | number>>({});
+  /**
+   * The words of the button that dismisses (admin plan 0053, section 2.5):
+   * "Stay here", "Keep it". `null` draws no such button, for a dialog that
+   * only says something and has one way out.
+   */
+  readonly dismissKey = input<string | null>('resource.action.cancel');
+  /**
+   * The button the operator is led to. It has the focus, and `dismiss` also
+   * draws the dismissing button as the primary one.
+   *
+   * `dismiss` is for a question whose safe answer is to stay: leaving a form
+   * with changes in it.
+   */
+  readonly prefer = input<'confirm' | 'dismiss'>('confirm');
+  /** Which button comes first. The one that goes through with it, as a rule. */
+  readonly order = input<'confirm-first' | 'dismiss-first'>('confirm-first');
 
   readonly confirm = output<void>();
   readonly dismiss = output<void>();
 
   private readonly _confirmButton =
     viewChild<ElementRef<HTMLButtonElement>>('confirmButton');
+  private readonly _dismissButton =
+    viewChild<ElementRef<HTMLButtonElement>>('dismissButton');
 
   ngAfterViewInit(): void {
     // The keyboard follows the dialog. Without this the focus is left on the
     // control that opened it, behind a cover, and Tab walks into content the
     // operator cannot see.
-    this._confirmButton()?.nativeElement.focus();
+    (
+      (this.prefer() === 'dismiss' ? this._dismissButton() : undefined) ??
+      this._confirmButton()
+    )?.nativeElement.focus();
   }
 }

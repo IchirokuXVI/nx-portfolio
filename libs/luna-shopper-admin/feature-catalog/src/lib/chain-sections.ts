@@ -17,6 +17,8 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
+  RECORD_EDIT_PARAM,
+  ResourceChanges,
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -61,15 +63,11 @@ export function panelErrorKey(error: unknown): string {
           {{ 'catalog.chainSections.heading' | rokuT }}
         </h2>
         @if (newLink(); as link) {
-          <a
-            [queryParams]="{ supermarketId: supermarketId() }"
-            [routerLink]="link"
-            class="button"
-            >{{ 'catalog.chainSections.add' | rokuT }}</a
-          >
+          <a [routerLink]="link" class="button">{{
+            'catalog.chainSections.add' | rokuT
+          }}</a>
         }
       </div>
-      <p class="muted">{{ 'catalog.chainSections.says' | rokuT }}</p>
 
       @if (loading() && sections().length === 0) {
         <p class="muted" role="status">
@@ -111,7 +109,12 @@ export function panelErrorKey(error: unknown): string {
               </tr>
             </thead>
             <tbody>
-              @for (section of sections(); track section.id) {
+              @for (
+                section of sections();
+                track section.id;
+                let first = $first;
+                let last = $last
+              ) {
                 <tr>
                   <td class="num">{{ section.position }}</td>
                   <td class="name">{{ nameOf(section) }}</td>
@@ -132,8 +135,32 @@ export function panelErrorKey(error: unknown): string {
                   </td>
                   <td class="num">{{ section.locationCount ?? '' }}</td>
                   <td class="actions">
+                    <button
+                      (click)="move(section, -1)"
+                      [attr.aria-label]="
+                        'catalog.locationSections.up'
+                          | rokuT: { name: nameOf(section) }
+                      "
+                      [disabled]="first || moving()"
+                      type="button"
+                      data-move-up
+                    >
+                      {{ 'catalog.locationSections.upShort' | rokuT }}
+                    </button>
+                    <button
+                      (click)="move(section, 1)"
+                      [attr.aria-label]="
+                        'catalog.locationSections.down'
+                          | rokuT: { name: nameOf(section) }
+                      "
+                      [disabled]="last || moving()"
+                      type="button"
+                      data-move-down
+                    >
+                      {{ 'catalog.locationSections.downShort' | rokuT }}
+                    </button>
                     @if (editLink(section.id); as link) {
-                      <a [routerLink]="link">{{
+                      <a [queryParams]="editQuery" [routerLink]="link">{{
                         'resource.action.edit' | rokuT
                       }}</a>
                     }
@@ -211,7 +238,11 @@ export function panelErrorKey(error: unknown): string {
       background: var(--admin-danger-wash);
     }
 
+    /* Positioned, so that the hidden heading of the actions column is laid out
+       inside the box that scrolls. Left to the page, it sat past the window's
+       edge on a phone and the whole page scrolled sideways by its offset. */
     .scroll {
+      position: relative;
       inline-size: 100%;
       overflow-x: auto;
     }
@@ -283,7 +314,7 @@ export function panelErrorKey(error: unknown): string {
       min-block-size: 2.25rem;
       padding: var(--admin-space-1) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);
@@ -317,6 +348,7 @@ export class ChainSections {
   private readonly _gateways = inject(RESOURCE_GATEWAYS);
   private readonly _references = inject(ResourceReferences);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _changes = inject(ResourceChanges);
   private readonly _content = inject(ContentLocaleStore);
 
   /** The chain whose sections are drawn. */
@@ -339,9 +371,14 @@ export class ChainSections {
 
   /** The create form, opened with this chain already chosen. */
   readonly newLink = computed(() => {
-    const path = this._registry.pathOf('sections');
+    const path = this._registry.pathOf('sections', {
+      supermarketId: this.supermarketId(),
+    });
     return path === null ? null : [...path, 'new'];
   });
+
+  /** Whether an order change is being written. */
+  readonly moving = signal(false);
 
   constructor() {
     effect(() => {
@@ -364,9 +401,64 @@ export class ChainSections {
     );
   }
 
+  /**
+   * What "Edit" adds to the address of a record, so that the page opens as
+   * the form and not to be read (admin plan 0053, section 2.3).
+   */
+  readonly editQuery = { [RECORD_EDIT_PARAM]: '1' };
+
   editLink(id: string): readonly string[] | null {
-    const path = this._registry.pathOf('sections');
-    return path === null ? null : [...path, id];
+    return this._registry.rowPath('sections', id, {
+      supermarketId: this.supermarketId(),
+    });
+  }
+
+  /**
+   * Move one section a step up or down the chain's order (admin plan 0042,
+   * target 6).
+   *
+   * The order is each section's `position`, so a move is two writes: the
+   * section and its neighbour trade positions. Two sections at the same
+   * position have nothing to trade, and then every section is given the place
+   * it will have, which settles the tie for every later move.
+   *
+   * Written at once and not held, unlike a shop's own order: each section is a
+   * row of its own, and there is no request that takes the whole order.
+   */
+  async move(section: ShopSection, step: -1 | 1): Promise<void> {
+    const order = this.sections();
+    const from = order.findIndex((held) => held.id === section.id);
+    const to = from + step;
+    if (from === -1 || to < 0 || to >= order.length || this.moving()) {
+      return;
+    }
+
+    const neighbour = order[to];
+    const gateway = this._gateways.for(sectionSource());
+    this.moving.set(true);
+    this.deleteErrorKey.set(null);
+
+    try {
+      if (neighbour.position !== section.position) {
+        await gateway.update(section.id, { position: neighbour.position });
+        await gateway.update(neighbour.id, { position: section.position });
+      } else {
+        const next = [...order];
+        next[from] = neighbour;
+        next[to] = section;
+        for (const [index, held] of next.entries()) {
+          if (held.position !== index) {
+            await gateway.update(held.id, { position: index });
+          }
+        }
+      }
+      this._changes.wrote('sections');
+    } catch (error) {
+      this.deleteErrorKey.set(panelErrorKey(error));
+    } finally {
+      this.moving.set(false);
+      await this.reload();
+    }
   }
 
   reload(): Promise<void> {
@@ -378,6 +470,7 @@ export class ChainSections {
     this.deleteErrorKey.set(null);
     try {
       await this._gateways.for(sectionSource()).remove(section.id);
+      this._changes.wrote('sections');
       this.deleting.set(null);
       await this.reload();
     } catch (error) {

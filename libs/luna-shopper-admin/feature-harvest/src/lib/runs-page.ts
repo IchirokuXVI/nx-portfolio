@@ -2,12 +2,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
-  viewChild,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
@@ -15,33 +16,45 @@ import {
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  canAbort,
   failureBlockReason,
-  spawnBlockReason,
+  HARVEST_IMPORT,
+  HARVEST_NEW_RUN,
+  harvestRunPath,
+  harvestRunsPath,
+  runProgress,
   type HarvestRun,
+  type InfoContent,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
+  BlockNotice,
+  CautionLine,
+  ConfirmDialog,
   HarvestNotice,
+  InfoButton,
+  RunProgressView,
   RunRowView,
-  SwitchPanel,
+  Viewport,
   type RunRow,
 } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { formatInstant } from './format-instant';
-import { HARVEST_SEGMENT } from './harvest-paths';
+import { HarvestHeader } from './harvest-header';
 import { HarvestShell } from './harvest-shell';
-import { RunRequestForm } from './run-request-form';
+import { HarvestStatus } from './harvest-status';
+import { ImportHandoff } from './import-handoff';
+import { PresetsPanel } from './presets-panel';
 
-/** What the reverted filter can be asked for. `any` sends no filter at all. */
+/** The three answers to "has this run been reverted?", in the order shown. */
 const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
 type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
 
 /**
- * The run modes the list can be narrowed to (admin plan 0034, section 4).
+ * The order the mode filter offers the run modes in: by how much each does.
  *
- * A record keyed on the wire union, as the sources page keeps its adapters, so
- * a mode the document adds is a compile error here rather than a filter that
- * silently cannot ask for it.
+ * A record over the generated enum, so a new mode is a compile error here
+ * rather than a filter that quietly cannot find it.
  */
 const MODE_ORDER: Record<Wire.EnumsHarvestRunMode, number> = {
   STORE_DISCOVERY: 1,
@@ -53,7 +66,6 @@ const MODES: readonly Wire.EnumsHarvestRunMode[] = (
   Object.keys(MODE_ORDER) as Wire.EnumsHarvestRunMode[]
 ).sort((a, b) => MODE_ORDER[a] - MODE_ORDER[b]);
 
-/** The mode filter. `''` sends none. */
 type ModeFilter = Wire.EnumsHarvestRunMode | '';
 
 /**
@@ -70,233 +82,300 @@ type RunPreset =
   | { readonly kind: 'deleted' }
   | null;
 
+/** Whether runs may start, as the header says it. */
+export type RunsState = 'on' | 'off' | 'unknown';
+
+/** What the info button beside that state says (admin plan 0041, section 3). */
+export const RUNS_STATE_INFO: InfoContent = {
+  title: 'harvest.switch.heading',
+  points: ['harvest.switch.info.both', 'harvest.switch.info.chain'],
+};
+
+/** What the info button of the import panel says. */
+export const IMPORT_INFO: InfoContent = {
+  title: 'harvest.imports.heading',
+  points: ['harvest.imports.info.drop'],
+  caution: 'harvest.imports.info.caution',
+};
+
 /**
- * The runs screen: what has run, what is running, and how to start one.
+ * Runs: what starts work and what follows it, on one tab (admin plan 0044,
+ * target 5).
  *
- * A run is a process rather than a resource, so this is not `0004`'s list with a
- * create form behind it. Starting one is a small set of choices with a mode at
- * the top, and reading one is a screen of its own that polls, so the row here
- * links out to that rather than to an edit form there is no such thing as.
+ * Runs, presets and the file import were three screens. They are one kind of
+ * work, so they are one page: the presets and the import at the left on a
+ * wide screen, the run in progress and the earlier runs at the right. On a
+ * phone the order is the run in progress, the presets, the earlier runs, with
+ * the two actions in a bar at the bottom.
  *
- * The choices are {@link RunRequestForm} since admin plan 0030, which the
- * presets screen edits a preset with. This page spawns what the form hands it,
- * draws the refusal, and saves the same request as a preset.
+ * The harvester's dashboard is gone, and this tab is what it showed: its
+ * running run is "Running now", its recent runs are "Earlier runs", and its
+ * notice that the harvester did not answer stays at the top.
  *
- * The switches sit above the list rather than on a settings screen
- * somewhere, because the question they answer is "why did my run do nothing",
- * and that question is asked here, looking at a run that did nothing.
+ * **"Runs may start" is a state in the header**, with an info button. It
+ * replaced a panel of two switches that took a third of the screen to say one
+ * thing: whether pressing Start will do anything. Whether one chain may be
+ * fetched is a switch in Setup, and the info button says so.
  *
- * **Starting a run is attributed to the harvester, not to the operator** (plan
- * 0006, section 6; backend plan 0075 section 3). Thousands of catalog writes
- * follow, and the audit trail credits the service for them. So the confirmation
- * says a run was started and never that the operator changed four thousand
- * prices, and `requestedByUserId` is not drawn as an author.
+ * A run is a process rather than a resource, so a row here links to the run's
+ * own screen, which polls, and not to a form.
  */
 @Component({
   selector: 'lib-runs-page',
   imports: [
+    HarvestHeader,
     FormsModule,
     RouterLink,
     RokuTranslatorPipe,
+    BlockNotice,
+    CautionLine,
+    ConfirmDialog,
     HarvestNotice,
-    RunRequestForm,
+    InfoButton,
+    PresetsPanel,
+    RunProgressView,
     RunRowView,
-    SwitchPanel,
   ],
   template: `
-    <header>
-      <h1>{{ 'harvest.runs.heading' | rokuT }}</h1>
-    </header>
-
-    <lib-switch-panel [switches]="shell.switches()" />
-
-    <section class="start">
-      <h2>{{ 'harvest.runs.start.heading' | rokuT }}</h2>
-
-      <lib-run-request-form
-        (changed)="draft.set($event)"
-        (submitted)="start($event)"
-        [busy]="starting()"
-      >
-        <button
-          (click)="openSave()"
-          [disabled]="!canSave()"
-          class="secondary"
-          type="button"
+    <lib-harvest-header>
+      <span [class]="'state ' + state()" pageChip data-runs-state>{{
+        'harvest.runs.state.' + state() | rokuT
+      }}</span>
+      <lib-info-button [info]="stateInfo" align="start" pageChip />
+      <!-- One block for each action: a block with two nodes at its root is
+           not projected into the action slot. -->
+      @if (!compact()) {
+        <a [routerLink]="importLink" class="button" pageAction>{{
+          'harvest.imports.heading' | rokuT
+        }}</a>
+      }
+      @if (!compact()) {
+        <a
+          [routerLink]="newRunLink"
+          class="button primary"
+          pageAction
+          data-new-run
+          >{{ 'harvest.runs.new' | rokuT }}</a
         >
-          {{ 'harvest.presets.saveAs.action' | rokuT }}
-        </button>
-      </lib-run-request-form>
+      }
+    </lib-harvest-header>
 
-      @if (blockedKey(); as key) {
-        <div class="failure" role="alert">
-          <p>{{ key | rokuT }}</p>
-          <!-- The server's own words, under the screen's. The refusals that
-               reach here are written for whoever is operating the harvester,
-               and they name the row or the switch that has to change. -->
-          @if (blockedDetails().length > 0) {
-            <ul>
-              @for (line of blockedDetails(); track line) {
-                <li>{{ line }}</li>
+    <!-- The dashboard read the harvester did not answer. It was the notice of
+         the harvester's own dashboard, and it stays at the top of this tab. -->
+    @if (status.answered() === false) {
+      <lib-block-notice
+        (retry)="status.refresh()"
+        [heading]="'dashboard.down.harvest'"
+      />
+    }
+
+    <div class="layout">
+      <div class="main">
+        @if (running(); as run) {
+          <section class="panel running" data-running-now>
+            <div class="named">
+              <span class="state on">{{
+                'harvest.status.' + run.status | rokuT
+              }}</span>
+              <h2>
+                @if (whatOf(run); as chain) {
+                  {{ chain }},
+                }
+                {{ 'harvest.mode.' + run.mode | rokuT }}
+              </h2>
+              <span class="since">{{
+                'harvest.runs.running.since'
+                  | rokuT: { when: instant(run.startedAt ?? run.requestedAt) }
+              }}</span>
+            </div>
+            <lib-run-progress [progress]="progress(run)" [run]="run" />
+            @if (run.abortRequestedAt !== null) {
+              <p class="quiet" role="status" data-stopping>
+                {{ 'harvest.run.aborting' | rokuT }}
+              </p>
+            }
+            <div class="controls">
+              <a [routerLink]="runLink(run.id)" class="button">{{
+                'harvest.runs.running.open' | rokuT
+              }}</a>
+              @if (canAbort(run)) {
+                <button
+                  (click)="stopping.set(run)"
+                  [disabled]="aborting()"
+                  class="danger"
+                  type="button"
+                  data-stop-run
+                >
+                  {{ 'harvest.run.abort' | rokuT }}
+                </button>
+              }
+            </div>
+            @if (abortFailure() !== null) {
+              <p class="field-error" role="alert">
+                {{ 'harvest.runs.running.stopFailed' | rokuT }}
+                {{ abortFailure() }}
+              </p>
+            }
+          </section>
+        }
+
+        <section class="panel earlier">
+          <div class="named">
+            <h2>{{ 'harvest.runs.earlier' | rokuT }}</h2>
+          </div>
+
+          <div class="filters">
+            <!-- By mode (admin plan 0034, section 4). One way, for the reason
+                 the reverted filter below gives. -->
+            <label>
+              <span>{{ 'harvest.runs.modeFilter.label' | rokuT }}</span>
+              <select
+                (ngModelChange)="onModeChange($event)"
+                [ngModel]="modeFilter()"
+                name="modeFilter"
+              >
+                <option value="">
+                  {{ 'harvest.runs.modeFilter.any' | rokuT }}
+                </option>
+                @for (mode of modes; track mode) {
+                  <option [value]="mode">
+                    {{ 'harvest.mode.' + mode | rokuT }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            <label>
+              <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
+              <!-- One way, with the handler setting the signal itself. A
+                   banana box beside an explicit ngModelChange fires this
+                   handler first and writes the signal second, so the read
+                   below it would go out with the filter the operator just
+                   moved away from. -->
+              <select
+                (ngModelChange)="onRevertedChange($event)"
+                [ngModel]="reverted()"
+                name="reverted"
+              >
+                @for (option of revertedOptions; track option) {
+                  <option [value]="option">
+                    {{ 'harvest.runs.filter.revertedOption.' + option | rokuT }}
+                  </option>
+                }
+              </select>
+            </label>
+
+            <!-- By preset (admin plan 0030, section 5). Every chain's presets,
+                 each named with its chain, because the list is every chain's
+                 runs. -->
+            <label>
+              <span>{{ 'harvest.runs.filter.preset' | rokuT }}</span>
+              <select
+                (ngModelChange)="onPresetChange($event)"
+                [ngModel]="presetFilter()"
+                name="preset"
+              >
+                <option value="">
+                  {{ 'harvest.runs.filter.presetAny' | rokuT }}
+                </option>
+                @for (preset of presets(); track preset.id) {
+                  <option [value]="preset.id">
+                    {{ preset.name }} ({{ names.nameOf(preset.supermarketId) }})
+                  </option>
+                }
+              </select>
+            </label>
+          </div>
+
+          @if (failed()) {
+            <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
+          } @else if (loading()) {
+            <p class="quiet">{{ 'resource.list.loading' | rokuT }}</p>
+          } @else if (rows().length === 0) {
+            <p class="quiet">{{ 'harvest.runs.empty' | rokuT }}</p>
+          } @else {
+            <ul class="runs">
+              @for (row of rows(); track row.id) {
+                <li
+                  [attr.aria-current]="row.id === highlighted() ? 'true' : null"
+                  [class.highlighted]="row.id === highlighted()"
+                >
+                  <lib-run-row [link]="runLink(row.id)" [row]="row" />
+                  @if (presetOf(row.id); as preset) {
+                    <p class="preset">
+                      @if (preset.kind === 'named') {
+                        {{
+                          'harvest.runs.row.preset'
+                            | rokuT: { name: preset.name }
+                        }}
+                      } @else {
+                        {{ 'harvest.runs.row.deletedPreset' | rokuT }}
+                      }
+                    </p>
+                  }
+                </li>
               }
             </ul>
           }
-        </div>
-      }
+        </section>
+      </div>
 
-      @if (savedPreset(); as saved) {
-        <p class="notice" role="status">
-          {{ 'harvest.presets.saveAs.saved' | rokuT: { name: saved.name } }}
-          <a [queryParams]="saved.query" [routerLink]="presetsLink">
-            {{ 'harvest.presets.saveAs.open' | rokuT }}
-          </a>
-        </p>
-      }
-    </section>
+      <div class="side">
+        <lib-presets-panel (started)="started($event)" />
 
-    <!-- Save as preset (admin plan 0030, section 4). A small dialog, because
-         the only new fact is the name: the request is the form as it is. -->
-    @if (saveOpen()) {
-      <div
-        (keydown.escape)="closeSave()"
-        aria-labelledby="save-preset-heading"
-        aria-modal="true"
-        class="dialog"
-        role="dialog"
-      >
-        <div class="panel">
-          <h2 id="save-preset-heading">
-            {{ 'harvest.presets.saveAs.heading' | rokuT }}
-          </h2>
-          <label>
-            <span>{{ 'harvest.presets.name' | rokuT }}</span>
-            <input
-              (ngModelChange)="onSaveNameChange($event)"
-              [ngModel]="saveName()"
-              maxlength="80"
-              name="presetName"
-              type="text"
-            />
-          </label>
-          @if (saveNameTaken()) {
-            <p class="field-error" role="alert">
-              {{ 'harvest.presets.nameTaken' | rokuT }}
-            </p>
-          }
-          @if (saveFailure() !== null) {
-            <div class="failure" role="alert">
-              <p>{{ 'harvest.presets.saveFailed' | rokuT }}</p>
-              @if (saveFailure() !== '') {
-                <p>{{ saveFailure() }}</p>
-              }
-            </div>
-          }
-          <div class="controls">
-            <button
-              (click)="saveAsPreset()"
-              [disabled]="saving() || saveName().trim() === ''"
-              class="primary"
-              type="button"
-            >
-              {{
-                (saving() ? 'harvest.presets.saving' : 'harvest.presets.save')
-                  | rokuT
-              }}
-            </button>
-            <button (click)="closeSave()" [disabled]="saving()" type="button">
-              {{ 'resource.action.cancel' | rokuT }}
-            </button>
+        <section
+          (dragleave)="dragging.set(false)"
+          (dragover)="dragOver($event)"
+          (drop)="drop($event)"
+          [class.over]="dragging()"
+          class="panel import"
+          data-import
+        >
+          <div class="named">
+            <h2>{{ 'harvest.imports.heading' | rokuT }}</h2>
+            <lib-info-button [info]="importInfo" />
           </div>
-        </div>
+          <div class="zone">
+            <span>{{ 'harvest.runs.import.drop' | rokuT }}</span>
+            <button (click)="picker.click()" type="button" data-choose-file>
+              {{ 'harvest.runs.import.choose' | rokuT }}
+            </button>
+            <input
+              (change)="chosen($event)"
+              #picker
+              accept="application/json,.json"
+              aria-hidden="true"
+              class="visually-hidden"
+              tabindex="-1"
+              type="file"
+            />
+          </div>
+          <lib-caution-line [text]="'harvest.imports.info.caution' | rokuT" />
+        </section>
+      </div>
+    </div>
+
+    <!-- On a phone the two actions sit in a bar above the navigation bar. -->
+    @if (compact()) {
+      <div class="bar" data-runs-bar>
+        <a [routerLink]="importLink" class="button">{{
+          'harvest.imports.heading' | rokuT
+        }}</a>
+        <a [routerLink]="newRunLink" class="button primary" data-new-run>{{
+          'harvest.runs.new' | rokuT
+        }}</a>
       </div>
     }
 
-    <section class="filters">
-      <!-- By mode (admin plan 0034, section 4). One way, for the reason the
-           reverted filter below gives. -->
-      <label>
-        <span>{{ 'harvest.runs.modeFilter.label' | rokuT }}</span>
-        <select
-          (ngModelChange)="onModeChange($event)"
-          [ngModel]="modeFilter()"
-          name="modeFilter"
-        >
-          <option value="">{{ 'harvest.runs.modeFilter.any' | rokuT }}</option>
-          @for (mode of modes; track mode) {
-            <option [value]="mode">{{ 'harvest.mode.' + mode | rokuT }}</option>
-          }
-        </select>
-      </label>
-
-      <label>
-        <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
-        <!-- One way, with the handler setting the signal itself. A banana box
-             beside an explicit ngModelChange fires this handler first and
-             writes the signal second, so the read below it would go out with
-             the filter the operator just moved away from. -->
-        <select
-          (ngModelChange)="onRevertedChange($event)"
-          [ngModel]="reverted()"
-          name="reverted"
-        >
-          @for (option of revertedOptions; track option) {
-            <option [value]="option">
-              {{ 'harvest.runs.filter.revertedOption.' + option | rokuT }}
-            </option>
-          }
-        </select>
-      </label>
-
-      <!-- By preset (admin plan 0030, section 5). Every chain's presets, each
-           named with its chain, because the list above is every chain's runs. -->
-      <label>
-        <span>{{ 'harvest.runs.filter.preset' | rokuT }}</span>
-        <select
-          (ngModelChange)="onPresetChange($event)"
-          [ngModel]="presetFilter()"
-          name="preset"
-        >
-          <option value="">
-            {{ 'harvest.runs.filter.presetAny' | rokuT }}
-          </option>
-          @for (preset of presets(); track preset.id) {
-            <option [value]="preset.id">
-              {{ preset.name }} ({{ names.nameOf(preset.supermarketId) }})
-            </option>
-          }
-        </select>
-      </label>
-    </section>
-
-    @if (failed()) {
-      <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
-    } @else if (loading()) {
-      <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
-    } @else if (rows().length === 0) {
-      <p class="state">{{ 'harvest.runs.empty' | rokuT }}</p>
-    } @else {
-      <ul class="runs">
-        @for (row of rows(); track row.id) {
-          <li
-            [attr.aria-current]="row.id === highlighted() ? 'true' : null"
-            [class.highlighted]="row.id === highlighted()"
-          >
-            <!-- Relative, because the run screen is a child of this one. The
-                 dashboard draws the same row with an absolute link, which is
-                 why the link is the row component's input. -->
-            <lib-run-row [link]="[row.id]" [row]="row" />
-            @if (presetOf(row.id); as preset) {
-              <p class="preset">
-                @if (preset.kind === 'named') {
-                  {{ 'harvest.runs.row.preset' | rokuT: { name: preset.name } }}
-                } @else {
-                  {{ 'harvest.runs.row.deletedPreset' | rokuT }}
-                }
-              </p>
-            }
-          </li>
-        }
-      </ul>
+    @if (stopping(); as run) {
+      <lib-confirm-dialog
+        (confirm)="stop(run)"
+        (dismiss)="stopping.set(null)"
+        [busy]="aborting()"
+        bodyKey="harvest.runs.running.stopBody"
+        confirmKey="harvest.run.abort"
+        headingKey="harvest.runs.running.stopHeading"
+      />
     }
   `,
   styles: `
@@ -305,73 +384,164 @@ type RunPreset =
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
+      min-inline-size: 0;
     }
 
     h2 {
-      font-size: 1rem;
-      font-weight: 700;
+      font-size: 0.9375rem;
+      font-weight: 600;
     }
 
-    .start {
+    /* One column: the run in progress, the presets, the earlier runs. The
+       wrapper of the two run panels gives its children to this column, so the
+       presets can sit between them. */
+    .layout {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-4);
+      min-inline-size: 0;
+    }
+
+    .main {
+      display: contents;
+    }
+
+    .running {
+      order: 1;
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-4);
+      order: 2;
+      min-inline-size: 0;
+    }
+
+    .earlier {
+      order: 3;
+    }
+
+    /* At 72 rem and above the presets and the import are a column 420 px
+       wide at the left. */
+    @media (min-width: 72rem) {
+      .layout {
+        display: grid;
+        grid-template-columns: 26.25rem minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .main {
+        display: flex;
+        flex-direction: column;
+        gap: var(--admin-space-4);
+        grid-column: 2;
+        grid-row: 1;
+        min-inline-size: 0;
+      }
+
+      .side {
+        grid-column: 1;
+        grid-row: 1;
+      }
+    }
+
+    .panel {
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-3);
-      align-items: flex-start;
+      min-inline-size: 0;
       padding: var(--admin-space-4);
       border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
     }
 
-    label {
+    .named {
       display: flex;
-      flex: 1 1 12rem;
-      flex-direction: column;
-      gap: var(--admin-space-1);
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
     }
 
-    label span {
+    .named h2 {
+      flex: 1;
+    }
+
+    .since,
+    .quiet,
+    .preset {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
+    .state {
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--admin-neutral-on-wash);
+    }
+
+    .state.on {
+      background: var(--admin-accent-wash);
+      color: var(--admin-accent-on-wash);
+    }
+
+    .state.off {
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      justify-content: flex-end;
+    }
+
+    .button,
     button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: var(--admin-control);
+      padding: 0 var(--admin-space-3);
+      border: 1px solid var(--admin-border-strong);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+      color: var(--admin-ink);
       cursor: pointer;
     }
 
     .primary {
-      border-color: transparent;
+      border-color: var(--admin-accent);
       background: var(--admin-accent);
-      font-weight: 600;
       color: var(--admin-accent-ink);
     }
 
-    .failure {
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-danger);
-      border-radius: var(--admin-radius);
-      background: var(--admin-danger-wash);
-      inline-size: 100%;
+    .danger {
+      border-color: var(--admin-danger);
+      color: var(--admin-danger-on-wash);
     }
 
-    /* The server's own sentences, indented under the screen's own. Marked as a
-       list because there can be several, which is what a refusal by field is. */
-    .failure ul {
-      margin-block-start: var(--admin-space-2);
-      padding-inline-start: var(--admin-space-4);
-      font-size: 0.8125rem;
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
     }
 
-    .notice {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-2);
-      font-size: 0.875rem;
+    .button:focus-visible,
+    button:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
     }
 
     .field-error {
@@ -379,10 +549,21 @@ type RunPreset =
       color: var(--admin-danger-on-wash);
     }
 
-    .state {
-      padding: var(--admin-space-6);
-      border: 1px dashed var(--admin-border);
-      border-radius: var(--admin-radius);
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+    }
+
+    label {
+      display: flex;
+      flex: 1 1 10rem;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    label span {
+      font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
@@ -399,88 +580,115 @@ type RunPreset =
       gap: var(--admin-space-1);
     }
 
-    /* The run a preset was just started as, on arriving from the presets
-       screen. An outline rather than a fill, so the status chip keeps its
-       colour. */
+    /* The run that was just started. An outline rather than a fill, so the
+       status chip keeps its colour. */
     .runs li.highlighted lib-run-row {
       outline: 2px solid var(--admin-accent);
       outline-offset: 2px;
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
     }
 
     .preset {
       padding-inline-start: var(--admin-space-3);
-      font-size: 0.8125rem;
+    }
+
+    /* Where a file is dropped. Dashed, so it reads as a place and not as a
+       panel of content. */
+    .zone {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      align-items: center;
+      padding: var(--admin-space-4);
+      border: 1px dashed var(--admin-border-strong);
+      border-radius: var(--admin-radius-control);
+      font-size: 0.875rem;
       color: var(--admin-ink-muted);
     }
 
-    .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
+    .import.over .zone {
+      border-color: var(--admin-accent);
+      background: var(--admin-accent-wash);
+      color: var(--admin-accent-on-wash);
     }
 
-    /* The save dialog, drawn as the confirm dialog is: an opaque cover and
-       one raised panel. */
-    .dialog {
-      position: fixed;
-      z-index: 90;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      inset: 0;
-      padding: var(--admin-space-4);
-      background: var(--admin-surface);
+    .visually-hidden {
+      position: absolute;
+      overflow: hidden;
+      inline-size: 1px;
+      block-size: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
 
-    .panel {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      inline-size: 100%;
-      max-inline-size: 26rem;
-      padding: var(--admin-space-6);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
+    @media (max-width: 47.99rem) {
+      /* Room for the bar of the two actions. The page already reserves the
+         navigation bar under it. */
+      :host {
+        padding-block-end: 4rem;
+      }
 
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
+      /* A phone has no file to drop. The import is the left of the two
+         actions in the bar. */
+      .import {
+        display: none;
+      }
+
+      /* Above the navigation bar, which is fixed at the bottom edge, and
+         never under it. */
+      .bar {
+        position: fixed;
+        z-index: 20;
+        inset-block-end: var(--admin-bar);
+        inset-inline: 0;
+        display: flex;
+        gap: var(--admin-space-2);
+        padding: var(--admin-space-2) var(--admin-space-3);
+        border-block-start: 1px solid var(--admin-border);
+        background: var(--admin-surface-raised);
+      }
+
+      .bar .button {
+        flex: 1;
+        min-block-size: 2.75rem;
+      }
+
+      .controls .button,
+      .controls button {
+        flex: 1;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunsPage {
   private readonly _service = inject(HARVEST_SERVICE);
+  private readonly _router = inject(Router);
+  private readonly _handoff = inject(ImportHandoff);
 
   readonly shell = inject(HarvestShell);
+  readonly status = inject(HarvestStatus);
   readonly names = inject(ChainNames);
+  readonly compact = inject(Viewport).compact;
 
-  readonly form = viewChild(RunRequestForm);
+  readonly stateInfo = RUNS_STATE_INFO;
+  readonly importInfo = IMPORT_INFO;
 
-  /**
-   * The reverted filter (backend plan 0082, section 6), as three choices rather
-   * than a checkbox.
-   *
-   * A checkbox has two states and the filter has three: reverted only,
-   * unreverted only, and both, which is what the screen opens on. A tri state
-   * checkbox would encode the same thing less legibly.
-   */
+  readonly newRunLink = harvestRunsPath(HARVEST_NEW_RUN);
+  readonly importLink = harvestRunsPath(HARVEST_IMPORT);
+
   readonly revertedOptions = REVERTED_OPTIONS;
+  /** Both by default, which is what the list showed before the filter existed. */
   readonly reverted = signal<RevertedFilter>('any');
-  /** The preset filter. `''` sends none. */
+  /** The preset whose runs are listed, or `''` for every run. */
   readonly presetFilter = signal('');
   readonly modes = MODES;
+  /** The mode whose runs are listed, or `''` for every mode. */
   readonly modeFilter = signal<ModeFilter>('');
 
-  readonly starting = signal(false);
   readonly loading = signal(true);
   readonly runs = signal<readonly HarvestRun[]>([]);
   readonly error = signal<GatewayError | null>(null);
-  private readonly _spawnError = signal<GatewayError | null>(null);
 
   /**
    * Every chain's presets, for the names on the rows and the filter. Null
@@ -494,47 +702,43 @@ export class RunsPage {
   /** Whether every page was read, which a "Deleted preset" claim needs. */
   private readonly _presetsComplete = signal(false);
 
-  /** The run to highlight, as the presets screen names it after a start. */
+  /** The run to mark: the one a preset or the run form just started. */
   readonly highlighted = signal(
     inject(ActivatedRoute).snapshot.queryParamMap.get('run') ?? ''
   );
 
-  /** The form's request as it stands, for "Save as preset". */
-  readonly draft = signal<Wire.SpawnHarvestRunDto | null>(null);
-  readonly saveOpen = signal(false);
-  readonly saveName = signal('');
-  readonly saving = signal(false);
-  readonly saveNameTaken = signal(false);
-  /** The server's sentence about a failed save, `''` when it sent none. */
-  readonly saveFailure = signal<string | null>(null);
-  readonly savedPreset = signal<{
-    readonly name: string;
-    readonly query: Readonly<Record<string, string>>;
-  } | null>(null);
+  /** The run somebody asked to stop, until the question is answered. */
+  readonly stopping = signal<HarvestRun | null>(null);
+  readonly aborting = signal(false);
+  readonly abortFailure = signal<string | null>(null);
 
-  readonly presetsLink = ['/', HARVEST_SEGMENT, 'presets'];
+  /** Whether a file is being dragged over the drop zone. */
+  readonly dragging = signal(false);
 
   readonly failed = computed(
     () => this.error() !== null && this.runs().length === 0
   );
 
   /**
-   * Whether the form can be saved as a preset (admin plan 0030, section 4).
+   * Whether runs may start (admin plan 0044, target 5).
    *
-   * Only when it could start, because the server validates a preset exactly as
-   * a spawn, and only with a chain, because every preset belongs to one.
+   * Off as soon as either switch is known to be off. On once both are known
+   * to be on. Otherwise not known: nothing has answered and nothing has been
+   * tried, and saying "may start" then would be a guess.
    */
-  readonly canSave = computed(() => {
-    const form = this.form();
-    const draft = this.draft();
-    return (
-      form !== undefined &&
-      form.ready() &&
-      !form.uploading() &&
-      draft !== null &&
-      (draft.supermarketId ?? '') !== ''
-    );
+  readonly state = computed<RunsState>(() => {
+    const switches = this.shell.switches();
+    if (switches.some((item) => item.state === 'off')) {
+      return 'off';
+    }
+    return switches.every((item) => item.state === 'on') ? 'on' : 'unknown';
   });
+
+  /** The run in progress, which the dashboard read names. */
+  readonly running = this.status.running;
+
+  readonly progress = runProgress;
+  readonly canAbort = canAbort;
 
   readonly rows = computed<readonly RunRow[]>(() =>
     this.runs().map((run) => ({
@@ -552,75 +756,63 @@ export class RunsPage {
       // A finished run that failed because of a switch says which one, on the
       // row, because that is where somebody is looking when they wonder.
       reasonKey: reasonKey(failureBlockReason(run)),
+      chain:
+        (run.supermarketId ?? '') === ''
+          ? ''
+          : this.names.nameOf(run.supermarketId ?? ''),
+      // "Wrote" is what the run created plus what it updated (admin plan
+      // 0044, section 2). The run view has no count of what it queued, so no
+      // such column is drawn.
+      wrote: run.created + run.updated,
     }))
   );
-
-  /**
-   * Why the last attempt to start would not start.
-   *
-   * The spawn refusal is the only direct evidence either switch offers, so it
-   * is kept and shown rather than folded into a general failure message. A 409 is different again: something is already running, which is
-   * not a switch and has an obvious remedy.
-   */
-  readonly blockedKey = computed(() => {
-    const error = this._spawnError();
-    if (error === null) {
-      return null;
-    }
-
-    const reason = spawnBlockReason(error);
-    if (reason !== null) {
-      return reasonKey(reason);
-    }
-    if (error.status === 409) {
-      return 'harvest.runs.start.alreadyRunning';
-    }
-    // Two sentences for the same status, and which one is true depends on
-    // whether the server explained itself. Saying it did not while its own
-    // words are drawn under the line is the failure this replaces.
-    return this.blockedDetails().length > 0
-      ? 'harvest.runs.start.refused'
-      : 'harvest.runs.start.failed';
-  });
-
-  /**
-   * What the server said about the refusal, in its own words.
-   *
-   * Empty when it sent none, which is the case the screen has its own sentence
-   * for. Most spawn refusals are not that case: the harvester answers a chain
-   * with no source row, a source switched off, a walk with no scope and a
-   * document already imported with a `ValidationException` or a
-   * `ConflictException`, and the fact that names the row to fix rides in
-   * `detail` rather than in `message`, which is the same generic line for every
-   * failure sharing a code.
-   *
-   * The per field messages come first where there are any, because a gateway
-   * DTO refusal leaves `detail` as the status text rather than as a sentence.
-   */
-  readonly blockedDetails = computed<readonly string[]>(() => {
-    const error = this._spawnError();
-    if (error === null) {
-      return [];
-    }
-
-    const fields = Object.values(error.fieldErrors).flat();
-    if (fields.length > 0) {
-      return fields;
-    }
-    return error.detail === '' ? [] : [error.detail];
-  });
 
   constructor() {
     void this.load();
     void this._readPresets();
+
+    // The run that was in progress ended: the earlier runs are one more than
+    // the list on screen holds, so read them again. A run that begins adds
+    // nothing to that list, and the first read of the status is no change.
+    let inProgress = this.running()?.id ?? null;
+    effect(() => {
+      const now = this.running()?.id ?? null;
+      untracked(() => {
+        if (now === inProgress) {
+          return;
+        }
+        const ended = inProgress !== null;
+        inProgress = now;
+        if (ended) {
+          void this.load();
+        }
+      });
+    });
+
+    // The chain of the run in progress, for the panel's title.
+    effect(() => {
+      const chain = this.running()?.supermarketId ?? '';
+      if (chain !== '') {
+        untracked(() => void this.names.resolve([chain]));
+      }
+    });
   }
 
-  /**
-   * The filter is a server side one, so changing it is a fresh read.
-   *
-   * The chosen value is the argument for the reason the template gives: read
-   * off the signal instead, this would send the filter that was there before.
-   */
+  /** The chain, where the run has one, for the title of "Running now". */
+  whatOf(run: HarvestRun): string {
+    const chain = run.supermarketId ?? '';
+    return chain === '' ? '' : this.names.nameOf(chain);
+  }
+
+  instant(value: string | null): string {
+    return formatInstant(value);
+  }
+
+  runLink(runId: string): readonly string[] {
+    return harvestRunPath(runId);
+  }
+
+  /** The filter decides what is asked for, so changing it asks again. */
   onRevertedChange(filter: RevertedFilter): void {
     this.reverted.set(filter);
     void this.load();
@@ -637,11 +829,11 @@ export class RunsPage {
   }
 
   /**
-   * The preset a run came from, as its row says it.
+   * What a run row says about its preset, or null when it has none to say.
    *
-   * Null for a run started by hand, and null too while the presets have not
-   * been read: "Deleted preset" is a claim, and a list that failed to arrive
-   * is not evidence for it.
+   * A run whose preset is not among the ones read is called deleted only when
+   * every page was read. A failed or truncated read says nothing, because a
+   * wrong "deleted" is worse than a missing name.
    */
   presetOf(runId: string): RunPreset {
     const run = this.runs().find((entry) => entry.id === runId);
@@ -672,9 +864,16 @@ export class RunsPage {
         ...(mode === '' ? {} : { mode }),
       });
       this.runs.set(page.items);
+      void this.names.resolve([
+        ...new Set(
+          page.items
+            .map((run) => run.supermarketId ?? '')
+            .filter((id) => id !== '')
+        ),
+      ]);
       this.shell.observeReachable();
-      // The runs are where a storefront refusal is legible, so the switch panel
-      // reads them rather than asking for them again.
+      // The runs are where a storefront refusal is legible, so the state in
+      // the header reads them rather than asking for them again.
       this.shell.observeRuns(page.items);
     } catch (error) {
       this.error.set(toGatewayError(error));
@@ -684,97 +883,80 @@ export class RunsPage {
     }
   }
 
-  /** Spawn what the form handed up. The form has already checked it is ready. */
-  async start(input: Wire.SpawnHarvestRunDto): Promise<void> {
-    this.starting.set(true);
-    this._spawnError.set(null);
+  /**
+   * A preset was started: mark its run, and read the runs and the run in
+   * progress again.
+   */
+  started(run: HarvestRun): void {
+    this.highlighted.set(run.id);
+    this.shell.observeSpawnRefusal(null);
+    this.status.refresh();
+    void this.load();
+  }
+
+  /**
+   * Stop the run in progress, once the question has been answered.
+   *
+   * What it has already fetched is kept, and the run finishes as stopped. The
+   * panel goes when the next read says nothing is running.
+   */
+  async stop(run: HarvestRun): Promise<void> {
+    this.aborting.set(true);
+    this.abortFailure.set(null);
 
     try {
-      await this._service.spawnRun(input);
-      this.shell.observeSpawnRefusal(null);
+      await this._service.abortRun(run.id);
+      this.stopping.set(null);
+      this.status.refresh();
       await this.load();
     } catch (error) {
-      const failure = toGatewayError(error);
-      this._spawnError.set(failure);
-      this.shell.observeSpawnRefusal(spawnBlockReason(failure));
+      this.stopping.set(null);
+      this.abortFailure.set(toGatewayError(error).detail);
     } finally {
-      this.starting.set(false);
+      this.aborting.set(false);
     }
   }
 
-  openSave(): void {
-    if (!this.canSave()) {
-      return;
-    }
-    this.saveName.set('');
-    this.saveNameTaken.set(false);
-    this.saveFailure.set(null);
-    this.savedPreset.set(null);
-    this.saveOpen.set(true);
+  /** A file is over the zone. Without this the browser opens it instead. */
+  dragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragging.set(true);
   }
 
-  closeSave(): void {
-    if (!this.saving()) {
-      this.saveOpen.set(false);
-    }
+  /** A file was dropped: hand it to the import page. */
+  drop(event: DragEvent): void {
+    event.preventDefault();
+    this.dragging.set(false);
+    this._import(event.dataTransfer?.files?.[0] ?? null);
   }
 
-  /** A new name is a new question, so the last answer about the old one goes. */
-  onSaveNameChange(name: string): void {
-    this.saveName.set(name);
-    this.saveNameTaken.set(false);
+  /** A file was chosen: hand it to the import page. */
+  chosen(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this._import(input.files?.[0] ?? null);
+    // So that choosing the same file again is still a change.
+    input.value = '';
   }
 
   /**
-   * Save the form as it is under the typed name.
+   * Open the import page with a file.
    *
-   * The chain comes out of the request, because a preset holds it as a column
-   * and its `input` has no field for it (backend plan 0120, section 3).
+   * That page reads the file, previews it and sends it, exactly as when the
+   * file is chosen there. This tab only carries it across.
    */
-  async saveAsPreset(): Promise<void> {
-    const draft = this.form()?.request() ?? this.draft();
-    const name = this.saveName().trim();
-    if (draft === null || name === '' || !this.canSave()) {
+  private _import(file: File | null): void {
+    if (file === null) {
       return;
     }
-    const { supermarketId, ...input } = draft;
-
-    this.saving.set(true);
-    this.saveNameTaken.set(false);
-    this.saveFailure.set(null);
-    try {
-      const preset = await this._service.createPreset(
-        supermarketId ?? '',
-        name,
-        input
-      );
-      this._presets.update((held) => [...(held ?? []), preset]);
-      this.savedPreset.set({
-        name: preset.name,
-        query: { chain: preset.supermarketId, preset: preset.id },
-      });
-      this.saveOpen.set(false);
-    } catch (error) {
-      const failure = toGatewayError(error);
-      if (failure.status === 409) {
-        this.saveNameTaken.set(true);
-      } else {
-        const fields = Object.values(failure.fieldErrors).flat();
-        this.saveFailure.set(
-          fields.length > 0 ? fields.join(' ') : failure.detail
-        );
-      }
-    } finally {
-      this.saving.set(false);
-    }
+    this._handoff.leave(file);
+    void this._router.navigate([...this.importLink]);
   }
 
   /**
-   * Every chain's presets, for the names on the rows and the filter.
+   * Every chain's presets, read once for the names and the filter.
    *
-   * One read for the screen rather than one per chain, since the route answers
-   * every chain's when asked for none, and cached: a preset's name does not
-   * change between polls of the list.
+   * A failure costs the names and nothing else: the runs still list, each
+   * without the preset it came from.
    */
   private async _readPresets(): Promise<void> {
     try {
@@ -793,8 +975,7 @@ export class RunsPage {
         ...new Set(held.map((preset) => preset.supermarketId)),
       ]);
     } catch {
-      // The rows name no preset and the filter offers none, which is the
-      // honest answer when the presets could not be read.
+      // The names are a courtesy. The list above them is the screen.
     }
   }
 }

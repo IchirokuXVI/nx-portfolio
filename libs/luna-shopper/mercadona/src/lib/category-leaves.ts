@@ -1,9 +1,10 @@
 /**
  * The leaves of Luna Shopper's category taxonomy, by root (backend plan 0173,
- * appendix A, which replaced the tree of plan 0166).
+ * appendix A, which replaced the tree of plan 0166, and backend plan 0179,
+ * which added four roots and thirty leaves for what DIA does not sell).
  *
- * **This is a copy, and it exists so that a typo fails a test.** The catalog's
- * reference seed owns the taxonomy and turns each slug into a row; this library
+ * **This is a copy, and it exists so that a typo fails a test.** The catalog
+ * service owns the taxonomy and turns each slug into a row; this library
  * knows no ids and no database, so the only thing its resolver can answer is a
  * slug, and the only way to prove a slug it answers is real is to hold the list
  * here. `categories.spec.ts` asserts every slug the table names is one of these.
@@ -254,6 +255,8 @@ export const CATEGORY_LEAVES: Readonly<Record<string, readonly string[]>> = {
     'ron-and-whisky',
     'vermouth-and-aperitifs',
     'creams-liqueurs-and-brandy',
+    'sherry-and-fortified-wines',
+    'premixed-drinks',
   ],
   'cleaning-and-home': [
     'detergents',
@@ -270,6 +273,7 @@ export const CATEGORY_LEAVES: Readonly<Record<string, readonly string[]>> = {
     'air-fresheners-refills-and-candles',
     'insecticides',
     'batteries-kitchenware-and-bags',
+    'shoe-care',
   ],
   'hygiene-and-body-care': [
     'shower-gel-and-sponges',
@@ -288,6 +292,7 @@ export const CATEGORY_LEAVES: Readonly<Record<string, readonly string[]>> = {
     'dyes',
     'facial-care',
     'perfumes-and-colognes',
+    'hair-accessories',
   ],
   'health-and-pharmacy': [
     'nutritional-supplements',
@@ -313,7 +318,38 @@ export const CATEGORY_LEAVES: Readonly<Record<string, readonly string[]>> = {
     'wet-dog-food',
     'dry-dog-food',
     'dog-treats-and-care',
+    'bird-food-and-care',
+    'small-animal-food-and-care',
+    'fish-and-reptile-care',
+    'pet-accessories',
   ],
+  makeup: [
+    'face-makeup',
+    'powders-and-blush',
+    'eye-makeup',
+    'lip-makeup',
+    'nail-care',
+    'makeup-tools',
+  ],
+  'home-and-garden': [
+    'home-textiles',
+    'home-decor',
+    'storage-and-organisation',
+    'garden-and-plants',
+    'diy-and-hardware',
+    'lighting-and-electrical',
+    'small-appliances',
+    'car-care',
+  ],
+  'leisure-and-stationery': [
+    'stationery-and-school',
+    'books',
+    'magazines-and-collectibles',
+    'toys-and-games',
+    'party-and-celebrations',
+    'beach-and-pool',
+  ],
+  'clothing-and-accessories': ['clothing', 'clothing-accessories'],
   other: ['uncategorised'],
 };
 

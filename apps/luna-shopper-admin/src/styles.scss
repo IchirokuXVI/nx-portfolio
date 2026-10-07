@@ -1,4 +1,5 @@
-// The app's global stylesheet: a reset, and the tokens on the app's own root.
+// The app's global stylesheet: the typeface, a reset, and the tokens on the app's
+// own root.
 //
 // The tokens land on `app-luna-shopper-admin-root` rather than on `:root`, which
 // costs nothing here (this app is never mounted inside anything) and keeps the habit
@@ -6,6 +7,17 @@
 // element, because that is where `AppRoot` stamps `data-deployment`.
 
 @use '../../../libs/luna-shopper-admin/ui/src/lib/styles/tokens' as tokens;
+
+// IBM Plex, hosted by this app (admin plan 0041, section 8). Plex Sans was drawn
+// for dense interface text and keeps its figures the same width, which is what a
+// screen of prices and counts is made of. Plex Mono sets what an operator copies
+// character by character: a barcode, a key, an id. Each file declares
+// `font-display: swap`, so text is readable before the font arrives. The `latin`
+// subset holds every letter Spanish needs.
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
 
 * {
   box-sizing: border-box;
@@ -15,40 +27,109 @@
 
 body {
   min-height: 100dvh;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, 'Noto Sans', 'Liberation Sans', sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
 app-luna-shopper-admin-root {
   @include tokens.admin-root;
   @include tokens.admin-deployments;
+
+  font-family: var(--admin-font);
+  font-size: 0.875rem;
+  line-height: 1.4;
+
+  // Text is 15 px on a phone, where it is read at arm's length.
+  @media (max-width: 47.99rem) {
+    font-size: 0.9375rem;
+  }
 }
 
 // What a control looks like, once, for every screen (plan 0018, section 2).
 //
 // A global element selector still matches an element inside a component with
 // emulated encapsulation, which is what makes this the right home: one rule,
-// every screen, including the ones nobody has written yet. It lived in four
-// components as four copies of the same eight declarations, and the screens that
-// did not copy it drew browser chrome instead: a `<select>` the browser styled,
-// an `<input>` 21 pixels tall beside a 44 pixel picker, a grey system button.
+// every screen, including the ones nobody has written yet.
 //
 // Modifiers stay in the components. `.primary`, `.danger` and `.toggle.on` are
 // each about one screen's meaning rather than about what a control looks like,
 // and a screen is the only place that knows which of its buttons is the one.
 button,
 input,
-select {
-  min-block-size: 2.75rem;
-  padding: var(--admin-space-2) var(--admin-space-3);
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
+select,
+textarea {
+  min-block-size: var(--admin-control);
+  padding: var(--admin-control-pad) var(--admin-space-3);
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius-control);
   background: var(--admin-surface-raised);
-  /* 1rem exactly: iOS Safari zooms the viewport on focus for anything smaller,
-     which on a phone leaves the operator scrolled sideways. */
   font: inherit;
-  font-size: 1rem;
   color: var(--admin-ink);
+}
+
+// A control whose value was refused (admin plan 0052, target 6). The edge is red
+// and twice as thick, drawn inside the box so that nothing moves. It is not the
+// only sign: the row writes the reason under the control, with a warning mark,
+// and `aria-describedby` ties the two together.
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'],
+button[aria-invalid='true'] {
+  border-color: var(--admin-danger);
+  box-shadow: inset 0 0 0 1px var(--admin-danger);
+}
+
+// The text in a field is 16 px on a phone, where iOS Safari zooms the viewport
+// on focus for anything smaller. The token holds both sizes, and the order
+// matters: `font: inherit` above takes the app's face, then this sets the size.
+input,
+select,
+textarea {
+  font-size: var(--admin-field-size);
+}
+
+// The arrow of a select (admin plan 0050).
+//
+// The arrow a browser draws sits at the edge of the box and ignores the padding,
+// so it is switched off and drawn here, `--admin-space-3` in from the right edge.
+// The text stops before it. A typeahead puts its own arrow at the same distance
+// (`ReferencePicker`), with the same chevron: the path below is
+// `chevron-left-icon.svg` of the shared icons turned a quarter, in
+// `--admin-ink-muted`. A data URI cannot read a custom property, so the colour
+// is written out, and `select-arrow.spec.ts` fails when either drifts.
+select {
+  appearance: none;
+  padding-inline-end: calc(
+    var(--admin-space-3) + var(--admin-caret) + var(--admin-space-2)
+  );
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23555c63' transform='rotate(-90 12 12)' d='M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: right var(--admin-space-3) center;
+  background-size: var(--admin-caret) var(--admin-caret);
+}
+
+// A link is pine, like everything else that takes the operator somewhere. A
+// screen that drew no link style of its own used to show the browser's blue.
+a {
+  color: var(--admin-accent);
+}
+
+// A column of numbers lines up digit under digit.
+td,
+dd,
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+// What an operator copies character by character.
+code,
+kbd,
+.mono {
+  font-family: var(--admin-font-mono);
+  font-size: 0.9em;
+}
+
+// One focus ring for every control that does not draw its own.
+:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
 }

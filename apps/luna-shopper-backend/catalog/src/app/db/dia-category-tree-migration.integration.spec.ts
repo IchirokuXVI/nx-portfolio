@@ -12,7 +12,7 @@ import {
   LEAF_REMAP,
   ROOT_REMAP,
 } from './migrations/1758500000000-DiaCategoryTree';
-import { categoryId } from './reference/ids';
+import { categoryId } from './taxonomy/ids';
 
 /**
  * The migration that swaps the first category tree for DIA's, against real
@@ -48,9 +48,8 @@ const BEFORE_FIRST_TREE = CATALOG_MIGRATIONS.slice(
 );
 
 /**
- * The first tree as the reference seed wrote it, root by root. It left
- * `db/reference/categories.ts` with this plan, so it is stated here, where it
- * is history. The keys are `ROOT_REMAP`'s and the leaves are `LEAF_REMAP`'s.
+ * The first tree as the reference seed wrote it, root by root. It left the
+ * taxonomy file with plan 0173, so it is stated here, where it is history. The keys are `ROOT_REMAP`'s and the leaves are `LEAF_REMAP`'s.
  */
 const FIRST_TREE: Record<string, string[]> = {
   'fruit-and-vegetables': [

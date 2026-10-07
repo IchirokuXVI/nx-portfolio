@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  PriceScopeKind,
+  sourceSizeUnitOf,
+} from '@portfolio/luna-shopper/contracts';
 import {
   isGroceryCategory,
   LidlClient,
@@ -222,6 +225,14 @@ function declareRegions(
  * Each price is verbatim. `unitPrice` is null: LIDL publishes no per kilogram
  * figure, and deriving one from the printed size would disagree with the chain
  * in the last cent on the field whose only purpose is comparison.
+ *
+ * **It never says a product is sold by weight (plan 0181).** The payload has
+ * no field for it. In the captured fixtures a price block carries `price`,
+ * `packaging.text` and a `basePrice` that is `{ prefix: false }` on every
+ * product, with no amount and no unit. The eight digit code LIDL keeps for a
+ * weight item does not say it either: `product-short-code.json` carries one
+ * and prints a fixed `400 g`. So the row is left as it is, and a person
+ * decides the unit when the product is created.
  */
 function observationOf(product: LidlProduct): SourceObservation {
   return {
@@ -230,6 +241,9 @@ function observationOf(product: LidlProduct): SourceObservation {
     brand: product.brand,
     ean: product.ean,
     unitSize: product.unitSize,
+    // The unit the adapter converted the printed size into (plan 0177): `75cl`
+    // is 750 here and `1,28 l` is 1.28, and this is what says which is which.
+    sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
     sizeFormat: product.sizeFormat,
     packCount: product.packCount,
     categoryPath: product.categoryPath,

@@ -24,9 +24,13 @@ import {
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsRequest,
   type ApplyProductGroupAssignmentsResult,
+  type BrandHomonymRequest,
+  type BrandHomonymsView,
   type BrandIdRequest,
   type BrandKeysRequest,
   type BrandKeysResult,
+  type BrandMatchesRequest,
+  type BrandMatchesResult,
   type BrandPage,
   type BrandView,
   type CountLocationsByPostalCodeRequest,
@@ -53,6 +57,7 @@ import {
   type GetItemsResult,
   type GetSupermarketItemRequest,
   type GetSupermarketLocationItemRequest,
+  type ItemEanRequest,
   type ItemIdRequest,
   type ItemPage,
   type ItemPriceIdRequest,
@@ -117,6 +122,8 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type TeachItemEansRequest,
+  type TeachItemEansResult,
   type UpdateBrandRequest,
   type UpdateBrandResult,
   type UpdateItemRequest,
@@ -128,6 +135,10 @@ import {
   type UpdateSupermarketLocationRequest,
   type UpdateSupermarketRequest,
   type UpsertSupermarketLocationItemRequest,
+  type WithdrawItemPricesRequest,
+  type WithdrawItemPricesResult,
+  type WithdrawSupermarketItemsRequest,
+  type WithdrawSupermarketItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import { BrandService } from './brand.service';
 import { CatalogDashboardService } from './dashboard.service';
@@ -383,6 +394,29 @@ export class CatalogController {
     return this.items.findByEans(req);
   }
 
+  /** One more barcode for a product (plan 0185). */
+  @MessagePattern(ITEM_PATTERNS.addEan)
+  addItemEan(@Payload() req: ItemEanRequest): Promise<ItemView> {
+    return this.items.addEan(req);
+  }
+
+  /** One barcode off a product (plan 0185). */
+  @MessagePattern(ITEM_PATTERNS.removeEan)
+  removeItemEan(@Payload() req: ItemEanRequest): Promise<ItemView> {
+    return this.items.removeEan(req);
+  }
+
+  /**
+   * The barcodes bound queue rows printed, given to their products in one
+   * transaction (plan 0185). What the harvester calls after a bind.
+   */
+  @MessagePattern(ITEM_PATTERNS.teachEans)
+  teachItemEans(
+    @Payload() req: TeachItemEansRequest
+  ): Promise<TeachItemEansResult> {
+    return this.items.teachEans(req);
+  }
+
   /**
    * Several products in one transaction (plan 0100), for the bulk entry
    * decisions that bind rows to every one of them in the step that follows.
@@ -475,10 +509,12 @@ export class CatalogController {
   }
 
   /**
-   * Remove a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * The only brand a person may delete: its products go back to unbranded and
-   * its key returns to the suggestions list. Every other brand is refused.
+   * A spelling goes, its products go back to unbranded and its key returns to
+   * the suggestions list. Any other brand goes only when nothing points at it,
+   * and is refused with `brand_in_use` while a product holds it or a spelling
+   * is linked to it.
    */
   @MessagePattern(BRAND_PATTERNS.delete)
   deleteBrand(@Payload() req: DeleteBrandRequest): Promise<DeleteBrandResult> {
@@ -511,6 +547,30 @@ export class CatalogController {
     @Payload() req: RegisterBrandsRequest
   ): Promise<RegisterBrandsResult> {
     return this.brands.registerMany(req);
+  }
+
+  /** Say that a printed key also names this brand (plan 0178). */
+  @MessagePattern(BRAND_PATTERNS.addHomonym)
+  addBrandHomonym(
+    @Payload() req: BrandHomonymRequest
+  ): Promise<BrandHomonymsView> {
+    return this.brands.addHomonym(req);
+  }
+
+  /** Take that pointer back. No brand and no product changes. */
+  @MessagePattern(BRAND_PATTERNS.removeHomonym)
+  removeBrandHomonym(
+    @Payload() req: BrandHomonymRequest
+  ): Promise<BrandHomonymsView> {
+    return this.brands.removeHomonym(req);
+  }
+
+  /** Every brand each printed key names, the key's own brand first. */
+  @MessagePattern(BRAND_PATTERNS.matches)
+  brandMatches(
+    @Payload() req: BrandMatchesRequest
+  ): Promise<BrandMatchesResult> {
+    return this.brands.matches(req);
   }
   @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
   listProductGroups(
@@ -689,6 +749,18 @@ export class CatalogController {
     return this.itemPrices.deleteByRun(req);
   }
 
+  /**
+   * Remove the price rows a run wrote for one product at named scopes and
+   * kinds (plan 0191). The harvester sends it when a row that stated them
+   * left the product.
+   */
+  @MessagePattern(ITEM_PRICE_PATTERNS.withdraw)
+  withdrawItemPrices(
+    @Payload() req: WithdrawItemPricesRequest
+  ): Promise<WithdrawItemPricesResult> {
+    return this.itemPrices.withdraw(req);
+  }
+
   // --- Price policies (plan 0080, section 3) --------------------------------
 
   @MessagePattern(PRICE_POLICY_PATTERNS.list)
@@ -712,6 +784,18 @@ export class CatalogController {
     @Payload() req: SetSupermarketItemAvailabilityRequest
   ): Promise<SetSupermarketItemAvailabilityResult> {
     return this.supermarketItems.setAvailability(req);
+  }
+
+  /**
+   * Take a product's offers out of the scopes of one chain, with the shop
+   * rows a run wrote for it there (plan 0191). The harvester sends it when no
+   * bound row of the chain names the product any more.
+   */
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.withdraw)
+  withdrawSupermarketItems(
+    @Payload() req: WithdrawSupermarketItemsRequest
+  ): Promise<WithdrawSupermarketItemsResult> {
+    return this.supermarketItems.withdraw(req);
   }
 
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.get)

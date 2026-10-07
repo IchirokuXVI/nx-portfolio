@@ -2,6 +2,13 @@
   <div class="lead"><ng-content /></div>
 
   <!--
+    What the page puts before the filter, at the trailing edge (velista 0132,
+    section 3). No box around it: an empty slot is no flex item, so a page that
+    projects nothing here pays no gap for it.
+  -->
+  <ng-content select="[listToolsTrail]" />
+
+  <!--
     The filter control. The badge is how many settings are on, and the **name carries
     it too**, because a count that only exists as a dot over a glyph is a count a
     screen reader never hears.

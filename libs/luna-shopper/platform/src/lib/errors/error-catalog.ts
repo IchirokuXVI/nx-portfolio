@@ -154,6 +154,17 @@ export const ERROR_CATALOG: Record<
     en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
     es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
   },
+  // The homonym's one refusal of its own (plan 0178).
+  [ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY]: {
+    en: 'That printed name is already this brand’s own key. A homonym is a printed name that belongs to another brand too.',
+    es: 'Ese nombre impreso ya es la clave de esta marca. Un homónimo es un nombre impreso que también pertenece a otra marca.',
+  },
+  // The delete's one refusal. It says what to do first, because the counts in
+  // `details` say how much of it there is.
+  [ERROR_CODES.BRAND_IN_USE]: {
+    en: 'This brand cannot be deleted while products hold it or spellings are linked to it. Move them first.',
+    es: 'Esta marca no se puede borrar mientras haya productos que la tengan o grafías enlazadas a ella. Muévelos primero.',
+  },
   // The three refusals of the places queue (plan 0152).
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: {
     en: 'That place is already imported into the catalog.',
@@ -162,6 +173,11 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.PLACE_MATCHES_LOCATION]: {
     en: 'The catalog already holds a shop that may be this place. Link it, or create a new shop anyway.',
     es: 'El catálogo ya tiene una tienda que puede ser este lugar. Enlázala o crea una tienda nueva de todos modos.',
+  },
+  // The one question a link asks (plan 0193).
+  [ERROR_CODES.PLACE_NAMES_ANOTHER_CHAIN]: {
+    en: 'That place names another chain than the shop belongs to. Link it anyway only if they are the same shop.',
+    es: 'Ese lugar nombra una cadena distinta de la cadena de la tienda. Enlázalo de todos modos solo si son la misma tienda.',
   },
   [ERROR_CODES.SCOPE_NOT_FOUND]: {
     en: 'The chain has no price scope with the key this place declares. Create that scope first.',
@@ -181,6 +197,14 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.ITEM_NEEDS_A_CATEGORY]: {
     en: 'A product needs at least one category.',
     es: 'Un producto necesita al menos una categoría.',
+  },
+  [ERROR_CODES.ITEM_EAN_INVALID]: {
+    en: 'That EAN is not a real barcode. Write the 8, 12, 13 or 14 digits printed under the bars, or leave it empty. A code that starts with 2 belongs to one shop and is not accepted.',
+    es: 'Ese EAN no es un código de barras real. Escribe los 8, 12, 13 o 14 dígitos impresos bajo las barras, o déjalo vacío. Un código que empieza por 2 es de una sola tienda y no se acepta.',
+  },
+  [ERROR_CODES.ITEM_EAN_HELD]: {
+    en: 'Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.',
+    es: 'Otro producto ya tiene ese código de barras. Un código de barras nombra un solo producto: enlaza con ese producto o quítale antes el código.',
   },
   [ERROR_CODES.CATEGORY_IN_USE]: {
     en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
@@ -202,6 +226,11 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.SECTION_SLUG_TAKEN]: {
     en: 'This chain already has a section with that slug.',
     es: 'Esta cadena ya tiene una sección con ese identificador.',
+  },
+  // One shop for each external reference (plan 0195).
+  [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: {
+    en: 'Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.',
+    es: 'Otra tienda ya tiene esa referencia externa. Una referencia nombra una sola tienda: usa esa tienda o quítale antes la referencia.',
   },
   // The catalog read at one shop (plan 0170).
   [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: {

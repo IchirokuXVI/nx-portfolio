@@ -1,0 +1,41 @@
+{
+  "title": "Velista: what the shopping list costs",
+  "lede": "The shopping list tab shows an estimated total of the lines on screen, with a thin bar of how much of it is bought. Pressing the number says what is behind it. With no priced line there is one small row that says why. Plan <code>0132</code>. Drawn on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "The total and its bar" },
+    { "file": "Info.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "The total, pressed" },
+    { "file": "States.dc.html", "x": 940, "y": 0, "w": 390, "h": 1010, "title": "The total follows the filter" },
+    { "file": "NoPrices.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844, "title": "No line has a price" },
+    { "file": "NoPricesMore.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844, "title": "No line has a price, after See more" }
+  ],
+  "annotations": [
+    {
+      "id": "rule",
+      "x": 0,
+      "y": -420,
+      "w": 420,
+      "text": "WHAT THE NUMBER IS.\nThe total of every line on screen that has a price: bought, still to buy, or marked not available by the shopper. Each line counts its price times the whole quantity asked for.\nAlways a ~ before it. No word and no glyph beside it, and no container around it. It is in the secondary text colour, the weight of the count at the other end of the row.\nThe number is a button. That is the only way into the popover."
+    },
+    {
+      "id": "bar",
+      "x": 470,
+      "y": -420,
+      "w": 420,
+      "text": "THE BAR AND THE POPOVER.\nThe bar is the list page's progress bar, thinner. Its whole length is the total and the amber part is what is bought. Under it, the bought amount at the leading end and what is left at the trailing end.\nThe popover is the only place that says Estimated. It gives bought, still to buy and the total, then how many lines have a product and how many of those have a price, then why the prices are not final."
+    },
+    {
+      "id": "filter",
+      "x": 940,
+      "y": -420,
+      "w": 420,
+      "text": "IT FOLLOWS THE FILTER.\nThe number, the bar and the counts are about the lines the filter leaves on screen, never the whole basket.\nWith a shop chosen, a line the shop does not list (Queso) or is known not to have (Café, in red) adds nothing. A line the shopper marked not available (Tomate frito) still counts, on the left side.\nThe count at the start of the row keeps counting the whole basket, as it does today."
+    },
+    {
+      "id": "none",
+      "x": 1410,
+      "y": -420,
+      "w": 420,
+      "text": "WHEN NO LINE HAS A PRICE.\nNo number and no bar. One small row under the tools says so. See more opens the reason and the three steps in place, and See less closes them.\nThe row has no close button. It is small, and it goes away by itself when the first line gets a price."
+    }
+  ]
+}

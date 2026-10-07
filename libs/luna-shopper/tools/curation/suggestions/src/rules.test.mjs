@@ -3,9 +3,12 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   ISSUE_DETAIL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   REASONING_MAX,
   SEARCH_TEXT_MAX,
   UNIT_BASES,
+  barcodesOf,
   brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
@@ -15,6 +18,7 @@ import {
   carriesGlitch,
   carriesSize,
   categoryVocabulary,
+  endsInPack,
   findBrand,
   findCanonicalBrand,
   indexBrands,
@@ -23,9 +27,13 @@ import {
   normalizeName,
   printedUnit,
   privateLabelLines,
+  productGtin,
+  readGtin,
   sameBaseSize,
+  sourceBrands,
   suggestBrandLabel,
   toBaseSize,
+  toBaseUnit,
 } from './rules.mjs';
 
 function fixture(name) {
@@ -340,21 +348,88 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
   assert.doesNotMatch(prompt, /Pascual/);
 });
 
-test('the prompt names brandMatch and the range rule', () => {
+test('the prompt names brandMatches and the range rule', () => {
   const template = loadPromptTemplate();
-  assert.match(template, /entry\.brandMatch/);
-  assert.match(template, /brandMatch\.label/);
+  assert.match(template, /entry\.brandMatches/);
+  assert.match(template, /write its `label` as `item\.brand`/);
+  // The single field is gone from the packet, so the prompt must not name it.
+  assert.doesNotMatch(template, /brandMatch\b(?!es)/);
   assert.match(template, /BRAND_UNREGISTERED/);
   assert.match(template, /BRAND_DIFFERS_FROM_SOURCE/);
   // A range is never a brand, which is the defect the registry was built for.
   assert.match(template, /A range, a flavour or a claim is never a brand/);
 });
 
+test('the prompt says a printed brand can name several brands, chosen by the product (backend plan 0178)', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /`entry\.brandMatches` can hold several brands/);
+  assert.match(template, /Choose by the product's type/);
+  // The way out when the product does not say which, so the model is not left
+  // guessing between two registered brands.
+  assert.match(
+    template,
+    /If the product does not\s+tell you which, answer `REVIEW`/
+  );
+});
+
+test('sourceBrands answers the key’s own brand, then each homonym the snapshot holds', () => {
+  const brands = indexBrands([
+    { id: 'b1', key: 'poseidon', label: 'Poseidon' },
+    { id: 'b2', key: 'poseidonfood', label: 'Poseidon Food' },
+    { id: 'b3', key: 'deborah', label: 'Deborah' },
+    {
+      id: 'b4',
+      key: 'deborah48h',
+      label: 'DEBORAH 48H',
+      canonicalBrandId: 'b3',
+    },
+  ]);
+  const labels = (entry) =>
+    sourceBrands(brands, entry).map(({ brand, printedAs }) => [
+      brand.label,
+      printedAs,
+    ]);
+
+  assert.deepEqual(labels({ brand: 'Poseidón' }), [['Poseidon', null]]);
+  assert.deepEqual(
+    labels({
+      brand: 'Poseidón',
+      brandMatches: [
+        { key: 'poseidonfood', label: 'Poseidon Food' },
+        { key: 'poseidon', label: 'Poseidon' },
+      ],
+    }),
+    [
+      ['Poseidon', null],
+      ['Poseidon Food', null],
+    ]
+  );
+  // The printed spelling keeps `printedAs`, and a homonym never carries one.
+  assert.deepEqual(
+    labels({
+      brand: 'DEBORAH 48H',
+      brandMatches: [{ key: 'poseidonfood', label: 'Poseidon Food' }],
+    }),
+    [
+      ['Deborah', 'DEBORAH 48H'],
+      ['Poseidon Food', null],
+    ]
+  );
+  // Nothing printed, nothing registered, a field of the wrong shape: no brand.
+  assert.deepEqual(labels({ brand: null }), []);
+  assert.deepEqual(labels({ brand: 'Otra', brandMatches: 'poseidon' }), []);
+  assert.deepEqual(
+    labels({ brand: 'Otra', brandMatches: [{ key: 'unknown' }, null] }),
+    []
+  );
+  assert.deepEqual(labels(null), []);
+});
+
 test('the prompt names printedAs and what a linked spelling leaves behind', () => {
   const template = loadPromptTemplate();
   // A packet field the prompt does not name is a field the model ignores, so
-  // the pair is pinned here as `brandMatch` itself is.
-  assert.match(template, /entry\.brandMatch\.printedAs/);
+  // the pair is pinned here as `brandMatches` itself is.
+  assert.match(template, /`printedAs` on a brand of `entry\.brandMatches`/);
   assert.match(template, /BRAND_IS_LINKED/);
   // The half of the instruction that is not "write the label": what the
   // spelling adds stays in the name, which is what makes the second attempt
@@ -604,9 +679,10 @@ test('a CREATE carrying no item is not a document the schema allows', () => {
   assert.ok(item);
   assert.equal(validates(SCHEMA, withoutItem), false);
 
-  // The three fields the checker refuses a CREATE without are required here
-  // too, for the same reason and at the same cost.
-  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
+  // The fields the checker refuses a CREATE without are required here too,
+  // for the same reason and at the same cost. `nameEn` is one of them since
+  // backend plan 0184.
+  for (const field of ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(
@@ -641,7 +717,7 @@ test('a half filled item is refused by the loose root, with no alternation', () 
   assert.ok(anyOf);
 
   assert.equal(validates(root, CREATE), true);
-  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
+  for (const field of ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(validates(root, { ...CREATE, item: stripped }), false, field);
@@ -773,6 +849,48 @@ test('every catalog unit has a base, and 420 g is 0.42 kg', () => {
   assert.equal(toBaseSize(null, 'GRAM'), null);
 });
 
+test('the pack count bounds are the ones the gateway enforces (backend plan 0177)', () => {
+  // Read from the committed OpenAPI document, which is generated from the
+  // contracts, so the copy in `rules.mjs` cannot drift from them unnoticed.
+  const doc = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../../../apps/luna-shopper-backend/gateway/docs/openapi.json',
+        import.meta.url
+      ),
+      'utf8'
+    )
+  );
+  const packCount =
+    doc.components.schemas['harvest.SourceCatalogEntryView'].properties
+      .packCount;
+  assert.equal(packCount.minimum, PACK_COUNT_MIN);
+  assert.equal(packCount.maximum, PACK_COUNT_MAX);
+});
+
+test('the decision schema lets a CREATE state a pack count, and does not require one', () => {
+  const schema = buildDecisionSchema({ categories: ['milk'], units: ['UNIT'] });
+  const create = schema.anyOf.find(
+    (shape) => shape.properties.decision.const === 'CREATE'
+  );
+  for (const item of [schema.properties.item, create.properties.item]) {
+    assert.deepEqual(item.properties.packCount, {
+      type: ['integer', 'null'],
+      minimum: PACK_COUNT_MIN,
+      maximum: PACK_COUNT_MAX,
+    });
+    assert.equal(item.required.includes('packCount'), false);
+  }
+});
+
+test('the prompt names the fields backend plan 0177 added', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /entry\.sizeUnit/);
+  assert.match(template, /entry\.packCount/);
+  assert.match(template, /item\.packCount/);
+  assert.match(template, /candidate of 160 g with `packCount` 16/);
+});
+
 test('suggestBrandLabel keeps a mixed case spelling and title cases capitals', () => {
   assert.equal(suggestBrandLabel(['HACENDADO', 'Hacendado']), 'Hacendado');
   assert.equal(suggestBrandLabel(['EL POZO']), 'El Pozo');
@@ -788,4 +906,163 @@ test('the prompt names the fields and codes plan 0006 added', () => {
   assert.match(template, /LINK_TARGET_NOT_SHOWN/);
   assert.match(template, /LINK_TARGET_MISSING/);
   assert.match(template, /420 g and 0\.42 kg are one format/);
+});
+
+// ---------------------------------------------------------------------------
+// Base units (backend plan 0183)
+// ---------------------------------------------------------------------------
+
+test('toBaseUnit states a size in grams, millilitres or a count', () => {
+  // The same table `source-size.spec.ts` holds the contracts function to.
+  for (const [size, unit, unitSize, base] of [
+    [0.25, 'KILOGRAM', 250, 'GRAM'],
+    [1.5, 'LITER', 1500, 'MILLILITER'],
+    [0.4636, 'KILOGRAM', 463.6, 'GRAM'],
+    [500, 'GRAM', 500, 'GRAM'],
+    [330, 'MILLILITER', 330, 'MILLILITER'],
+    [16, 'UNIT', 16, 'UNIT'],
+    [6, 'PACK', 6, 'UNIT'],
+    [null, 'KILOGRAM', null, 'KILOGRAM'],
+    [null, 'LITER', null, 'MILLILITER'],
+    [undefined, 'PACK', null, 'UNIT'],
+  ]) {
+    assert.deepEqual(toBaseUnit(size, unit), { unitSize, unit: base });
+  }
+});
+
+test('toBaseUnit answers a unit it does not know as it came', () => {
+  assert.deepEqual(toBaseUnit(2, 'BOTTLE'), { unitSize: 2, unit: 'BOTTLE' });
+});
+
+test('the prompt names the base unit rule, its code, and what is not a size', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /NOT_A_BASE_UNIT/);
+  assert.match(template, /Never write `LITER` or `PACK`/);
+  assert.match(template, /0\.25 kg is 250 `GRAM`/);
+  assert.match(template, /1\.5 l is 1500 `MILLILITER`/);
+  // A product sold by weight is the one thing a kilogram is still written for.
+  assert.match(template, /`KILOGRAM` is only for a product sold by weight/);
+  // The capacity of a container is how big the object is, never its size.
+  assert.match(template, /A dimension or a capacity is never the size/);
+  assert.match(template, /a bottle sold empty/);
+});
+
+// ---------------------------------------------------------------------------
+// What a created product must carry (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+test('the readGtin copy answers every pair the contracts cases pin', () => {
+  // The contracts function is TypeScript and this library is plain `.mjs` with
+  // no build step, so the two are held together by this file rather than by an
+  // import. A pair added on the backend side fails here until the copy agrees.
+  const cases = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../contracts/src/lib/barcodes/gtin.cases.json',
+        import.meta.url
+      ),
+      'utf8'
+    )
+  );
+  assert.ok(cases.length > 0);
+  for (const [text, reading] of cases) {
+    assert.deepEqual(
+      readGtin(text),
+      reading,
+      `readGtin(${JSON.stringify(text)})`
+    );
+  }
+  assert.deepEqual(readGtin(undefined), { kind: 'INVALID', reason: 'EMPTY' });
+});
+
+test('productGtin answers a real barcode and nothing else', () => {
+  assert.equal(productGtin(' 4006381333931 '), '4006381333931');
+  assert.equal(productGtin('96385074'), '96385074');
+  assert.equal(productGtin('2204500000000'), null);
+  assert.equal(productGtin('84100100012'), null);
+  assert.equal(productGtin(null), null);
+});
+
+test('endsInPack reads the last word, whatever follows it', () => {
+  for (const name of [
+    'Cerveza pack',
+    'Cerveza PACK',
+    'Cerveza (pack)',
+    'pack',
+  ]) {
+    assert.equal(endsInPack(name), true, name);
+  }
+  for (const name of [
+    'Backpack',
+    'Pack de cervezas',
+    'Cerveza packs',
+    '',
+    null,
+  ]) {
+    assert.equal(endsInPack(name), false, String(name));
+  }
+});
+
+test('the schema types nameEn as a string that is never null', () => {
+  // Required and nullable is not required: a `null` satisfies it, and the
+  // checker refuses a CREATE whose nameEn is null.
+  const nulled = { ...CREATE, item: { ...CREATE.item, nameEn: null } };
+  assert.equal(validates(SCHEMA, nulled), false);
+  const { anyOf, ...root } = SCHEMA;
+  assert.ok(anyOf);
+  assert.equal(validates(root, nulled), false);
+});
+
+test('the prompt says nameEn is always written and that a name never says pack', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /`item\.nameEn` is\s+always written/);
+  assert.match(template, /stay as printed in both languages/);
+  assert.match(template, /NAME_EN_MISSING/);
+  assert.match(template, /A name never says `pack`/);
+  assert.match(template, /The pack count carries it/);
+  // The old permission to answer null is gone.
+  assert.doesNotMatch(template, /else null\.\n- `item\.brand`/);
+  assert.doesNotMatch(template, /when you are confident of the translation/);
+});
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+test('barcodesOf lists every barcode of a product, the first one leading', () => {
+  assert.deepEqual(
+    barcodesOf({ ean: '8402001002083', eans: ['8402001002083', '96385074'] }),
+    ['8402001002083', '96385074']
+  );
+  // A view that lists no `eans` answers the one barcode it has.
+  assert.deepEqual(barcodesOf({ ean: '96385074' }), ['96385074']);
+  assert.deepEqual(barcodesOf({ ean: null, eans: [] }), []);
+  assert.deepEqual(barcodesOf(null), []);
+  // An old in-store code on `ean` that is in no list is still a code the
+  // product carries, so a row printing it is not told the product lacks it.
+  assert.deepEqual(barcodesOf({ ean: '2204500000000', eans: ['96385074'] }), [
+    '96385074',
+    '2204500000000',
+  ]);
+});
+
+test('the prompt says a product can hold several barcodes, and what EAN_CONFLICT now means', () => {
+  const template = loadPromptTemplate();
+  assert.match(
+    template,
+    /A candidate's `eans` lists every barcode the product holds/
+  );
+  assert.match(
+    template,
+    /A different\s+barcode alone does not make a second product/
+  );
+  assert.match(
+    template,
+    /`EAN_CONFLICT`: a `LINK` onto a product while another product holds the entry's barcode/
+  );
+  // The old rule, that a different barcode is a conflict by itself, is gone.
+  assert.doesNotMatch(
+    template,
+    /a `LINK` onto a product carrying a different barcode/
+  );
 });

@@ -187,6 +187,24 @@ export const ITEM_PATTERNS = {
    */
   findByEans: 'item.findByEans',
   /**
+   * Give a product one more barcode (plan 0185). Refused with `item_ean_held`
+   * when another product holds it, and with `item_ean_invalid` when it is not
+   * a real barcode. A barcode the product already holds changes nothing.
+   */
+  addEan: 'item.ean.add',
+  /**
+   * Take one barcode off a product (plan 0185). When it was the product's
+   * first barcode, the oldest of the rest becomes the first.
+   */
+  removeEan: 'item.ean.remove',
+  /**
+   * {@link ITEM_PATTERNS.addEan} for many products in one round trip and one
+   * transaction (plan 0185). What a queue decision calls after it bound a row
+   * whose barcode its product did not hold. A barcode another product holds
+   * is not written and is named in the answer. It does not fail the call.
+   */
+  teachEans: 'item.ean.teach',
+  /**
    * Several products in one transaction, all or nothing (plan 0100).
    *
    * The step `sourceEntry.applyDecisions` needs: a decisions file that creates
@@ -429,10 +447,11 @@ export const PRODUCT_GROUP_PATTERNS = {
  * run registers a brand: an unregistered brand is still accepted on an item,
  * and deciding it is really a brand is curation.
  *
- * **The only brand that can be deleted is a spelling of another** (plan 0124).
- * Every other brand still cannot be removed, by section 9: its products have
+ * **A brand can be deleted when it is a spelling of another** (plan 0124), **or
+ * when nothing points at it** (the follow up of plan 0178). A brand that a
+ * product holds still cannot be removed, by section 9: its products have
  * nowhere to go, and the foreign key from `items.brandId` sets null rather than
- * cascading.
+ * cascading, so the delete refuses rather than let it.
  */
 export const BRAND_PATTERNS = {
   create: 'brand.create',
@@ -450,14 +469,18 @@ export const BRAND_PATTERNS = {
    */
   registerSuggestion: 'brand.registerSuggestion',
   /**
-   * Remove a spelling, and only a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * **The one brand that may be deleted is one linked to another.** Deleting it
-   * puts its products back exactly where they were before it was registered,
-   * unbranded and still carrying its printed text, so its key returns to the
-   * suggestions list by itself and registering it again picks them up. Every
-   * other brand still cannot be removed, by section 9 of plan 0115: there is
-   * nowhere for its products to go.
+   * **A brand linked to another** is a spelling. Deleting it puts its products
+   * back exactly where they were before it was registered, unbranded and still
+   * carrying its printed text, so its key returns to the suggestions list by
+   * itself and registering it again picks them up.
+   *
+   * **Any other brand** is deleted only when nothing points at it, and its
+   * homonyms go with it. While a product holds it or a spelling is linked to
+   * it, the answer is `brand_in_use` with `itemCount` and `linkCount` in
+   * `details`, and nothing is written: section 9 of plan 0115 still holds for
+   * a brand whose products would have nowhere to go.
    */
   delete: 'brand.delete',
   /**
@@ -481,6 +504,25 @@ export const BRAND_PATTERNS = {
    * which keeps each registration a decision.
    */
   registerMany: 'brand.registerMany',
+  /**
+   * Say that a printed key also names this brand (plan 0178).
+   *
+   * One name can belong to two businesses: El Jamón prints `Poseidón` on salmon
+   * and the registered `Poseidon` is a cologne. The key stays unique and stays
+   * the first brand's; the homonym is an extra pointer from that printed key to
+   * a second brand, so the curator chooses between them from the product.
+   */
+  addHomonym: 'brand.addHomonym',
+  /** Take that pointer back. The brand and the key's own brand are untouched. */
+  removeHomonym: 'brand.removeHomonym',
+  /**
+   * Every brand each printed key names, the key's own brand first
+   * (plan 0178).
+   *
+   * Asked by the gateway for the keys one page of the queue prints, so it is a
+   * handful of keys per message and the ceiling `keys` documents is far away.
+   */
+  matches: 'brand.matches',
 } as const;
 
 /**
@@ -514,6 +556,15 @@ export const SUPERMARKET_ITEM_PATTERNS = {
    * reachable only through `/v3/admin/catalog/supermarket-items`.
    */
   adminList: 'supermarketItem.adminList',
+  /**
+   * Take a product's offers out of the scopes of one chain, with the shop rows
+   * a harvest run wrote for it there (plan 0191).
+   *
+   * Sent by the harvester when no bound row of the chain names the product any
+   * more. An offer goes only when nothing prices it and no shop row a person
+   * wrote backs it. Nothing a person typed is removed.
+   */
+  withdraw: 'supermarketItem.withdraw',
 } as const;
 
 /**
@@ -567,6 +618,15 @@ export const ITEM_PRICE_PATTERNS = {
    * another run wrote.
    */
   deleteByRun: 'itemPrice.deleteByRun',
+  /**
+   * Remove the price rows a harvest run wrote for one product, at named
+   * scopes and kinds, and recompute (plan 0191).
+   *
+   * Sent by the harvester when a row that stated those prices left the
+   * product. A row a person typed is never touched: an `ADMIN` row, and a row
+   * of any kind that names no run.
+   */
+  withdraw: 'itemPrice.withdraw',
 } as const;
 
 /**
@@ -665,6 +725,35 @@ export interface SupermarketView {
    * store.
    */
   defaultPriceScopeId: string | null;
+  /**
+   * How many shops the chain holds (admin plan 0042, section 2): its rows of
+   * `supermarket_locations`, counted in one grouped query for the page.
+   *
+   * Present on the reads of a chain itself (`supermarket.create`, `list`, `get`
+   * and `update`), and absent where a chain rides inside another view (a shop's
+   * neighbours, a basket's shop), which is about one shop and would cost a
+   * count nobody there reads.
+   */
+  locationCount?: number;
+}
+
+/**
+ * The shop that holds an external reference (plan 0195).
+ *
+ * What the 409 `location_external_ref_taken` names under `details.heldBy`,
+ * and what a link of a place answers when it left the reference of the shop
+ * empty. It carries what a person needs to tell the shop from its
+ * neighbours: the chain, the label and the address.
+ */
+export interface LocationRefHolder {
+  supermarketLocationId: string;
+  supermarketId: string;
+  supermarketName: LocalizedText;
+  label: LocalizedText | null;
+  address: string | null;
+  city: string | null;
+  /** Whose reference the shop says it holds. Null when it names nobody. */
+  externalProvider: string | null;
 }
 
 export interface SupermarketLocationView {
@@ -890,6 +979,46 @@ export interface BrandView {
   linkCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One brand a printed key names (plan 0178).
+ *
+ * Always a brand that stands for itself: a key that names a linked spelling
+ * answers the brand it spells, and `printedAs` then keeps the spelling.
+ */
+export interface BrandMatchView {
+  brandId: string;
+  /** That brand's own key, which differs from the printed key for a homonym. */
+  key: string;
+  /** The brand to write. */
+  label: string;
+  /** The chain that owns this private label, or null for an ordinary brand. */
+  privateLabelSupermarketId: string | null;
+  /**
+   * The registered spelling the printed key names, when the registry holds it
+   * as a spelling of `label`. Null when the two are the same brand, and on a
+   * homonym.
+   */
+  printedAs: string | null;
+}
+
+/** One printed key and every brand it names, the key's own brand first. */
+export interface BrandKeyMatches {
+  printedKey: string;
+  brands: BrandMatchView[];
+}
+
+/**
+ * The printed keys that also name one brand (plan 0178).
+ *
+ * The answer of both homonym writes, and it is the whole list after the write
+ * rather than the one row, because the list is what a person checks.
+ */
+export interface BrandHomonymsView {
+  brandId: string;
+  /** Sorted. Never holds the brand's own key. */
+  printedKeys: string[];
 }
 
 /**
@@ -1146,8 +1275,22 @@ export interface ItemView {
    * The only identifier that joins a product across chains, and the reason
    * catalog discovery pays one detail request per product (plan 0038, section
    * 2.5). Unique when present.
+   *
+   * The product's **first** barcode, the one a product page shows (plan 0185).
+   * It is also the first entry of {@link eans}, unless it is one of the old
+   * in-store or invalid codes plan 0184 counted, which are in no list.
    */
   ean: string | null;
+  /**
+   * Every barcode of the product (plan 0185), {@link ean} first and the rest
+   * in the order they were added. Empty for a product with none.
+   *
+   * A maker prints a new barcode when it changes a factory, a supplier or a
+   * label, and the product on the shelf is the same. Each entry is a real
+   * barcode (`readGtin`): an in-store code is never one of them. A barcode
+   * names one product, so no two products share an entry.
+   */
+  eans: string[];
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   unitSize: number | null;
   /**
@@ -1508,6 +1651,18 @@ export interface SupermarketLocationItemView {
   availabilityObservedAt: string | null;
   /** The harvest run that wrote it. Opaque, never joined. */
   availabilitySourceRunId: string | null;
+  /**
+   * The product's name, joined on as {@link AdminSupermarketItemView} joins it
+   * (admin plan 0042, section 2): a shop's page of products is a page of
+   * distinct products, so resolving the name client side would cost a request
+   * per row. Null when the join found nothing.
+   */
+  itemName: LocalizedText | null;
+  /**
+   * The product's brand as `ItemView.brand` states it, joined on beside the
+   * name. Null for a product with no brand, and when the join found nothing.
+   */
+  itemBrand: string | null;
 }
 
 // --- Supermarket requests --------------------------------------------------
@@ -2076,6 +2231,45 @@ export interface FindItemsByEansResult {
   items: ItemView[];
 }
 
+/** One barcode of one product (plan 0185). */
+export interface ItemEanRequest extends AdminCredential {
+  itemId: string;
+  ean: string;
+}
+
+/** A product and a barcode a bound queue row printed for it (plan 0185). */
+export interface ItemEanPair {
+  itemId: string;
+  ean: string;
+}
+
+/**
+ * Teach products the barcodes their bound rows printed (plan 0185). Capped at
+ * {@link BULK_DECISION_MAX_OPERATIONS}, the most rows one decisions file binds.
+ */
+export interface TeachItemEansRequest extends AdminCredential {
+  entries: ItemEanPair[];
+}
+
+/** A barcode that was not written, and why. */
+export interface ItemEanRefusal extends ItemEanPair {
+  /**
+   * `HELD`: another product holds the barcode, named in `heldBy`.
+   * `INVALID`: not a real barcode, an in-store code included.
+   * `NOT_FOUND`: the product does not exist.
+   */
+  reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
+  /** The product that holds the barcode, for `HELD`. Null otherwise. */
+  heldBy: string | null;
+}
+
+export interface TeachItemEansResult {
+  /** How many barcodes were written. One a product already held is not counted. */
+  added: number;
+  /** Every pair that was not written. Empty when all of them were. */
+  refused: ItemEanRefusal[];
+}
+
 export interface ItemIdRequest extends AdminCredential {
   itemId: string;
 }
@@ -2164,6 +2358,16 @@ export interface SearchItemsRequest extends PageQuery {
    */
   withoutProductGroup?: boolean;
   /**
+   * Only the products on no category at all (admin plan 0043, section 2).
+   *
+   * A product needs a category to be written, so these are the rows a source
+   * left behind and the rows a deleted category let go of. A separate flag for
+   * the reason {@link withoutProductGroup} is one: absent already means "any
+   * category". Setting it beside a `categoryId` answers nothing, which is what
+   * the two together mean.
+   */
+  withoutCategory?: boolean;
+  /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
    * **Absent and empty are the same answer since plan 0069, section 2**: the
@@ -2195,6 +2399,26 @@ export interface SearchItemsRequest extends PageQuery {
    * ids list what either chain sells.
    */
   soldBy?: string[];
+  /**
+   * Only the products this price scope shows no price for (plan 0187).
+   *
+   * The curation worklist of the back office: after a crawl of a chain, what
+   * the crawl did not reach. A product is listed when the scope holds no row
+   * for it, or a row with no price that still says the product is sold.
+   *
+   * **A scope that says "not sold" has answered**, so a row with
+   * `available = false` keeps its product out of this list. An out of date
+   * price is a price, and keeps its product out too.
+   *
+   * Read from the materialized row and never worked out again from the price
+   * rows (plan 0080). A uuid and nothing else: an id that names no scope is
+   * refused with the 404 the price scope read answers, because an empty
+   * worklist for a scope that does not exist would read as "all priced".
+   *
+   * It combines with every other filter, and it is what makes the page carry
+   * {@link ItemPage.total}.
+   */
+  withoutPriceAtScopeId?: string;
   /**
    * How much of the pricing to attach (plan 0161, section 1), read exactly as
    * {@link GetItemsRequest.offers} is: `best` is the default, `all` adds
@@ -2575,19 +2799,24 @@ export interface BrandIdRequest {
   brandId: string;
 }
 
-/** Remove a spelling. A brand that is nobody's spelling is refused. */
+/**
+ * Delete a brand. A brand that is nobody's spelling is refused while a product
+ * holds it or a spelling is linked to it.
+ */
 export interface DeleteBrandRequest extends AdminCredential {
   brandId: string;
 }
 
 /**
- * A spelling removed, and how many products went back to unbranded
+ * A brand deleted, and how many products went back to unbranded
  * (plan 0124).
  *
  * `id` is the convention every other admin catalog delete answers with.
- * `movedItems` is beside it because the number is the visible effect of the
- * delete: those products keep their printed text and lose their brand, which is
- * the state they were in before the spelling was registered.
+ * `movedItems` is beside it because the number is the visible effect of
+ * deleting a spelling: those products keep their printed text and lose their
+ * brand, which is the state they were in before the spelling was registered.
+ * It is always zero for a brand that was nobody's spelling, because that
+ * delete is refused while a product holds the brand.
  */
 export interface DeleteBrandResult {
   id: string;
@@ -2680,6 +2909,32 @@ export interface RegisterBrandsOutcome {
 
 export interface RegisterBrandsResult {
   results: RegisterBrandsOutcome[];
+}
+
+/**
+ * Add or remove one homonym of one brand (plan 0178).
+ *
+ * `printedKey` is keyed with `brandKey` before it is stored or compared, so
+ * `Poseidón` and `poseidon` are one homonym. A text that makes no key is
+ * refused, and so is the brand's own key.
+ */
+export interface BrandHomonymRequest extends AdminCredential {
+  brandId: string;
+  printedKey: string;
+}
+
+/** The most printed keys one `brand.matches` request may carry. */
+export const BRAND_MATCHES_MAX_KEYS = 200;
+
+/** Which brands each of these printed keys names. Carries no page. */
+export interface BrandMatchesRequest {
+  userId: string;
+  /** Keys as `brandKey` makes them. A key nothing names is left out of the answer. */
+  keys: string[];
+}
+
+export interface BrandMatchesResult {
+  matches: BrandKeyMatches[];
 }
 
 // --- Item price requests (plan 0080, section 9) -----------------------------
@@ -2807,10 +3062,242 @@ export interface DeleteItemPricesByRunResult {
   recomputed: number;
 }
 
+/**
+ * How many scopes one withdraw message may name (plan 0191). A chain has a
+ * handful of scopes to a few hundred, so this bounds a message and not a chain.
+ */
+export const WITHDRAW_MAX_SCOPES = 5000;
+
+/**
+ * A price row that a row still bound to the product holds (plan 0191), open
+ * or not. It is what a bound row accounts for, and a withdraw never removes
+ * what it accounts for.
+ *
+ * **One held price spares its whole scope.** A source row holds one price per
+ * scope, and that price names one run. The same row can have written at the
+ * scope under another kind before (a shared row of a website and a leaflet),
+ * and it can have written a newer price than the one it holds now (a file
+ * import of an older document). Nothing in the row says so. So at a scope
+ * where a bound row holds a price, catalog removes only a row of a run that
+ * the row that left names (`left`), and what a statement removes.
+ */
+export interface HeldItemPrice {
+  priceScopeId: string;
+  /**
+   * The kind the price was written with: the kind of the run that observed
+   * it. Null when that run cannot be told (the price names no run, or the run
+   * is gone). With a null, no statement is applied at the scope.
+   */
+  sourceKind: PriceSourceKind | null;
+  /**
+   * The run that observed the price, or null. A row of this run at this scope
+   * is never removed as the leaving row's, whatever kind it was written under.
+   */
+  sourceRunId: string | null;
+}
+
+/**
+ * A run the row that left the product names at a scope (plan 0191): the run
+ * of the price it holds there. The rows that run wrote for the product at
+ * that scope are the ones the row takes with it.
+ */
+export interface LeftItemPrice {
+  priceScopeId: string;
+  sourceRunId: string;
+}
+
+/**
+ * The one price the rows still bound to the product state at a scope and
+ * kind (plan 0191), with everything catalog needs to write it.
+ *
+ * At that scope and kind catalog removes a run written row only when it was
+ * observed at `price.observedAt` or later, its values differ from this price,
+ * **and it is a row of this statement's own run or of a run the leaving row
+ * names**. It then writes this price through the insert on change, in the
+ * same transaction. A row that already says what this says is left alone, so
+ * a second call changes nothing.
+ *
+ * **A statement does not have to be the newest thing catalog holds.** The row
+ * can hold an older observation than catalog does: a file import stamps the
+ * instant of its document. A newer row of a run nobody names stays, and stays
+ * current. The answer then names the statement in `notCurrent`.
+ */
+export interface StatedItemPrice {
+  priceScopeId: string;
+  /** The kind of the run that observed the price. Never the row's own kind. */
+  sourceKind: PriceSourceKind;
+  /** The run that observed the price. */
+  sourceRunId: string;
+  /** The scope the price was read at, when it is a copy (plan 0118). */
+  copiedFromScopeId?: string | null;
+  /** The values, with `observedAt` always stated. */
+  price: ItemPriceValues & { observedAt: string };
+}
+
+/**
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it (plan 0191), in one transaction.
+ *
+ * The rows named are the product's rows at every scope of `priceScopeIds` and
+ * of every kind of `sourceKinds`, where the row names a run. `ADMIN` is
+ * refused as a kind, and a row with no run id is never removed, whatever its
+ * kind: a person can type a price of an automated kind, and such a row names
+ * no run.
+ *
+ * - **A scope no bound row holds a price at** loses every such row.
+ * - **A scope a bound row holds a price at** (`held`) loses only the rows of
+ *   a run that the leaving row names (`left`) and no bound row names.
+ * - **A statement** (`stated`) removes, at its scope and kind, what
+ *   {@link StatedItemPrice} says, and is written.
+ *
+ * A statement is not applied, and removes nothing, in three cases. Catalog
+ * holds a row of its run at its scope under **another** kind
+ * (`keptAsWritten`): the price is in catalog already, under the kind it was
+ * written with. The scope it says it was copied from is gone or is not
+ * another scope of the chain (`notWritable`). Or a held price at its scope
+ * has no kind.
+ *
+ * Only a service actor may send it. An operator settles a product through the
+ * harvester, which knows the bound rows.
+ */
+export interface WithdrawItemPricesRequest extends AdminCredential {
+  itemId: string;
+  /** At most {@link WITHDRAW_MAX_SCOPES}. */
+  priceScopeIds: string[];
+  /** Automated kinds only. `ADMIN` and the user kinds are refused. */
+  sourceKinds: PriceSourceKind[];
+  /** Every price row a bound row holds. Absent is the same as empty. */
+  held?: HeldItemPrice[];
+  /** One per scope and kind at most. Absent is the same as empty. */
+  stated?: StatedItemPrice[];
+  /**
+   * The runs the row that left names, per scope. Absent when no row is
+   * leaving in this call: the settle a person asks for knows of none.
+   */
+  left?: LeftItemPrice[];
+  /** True answers what a call would remove and write, and writes nothing. */
+  dryRun?: boolean;
+}
+
+/** What {@link WithdrawItemPricesRequest} did, or would do. */
+export interface WithdrawItemPricesResult {
+  /** Every `item_prices` row removed. */
+  deleted: number;
+  /** The same rows by scope and kind. A pair that lost no row is left out. */
+  removed: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    deleted: number;
+  }[];
+  /** `item_prices` rows inserted for a statement. */
+  inserted: number;
+  /** Current rows a statement confirmed: their `lastObservedAt` moved. */
+  confirmed: number;
+  /**
+   * Statements that were not applied, because catalog holds the price of that
+   * run at that scope under another kind. Nothing was removed or written at
+   * the scope and kind of such a statement.
+   */
+  keptAsWritten: {
+    priceScopeId: string;
+    /** The kind the statement named. */
+    sourceKind: PriceSourceKind;
+    /** The kind catalog holds the run's price under. */
+    heldAs: PriceSourceKind;
+  }[];
+  /**
+   * Statements that were not applied, because the scope they were copied
+   * from is gone or is not another scope of the chain. Nothing was removed
+   * or written at the scope and kind of such a statement.
+   */
+  notWritable: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  /**
+   * Statements catalog holds, but not as the current row of their scope and
+   * kind: a newer row that no bound row and no leaving row names says
+   * something else, and it stays.
+   */
+  notCurrent: { priceScopeId: string; sourceKind: PriceSourceKind }[];
+  /** The (item, scope) keys worked out again, the fan out included. */
+  recomputed: number;
+}
+
+/**
+ * Take a product's offers out of the scopes of one chain (plan 0191).
+ *
+ * The caller says that no bound row of the chain names the product. Catalog
+ * checks the rest, per offer:
+ *
+ * - **Nothing prices it.** No `item_prices` row of the product exists at the
+ *   scope or at a scope it falls through to. A price a person typed keeps the
+ *   offer.
+ * - **No shop row backs it.** The shop rows a harvest run wrote for the
+ *   product at the shops of the chain are removed first. A row a person wrote
+ *   stays, is reported in `conflicts`, and keeps the offer of every scope its
+ *   shop holds.
+ * - **No person wrote the offer itself.** The trail records who wrote a row,
+ *   and an offer an operator created or changed is kept (`PERSON`). An offer
+ *   that is older than the oldest row of the trail is kept too (`NO_TRAIL`):
+ *   the trail cannot say that nobody typed it.
+ *
+ * `available` is not read. An offer that says `false` goes under the same
+ * conditions as one that says `true`.
+ *
+ * Only a service actor may send it.
+ */
+export interface WithdrawSupermarketItemsRequest extends AdminCredential {
+  itemId: string;
+  supermarketId: string;
+  /** Scopes of `supermarketId`. At most {@link WITHDRAW_MAX_SCOPES}. */
+  priceScopeIds: string[];
+  /** True answers what a call would remove, and writes nothing. */
+  dryRun?: boolean;
+  /**
+   * With `dryRun` only: answer as if the run written price rows of these
+   * kinds at these scopes were already removed. It is how a dry run of the
+   * two messages in a row answers what the two calls would do.
+   */
+  assumePricesWithdrawn?: PriceSourceKind[];
+}
+
+/** Why an offer stayed (plan 0191). */
+export type OfferKeptReason = 'PRICED' | 'SHOP_ROW' | 'PERSON' | 'NO_TRAIL';
+
+/** What {@link WithdrawSupermarketItemsRequest} removed, or would remove. */
+export interface WithdrawSupermarketItemsResult {
+  /** The scopes whose offer was removed. */
+  offersRemoved: string[];
+  /** The offers that stayed, and the condition each one failed. */
+  offersKept: { priceScopeId: string; reason: OfferKeptReason }[];
+  /** Shop rows removed whole: a harvest run wrote all that they held. */
+  shopRowsRemoved: number;
+  /**
+   * Shop rows that keep a position a person typed. Their availability is
+   * cleared and the row stays.
+   */
+  shopRowsCleared: number;
+  /** Shop rows whose availability a person wrote. Left alone. */
+  conflicts: { supermarketLocationId: string; held: boolean | null }[];
+}
+
 /** Whether a scope carries each of these products. Carries no price. */
 export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   priceScopeId: string;
   entries: { itemId: string; available: boolean }[];
+  /**
+   * True creates the row of a product the scope has none for and leaves every
+   * row that exists exactly as it is, whatever `available` says here (plan
+   * 0182).
+   *
+   * It is what the harvester's offer with no price sends. That offer says "the
+   * chain lists this product", and catalog derives the flag of a row that
+   * exists from the shops of the scope. A plain write of `true` would flip a
+   * derived `false` back on every run.
+   */
+  onlyIfMissing?: boolean;
 }
 
 export interface SetSupermarketItemAvailabilityResult {
@@ -2872,10 +3359,19 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
  * and is the only useful shape for somebody looking for the row they just broke,
  * so it is reachable by an operator token and by nothing else.
  */
+/** How many products one {@link AdminListSupermarketItemsRequest} may name. */
+export const ADMIN_PRICE_ITEM_IDS_MAX = 100;
+
 export interface AdminListSupermarketItemsRequest
   extends PageQuery, AdminCredential {
   /** One product's prices across every scope. */
   itemId?: string;
+  /**
+   * Several products at once (admin plan 0043, section 2): the price of every
+   * product on one page of the product list, in one read. At most
+   * {@link ADMIN_PRICE_ITEM_IDS_MAX}. Empty is the same as absent.
+   */
+  itemIds?: string[];
   /** One scope's prices, which is what a chain's price table is. */
   priceScopeId?: string;
   /** `ADMIN` answers "what have I overridden": the effective rows an operator's price won. */
@@ -3177,7 +3673,16 @@ export type SupermarketPage = Paginated<SupermarketView>;
 export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
 /** The browsed read of the same table (plan 0068), chain attached and refusals flagged. */
 export type ShopPage = Paginated<ShopView>;
-export type ItemPage = Paginated<ItemView>;
+/**
+ * A page of products.
+ *
+ * `total` is present on one read and absent on every other (plan 0187): the
+ * search with {@link SearchItemsRequest.withoutPriceAtScopeId} set. It is the
+ * number of products that match the whole request, on every page of it, so
+ * that the back office can show how long the worklist is. A cursor page says
+ * nothing about totals otherwise, and a count is a second query.
+ */
+export type ItemPage = Paginated<ItemView> & { total?: number };
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
 /** The admin listing's page: the same rows with the product's name joined on. */
 export type AdminSupermarketItemPage = Paginated<AdminSupermarketItemView>;

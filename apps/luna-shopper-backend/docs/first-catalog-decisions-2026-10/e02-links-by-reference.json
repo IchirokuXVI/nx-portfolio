@@ -1,0 +1,79 @@
+{
+  "step": "E2",
+  "title": "Plan 0193, section 4, on 2026-10-07: the places whose reference is the reference of a shop",
+  "sources": [
+    "stage-c8/step4.link-by-ref.dry-1.summary.json",
+    "stage-c8/step4.link-by-ref.apply.summary.json",
+    "stage-c8/step4.link-by-ref.dry-2-after-apply.summary.json"
+  ],
+  "keys": "A shop is keyed as in e01, as it stood after the 19 links of e01. A place is keyed by its provider and its reference.",
+  "decidedBy": "Nobody chose a pair. The bulk act links a `NEW` place to the one shop that holds the same reference and provider.",
+  "route": "POST /v1/admin/harvest/places/link-by-ref. The body {} answers what it would link and writes nothing. The body { \"apply\": true } links.",
+  "order": "The bulk act ran after the 19 links of e01. Plan 0193 lists it first. The dry call named no `POSTAL_CODE` on any entry.",
+  "calls": [
+    {
+      "body": {},
+      "linked": 27,
+      "skipped": 0
+    },
+    {
+      "body": {
+        "apply": true
+      },
+      "linked": 27,
+      "skipped": 0
+    },
+    {
+      "body": {},
+      "linked": 0,
+      "skipped": 0
+    }
+  ],
+  "byChain": {
+    "El Jamón": 19,
+    "Deza": 8
+  },
+  "entriesThatFilledAField": 1,
+  "fieldsFilled": {
+    "FOOTPRINT": 1
+  },
+  "count": 27,
+  "naturalKeys": {
+    "products": 0,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"shop":{"chain":"El Jamón","address":"AVDA. CERVANTES, 8","city":"Córdoba","postalCode":"14008","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10566052707","localId":"6c262d01-2f25-4323-bfec-91905ad5809d"},"place":{"provider":"OSM","externalRef":"node/10566052707","street":null,"postalCode":null,"localId":"698922f1-39f5-49c9-a7a0-ad86a127f346"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Calle Libertador Sucre 38","city":"Córdoba","postalCode":"14013","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579977238","localId":"0182ce5a-4fb8-46e3-a8db-f80fbff1af87"},"place":{"provider":"OSM","externalRef":"node/10579977238","street":"Calle Libertador Sucre 38","postalCode":"14013","localId":"d1abfd64-7975-43da-882e-c99c13d18903"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Calle Imprenta de la Alborada 116","city":"Córdoba","postalCode":"14014","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579977239","localId":"cd266219-2f01-4a57-9d50-9c1ee3707455"},"place":{"provider":"OSM","externalRef":"node/10579977239","street":"Calle Imprenta de la Alborada 116","postalCode":"14014","localId":"cb0e6776-3937-4258-9220-cc867ff451ff"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Avenida de Libia","city":"Córdoba","postalCode":"14007","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579977240","localId":"083c52dd-2dca-4167-9dd6-8872e91eb466"},"place":{"provider":"OSM","externalRef":"node/10579977240","street":"Avenida de Libia","postalCode":"14007","localId":"70ad719a-75ea-430e-9dde-1d8b67a31228"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Avenida Jesús Rescatado 15","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579989741","localId":"fb5d6af2-b5e3-46d4-beed-3ffed8b3003b"},"place":{"provider":"OSM","externalRef":"node/10579989741","street":"Avenida Jesús Rescatado 15","postalCode":"14010","localId":"fadfac8e-d3b6-468f-a016-fee31d3c3cee"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Avenida Ronda del Marrubial","city":"Córdoba","postalCode":"14007","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579989742","localId":"7fcf0bcf-e331-4f35-9763-d2a482133b4a"},"place":{"provider":"OSM","externalRef":"node/10579989742","street":"Avenida Ronda del Marrubial","postalCode":"14007","localId":"2ad7440e-dc0e-4f6f-a3af-f150f19a20c6"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Calle Camino de la Barca 1","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/10579989743","localId":"d7457e14-3371-4772-9945-d623aaed845a"},"place":{"provider":"OSM","externalRef":"node/10579989743","street":"Calle Camino de la Barca 1","postalCode":"14010","localId":"e7e8048d-30f6-4744-a21a-bddbfaeb264c"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle Manuel Fuentes \"Bocanegra\" 19","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/11529014913","localId":"c7c99336-7ebb-4617-bc3a-b37d48efd648"},"place":{"provider":"OSM","externalRef":"node/11529014913","street":"Calle Manuel Fuentes \"Bocanegra\" 19","postalCode":"14005","localId":"72314bee-9f4e-4595-8848-9f2d8c270a4d"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ MANUEL DE SANDOVAL, 5","city":"Córdoba","postalCode":"14008","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/12569327955","localId":"f6dcfea2-19c8-492d-9da8-bcdc9633abd9"},"place":{"provider":"OSM","externalRef":"node/12569327955","street":null,"postalCode":null,"localId":"374a5050-1814-4e9c-bb83-ba16cb091c6a"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ ALONSO EL SABIO, 6","city":"Córdoba","postalCode":"14001","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/12797505512","localId":"13362069-32b8-4383-b8a1-d4f16dc446a3"},"place":{"provider":"OSM","externalRef":"node/12797505512","street":null,"postalCode":null,"localId":"ac0bcb39-f828-4691-ab00-a9c07ebc3802"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ DUQUE DE HORNACHUELOS, 2","city":"Córdoba","postalCode":"14002","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/12802209024","localId":"e2ab1ead-b50c-4eeb-b8d9-522a25f75c69"},"place":{"provider":"OSM","externalRef":"node/12802209024","street":null,"postalCode":null,"localId":"2117df19-db1e-4bea-9d31-b1b266f858df"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle Hermano Juan Fernández","city":"Córdoba","postalCode":"14007","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/12899332111","localId":"8e561111-4115-4289-a7fc-6994b63eb58c"},"place":{"provider":"OSM","externalRef":"node/12899332111","street":"Calle Hermano Juan Fernández","postalCode":"14007","localId":"7c564002-d472-4080-8ee4-4c0dea1510d6"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle de Ronda 5","city":"Córdoba","postalCode":"14013","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/14166743654","localId":"a35697e3-457f-4139-ab29-aec157c78ac7"},"place":{"provider":"OSM","externalRef":"node/14166743654","street":"Calle de Ronda 5","postalCode":"14013","localId":"fe798250-55d6-4053-8102-8572660cd5c6"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ HISTORIADOR JAEN MORENTE, 28","city":"Córdoba","postalCode":"14014","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/1657902402","localId":"6521c023-2be7-4cc9-ab26-f59f618c0e9d"},"place":{"provider":"OSM","externalRef":"node/1657902402","street":null,"postalCode":"14014","localId":"6442eee8-3b3e-4619-8b56-da34353f0f6f"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"AVDA. VIRGEN DE FATIMA, 19","city":"Córdoba","postalCode":"14014","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/2195839176","localId":"d6184bb1-7780-4941-a06e-451604e7ea5d"},"place":{"provider":"OSM","externalRef":"node/2195839176","street":null,"postalCode":null,"localId":"efbc5e38-fc8b-40c3-977f-81a358ef53d9"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"AVDA. VIRGEN MILAGROSA, 18","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/2432408937","localId":"5e6b5fc7-b00f-4d57-be32-71c37bce131a"},"place":{"provider":"OSM","externalRef":"node/2432408937","street":null,"postalCode":null,"localId":"a36a518d-fefa-468a-8899-94b2ad892c40"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ DOCTOR BARRAQUER, 8","city":"Córdoba","postalCode":"14004","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/3647840964","localId":"20c64e1b-5a72-47a0-a824-5cd50358f731"},"place":{"provider":"OSM","externalRef":"node/3647840964","street":null,"postalCode":null,"localId":"116968c6-7683-4540-bec6-541bad4d8f27"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ REALEJO, 1","city":"Córdoba","postalCode":"14002","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/5537564359","localId":"a5b70c95-cb00-4588-ab5d-9f34746566c4"},"place":{"provider":"OSM","externalRef":"node/5537564359","street":null,"postalCode":null,"localId":"4d7f9eae-d653-475f-9227-e29bff18b075"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Calle Isla de Fuerteventura 48","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/5718349525","localId":"59f43e28-98c0-4898-912b-4cce2c1335f9"},"place":{"provider":"OSM","externalRef":"node/5718349525","street":"Calle Isla de Fuerteventura 48","postalCode":"14011","localId":"51011c4f-b614-430c-a4e1-36a02f1e49c1"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Gran Vía Parque 23","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/7579932313","localId":"5ecf49e7-791e-4fe4-8bd0-6d39cb1a8f87"},"place":{"provider":"OSM","externalRef":"node/7579932313","street":"Gran Vía Parque 23","postalCode":"14005","localId":"bdc52373-bb31-4390-8318-d3f8a046a8aa"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Marruecos","city":"Córdoba","postalCode":"14004","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/7868611485","localId":"6d44d488-c97e-4b7e-aafc-7f5dd768aa98"},"place":{"provider":"OSM","externalRef":"node/7868611485","street":"Marruecos","postalCode":null,"localId":"716ee486-2078-445a-b1cd-c116586ae8c7"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"CARRETERA DE TRASSIERRA, 19B","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/908652698","localId":"334bf1f9-4f6e-4ac4-8931-cb89eb027cee"},"place":{"provider":"OSM","externalRef":"node/908652698","street":null,"postalCode":null,"localId":"6a8579fa-5fb7-4978-b111-ce162ea8d021"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ REYES CATOLICOS, 20","city":"Córdoba","postalCode":"14001","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/909201880","localId":"4a76729e-1e9a-4206-9e02-eb7bf2a1c223"},"place":{"provider":"OSM","externalRef":"node/909201880","street":null,"postalCode":null,"localId":"21030398-b514-430b-9319-b43d23b464b4"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"Deza","address":"Calle José María Martorell","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/9605812202","localId":"8da2345e-0347-4d44-a0f9-a03b40ac9704"},"place":{"provider":"OSM","externalRef":"node/9605812202","street":"Calle José María Martorell","postalCode":"14005","localId":"5ef04ca8-067c-4d42-803e-64274019fdfa"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"AVDA. DE LOS ALMOGAVARES, 32","city":"Córdoba","postalCode":"14006","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/9839534838","localId":"3d4e2feb-71ae-4b75-9ae0-dcb97dbe01e2"},"place":{"provider":"OSM","externalRef":"node/9839534838","street":null,"postalCode":null,"localId":"d94dd9ca-49f9-4cc2-945b-37b521131754"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"C/ COMPOSITOR RAMON MEDINA, 38","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/9839543820","localId":"ab4298f4-29c2-4aa7-b1f1-98baf0caf162"},"place":{"provider":"OSM","externalRef":"node/9839543820","street":null,"postalCode":null,"localId":"bbc0222e-21e4-4e2c-a13f-c8909f16ee34"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":[],"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Doña Berenguela 18","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"way/821913293","localId":"91c9a984-a5c6-4cff-96f6-5dc61af5a0de"},"place":{"provider":"OSM","externalRef":"way/821913293","street":"Doña Berenguela 18","postalCode":"14011","localId":"4ebadd6c-fb87-4e06-814a-02135f1b425d"},"rung":"EXTERNAL_REF","decision":{"action":"link-by-ref"},"filled":["FOOTPRINT"],"footprintM2":758,"status":"applied on 2026-10-07 (stage c8)"}
+  ]
+}

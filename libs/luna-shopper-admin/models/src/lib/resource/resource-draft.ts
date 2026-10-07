@@ -62,6 +62,8 @@ export function emptyValue<T extends ResourceRow>(
       return emptyLocalizedText(field.locales);
     case 'references':
       return [];
+    case 'enum':
+      return field.initial ?? '';
     default:
       return '';
   }
@@ -282,15 +284,6 @@ export function changedFields(
   );
 }
 
-/** Whether anything has been typed that would be lost by leaving. */
-export function isDirty(
-  draft: ResourceDraft,
-  original: ResourceDraft,
-  ordered: ReadonlySet<string> = NOTHING_ORDERED
-): boolean {
-  return changedFields(draft, original, ordered).length > 0;
-}
-
 export const REQUIRED_KEY = 'resource.error.required';
 
 /**
@@ -391,7 +384,11 @@ function validateField<T extends ResourceRow>(
           fieldMessage('resource.error.tooLong', { max: field.maxLength })
         );
       }
-      if (field.format === 'url' && !isUrl(text)) {
+      // The address of a picture is an address, and is checked as one.
+      if (
+        (field.format === 'url' || field.format === 'image') &&
+        !isUrl(text)
+      ) {
         messages.push(fieldMessage('resource.error.notAUrl'));
       }
       break;

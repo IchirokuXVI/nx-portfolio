@@ -134,6 +134,35 @@ lib-line-composer {
   font-size: var(--app-text-2xs);
 }
 
+// The tools bar sticks to the top **edge** of the column, over the column's own start
+// padding. A sticky offset is measured from the scroller's content box, so at
+// `ListTools`'s own zero the bar stopped one `padding-block-start` short of the header
+// and the lines scrolled through that strip, in plain sight above an opaque bar.
+//
+// The three values are that one padding. The offset moves the stop up by it, the
+// padding paints the bar's ground over the strip, and the margin takes the same amount
+// back so the row rests exactly where it did: over the column's padding as the first
+// item, over the gap after a notice.
+lib-list-tools {
+  inset-block-start: calc(var(--app-space-3) * -1);
+  margin-block-start: calc(var(--app-space-3) * -1);
+  padding-block-start: var(--app-space-3);
+  // Room under the count, the total and its bar, so the first line does not start
+  // against them. On the bar and not on the list, so it holds while the lines
+  // scroll under.
+  padding-block-end: var(--app-space-3);
+  // The column's own inline padding is zero, so its rows reach the edges. The bar is
+  // not a row: without this its count, its chips and the bar of the total started on
+  // the edge of the screen. The trailing side is the filter button's, which keeps its
+  // own small inset, so what sits under the row takes the trailing gutter itself.
+  padding-inline-start: var(--app-space-5);
+}
+
+.chips,
+.total-bar {
+  margin-inline-end: var(--app-space-5);
+}
+
 // The tools row itself is `ListTools` in `velista/ui` since velista 0082, which moved
 // its styles with it. What stays here is what this page projects into it.
 .progress {
@@ -142,6 +171,13 @@ lib-line-composer {
   margin: 0;
   font-size: var(--app-text-sm);
   color: var(--app-text-muted);
+}
+
+// No visible line has a price (velista 0132, section 6). The small row is as wide as
+// it is given, so its gutter is set here, where the column's own is zero. Its hairline
+// is on its host, so it still runs from edge to edge.
+.no-prices {
+  padding-inline: var(--app-space-5);
 }
 
 // Quieter than the count beside it: it is a fact about the trip rather than

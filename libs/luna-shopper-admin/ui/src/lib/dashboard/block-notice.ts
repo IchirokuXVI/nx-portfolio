@@ -18,15 +18,14 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
  * a fixed string: the four are four deployments, and the operator reading this
  * is about to go and look at one of them.
  *
- * Not `lib-harvest-notice`, which says something different: that one is about a
- * service the chart never renders in two of the three environments, and it is
- * built around telling "expected" from "broken". Nothing here is expected, and
- * `harvesterDeployed` must not be consulted: both clusters run the harvester
- * now, so the document is the only thing that knows.
+ * Not `lib-harvest-notice`, which says something different: that one tells a
+ * service that is switched off from one that is broken. A block missing from
+ * the document is never expected, and the document is the only thing that
+ * knows it is missing.
  *
- * In `ui` since admin plan 0022, because the overview is four screens now and
- * each of them draws this. The copy it names is already in this library's
- * catalogue, so nothing moved with it.
+ * In `ui`, because more than one library draws it: the Runs tab of the
+ * harvester, and the failed sign ins of Admins. The Overview says the same
+ * thing in one line inside the panel of the block.
  */
 @Component({
   selector: 'lib-block-notice',
@@ -63,10 +62,10 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

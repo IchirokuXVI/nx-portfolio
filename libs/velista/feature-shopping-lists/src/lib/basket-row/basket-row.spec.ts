@@ -5,7 +5,9 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  basketElsewhere,
   QUANTITY_REEL_IDLE_MS,
+  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketRow,
@@ -34,6 +36,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     left: 3,
     bought: 0,
     asked: 3,
+    boughtElsewhere: 0,
     state: 'WANTED',
     note: null,
     noteAt: null,
@@ -58,6 +61,7 @@ function entry(
     left: 3,
     bought: 0,
     asked: 3,
+    boughtElsewhere: 0,
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
@@ -90,6 +94,8 @@ async function render(
     finished?: boolean;
     /** What the basket is being searched for, already folded (velista `0074`). */
     highlight?: string;
+    /** What the pipeline says was bought through another basket (velista `0131`). */
+    elsewhere?: BasketElsewhere | null;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -115,6 +121,7 @@ async function render(
   fixture.componentRef.setInput('notice', options.notice ?? null);
   fixture.componentRef.setInput('finished', options.finished ?? false);
   fixture.componentRef.setInput('highlight', options.highlight ?? '');
+  fixture.componentRef.setInput('elsewhere', options.elsewhere ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -978,4 +985,133 @@ describe('BasketRow: how often it was bought here', () => {
       );
     }
   );
+});
+
+/**
+ * Velista `0131`: a row somebody bought through another basket.
+ *
+ * It looks like a done row, it says where the purchase was made, and it offers
+ * nothing that takes the purchase back: the server refuses to let one basket
+ * revert a purchase of another, and a control it refuses is not drawn (`0030`).
+ */
+describe('BasketRow: bought on another basket (velista 0131)', () => {
+  const elsewhereRow = () =>
+    line({
+      content: 'Butter',
+      left: 0,
+      bought: 0,
+      asked: 0,
+      boughtElsewhere: 2,
+      state: 'DONE',
+      note: 'BOUGHT_ON_ANOTHER_BASKET',
+      noteAt: new Date('2026-10-04T10:00:00.000Z'),
+    });
+
+  const drawn = (row: BasketRow) =>
+    render(row, { elsewhere: basketElsewhere(row) });
+
+  const element = (fixture: Awaited<ReturnType<typeof render>>) =>
+    fixture.nativeElement as HTMLElement;
+
+  it('draws the caption under the name, in the caption style the row already has', async () => {
+    const fixture = await drawn(elsewhereRow());
+
+    const captions = [...element(fixture).querySelectorAll('.touched')].map(
+      (caption) => caption.textContent?.trim()
+    );
+    expect(captions).toEqual(['basket.elsewhere.caption']);
+  });
+
+  it('looks like a done row', async () => {
+    const fixture = await drawn(elsewhereRow());
+
+    expect(element(fixture).querySelector('.row.is-done')).not.toBeNull();
+    expect(
+      element(fixture).querySelector('.status-glyph.is-bought')
+    ).not.toBeNull();
+  });
+
+  it('draws no control that undoes a purchase', async () => {
+    const fixture = await drawn(elsewhereRow());
+    const reverted = jest.fn();
+    fixture.componentInstance.revert.subscribe(reverted);
+
+    // A statement of what the row is, and nothing to press.
+    expect(element(fixture).querySelector('button.status')).toBeNull();
+    expect(status(fixture)?.getAttribute('role')).toBe('img');
+    expect(status(fixture)?.getAttribute('aria-label')).toBe(
+      'basket.status.isGot'
+    );
+    // A reel raised from zero takes units back, so the number is a readout.
+    expect(element(fixture).querySelector('lib-quantity-reel')).toBeNull();
+    expect(element(fixture).querySelector('.settled-count')).not.toBeNull();
+    expect(reverted).not.toHaveBeenCalled();
+  });
+
+  it('still opens the sheet, where the list can be asked for more', async () => {
+    const fixture = await drawn(elsewhereRow());
+    const opened = jest.fn();
+    fixture.componentInstance.open.subscribe(opened);
+
+    element(fixture).querySelector<HTMLButtonElement>('button.body')?.click();
+
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it('says it in the row\u2019s accessible name', async () => {
+    const fixture = await drawn(elsewhereRow());
+
+    expect(
+      element(fixture).querySelector('button.body')?.getAttribute('aria-label')
+    ).toContain('basket.elsewhere.caption');
+  });
+
+  it('keeps today\u2019s look and controls on a row with something left, and adds the caption', async () => {
+    const fixture = await drawn(
+      line({ left: 1, asked: 1, boughtElsewhere: 1 })
+    );
+
+    expect(element(fixture).querySelector('.row.is-done')).toBeNull();
+    expect(element(fixture).querySelector('button.status')).not.toBeNull();
+    expect(element(fixture).querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
+  });
+
+  it('keeps the revert on a done row this basket bought some of', async () => {
+    const fixture = await drawn(
+      line({ left: 0, bought: 1, asked: 1, boughtElsewhere: 1, state: 'DONE' })
+    );
+
+    expect(element(fixture).querySelector('button.status')).not.toBeNull();
+    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
+  });
+
+  it('draws no caption on a row nothing was bought of elsewhere', async () => {
+    const fixture = await drawn(bought());
+
+    expect(element(fixture).textContent).not.toContain(
+      'basket.elsewhere.caption'
+    );
+  });
+
+  /** Under a list heading the pipeline hands the entry's, and the row draws it. */
+  it('draws what it is handed, which under a list heading is the entry\u2019s', async () => {
+    const mine = entry('l1', {
+      left: 0,
+      bought: 0,
+      asked: 0,
+      boughtElsewhere: 2,
+      state: 'DONE',
+    });
+    const row = line({ left: 3, boughtElsewhere: 2, entries: [mine] });
+
+    const fixture = await render(row, {
+      entry: mine,
+      elsewhere: basketElsewhere(mine),
+      lists: new Map([['l1', ref('l1', 'Weekly shop')]]),
+    });
+
+    expect(element(fixture).querySelector('button.status')).toBeNull();
+    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
+  });
 });

@@ -2,23 +2,37 @@
 // `@use '../styles/tokens' as tokens;` and reaches no further.
 //
 // Deliberately much smaller than velista's three layer system. This is an internal
-// tool for one operator on a desktop and a phone browser, and the thing it actually
-// has to get right is the environment accent below; a full primitive/semantic/theme
-// split would be scaffolding around one decision.
+// tool for one operator on a desktop and a phone browser.
 //
 // It lands on the app's own root element rather than on `:root`, which costs
 // nothing here (this app is never mounted inside anything) and keeps the habit that
 // makes velista extractable.
+//
+// The palette is admin plan 0041, section 2. Four colours carry a meaning, and each
+// carries one:
+//
+//   pine   what is selected, and the main action
+//   amber  a person must decide
+//   red    danger
+//   the navigation colour  which deployment this is
+//
+// The ground is a cool grey with a little green in it, so that the pine sits in it
+// rather than on it.
 
 /// Everything the app root carries.
 @mixin admin-root {
   // Surfaces and ink. One scheme: an operator tool that is read in a lit room, and
-  // a second theme is a decision nothing in these plans asks for.
-  --admin-surface: #f7f7f8;
-  --admin-surface-raised: #ffffff;
-  --admin-border: #d8d9de;
-  --admin-ink: #16171c;
-  --admin-ink-muted: #5c5f6b;
+  // a second scheme doubles every pair the two contrast specs prove. The names say
+  // what a surface is for and not how light it is, so that one can follow.
+  --admin-surface: #f3f4f1;
+  --admin-surface-raised: #fcfcfa;
+  --admin-border: #d9dcd6;
+  // The outline of a control and nothing else (admin plan 0052, section 4). It is
+  // 3 to 1 on the raised surface, which every control is filled with. The edge of
+  // a panel and a line between rows take `--admin-border`.
+  --admin-border-strong: #878e86;
+  --admin-ink: #14171a;
+  --admin-ink-muted: #555c63;
 
   --admin-space-1: 0.25rem;
   --admin-space-2: 0.5rem;
@@ -27,17 +41,56 @@
   --admin-space-6: 1.5rem;
   --admin-space-8: 2rem;
 
-  --admin-radius: 0.5rem;
+  // Three corners, and which one a thing takes says what it is: a control, a
+  // panel, or a state label.
+  --admin-radius-control: 0.375rem;
+  --admin-radius: 0.625rem;
+  --admin-radius-state: 0.25rem;
 
-  // Destructive, and fixed rather than derived from the accent. The accent moves
-  // with the environment, so a delete button drawn in it would be red in
-  // production, amber in staging and blue in development: the one control whose
-  // colour has to mean the same thing everywhere would be the one that does not.
-  --admin-danger: #b4232a;
-  --admin-danger-ink: #ffffff;
-  --admin-danger-wash: #fbeaeb;
+  // How tall a control is: 36 px beside a pointer, 44 px under a thumb. The phone
+  // values are set in the media query at the foot of this mixin.
+  //
+  // The height is a minimum, and the block padding is what lets one line of text
+  // sit inside it: 14 px text at a line height of 1.4, 6 px above and below and a
+  // 1 px border come to 34 px, so the minimum decides and every control on a row
+  // is the same 36 px. A control whose text wraps grows, and keeps the padding.
+  --admin-control: 2.25rem;
+  --admin-control-pad: 0.375rem;
 
-  // The ink for a **wash**, and the first of three (plan 0018, section 1.1).
+  // The arrow of a select and of a typeahead (admin plan 0050). One size, so the
+  // two sit at the same place: this far in from the edge of the box, and the
+  // text of the control stops before it.
+  --admin-caret: 1.25rem;
+
+  // The size of the text in a field. 16 px exactly on a phone: iOS Safari zooms
+  // the viewport on focus for anything smaller, which leaves the operator
+  // scrolled sideways.
+  --admin-field-size: 0.875rem;
+
+  // How far a page's content sits from the edge of the main column. The page
+  // header and the tabs read these to reach the edge again.
+  --admin-page-inline: 1.25rem;
+  --admin-page-block: 1.25rem;
+
+  // How much room the fixed chrome takes at the bottom: nothing on a wide screen,
+  // where the rail is at the side, and the bar on a phone.
+  --admin-bar: 0rem;
+
+  --admin-font:
+    'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --admin-font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  // The accent: pine, on every deployment. It marks what is selected and what the
+  // main action is, and nothing else.
+  //
+  // It used to follow the deployment, which made a primary button red in
+  // production. The deployment colours the navigation now, and the accent means
+  // one thing everywhere.
+  --admin-accent: #0b6b53;
+  --admin-accent-ink: #ffffff;
+  --admin-accent-wash: #e3f1ec;
+
+  // The ink for a **wash** (plan 0018, section 1.1).
   //
   // The rule, and it is the whole of it:
   //
@@ -46,23 +99,41 @@
   //   wash's ink. A filled control takes the solid and the solid's ink. Neither
   //   ink is a general purpose foreground.
   //
-  // It is written down because for a while there was no ink for a wash at all,
-  // so every author who wanted a tinted badge reached for the only ink the block
-  // offered and got white on a pale box: seventeen rules, at ratios from 1.14 to
-  // 1.16, which is not hard to read but invisible. `ink-on-wash.spec.ts` reads
-  // every component in the app and fails on the eighteenth.
-  //
-  // Danger on its own wash measures 5.62 to 1, and on the raised surface, where
-  // the four rules with no background of their own sit, 6.53 to 1.
+  // `ink-on-wash.spec.ts` reads every component in the app and fails on a rule
+  // that breaks it, and `wash-contrast.spec.ts` computes each ratio.
+  --admin-accent-on-wash: #085441;
+
+  // A count or a state that says nothing in particular: a number beside a tab, a
+  // run that ended. Grey on grey, and still 8 to 1.
+  --admin-neutral-wash: #e9ebe6;
+  --admin-neutral-on-wash: #3d4348;
+
+  // Something waits for a person. Amber on the page means this and only this.
+  --admin-waiting-wash: #fdf3e0;
+  --admin-waiting-on-wash: #7a4f05;
+
+  // Destructive. Red on the page means this and only this.
+  --admin-danger: #b4232a;
+  --admin-danger-ink: #ffffff;
+  --admin-danger-wash: #fbeaeb;
   --admin-danger-on-wash: var(--admin-danger);
 
-  // What a chart draws a series in (plan 0015, section 2).
+  // The navigation: the rail on a wide screen and the bar on a phone.
   //
-  // Fixed across every environment, and deliberately not the accent. The accent is
-  // red in production, amber in staging and blue in development, so a series drawn
-  // in it would change colour with the deployment and say nothing at all about the
-  // data. The accent means one thing everywhere it appears, and this is how it goes
-  // on meaning it.
+  // The resting values are the ones for a deployment the app could not establish:
+  // a dark green grey, saying nothing. Every named deployment overrides them
+  // below, so a colour is only ever shown because the API named the deployment it
+  // belongs to. An app that failed to ask cannot end up wearing production's red.
+  //
+  // `--admin-nav-ink` is an entry at rest. The current entry is white on
+  // `--admin-nav-current`. The count is `--admin-ink` on `--admin-count`.
+  --admin-nav: #14211d;
+  --admin-nav-ink: #b9c4bf;
+  --admin-nav-current: #24362f;
+  --admin-nav-current-ink: #ffffff;
+  --admin-count: #fcfcfa;
+
+  // What a chart draws a series in (plan 0015, section 2).
   //
   // Six, because `PriceSourceKind` has six members and that is the widest
   // categorical series any planned chart carries. A seventh folds into the sixth as
@@ -89,67 +160,38 @@
   --admin-chart-ink: var(--admin-ink-muted);
   --admin-chart-grid: var(--admin-border);
 
-  // A queue with rows in it, found from across the room (plan 0015, section 3.3).
-  //
-  // Fixed for the same reason `--admin-danger` is fixed: a stat tile that wore the
-  // accent would be shouting production red at an operator on every dashboard in
-  // production, whether or not anything was waiting. Violet also sits outside the
-  // six above, so a tile in it is never mistaken for a series.
-  --admin-status-attention: #4a3aa7;
-  --admin-status-attention-wash: #efedf9;
-
-  // The violet on its own wash, at 7.40 to 1. Same rule as the danger pair above.
-  --admin-status-attention-on-wash: var(--admin-status-attention);
-
-  // The environment accent, and the reason this file exists (plan 0001, section 6).
-  //
-  // The resting value is the one for an environment the app could not establish:
-  // grey, saying nothing. Every named deployment overrides it below, so a colour is
-  // only ever shown because the API named the environment it belongs to — an app
-  // that failed to ask cannot end up wearing production's red or staging's amber.
-  --admin-accent: #6b7280;
-  --admin-accent-ink: #ffffff;
-  --admin-accent-wash: #eeeff1;
-
-  // The accent's ink for a wash, and the one of the three that is not simply the
-  // solid colour. Same rule as the danger pair above.
-  //
-  // Every named deployment overrides this with its own accent, which reads on its
-  // own wash: 5.62 to 1 in production, 5.38 in staging, 5.99 in development. The
-  // resting grey does not, at 4.20, so the resting value is `--admin-ink-muted`'s
-  // grey instead, which measures 5.52 on the resting wash. A tinted badge in an
-  // environment the app could not establish is therefore readable and says
-  // nothing about which environment it is, which is what the resting accent is
-  // for everywhere else in this block.
-  --admin-accent-on-wash: #5c5f6b;
+  @media (max-width: 47.99rem) {
+    --admin-control: 2.75rem;
+    --admin-field-size: 1rem;
+    --admin-page-inline: 1rem;
+    --admin-page-block: 1rem;
+    --admin-bar: calc(3.625rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
-/// The per deployment accent, keyed off the attribute the app root stamps.
+/// The per deployment navigation, keyed off the attribute the app root stamps.
 ///
-/// Three colours that stay distinguishable at a glance and in a screenshot: red
-/// carries production because it is the one an operator must never mistake, amber
-/// carries staging, and development is the calm one nobody needs to be warned
-/// about. They differ in lightness as well as hue, so the pair is still told apart
-/// by someone who does not see red and green apart.
+/// These rules set the three navigation tokens and nothing else. Red carries
+/// production because it is the one an operator must never mistake, amber
+/// carries staging, and a local stack is the calm blue nobody needs to be warned
+/// about. They differ in lightness as well as hue, and the rail writes the name
+/// of the deployment as well, so colour is never the only sign.
 @mixin admin-deployments {
   &[data-deployment='production'] {
-    --admin-accent: #b4232a;
-    --admin-accent-ink: #ffffff;
-    --admin-accent-wash: #fbeaeb;
-    --admin-accent-on-wash: var(--admin-accent);
+    --admin-nav: #6e1a1f;
+    --admin-nav-ink: #f3d9da;
+    --admin-nav-current: #8f2a30;
   }
 
   &[data-deployment='staging'] {
-    --admin-accent: #8a5a06;
-    --admin-accent-ink: #ffffff;
-    --admin-accent-wash: #fdf3e0;
-    --admin-accent-on-wash: var(--admin-accent);
+    --admin-nav: #6b4605;
+    --admin-nav-ink: #f6e7c8;
+    --admin-nav-current: #8a5d0c;
   }
 
   &[data-deployment='development'] {
-    --admin-accent: #1f5f8b;
-    --admin-accent-ink: #ffffff;
-    --admin-accent-wash: #e8f1f8;
-    --admin-accent-on-wash: var(--admin-accent);
+    --admin-nav: #173f5c;
+    --admin-nav-ink: #d3e3ef;
+    --admin-nav-current: #23587d;
   }
 }

@@ -10,7 +10,6 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { PRICE_SOURCE_KIND_OPTIONS } from './catalog-enums';
 import { itemPriceSource, PRICE_KEY, priceSource } from './catalog-sources';
-import { PriceDetailPage } from './price-detail-page';
 import { PriceFormPage } from './price-form-page';
 
 /**
@@ -24,32 +23,33 @@ export type Price = Wire.CatalogAdminSupermarketItemView & {
 };
 
 /**
- * Effective prices: the listing, and the door to a price's history (backend
- * plan 0080, section 10).
+ * A price: the shown price of one product at one scope, and the form that
+ * adds one (backend plan 0080, section 10).
+ *
+ * **It has no screen of its own any more** (admin plan 0043, target 7). A
+ * price is read in two places: on its product, by chain and scope, which is
+ * the Prices tab of the product's page, and on the product list, as a column
+ * for one chosen scope. So this resource sits under a product, at
+ * `/products/{productId}/prices`, and what the descriptor still gives is the
+ * add a price form and the shape of a shown price.
  *
  * Since plan 0080 a price is **the price chosen among several**. Every price a
- * source gave is a row of its own, and this screen lists the one the policy
- * picked for each (product, scope) with the terms it was picked on: where it
- * came from, when it was last seen, whether it is shown on sufferance
- * (`stale`), and until when it holds. Nothing here edits that row, because it
- * is derived; a row opens the second screen, which shows the rows behind it.
+ * source gave is a row of its own, and the shown one is the one the price
+ * rules picked for each (product, scope). Nothing edits that row, because it
+ * is derived.
  *
- * Three things the old screen was shaped around are gone with the model:
- *
- * - **A typed price is no longer permanent and invisible.** It coexists with
- *   the automated rows and the policy decides between them on every read, so
- *   "what have I overridden" is the `ADMIN` filter and nothing else.
+ * - **A typed price is not permanent.** It coexists with the automated rows
+ *   and the rules decide between them on every read.
  * - **There is no revert.** A typed price with a typo is a row the operator
- *   removes from the history screen, and adds again. Editing a price is
- *   inserting a price.
- * - **`stale` is a column and a filter**, and it is the server's judgement,
- *   never inferred here from the date: only the policy knows which kinds have
- *   a maximum age.
+ *   removes on the Prices tab, and adds again. Editing a price is inserting a
+ *   price.
+ * - **`stale` is the server's judgement**, never inferred here from the date:
+ *   only the rules know which sources have a maximum age.
  *
  * ## What the editor adds
  *
- * `PriceFormPage` replaces the generic form for the add, and section 2 of plan
- * 0005 is still why: a price belongs to a **scope** and not to a shop, so the
+ * `PriceFormPage` stands in for the record page for the add, and section 2 of
+ * plan 0005 is still why: a price belongs to a **scope** and not to a shop, so the
  * screen has to name the scope, say what kind it is, and say how many shops
  * share it. What changed is the verb: the form inserts an `ADMIN` row and never
  * edits one, so the descriptor's one write goes to the item prices and not to
@@ -65,8 +65,12 @@ export type Price = Wire.CatalogAdminSupermarketItemView & {
  */
 export const PRICES = defineResource<Price>({
   name: 'prices',
+  // The Prices tab of a product (admin plan 0043).
   segment: 'prices',
   labels: { one: 'catalog.prices.one', many: 'catalog.prices.many' },
+
+  // The product is in the address: `/products/{productId}/prices`.
+  parent: { resource: 'items', param: 'productId', filter: 'itemId' },
 
   // The pair the row is keyed on. Its own uuid addresses nothing: no route
   // reads or deletes an effective row by it.
@@ -84,7 +88,9 @@ export const PRICES = defineResource<Price>({
     return name === '' ? row.itemId : name;
   },
 
-  detail: PriceDetailPage,
+  // A price has no page to open (admin plan 0060, target 3): after one is
+  // added, the editor closes its panel and the Prices tab shows it. The
+  // editor draws its own rows, so the descriptor states no `record` block.
   editor: PriceFormPage,
 
   fields: [
@@ -242,44 +248,9 @@ export const PRICES = defineResource<Price>({
     compact: ['price', 'sourceKind', 'observedAt', 'stale'],
   },
 
-  note: 'catalog.prices.note',
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'itemId',
-      label: 'catalog.prices.filter.itemId',
-      resource: 'items',
-    },
-    {
-      kind: 'reference',
-      param: 'priceScopeId',
-      label: 'catalog.prices.filter.priceScopeId',
-      resource: 'price-scopes',
-    },
-    {
-      // "What have I overridden." The effective rows an operator's price won.
-      kind: 'enum',
-      param: 'sourceKind',
-      label: 'catalog.prices.filter.sourceKind',
-      options: PRICE_SOURCE_KIND_OPTIONS,
-    },
-    {
-      // "What is shown on sufferance."
-      kind: 'boolean',
-      param: 'stale',
-      label: 'catalog.prices.filter.stale',
-    },
-    {
-      kind: 'boolean',
-      param: 'available',
-      label: 'catalog.prices.filter.available',
-    },
-  ],
-
-  // Add, and nothing else from the listing. There is no edit, because the row
-  // is derived, and no delete, because what an operator removes is a row of
-  // the history, from the detail screen, with the history in front of them.
+  // Add, and nothing else. There is no edit, because the row is derived, and
+  // no delete, because what an operator removes is one of the prices behind
+  // it, on the Prices tab, with every price of the scope in front of them.
   actions: { create: true },
 
   gateway: () => {

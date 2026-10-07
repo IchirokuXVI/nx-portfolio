@@ -288,6 +288,18 @@ export enum HarvestWarningCode {
    * that waits a week for the next run to fetch the detail.
    */
   DETAIL_SKIPPED_UNKNOWN = 'DETAIL_SKIPPED_UNKNOWN',
+  /**
+   * A source that does not own the text of a row stated a price for it that
+   * is sold another way than the row says (plan 0190): a leaflet offer by the
+   * kilo on a row that a website walk describes as a fixed pack, or the
+   * reverse.
+   *
+   * The row keeps what the walk said, so the figure would be stored, and
+   * sent to catalog, as the price of something it is not the price of. No
+   * price of that observation is written. The row is still seen. A person
+   * decides: the leaflet may name another product than the row.
+   */
+  PRICE_SOLD_ANOTHER_WAY = 'PRICE_SOLD_ANOTHER_WAY',
 }
 
 /**
@@ -303,8 +315,12 @@ export enum DiscoveredPlaceStatus {
 
 /**
  * Which rung found a catalog shop a discovered place may be (plan 0152,
- * section 2). The rungs are tried in this order, and the first that finds
- * anything answers.
+ * section 2). The first three are the strict rungs: they are tried in this
+ * order, and the first that finds anything answers.
+ *
+ * `SAME_CHAIN_NEAR` is the hint of plan 0193. It is listed after the strict
+ * rungs on the places list and it keeps a trusted import in the queue. It
+ * never stops a hand import, and nothing links on it.
  */
 export enum PlaceMatchRung {
   /** The shop carries the place's own `externalRef`. */
@@ -313,6 +329,34 @@ export enum PlaceMatchRung {
   NEARBY = 'NEARBY',
   /** A shop with no coordinates, at the same postal code and address. */
   ADDRESS = 'ADDRESS',
+  /** A shop of the same chain farther than 50 metres and within 250. */
+  SAME_CHAIN_NEAR = 'SAME_CHAIN_NEAR',
+}
+
+/**
+ * One thing a link wrote on the shop, because the shop lacked it (plan 0193).
+ * A link that answers none of them wrote only the mark on the place.
+ */
+export enum PlaceLinkField {
+  COORDINATES = 'COORDINATES',
+  EXTERNAL_REF = 'EXTERNAL_REF',
+  POSTAL_CODE = 'POSTAL_CODE',
+  FOOTPRINT = 'FOOTPRINT',
+  ADDRESS = 'ADDRESS',
+  CITY = 'CITY',
+  COUNTRY = 'COUNTRY',
+}
+
+/**
+ * Why the bulk link by reference left a place alone (plan 0193).
+ *
+ * `SEVERAL_SHOPS`: more than one shop carries the reference of the place, so
+ * a person decides which one it is. `PROVIDER_NOT_NAMED`: one shop carries
+ * the reference and names no provider, and two providers may use one string.
+ */
+export enum PlaceLinkSkipReason {
+  SEVERAL_SHOPS = 'SEVERAL_SHOPS',
+  PROVIDER_NOT_NAMED = 'PROVIDER_NOT_NAMED',
 }
 
 /**

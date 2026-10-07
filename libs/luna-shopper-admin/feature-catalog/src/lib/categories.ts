@@ -42,6 +42,22 @@ export const CATEGORIES = defineResource<Category>({
 
   title: (row, locales) => localizedTextValue(row.name, locales),
 
+  // `kind` is a filter of the list and no column of a row: a root is a row
+  // with no parent, and a leaf is a row with one. A read by ID sends no
+  // filter, so a picker of leaves asks here whether the row it was handed is
+  // one (admin plan 0051). Any other kind narrows nothing.
+  within: (row, scope) => {
+    const root = (row.parentId ?? null) === null;
+    switch (scope['kind']) {
+      case 'root':
+        return root;
+      case 'leaf':
+        return !root;
+      default:
+        return true;
+    }
+  },
+
   fields: [
     {
       kind: 'text',

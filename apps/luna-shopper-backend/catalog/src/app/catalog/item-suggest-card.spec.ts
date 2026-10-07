@@ -8,6 +8,7 @@ import type { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { fakeCategories } from './category.testing';
+import { fakeItemEans } from './item-ean.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -173,7 +174,8 @@ function build(world: World = {}) {
     {} as unknown as PlatformAdminService,
     fakeAudit([]).service,
     {} as unknown as CatalogEventsPublisher,
-    fakeCategories().service
+    fakeCategories().service,
+    fakeItemEans().store
   );
   const memberQueries = () =>
     itemQueries.filter((q) => q.sql.includes('AS "itemId"'));

@@ -130,8 +130,11 @@ fi
 
 # Release tasks (k8s/release-tasks): the pre phase dumps what each due task
 # touches and runs its pre.sh, before the upgrade's migrations. A failure stops
-# the deploy here, with nothing upgraded.
-bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" --env production --phase pre
+# the deploy here, with nothing upgraded. The version goes with it, because a
+# task runs in production only in the one release its task.env names (k8s plan
+# 0011).
+bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" \
+  --env production --phase pre --release "$VERSION"
 
 echo "Upgrading helm release '${RELEASE_NAME}' in namespace '${NAMESPACE}' to ${VERSION}"
 
@@ -174,7 +177,8 @@ echo "Waiting for every deployment to report ready..."
 kubectl rollout status deployment -n "$NAMESPACE" --timeout=5m
 
 # The post phase finishes each task the pre phase started, against the new pods.
-bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" --env production --phase post
+bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" \
+  --env production --phase post --release "$VERSION"
 
 echo "Production is now serving release ${VERSION}"
 echo "Helm revision history (use 'helm rollback ${RELEASE_NAME} <rev>' as an alternative):"

@@ -20,6 +20,7 @@ import {
   inLocale,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   shownOffer,
+  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -35,11 +36,13 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
+  productSizeText,
   QuantityReel,
   SlashCircleIcon,
   SwapIcon,
 } from '@portfolio/velista/ui';
 import {
+  elsewhereCaption,
   originsCaption,
   outstandingCaption,
   quantityCaption,
@@ -264,6 +267,17 @@ export class BasketRow {
     readonly bought: number;
     readonly of: number;
   } | null>(null);
+
+  /**
+   * What was bought of this row through another basket, or null (velista `0131`).
+   *
+   * Composed by the pipeline beside {@link usual}, which hands the entry's under
+   * a list heading and the row's everywhere else, so the row draws what it is
+   * handed. It adds one caption under the name. When that purchase is all that
+   * closed the row, it also takes the two controls that undo a purchase off it:
+   * the glyph is a statement and the number is a readout.
+   */
+  readonly elsewhere = input<BasketElsewhere | null>(null);
 
   /**
    * What this row says about that shop, beside the number, or null.
@@ -687,7 +701,35 @@ export class BasketRow {
    * `0044`: press it, and the reel comes back with the row.
    */
   protected readonly showsReel = computed(
-    () => this.state() !== 'SKIPPED' && this.state() !== 'NOT_AVAILABLE'
+    () =>
+      this.state() !== 'SKIPPED' &&
+      this.state() !== 'NOT_AVAILABLE' &&
+      // Raising the reel of a done row takes units back, and there are none of
+      // this basket's to take (velista `0131`). What the list asks for is raised
+      // on the sheet, where the server allows it.
+      !this._closedElsewhere()
+  );
+
+  /**
+   * Whether a purchase made through another basket is all that closed this row
+   * (velista `0131`).
+   *
+   * It is a done row to look at and offers no revert: the server refuses to let
+   * one basket take back a purchase of another, and a control it refuses is not
+   * drawn (`0030`).
+   */
+  private readonly _closedElsewhere = computed(
+    () => this.elsewhere()?.closed === true
+  );
+
+  /**
+   * "Bought on another basket", under the name, or null (velista `0131`).
+   *
+   * It names nobody and says no time. The same sentence on a row closed from
+   * elsewhere and on a row that still has something left.
+   */
+  protected readonly elsewhereCaption = computed<string | null>(() =>
+    elsewhereCaption(this.elsewhere(), this._translator, this._locale())
   );
 
   /**
@@ -708,16 +750,19 @@ export class BasketRow {
   /**
    * Whether the glyph is a control, or only a statement of what the row is.
    *
-   * Two ways to be a statement rather than a button now, where there were three: a
-   * finished trip, which takes every control off the screen, and a `REMOVED` row,
-   * which is information about the basket rather than a thing to act on.
+   * Three ways to be a statement rather than a button: a finished trip, which
+   * takes every control off the screen; a `REMOVED` row, which is information
+   * about the basket rather than a thing to act on; and a row somebody closed
+   * through another basket (velista `0131`), where pressing would ask for a revert
+   * the server refuses.
    *
    * The third was a build with no reopen route behind it. There is no such build:
    * `BASKET_REOPEN_AVAILABLE` guarded a route backend `0136` replaced with a revert
    * that is always available, so the constant went with it.
    */
   protected readonly statusIsButton = computed(
-    () => !this.finished() && this.state() !== 'REMOVED'
+    () =>
+      !this.finished() && this.state() !== 'REMOVED' && !this._closedElsewhere()
   );
 
   /**
@@ -788,6 +833,27 @@ export class BasketRow {
     // A pick catalog no longer has: the basket outlives the catalog it was built
     // from, and a line with an unnameable product is still a line to buy.
     return product === null ? null : inLocale(product.name, this._locale());
+  });
+
+  /**
+   * How big the product's packet is, as words, or null where the catalog does
+   * not say or a count of one says nothing.
+   */
+  protected readonly productFormat = computed<string | null>(() => {
+    const product = this._product();
+    if (product === null) {
+      return null;
+    }
+    const locale = this._locale();
+    return productSizeText(product.size, product.unit, locale, (key, args) =>
+      this._translator.t(key, undefined, locale, args)
+    );
+  });
+
+  /** The product's brand, or null where the catalog names none. */
+  protected readonly productBrand = computed<string | null>(() => {
+    const brand = this._product()?.brand?.trim() ?? '';
+    return brand === '' ? null : brand;
   });
 
   /**
@@ -1021,6 +1087,9 @@ export class BasketRow {
       // sentence of its own: a mark is words beside a number and a reader who
       // hears the row hears it (velista `0078`, section 7).
       this.productName() ?? '',
+      // The format and the brand, in the order the row draws them.
+      this.productFormat() ?? '',
+      this.productBrand() ?? '',
       this.productPrice() ?? '',
       this.markCaption() ?? '',
       // A cheaper product of the same group, said as it is drawn.
@@ -1028,6 +1097,8 @@ export class BasketRow {
       // What the shop is known not to have, said as it is drawn (velista `0102`).
       this._shelfLabel(),
       this.touched() ?? '',
+      // Bought on another basket, said as it is drawn (velista `0131`).
+      this.elsewhereCaption() ?? '',
       // How often it was bought here, said as it is drawn (velista `0104`).
       this.usualCaption() ?? '',
       this.from() ?? '',

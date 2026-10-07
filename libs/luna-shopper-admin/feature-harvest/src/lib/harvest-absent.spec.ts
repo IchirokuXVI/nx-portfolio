@@ -1,6 +1,7 @@
 import { provideLocationMocks } from '@angular/common/testing';
+import type { Provider } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
@@ -12,10 +13,16 @@ import {
   type HarvestServiceI,
   ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  provideSections,
+  RESOURCE_DESCRIPTOR,
+  RESOURCE_LIST_EMBED,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
 import { PlacesQueuePage } from './places-queue-page';
 import { RunsPage } from './runs-page';
-import { SourcesPage } from './sources-page';
+import { SOURCES } from './sources';
+import { SourcesTab } from './sources-tab';
 
 /**
  * Section 4 and section 7's fourth test: **with the harvester absent, every
@@ -70,12 +77,37 @@ function silent(): HarvestServiceI {
     readSource: refuse,
     upsertSource: refuse,
     setSourceEnabled: refuse,
+    deleteSource: refuse,
   };
 }
 
+/**
+ * What the chain sources need and the other screens do not: they are the
+ * generic list (admin plan 0059), which reads its descriptor from the route
+ * and asks the registry where a source is.
+ */
+const AS_THE_SOURCES_TAB: readonly Provider[] = [
+  provideSections({
+    key: 'harvest',
+    label: '',
+    segment: 'harvest',
+    held: [SOURCES],
+    heldUnder: 'setup',
+  }),
+  {
+    provide: ActivatedRoute,
+    useValue: {
+      snapshot: {
+        data: { [RESOURCE_DESCRIPTOR]: SOURCES, [RESOURCE_LIST_EMBED]: 'tab' },
+      },
+    },
+  },
+];
+
 async function render<T>(
   component: new (...args: never[]) => T,
-  deployment: Deployment
+  deployment: Deployment,
+  more: readonly Provider[] = []
 ): Promise<ComponentFixture<T>> {
   const deployments: DeploymentServiceI = {
     read: async () => ({ deployment, devAutologin: false }),
@@ -92,6 +124,7 @@ async function render<T>(
       { provide: HARVEST_SERVICE, useValue: silent() },
       { provide: DEPLOYMENT_SERVICE, useValue: deployments },
       DeploymentStore,
+      ...more,
     ],
   }).compileComponents();
 
@@ -119,26 +152,29 @@ const notice = (fixture: ComponentFixture<unknown>) =>
  * makes it.
  */
 const screens = [
-  ['runs', RunsPage],
-  ['discovered places', PlacesQueuePage],
-  ['chain sources', SourcesPage],
+  ['runs', RunsPage, []],
+  ['discovered places', PlacesQueuePage, []],
+  ['chain sources', SourcesTab, AS_THE_SOURCES_TAB],
 ] as const;
 
 describe('with the harvester absent', () => {
-  it.each(screens)('%s says the service is not deployed', async (_, page) => {
-    const fixture = await render(page, 'production');
-    const shown = notice(fixture);
+  it.each(screens)(
+    '%s says the service is not deployed',
+    async (_, page, more) => {
+      const fixture = await render(page, 'production', more);
+      const shown = notice(fixture);
 
-    expect(shown).not.toBeNull();
-    expect(shown.textContent).toContain('harvest.absent.heading');
-    // Never the empty state, which would claim nothing has ever happened.
-    expect(fixture.nativeElement.textContent).not.toContain('.empty');
-  });
+      expect(shown).not.toBeNull();
+      expect(shown.textContent).toContain('harvest.absent.heading');
+      // Never the empty state, which would claim nothing has ever happened.
+      expect(fixture.nativeElement.textContent).not.toContain('.empty');
+    }
+  );
 
   it.each(screens)(
     '%s offers no retry for an expected absence',
-    async (_, page) => {
-      const fixture = await render(page, 'production');
+    async (_, page, more) => {
+      const fixture = await render(page, 'production', more);
 
       // There is nothing to retry: no Deployment, no Service, no database. A
       // button that invited an operator to try again would be inviting them to
@@ -159,12 +195,15 @@ describe('with the harvester expected and silent', () => {
    * A failure in an environment that should be running it is a failure, not an
    * expected absence, and it says so differently and offers the retry.
    */
-  it.each(screens)('%s says the harvester did not answer', async (_, page) => {
-    const fixture = await render(page, 'development');
-    const shown = notice(fixture);
+  it.each(screens)(
+    '%s says the harvester did not answer',
+    async (_, page, more) => {
+      const fixture = await render(page, 'development', more);
+      const shown = notice(fixture);
 
-    expect(shown).not.toBeNull();
-    expect(shown.textContent).toContain('harvest.down.heading');
-    expect(shown.querySelector('button')).not.toBeNull();
-  });
+      expect(shown).not.toBeNull();
+      expect(shown.textContent).toContain('harvest.down.heading');
+      expect(shown.querySelector('button')).not.toBeNull();
+    }
+  );
 });

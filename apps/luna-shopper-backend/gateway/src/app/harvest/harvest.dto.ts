@@ -355,14 +355,48 @@ export class ImportDiscoveredPlaceDto {
   newChain?: NewChainDto;
 }
 
+/**
+ * A body flag exactly as the caller spelled it (plan 0193).
+ *
+ * The pipe converts implicitly, and its conversion of a boolean is
+ * `Boolean(value)`: the string `"false"` arrives as `true`. For a flag that
+ * decides whether a call writes, that turns a caller's typo into the write it
+ * meant to withhold. Handing `@IsBoolean` the raw value makes it refuse
+ * anything but a real `true` or `false`.
+ */
+const asSent = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
+  obj[key];
+
 /** Bind a discovered place to a shop the catalog already holds (plan 0152). */
 export class LinkDiscoveredPlaceDto {
   @ApiProperty({
     format: 'uuid',
-    description: 'A shop of the place’s own chain.',
+    description:
+      'The shop this place is. It decides the chain: a place that resolves to no chain links with no question.',
   })
   @IsUUID()
   supermarketLocationId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Link although the place resolves to another chain than the shop belongs to. Without it that case answers 409 `place_names_another_chain` and writes nothing.',
+  })
+  @IsOptional()
+  @Transform(asSent)
+  @IsBoolean()
+  acrossChains?: boolean;
+}
+
+/** The bulk link of places to the shops made from them (plan 0193). */
+export class LinkPlacesByRefDto {
+  @ApiPropertyOptional({
+    description:
+      'Write the links. Absent or false changes nothing and answers what a call with it would do.',
+  })
+  @IsOptional()
+  @Transform(asSent)
+  @IsBoolean()
+  apply?: boolean;
 }
 
 /**
@@ -400,7 +434,12 @@ export class CreateItemFromEntryDto {
   @MaxLength(120)
   brand?: string | null;
 
-  @ApiPropertyOptional({ maxLength: 32, nullable: true })
+  @ApiPropertyOptional({
+    maxLength: 32,
+    nullable: true,
+    description:
+      'Override the EAN the row printed. The product holds a real barcode or none (plan 0184): an in-store code (13 digits that start with 2) or an invalid code, from here or from the row, creates the product with no EAN. The row keeps what the chain printed.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(32)
@@ -525,7 +564,7 @@ export class SourceEntryDecisionDto {
   @ApiPropertyOptional({
     type: CreateItemFromEntryDto,
     description:
-      'createItem: the product to create. Every field is optional, because the row already holds a default for each.',
+      'createItem: the product to create. Every field is optional, because the row already holds a default for each, with one exception (plan 0184): the product needs an English name, and this route translates nothing, so `item.name.en` is stated here. A createItem that ends with no English name is refused with `NAME_EN_MISSING`.',
   })
   @IsOptional()
   @ValidateNested()
@@ -640,6 +679,25 @@ export class SetSourceEnabledDto {
   @ApiProperty()
   @IsBoolean()
   enabled!: boolean;
+}
+
+/** Settle a product at a chain (plan 0191). */
+export class SettleItemAtChainDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The chain whose rows are read. Catalog is made to agree with the rows of this chain that are bound to the product now.',
+  })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'True answers what a call would remove and write, and writes nothing. The answer has the shape of a real call and counts the same things. Absent is false.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }
 
 // --- Queries ---------------------------------------------------------------

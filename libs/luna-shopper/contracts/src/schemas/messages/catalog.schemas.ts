@@ -11,8 +11,10 @@ import {
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  ADMIN_PRICE_ITEM_IDS_MAX,
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
+  BRAND_MATCHES_MAX_KEYS,
   BRAND_ORDERS,
   BRAND_PATTERNS,
   BULK_DECISION_MAX_OPERATIONS,
@@ -41,6 +43,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   UNIT_BASES,
+  WITHDRAW_MAX_SCOPES,
 } from '../../lib/messages/catalog.messages';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
@@ -103,6 +106,14 @@ export const CATALOG_SCHEMA_IDS = {
   registerBrandsRequest: schemaId('msg/brand.registerMany/request'),
   registerBrandsOutcome: schemaId('catalog/RegisterBrandsOutcome'),
   registerBrandsResult: schemaId('msg/brand.registerMany/response'),
+  // Plan 0178: a printed key that names more than one brand.
+  brandMatchView: schemaId('catalog/BrandMatchView'),
+  brandKeyMatches: schemaId('catalog/BrandKeyMatches'),
+  brandHomonymsView: schemaId('catalog/BrandHomonymsView'),
+  addBrandHomonymRequest: schemaId('msg/brand.addHomonym/request'),
+  removeBrandHomonymRequest: schemaId('msg/brand.removeHomonym/request'),
+  brandMatchesRequest: schemaId('msg/brand.matches/request'),
+  brandMatchesResult: schemaId('msg/brand.matches/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   priceScopeChainView: schemaId('catalog/PriceScopeChainView'),
@@ -144,6 +155,11 @@ export const CATALOG_SCHEMA_IDS = {
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
   findItemsByEansRequest: schemaId('msg/item.findByEans/request'),
   findItemsByEansResult: schemaId('catalog/FindItemsByEansResult'),
+  itemEanRequest: schemaId('msg/item.ean/request'),
+  itemEanPair: schemaId('catalog/ItemEanPair'),
+  itemEanRefusal: schemaId('catalog/ItemEanRefusal'),
+  teachItemEansRequest: schemaId('msg/item.ean.teach/request'),
+  teachItemEansResult: schemaId('catalog/TeachItemEansResult'),
   // Plan 0162: the harvester fills the pack counts a run saw.
   packCountFill: schemaId('catalog/PackCountFill'),
   fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
@@ -228,6 +244,14 @@ export const CATALOG_SCHEMA_IDS = {
   itemPriceIdRequest: schemaId('msg/itemPrice.id/request'),
   deleteItemPricesByRunRequest: schemaId('msg/itemPrice.deleteByRun/request'),
   deleteItemPricesByRunResult: schemaId('catalog/DeleteItemPricesByRunResult'),
+  withdrawItemPricesRequest: schemaId('msg/itemPrice.withdraw/request'),
+  withdrawItemPricesResult: schemaId('catalog/WithdrawItemPricesResult'),
+  withdrawSupermarketItemsRequest: schemaId(
+    'msg/supermarketItem.withdraw/request'
+  ),
+  withdrawSupermarketItemsResult: schemaId(
+    'catalog/WithdrawSupermarketItemsResult'
+  ),
   setSupermarketItemAvailabilityRequest: schemaId(
     'msg/supermarketItem.setAvailability/request'
   ),
@@ -375,6 +399,13 @@ const supermarketView = object(
     externalBrandKey: nullableString(),
     // The last rung of the scope ladder (plan 0049, section 3.1).
     defaultPriceScopeId: nullableString(),
+    // Deliberately NOT required (admin plan 0042, section 2): the reads of a
+    // chain itself carry it, and a chain inside another view does not.
+    locationCount: integer({
+      minimum: 0,
+      description:
+        'The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view.',
+    }),
   },
   [
     'id',
@@ -566,6 +597,8 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   imageUrl: nullableString(),
   sku: nullableString(),
   ean: nullableString(),
+  // Plan 0185: every barcode of the product, `ean` first. Empty for none.
+  eans: array(nonEmptyString()),
   unitSize: numberOrNull(),
   packCount: packCountOrNull(),
   // Plan 0166: position order and never empty, so a reader always has a first.
@@ -593,6 +626,7 @@ export const itemViewRequired: string[] = [
   'imageUrl',
   'sku',
   'ean',
+  'eans',
   'unitSize',
   'packCount',
   'categories',
@@ -869,6 +903,10 @@ const supermarketLocationItemView = object(
     availabilitySourceKind: nullableSourceKind(),
     availabilityObservedAt: nullableString(),
     availabilitySourceRunId: nullableString(),
+    // The product's name and brand, joined on as the admin price list joins
+    // `itemName` (admin plan 0042, section 2). Every read of the row fills both.
+    itemName: nullableLocalized(),
+    itemBrand: nullableString(),
   },
   [
     'id',
@@ -879,6 +917,8 @@ const supermarketLocationItemView = object(
     'availabilitySourceKind',
     'availabilityObservedAt',
     'availabilitySourceRunId',
+    'itemName',
+    'itemBrand',
   ]
 );
 
@@ -890,10 +930,25 @@ const supermarketLocationPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketLocationPage,
   CATALOG_SCHEMA_IDS.supermarketLocationView
 );
-const itemPage = paginated(
+const itemPageBase = paginated(
   CATALOG_SCHEMA_IDS.itemPage,
   CATALOG_SCHEMA_IDS.itemView
 );
+/**
+ * The one page that can carry a count (plan 0187). `total` is present only
+ * when the search named `withoutPriceAtScopeId`, so it is not required.
+ */
+const itemPage: JsonSchema = {
+  ...itemPageBase,
+  properties: {
+    ...(itemPageBase['properties'] as Record<string, JsonSchema>),
+    total: integer({
+      minimum: 0,
+      description:
+        'How many products match the whole request, on every page of it. Present only when the request named `withoutPriceAtScopeId`, and absent on every other read.',
+    }),
+  },
+};
 const supermarketItemPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketItemPage,
   CATALOG_SCHEMA_IDS.supermarketItemView
@@ -1628,6 +1683,50 @@ const findItemsByEansResult = object(
   { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
   ['items']
 );
+/** One barcode of one product (plan 0185). */
+const itemEanRequest = object(
+  CATALOG_SCHEMA_IDS.itemEanRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    ean: nonEmptyString(),
+  },
+  ['userId', 'itemId', 'ean']
+);
+const itemEanPair = object(
+  CATALOG_SCHEMA_IDS.itemEanPair,
+  { itemId: nonEmptyString(), ean: nonEmptyString() },
+  ['itemId', 'ean']
+);
+const itemEanRefusal = object(
+  CATALOG_SCHEMA_IDS.itemEanRefusal,
+  {
+    itemId: nonEmptyString(),
+    ean: nonEmptyString(),
+    reason: { type: 'string', enum: ['HELD', 'INVALID', 'NOT_FOUND'] },
+    heldBy: nullableString(),
+  },
+  ['itemId', 'ean', 'reason', 'heldBy']
+);
+const teachItemEansRequest = object(
+  CATALOG_SCHEMA_IDS.teachItemEansRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.itemEanPair)),
+      maxItems: BULK_DECISION_MAX_OPERATIONS,
+    },
+  },
+  ['userId', 'entries']
+);
+const teachItemEansResult = object(
+  CATALOG_SCHEMA_IDS.teachItemEansResult,
+  {
+    added: integer({ minimum: 0 }),
+    refused: array(ref(CATALOG_SCHEMA_IDS.itemEanRefusal)),
+  },
+  ['added', 'refused']
+);
 /** One product and the count a run read for it (plan 0162, section 3). */
 const packCountFill = object(
   CATALOG_SCHEMA_IDS.packCountFill,
@@ -1699,10 +1798,15 @@ const searchItemsRequest = object(
     productGroupId: string(),
     // Plan 0073: the back office's "what has curation not reached yet".
     withoutProductGroup: boolean(),
+    // Admin plan 0043: the products on no category at all.
+    withoutCategory: boolean(),
     priceScopeIds: array(nonEmptyString()),
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
     soldBy: array(nonEmptyString()),
+    // Plan 0187: the products this scope shows no price for. Its presence is
+    // what puts `total` on the page.
+    withoutPriceAtScopeId: nonEmptyString(),
     // Plan 0161: every scope's offer, read as `item.getMany` reads it.
     offers: string({ enum: ['best', 'all'] }),
     cursor: string(),
@@ -1818,7 +1922,7 @@ const deleteBrandResult = object(
     id: nonEmptyString(),
     movedItems: integer({
       description:
-        'Products that went back to unbranded, keeping the text this spelling was printed as.',
+        'Products that went back to unbranded, keeping the text this spelling was printed as. Always zero for a brand that was not a spelling.',
     }),
   },
   ['id', 'movedItems']
@@ -1852,6 +1956,77 @@ const brandKeysResult = object(
   CATALOG_SCHEMA_IDS.brandKeysResult,
   { keys: array(nonEmptyString()) },
   ['keys']
+);
+// Plan 0178. One brand a printed key names, always one that stands for itself.
+const brandMatchView = object(
+  CATALOG_SCHEMA_IDS.brandMatchView,
+  {
+    brandId: nonEmptyString(),
+    key: {
+      ...nonEmptyString(),
+      description:
+        'That brand’s own key, which differs from the printed key for a homonym.',
+    },
+    label: { ...nonEmptyString(), description: 'The brand to write.' },
+    privateLabelSupermarketId: nullableString(),
+    printedAs: {
+      ...nullableString(),
+      description:
+        'The registered spelling the printed key names, when the registry holds it as a spelling of `label`. Null when the two are the same brand, and on a homonym.',
+    },
+  },
+  ['brandId', 'key', 'label', 'privateLabelSupermarketId', 'printedAs']
+);
+const brandKeyMatches = object(
+  CATALOG_SCHEMA_IDS.brandKeyMatches,
+  {
+    printedKey: nonEmptyString(),
+    brands: {
+      ...array(ref(CATALOG_SCHEMA_IDS.brandMatchView)),
+      description: 'Every brand the printed key names, its own brand first.',
+    },
+  },
+  ['printedKey', 'brands']
+);
+const brandHomonymsView = object(
+  CATALOG_SCHEMA_IDS.brandHomonymsView,
+  {
+    brandId: nonEmptyString(),
+    printedKeys: {
+      ...array(nonEmptyString()),
+      description:
+        'The printed keys that also name this brand, sorted. Never its own key.',
+    },
+  },
+  ['brandId', 'printedKeys']
+);
+const brandHomonymRequestProperties = {
+  ...adminCredentialProperties,
+  brandId: nonEmptyString(),
+  printedKey: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+};
+const addBrandHomonymRequest = object(
+  CATALOG_SCHEMA_IDS.addBrandHomonymRequest,
+  brandHomonymRequestProperties,
+  ['userId', 'brandId', 'printedKey']
+);
+const removeBrandHomonymRequest = object(
+  CATALOG_SCHEMA_IDS.removeBrandHomonymRequest,
+  brandHomonymRequestProperties,
+  ['userId', 'brandId', 'printedKey']
+);
+const brandMatchesRequest = object(
+  CATALOG_SCHEMA_IDS.brandMatchesRequest,
+  {
+    userId: nonEmptyString(),
+    keys: { ...array(nonEmptyString()), maxItems: BRAND_MATCHES_MAX_KEYS },
+  },
+  ['userId', 'keys']
+);
+const brandMatchesResult = object(
+  CATALOG_SCHEMA_IDS.brandMatchesResult,
+  { matches: array(ref(CATALOG_SCHEMA_IDS.brandKeyMatches)) },
+  ['matches']
 );
 // Plan 0160. A name is what `brand.create` takes, without a link: a batch
 // registers brands, and a spelling is a decision about two of them.
@@ -2003,6 +2178,194 @@ const deleteItemPricesByRunResult = object(
   },
   ['deleted', 'reset', 'recomputed']
 );
+/** A price row a row still bound to the product holds (plan 0191). */
+const heldItemPrice: JsonSchema = {
+  type: 'object',
+  properties: {
+    priceScopeId: nonEmptyString(),
+    sourceKind: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+    },
+    sourceRunId: nullableString(),
+  },
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId'],
+  additionalProperties: false,
+};
+/** The one price the bound rows state at a scope and kind (plan 0191). */
+const statedItemPrice: JsonSchema = {
+  type: 'object',
+  properties: {
+    priceScopeId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nonEmptyString(),
+    copiedFromScopeId: nullableString(),
+    price: {
+      type: 'object',
+      properties: { ...itemPriceValues, observedAt: nonEmptyString() },
+      required: ['observedAt'],
+      additionalProperties: false,
+    },
+  },
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId', 'price'],
+  additionalProperties: false,
+};
+/**
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it (plan 0191). A row a person typed is never touched.
+ */
+const withdrawItemPricesRequest = object(
+  CATALOG_SCHEMA_IDS.withdrawItemPricesRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    priceScopeIds: {
+      ...array(nonEmptyString()),
+      maxItems: WITHDRAW_MAX_SCOPES,
+    },
+    sourceKinds: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
+    held: array(heldItemPrice),
+    stated: array(statedItemPrice),
+    left: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceRunId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceRunId'],
+      additionalProperties: false,
+    }),
+    dryRun: boolean(),
+  },
+  ['userId', 'itemId', 'priceScopeIds', 'sourceKinds']
+);
+const withdrawItemPricesResult = object(
+  CATALOG_SCHEMA_IDS.withdrawItemPricesResult,
+  {
+    deleted: integer({ minimum: 0 }),
+    removed: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        deleted: integer({ minimum: 1 }),
+      },
+      required: ['priceScopeId', 'sourceKind', 'deleted'],
+      additionalProperties: false,
+    }),
+    inserted: integer({ minimum: 0 }),
+    confirmed: integer({ minimum: 0 }),
+    keptAsWritten: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        heldAs: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind', 'heldAs'],
+      additionalProperties: false,
+    }),
+    notWritable: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        copiedFromScopeId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceKind', 'copiedFromScopeId'],
+      additionalProperties: false,
+    }),
+    notCurrent: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind'],
+      additionalProperties: false,
+    }),
+    recomputed: integer({ minimum: 0 }),
+  },
+  [
+    'deleted',
+    'removed',
+    'inserted',
+    'confirmed',
+    'keptAsWritten',
+    'notWritable',
+    'notCurrent',
+    'recomputed',
+  ]
+);
+/**
+ * Take a product's offers out of the scopes of one chain, with the shop rows
+ * a harvest run wrote for it there (plan 0191).
+ */
+const withdrawSupermarketItemsRequest = object(
+  CATALOG_SCHEMA_IDS.withdrawSupermarketItemsRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    priceScopeIds: {
+      ...array(nonEmptyString()),
+      maxItems: WITHDRAW_MAX_SCOPES,
+    },
+    dryRun: boolean(),
+    assumePricesWithdrawn: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
+  },
+  ['userId', 'itemId', 'supermarketId', 'priceScopeIds']
+);
+const withdrawSupermarketItemsResult = object(
+  CATALOG_SCHEMA_IDS.withdrawSupermarketItemsResult,
+  {
+    offersRemoved: {
+      ...array(nonEmptyString()),
+      description: 'The price scopes whose offer was removed.',
+    },
+    offersKept: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          reason: {
+            type: 'string',
+            enum: ['PRICED', 'SHOP_ROW', 'PERSON', 'NO_TRAIL'],
+          },
+        },
+        required: ['priceScopeId', 'reason'],
+        additionalProperties: false,
+      }),
+      description:
+        'The offers that stayed, and why: PRICED when a price row of the product exists at the scope or at a scope it falls through to, SHOP_ROW when a shop row a person wrote backs it, PERSON when an operator wrote the offer itself, NO_TRAIL when the offer is older than the trail that would say so.',
+    },
+    shopRowsRemoved: integer({ minimum: 0 }),
+    shopRowsCleared: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Shop rows that keep a position a person typed. Their availability is cleared and the row stays.',
+    },
+    conflicts: {
+      ...array({
+        type: 'object',
+        properties: {
+          supermarketLocationId: nonEmptyString(),
+          held: { type: ['boolean', 'null'] },
+        },
+        required: ['supermarketLocationId', 'held'],
+        additionalProperties: false,
+      }),
+      description:
+        'Shop rows whose availability a person wrote. They are left alone.',
+    },
+  },
+  [
+    'offersRemoved',
+    'offersKept',
+    'shopRowsRemoved',
+    'shopRowsCleared',
+    'conflicts',
+  ]
+);
 const setSupermarketItemAvailabilityRequest = object(
   CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
   {
@@ -2014,6 +2377,7 @@ const setSupermarketItemAvailabilityRequest = object(
       required: ['itemId', 'available'],
       additionalProperties: false,
     }),
+    onlyIfMissing: boolean(),
   },
   ['userId', 'priceScopeId', 'entries']
 );
@@ -2088,6 +2452,11 @@ const adminListSupermarketItemsRequest = object(
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
+    // Admin plan 0043: one page of the product list, priced in one read.
+    itemIds: {
+      ...array(nonEmptyString()),
+      maxItems: ADMIN_PRICE_ITEM_IDS_MAX,
+    },
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     stale: boolean(),
@@ -2785,6 +3154,13 @@ export const catalogSchemas: JsonSchema[] = [
   registerBrandsRequest,
   registerBrandsOutcome,
   registerBrandsResult,
+  brandMatchView,
+  brandKeyMatches,
+  brandHomonymsView,
+  addBrandHomonymRequest,
+  removeBrandHomonymRequest,
+  brandMatchesRequest,
+  brandMatchesResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -2838,6 +3214,11 @@ export const catalogSchemas: JsonSchema[] = [
   findItemByEanResult,
   findItemsByEansRequest,
   findItemsByEansResult,
+  itemEanRequest,
+  itemEanPair,
+  itemEanRefusal,
+  teachItemEansRequest,
+  teachItemEansResult,
   packCountFill,
   fillPackCountsRequest,
   fillPackCountsResult,
@@ -2859,6 +3240,10 @@ export const catalogSchemas: JsonSchema[] = [
   itemPriceIdRequest,
   deleteItemPricesByRunRequest,
   deleteItemPricesByRunResult,
+  withdrawItemPricesRequest,
+  withdrawItemPricesResult,
+  withdrawSupermarketItemsRequest,
+  withdrawSupermarketItemsResult,
   setSupermarketItemAvailabilityRequest,
   setSupermarketItemAvailabilityResult,
   listPricePoliciesRequest,
@@ -2996,6 +3381,18 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.findItemsByEansRequest,
     response: CATALOG_SCHEMA_IDS.findItemsByEansResult,
   },
+  [ITEM_PATTERNS.addEan]: {
+    request: CATALOG_SCHEMA_IDS.itemEanRequest,
+    response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.removeEan]: {
+    request: CATALOG_SCHEMA_IDS.itemEanRequest,
+    response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.teachEans]: {
+    request: CATALOG_SCHEMA_IDS.teachItemEansRequest,
+    response: CATALOG_SCHEMA_IDS.teachItemEansResult,
+  },
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
@@ -3108,6 +3505,18 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.registerBrandsRequest,
     response: CATALOG_SCHEMA_IDS.registerBrandsResult,
   },
+  [BRAND_PATTERNS.addHomonym]: {
+    request: CATALOG_SCHEMA_IDS.addBrandHomonymRequest,
+    response: CATALOG_SCHEMA_IDS.brandHomonymsView,
+  },
+  [BRAND_PATTERNS.removeHomonym]: {
+    request: CATALOG_SCHEMA_IDS.removeBrandHomonymRequest,
+    response: CATALOG_SCHEMA_IDS.brandHomonymsView,
+  },
+  [BRAND_PATTERNS.matches]: {
+    request: CATALOG_SCHEMA_IDS.brandMatchesRequest,
+    response: CATALOG_SCHEMA_IDS.brandMatchesResult,
+  },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,
     response: CATALOG_SCHEMA_IDS.productGroupView,
@@ -3156,6 +3565,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
     response: CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
   },
+  [ITEM_PRICE_PATTERNS.withdraw]: {
+    request: CATALOG_SCHEMA_IDS.withdrawItemPricesRequest,
+    response: CATALOG_SCHEMA_IDS.withdrawItemPricesResult,
+  },
   [PRICE_POLICY_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listPricePoliciesRequest,
     response: CATALOG_SCHEMA_IDS.pricePolicyListView,
@@ -3167,6 +3580,10 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_ITEM_PATTERNS.setAvailability]: {
     request: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
     response: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityResult,
+  },
+  [SUPERMARKET_ITEM_PATTERNS.withdraw]: {
+    request: CATALOG_SCHEMA_IDS.withdrawSupermarketItemsRequest,
+    response: CATALOG_SCHEMA_IDS.withdrawSupermarketItemsResult,
   },
   [SUPERMARKET_ITEM_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.getSupermarketItemRequest,

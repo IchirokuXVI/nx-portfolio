@@ -69,6 +69,16 @@
   color: inherit;
 }
 
+// The format and the brand of the line's one product, in the role and the size the
+// shopping list row gives its product caption. One line, cut like the name above it.
+.detail {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 // A settled line: at zero, with a purchase behind it. Muted, and **never struck
 // through**. The strikethrough went with the tick that drew it (plan 0043, section
 // 3.2): there is nothing crossed out about a line saying the household is stocked, and

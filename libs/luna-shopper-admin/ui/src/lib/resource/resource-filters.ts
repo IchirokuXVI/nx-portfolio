@@ -10,7 +10,7 @@ import type {
   FilterDescriptor,
 } from '@portfolio/luna-shopper-admin/models';
 import type { ReferenceLookup } from './reference-lookup';
-import { ReferencePicker } from './reference-picker';
+import { ReferencePicker, type ReferenceEmpty } from './reference-picker';
 
 /** One filter changing. */
 export interface FilterChange {
@@ -91,9 +91,10 @@ export interface FilterChange {
                   filterChange.emit({ param: filter.param, value: $event })
                 "
                 [controlId]="controlId(filter.param)"
+                [empty]="emptyOf(filter)"
+                [label]="filter.label | rokuT"
                 [lookup]="lookup()"
                 [none]="offersNone(filter)"
-                [nullable]="true"
                 [resource]="resourceOf(filter)"
                 [value]="valueOf(filter.param)"
               />
@@ -104,13 +105,13 @@ export interface FilterChange {
 
       @if (sorts().length > 0) {
         <div class="filter">
-          <label class="label" for="resource-order">{{
+          <label [for]="orderId()" class="label">{{
             'resource.sort.label' | rokuT
           }}</label>
           <select
             (change)="onOrder($event)"
+            [id]="orderId()"
             [value]="order() ?? ''"
-            id="resource-order"
           >
             <option value="">{{ 'resource.sort.default' | rokuT }}</option>
             @for (sort of sorts(); track sort.value) {
@@ -194,6 +195,17 @@ export class ResourceFilters {
   }
 
   /**
+   * Whether a reference filter starts its list with "Any", which clears it
+   * (admin plan 0050, section 2). It does unless the descriptor says no: a
+   * filter nobody can put back to every row is a trap.
+   */
+  emptyOf(filter: FilterDescriptor): ReferenceEmpty {
+    return filter.kind === 'reference' && filter.emptyOption === false
+      ? null
+      : 'any';
+  }
+
+  /**
    * A date filter's value, as the `YYYY-MM-DD` a date input reads.
    *
    * The stored value is the instant that goes to the gateway, so it is cut back
@@ -221,9 +233,27 @@ export class ResourceFilters {
     return toDay(date);
   }
 
+  /**
+   * A name for this set of filters, for a page that draws more than one list
+   * (admin plan 0042): a chain's shops are a column beside the column of
+   * chains, and both search on `query`. Two controls with one id would leave
+   * the second label pointing at the first field. Empty for a list that is the
+   * whole page, whose ids stay what they always were.
+   */
+  readonly scope = input('');
+
   /** The control's id, which is also what its label points at. */
   controlId(param: string): string {
-    return `filter-${param}`;
+    return this.scope() === ''
+      ? `filter-${param}`
+      : `filter-${this.scope()}-${param}`;
+  }
+
+  /** The id of the order control. */
+  orderId(): string {
+    return this.scope() === ''
+      ? 'resource-order'
+      : `resource-order-${this.scope()}`;
   }
 
   /** The options of an enum filter, for a template that has lost the narrowing. */

@@ -5,6 +5,8 @@ import {
   SourceLocationStatus,
   type PackCountFill,
 } from '@portfolio/luna-shopper/contracts';
+import { packCountIn as dezaPackCount } from '@portfolio/luna-shopper/deza';
+import { splitSize as elJamonSize } from '@portfolio/luna-shopper/eljamon';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -14,6 +16,13 @@ import type { RunContext } from './run-context';
 import type { ObservedPlace } from './run-report';
 import { RunReportSink } from './run-report.sink';
 import type {
+  AvailabilitySent,
+  RunClaimCounts,
+  SourceEntryAvailabilityWriter,
+  StoredClaim,
+} from './source-entry-availability';
+import type {
+  PriceConflict,
   SourceIngest,
   SourceIngestCounters,
   SourceObservation,
@@ -40,6 +49,7 @@ function observation(over: Partial<SourceObservation> = {}): SourceObservation {
     brand: null,
     ean: null,
     unitSize: null,
+    sizeUnit: null,
     sizeFormat: null,
     categoryPath: [],
     url: null,
@@ -77,8 +87,18 @@ function build(
     tracked?: Array<{ externalId: string; itemId: string }>;
     shops?: Array<Partial<SourceLocation>>;
     conflicts?: Array<Record<string, unknown>>;
+    /** What sending the run's ready claims answered (plan 0182). */
+    sent?: Partial<AvailabilitySent>;
+    /** What became of the claims the run stored (plan 0182). */
+    counts?: Partial<RunClaimCounts>;
+    /** The offers with no price catalog created at the end of the run. */
+    pricelessOffers?: number;
+    /** The products whose offer could not be sent. */
+    pricelessOffersFailed?: number;
     /** What the ingest counted, which the sink carries into the report. */
     counters?: Partial<SourceIngestCounters>;
+    /** The conflicts the ingest named (plan 0191). */
+    priceConflicts?: PriceConflict[];
     /** The scopes this run copies to, by the scope copied from (plan 0118). */
     copies?: Record<string, string[]>;
     /** What the ingest said its copies wrote. */
@@ -109,6 +129,7 @@ function build(
       pricedScopes: new Set(options.pricedScopes ?? []),
       pricesCopied: new Map(Object.entries(options.pricesCopied ?? {})),
     },
+    priceConflicts: options.priceConflicts ?? [],
   }));
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
@@ -120,6 +141,8 @@ function build(
             const resolved = options.resolves?.[each.externalId];
             return {
               entry: {
+                // The row the observation was written to, bound or not.
+                id: `entry-${each.externalId}`,
                 externalId: each.externalId,
                 itemId: resolved?.itemId ?? null,
                 // The row holds what the observation stated (plan 0162).
@@ -176,6 +199,36 @@ function build(
     })),
   } as unknown as CatalogClient;
 
+  // Where per shop claims are kept and what sends them (plan 0182). Which
+  // stored claims are ready is a query over real Postgres, proved in
+  // `source-entry-availability.integration.spec.ts`; here it answers what a
+  // test says it sent.
+  const storedClaims: StoredClaim[] = [];
+  const availability = {
+    store: jest.fn(async (claims: readonly StoredClaim[]) => {
+      storedClaims.push(...claims);
+      return claims.length;
+    }),
+    writeForRun: jest.fn(async () => ({
+      written: 0,
+      shops: 0,
+      conflicts: [],
+      pricelessOffers: 0,
+      ...options.sent,
+    })),
+    countsForRun: jest.fn(async () => ({
+      stored: storedClaims.length,
+      written: 0,
+      waitingForBinding: 0,
+      waitingForShop: 0,
+      ...options.counts,
+    })),
+    writePricelessOffersForRun: jest.fn(async () => ({
+      written: options.pricelessOffers ?? 0,
+      failed: options.pricelessOffersFailed ?? 0,
+    })),
+  } as unknown as SourceEntryAvailabilityWriter;
+
   const entries = {
     find: jest.fn(async () =>
       (options.tracked ?? []).map(
@@ -217,7 +270,7 @@ function build(
       copiesOf: (scopeId) => options.copies?.[scopeId] ?? [],
       writes: options.writes,
     },
-    { ingest, scopes, places, shops, catalog, entries }
+    { ingest, scopes, places, shops, catalog, entries, availability }
   );
 
   return {
@@ -229,6 +282,8 @@ function build(
     catalog,
     ingest,
     scopes,
+    availability,
+    storedClaims,
   };
 }
 
@@ -274,6 +329,32 @@ describe('RunReportSink', () => {
     expect(written.pricesRecorded).toBe(8154);
     expect(written.pricesPublished).toBe(0);
     expect(written.pricesConfirmed).toBe(0);
+  });
+
+  /**
+   * Plan 0191: the count said that a price was withheld and not for which
+   * product, so finding the pair was a query. The report names it.
+   */
+  it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {
+    const conflict = (n: number): PriceConflict => ({
+      itemId: `item-${n}`,
+      priceScopeId: 'scope-1',
+      entryIds: [`a-${n}`, `b-${n}`],
+      firstWasSent: n % 2 === 0,
+    });
+    const many = Array.from({ length: 250 }, (_, n) => conflict(n));
+    const { sink } = build({
+      counters: { pricesConflicted: many.length },
+      priceConflicts: many,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    const written = await sink.drain();
+
+    // The count is the whole number. The names are the first two hundred.
+    expect(written.pricesConflicted).toBe(250);
+    expect(written.priceConflicts).toHaveLength(200);
+    expect(written.priceConflicts[0]).toEqual(conflict(0));
   });
 
   describe('the pack count fill (plan 0162, section 3)', () => {
@@ -337,6 +418,52 @@ describe('RunReportSink', () => {
       expect(written.packCountConflicts).toEqual([
         { itemId: 'item-merged', packCounts: [4, 6] },
       ]);
+    });
+
+    it('receives no count from a dimension (plan 0183)', async () => {
+      // The fill is unchanged. What changed is what the readers hand it:
+      // `125x157 cm` used to arrive as a pack of 125 and `5x1.2 m` as a pack
+      // of 5, and the fill wrote both onto the product.
+      const { sink, catalog } = build({
+        resolves: {
+          cloth: { itemId: 'item-cloth', active: true },
+          sheet: { itemId: 'item-sheet', active: true },
+          jamonCloth: { itemId: 'item-cloth', active: true },
+          cans: { itemId: 'item-cans', active: true },
+        },
+      });
+
+      sink.product(
+        observation({
+          externalId: 'cloth',
+          packCount: dezaPackCount('Mantel rectangular ALTEZA 125x157 cm'),
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'sheet',
+          packCount: dezaPackCount('Sábana ajustable ALTEZA 5x1.2 m'),
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'jamonCloth',
+          packCount: elJamonSize('mantel rectangular, 125x157 cm').packCount,
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'cans',
+          packCount: dezaPackCount('Cerveza MAHOU 6x33 cl'),
+        })
+      );
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).toHaveBeenCalledTimes(1);
+      expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+        { itemId: 'item-cans', packCount: 6 },
+      ]);
+      expect(written.packCountConflicts).toEqual([]);
     });
 
     it('splits a long list into calls catalog accepts', async () => {
@@ -480,6 +607,7 @@ describe('RunReportSink', () => {
         copies: { [SCOPE]: ['scope-w2'] },
         shops: [
           {
+            id: 'shop-T1',
             externalId: 'T1',
             printedName: 'Centro',
             supermarketLocationId: 'loc-1',
@@ -499,27 +627,31 @@ describe('RunReportSink', () => {
     }
 
     it('writes no availability, at the scope, its copies or a shop, for PRICES', async () => {
-      const { catalog, shopsObserved, written, pushed } = await walk(
-        HarvestRunWrites.PRICES
-      );
+      const { catalog, shopsObserved, written, pushed, availability } =
+        await walk(HarvestRunWrites.PRICES);
 
       // The products still reach the ingest, which writes the prices.
       expect(pushed.flat().map((each) => each.externalId)).toEqual(['seen']);
       expect(catalog.setAvailability).not.toHaveBeenCalled();
-      expect(catalog.setLocationAvailability).not.toHaveBeenCalled();
+      // A shop claim is not even stored: this run states no stock at all.
+      expect(availability.store).not.toHaveBeenCalled();
+      expect(availability.writeForRun).not.toHaveBeenCalled();
       expect(shopsObserved).toEqual([]);
       expect(written.availabilityWritten).toBe(0);
       expect(written.availabilityCopied).toEqual({});
     });
 
     it('writes availability at the scope, its copies and a shop, for AVAILABILITY', async () => {
-      const { catalog, written } = await walk(HarvestRunWrites.AVAILABILITY);
+      const { catalog, written, availability } = await walk(
+        HarvestRunWrites.AVAILABILITY
+      );
 
       const scopes = (catalog.setAvailability as jest.Mock).mock.calls.map(
         ([scopeId]) => scopeId
       );
       expect(scopes).toEqual([SCOPE, 'scope-w2']);
-      expect(catalog.setLocationAvailability).toHaveBeenCalledTimes(1);
+      expect(availability.store).toHaveBeenCalledTimes(1);
+      expect(availability.writeForRun).toHaveBeenCalledTimes(1);
       expect(written.availabilityCopied).toEqual({ [SCOPE]: 2 });
     });
 
@@ -571,100 +703,243 @@ describe('RunReportSink', () => {
     expect(catalog.setAvailability).not.toHaveBeenCalled();
   });
 
-  it('writes per shop availability through the shop a person mapped', async () => {
-    const { sink, catalog, shopsObserved } = build({
-      // A fuzzy `CANDIDATE` row, which per shop availability reads and a price
-      // does not: DEZA publishes no EAN, so an `ACTIVE` row there would only
-      // ever be one a person accepted, and reading `ACTIVE` alone would silence
-      // the whole crawl.
-      resolves: { p1: { itemId: 'item-1', active: false } },
-      shops: [
-        {
-          externalId: 'T1',
-          printedName: 'Jesús Rescatado',
-          supermarketLocationId: 'loc-1',
-          status: SourceLocationStatus.ACTIVE,
-        } as Partial<SourceLocation>,
-      ],
+  describe('per shop availability (plans 0084 and 0182)', () => {
+    const shop = (
+      code: string,
+      supermarketLocationId: string | null
+    ): Partial<SourceLocation> => ({
+      id: `shop-${code}`,
+      externalId: code,
+      printedName: `Shop ${code}`,
+      supermarketLocationId,
+      status: supermarketLocationId
+        ? SourceLocationStatus.ACTIVE
+        : SourceLocationStatus.UNMAPPED,
     });
 
-    sink.product(observation({ externalId: 'p1' }));
-    sink.availability({
-      externalId: 'p1',
-      shopCode: 'T1',
-      shopName: 'Jesús Rescatado',
-      available: true,
-    });
-    const written = await sink.drain();
+    it('stores every claim, whether or not the row is bound or the shop is mapped', async () => {
+      // The first run of a chain: nothing resolves to a product, and one of the
+      // two shops is mapped to nothing. Every claim used to be dropped here,
+      // the first kind for having no item and the second for having no shop.
+      const { sink, storedClaims, shopsObserved, catalog } = build({
+        shops: [shop('T1', 'loc-1'), shop('C1', null)],
+      });
 
-    expect(shopsObserved[0]).toEqual([
-      { externalId: 'T1', printedName: 'Jesús Rescatado' },
-    ]);
-    expect(catalog.setLocationAvailability).toHaveBeenCalledTimes(1);
-    expect(
-      (catalog.setLocationAvailability as jest.Mock).mock.calls[0][1]
-    ).toEqual([{ itemId: 'item-1', available: true }]);
-    expect(written.shopsWritten).toBe(1);
-  });
+      sink.product(observation({ externalId: 'p1' }));
+      sink.product(observation({ externalId: 'p2' }));
+      for (const externalId of ['p1', 'p2']) {
+        sink.availability({
+          externalId,
+          shopCode: 'T1',
+          shopName: 'Shop T1',
+          available: true,
+        });
+        // A shop the popup did not name: the negative is a claim too.
+        sink.availability({
+          externalId,
+          shopCode: 'C1',
+          shopName: 'Shop C1',
+          available: false,
+        });
+      }
+      await sink.drain();
 
-  it('skips an unmapped shop, names it, and still finishes', async () => {
-    // Plan 0084, section 6: the run writes nothing for it and finishes, and the
-    // row is what the back office shows. Mapping it later does not backfill
-    // what this run skipped.
-    const { sink, catalog } = build({
-      resolves: { p1: { itemId: 'item-1', active: false } },
-      shops: [
-        {
-          externalId: 'C1',
-          printedName: 'SuperCash (Quemadas)',
-          supermarketLocationId: null,
-          status: SourceLocationStatus.UNMAPPED,
-        } as Partial<SourceLocation>,
-      ],
-    });
-
-    sink.product(observation({ externalId: 'p1' }));
-    sink.availability({
-      externalId: 'p1',
-      shopCode: 'C1',
-      shopName: 'SuperCash (Quemadas)',
-      available: true,
-    });
-    const written = await sink.drain();
-
-    expect(catalog.setLocationAvailability).not.toHaveBeenCalled();
-    expect(written.shopsUnmapped).toEqual([
-      { code: 'C1', name: 'SuperCash (Quemadas)' },
-    ]);
-  });
-
-  it('reports an availability row a person owns rather than overwriting it', async () => {
-    // Plan 0084, section 3: a person always wins, and the run reports the
-    // disagreement rather than applying it.
-    const { sink } = build({
-      resolves: { p1: { itemId: 'item-1', active: false } },
-      shops: [
-        {
-          externalId: 'T1',
-          printedName: 'Jesús Rescatado',
-          supermarketLocationId: 'loc-1',
-          status: SourceLocationStatus.ACTIVE,
-        } as Partial<SourceLocation>,
-      ],
-      conflicts: [{ itemId: 'item-1', held: false, offered: true }],
+      expect(shopsObserved[0]).toEqual([
+        { externalId: 'T1', printedName: 'Shop T1' },
+        { externalId: 'C1', printedName: 'Shop C1' },
+      ]);
+      // Kept against the source's own row and the source's own shop.
+      expect(storedClaims).toEqual([
+        { entryId: 'entry-p1', sourceLocationId: 'shop-T1', available: true },
+        { entryId: 'entry-p1', sourceLocationId: 'shop-C1', available: false },
+        { entryId: 'entry-p2', sourceLocationId: 'shop-T1', available: true },
+        { entryId: 'entry-p2', sourceLocationId: 'shop-C1', available: false },
+      ]);
+      // The sink itself sends nothing: what is ready is read from the table.
+      expect(catalog.setLocationAvailability).not.toHaveBeenCalled();
     });
 
-    sink.product(observation({ externalId: 'p1' }));
-    sink.availability({
-      externalId: 'p1',
-      shopCode: 'T1',
-      shopName: 'Jesús Rescatado',
-      available: true,
-    });
-    const written = await sink.drain();
+    it('stamps what it stores with the run, and sends what that run made ready', async () => {
+      const { sink, availability } = build({
+        resolves: { p1: { itemId: 'item-1', active: false } },
+        shops: [shop('T1', 'loc-1')],
+        sent: { written: 3, shops: 1 },
+      });
 
-    expect(written.conflicts).toEqual([
-      { shop: 'T1', itemId: 'item-1', held: false, offered: true },
-    ]);
+      sink.product(observation({ externalId: 'p1' }));
+      sink.availability({ externalId: 'p1', shopCode: 'T1', available: true });
+      const written = await sink.drain();
+
+      expect((availability.store as jest.Mock).mock.calls[0][1]).toBe(RUN);
+      expect(availability.writeForRun).toHaveBeenCalledWith(RUN, CHAIN);
+      expect(written.shopsWritten).toBe(1);
+      expect(written.availabilityWritten).toBe(3);
+    });
+
+    it('drops a claim about a product the run did not report', async () => {
+      const { sink, storedClaims } = build({ shops: [shop('T1', 'loc-1')] });
+
+      sink.product(observation({ externalId: 'p1' }));
+      sink.availability({
+        externalId: 'never-reported',
+        shopCode: 'T1',
+        available: true,
+      });
+      await sink.drain();
+
+      // There is no row to keep it against.
+      expect(storedClaims).toEqual([]);
+    });
+
+    it('names an unmapped shop, and still finishes', async () => {
+      // Plan 0084, section 6: the row is what the back office shows. Since
+      // plan 0182 its claims are stored, and mapping the shop sends them.
+      const { sink, storedClaims } = build({
+        resolves: { p1: { itemId: 'item-1', active: false } },
+        shops: [shop('C1', null)],
+      });
+
+      sink.product(observation({ externalId: 'p1' }));
+      sink.availability({
+        externalId: 'p1',
+        shopCode: 'C1',
+        shopName: 'Shop C1',
+        available: true,
+      });
+      const written = await sink.drain();
+
+      expect(written.shopsUnmapped).toEqual([{ code: 'C1', name: 'Shop C1' }]);
+      expect(storedClaims).toHaveLength(1);
+    });
+
+    it('carries the three counts into the result', async () => {
+      const { sink } = build({
+        shops: [shop('T1', 'loc-1')],
+        counts: {
+          stored: 10,
+          written: 4,
+          waitingForBinding: 5,
+          waitingForShop: 1,
+        },
+      });
+
+      sink.product(observation({ externalId: 'p1' }));
+      sink.availability({ externalId: 'p1', shopCode: 'T1', available: true });
+      const written = await sink.drain();
+
+      expect(written).toMatchObject({
+        claimsStored: 10,
+        claimsWritten: 4,
+        // Waiting for a binding or a shop, and the two it is made of.
+        claimsWaiting: 6,
+        claimsWaitingForBinding: 5,
+        claimsWaitingForShop: 1,
+      });
+    });
+
+    describe('the offer with no price, at the end of a run', () => {
+      it('asks for the offers of the rows this run saw, last, and counts what catalog created', async () => {
+        const { sink, availability } = build({
+          resolves: { p1: { itemId: 'item-1', active: true } },
+          shops: [shop('T1', 'loc-1')],
+          pricelessOffers: 7,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        sink.availability({
+          externalId: 'p1',
+          shopCode: 'T1',
+          available: true,
+        });
+        const written = await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).toHaveBeenCalledTimes(
+          1
+        );
+        expect(availability.writePricelessOffersForRun).toHaveBeenCalledWith(
+          RUN,
+          CHAIN
+        );
+        expect(written.pricelessOffersWritten).toBe(7);
+        expect(written.pricelessOffersFailed).toBe(0);
+        // After the shop claims, so a row they derived is one it leaves alone.
+        const order = (mock: unknown) =>
+          (mock as jest.Mock).mock.invocationCallOrder[0];
+        expect(order(availability.writeForRun)).toBeLessThan(
+          order(availability.writePricelessOffersForRun)
+        );
+      });
+
+      it('carries the products that could not be offered into the result, beside what was written', async () => {
+        const { sink } = build({
+          pricelessOffers: 500,
+          pricelessOffersFailed: 500,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        const written = await sink.drain();
+
+        expect(written).toMatchObject({
+          pricelessOffersWritten: 500,
+          pricelessOffersFailed: 500,
+        });
+      });
+
+      it('asks for none in a run that reported no product', async () => {
+        const { sink, availability } = build();
+
+        const written = await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).not.toHaveBeenCalled();
+        expect(written.pricelessOffersWritten).toBe(0);
+      });
+
+      it('asks for none in a run that writes prices only (plan 0119)', async () => {
+        const { sink, availability } = build({
+          writes: HarvestRunWrites.PRICES,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).not.toHaveBeenCalled();
+      });
+    });
+
+    it('counts no claim for a run that stated none', async () => {
+      const { sink, availability } = build();
+
+      sink.product(observation({ externalId: 'p1' }));
+      const written = await sink.drain();
+
+      expect(availability.store).not.toHaveBeenCalled();
+      expect(written).toMatchObject({
+        claimsStored: 0,
+        claimsWritten: 0,
+        claimsWaiting: 0,
+      });
+    });
+
+    it('reports an availability row a person owns rather than overwriting it', async () => {
+      // Plan 0084, section 3: a person always wins, and the run reports the
+      // disagreement rather than applying it.
+      const { sink } = build({
+        resolves: { p1: { itemId: 'item-1', active: false } },
+        shops: [shop('T1', 'loc-1')],
+        sent: {
+          conflicts: [
+            { shop: 'T1', itemId: 'item-1', held: false, offered: true },
+          ],
+        },
+      });
+
+      sink.product(observation({ externalId: 'p1' }));
+      sink.availability({ externalId: 'p1', shopCode: 'T1', available: true });
+      const written = await sink.drain();
+
+      expect(written.conflicts).toEqual([
+        { shop: 'T1', itemId: 'item-1', held: false, offered: true },
+      ]);
+    });
   });
 });

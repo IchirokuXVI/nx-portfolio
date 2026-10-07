@@ -88,6 +88,21 @@ describe('ServerDownOverlay', () => {
     expect(text(fixture)).toContain('serverDown.body');
   });
 
+  /** The card and the button are the shared entry card's (admin plan 0046). */
+  it('is drawn on the shared entry card, which names the dialog', async () => {
+    const fixture = await render();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('lib-entry-card')).not.toBeNull();
+    expect(host.getAttribute('aria-labelledby')).toBe('server-down-heading');
+    expect(host.querySelector('h2#server-down-heading')?.textContent).toContain(
+      'serverDown.heading'
+    );
+    expect(host.querySelector('.entry-warning')?.getAttribute('role')).toBe(
+      'alert'
+    );
+  });
+
   /**
    * There is nothing to type against a server that cannot check it, and a
    * password field that fails on submit is worse than no field at all.

@@ -1,6 +1,7 @@
-import type {
-  ItemView,
+import {
   PriceSourceKind,
+  type ItemView,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -31,6 +32,18 @@ export interface SourceEntryFields {
   brandKey: string | null;
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The catalog unit `unitSize` is in (plan 0177), and null whenever
+   * `unitSize` is. Written with the size on every observation, so the two
+   * cannot describe different reads of the source.
+   */
+  sizeUnit: SourceSizeUnit | null;
+  /**
+   * Whether the product is sold by weight (plan 0181). When it is, `unitSize`
+   * and `sizeUnit` are both null: the weight is not the same on every pack,
+   * so it is not a size.
+   */
+  soldByWeight: boolean;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, or null (plan 0162).
@@ -66,6 +79,11 @@ export function sourceGroupChanged(
     (fields.packCount !== undefined &&
       (existing.packCount ?? null) !== fields.packCount) ||
     numeric(existing.unitSize) !== numeric(fields.unitSize) ||
+    // A row written before plan 0177 holds no unit, so the first run to see it
+    // again reports it `updated`, which is true: the row now says something it
+    // did not say before.
+    (existing.sizeUnit ?? null) !== fields.sizeUnit ||
+    (existing.soldByWeight ?? false) !== fields.soldByWeight ||
     existing.url !== fields.url ||
     existing.sourceKind !== fields.sourceKind
   );
@@ -91,6 +109,8 @@ export function applySourceGroup(
   row.brandKey = fields.brandKey;
   row.ean = fields.ean;
   row.unitSize = fields.unitSize;
+  row.sizeUnit = fields.sizeUnit;
+  row.soldByWeight = fields.soldByWeight;
   row.sizeFormat = fields.sizeFormat;
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;
@@ -98,6 +118,61 @@ export function applySourceGroup(
   row.categoryPath = fields.categoryPath;
   row.url = fields.url;
   row.extra = fields.extra;
+}
+
+/**
+ * The kinds that are a walk: a run that reads the fields of a product from the
+ * chain's own API or website (plan 0190).
+ */
+const WALK_KINDS: readonly PriceSourceKind[] = [
+  PriceSourceKind.OFFICIAL_API,
+  PriceSourceKind.OFFICIAL_WEB,
+];
+
+/** Whether a run of this kind is a walk. */
+export function isWalkKind(sourceKind: PriceSourceKind): boolean {
+  return WALK_KINDS.includes(sourceKind);
+}
+
+/**
+ * **A walk owns the text of a row. Any other source adds to it** (plan 0190,
+ * the owner's decision 2C). Answers whether an observation of this kind
+ * writes the source group of this row.
+ *
+ * A website and a leaflet of one chain can print one product with the same
+ * name and format. A source with no product id keys its row on exactly those
+ * two (`entryKey`), so both land on one row, and that is intended: a person
+ * decides once and both sources resolve through the row (plans 0085 and
+ * 0086). What the row says about the product is still one text, and before
+ * the plan it was the text of whichever run came last. Eight rows of the
+ * first catalog changed their name, their brand and their size twice in
+ * three days.
+ *
+ * So the group has one owner. A walk reads fields, and a leaflet is read by a
+ * model from a picture:
+ *
+ * - **An observation of the kind the row holds writes the group**, as every
+ *   run did before the plan.
+ * - **A walk writes the group of any row.** A row that only a leaflet has
+ *   described is taken over: it gets the walk's text and the walk's kind.
+ *   That happens once for a row, because from then on a walk owns it.
+ * - **An observation that is not a walk leaves a row that a walk owns alone.**
+ *   The caller still moves the seen fields and writes the prices, each under
+ *   the kind of its own run, which is where the kind of a price lives now
+ *   (`source_entry_prices.sourceKind`).
+ *
+ * The cost, which the plan accepts: a size that a leaflet prints and the
+ * website does not is not on the row. A person types it on the create.
+ */
+export function writesSourceGroup(
+  row: Pick<SourceCatalogEntry, 'sourceKind'>,
+  sourceKind: PriceSourceKind
+): boolean {
+  return (
+    row.sourceKind === sourceKind ||
+    isWalkKind(sourceKind) ||
+    !isWalkKind(row.sourceKind)
+  );
 }
 
 /** The whole catalog item index, paged once. See {@link ItemMatchIndex}'s doc. */

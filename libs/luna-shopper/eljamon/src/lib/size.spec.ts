@@ -25,7 +25,8 @@ describe('splitSize', () => {
       false,
     ],
     ['aceite de oliva, 1,5l', 'aceite de oliva', '1,5l', 1.5, null, false],
-    ['cerveza rubia, pk 6x33cl', 'cerveza rubia', 'pk 6x33cl', 198, 6, false],
+    // Centilitres are written as millilitres (plan 0177): six cans of 33 cl.
+    ['cerveza rubia, pk 6x33cl', 'cerveza rubia', 'pk 6x33cl', 1980, 6, false],
     ['yogur natural, pk 3', 'yogur natural', 'pk 3', null, 3, false],
     [
       'burger vacuno alta proteínas 130g, pk-2',
@@ -46,12 +47,79 @@ describe('splitSize', () => {
       false,
     ],
   ])('%s', (printed, name, sizeFormat, unitSize, packCount, soldByWeight) => {
-    expect(splitSize(printed)).toEqual({
+    expect(splitSize(printed)).toMatchObject({
       name,
       sizeFormat,
       unitSize,
       packCount,
       soldByWeight,
+    });
+  });
+
+  describe('the unit the number is in (plan 0177)', () => {
+    it.each([
+      ['vino tinto crianza, 75cl', '75cl', 750, 'MILLILITER'],
+      ['cerveza rubia, pk 6x33cl', 'pk 6x33cl', 1980, 'MILLILITER'],
+      ['aceite de oliva, 1,5l', '1,5l', 1.5, 'LITER'],
+      ['arroz bomba, 1kg', '1kg', 1, 'KILOGRAM'],
+      ['queso curado, 500g aprox.', '500g aprox.', 500, 'GRAM'],
+      ['crema fresca de calabaza, 330ml', '330ml', 330, 'MILLILITER'],
+      ['café en cápsulas, 16ud', '16ud', 16, 'UNIT'],
+      ['detergente líquido, 40 lavados', '40 lavados', 40, 'UNIT'],
+    ])('%s', (printed, sizeFormat, unitSize, sizeUnit) => {
+      // The printed text is the key, and it is exactly what the chain wrote.
+      expect(splitSize(printed)).toMatchObject({
+        sizeFormat,
+        unitSize,
+        sizeUnit,
+      });
+    });
+
+    describe('a length is a dimension, not a size (plan 0183)', () => {
+      it('keeps the printed text and states no size for a roll', () => {
+        expect(splitSize('papel de aluminio, 30m')).toMatchObject({
+          sizeFormat: '30m',
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+        });
+      });
+
+      it.each([
+        ['mantel rectangular, 125x157 cm', '125x157 cm'],
+        ['sábana ajustable, 5x1.2 m', '5x1.2 m'],
+        ['mantel rectangular, 125x157cm', '125x157cm'],
+      ])('%p states no count and no size', (printed, sizeFormat) => {
+        expect(splitSize(printed)).toMatchObject({
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          soldByWeight: false,
+        });
+      });
+
+      it('still reads the count of a pack of cans', () => {
+        expect(splitSize('cerveza rubia, 6x33 cl')).toMatchObject({
+          sizeFormat: '6x33 cl',
+          unitSize: 1980,
+          sizeUnit: 'MILLILITER',
+          packCount: 6,
+        });
+      });
+    });
+
+    it('states no unit where there is no number', () => {
+      for (const printed of [
+        'yogur natural, pk 3',
+        'lechuga iceberg, ud',
+        'bacon original, kg',
+      ]) {
+        expect(splitSize(printed)).toMatchObject({
+          unitSize: null,
+          sizeUnit: null,
+        });
+      }
     });
   });
 
@@ -67,6 +135,7 @@ describe('splitSize', () => {
       name: 'salmón ahumado suave 80g',
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
       soldByWeight: false,
     });

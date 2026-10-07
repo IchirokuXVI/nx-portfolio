@@ -14,22 +14,27 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
-  provideResources,
+  provideSections,
+  RecordPage,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { itemSource } from './catalog-sources';
-import { ITEMS } from './items';
+import { GroupAddItemsPanel } from './product-group-add-items';
 import {
   ProductGroupAssignments,
   toGroupAssignmentAnswer,
 } from './product-group-assignments';
-import { ProductGroupDetailPage } from './product-group-detail-page';
-import { PRODUCT_GROUPS } from './product-groups';
+import {
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
+} from './products/products-routes';
 import { SetGroupPanel } from './set-group-panel';
 
 /**
  * Moving many products into a group, rendered (admin plan 0035, section 2).
+ * "Add items" is a panel of the group's record page (admin plan 0055).
  *
  * Both ways in run against the in memory gateway, which is the default behind
  * `RESOURCE_GATEWAYS`, so a move really moves a row of the item table and the
@@ -45,8 +50,15 @@ import { SetGroupPanel } from './set-group-panel';
 })
 class TestHost {}
 
-const ALL = [ITEMS, PRODUCT_GROUPS];
-const SECTION: AdminSection = { key: 'catalog', label: '', resources: ALL };
+/** The Products section, as the app declares it (admin plan 0043). */
+const SECTION: AdminSection = {
+  key: 'products',
+  label: '',
+  segment: PRODUCTS_SEGMENT,
+  held: PRODUCT_RESOURCES,
+  heldTabs: true,
+  screens: productsRoutes(),
+};
 
 async function boot(url: string) {
   TestBed.resetTestingModule();
@@ -57,7 +69,7 @@ async function boot(url: string) {
       ServerReachability,
       provideRouter(adminRoutes([SECTION])),
       provideLocationMocks(),
-      provideResources(...ALL),
+      provideSections(SECTION),
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -119,13 +131,13 @@ async function groupOf(itemId: string): Promise<string | null> {
 
 describe('Add items on a product group', () => {
   it('opens on the ungrouped products, and a tick sends nothing', async () => {
-    const { fixture, assign } = await boot('/product-groups/pg_olive_oil');
+    const { fixture, assign } = await boot('/products/groups/pg_olive_oil');
 
-    // The generic form is still the top of the screen.
+    // The record page is the screen, and "Add items" is a panel inside it.
+    expect(fixture.debugElement.query(By.directive(RecordPage))).not.toBeNull();
     expect(
-      fixture.debugElement.query(By.directive(ProductGroupDetailPage))
+      q(fixture, 'lib-record-view lib-group-add-items-panel')
     ).not.toBeNull();
-    expect(q(fixture, 'lib-resource-form-page')).not.toBeNull();
 
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);
@@ -143,7 +155,7 @@ describe('Add items on a product group', () => {
   });
 
   it('moves the ticked products after the review, and says so per product', async () => {
-    const { fixture, assign } = await boot('/product-groups/pg_olive_oil');
+    const { fixture, assign } = await boot('/products/groups/pg_olive_oil');
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);
     await tick(fixture, all(fixture, '[data-pick-item]')[0]);
@@ -172,7 +184,7 @@ describe('Add items on a product group', () => {
   });
 
   it('refuses the whole request when a product moved after the review', async () => {
-    const { fixture } = await boot('/product-groups/pg_olive_oil');
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);
     await tick(fixture, all(fixture, '[data-pick-item]')[0]);
@@ -204,27 +216,75 @@ describe('Add items on a product group', () => {
   });
 });
 
+describe('Add items, when one search overtakes another', () => {
+  /**
+   * A search by name is slower than the read of an ID typed after it (admin
+   * plan 0051). The slow answer must not be drawn over the ID's.
+   */
+  it('drops a search that lands after the one that replaced it', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    await click(fixture, '[data-add-items-open]');
+    await settle(fixture, 300);
+
+    const page = fixture.debugElement.query(By.directive(GroupAddItemsPanel))
+      .componentInstance as GroupAddItemsPanel;
+    const items = page['_items'];
+    const found = await itemsNow();
+    let answer: () => void = () => undefined;
+    jest.spyOn(items, 'list').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve({ items: found, nextCursor: null });
+        })
+    );
+    const type = async (text: string) => {
+      const box = q<HTMLInputElement>(fixture, '[data-item-search]');
+      expect(box).not.toBeNull();
+      if (box !== null) {
+        box.value = text;
+        box.dispatchEvent(new Event('input'));
+      }
+      await settle(fixture, 300);
+    };
+
+    await type('oil');
+    // No product of the seed has this ID, and the read answers at once.
+    await type('3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f');
+    expect(q(fixture, '[data-id-not-found]')).not.toBeNull();
+
+    answer();
+    await settle(fixture);
+
+    expect(q(fixture, '[data-id-not-found]')).not.toBeNull();
+    expect(all(fixture, '[data-pick-item]')).toHaveLength(0);
+  });
+});
+
 describe('Set group on the product list', () => {
   it('draws a tick box per row, and a tick sends nothing', async () => {
-    const { fixture, assign } = await boot('/items');
+    const { fixture, assign } = await boot('/products');
 
     const boxes = all(fixture, '[data-pick-row]');
     expect(boxes.length).toBe(4);
-    expect(q(fixture, '[data-bulk="setGroup"]')?.hasAttribute('disabled')).toBe(
-      true
-    );
+    // The bar at the bottom is drawn only while rows are ticked (admin plan
+    // 0043, target 2).
+    expect(q(fixture, '[data-bulk-bar]')).toBeNull();
 
     await tick(fixture, boxes[0]);
     await tick(fixture, boxes[3]);
 
-    expect(q(fixture, '[data-bulk="setGroup"]')?.hasAttribute('disabled')).toBe(
-      false
-    );
+    expect(q(fixture, '[data-bulk-bar]')).not.toBeNull();
+    expect(q(fixture, '[data-bulk="setGroup"]')).not.toBeNull();
+    expect(q(fixture, '[data-bulk="setCategories"]')).not.toBeNull();
     expect(assign).not.toHaveBeenCalled();
+
+    // "Clear" unticks every row, and the bar goes with them.
+    await click(fixture, '[data-bulk-clear]');
+    expect(q(fixture, '[data-bulk-bar]')).toBeNull();
   });
 
   it('chooses a group, reviews, and moves every ticked row', async () => {
-    const { fixture, assign } = await boot('/items');
+    const { fixture, assign } = await boot('/products');
     const boxes = all(fixture, '[data-pick-row]');
     // Whole milk 1 L (in whole milk) and the dish soap (in none).
     await tick(fixture, boxes[0]);
@@ -269,7 +329,7 @@ describe('Set group on the product list', () => {
   });
 
   it('leaves out a product already in the chosen group', async () => {
-    const { fixture, assign } = await boot('/items');
+    const { fixture, assign } = await boot('/products');
     const boxes = all(fixture, '[data-pick-row]');
     await tick(fixture, boxes[0]);
 
@@ -288,7 +348,7 @@ describe('Set group on the product list', () => {
   });
 
   it('keeps the ticks when the panel is cancelled', async () => {
-    const { fixture, assign } = await boot('/items');
+    const { fixture, assign } = await boot('/products');
     await tick(fixture, all(fixture, '[data-pick-row]')[1]);
 
     await click(fixture, '[data-bulk="setGroup"]');
@@ -356,5 +416,42 @@ describe('toGroupAssignmentAnswer', () => {
       applied: false,
       error: null,
     });
+  });
+});
+
+describe('a product group, on the record page', () => {
+  it('opens reading, with its fields in one section and no tab', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+
+    expect(page.store().mode()).toBe('read');
+    expect(page.tabs()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain(
+      'catalog.productGroups.section.name'
+    );
+  });
+
+  /** The products list, narrowed to the group. */
+  it('links to its products', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    const link = all(fixture, 'lib-record-children a').find((a) =>
+      a.textContent?.includes('catalog.productGroups.products')
+    );
+
+    expect(link?.getAttribute('href')).toBe(
+      '/products?productGroupId=pg_olive_oil'
+    );
+  });
+
+  /** The address the old form of a group had. */
+  it('opens the form of the group from its old address', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil/edit');
+    await settle(fixture);
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+
+    expect(TestBed.inject(Router).url).toBe('/products/groups/pg_olive_oil');
+    expect(page.store().mode()).toBe('edit');
   });
 });

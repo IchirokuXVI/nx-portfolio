@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ADMIN_PRICE_ITEM_IDS_MAX,
   BRAND_ORDERS,
   CATEGORY_KINDS,
   PostalCodeSource,
@@ -52,14 +53,22 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @MaxLength(120)
   query?: string;
 
+  /**
+   * One parameter for two questions, as {@link productGroupId} is (admin plan
+   * 0043, section 2). A uuid is the products under that category; the literal
+   * `none` is the products on no category at all, which is the "No category"
+   * entry of the back office's tree.
+   */
   @ApiPropertyOptional({
-    format: 'uuid',
-    description:
+    description: referenceFilterDescription(
       'Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.',
+      'the products on no category at all.'
+    ),
   })
   @IsOptional()
-  // Any version: seeded categories carry version 5 ids derived from the slug.
-  @IsUUID('all')
+  // Any uuid version: seeded categories carry version 5 ids derived from the
+  // slug, and the validator beneath checks the shape and not the version.
+  @IsUuidOrNone()
   categoryId?: string;
 
   /**
@@ -78,6 +87,24 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @IsOptional()
   @IsUuidOrNone()
   productGroupId?: string;
+
+  /**
+   * The products one price scope shows no price for (plan 0187): what a crawl
+   * of the chain did not reach.
+   *
+   * **A uuid and nothing else.** The literal `none` has no meaning here, since
+   * the parameter does not name a reference of the product: it names the scope
+   * the question is asked at. It is also not a boolean beside `priceScopeId`,
+   * because this route takes no scope and prices nothing.
+   */
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products this price scope shows no price for: the scope holds no row for the product, or a row with no price that still says the product is sold. A row that says the scope does not sell the product is an answer, and keeps the product out. It combines with every other filter of this route. With it the page carries `total`, the number of products that match the whole request, on every page of it. An id that names no price scope answers 404.',
+  })
+  @IsOptional()
+  @IsUUID()
+  withoutPriceAtScopeId?: string;
 }
 
 /**
@@ -149,6 +176,20 @@ export class AdminListSupermarketItemsQueryDto extends CatalogListQueryDto {
   @IsOptional()
   @IsUUID()
   itemId?: string;
+
+  @ApiPropertyOptional({
+    name: 'itemIds',
+    type: [String],
+    format: 'uuid',
+    description: `Repeatable, at most ${ADMIN_PRICE_ITEM_IDS_MAX}. Only the prices of these products: with priceScopeId, the price of every product on one page of the product list in one read (admin plan 0043). Empty and absent both mean every product.`,
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(ADMIN_PRICE_ITEM_IDS_MAX)
+  // Any version: a seeded product carries a version 5 id.
+  @IsUUID('all', { each: true })
+  itemIds?: string[];
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()

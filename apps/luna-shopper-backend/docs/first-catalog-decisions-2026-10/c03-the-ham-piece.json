@@ -1,0 +1,22 @@
+{
+  "step": "C3",
+  "title": "Decision 14: the Incarlopsa ham piece is sold by the kilo",
+  "sources": [
+    "stage-c1/c3-ham.answers.json"
+  ],
+  "keys": "Each product is keyed as it stood at the start of the stage of plan 0192 that changed it (the items-snapshot of that stage). A product that a stage created is keyed as the create answered it. Each queue row is keyed as it stood at the start of stage 1 (stage-c1/rows-snapshot.c0-start.json).",
+  "decidedBy": "The owner, 2026-10-06 (decision 14).",
+  "count": 1,
+  "naturalKeys": {
+    "products": 1,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"product":{"brand":"Incarlopsa","nameEs":"Jamón serrano pieza","size":7500,"unit":"GRAM","packCount":null,"barcode":"8421384092375","localId":"47e4d9a0-b5be-4a8f-b697-d97ae505bcd0"},"decision":{"action":"set-unit","size":null,"unit":"KILOGRAM"},"status":"applied in stage 1","openDecision":14,"ownerDecision":"Decided by the owner, 2026-10-06: KILOGRAM with no size if its row is sold by weight. Else left.","why":"its only row (Mercadona 40be5d70, ext 58293) says soldByWeight true and no size, and the current price of each of the three warehouses is 9.56 = 9.56 per kg"}
+  ]
+}

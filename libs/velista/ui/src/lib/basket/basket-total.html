@@ -1,0 +1,89 @@
+<button
+  (click)="toggle()"
+  [attr.aria-expanded]="open()"
+  [attr.aria-label]="'basket.total.open' | rokuT: { amount: amounts().total }"
+  #control
+  #origin="cdkOverlayOrigin"
+  aria-haspopup="dialog"
+  cdkOverlayOrigin
+  class="number"
+  type="button"
+>
+  {{ 'basket.total.amount' | rokuT: { amount: amounts().total } }}
+</button>
+
+<!--
+  A popover and not a sheet (section 5): a few sentences and nothing to do, so no
+  route, no scrim, and the lines the number is about stay in view.
+-->
+<lib-anchored-popover
+  (closed)="close($event, control)"
+  [open]="open()"
+  [origin]="origin"
+  align="end"
+  labelledBy="basket-total-title"
+>
+  <div class="explain">
+    <!-- Rule T6: the one place the word "Estimated" is written. -->
+    <p class="title" id="basket-total-title">
+      {{ 'basket.total.title' | rokuT }}
+    </p>
+
+    <dl class="ledger">
+      <div class="entry">
+        <dt>{{ 'basket.total.bought' | rokuT }}</dt>
+        <dd>
+          {{ 'basket.total.amount' | rokuT: { amount: amounts().bought } }}
+        </dd>
+      </div>
+      <div class="entry">
+        <dt>{{ 'basket.total.left' | rokuT }}</dt>
+        <dd>
+          {{ 'basket.total.amount' | rokuT: { amount: amounts().left } }}
+        </dd>
+      </div>
+      <div class="entry is-sum">
+        <dt>{{ 'basket.total.total' | rokuT }}</dt>
+        <dd>
+          {{ 'basket.total.amount' | rokuT: { amount: amounts().total } }}
+        </dd>
+      </div>
+    </dl>
+
+    <p class="counts">
+      <span class="count with-product">
+        {{
+          'basket.total.withProduct'
+            | rokuT: { count: total().withProduct, lines: total().lines }
+        }}
+      </span>
+      <!-- "Of those 0" is a sentence about nothing, so it is not written. -->
+      @if (total().withProduct > 0) {
+        <span class="count with-price">
+          @if (chainName(); as chain) {
+            {{
+              'basket.total.withPriceAt'
+                | rokuT
+                  : {
+                      count: total().withPrice,
+                      products: total().withProduct,
+                      chain: chain,
+                    }
+            }}
+          } @else {
+            {{
+              'basket.total.withPrice'
+                | rokuT
+                  : {
+                      count: total().withPrice,
+                      products: total().withProduct,
+                    }
+            }}
+          }
+        </span>
+      }
+    </p>
+
+    <p class="why">{{ 'basket.total.why' | rokuT }}</p>
+  </div>
+</lib-anchored-popover>

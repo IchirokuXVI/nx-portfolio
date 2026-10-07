@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -16,21 +18,23 @@ import {
   gatewayErrorKey,
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import {
+  harvestRunPath,
+  harvestRunsPath,
+  type InfoContent,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
+  InfoButton,
   QueueFrame,
   ReferencePicker,
-  type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
-import { HARVEST_SEGMENT } from './harvest-paths';
+import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
-import {
-  runQueueBulk,
-  type PendingBulk,
-  type QueueBulkAct,
-} from './queue-bulk';
+import { HarvestStatus } from './harvest-status';
+import { ReviewChain } from './review-chain';
 import {
   toShopRow,
   type Shop,
@@ -80,9 +84,13 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
  * 0020, section 1.1). This screen used to hold its own rows and read one page of
  * a hundred, never looking at `nextCursor`, so a chain with more than a hundred
  * source locations showed a hundred of them with nothing on the screen saying
- * so. Moving onto the store fixes that as a side effect of getting the selection
- * and the bulk runner. It opens in the list view, which is the view it has
- * always had, and the review view is the new one.
+ * so.
+ *
+ * **One row at a time, with the rows in a column beside it** (admin plan
+ * 0049). It opened as a list with a checkbox on each row and a bar of bulk
+ * actions, and the owner removed that view from the three queues. What a bulk
+ * action did to many rows, the bar under the open row does to one: map it,
+ * ignore it, put an ignored one back, or take a mapping off.
  *
  * Nothing here creates a shop of ours. An unmapped row that is genuinely a new
  * store is created on the locations screen and then mapped here, because
@@ -98,22 +106,10 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     HarvestNotice,
     QueueFrame,
     ReferencePicker,
+    InfoButton,
   ],
   template: `
-    <p class="lead">{{ 'harvest.shops.lead' | rokuT }}</p>
-
     <div class="filters">
-      <div class="field">
-        <span>{{ 'harvest.shops.chain' | rokuT }}</span>
-        <lib-reference-picker
-          (valueChange)="chooseChain($event)"
-          [controlId]="'shops-chain'"
-          [lookup]="references"
-          [resource]="'supermarkets'"
-          [value]="supermarketId()"
-        />
-      </div>
-
       <label class="field">
         <span>{{ 'harvest.shops.filter.status' | rokuT }}</span>
         <select
@@ -123,46 +119,78 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         >
           <option value="">{{ 'harvest.shops.filter.any' | rokuT }}</option>
           @for (option of statuses; track option) {
-            <option [value]="option">
+            <option [selected]="option === status()" [value]="option">
               {{ 'harvest.shops.status.' + option | rokuT }}
             </option>
           }
         </select>
       </label>
+      <!-- What a row is and what the two answers do, behind an info button
+           (admin plan 0041, section 3). -->
+      <lib-info-button [info]="info" align="start" />
     </div>
 
     @if (queue === null) {
-      <p class="state">{{ 'harvest.shops.chooseChain' | rokuT }}</p>
+      <!-- This queue is read one chain at a time. With none chosen it lists
+           the chains that have shops waiting, and a press chooses the chain
+           (admin plan 0044, target 4). -->
+      <section class="chains">
+        <h2>{{ 'harvest.shops.chains.heading' | rokuT }}</h2>
+        @if (waitingChains().length === 0) {
+          <p class="state">
+            {{
+              (countsKnown()
+                ? 'harvest.shops.chains.none'
+                : 'harvest.shops.chains.unknown'
+              ) | rokuT
+            }}
+          </p>
+        } @else {
+          <ul>
+            @for (chain of waitingChains(); track chain.supermarketId) {
+              <li>
+                <button
+                  (click)="review.choose(chain.supermarketId)"
+                  [attr.data-chain]="chain.supermarketId"
+                  type="button"
+                >
+                  <span class="chain-name">{{
+                    names.nameOf(chain.supermarketId)
+                  }}</span>
+                  <span
+                    [attr.aria-label]="
+                      'shell.waiting' | rokuT: { count: chain.count }
+                    "
+                    class="waiting"
+                    >{{ chain.count }}</span
+                  >
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </section>
     } @else {
       <lib-queue-frame
-        (clearSelection)="queue.clearSelection()"
         (confirm)="primary()"
         (loadMore)="queue.loadMore()"
-        (openRow)="queue.focus($event)"
-        (pickRow)="queue.toggle($event)"
+        (openRow)="openRow($event)"
         (reject)="rejectCurrent()"
-        (selectAll)="queue.selectLoaded()"
-        (skip)="queue.skip()"
-        (stop)="queue.stopBulk()"
+        (skip)="skip()"
         [busy]="queue.busy()"
         [canLoadMore]="queue.canLoadMore()"
         [confirmKey]="confirmKey()"
-        [decided]="queue.decided()"
+        [currentId]="current()?.id ?? null"
         [empty]="queue.empty()"
         [errorKey]="errorKey()"
         [failed]="failed()"
         [loading]="loading()"
         [loadingMore]="queue.loadingMore()"
-        [progress]="queue.bulk()"
-        [progressKey]="progressKey()"
-        [rejectKey]="rejectKey()"
-        [remaining]="rows().length"
-        [report]="report()"
+        [rejectDisabled]="!canReject()"
         [rows]="rows()"
-        [selected]="queue.selected()"
-        [selectedCount]="queue.selectedCount()"
-        defaultView="list"
         emptyKey="harvest.shops.empty"
+        rejectKey="harvest.shops.action.ignore"
+        rejectShortKey="harvest.shops.action.ignoreShort"
         titleKey="harvest.shops.heading"
       >
         <lib-harvest-notice
@@ -271,6 +299,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
               <lib-reference-picker
                 (valueChange)="pickLocation($event)"
                 [controlId]="'shops-location-' + row.id"
+                [label]="'harvest.shops.map.pick' | rokuT"
                 [lookup]="references"
                 [resource]="'locations'"
                 [scope]="locationScope()"
@@ -283,10 +312,10 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
           }
         }
 
-        <!-- Section 2 keeps the columns this screen already had, the match
-             rule among them, because a row the automatic match bound and a row
-             a person bound differ in nothing else. -->
-        <ng-template #queueRow let-row>
+        <!-- One line of the column. It keeps the match rule, because a row
+             the automatic match bound and a row a person bound differ in
+             nothing else. -->
+        <ng-template #queueLine let-row>
           <code class="code">{{ row.code }}</code>
           <strong class="printed">{{ row.printedName }}</strong>
           <span [class]="'badge ' + row.status" class="badge">
@@ -317,30 +346,6 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
           }}</span>
           <span class="none">{{ row.lastSeen }}</span>
         </ng-template>
-
-        <div class="bulk" queueBulk>
-          <button
-            (click)="askIgnore()"
-            [disabled]="ignorable().length === 0"
-            type="button"
-          >
-            {{ 'harvest.shops.action.ignore' | rokuT }}
-          </button>
-          <button
-            (click)="askUnignore()"
-            [disabled]="unignorable().length === 0"
-            type="button"
-          >
-            {{ 'harvest.shops.action.unignore' | rokuT }}
-          </button>
-          <button
-            (click)="askUnmap()"
-            [disabled]="unmappable().length === 0"
-            type="button"
-          >
-            {{ 'harvest.shops.action.unmap' | rokuT }}
-          </button>
-        </div>
       </lib-queue-frame>
     }
 
@@ -360,19 +365,6 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         }}</a>
       </lib-confirm-dialog>
     }
-
-    @if (pending(); as bulk) {
-      <lib-confirm-dialog
-        (confirm)="go(bulk)"
-        (dismiss)="pending.set(null)"
-        [bodyArgs]="{ count: bulk.count, leftAlone: bulk.leftAlone }"
-        [bodyKey]="bulk.bodyKey"
-        [busy]="queue !== null && queue.busy()"
-        [confirmKey]="bulk.confirmKey"
-        [headingKey]="bulk.headingKey"
-        [tone]="bulk.tone"
-      />
-    }
   `,
   styles: `
     :host {
@@ -382,7 +374,6 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
       gap: var(--admin-space-4);
     }
 
-    .lead,
     .state,
     .none {
       color: var(--admin-ink-muted);
@@ -398,13 +389,75 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-4);
+      align-items: flex-end;
     }
 
     .field {
       display: flex;
-      flex: 1 1 14rem;
+      flex: 0 1 14rem;
       flex-direction: column;
       gap: var(--admin-space-1);
+    }
+
+    .chains {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+    }
+
+    .chains h2 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    .chains ul {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      max-inline-size: 32rem;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      list-style: none;
+    }
+
+    .chains li + li {
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    .chains button {
+      display: flex;
+      gap: var(--admin-space-3);
+      align-items: center;
+      inline-size: 100%;
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: none;
+      border-radius: 0;
+      background: none;
+      font: inherit;
+      text-align: start;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .chains button:hover {
+      background: var(--admin-accent-wash);
+    }
+
+    .chain-name {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .waiting {
+      padding: 0.0625rem 0.375rem;
+      border-radius: 0.5625rem;
+      background: var(--admin-waiting-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-waiting-on-wash);
     }
 
     .field > span {
@@ -547,7 +600,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     }
 
     .map {
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border-color: var(--admin-accent);
       background: var(--admin-accent);
       color: var(--admin-accent-ink);
@@ -555,18 +608,6 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
 
     .map:active:not(:disabled) {
       transform: translateY(1px);
-    }
-
-    .bulk {
-      display: flex;
-      flex: 3;
-      gap: var(--admin-space-3);
-    }
-
-    .bulk button {
-      flex: 1;
-      min-block-size: 3rem;
-      font-size: 1rem;
     }
 
     button {
@@ -587,6 +628,16 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShopsQueuePage {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'harvest.shops.heading',
+    points: [
+      'harvest.shops.info.row',
+      'harvest.shops.info.map',
+      'harvest.shops.info.unmapped',
+    ],
+  };
+
   private readonly _service = inject(HARVEST_SERVICE);
 
   readonly shell = inject(HarvestShell);
@@ -619,12 +670,6 @@ export class ShopsQueuePage {
   /** The shop of ours the operator picked, waiting to be confirmed. */
   readonly confirming = signal<PendingMapping | null>(null);
 
-  /** The bulk action waiting for an answer, or null when none is. */
-  readonly pending = signal<PendingBulk | null>(null);
-  /** What the last bulk run did, by name. Cleared when another one starts. */
-  readonly report = signal<QueueReport | null>(null);
-  readonly progressKey = signal('harvest.queue.bulk.progress');
-
   /**
    * The names of the shops of ours that rows already point at.
    *
@@ -644,8 +689,16 @@ export class ShopsQueuePage {
     );
   });
 
-  /** The row the review view is about, which is the head of the queue. */
-  readonly current = computed<ShopRow | null>(() => this.rows()[0] ?? null);
+  /**
+   * The row that is open, which the queue names and the column marks. Looked
+   * up in `rows` by its id, so that it is the row as this page draws it.
+   */
+  readonly current = computed<ShopRow | null>(() => {
+    const shop = this.queue?.current() ?? null;
+    return shop === null
+      ? null
+      : (this.rows().find((row) => row.id === shop.id) ?? null);
+  });
 
   readonly loading = computed(() => this.queue?.loading() ?? false);
   readonly failed = computed(() => this.queue?.failed() ?? false);
@@ -655,7 +708,7 @@ export class ShopsQueuePage {
   );
 
   /**
-   * What the review view's primary button says, which is what it does.
+   * What the primary button of the open row says, which is what it does.
    *
    * One row, one primary decision. An `UNMAPPED` row is mapped, an `ACTIVE` row
    * is unmapped, an `IGNORED` row is put back. Ignoring is the "no" beside it,
@@ -671,14 +724,12 @@ export class ShopsQueuePage {
       : 'harvest.shops.action.unignore';
   });
 
-  readonly rejectKey = computed(() =>
-    this.current()?.canIgnore === true ? 'harvest.shops.action.ignore' : null
-  );
-
-  /** The selected rows each bulk action can actually be applied to. */
-  readonly ignorable = computed(() => this._selected(canIgnore));
-  readonly unignorable = computed(() => this._selected(canUnignore));
-  readonly unmappable = computed(() => this._selected(canUnmap));
+  /**
+   * Whether the row in front can be ignored. An ignored row cannot be ignored
+   * again, and the button stays in the bar, disabled: every button keeps its
+   * place from one row to the next.
+   */
+  readonly canReject = computed(() => this.current()?.canIgnore === true);
 
   /**
    * What the mapping picker is over: this chain's shops, and no other's.
@@ -691,9 +742,41 @@ export class ShopsQueuePage {
     supermarketId: this.supermarketId(),
   }));
 
+  /** The chain the four queues share, and the way to choose one. */
+  readonly review = inject(ReviewChain);
+  readonly names = inject(ChainNames);
+  private readonly _status = inject(HarvestStatus);
+
+  /** The chains that have shops waiting, most first, for when none is chosen. */
+  readonly waitingChains = computed(
+    () => this._status.waiting()?.shopsByChain ?? []
+  );
+
+  /** Whether the counts have been read, so that "none" is not said too soon. */
+  readonly countsKnown = computed(() => this._status.waiting() !== null);
+
+  constructor() {
+    // The chain comes from the filter the four queues share (admin plan
+    // 0044). Each change builds the queue again, and with no chain there is
+    // no queue: the page lists the chains instead.
+    effect(() => {
+      const chain = this.review.chain();
+      untracked(() => this.chooseChain(chain));
+    });
+
+    effect(() => {
+      const ids = this.waitingChains().map((chain) => chain.supermarketId);
+      untracked(() => void this.names.resolve(ids));
+    });
+  }
+
   chooseChain(supermarketId: string): void {
     this.supermarketId.set(supermarketId);
     this.cancelMapping();
+    if (supermarketId === '') {
+      this._queue.set(null);
+      return;
+    }
     void this.load();
   }
 
@@ -716,7 +799,6 @@ export class ShopsQueuePage {
       return;
     }
 
-    this.report.set(null);
     const queue = new QueueStore<Shop>(
       async (cursor) => {
         try {
@@ -745,7 +827,7 @@ export class ShopsQueuePage {
     await queue.load();
   }
 
-  /** The review view's primary act, which is whatever this row's is. */
+  /** The open row's primary act, which is whatever this row's is. */
   primary(): void {
     const row = this.current();
     if (row === null) {
@@ -759,7 +841,21 @@ export class ShopsQueuePage {
     void (row.canUnmap ? this.unmap(row) : this.unignore(row));
   }
 
-  /** The review view's "no", which exists only on a row that has one. */
+  /**
+   * Another row of the column was pressed. A mapping that was being picked
+   * for the row before it is dropped, since its picker goes with that row.
+   */
+  openRow(id: string): void {
+    this.cancelMapping();
+    this.queue?.focus(id);
+  }
+
+  skip(): void {
+    this.cancelMapping();
+    void this.queue?.skip();
+  }
+
+  /** The open row's "no", which exists only on a row that has one. */
   rejectCurrent(): void {
     const row = this.current();
     if (row !== null && row.canIgnore) {
@@ -798,6 +894,13 @@ export class ShopsQueuePage {
       'locations',
       supermarketLocationId
     );
+
+    // The lookup took a moment, and the operator can open another row or
+    // cancel in it. The answer then belongs to a picker that is gone, and a
+    // dialog raised from it would ask to bind a shop nobody is looking at.
+    if (this.mapping() !== shop) {
+      return;
+    }
 
     this.confirming.set({
       shopId: shop.id,
@@ -860,52 +963,6 @@ export class ShopsQueuePage {
     return this._decide(row.id, () => this._service.unignoreShop(row.id));
   }
 
-  askIgnore(): void {
-    this._ask({
-      headingKey: 'harvest.shops.bulk.ignoreConfirm.heading',
-      bodyKey: 'harvest.shops.bulk.ignoreConfirm.body',
-      confirmKey: 'harvest.shops.action.ignore',
-      progressKey: 'harvest.shops.bulk.ignoring',
-      count: this.ignorable().length,
-      tone: 'danger',
-      act: (shop) => this._service.ignoreShop(shop.id),
-      applies: canIgnore,
-    });
-  }
-
-  askUnignore(): void {
-    this._ask({
-      headingKey: 'harvest.shops.bulk.unignoreConfirm.heading',
-      bodyKey: 'harvest.shops.bulk.unignoreConfirm.body',
-      confirmKey: 'harvest.shops.action.unignore',
-      progressKey: 'harvest.shops.bulk.unignoring',
-      count: this.unignorable().length,
-      tone: 'primary',
-      act: (shop) => this._service.unignoreShop(shop.id),
-      applies: canUnignore,
-    });
-  }
-
-  askUnmap(): void {
-    this._ask({
-      headingKey: 'harvest.shops.bulk.unmapConfirm.heading',
-      bodyKey: 'harvest.shops.bulk.unmapConfirm.body',
-      confirmKey: 'harvest.shops.action.unmap',
-      progressKey: 'harvest.shops.bulk.unmapping',
-      count: this.unmappable().length,
-      tone: 'danger',
-      act: (shop) => this._service.unmapShop(shop.id),
-      applies: canUnmap,
-    });
-  }
-
-  /** Go through with the confirmed bulk action. */
-  go(bulk: PendingBulk): void {
-    this.pending.set(null);
-    this.progressKey.set(bulk.progressKey);
-    void bulk.run();
-  }
-
   /**
    * Where a row's last run is read, and where a run is started.
    *
@@ -915,50 +972,11 @@ export class ShopsQueuePage {
    * directly in its spec, where there is none.
    */
   runLink(runId: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', runId];
+    return harvestRunPath(runId);
   }
 
   runsLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs'];
-  }
-
-  private _ask(asked: {
-    headingKey: string;
-    bodyKey: string;
-    confirmKey: string;
-    progressKey: string;
-    count: number;
-    tone: 'danger' | 'primary';
-    act: (shop: Shop) => Promise<Shop>;
-    applies: (shop: Shop) => boolean;
-  }): void {
-    const selected = this.queue?.selectedCount() ?? 0;
-    this.pending.set({
-      headingKey: asked.headingKey,
-      bodyKey: asked.bodyKey,
-      confirmKey: asked.confirmKey,
-      progressKey: asked.progressKey,
-      count: asked.count,
-      leftAlone: selected - asked.count,
-      tone: asked.tone,
-      run: () =>
-        this._run({
-          act: async (shop) => this._settled(await asked.act(shop)),
-          applies: asked.applies,
-          nameOf: (shop) => shop.printedName,
-        }),
-    });
-  }
-
-  private async _run(bulk: QueueBulkAct<Shop>): Promise<void> {
-    const queue = this.queue;
-    if (queue === null) {
-      return;
-    }
-
-    this.report.set(null);
-    this.report.set(await runQueueBulk(queue, bulk));
-    this.progressKey.set('harvest.queue.bulk.progress');
+    return harvestRunsPath();
   }
 
   /**
@@ -978,19 +996,13 @@ export class ShopsQueuePage {
     decide: () => Promise<Shop>
   ): Promise<void> {
     await this.queue?.decideAt(id, async () => this._settled(await decide()));
+    this._status.refresh();
   }
 
   /** The decided row, or null when the filter no longer describes it. */
   private _settled(shop: Shop): Shop | null {
     const status = this.status();
     return status === '' || shop.status === status ? shop : null;
-  }
-
-  private _selected(applies: (shop: Shop) => boolean): readonly Shop[] {
-    const selected = this.queue?.selected() ?? new Set<string>();
-    return (this.queue?.items() ?? []).filter(
-      (shop) => selected.has(shop.id) && applies(shop)
-    );
   }
 
   /**
@@ -1032,20 +1044,6 @@ export class ShopsQueuePage {
       return next;
     });
   }
-}
-
-/** A row that is not already ignored, which is what ignoring one needs. */
-function canIgnore(shop: Shop): boolean {
-  return shop.status !== 'IGNORED';
-}
-
-function canUnignore(shop: Shop): boolean {
-  return shop.status === 'IGNORED';
-}
-
-/** Only an `ACTIVE` row points at anything, so only one can be unmapped. */
-function canUnmap(shop: Shop): boolean {
-  return shop.status === 'ACTIVE';
 }
 
 /** A mapping the operator picked and has not yet gone through with. */

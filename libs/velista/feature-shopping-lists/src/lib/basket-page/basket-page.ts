@@ -66,6 +66,8 @@ import {
   AnchoredPopover,
   type AnchoredPopoverClose,
   BasketIcon,
+  BasketTotalBar,
+  BasketTotalNumber,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
@@ -77,6 +79,7 @@ import {
   type ListPickerRow,
   ListTools,
   MapIcon,
+  NoPricesNote,
   OfflineIcon,
   PageHeader,
   PageHeaderAction,
@@ -172,6 +175,8 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
     AnchoredPopover,
     BasketIcon,
     BasketRow,
+    BasketTotalBar,
+    BasketTotalNumber,
     CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
@@ -182,6 +187,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
     ListPicker,
     ListTools,
     MapIcon,
+    NoPricesNote,
     OfflineIcon,
     PageHeader,
     PageHeaderAction,
@@ -1774,6 +1780,41 @@ export class BasketPage {
 
   /** How many of the five properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;
+
+  // --- What the lines cost (velista `0132`) ---------------------------------
+
+  /**
+   * What the lines on screen come to, read from the store and handed down.
+   *
+   * The page only decides which of the three parts is drawn. With a priced line
+   * it is the number and the bar; with lines and none priced it is the small
+   * row; with no countable line it is nothing.
+   */
+  protected readonly total = this._view.total;
+
+  /** The reader's language tag, for the money in the number and the bar. */
+  protected readonly locale = this._locale;
+
+  /**
+   * The chain the popover names in "have a price at Mercadona", or null.
+   *
+   * Only while {@link pricedAtShop} is true, and not whenever a shop is chosen.
+   * A read at a new shop still out, and a shop that prices nothing on this
+   * basket, both leave every row on the cheapest price anywhere. The sum reads
+   * those same prices, so naming the shop then would be a claim about prices the
+   * number does not hold.
+   */
+  protected readonly totalChain = computed(() =>
+    this.pricedAtShop() ? (this._view.chosenShop()?.chain ?? null) : null
+  );
+
+  /**
+   * Whether the reader is a guest, who cannot open a line, so the small row
+   * does not offer the steps that start there (section 6).
+   */
+  protected readonly isGuest = computed(
+    () => this._store.me()?.kind === 'GUEST'
+  );
 
   /**
    * The chips, with their words resolved.

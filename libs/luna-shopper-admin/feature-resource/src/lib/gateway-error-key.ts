@@ -111,11 +111,21 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       return 'resource.error.sectionOfAnotherChain';
     case 'section_slug_taken':
       return 'resource.error.sectionSlugTaken';
+    case 'location_external_ref_taken':
+      // A shop given a reference that another shop holds (backend plan 0195).
+      // The catalog holds one shop for each reference, so the fix is on that
+      // other shop, and the generic conflict sentence does not say so.
+      return 'resource.error.locationExternalRefTaken';
     case 'run_in_progress':
       // A row the harvester is working on right now. A conflict, but the useful
       // half is which conflict: waiting for the run to finish is the whole of
       // what the operator has to do.
       return 'resource.error.runInProgress';
+    case 'guest_has_no_roles':
+      // A role given to a guest account (backend plan 0175). The page of a
+      // person offers a guest no role, so this is a screen that is behind:
+      // the account was a registered one when the page read it.
+      return 'resource.error.guestHasNoRoles';
   }
 
   switch (error.status) {

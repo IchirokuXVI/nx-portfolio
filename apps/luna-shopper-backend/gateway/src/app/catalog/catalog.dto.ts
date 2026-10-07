@@ -378,7 +378,7 @@ export class CreateItemDto {
     nullable: true,
     maxLength: 32,
     description:
-      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present.',
+      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A real barcode or null (plan 0184): 8, 12, 13 or 14 digits with a valid check digit. Anything else, and a 13 digit in-store code that starts with 2, is refused with `item_ean_invalid`.',
   })
   @IsOptional()
   @IsString()
@@ -491,7 +491,7 @@ export class UpdateItemDto {
     nullable: true,
     maxLength: 32,
     description:
-      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present.',
+      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A value that changes the EAN is a real barcode or null (plan 0184), and anything else is refused with `item_ean_invalid`. Absent, or the EAN the product already holds, is never refused, so a product that holds an old in-store code still saves its other fields.',
   })
   @IsOptional()
   @IsString()
@@ -1800,6 +1800,43 @@ export class RegisterBrandsDto {
   @ValidateNested({ each: true })
   @Type(() => RegisterBrandsEntryDto)
   brands!: RegisterBrandsEntryDto[];
+}
+
+/**
+ * One more barcode for a product (plan 0185).
+ *
+ * One field. It is refused with `item_ean_invalid` unless it is a real
+ * barcode, by the same function the product create uses.
+ */
+export class AddItemEanDto {
+  @ApiProperty({
+    maxLength: 32,
+    description:
+      'A barcode to add to the product (plan 0185): 8, 12, 13 or 14 digits with a valid check digit. A 13 digit in-store code that starts with 2 is refused with `item_ean_invalid`, and a barcode another product holds with `item_ean_held`.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  ean!: string;
+}
+
+/**
+ * A printed name that also names this brand (plan 0178).
+ *
+ * One field, and it is the printed text rather than a key: the service keys it
+ * with the same function every brand is keyed with, so `Poseidón` and
+ * `poseidon` are one homonym.
+ */
+export class AddBrandHomonymDto {
+  @ApiProperty({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'The printed name, or its key. It is keyed before it is stored, a text with no letter or digit is refused, and so is the brand’s own key.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  printedKey!: string;
 }
 
 /**

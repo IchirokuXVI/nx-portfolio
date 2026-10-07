@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The rail says which deployment this is</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h2,.ab p{margin:0}
+.ab h2{font-size:15px;font-weight:600}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.rail{width:76px;height:400px;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none;border-radius:8px 0 0 8px}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;position:relative;text-decoration:none}
+.rail a.on{color:#fff !important}
+.rail svg,.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fcfcfa;color:#14171a}
+.page{height:400px;background:#fcfcfa;border:1px solid #d9dcd6;border-left:0;border-radius:0 8px 8px 0;padding:14px}
+.ln{height:10px;border-radius:5px;background:#e9ebe6;margin-bottom:10px}
+.bnav{height:58px;display:flex;border-radius:0 0 8px 8px}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;position:relative;text-decoration:none}
+.bnav a.on{color:#fff !important}
+.bnav .badge{top:5px;right:10px}
+.ptop{height:60px;background:#fcfcfa;border:1px solid #d9dcd6;border-bottom:0;border-radius:8px 8px 0 0;padding:12px}
+</style>
+</helmet>
+<div class="ab col" style="width: 1000px; height: 860px; padding: 28px 32px; gap: 20px">
+
+<div class="rowx" style="gap: 28px; align-items: flex-start">
+
+<div class="col grow" style="gap: 8px">
+<h2>Production</h2>
+<div class="rowx" style="align-items: stretch">
+<nav class="rail" style="background: #6e1a1f" aria-label="Production rail">
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="background: #8f2a30"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<div class="grow"></div>
+<span class="env">PRODUCTION</span>
+</nav>
+<div class="page grow"><div class="ln" style="width: 60%"></div><div class="ln"></div><div class="ln" style="width: 80%"></div></div>
+</div>
+<p class="mono mut">#6E1A1F, current #8F2A30, text #F3D9DA</p>
+</div>
+
+<div class="col grow" style="gap: 8px">
+<h2>Staging</h2>
+<div class="rowx" style="align-items: stretch">
+<nav class="rail" style="background: #6b4605" aria-label="Staging rail">
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="background: #8a5d0c"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+</nav>
+<div class="page grow"><div class="ln" style="width: 60%"></div><div class="ln"></div><div class="ln" style="width: 80%"></div></div>
+</div>
+<p class="mono mut">#6B4605, current #8A5D0C, text #F6E7C8</p>
+</div>
+
+<div class="col grow" style="gap: 8px">
+<h2>Local</h2>
+<div class="rowx" style="align-items: stretch">
+<nav class="rail" style="background: #173f5c" aria-label="Local rail">
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="background: #23587d"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<div class="grow"></div>
+<span class="env">LOCAL</span>
+</nav>
+<div class="page grow"><div class="ln" style="width: 60%"></div><div class="ln"></div><div class="ln" style="width: 80%"></div></div>
+</div>
+<p class="mono mut">#173F5C, current #23587D, text #D3E3EF</p>
+</div>
+
+</div>
+
+<div class="rowx" style="gap: 28px; align-items: flex-start">
+<div class="col grow">
+<div class="ptop"><div class="ln" style="width: 50%"></div></div>
+<nav class="bnav" style="background: #6e1a1f" aria-label="Production bar">
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="box-shadow: inset 0 2px 0 #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a style="color: #f3d9da"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+<div class="col grow">
+<div class="ptop"><div class="ln" style="width: 50%"></div></div>
+<nav class="bnav" style="background: #6b4605" aria-label="Staging bar">
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="box-shadow: inset 0 2px 0 #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a style="color: #f6e7c8"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+<div class="col grow">
+<div class="ptop"><div class="ln" style="width: 50%"></div></div>
+<nav class="bnav" style="background: #173f5c" aria-label="Local bar">
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" style="box-shadow: inset 0 2px 0 #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a style="color: #d3e3ef"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+</div>
+
+<div class="col" style="gap: 6px; max-width: 760px">
+<p>The rail on a wide screen and the bar on a phone take the color of the deployment. The name of the deployment is also written in the rail, and in the More sheet on a phone, so that the color is never the only sign.</p>
+<p class="mut">A deployment the app does not know keeps the neutral rail, #14211D. The sign in page shows the same color as a band at the top.</p>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

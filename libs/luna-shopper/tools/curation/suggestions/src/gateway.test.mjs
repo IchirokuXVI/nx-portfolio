@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { makeGateway } from './gateway.mjs';
+import { makeGateway, toBulkCreateItem, toCreateItemBody } from './gateway.mjs';
 import { SEARCH_TEXT_MAX } from './rules.mjs';
 
 /** A session that records what it was asked and answers from `respond`. */
@@ -45,6 +45,62 @@ test('searchItems sends a short text as it is, and nothing for no text', async (
   assert.equal(session.calls.length, 1);
 });
 
+const DECIDED_ITEM = {
+  nameEs: 'Café con leche en cápsulas',
+  nameEn: null,
+  brand: 'Dolce Gusto',
+  ean: null,
+  unitSize: 160,
+  defaultUnit: 'GRAM',
+  categorySlugs: ['coffee'],
+  categoryIds: ['c-coffee'],
+};
+
+test('the bulk create carries a pack count the decision stated, and only then (backend plan 0177)', () => {
+  assert.equal(
+    toBulkCreateItem({ ...DECIDED_ITEM, packCount: 16 }).packCount,
+    16
+  );
+  // Absent is how the bulk route is told to take the row's own count. A null
+  // here would create the product with none.
+  assert.equal('packCount' in toBulkCreateItem(DECIDED_ITEM), false);
+  assert.equal(
+    'packCount' in toBulkCreateItem({ ...DECIDED_ITEM, packCount: null }),
+    false
+  );
+});
+
+test('both creates send both names (backend plan 0184)', () => {
+  const decided = { ...DECIDED_ITEM, nameEn: 'Coffee with milk capsules' };
+  const both = {
+    es: 'Café con leche en cápsulas',
+    en: 'Coffee with milk capsules',
+  };
+  assert.deepEqual(toBulkCreateItem(decided).name, both);
+  assert.deepEqual(toCreateItemBody(decided).name, both);
+});
+
+test('a decision recorded before both names were required is sent as it was decided', () => {
+  // The bulk route refuses that operation with `NAME_EN_MISSING`, which names
+  // the row a person has to finish. Nothing here invents an English name.
+  assert.deepEqual(toBulkCreateItem(DECIDED_ITEM).name, {
+    es: 'Café con leche en cápsulas',
+  });
+});
+
+test('the rehearsal create carries the count the real create will write', () => {
+  // The decision's count wins, as it does on the bulk route.
+  assert.equal(
+    toCreateItemBody({ ...DECIDED_ITEM, packCount: 16 }, 6).packCount,
+    16
+  );
+  // Otherwise the row's own, so a later row of the run is compared against
+  // the product the catalog will really hold.
+  assert.equal(toCreateItemBody(DECIDED_ITEM, 16).packCount, 16);
+  assert.equal('packCount' in toCreateItemBody(DECIDED_ITEM, null), false);
+  assert.equal('packCount' in toCreateItemBody(DECIDED_ITEM), false);
+});
+
 test('getItem answers null for a 404 and throws every other failure', async () => {
   const failing = (status) =>
     makeGateway(
@@ -69,4 +125,28 @@ test('getItem answers null for a 404 and throws every other failure', async () =
 
   const found = makeGateway(recordingSession(() => ({ id: 'i1' })));
   assert.deepEqual(await found.getItem('i1'), { id: 'i1' });
+});
+
+test('findByEan answers the product that holds the barcode, as its first or as any other (backend plan 0185)', async () => {
+  const milk = {
+    id: 'i1',
+    ean: '8402001002083',
+    eans: ['8402001002083', '8402001047251'],
+  };
+  // The search also answers a text hit that merely scored well.
+  const session = recordingSession(() => ({
+    items: [
+      { id: 'i-text', ean: '4006381333931', eans: ['4006381333931'] },
+      milk,
+    ],
+  }));
+  const gateway = makeGateway(session);
+
+  assert.equal((await gateway.findByEan('8402001047251')).id, 'i1');
+  assert.equal((await gateway.findByEan('8402001002083')).id, 'i1');
+  assert.equal(await gateway.findByEan('96385074'), null);
+  // No barcode asks nothing.
+  const asked = session.calls.length;
+  assert.equal(await gateway.findByEan(null), null);
+  assert.equal(session.calls.length, asked);
 });

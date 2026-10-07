@@ -93,12 +93,24 @@ export interface HarvestServiceI {
    *
    * The other answer to an import refused with `place_matches_location`. It
    * never creates a shop: it fills only what the named shop lacks and marks
-   * the place imported. The shop must be one of the place's own chain.
+   * the place imported. The answer is the place and what was filled (backend
+   * plan 0193).
    */
   linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView>;
+  ): Promise<Wire.HarvestPlaceLinkResult>;
+  /**
+   * Link every place that a shop was made from (backend plan 0193, target 8).
+   *
+   * Without `apply` it changes nothing and answers what it would do, which is
+   * the preview the screen shows before it asks. With `apply` it links each
+   * place that exactly one shop carries the reference of, and answers the
+   * same list. It is not narrowed by a chain: it reads every undecided place.
+   */
+  linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult>;
 
   /**
    * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).
@@ -110,7 +122,7 @@ export interface HarvestServiceI {
    * `setManualItemRef`, `confirmItemRef`, `rejectItemRef`, `listAliases`,
    * `acceptAlias`, `createItemFromAlias` and `rejectAlias` are gone with them.
    */
-  listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage>;
+  listEntries(query: EntryQuery): Promise<Wire.HarvestQueuedSourceEntryPage>;
 
   /**
    * Bind a row to a product the catalog already holds.

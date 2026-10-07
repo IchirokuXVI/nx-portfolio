@@ -3,12 +3,23 @@ import {
   ADMIN_LISTS_PATH,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { ListDetailPage } from './list-detail-page';
+import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  defineResource,
+  type InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
+import { LIST_LINES_PANEL, ListLinesPanel } from './list-lines-panel';
 import { LIST_SEED, type ListRow } from './people-seed';
+import { ZONE_CAUTION, ZONE_PARAM } from './shopper-params';
 
 /** A standing list inside a zone, as the back office reads one. */
 export type List = ListRow;
+
+/** What the info button of a list says (admin plan 0045, target 7). */
+export const LIST_INFO: InfoContent = {
+  title: 'people.lists.info.title',
+  points: ['people.lists.info.corrects', 'people.lists.info.adds'],
+};
 
 /**
  * The standing lists (plan 0007, section 2, widened by plan 0009, section 4.1).
@@ -29,19 +40,25 @@ export type List = ListRow;
  * something the backend does, and who wrote a list is a fact rather than a
  * setting.
  *
- * **Its lines are on the detail screen and on their own screen.** Reading what a
- * household wrote down is a deliberate click, not something that happens while
- * browsing zones, which is why the zone screen shows list names and counts and
- * this one shows contents.
+ * **The lists are a tab of their zone** (admin plan 0045), so the zone is read
+ * from the address and is no filter. Lists by who made them is dropped: that
+ * filter has no screen in this design.
+ *
+ * **Its lines are on the list's own page.** Reading what a household wrote
+ * down is a deliberate click, not something that happens while browsing zones,
+ * which is why the tab shows list names and counts and the page shows
+ * contents. `shoppersRoutes` mounts that page.
+ *
+ * **The page is the record page** (admin plan 0058): one section, the lines
+ * as a panel of their own, and a Record block that says who made the list.
  */
 export const LISTS = defineResource<List>({
   name: 'lists',
   segment: 'lists',
+  parent: { resource: 'zones', param: ZONE_PARAM, filter: 'zoneId' },
   labels: { one: 'people.lists.one', many: 'people.lists.many' },
 
   title: (row) => row.name,
-
-  detail: ListDetailPage,
 
   fields: [
     {
@@ -97,37 +114,83 @@ export const LISTS = defineResource<List>({
       name: 'createdAt',
       label: 'people.lists.createdAt',
       help: 'people.field.createdAtHelp',
+      time: true,
+      editable: false,
+    },
+    {
+      kind: 'date',
+      name: 'updatedAt',
+      label: 'people.lists.updatedAt',
+      help: 'people.field.updatedAtHelp',
+      time: true,
       editable: false,
     },
   ],
 
   list: {
-    columns: ['name', 'zoneName', 'lineCount', 'sharedWithZone', 'createdAt'],
-    compact: ['zoneName', 'lineCount'],
+    // No zone column: the tab is the zone's.
+    columns: ['name', 'lineCount', 'sharedWithZone', 'createdAt'],
+    compact: ['lineCount', 'sharedWithZone'],
   },
 
-  formNote: 'people.broadcast',
+  info: LIST_INFO,
+  caution: ZONE_CAUTION,
+
+  /**
+   * The page of a list (admin plan 0058, section 2.1).
+   *
+   * The lines are a part and not a list of another resource, because each
+   * row has buttons, and a list tab holds none. Their count is beside the
+   * heading of the panel and in no section.
+   *
+   * The zone is the parent, so the way back names it. It is also a row of
+   * the Record block, because every field is drawn somewhere, and a field
+   * that no section and no fact names would get a section of its own.
+   */
+  record: {
+    sections: [
+      {
+        title: 'people.lists.section.list',
+        fields: ['name', 'autoApproveLines', 'sharedWithZone'],
+      },
+    ],
+    children: [
+      {
+        as: 'panel',
+        name: LIST_LINES_PANEL,
+        label: 'people.lists.record.lines',
+        component: ListLinesPanel,
+        count: 'lineCount',
+      },
+    ],
+    facts: {
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      also: ['zoneName'],
+    },
+  },
 
   actions: { edit: true, delete: true },
 
-  filters: [
-    {
-      kind: 'reference',
-      param: 'zoneId',
-      label: 'people.lists.filter.zoneId',
-      resource: 'zones',
-    },
-    {
-      kind: 'reference',
-      param: 'createdByUserId',
-      label: 'people.lists.filter.createdByUserId',
-      resource: 'users',
-    },
-  ],
-
-  gateway: () =>
-    inject(RESOURCE_GATEWAYS).for<List>({
+  gateway: () => {
+    const changes = inject(ResourceChanges);
+    const lists = inject(RESOURCE_GATEWAYS).for<List>({
       path: ADMIN_LISTS_PATH,
       seed: LIST_SEED,
-    }),
+    });
+
+    return {
+      list: (query) => lists.list(query),
+      read: (id, shown) => lists.read(id, shown),
+      create: (input) => lists.create(input),
+      update: (id, input) => lists.update(id, input),
+      remove: async (id) => {
+        await lists.remove(id);
+        // The zone counts its lists, and one of them is gone. The column of
+        // zones beside the page says that count.
+        changes.wrote('zones');
+      },
+    };
+  },
 });

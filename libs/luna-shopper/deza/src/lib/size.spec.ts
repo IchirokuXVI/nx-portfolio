@@ -1,4 +1,4 @@
-import { packCountIn, splitSize } from './size';
+import { packCountIn, sizeOf, splitSize } from './size';
 
 /**
  * Real descriptions, read off the live listing on 2026-09-05, kept here rather
@@ -107,6 +107,61 @@ describe('splitSize', () => {
   });
 });
 
+describe('sizeOf (plan 0177)', () => {
+  it.each([
+    ['75 cl', 750, 'MILLILITER'],
+    ['1 L', 1, 'LITER'],
+    ['1.5 L', 1.5, 'LITER'],
+    ['1,75 l', 1.75, 'LITER'],
+    ['1 Kg', 1, 'KILOGRAM'],
+    ['400 g', 400, 'GRAM'],
+    ['10 ud', 10, 'UNIT'],
+    ['16 ud', 16, 'UNIT'],
+    ['44 lavados', 44, 'UNIT'],
+  ])('reads %p as %p %p', (sizeFormat, unitSize, sizeUnit) => {
+    expect(sizeOf(sizeFormat)).toEqual({ unitSize, sizeUnit });
+  });
+
+  it('states a multiplied pack as one pack', () => {
+    expect(sizeOf('3x187 ml')).toEqual({
+      unitSize: 561,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(sizeOf('5x30 g')).toEqual({ unitSize: 150, sizeUnit: 'GRAM' });
+    expect(sizeOf('6x33 cl')).toEqual({
+      unitSize: 1980,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
+  it('states no size for a sum, whose arithmetic the chain did not state', () => {
+    expect(sizeOf('23+12 lavados')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('states no size for a length, which the catalog has no unit for', () => {
+    expect(sizeOf('30 m')).toEqual({ unitSize: null, sizeUnit: null });
+    expect(sizeOf('125x157 cm')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('states no size where the row states none', () => {
+    expect(sizeOf(null)).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('reads the size of every row of the table that prints one number', () => {
+    // The same real descriptions the split is judged against, so the two
+    // cannot disagree about where a size starts.
+    for (const [description, , sizeFormat] of TABLE) {
+      const size = sizeOf(splitSize(description).sizeFormat);
+      if (sizeFormat === null || sizeFormat.includes('+')) {
+        expect(size).toEqual({ unitSize: null, sizeUnit: null });
+      } else {
+        expect(size.unitSize).toBeGreaterThan(0);
+        expect(size.sizeUnit).not.toBeNull();
+      }
+    }
+  });
+});
+
 describe('packCountIn (plan 0162, section 1)', () => {
   it('reads the N of a trailing NxQ', () => {
     expect(packCountIn('Vino mesa blanco VIÑA LA HIGUERA 3x187 ml')).toBe(3);
@@ -138,5 +193,30 @@ describe('packCountIn (plan 0162, section 1)', () => {
 
   it('reads nothing into a pack phrase in the middle of a name', () => {
     expect(packCountIn('Estuche pack 3 regalo ALTEZA 500 g')).toBeNull();
+  });
+
+  describe('a dimension is not a pack (plan 0183)', () => {
+    it.each([
+      ['Mantel rectangular ALTEZA 125x157 cm', '125x157 cm'],
+      ['Sábana ajustable ALTEZA 5x1.2 m', '5x1.2 m'],
+    ])('%p states no count and no size', (description, sizeFormat) => {
+      // The printed text is still split off and kept: it is half of the key.
+      expect(splitSize(description).sizeFormat).toBe(sizeFormat);
+      expect(packCountIn(description)).toBeNull();
+      expect(sizeOf(sizeFormat)).toEqual({ unitSize: null, sizeUnit: null });
+    });
+
+    it('still reads the count of a pack of cans', () => {
+      expect(packCountIn('Cerveza MAHOU 6x33 cl')).toBe(6);
+      expect(sizeOf('6x33 cl')).toEqual({
+        unitSize: 1980,
+        sizeUnit: 'MILLILITER',
+      });
+    });
+
+    it('still reads a pack phrase in front of a length', () => {
+      // The phrase states the count in words, and the length states none.
+      expect(packCountIn('Papel aluminio ALTEZA pack de 2 30 m')).toBe(2);
+    });
   });
 });

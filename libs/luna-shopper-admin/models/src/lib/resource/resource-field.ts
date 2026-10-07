@@ -7,6 +7,8 @@
  * entity that arrives after this one.
  */
 
+import type { ScopeMarkView } from './info-content';
+
 /** Anything the generic machinery can read a field off. */
 export type ResourceRow = Record<string, unknown>;
 
@@ -55,6 +57,15 @@ interface FieldBase<T extends ResourceRow> {
   readonly label: string;
   /** A translation key for the line under the control, when one helps. */
   readonly help?: string;
+  /**
+   * Whether {@link help} is also drawn under the value while the page reads.
+   *
+   * Help is written for the person who types, so a reading page draws none.
+   * "May be fetched" of a chain source is the exception: no mode can type
+   * into it, and its help says what the value means and what changes it. Only
+   * a field that says so here is drawn with its help while it is read.
+   */
+  readonly helpWhenRead?: true;
   /** Refused when empty. */
   readonly required?: boolean;
   /**
@@ -113,6 +124,34 @@ interface FieldBase<T extends ResourceRow> {
    * concrete row has to remain assignable to a descriptor for any row.
    */
   read?(row: T): unknown;
+  /**
+   * The scope mark to draw before this field's value, when the value names a
+   * price scope or a kind of one (admin plan 0041, section 10).
+   *
+   * A method for the reason {@link read} is one. `undefined` draws no mark,
+   * which is the answer for a row whose scope the read did not describe.
+   */
+  scope?(row: T): ScopeMarkView | undefined;
+  /**
+   * A translation key for the words beside this value while the page is a form
+   * and the value cannot be changed: "Set by the harvester" (admin plan 0052,
+   * section 2.1).
+   */
+  readonly setBy?: string;
+  /**
+   * What a person must look at in this value, or `null`. Drawn as an amber
+   * state beside the value: "Guessed from the city. Check it."
+   *
+   * A method for the reason {@link read} is one.
+   */
+  check?(row: T): FieldCheck | null;
+}
+
+/** An amber state beside a value. Amber means only this. */
+export interface FieldCheck {
+  /** A translation key. */
+  readonly label: string;
+  readonly args?: Readonly<Record<string, string | number>>;
 }
 
 /** A single line, or a paragraph. */
@@ -120,8 +159,22 @@ export interface TextField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'text';
   readonly multiline?: boolean;
   readonly maxLength?: number;
-  /** `url` renders a link in the list and validates the shape in the form. */
-  readonly format?: 'plain' | 'url';
+  /**
+   * How the text reads and what the form checks (admin plan 0052, section
+   * 2.1).
+   *
+   * `url` renders a link in the list and validates the shape in the form.
+   * `code` is text an operator copies character by character, so it is drawn
+   * in the mono face. `image` is the address of a picture: it reads as the
+   * picture beside its address, and the form checks it as it checks a `url`.
+   */
+  readonly format?: 'plain' | 'url' | 'code' | 'image';
+  /**
+   * A translation key for the words of the link, in place of its address
+   * (admin plan 0056, section 2). Only for `format: 'url'`, and only where the
+   * page reads: "Open on a map" says more than the address of a map does.
+   */
+  readonly linkLabel?: string;
 }
 
 /** A count or a measure. Not money, which is its own kind for a reason. */
@@ -171,6 +224,12 @@ export interface BooleanField<T extends ResourceRow> extends FieldBase<T> {
 export interface EnumField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'enum';
   readonly options: readonly EnumOption[];
+  /**
+   * The option a new record starts at (admin plan 0055, target 6): "Sold by"
+   * of a product starts at "Unit". Left out, a new record starts with no
+   * option chosen. A record that exists shows what it holds.
+   */
+  readonly initial?: string;
 }
 
 /**
@@ -184,6 +243,16 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'reference';
   /** The `name` of the resource being pointed at. */
   readonly resource: string;
+  /**
+   * Whether the picker starts its list with "None", the choice that clears
+   * the field (admin plan 0050, section 2).
+   *
+   * Left out, it follows {@link FieldBase.nullable}: a column that takes null
+   * offers it and a column that does not offers nothing. Say `false` on a
+   * nullable field that a screen must not empty, and `true` only where the
+   * server accepts the empty value.
+   */
+  readonly emptyOption?: boolean;
   /**
    * The row property that carries the target's name, for a read that joins it
    * on (admin plan 0023, section 3).
@@ -299,6 +368,34 @@ export interface ReferencesField<T extends ResourceRow> extends FieldBase<T> {
    * target be removed.
    */
   locked?(row: Partial<T>, target: ResourceRow): boolean;
+  /**
+   * The scope mark to draw before one target, read from the target's own row
+   * (admin plan 0056, section 2). A shop's price scopes each show how far
+   * they reach.
+   *
+   * A method for the reason {@link locked} is one. The page asks it once the
+   * lookup has read the target, as it asks `locked`.
+   */
+  mark?(target: ResourceRow): ScopeMarkView | undefined;
+  /**
+   * What one target is called on this record, in place of the target's own
+   * title (admin plan 0056, target 7). A shop calls its own price scope
+   * "This shop only", which the scope cannot say about itself.
+   *
+   * A message and not a string, because a descriptor has no translator.
+   * `undefined` keeps the title. A method for the reason {@link locked} is
+   * one, and asked when `locked` is.
+   */
+  nameOf?(row: Partial<T>, target: ResourceRow): FieldMessage | undefined;
+  /**
+   * The order the targets are read in, as a comparison of two target rows.
+   *
+   * Only while the page reads, and only once every target is read. The form
+   * keeps the order the row holds, which is the order it sends. So this is
+   * for a field whose order says nothing, and never one that is
+   * {@link ordered}.
+   */
+  readOrder?(a: ResourceRow, b: ResourceRow): number;
 }
 
 /** A `jsonb` column with one string per locale. */
@@ -363,10 +460,13 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | JsonField<T>;
 
 /**
- * Whether the form is creating a row or changing one.
+ * Whether a draft adds a record or changes one.
  *
- * Here rather than beside the draft, because {@link isEditable} needs it and a
- * field's own rules are the deeper of the two.
+ * The record page has a third mode, reading, which holds no draft:
+ * `RecordMode` names all three, and `RecordStore` hands the rules of a draft
+ * one of these two. Here rather than beside the draft, because
+ * {@link isEditable} needs it and a field's own rules are the deeper of the
+ * two.
  */
 export type FormMode = 'create' | 'edit';
 

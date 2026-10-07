@@ -251,6 +251,13 @@ function sizeOf(entry: SourceCatalogEntry): HarvestDocumentSize | null {
   return {
     ...(entry.sizeFormat ? { label: entry.sizeFormat } : {}),
     ...(quantity === null ? {} : { quantity }),
+    // The unit the quantity is in (plan 0177), so an import of this file
+    // writes the same `sizeUnit` the row holds. Only beside a label: the
+    // import reads `unit` as the size text when a size has no label, and a
+    // row with no `sizeFormat` must come back with none.
+    ...(quantity !== null && entry.sizeFormat && entry.sizeUnit
+      ? { unit: entry.sizeUnit }
+      : {}),
   };
 }
 
@@ -298,9 +305,19 @@ function localDay(instant: Date): string {
 function dominantKind(
   entries: SourceCatalogEntry[]
 ): HarvestDocumentHints['source_kind'] {
+  // The kind of the prices the run observed, and not of the row: a row that
+  // a website walk owns holds the leaflet price a leaflet run wrote (plan
+  // 0190). A row with no price of a known kind answers with its own.
   const counts = new Map<PriceSourceKind, number>();
   for (const entry of entries) {
-    counts.set(entry.sourceKind, (counts.get(entry.sourceKind) ?? 0) + 1);
+    const stated = new Set(
+      (entry.prices ?? [])
+        .map((price) => price.sourceKind)
+        .filter((kind): kind is PriceSourceKind => !!kind)
+    );
+    for (const kind of stated.size > 0 ? stated : [entry.sourceKind]) {
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
   }
   let best: PriceSourceKind | null = null;
   let bestCount = 0;

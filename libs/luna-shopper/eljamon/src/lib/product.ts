@@ -1,3 +1,4 @@
+import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
 import { decodeEntities, textOf } from './html';
 import type { ElJamonProduct } from './types';
 
@@ -27,10 +28,13 @@ export function parseProductPage(html: string): ElJamonProduct | null {
     return null;
   }
   const price = Number(stringOf(offers['price']));
+  // A word that is never a brand reads as no brand (plan 0178), as it does in
+  // the listing, so the two readers cannot disagree about one product.
+  const printedBrand = stringOf(brand['name']);
   return {
     code,
     name,
-    brand: stringOf(brand['name']),
+    brand: isNeverABrand(printedBrand) ? null : printedBrand,
     price:
       stringOf(offers['price']) !== null && Number.isFinite(price)
         ? price

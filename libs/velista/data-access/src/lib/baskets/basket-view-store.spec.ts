@@ -49,6 +49,7 @@ function row(
     left: 1,
     bought: 0,
     asked: 1,
+    boughtElsewhere: 0,
     state: 'WANTED',
     note: null,
     noteAt: null,
@@ -69,6 +70,7 @@ function entry(listId: string | null, lineId: string): BasketRowEntry {
     left: 1,
     bought: 0,
     asked: 1,
+    boughtElsewhere: 0,
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
@@ -1408,5 +1410,147 @@ describe('BasketViewStore: the aisles of the shop', () => {
     expect(view.sections().map((part) => part.key)).toEqual([
       'category:cat-uncategorised',
     ]);
+  });
+});
+
+/**
+ * What the rows on the screen come to (velista `0132`).
+ *
+ * The sum itself is `basketTotal`'s, with its own spec. What is asked here is
+ * what the store adds: **the total is over the rows it draws**, and it is handed
+ * the shop flag the page hands each row.
+ */
+describe('BasketViewStore: the estimated total', () => {
+  function priced(
+    id: string,
+    name: string,
+    cheapest: number,
+    atShop: number | null = null
+  ): BasketProduct {
+    return {
+      ...product(id, name, name),
+      offer: {
+        price: cheapest,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        priceScopeId: 'scope-dia',
+      },
+      atShop:
+        atShop === null
+          ? null
+          : {
+              priceScopeId: 'scope-mercadona',
+              price: atShop,
+              currency: 'EUR',
+              available: null,
+            },
+    };
+  }
+
+  const basket: readonly BasketRow[] = [
+    row('l-1', 'Milk', 'item-milk', [entry('l-groceries', 'zl-1')]),
+    row('l-2', 'Bread', 'item-bread', [entry('l-weekly', 'zl-2')]),
+    // Free text, which counts as a line and adds no price.
+    row('l-3', 'Batteries', null, [entry('l-weekly', 'zl-3')]),
+  ];
+
+  const products = new Map([
+    ['item-milk', priced('item-milk', 'Whole milk', 1.35, 1.49)],
+    ['item-bread', priced('item-bread', 'Sourdough', 2.1, 2.4)],
+  ]);
+
+  it('adds up every row of an untouched basket', () => {
+    const { view } = withLists(harness(basket, products));
+
+    expect(view.total()).toEqual({
+      lines: 3,
+      withProduct: 2,
+      withPrice: 2,
+      boughtCents: 0,
+      leftCents: 345,
+      totalCents: 345,
+      currency: 'EUR',
+    });
+  });
+
+  it('follows a change of the kept lists', () => {
+    const { view } = withLists(harness(basket, products));
+
+    view.toggleList('l-weekly');
+
+    expect(view.total().lines).toBe(1);
+    expect(view.total().totalCents).toBe(135);
+
+    view.toggleList('l-weekly');
+    expect(view.total().totalCents).toBe(345);
+  });
+
+  it('follows a change of the search', () => {
+    const { view } = withLists(harness(basket, products));
+
+    view.search('sourdough');
+
+    expect(view.total().lines).toBe(1);
+    expect(view.total().totalCents).toBe(210);
+
+    view.search('');
+    expect(view.total().totalCents).toBe(345);
+  });
+
+  /**
+   * The cheapest anywhere until the read at the chosen shop prices the rows, and
+   * that shop's own price from then on: the flag each row is handed.
+   */
+  it('reads the chosen shop’s prices once the rows are priced at it', () => {
+    const harnessed = withLists(harness(basket, products));
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-mercadona',
+          {
+            priceScopeId: 'scope-mercadona',
+            supermarketId: 'sm-mercadona',
+            logoUrl: null,
+            supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+            locations: [
+              {
+                id: 'loc-tejares',
+                label: null,
+                address: 'Ronda de los Tejares 32',
+                city: 'Córdoba',
+                postalCode: '14008',
+                sections: [],
+              },
+            ],
+          },
+        ],
+      ])
+    );
+    expect(harnessed.view.pricedAtShop()).toBe(false);
+    expect(harnessed.view.total().totalCents).toBe(345);
+
+    harnessed.view.setShop('loc-tejares');
+
+    expect(harnessed.view.pricedAtShop()).toBe(true);
+    expect(harnessed.view.total().totalCents).toBe(389);
+
+    harnessed.view.setShop(null);
+    expect(harnessed.view.total().totalCents).toBe(345);
+  });
+
+  it('moves when a row is settled, with nothing subscribed', () => {
+    const harnessed = withLists(harness(basket, products));
+
+    harnessed.rows.set([
+      { ...basket[0], left: 0, bought: 1, state: 'DONE' },
+      ...basket.slice(1),
+    ]);
+
+    expect(harnessed.view.total().boughtCents).toBe(135);
+    expect(harnessed.view.total().leftCents).toBe(210);
   });
 });

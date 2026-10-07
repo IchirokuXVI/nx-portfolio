@@ -297,11 +297,22 @@ jobs:
       && needs.build.result != 'failure'
     runs-on: ubuntu-latest
     steps:
-      # Only the chart is needed here, and only at the release tag.
+      # Only the chart is needed here, and only at the release tag. The whole
+      # history comes with it, because the release task check below measures each
+      # window from the commit that last changed its task.env, and a shallow
+      # clone has no such commit to show.
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      # Before any SSH: every release task states a window per environment, the
+      # production release it belongs to and a check.sh (k8s plan 0011, section
+      # 4). It reads files only, so a task that leaves one of those out stops the
+      # release here, with no machine contacted.
+      - name: Every release task states when it can run
+        run: node k8s/release-tasks/check-tasks.mjs
 
       # Is there anywhere to deploy to?
       #
@@ -369,12 +380,37 @@ jobs:
 
       # Reject a deploy that cannot possibly work in seconds, rather than
       # diagnosing it in minutes from a crashloop (k8s plan 0006, section 3).
-      - name: Preflight the production Secrets
+      #
+      # The release tasks are asked the same question in the same step (k8s plan
+      # 0011, section 3). `--phase check` changes nothing: no dump, no hook except
+      # each task's check.sh, no write to the ledger. It prints one line per task
+      # and fails when a task states no window or meets data it was not written
+      # for. The list also goes to the summary, so the release page shows which
+      # tasks this release runs.
+      #
+      # The output is kept in a file rather than piped, so that the exit status
+      # read below is the runner's own and not that of a `tee`.
+      - name: Preflight the production Secrets and the release tasks
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash ~/k8s/bootstrap/provision-release.sh --check --env production"
+
+          status=0
+          ssh $SSH_OPTS \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
+            "bash ~/k8s/release-tasks/run-release-tasks.sh --env production --phase check --release '${{ needs.setup.outputs.version }}'" \
+            > release-tasks.txt 2>&1 || status=$?
+          cat release-tasks.txt
+          {
+            echo "### Release tasks of ${{ needs.setup.outputs.version }}"
+            echo
+            echo '```'
+            cat release-tasks.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Deploy production release
         if: steps.deploy-target.outputs.configured == 'true'

@@ -8,7 +8,6 @@ import {
   HarvestRunWrites,
   HarvestWarningCode,
   PriceSourceKind,
-  type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
 import { IsNull, Not, Repository } from 'typeorm';
@@ -28,6 +27,8 @@ import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunContext } from './run-context';
 import { RunReportSink, type RunReportResult } from './run-report.sink';
+import { sourceKindOf } from './run-source-kind';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceIngest, type SourceIngestCounters } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
@@ -64,7 +65,8 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly places: DiscoveredPlaceService,
     private readonly shops: SourceLocationService,
     private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   /**
@@ -118,6 +120,7 @@ export class RunExecutor implements OnApplicationShutdown {
       name: row.name,
       brand: row.brand,
       unitSize: row.unitSize === null ? null : Number(row.unitSize),
+      sizeUnit: row.sizeUnit ?? null,
       sizeFormat: row.sizeFormat,
       packCount: row.packCount ?? null,
       categoryPath: row.categoryPath ?? [],
@@ -390,6 +393,7 @@ export class RunExecutor implements OnApplicationShutdown {
                 shops: this.shops,
                 catalog: this.catalog,
                 entries: this.entries,
+                availability: this.availability,
               }
             );
 
@@ -596,31 +600,6 @@ export class RunExecutor implements OnApplicationShutdown {
 }
 
 /**
- * What observed a price, per adapter (plan 0103, section 2.3).
- *
- * It is stamped on every row and every price a run writes, and it used to be
- * stated inline by each runner at its own ingest call. The runners write
- * nothing now, so it is stated here, once, and a run of an adapter this map does
- * not know is `OFFICIAL_WEB`: a page a chain publishes is the least specific
- * honest answer, and a file import never reaches here because the operator says
- * what observed it.
- */
-const SOURCE_KIND_BY_ADAPTER: Partial<Record<AdapterKey, PriceSourceKind>> = {
-  'mercadona-api': PriceSourceKind.OFFICIAL_API,
-  'lidl-api': PriceSourceKind.OFFICIAL_API,
-  'dia-api': PriceSourceKind.OFFICIAL_API,
-  'deza-web': PriceSourceKind.OFFICIAL_WEB,
-  'carrefour-web': PriceSourceKind.OFFICIAL_WEB,
-};
-
-function sourceKindOf(adapterKey: AdapterKey | undefined): PriceSourceKind {
-  return (
-    (adapterKey && SOURCE_KIND_BY_ADAPTER[adapterKey]) ??
-    PriceSourceKind.OFFICIAL_WEB
-  );
-}
-
-/**
  * How many product pages one backfill run may read, **the owner's number**.
  *
  * Unset means every row that still needs one, which is the overnight run plan
@@ -674,6 +653,9 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
       pricesConfirmed: written.pricesConfirmed,
       pricesConflicted: written.pricesConflicted,
     }),
+    // Plan 0191: the pairs behind `pricesConflicted`, named. Two rows of the
+    // chain are bound to one product and state two amounts at one scope.
+    priceConflicts: written.priceConflicts,
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
     placesImported: written.placesImported,
@@ -688,6 +670,20 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // thousand.
     shopsUnmapped: written.shopsUnmapped,
     availabilityWritten: written.availabilityWritten,
+    // Plan 0182: what the run said about each shop, kept on the source's own
+    // rows. Stored is written plus waiting, and a waiting claim is sent when
+    // its row is bound or its shop is mapped.
+    claimsStored: written.claimsStored,
+    claimsWritten: written.claimsWritten,
+    claimsWaiting: written.claimsWaiting,
+    claimsWaitingForBinding: written.claimsWaitingForBinding,
+    claimsWaitingForShop: written.claimsWaitingForShop,
+    // Plan 0182: offers with no price created for bound rows the run saw. A
+    // product that already had a row in the default scope is not counted.
+    pricelessOffersWritten: written.pricelessOffersWritten,
+    // Products whose offer could not be sent. The run still completes, and
+    // the next run offers them again.
+    pricelessOffersFailed: written.pricelessOffersFailed,
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,

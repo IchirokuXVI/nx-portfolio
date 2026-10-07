@@ -98,6 +98,7 @@ const basketView = (servesLocations: boolean): BasketView => ({
       left: 2,
       bought: 0,
       asked: 2,
+      boughtElsewhere: 0,
       state: BasketRowState.WANTED,
       note: null,
       noteAt: null,
@@ -111,6 +112,7 @@ const basketView = (servesLocations: boolean): BasketView => ({
           lineId: 'l1',
           left: 2,
           bought: 0,
+          boughtElsewhere: 0,
           state: BasketRowState.WANTED,
           approvalStatus: LineApprovalStatus.APPROVED,
           demandEditable: true,
@@ -137,6 +139,7 @@ const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
   imageUrl: null,
   sku: null,
   ean: null,
+  eans: [],
   unitSize: 1,
   categories: [
     {

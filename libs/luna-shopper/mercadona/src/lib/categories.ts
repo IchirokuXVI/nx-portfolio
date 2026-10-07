@@ -3,7 +3,8 @@
  * section 5.6, retargeted by plan 0166, section 7, and again by plan 0173,
  * section 6).
  *
- * The answer is a **leaf slug** from appendix A of plan 0173, or null. The
+ * The answer is a **leaf slug** from appendix A of plan 0173 or from plan
+ * 0179, which added the leaves DIA's tree had no place for, or null. The
  * library knows no ids: the harvester turns the slug into a row, and turns null
  * into `uncategorised`.
  *
@@ -227,6 +228,8 @@ const SECTIONS: readonly MercadonaSectionMapping[] = [
       ['Gel y jabón de manos', 'shower-gel-and-sponges'],
       ['Higiene bucal', 'oral-hygiene'],
       ['Higiene íntima', 'sanitary-pads-and-feminine-hygiene'],
+      // Mercadona files nails with body care. The leaf is under `makeup`.
+      ['Manicura y pedicura', 'nail-care'],
       ['Protector solar y aftersun', 'sunscreen'],
     ],
   },
@@ -281,8 +284,18 @@ const SECTIONS: readonly MercadonaSectionMapping[] = [
       ['Utensilios de limpieza y calzado', 'garbage-bags-brooms-and-mops'],
     ],
   },
-  // The taxonomy has no make up leaf.
-  { name: 'Maquillaje', slug: NO_LEAF, children: [] },
+  {
+    // The make-up leaves are ours (plan 0179): DIA's tree had none. The
+    // section spans all of them, so on its own it still answers no leaf.
+    name: 'Maquillaje',
+    slug: NO_LEAF,
+    children: [
+      ['Bases de maquillaje y corrector', 'face-makeup'],
+      ['Colorete y polvos', 'powders-and-blush'],
+      ['Labios', 'lip-makeup'],
+      ['Ojos', 'eye-makeup'],
+    ],
+  },
   {
     name: 'Marisco y pescado',
     slug: NO_LEAF,
@@ -293,7 +306,9 @@ const SECTIONS: readonly MercadonaSectionMapping[] = [
     ],
   },
   {
-    // Cats and dogs only: the taxonomy has no leaf for any other animal.
+    // Cats and dogs only. The taxonomy has leaves for birds, rodents, fish and
+    // accessories since plan 0179, but no fixture holds the children that
+    // would name them, so those still climb to the section's answer.
     name: 'Mascotas',
     slug: NO_LEAF,
     children: [

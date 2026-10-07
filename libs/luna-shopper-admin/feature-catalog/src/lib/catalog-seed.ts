@@ -247,6 +247,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     imageUrl: null,
     sku: '12345',
     ean: '8480000123459',
+    eans: ['8480000123459'],
     unitSize: 1,
     packCount: null,
     categories: categoriesOf('milk'),
@@ -260,6 +261,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     imageUrl: null,
     sku: '12346',
     ean: '8480000123466',
+    eans: ['8480000123466'],
     unitSize: 6,
     packCount: 6,
     categories: categoriesOf('milk'),
@@ -276,6 +278,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     imageUrl: null,
     sku: '22001',
     ean: '8480000220011',
+    eans: ['8480000220011'],
     unitSize: 1,
     packCount: null,
     categories: categoriesOf('oils'),
@@ -289,6 +292,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     imageUrl: null,
     sku: '31007',
     ean: '8480000310071',
+    eans: ['8480000310071'],
     unitSize: 750,
     packCount: null,
     categories: categoriesOf('dishwasher'),
@@ -575,6 +579,9 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: 'ADMIN',
       availabilityObservedAt: '2026-08-02T09:15:00.000Z',
       availabilitySourceRunId: null,
+      // Joined on by the read (admin plan 0042, section 2).
+      itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+      itemBrand: 'Hacendado',
     },
     {
       id: 'sli_oil_centro',
@@ -586,6 +593,11 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: 'OFFICIAL_WEB',
       availabilityObservedAt: '2026-09-01T06:40:00.000Z',
       availabilitySourceRunId: 'run_deza_1',
+      itemName: {
+        en: 'Extra virgin olive oil 1 L',
+        es: 'Aceite de oliva virgen extra 1 L',
+      },
+      itemBrand: 'Hacendado',
     },
     {
       id: 'sli_milk_oeste',
@@ -597,5 +609,7 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: null,
       availabilityObservedAt: null,
       availabilitySourceRunId: null,
+      itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+      itemBrand: 'Hacendado',
     },
   ];

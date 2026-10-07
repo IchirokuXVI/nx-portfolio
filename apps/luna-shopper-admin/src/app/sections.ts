@@ -1,51 +1,45 @@
 import {
   BRANDS,
-  BRANDS_LINKS,
-  brandsRoutes,
+  BrandSuggestionsPage,
 } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
-  CatalogDashboard,
-  catalogRoutes,
-  CATEGORIES,
-  ITEMS,
-  LOCATION_ITEMS,
-  LOCATIONS,
-  PRICE_POLICIES,
-  PRICE_SCOPES,
-  PRICES,
-  PRODUCT_GROUPS,
-  SECTIONS,
-  SUPERMARKETS,
+  CHAIN_RESOURCES,
+  chainsRoutes,
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import {
-  HARVEST_LINKS,
   HARVEST_SEGMENT,
-  HarvestDashboard,
+  HARVEST_TABS,
   harvestRoutes,
+  HarvestStatus,
   POSTAL_CODES,
+  SOURCES,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
-  ADMINS,
-  BASKETS,
-  LIST_LINES,
-  LISTS,
-  MEMBERSHIPS,
-  PeopleDashboard,
+  ADMIN_ACCOUNTS_TAB,
+  ADMINS_SEGMENT,
+  adminsRoutes,
+  SHOPPER_RESOURCES,
+  shoppersRoutes,
+  ShoppersStatus,
   USERS,
-  ZONES,
 } from '@portfolio/luna-shopper-admin/feature-people';
 import type { AdminSection } from '@portfolio/luna-shopper-admin/feature-resource';
-
-/**
- * The segment the catalog owns, for the rare screen that builds an absolute URL
- * into it by hand.
- *
- * Exported the way `HARVEST_SEGMENT` is, and used the same way: a **resource**
- * under this section is found through `ResourceRegistry.pathOf` and never
- * through this constant.
- */
-export const CATALOG_SEGMENT = 'catalog';
+import {
+  HARVEST_REVIEW_TAB,
+  HARVEST_SETUP_TAB,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  DashboardIcon,
+  InboxIcon,
+  PeopleIcon,
+  ShieldIcon,
+  StoreIcon,
+  TagIcon,
+} from '@portfolio/shared/ui';
 
 /** The segment the shoppers section owns, for the same narrow use. */
 export const SHOPPERS_SEGMENT = 'shoppers';
@@ -80,38 +74,34 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * names on a tab, because a tab names what the operator is about to look at and
  * nobody is about to look at a deployment.
  *
- * **Shoppers** for the section holding users, zones, memberships, lists, list
- * lines and baskets: the people who use velista and the things they own
- * together. Not *People*, which is `0007`'s own title and reads well until the
- * section next to it is full of admins, who are also people. Not *Users*, which
- * is one of the six screens inside it, and a section cannot carry the same word
- * as one of its members without an operator having to learn which is which. Not
- * *Accounts*, because an account is the auth idea and Auth is the next section
- * along. **Admins** for that one by the same rule, and because the section is
- * the admin account table and nothing else.
+ * **Shoppers** for the section holding the people who use velista and the
+ * zones they share. Not *People*, which is one of its two tabs, and a section
+ * cannot carry the same word as one of its members without an operator having
+ * to learn which is which. Not *Accounts*, because an account is the auth idea
+ * and Auth is the next section along. **Admins** for that one by the same
+ * rule, and because the section is about the admin accounts and nothing else:
+ * who they are, and who failed to sign in as one.
  *
  * ## Order
  *
  * The sections run in the order an operator meets them: the overview, then the
- * catalog, which is the half that gets edited; then the people
- * and what they share, which is read far more often than it is touched; then the
- * harvester, which produces most of the catalog; then the admin table, which is
- * opened to answer one question and never to change anything.
+ * chains, which hold the shops, the sections and the price scopes (admin plan
+ * 0042); then the products, with their groups, their categories and the price
+ * rules (admin plan 0043); then the harvester, which produces most of the
+ * catalog and is where work waits for a person (admin plan 0044); then the
+ * people and what they share, which is read far more often than it is
+ * touched; then the admins, which is opened to answer who has access and who
+ * was refused it, and never to change anything. A phone shows the first four and "More".
  *
- * Inside the catalog the order follows what an operator is holding in their head
- * rather than the alphabet. A chain, then the shops it has, the sections those
- * shops are laid out in (admin plan 0037) and the scopes it prices against,
- * because all three belong to a chain and none can be read without naming one. Then the products, then the categories they sit in (admin plan
- * 0036), then the groups that make two products comparable, then the prices,
- * which need a product and a scope to exist at all.
- * Backend plan 0080 puts the price policies straight after the prices they
- * decide between. The per shop rows are last: they are the narrowest question in
- * the catalog and the one asked least often.
+ * **There is no Catalog section any more.** It held ten screens. Five went to
+ * the chains and five are the products, and its dashboard is a block of the
+ * overview. Nothing is left at `/catalog` (admin plan 0047).
  *
- * Among the shoppers, each nested collection follows the resource it hangs off:
- * a membership after zones, a line after lists. Neither can be listed from
- * nothing, so both are usually reached by opening a row on their parent's detail
- * screen rather than from the navigation.
+ * **The shoppers have two tabs, People and Zones** (admin plan 0045). The
+ * section held six flat screens. The data had a shape they did not show: a
+ * zone holds its members and its lists, a list holds its lines, and a person
+ * is in zones and owns shopping lists. So the four other screens are tabs of a
+ * zone or of a person.
  */
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   {
@@ -119,60 +109,114 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // holds is what is true of the whole system rather than of one part of it.
     key: 'overview',
     label: 'shell.sections.overview',
+    icon: DashboardIcon,
     home: DashboardPage,
   },
   {
-    key: 'catalog',
-    label: 'shell.sections.catalog',
-    segment: CATALOG_SEGMENT,
-    home: CatalogDashboard,
-    resources: [
-      SUPERMARKETS,
-      LOCATIONS,
-      SECTIONS,
-      PRICE_SCOPES,
-      ITEMS,
-      CATEGORIES,
-      PRODUCT_GROUPS,
-      PRICES,
-      PRICE_POLICIES,
-      LOCATION_ITEMS,
-    ],
-    // One product at every scope (admin plan 0033), reached from the product
-    // and from a price's history rather than from the navigation.
-    screens: catalogRoutes(),
+    // A chain holds its shops (admin plan 0042). Second on the rail, after the
+    // overview, because a chain is where an operator starts: a shop, a section
+    // and a price scope each belong to one.
+    //
+    // **No segment and no tabs.** The chains are at `/chains`, which is the
+    // segment of the one resource here that has no parent, and a chain's own
+    // page draws its tabs. The five resources are held and not mounted: the
+    // section's own route table is where each of them is.
+    key: 'chains',
+    label: 'shell.sections.chains',
+    icon: StoreIcon,
+    held: CHAIN_RESOURCES,
+    screens: chainsRoutes(),
   },
   {
-    key: 'shoppers',
-    label: 'shell.sections.shoppers',
-    segment: SHOPPERS_SEGMENT,
-    home: PeopleDashboard,
-    resources: [USERS, ZONES, MEMBERSHIPS, LISTS, LIST_LINES, BASKETS],
+    // A product and its prices (admin plan 0043). Third on the rail.
+    //
+    // The four lists are held and are the section's tabs: Products at the
+    // section's own address, then Groups, Categories and Price rules one
+    // segment under it. A product is a page with tabs of its own, so the
+    // section's route table mounts all of it and the route factory mounts
+    // none. The fifth resource, a price, sits under one product and is no tab.
+    key: 'products',
+    label: 'shell.sections.products',
+    icon: TagIcon,
+    segment: PRODUCTS_SEGMENT,
+    held: PRODUCT_RESOURCES,
+    heldTabs: true,
+    screens: productsRoutes(),
   },
   {
-    // The one section that moves nothing. `0006` gave it this prefix for its own
-    // reasons, and this plan makes the reason general rather than particular.
+    // The harvester in three tabs (admin plan 0044). Fourth on the rail, and
+    // so the last of the four a phone shows before "More".
+    //
+    // **No home.** The section's own address goes to Review, where a person
+    // has work, and the three tabs are its links. The count on Review, and so
+    // on this section's entry in the rail, is what waits in the four queues:
+    // `HarvestStatus` reads it with the dashboard.
+    //
+    // The suggested brands are a queue of Review and the registered brands
+    // are a part of Setup, although a registered brand is catalog data. The
+    // suggestions are keys the harvested queue carries, and a person registers
+    // them while working that queue. Both are in `feature-brands`, which
+    // imports the harvester's library, so they are handed to its route table
+    // here, where both are in sight.
+    //
+    // The two resources are held and not mounted by the route factory: they
+    // are parts of the Setup tab, at `/harvest/setup/brands` and
+    // `/harvest/setup/postal-codes`, and the section's own table mounts them.
+    //
+    // The chain sources are held too (admin plan 0059), so that the registry
+    // knows where a source is. They are the harvester's own, so its route
+    // table mounts them without being handed them.
     key: 'harvest',
     label: 'shell.sections.harvest',
+    icon: InboxIcon,
     segment: HARVEST_SEGMENT,
-    home: HarvestDashboard,
-    // The brands are here rather than in the catalog, although a registered
-    // brand is catalog data. The suggestions are keys the harvested queue
-    // carries, a person registers them while working that queue, and the
-    // catalog's row is already full. `BRANDS` comes before `POSTAL_CODES` and
-    // `BRANDS_LINKS` after `HARVEST_LINKS`, so the two brand screens sit side
-    // by side: hand written links are drawn first, then resources.
-    resources: [BRANDS, POSTAL_CODES],
-    screens: [...harvestRoutes(), ...brandsRoutes()],
-    links: [...HARVEST_LINKS, ...BRANDS_LINKS],
+    landing: HARVEST_REVIEW_TAB,
+    held: [SOURCES, BRANDS, POSTAL_CODES],
+    heldUnder: HARVEST_SETUP_TAB,
+    screens: harvestRoutes({
+      brandsQueue: BrandSuggestionsPage,
+      setup: [BRANDS, POSTAL_CODES],
+    }),
+    links: HARVEST_TABS,
+    counts: HarvestStatus,
   },
   {
-    // **A section with one screen has no segment**, so the admins list stays at
-    // `/admins` rather than moving to `/admins/admins`, and the tab points
-    // straight at it. A dashboard summarising one list is a click between the
-    // operator and the list, which is `0004`'s argument and it holds here too.
+    // A zone holds its members and its lists (admin plan 0045).
+    //
+    // **No home.** The section's own address goes to People, and the two
+    // held resources that have no parent, the people and the zones, are its
+    // tabs. The other five are held and are no tab: each lives under a zone
+    // or a person, and the section's own route table mounts all seven.
+    //
+    // The count on Zones, and so on this section's entry in the rail, is the
+    // join requests that wait: `ShoppersStatus` reads it with the dashboard.
+    key: 'shoppers',
+    label: 'shell.sections.shoppers',
+    icon: PeopleIcon,
+    segment: SHOPPERS_SEGMENT,
+    landing: USERS.segment,
+    held: SHOPPER_RESOURCES,
+    heldTabs: true,
+    screens: shoppersRoutes(),
+    counts: ShoppersStatus,
+  },
+  {
+    // Who can open this back office, and who tried to (admin plan 0046).
+    //
+    // **No home.** The section's own address goes to Accounts. Its two tabs
+    // are hand written and are drawn by the section's own page, so the frame
+    // is told about no screen here: the count on "Failed sign ins" is not
+    // work that waits for a decision, and the frame would add it to the rail
+    // as such.
+    //
+    // **No resource either.** An admin is read and never created, changed or
+    // removed from here, and its rows do not open, so nothing in the app
+    // needs the registry to say where one is.
     key: 'admins',
     label: 'shell.sections.admins',
-    resources: [ADMINS],
+    icon: ShieldIcon,
+    segment: ADMINS_SEGMENT,
+    landing: ADMIN_ACCOUNTS_TAB,
+    screens: adminsRoutes(),
   },
 ];

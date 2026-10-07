@@ -7,6 +7,9 @@ import {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceLinkField,
+  PlaceLinkSkipReason,
+  PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -15,6 +18,7 @@ import {
   CONTENT_LOCALES,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
+  UNIT_BASES,
 } from '../../lib/messages/catalog.messages';
 import {
   ADAPTER_CAPABILITIES,
@@ -28,6 +32,7 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../../lib/messages/harvest.messages';
+import { SOURCE_SIZE_UNITS } from '../../lib/units/source-size';
 import {
   array,
   boolean,
@@ -76,6 +81,17 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunExportResult: schemaId('harvest/HarvestRunExportResult'),
   harvestDocument: schemaId('harvest/HarvestDocument'),
   discoveredPlaceView: schemaId('harvest/DiscoveredPlaceView'),
+  // The link, its candidates and the bulk link by reference (plan 0193).
+  placeMatchRung: schemaId('enums/PlaceMatchRung'),
+  placeLinkField: schemaId('enums/PlaceLinkField'),
+  placeLinkSkipReason: schemaId('enums/PlaceLinkSkipReason'),
+  placeLocationCandidate: schemaId('harvest/PlaceLocationCandidate'),
+  placeLinkResult: schemaId('harvest/PlaceLinkResult'),
+  // The shop a link could not take a reference from (plan 0195).
+  locationRefHolder: schemaId('harvest/LocationRefHolder'),
+  placeRefLink: schemaId('harvest/PlaceRefLink'),
+  placeRefSkip: schemaId('harvest/PlaceRefSkip'),
+  linkPlacesByRefResult: schemaId('harvest/LinkPlacesByRefResult'),
   discoveredPlaceGroup: schemaId('harvest/DiscoveredPlaceGroup'),
   discoveredPlaceGroupsResult: schemaId('harvest/DiscoveredPlaceGroupsResult'),
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
@@ -129,6 +145,7 @@ export const HARVEST_SCHEMA_IDS = {
   groupPlacesRequest: schemaId('msg/place.groups/request'),
   importPlaceRequest: schemaId('msg/place.import/request'),
   linkPlaceRequest: schemaId('msg/place.link/request'),
+  linkPlacesByRefRequest: schemaId('msg/place.linkByRef/request'),
   placeIdRequest: schemaId('msg/place.id/request'),
   listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
   mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
@@ -138,7 +155,13 @@ export const HARVEST_SCHEMA_IDS = {
   listEntriesByItemRequest: schemaId('msg/sourceEntry.listByItem/request'),
   itemSourceEntryView: schemaId('harvest/ItemSourceEntryView'),
   itemSourceEntryPage: schemaId('harvest/ItemSourceEntryPage'),
+  // Plan 0178: the queue's rows, with the brands each printed brand names.
+  queuedSourceEntryView: schemaId('harvest/QueuedSourceEntryView'),
+  queuedSourceEntryPage: schemaId('harvest/QueuedSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
+  settleItemRequest: schemaId('msg/sourceEntry.settleItem/request'),
+  settleItemAtChainResult: schemaId('harvest/SettleItemAtChainResult'),
+  sourceEntryPriceWithheld: schemaId('harvest/SourceEntryPriceWithheld'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
   // Plan 0100: a whole decisions file, in one call.
@@ -173,6 +196,10 @@ const packCountOrNull = (): JsonSchema => ({
   type: ['integer', 'null'],
   minimum: PACK_COUNT_MIN,
   maximum: PACK_COUNT_MAX,
+});
+/** The unit a source's size is in (plan 0177), or null. */
+const sizeUnitOrNull = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...SOURCE_SIZE_UNITS] }, { type: 'null' }],
 });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A tag bag kept exactly as the provider sent it (plan 0038, section 8.2). */
@@ -317,6 +344,37 @@ const harvestRunWarning = object(
   ['code', 'offerId', 'page', 'name', 'message']
 );
 
+/**
+ * One catalog shop a place may be (plans 0152 and 0193). A hint for a person:
+ * nothing links on a candidate.
+ */
+const placeLocationCandidate = object(
+  HARVEST_SCHEMA_IDS.placeLocationCandidate,
+  {
+    supermarketLocationId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+    rung: ref(HARVEST_SCHEMA_IDS.placeMatchRung),
+    // Whole metres from the place. Null for a shop with no position.
+    metres: integerOrNull(),
+  },
+  [
+    'supermarketLocationId',
+    'supermarketId',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'rung',
+    'metres',
+  ]
+);
+
 const discoveredPlaceView = object(
   HARVEST_SCHEMA_IDS.discoveredPlaceView,
   {
@@ -352,6 +410,9 @@ const discoveredPlaceView = object(
     supermarketLocationId: nullableString(),
     firstSeenAt: string({ format: 'date-time' }),
     lastSeenAt: string({ format: 'date-time' }),
+    // The shops a `NEW` place may be, best first, on the list read only (plan
+    // 0193). Empty for every other status and on every other read.
+    candidates: array(ref(HARVEST_SCHEMA_IDS.placeLocationCandidate)),
   },
   [
     'id',
@@ -376,7 +437,89 @@ const discoveredPlaceView = object(
     'supermarketLocationId',
     'firstSeenAt',
     'lastSeenAt',
+    'candidates',
   ]
+);
+
+/**
+ * The shop that holds an external reference (plan 0195): its chain, its label
+ * and its address, which is what a person tells one shop from another by.
+ */
+const locationRefHolder = object(
+  HARVEST_SCHEMA_IDS.locationRefHolder,
+  {
+    supermarketLocationId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    city: nullableString(),
+    externalProvider: nullableString(),
+  },
+  [
+    'supermarketLocationId',
+    'supermarketId',
+    'supermarketName',
+    'label',
+    'address',
+    'city',
+    'externalProvider',
+  ]
+);
+
+/**
+ * What a link did (plan 0193): the place, and each thing the link wrote on
+ * the shop because the shop lacked it.
+ *
+ * `refHeldBy` is present only when the link left the reference of the shop
+ * empty, because another shop holds the reference of the place (plan 0195).
+ */
+const placeLinkResult = object(
+  HARVEST_SCHEMA_IDS.placeLinkResult,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    filled: array(ref(HARVEST_SCHEMA_IDS.placeLinkField)),
+    refHeldBy: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.locationRefHolder), { type: 'null' }],
+    },
+  },
+  ['place', 'filled']
+);
+
+const placeRefLink = object(
+  HARVEST_SCHEMA_IDS.placeRefLink,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    shop: ref(HARVEST_SCHEMA_IDS.placeLocationCandidate),
+    filled: array(ref(HARVEST_SCHEMA_IDS.placeLinkField)),
+  },
+  ['place', 'shop', 'filled']
+);
+
+const placeRefSkip = object(
+  HARVEST_SCHEMA_IDS.placeRefSkip,
+  {
+    place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
+    reason: ref(HARVEST_SCHEMA_IDS.placeLinkSkipReason),
+    shops: array(ref(HARVEST_SCHEMA_IDS.placeLocationCandidate)),
+  },
+  ['place', 'reason', 'shops']
+);
+
+/**
+ * The bulk link by reference (plan 0193). `applied: false` is the dry answer:
+ * the same lists, and nothing written.
+ */
+const linkPlacesByRefResult = object(
+  HARVEST_SCHEMA_IDS.linkPlacesByRefResult,
+  {
+    applied: boolean(),
+    linked: array(ref(HARVEST_SCHEMA_IDS.placeRefLink)),
+    skipped: array(ref(HARVEST_SCHEMA_IDS.placeRefSkip)),
+  },
+  ['applied', 'linked', 'skipped']
 );
 
 const discoveredPlaceGroup = object(
@@ -415,6 +558,9 @@ const sourceCatalogEntryProperties = {
   brand: nullableString(),
   ean: nullableString(),
   unitSize: numberOrNull(),
+  sizeUnit: sizeUnitOrNull(),
+  // Whether the source sells the product by weight (plan 0181).
+  soldByWeight: boolean(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
@@ -447,6 +593,8 @@ const sourceCatalogEntryRequired = [
   'brand',
   'ean',
   'unitSize',
+  'sizeUnit',
+  'soldByWeight',
   'sizeFormat',
   'packCount',
   'categoryPath',
@@ -476,8 +624,29 @@ const itemSourceEntryView = object(
   {
     ...sourceCatalogEntryProperties,
     eanSharedBy: { type: ['integer', 'null'], minimum: 1 },
+    scopeSharedWith: {
+      ...array(nonEmptyString()),
+      description:
+        'The other rows of this chain and source kind that are bound to the same product and hold an open price at a scope this row also holds one at (plan 0191). Catalog keeps one current price per product, scope and kind, so when the amounts differ and the rows are not both sold by weight, neither price is written. Empty for a row that is not ACTIVE.',
+    },
   },
-  [...sourceCatalogEntryRequired, 'eanSharedBy']
+  [...sourceCatalogEntryRequired, 'eanSharedBy', 'scopeSharedWith']
+);
+/**
+ * A row as the queue answers it (plan 0178). Composed at the gateway: the
+ * harvester answers the rows and catalog answers what each printed key names.
+ */
+const queuedSourceEntryView = object(
+  HARVEST_SCHEMA_IDS.queuedSourceEntryView,
+  {
+    ...sourceCatalogEntryProperties,
+    brandMatches: {
+      ...array(ref(CATALOG_SCHEMA_IDS.brandMatchView)),
+      description:
+        'Every registered brand the row’s printed brand names, the key’s own brand first and then each brand a homonym points that key at. Empty when the row prints no brand or nothing registered answers to it. Several brands is an ordinary answer: which one made the product is read from the product.',
+    },
+  },
+  [...sourceCatalogEntryRequired, 'brandMatches']
 );
 
 /**
@@ -491,11 +660,21 @@ const sourceEntryPriceView = object(
   {
     id: nonEmptyString(),
     priceScopeId: nonEmptyString(),
+    sourceKind: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+      description:
+        'The kind of the run that stated this price (plan 0190), which is the kind an accept writes it to catalog under. It can differ from the kind of the row: a row that a website walk owns can hold a leaflet price. Null only for a price from before plan 0190 whose kind could not be read. Such a price is not written by an accept.',
+    },
     // Null when the source stated only a comparison figure.
     price: numberOrNull(),
     currency: nonEmptyString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    // Plan 0189: read from the label on every request, so it is stated and
+    // never required, as it is on a catalog price (plan 0157).
+    unitBasis: {
+      anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
+    },
     validFrom: nullableString(),
     validUntil: nullableString(),
     details: nullableObject(),
@@ -505,6 +684,7 @@ const sourceEntryPriceView = object(
   [
     'id',
     'priceScopeId',
+    'sourceKind',
     'price',
     'currency',
     'unitPrice',
@@ -530,8 +710,189 @@ const sourceEntryAcceptResult = object(
     createdItem: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }],
     },
+    pricesWithheld: {
+      ...array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld)),
+      description:
+        'The scopes whose price was not written, because another bound row of the chain states another amount there (plan 0191). The row is bound all the same.',
+    },
+    settled: {
+      anyOf: [
+        ref(HARVEST_SCHEMA_IDS.settleItemAtChainResult),
+        { type: 'null' },
+      ],
+      description:
+        'What settling the product the row left did (plan 0191). Null when the row was not bound before, or was bound to this same product.',
+    },
   },
-  ['entry', 'pricesWritten', 'createdItem']
+  ['entry', 'pricesWritten', 'createdItem', 'pricesWithheld', 'settled']
+);
+
+/**
+ * A price that was not sent to catalog (plan 0191): two rows of one chain and
+ * one source kind are bound to one product and state two amounts at one scope.
+ */
+const sourceEntryPriceWithheld = object(
+  HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld,
+  {
+    entryId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    otherEntryIds: array(nonEmptyString()),
+    kindUnknown: {
+      type: 'boolean',
+      enum: [true],
+      description:
+        'Present and true when the price was not sent because it is a price from before plan 0190 whose kind could not be read. A price is never sent under a guessed kind. otherEntryIds is then empty.',
+    },
+  },
+  ['entryId', 'priceScopeId', 'otherEntryIds']
+);
+
+/** Settle a product at a chain (plan 0191). */
+const settleItemRequest = object(
+  HARVEST_SCHEMA_IDS.settleItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    dryRun: boolean(),
+  },
+  ['userId', 'itemId', 'supermarketId']
+);
+
+/**
+ * What settling a product at a chain did, or with `dryRun` would do (plan
+ * 0191). The two answers have one shape and count the same things.
+ */
+const settleItemAtChainResult = object(
+  HARVEST_SCHEMA_IDS.settleItemAtChainResult,
+  {
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    dryRun: boolean(),
+    boundEntryIds: {
+      ...array(nonEmptyString()),
+      description:
+        'The rows of the chain that are bound to the product now. Catalog is made to agree with these.',
+    },
+    pricesWithdrawn: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Price rows a harvest run wrote that were removed from the product. A row a person typed is never one of them.',
+    },
+    pricesWithdrawnAt: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        deleted: integer({ minimum: 1 }),
+      },
+      required: ['priceScopeId', 'sourceKind', 'deleted'],
+      additionalProperties: false,
+    }),
+    pricesRestated: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Prices of the bound rows that are the current price of their scope and kind after the call, one per scope and kind. It counts what is stated and current, not what changed.',
+    },
+    pricesNotCurrent: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        },
+        required: ['priceScopeId', 'sourceKind'],
+        additionalProperties: false,
+      }),
+      description:
+        'Prices a bound row states that are not the current price of their scope and kind. Catalog holds a newer row there that says something else, written by a run that no bound row and no leaving row names. That row stays.',
+    },
+    pricesNotWritable: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+          copiedFromScopeId: nonEmptyString(),
+        },
+        required: ['priceScopeId', 'sourceKind', 'copiedFromScopeId'],
+        additionalProperties: false,
+      }),
+      description:
+        'Prices a bound row states that catalog cannot write, because the scope the price was copied from is gone. Nothing at that scope and kind changed.',
+    },
+    pricesWritten: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Price rows catalog inserted for those statements. Zero on a product that was already settled.',
+    },
+    pricesKeptAsWritten: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+          heldAs: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        },
+        required: ['priceScopeId', 'sourceKind', 'heldAs'],
+        additionalProperties: false,
+      }),
+      description:
+        'Statements catalog did not apply, because it holds the price of that run at that scope under another kind (heldAs) than the kind of the run (sourceKind). The price stays as it was written.',
+    },
+    pricesWithheld: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld)),
+    offersRemoved: {
+      ...array(nonEmptyString()),
+      description:
+        'The price scopes whose offer was removed. Always empty while a bound row of the chain names the product.',
+    },
+    offersKept: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        reason: {
+          type: 'string',
+          enum: ['PRICED', 'SHOP_ROW', 'PERSON', 'NO_TRAIL'],
+        },
+      },
+      required: ['priceScopeId', 'reason'],
+      additionalProperties: false,
+    }),
+    shopRowsRemoved: integer({ minimum: 0 }),
+    shopRowsCleared: integer({ minimum: 0 }),
+    shopRowConflicts: {
+      ...array({
+        type: 'object',
+        properties: {
+          supermarketLocationId: nonEmptyString(),
+          held: { type: ['boolean', 'null'] },
+        },
+        required: ['supermarketLocationId', 'held'],
+        additionalProperties: false,
+      }),
+      description:
+        'Shop rows whose availability a person wrote. They are left alone.',
+    },
+  },
+  [
+    'itemId',
+    'supermarketId',
+    'dryRun',
+    'boundEntryIds',
+    'pricesWithdrawn',
+    'pricesWithdrawnAt',
+    'pricesRestated',
+    'pricesNotCurrent',
+    'pricesNotWritable',
+    'pricesWritten',
+    'pricesKeptAsWritten',
+    'pricesWithheld',
+    'offersRemoved',
+    'offersKept',
+    'shopRowsRemoved',
+    'shopRowsCleared',
+    'shopRowConflicts',
+  ]
 );
 
 /**
@@ -717,6 +1078,10 @@ const sourceCatalogEntryPage = paginated(
 const itemSourceEntryPage = paginated(
   HARVEST_SCHEMA_IDS.itemSourceEntryPage,
   HARVEST_SCHEMA_IDS.itemSourceEntryView
+);
+const queuedSourceEntryPage = paginated(
+  HARVEST_SCHEMA_IDS.queuedSourceEntryPage,
+  HARVEST_SCHEMA_IDS.queuedSourceEntryView
 );
 const sourceLocationPage = paginated(
   HARVEST_SCHEMA_IDS.sourceLocationPage,
@@ -1035,8 +1400,15 @@ const linkPlaceRequest = object(
     ...adminCredentialProperties,
     placeId: nonEmptyString(),
     supermarketLocationId: nonEmptyString(),
+    // Link although the place resolves to another chain (plan 0193).
+    acrossChains: boolean(),
   },
   ['userId', 'placeId', 'supermarketLocationId']
+);
+const linkPlacesByRefRequest = object(
+  HARVEST_SCHEMA_IDS.linkPlacesByRefRequest,
+  { ...adminCredentialProperties, apply: boolean() },
+  ['userId']
 );
 const placeIdRequest = object(
   HARVEST_SCHEMA_IDS.placeIdRequest,
@@ -1380,6 +1752,12 @@ export const harvestSchemas: JsonSchema[] = [
     HARVEST_SCHEMA_IDS.sourceLocationStatus,
     Object.values(SourceLocationStatus)
   ),
+  enumOf(HARVEST_SCHEMA_IDS.placeMatchRung, Object.values(PlaceMatchRung)),
+  enumOf(HARVEST_SCHEMA_IDS.placeLinkField, Object.values(PlaceLinkField)),
+  enumOf(
+    HARVEST_SCHEMA_IDS.placeLinkSkipReason,
+    Object.values(PlaceLinkSkipReason)
+  ),
   enumOf(HARVEST_SCHEMA_IDS.adapterKey, ADAPTER_KEYS),
   enumOf(
     HARVEST_SCHEMA_IDS.harvestWarningCode,
@@ -1399,11 +1777,18 @@ export const harvestSchemas: JsonSchema[] = [
   harvestRunView,
   harvestDocument,
   harvestRunExportResult,
+  placeLocationCandidate,
   discoveredPlaceView,
+  locationRefHolder,
+  placeLinkResult,
+  placeRefLink,
+  placeRefSkip,
+  linkPlacesByRefResult,
   discoveredPlaceGroup,
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
   itemSourceEntryView,
+  queuedSourceEntryView,
   sourceEntryPriceView,
   sourceEntryAcceptResult,
   sourceLocationCandidate,
@@ -1415,6 +1800,7 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlacePage,
   sourceCatalogEntryPage,
   itemSourceEntryPage,
+  queuedSourceEntryPage,
   sourceLocationPage,
   brandSuggestionChain,
   brandSuggestionView,
@@ -1441,6 +1827,7 @@ export const harvestSchemas: JsonSchema[] = [
   groupPlacesRequest,
   importPlaceRequest,
   linkPlaceRequest,
+  linkPlacesByRefRequest,
   placeIdRequest,
   listSourceLocationsRequest,
   mapSourceLocationRequest,
@@ -1448,6 +1835,9 @@ export const harvestSchemas: JsonSchema[] = [
   listEntriesRequest,
   listEntriesByItemRequest,
   entryIdRequest,
+  settleItemRequest,
+  settleItemAtChainResult,
+  sourceEntryPriceWithheld,
   acceptEntryRequest,
   createItemFromEntryRequest,
   sourceEntryExpectation,
@@ -1533,9 +1923,14 @@ export const harvestMessageContracts: Record<
     request: HARVEST_SCHEMA_IDS.importPlaceRequest,
     response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
   },
+  // The place and what the link wrote on the shop (plan 0193).
   [DISCOVERED_PLACE_PATTERNS.link]: {
     request: HARVEST_SCHEMA_IDS.linkPlaceRequest,
-    response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
+    response: HARVEST_SCHEMA_IDS.placeLinkResult,
+  },
+  [DISCOVERED_PLACE_PATTERNS.linkByRef]: {
+    request: HARVEST_SCHEMA_IDS.linkPlacesByRefRequest,
+    response: HARVEST_SCHEMA_IDS.linkPlacesByRefResult,
   },
   [DISCOVERED_PLACE_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.placeIdRequest,
@@ -1580,6 +1975,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.entryIdRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  },
+  [SOURCE_ENTRY_PATTERNS.settleItem]: {
+    request: HARVEST_SCHEMA_IDS.settleItemRequest,
+    response: HARVEST_SCHEMA_IDS.settleItemAtChainResult,
   },
   [SOURCE_ENTRY_PATTERNS.applyDecisions]: {
     request: HARVEST_SCHEMA_IDS.applyEntryDecisionsRequest,

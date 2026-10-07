@@ -22,12 +22,11 @@
 //   2026-08-28  ioredis, tslib, @socket.io/redis-adapter, the OpenTelemetry SDK
 //               missing from all five manifests. Every image dead at boot.
 //   2026-09-01  the gateway gained @nestjs/jwt and the manifest did not.
-//   2026-09-03  `uuid`, required by catalog's seed-reference.js for the
-//               deterministic ids in app/db/reference/ids.ts and by nothing on
-//               the main path:
+//   2026-09-03  `uuid`, required by a third catalog bundle for its
+//               deterministic ids and by nothing on the main path. That
+//               bundle was the reference seed, which plan 0180 removed:
 //
 //                 Error: Cannot find module 'uuid'
-//                 Require stack: - /app/seed-reference.js
 //
 //               The service itself started perfectly. But the Job that runs that
 //               bundle is a Helm pre-upgrade hook, so it did not cost one dead

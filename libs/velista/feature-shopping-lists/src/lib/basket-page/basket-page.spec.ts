@@ -54,7 +54,7 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineComposer } from '@portfolio/velista/ui';
+import { LineComposer, NoPricesNote } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
@@ -291,6 +291,7 @@ function line(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     left,
     bought,
     asked: bought + left,
+    boughtElsewhere: 0,
     state: 'WANTED',
     note: null,
     noteAt: null,
@@ -317,6 +318,7 @@ function entry(
     left,
     bought: 0,
     asked: left,
+    boughtElsewhere: 0,
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
@@ -1730,6 +1732,27 @@ describe('searching the basket', () => {
       expect(css).not.toContain('.standalone');
       expect(css).not.toMatch(/position:\s*sticky/);
       expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
+    });
+
+    it('sticks the tools bar over the start padding of its column', () => {
+      // A sticky offset is measured from the content box of the scroller. With a start
+      // padding on `.page` and an offset of zero, the bar stopped that padding short of
+      // the header and the lines showed through the strip above it. So the bar's offset
+      // and its own padding are both the padding of the column, under one token.
+      const css = readFileSync(
+        join(__dirname, 'basket-page.scss'),
+        'utf8'
+      ).replace(/\/\/.*$/gm, '');
+
+      const lead = /\.page\s*\{[^}]*padding-block-start:\s*(var\([^)]+\))/.exec(
+        css
+      )?.[1];
+      const bar = /lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+
+      expect(lead).toBeDefined();
+      expect(bar).toContain(`inset-block-start: calc(${lead} * -1)`);
+      expect(bar).toContain(`margin-block-start: calc(${lead} * -1)`);
+      expect(bar).toContain(`padding-block-start: ${lead}`);
     });
   });
 
@@ -4052,5 +4075,353 @@ describe('BasketPage: the map of the shop you are in', () => {
     fixture.detectChanges();
 
     expect(query(fixture, 'lib-basket-row .section')).toBeNull();
+  });
+});
+
+/**
+ * Velista `0131`: a row somebody bought through another basket, on the page.
+ *
+ * The pipeline hands the row what was bought elsewhere and the row draws it, so
+ * this asserts the two are wired: the caption is on the page and the control that
+ * undoes a purchase is not. The quantity control is the sheet's "asks for" reel,
+ * which the entries pane and the settle sheet specs assert against
+ * `demandEditable`.
+ */
+describe('a row bought on another basket (velista 0131)', () => {
+  const butter = (demandEditable = true) =>
+    line('Butter', {
+      left: 0,
+      bought: 0,
+      asked: 0,
+      boughtElsewhere: 2,
+      state: 'DONE',
+      note: 'BOUGHT_ON_ANOTHER_BASKET',
+      noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      entries: [
+        entry(null, 'zl-Butter', 0, {
+          boughtElsewhere: 2,
+          state: 'DONE',
+          demandEditable,
+        }),
+      ],
+    });
+
+  it('draws the caption', async () => {
+    const { fixture } = await render({ lines: [butter()] });
+
+    expect(text(fixture)).toContain('basket.elsewhere.caption');
+  });
+
+  it('draws it as a done row with no revert control', async () => {
+    const { fixture, store } = await render({ lines: [butter()] });
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(page.querySelector('lib-basket-row .row.is-done')).not.toBeNull();
+    expect(page.querySelector('lib-basket-row button.status')).toBeNull();
+    expect(page.querySelector('lib-basket-row lib-quantity-reel')).toBeNull();
+    expect(store.revert).not.toHaveBeenCalled();
+  });
+
+  it('draws no caption and keeps the revert on a row this basket bought', async () => {
+    const { fixture } = await render({
+      lines: [line('Eggs', { left: 0, bought: 2, state: 'DONE' })],
+    });
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(text(fixture)).not.toContain('basket.elsewhere.caption');
+    expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
+  });
+
+  it('keeps today\u2019s row and adds the caption when something is left', async () => {
+    const { fixture } = await render({
+      lines: [line('Milk', { left: 2, boughtElsewhere: 1 })],
+    });
+    const page = fixture.nativeElement as HTMLElement;
+
+    expect(text(fixture)).toContain('basket.elsewhere.caption');
+    expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
+    expect(
+      page.querySelector('lib-basket-row lib-quantity-reel')
+    ).not.toBeNull();
+  });
+});
+
+/**
+ * What the lines cost, on the page (velista `0132`, section 9).
+ *
+ * The sum has its own spec and so does each part that draws it. What is left for
+ * the page is the one decision it makes: **which of the three parts is on
+ * screen**, and what it hands the popover to name.
+ */
+describe('BasketPage: what the lines cost (velista 0132)', () => {
+  const MERCADONA: BasketShop = {
+    id: 'loc-mayor',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  /** A product priced at 1.35 anywhere, and at the chosen shop when told so. */
+  function yogurt(atShop: number | null = null): BasketProduct {
+    return {
+      id: 'item-yogurt',
+      name: { en: 'Yogurt', es: 'Yogur' },
+      brand: null,
+      imageUrl: null,
+      size: null,
+      unit: null,
+      offer: {
+        price: 1.35,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        priceScopeId: 's-dia',
+      },
+      offers: [],
+      atShop:
+        atShop === null
+          ? null
+          : {
+              priceScopeId: 's-merca',
+              price: atShop,
+              currency: 'EUR',
+              available: null,
+            },
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+    };
+  }
+
+  const priced = (atShop: number | null = null) =>
+    new Map<string, BasketProduct>([['item-yogurt', yogurt(atShop)]]);
+
+  /** Two yogurts with a product, and a line that is only words. */
+  const lines = (): readonly BasketRow[] => [
+    line('Yogurt', { left: 2, optionIds: ['item-yogurt'] }),
+    line('Candles'),
+  ];
+
+  const served = [
+    { listId: 'l-weekly', name: 'Weekly shop', zoneId: 'z1', zoneName: 'Flat' },
+  ];
+
+  const NUMBER = 'lib-list-tools lib-basket-total';
+  const BAR = 'lib-list-tools lib-basket-total-bar';
+  const NOTE = 'lib-no-prices-note';
+
+  // A popover is drawn beside the page and not inside it, so one left open
+  // would still be in the document for the next test to find.
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('draws the number and the bar with a priced line, and no small row', async () => {
+    const { fixture } = await render({
+      lines: lines(),
+      products: priced(),
+      echoValues: true,
+    });
+
+    // Two at 1.35: the number is the sum of the rows under it.
+    expect(query(fixture, NUMBER)?.textContent).toContain('"amount":"€2.70"');
+    expect(query(fixture, BAR)).not.toBeNull();
+    expect(query(fixture, NOTE)).toBeNull();
+  });
+
+  it('puts the number before the filter, and the bar under the chips', async () => {
+    const { fixture } = await render({ lines: lines(), products: priced() });
+    TestBed.inject(BasketViewStore).setOrder('alpha');
+    fixture.detectChanges();
+
+    const number = query(fixture, NUMBER);
+    expect(number?.nextElementSibling?.classList).toContain('tool');
+    expect(query(fixture, BAR)?.previousElementSibling?.tagName).toBe(
+      'LIB-CHIP-ROW'
+    );
+  });
+
+  it('keeps the bar and the small row off the edges of the screen', () => {
+    // The column's inline padding is zero, so its rows reach the edges, and
+    // nothing in the tools bar is a row. jsdom lays nothing out, so the
+    // stylesheet is the half a spec can see.
+    const css = readFileSync(
+      join(__dirname, 'basket-page.scss'),
+      'utf8'
+    ).replace(/\/\/.*$/gm, '');
+    const gutter = 'var(--app-space-5)';
+
+    expect(/lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
+      `padding-inline-start: ${gutter}`
+    );
+    expect(/\.chips,\s*\.total-bar\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
+      `margin-inline-end: ${gutter}`
+    );
+    expect(/\.no-prices\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
+      `padding-inline: ${gutter}`
+    );
+  });
+
+  it('draws the small row with no priced line, and no number and no bar', async () => {
+    const { fixture } = await render({
+      lines: [line('Candles'), line('Batteries')],
+      unseenChanges: 1,
+    });
+
+    expect(query(fixture, NUMBER)).toBeNull();
+    expect(query(fixture, BAR)).toBeNull();
+
+    // First in the scroll: under the sticky bar and above the changes banner.
+    const note = query(fixture, NOTE);
+    expect(note?.previousElementSibling?.tagName).toBe('LIB-LIST-TOOLS');
+    expect(note?.nextElementSibling?.tagName).toBe('LIB-CHANGES-BANNER');
+  });
+
+  it('draws none of the three on an empty basket', async () => {
+    const { fixture } = await render({ lines: [] });
+
+    expect(query(fixture, 'lib-basket-total')).toBeNull();
+    expect(query(fixture, 'lib-basket-total-bar')).toBeNull();
+    expect(query(fixture, NOTE)).toBeNull();
+  });
+
+  it('draws neither while the composer holds words, with or without a price', async () => {
+    const withPrice = await render({
+      lines: lines(),
+      products: priced(),
+      served,
+    });
+    typeInto(withPrice.fixture, 'yog');
+
+    expect(query(withPrice.fixture, 'lib-basket-total')).toBeNull();
+    expect(query(withPrice.fixture, 'lib-basket-total-bar')).toBeNull();
+
+    const without = await render({ lines: [line('Candles')], served });
+    expect(query(without.fixture, NOTE)).not.toBeNull();
+    typeInto(without.fixture, 'can');
+
+    expect(query(without.fixture, NOTE)).toBeNull();
+  });
+
+  it('opens the popover from the number', async () => {
+    const { fixture } = await render({ lines: lines(), products: priced() });
+    const number = query(fixture, `${NUMBER} button`) as HTMLButtonElement;
+
+    expect(number.getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.textContent).not.toContain('basket.total.why');
+
+    number.click();
+    fixture.detectChanges();
+
+    expect(number.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      document.querySelector(
+        '[role="dialog"][aria-labelledby="basket-total-title"]'
+      )
+    ).not.toBeNull();
+    expect(document.body.textContent).toContain('basket.total.why');
+  });
+
+  describe('the chain the popover names', () => {
+    async function popover(options: Options): Promise<string> {
+      const { fixture } = await render({ ...options, echoValues: true });
+      (query(fixture, `${NUMBER} button`) as HTMLButtonElement).click();
+      fixture.detectChanges();
+      return document.querySelector('.pop')?.textContent ?? '';
+    }
+
+    it('is none with no shop chosen', async () => {
+      const words = await popover({ lines: lines(), products: priced() });
+
+      expect(words).toContain(
+        'basket.total.withPrice:{"count":1,"products":1}'
+      );
+    });
+
+    it('is the chosen shop’s while the rows quote that shop', async () => {
+      const words = await popover({
+        lines: lines(),
+        products: priced(1.5),
+        readAtShop: MERCADONA,
+      });
+
+      expect(words).toContain(
+        'basket.total.withPriceAt:{"count":1,"products":1,"chain":"Mercadona"}'
+      );
+      // And the sum is that shop's price, as the row's is: two at 1.50.
+      expect(words).toContain('"amount":"€3.00"');
+    });
+
+    it('is none for a chosen shop that prices nothing here, whose rows quote the cheapest anywhere', async () => {
+      const words = await popover({
+        lines: lines(),
+        products: priced(),
+        readAtShop: MERCADONA,
+      });
+
+      expect(words).toContain(
+        'basket.total.withPrice:{"count":1,"products":1}'
+      );
+      expect(words).not.toContain('Mercadona');
+    });
+  });
+
+  describe('the small row', () => {
+    const note = (fixture: ComponentFixture<BasketPage>) =>
+      fixture.debugElement.query(By.directive(NoPricesNote))
+        .componentInstance as NoPricesNote;
+
+    it('is told the reader is a guest, who cannot open a line', async () => {
+      const asOwner = await render({ lines: [line('Candles')] });
+      expect(note(asOwner.fixture).guest()).toBe(false);
+
+      const asGuest = await render({
+        lines: [line('Candles')],
+        me: participant(guest('p-9', 1)),
+      });
+      expect(note(asGuest.fixture).guest()).toBe(true);
+    });
+
+    it('is told of a shop only while the rows quote that shop', async () => {
+      const anywhere = await render({ lines: [line('Candles')] });
+      expect(note(anywhere.fixture).shopChosen()).toBe(false);
+
+      // The shop prices the yogurt, and the one line the filter leaves is a
+      // product it is known not to have, so nothing on screen adds a price.
+      const absent: BasketProduct = {
+        ...yogurt(),
+        id: 'item-coffee',
+        offer: null,
+        atShop: {
+          priceScopeId: null,
+          price: null,
+          currency: null,
+          available: false,
+        },
+      };
+      const atShop = await render({
+        lines: [
+          line('Yogurt', { optionIds: ['item-yogurt'] }),
+          line('Coffee', { optionIds: ['item-coffee'] }),
+        ],
+        products: new Map([
+          ['item-yogurt', yogurt(1.5)],
+          ['item-coffee', absent],
+        ]),
+        readAtShop: MERCADONA,
+      });
+      // The store's own search and not the field, so the page keeps its body.
+      TestBed.inject(BasketViewStore).search('coffee');
+      atShop.fixture.detectChanges();
+
+      expect(note(atShop.fixture).shopChosen()).toBe(true);
+    });
   });
 });

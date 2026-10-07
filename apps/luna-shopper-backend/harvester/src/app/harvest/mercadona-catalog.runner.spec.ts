@@ -105,7 +105,13 @@ function listed(id: string, warehouse: string) {
 }
 
 /** `/categories/:id/`: the level 2 children with their products inline. */
-function categoryProducts(warehouse: string) {
+function categoryProducts(
+  warehouse: string,
+  priceFor?: (
+    externalId: string,
+    warehouse: string
+  ) => Record<string, unknown> | undefined
+) {
   return {
     id: 112,
     name: 'Aceite, vinagre y sal',
@@ -117,9 +123,16 @@ function categoryProducts(warehouse: string) {
         name: 'Aceite de oliva',
         order: 1,
         published: true,
-        products: (ASSORTMENT[warehouse] ?? []).map((id) =>
-          listed(id, warehouse)
-        ),
+        products: (ASSORTMENT[warehouse] ?? []).map((id) => {
+          const product = listed(id, warehouse);
+          return {
+            ...product,
+            price_instructions: {
+              ...product.price_instructions,
+              ...priceFor?.(id, warehouse),
+            },
+          };
+        }),
       },
     ],
   };
@@ -151,6 +164,11 @@ function detailed(id: string, warehouse: string, ean: string | null) {
  */
 function stubFetch(options: {
   detailFor?: (externalId: string, warehouse: string) => unknown | null;
+  /** Fields laid over the price block of one product in one warehouse's listing. */
+  listingPriceFor?: (
+    externalId: string,
+    warehouse: string
+  ) => Record<string, unknown> | undefined;
   onRequest?: (count: number, url: string) => void;
 }): { urls: string[]; fetchImpl: typeof fetch } {
   const urls: string[] = [];
@@ -175,7 +193,7 @@ function stubFetch(options: {
       return answer(200, CATEGORY_TREE);
     }
     if (/\/categories\/\d+\//.test(url)) {
-      return answer(200, categoryProducts(warehouse));
+      return answer(200, categoryProducts(warehouse, options.listingPriceFor));
     }
     const product = /\/products\/([^/?]+)\//.exec(url);
     if (product) {
@@ -267,6 +285,230 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       expect.objectContaining({ scopeKey: '4661', price: 8.75 }),
     ]);
     expect(report.products[0].ean).toBe('8480000135636');
+    // The size and the unit it is in, from the one detail payload (plan
+    // 0177). The printed text is the listing's `size_format`, untouched.
+    expect(report.products[0]).toMatchObject({
+      unitSize: 1,
+      sizeUnit: 'LITER',
+      sizeFormat: 'l',
+    });
+  });
+
+  describe('the size and the unit it is in (plan 0177)', () => {
+    /** One walk whose two details state the given size blocks. */
+    async function sizesOf(
+      blocks: Record<string, Record<string, unknown>>
+    ): Promise<Record<string, [number | null, string | null]>> {
+      const { fetchImpl } = stubFetch({
+        detailFor: (id, warehouse) => {
+          const detail = detailed(id, warehouse, null);
+          return {
+            ...detail,
+            price_instructions: {
+              ...detail.price_instructions,
+              ...blocks[id],
+            },
+          };
+        },
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+      await runner.run(context, report, walking('4661'), source());
+      restore();
+      restore = undefined;
+      return Object.fromEntries(
+        report.products.map((product) => [
+          product.externalId,
+          [product.unitSize, product.sizeUnit],
+        ])
+      );
+    }
+
+    // Mercadona prints the unit alone, and never a centilitre: `kg`, `l`, `ud`
+    // and `m` are the four values of the whole assortment.
+    it('states the litre and the kilogram of the detail it read', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'l', unit_size: 1.5 },
+          '7012': { size_format: 'kg', unit_size: 0.4636 },
+        })
+      ).toEqual({ '4241': [1.5, 'LITER'], '7012': [0.4636, 'KILOGRAM'] });
+    });
+
+    it('states the unit of a product sized by count, and none for metres', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'ud', unit_size: 12 },
+          // Foil and cling film: a length is a dimension and not a size, so
+          // the row states neither a number nor a unit (plan 0183).
+          '7012': { size_format: 'm', unit_size: 30 },
+        })
+      ).toEqual({ '4241': [12, 'UNIT'], '7012': [null, null] });
+    });
+
+    it('states no unit beside no size', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'kg', unit_size: null },
+          '7012': { size_format: 'l', unit_size: null },
+        })
+      ).toEqual({ '4241': [null, null], '7012': [null, null] });
+    });
+
+    it('reads the unit from the detail, whatever the listing printed', async () => {
+      // The number is the detail's, so the unit has to be the detail's too:
+      // the listing here still says `l`.
+      const { fetchImpl } = stubFetch({
+        detailFor: (id, warehouse) => {
+          const detail = detailed(id, warehouse, null);
+          return {
+            ...detail,
+            price_instructions: {
+              ...detail.price_instructions,
+              size_format: 'kg',
+              unit_size: 0.5,
+            },
+          };
+        },
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(report.products[0]).toMatchObject({
+        unitSize: 0.5,
+        sizeUnit: 'KILOGRAM',
+        sizeFormat: 'l',
+      });
+    });
+  });
+
+  describe('a product sold by approximate weight (plan 0181)', () => {
+    /**
+     * The tray of plan 0108, section 5.1: the same 7.30 a kilo in both
+     * warehouses, and a typical weight that differs between them.
+     */
+    const TRAY: Record<string, Record<string, unknown>> = {
+      '4661': {
+        approx_size: true,
+        size_format: 'kg',
+        unit_size: 0.6,
+        unit_price: '4.38',
+        bulk_price: '7.30',
+        reference_format: 'kg',
+      },
+      '4804': {
+        approx_size: true,
+        size_format: 'kg',
+        unit_size: 0.65,
+        unit_price: '4.75',
+        bulk_price: '7.30',
+        reference_format: 'kg',
+      },
+    };
+    const trayOf = (id: string, warehouse: string) =>
+      id === '7012' ? TRAY[warehouse] : undefined;
+
+    function weighedWalk() {
+      return stubFetch({
+        listingPriceFor: trayOf,
+        detailFor: (id, warehouse) => {
+          const detail = detailed(id, warehouse, '2105600070120');
+          return {
+            ...detail,
+            price_instructions: {
+              ...detail.price_instructions,
+              ...trayOf(id, warehouse),
+            },
+          };
+        },
+      });
+    }
+
+    it('reports it sold by weight, with no size and the price of a kilo per warehouse', async () => {
+      const { fetchImpl } = weighedWalk();
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661', '4804'), source());
+
+      const tray = report.products.find(
+        (product) => product.externalId === '7012'
+      );
+      expect(tray).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        // The chain's own token, which the row already holds.
+        sizeFormat: 'kg',
+        prices: [
+          expect.objectContaining({
+            scopeKey: '4661',
+            price: 7.3,
+            unitPrice: 7.3,
+            unitPriceLabel: 'kg',
+          }),
+          expect.objectContaining({
+            scopeKey: '4804',
+            price: 7.3,
+            unitPrice: 7.3,
+          }),
+        ],
+      });
+    });
+
+    it('leaves a fixed pack beside it exactly as it was', async () => {
+      const { fetchImpl } = weighedWalk();
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, walking('4661'), source());
+
+      const bottle = report.products.find(
+        (product) => product.externalId === '4241'
+      );
+      expect(bottle).toMatchObject({
+        soldByWeight: false,
+        unitSize: 1,
+        sizeUnit: 'LITER',
+        prices: [expect.objectContaining({ price: 8.75, unitPrice: 8.75 })],
+      });
+    });
+
+    it('prices a known product by the kilo from the listing alone', async () => {
+      const { fetchImpl } = weighedWalk();
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        {
+          ...walking('4661'),
+          details: HarvestDetailFetch.NEW,
+          knownExternalIds: new Set(WALKED),
+        },
+        source()
+      );
+
+      const tray = report.partialProducts.find(
+        (product) => product.externalId === '7012'
+      );
+      expect(tray).toMatchObject({
+        detailFetched: false,
+        // The listing's own answer, so the row it lands on stops saying that
+        // it is a fixed pack beside a price per kilo.
+        soldByWeight: true,
+        prices: [expect.objectContaining({ price: 7.3, unitPrice: 7.3 })],
+      });
+      const bottle = report.partialProducts.find(
+        (product) => product.externalId === '4241'
+      );
+      expect(bottle).toMatchObject({
+        detailFetched: false,
+        soldByWeight: false,
+      });
+    });
   });
 
   it('declares each warehouse as a LOCAL_AREA scope before any price names it', async () => {
@@ -508,12 +750,15 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         (product) => product.externalId === '4241'
       );
       // A null for a field it did not read would blank the stored one, so the
-      // field is not there at all (plan 0119, section 6).
+      // field is not there at all (plan 0119, section 6). `soldByWeight` is
+      // not an identity field: it says what the prices beside it are, and the
+      // listing states it (plan 0181).
       expect(Object.keys(shared ?? {}).sort()).toEqual([
         'detailFetched',
         'externalId',
         'observedAt',
         'prices',
+        'soldByWeight',
       ]);
       // One price per warehouse that listed it, from that warehouse's listing,
       // exactly as a product read whole carries.

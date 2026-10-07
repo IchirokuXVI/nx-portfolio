@@ -38,6 +38,7 @@ import {
   loadUnits,
   normalizeName,
   privateLabelLines,
+  productGtin,
   suggestBrandLabel,
 } from './rules.mjs';
 import {
@@ -389,11 +390,18 @@ export async function collectCandidates({
     Object.entries(createdRefs ?? {}).map(([ref, itemId]) => [itemId, ref])
   );
 
+  // Only a real barcode is looked up (backend plan 0184). A code a shop prints
+  // on its own scales names another product in another chain, and the 211
+  // products that already hold one would come back as `eanMatch`, which the
+  // prompt calls the strongest evidence there is. The ingest stopped matching
+  // on such a code, and this is the same rule. `findByEan` answers null for
+  // no code, so no request is made.
+  const barcode = productGtin(entry.ean);
   const [mainHits, mainEan, runHits, runEan] = await Promise.all([
     main.searchItems(key),
-    main.findByEan(entry.ean),
+    main.findByEan(barcode),
     rehearsal.searchItems(key),
-    rehearsal.findByEan(entry.ean),
+    rehearsal.findByEan(barcode),
   ]);
 
   const candidates = [];
@@ -440,6 +448,9 @@ export async function collectCandidates({
   return {
     candidates: candidates.slice(0, CANDIDATE_LIMIT * 2),
     eanMatch: eanCandidate,
+    // The same product as a catalog row, for the LINK check that asks whether
+    // another product holds the entry's barcode (backend plan 0185).
+    eanOwner: mainEan ?? (runEan && refByItemId.has(runEan.id) ? runEan : null),
     itemsById,
     runItems,
   };
@@ -840,6 +851,8 @@ export async function decide({
       createdRefs: state.createdRefs,
     }));
   const { candidates, itemsById, runItems } = collected;
+  // The product that holds the entry's own real barcode, in either catalog.
+  const rowEanOwner = collected.eanOwner ?? null;
 
   // What the model was shown, as the ids and refs it could name (plan 0006).
   // The handout when a `next` handed this row out, which the staleness check
@@ -882,6 +895,7 @@ export async function decide({
       linkTarget,
       linkTargetShown,
       eanOwner,
+      rowEanOwner,
       brands,
       supermarkets: state.supermarkets ?? [],
       categories: vocabulary.categories,
@@ -943,6 +957,12 @@ export async function decide({
     // The slot's own ids for the slugs, because the catalog create route takes
     // ids (backend plan 0166). The recorded item keeps them for a resume.
     item = withCategoryIds(proposal.item, await rehearsal.listCategories());
+    // The row's own count goes onto the recorded item (backend plan 0177), so
+    // a resume that rebuilds the rehearsal from the record alone writes the
+    // same product this write does. Only a count the row read is recorded.
+    if (entry.packCount !== null && entry.packCount !== undefined) {
+      item = { ...item, rowPackCount: entry.packCount };
+    }
     const created = await rehearsal.createItem(toCreateItemBody(item));
     rehearsalItemId = created?.id ?? null;
   } catch (error) {

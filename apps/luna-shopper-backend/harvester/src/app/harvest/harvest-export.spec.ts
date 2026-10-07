@@ -1,6 +1,7 @@
 import {
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   validateHarvestDocument,
   type HarvestDocument,
 } from '@portfolio/luna-shopper/contracts';
@@ -64,6 +65,7 @@ function entry(
     brand: 'Hacendado',
     ean: '8480000123456',
     unitSize: 1,
+    sizeUnit: UnitOfMeasure.LITER,
     sizeFormat: '1 L',
     categoryPath: ['Lácteos', 'Leche'],
     url: 'https://example.invalid/4241',
@@ -215,6 +217,36 @@ describe('buildHarvestDocument', () => {
     );
   });
 
+  it('hints the kind of the prices the run observed, not the kind of the row (plan 0190)', async () => {
+    // The export of a leaflet run. Its offers landed on rows that a website
+    // walk owns, so every row says OFFICIAL_WEB and every price says leaflet.
+    const document = build([
+      entry({
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [price({ sourceKind: PriceSourceKind.OFFICIAL_LEAFLET })],
+      }),
+      entry({
+        id: 'e-2',
+        externalId: 'k-2',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [
+          price({ id: 'p-2', sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }),
+        ],
+      }),
+      // A row with no price answers with its own kind, and is outnumbered.
+      entry({
+        id: 'e-3',
+        externalId: 'k-3',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [],
+      }),
+    ]);
+
+    expect((document['hints'] as Record<string, unknown>)['source_kind']).toBe(
+      PriceSourceKind.OFFICIAL_LEAFLET
+    );
+  });
+
   it('states a window as the local days it was printed as, not the exclusive bound', async () => {
     // `validUntil` is the local midnight *after* the last valid day, so a file
     // that said "to 23 September" stored the 24th. Exporting the 24th would
@@ -255,6 +287,30 @@ describe('buildHarvestDocument', () => {
 
     expect(failures).toEqual([]);
     expect(valid).toBe(true);
+  });
+
+  it('states the unit the quantity is in, beside the printed label (plan 0177)', async () => {
+    const [product] = productsOf(build([entry()]));
+
+    expect(product['size']).toEqual({
+      label: '1 L',
+      quantity: 1,
+      unit: 'LITER',
+    });
+  });
+
+  it('states no unit for a row that holds none, which is every row written before the plan', async () => {
+    const [product] = productsOf(build([entry({ sizeUnit: null })]));
+
+    expect(product['size']).toEqual({ label: '1 L', quantity: 1 });
+  });
+
+  it('states no unit for a size with no label, so the import cannot read it as the size text', async () => {
+    // The import takes `size.unit` as `sizeFormat` when there is no label, and
+    // a row with no printed size must come back with none.
+    const [product] = productsOf(build([entry({ sizeFormat: null })]));
+
+    expect(product['size']).toEqual({ quantity: 1 });
   });
 
   it('omits a size a source never stated rather than writing an empty one', async () => {
@@ -383,6 +439,7 @@ describe('importing a run this backend exported', () => {
           ean: null,
           sizeFormat: 'kg',
           unitSize: 0.35,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
           extra: null,
           prices: [
             price({
@@ -416,6 +473,9 @@ describe('importing a run this backend exported', () => {
       ean: '8480000123456',
       sizeFormat: '1 L',
       unitSize: 1,
+      // The unit travels with the quantity (plan 0177), so the importing
+      // cluster's row says what the exporting one did.
+      sizeUnit: 'LITER',
       categoryPath: ['Lácteos', 'Leche'],
       url: 'https://example.invalid/4241',
       extra: { page: 3, raw_text: ['LECHE 0,89'] },

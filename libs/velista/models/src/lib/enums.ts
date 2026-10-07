@@ -313,8 +313,12 @@ export const BASKET_ROW_STATE_FALLBACK: BasketRowState = 'WANTED';
 /**
  * A fact about a row's past worth saying beside it (backend `0130`, section 4).
  *
- * One value today, and a union rather than a boolean so the wire shape does not
- * move when a second one arrives.
+ * A union rather than a boolean, so the wire shape did not move when the second
+ * one arrived. `BOUGHT_ON_ANOTHER_BASKET` is that second one (velista `0131`;
+ * backend `0188`): somebody bought some of the row lately through another basket,
+ * or through none. `SKIPPED_EARLIER` wins when both apply, by the server, so the
+ * caption for a purchase made elsewhere is drawn from `boughtElsewhere` and never
+ * from this.
  *
  * **There is no fallback**, unlike {@link BASKET_ROW_STATES}, and the difference is
  * the point: a state every row has must resolve to something, while a note is a
@@ -322,7 +326,10 @@ export const BASKET_ROW_STATE_FALLBACK: BasketRowState = 'WANTED';
  * draws nothing, where a guess would put a sentence under a row that does not
  * deserve it.
  */
-export const BASKET_ROW_NOTES = ['SKIPPED_EARLIER'] as const;
+export const BASKET_ROW_NOTES = [
+  'SKIPPED_EARLIER',
+  'BOUGHT_ON_ANOTHER_BASKET',
+] as const;
 export type BasketRowNote = (typeof BASKET_ROW_NOTES)[number];
 
 /**

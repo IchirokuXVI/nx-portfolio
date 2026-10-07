@@ -1,0 +1,311 @@
+{
+  "step": "D1",
+  "title": "The re-file of 2026-10-07: the rule that moved each product onto a leaf of plan 0179",
+  "sources": [
+    "stage-c6/propose.mjs",
+    "stage-c6/proposal/<leaf>.json",
+    "stage-c6/proposal.summary.json"
+  ],
+  "keys": "An entry is a rule and not a product. A rule names the leaf that a product is in, a test on its curated Spanish name (a regular expression), sometimes its brand or the shelf of its chain, and the leaf it goes to. `products` is the count of moved products that the rule explains, and `examples` holds three of their names.",
+  "decidedBy": "The session of stage c6, which wrote each rule after it read the names that the rule matches. Plan 0179 named the leaves.",
+  "fullRecord": "stage-c6/proposal/<leaf>.json holds each of the moved products with its old and its new categories. It is too large for this folder.",
+  "productsMoved": 2250,
+  "productsThatNoRuleOfThisFileExplains": 0,
+  "productsLeftForAPerson": 92,
+  "facialCare": {
+    "before": 2346,
+    "after": 496
+  },
+  "orderOfTheMakeupRules": "A product in `facial-care` is tried against the review names first, then the shelf of Mercadona, then the care shelves that keep their products, then the name. The first rule that fits decides.",
+  "keptInFacialCare": [
+    "A product whose name starts with \"Estuche de maquillaje\", \"Maletín de maquillaje\", \"Paleta de maquillaje\", \"Set de maquillaje\" or \"Lote infantil de maquillaje\": it holds products of several leaves. It is in the review list.",
+    "A product on the Mercadona shelf \"Maquillaje > Labios > Cuidado\": lip care is facial care.",
+    "A product on the Deza shelf \"PERFUMERIA DIVA > Tratamientos\" or on a Mercadona shelf under \"Cuidado facial y corporal\" (other than \"Manicura y pedicura\"), whatever its name starts with. A tinted cream there is in the review list.",
+    "A product whose name no rule reads as make-up. If it is on the Deza shelf \"PERFUMERIA DIVA > Color\", it is in the review list."
+  ],
+  "aProductThatKeptAnotherCategory": "A product keeps every category that no rule drops. The new leaf takes the position of the leaf it replaces. 7 Shiseido \"BB Sports\" keep `sunscreen`, and one vacuum sealer keeps `film-aluminum-and-preservation`.",
+  "mirroredRules": "The two sherry rules, the two pet rules and two of the premixed drink rules mirror each other. A product that held both old leaves is counted under both rules: 9 sherries, 37 pet accessories and 1 mojito.",
+  "perLeaf": {
+    "books": {
+      "es": "Libros",
+      "products": 10,
+      "from": {
+        "uncategorised": 10
+      }
+    },
+    "car-care": {
+      "es": "Cuidado del coche",
+      "products": 32,
+      "from": {
+        "air-fresheners-refills-and-candles": 22,
+        "scouring-pads-cloths-and-gloves": 4,
+        "cleaning-floors-windows-and-furniture": 6
+      }
+    },
+    "diy-and-hardware": {
+      "es": "Bricolaje y ferretería",
+      "products": 15,
+      "from": {
+        "batteries-kitchenware-and-bags": 15
+      }
+    },
+    "eye-makeup": {
+      "es": "Ojos",
+      "products": 455,
+      "from": {
+        "facial-care": 453,
+        "dyes": 2
+      }
+    },
+    "face-makeup": {
+      "es": "Bases y correctores",
+      "products": 449,
+      "from": {
+        "facial-care": 449
+      }
+    },
+    "hair-accessories": {
+      "es": "Accesorios para el cabello",
+      "products": 12,
+      "from": {
+        "foams-and-fixers": 12
+      }
+    },
+    "home-decor": {
+      "es": "Decoración",
+      "products": 7,
+      "from": {
+        "uncategorised": 5,
+        "air-fresheners-refills-and-candles": 2
+      }
+    },
+    "home-textiles": {
+      "es": "Textil hogar",
+      "products": 4,
+      "from": {
+        "batteries-kitchenware-and-bags": 2,
+        "scouring-pads-cloths-and-gloves": 2
+      }
+    },
+    "lighting-and-electrical": {
+      "es": "Iluminación y electricidad",
+      "products": 67,
+      "from": {
+        "batteries-kitchenware-and-bags": 67
+      }
+    },
+    "lip-makeup": {
+      "es": "Labios",
+      "products": 607,
+      "from": {
+        "facial-care": 607
+      }
+    },
+    "magazines-and-collectibles": {
+      "es": "Revistas y coleccionables",
+      "products": 9,
+      "from": {
+        "uncategorised": 9
+      }
+    },
+    "makeup-tools": {
+      "es": "Brochas y accesorios",
+      "products": 30,
+      "from": {
+        "facial-care": 30
+      }
+    },
+    "nail-care": {
+      "es": "Manicura y pedicura",
+      "products": 81,
+      "from": {
+        "facial-care": 74,
+        "shower-gel-and-sponges": 1,
+        "parapharmacy": 6
+      }
+    },
+    "party-and-celebrations": {
+      "es": "Fiestas y disfraces",
+      "products": 35,
+      "from": {
+        "dessert-mixes-and-decorations": 23,
+        "uncategorised": 1,
+        "air-fresheners-refills-and-candles": 11
+      }
+    },
+    "pet-accessories": {
+      "es": "Accesorios para mascotas",
+      "products": 68,
+      "from": {
+        "dog-treats-and-care": 57,
+        "cat-treats-and-care": 48
+      }
+    },
+    "powders-and-blush": {
+      "es": "Polvos y colorete",
+      "products": 237,
+      "from": {
+        "facial-care": 237
+      }
+    },
+    "premixed-drinks": {
+      "es": "Combinados y bebidas con alcohol",
+      "products": 16,
+      "from": {
+        "creams-liqueurs-and-brandy": 3,
+        "ron-and-whisky": 5,
+        "gin-vodka-and-tequila": 5,
+        "vermouth-and-aperitifs": 4
+      }
+    },
+    "sherry-and-fortified-wines": {
+      "es": "Vinos generosos y dulces",
+      "products": 50,
+      "from": {
+        "white-wine": 38,
+        "vermouth-and-aperitifs": 21
+      }
+    },
+    "shoe-care": {
+      "es": "Cuidado del calzado",
+      "products": 5,
+      "from": {
+        "air-fresheners-refills-and-candles": 3,
+        "scouring-pads-cloths-and-gloves": 2
+      }
+    },
+    "small-appliances": {
+      "es": "Pequeño electrodoméstico",
+      "products": 52,
+      "from": {
+        "batteries-kitchenware-and-bags": 41,
+        "foams-and-fixers": 9,
+        "fabric-softeners-and-laundry-care": 2
+      }
+    },
+    "stationery-and-school": {
+      "es": "Papelería y material escolar",
+      "products": 3,
+      "from": {
+        "uncategorised": 3
+      }
+    },
+    "storage-and-organisation": {
+      "es": "Orden y almacenaje",
+      "products": 3,
+      "from": {
+        "batteries-kitchenware-and-bags": 3
+      }
+    },
+    "toys-and-games": {
+      "es": "Juguetes y juegos",
+      "products": 3,
+      "from": {
+        "uncategorised": 3
+      }
+    }
+  },
+  "makeupPerSource": {
+    "Deza Color shelf": {
+      "face-makeup": 411,
+      "total": 1633,
+      "powders-and-blush": 208,
+      "eye-makeup": 406,
+      "lip-makeup": 556,
+      "nail-care": 42,
+      "makeup-tools": 10
+    },
+    "Mercadona Maquillaje": {
+      "face-makeup": 38,
+      "total": 163,
+      "powders-and-blush": 27,
+      "eye-makeup": 44,
+      "lip-makeup": 49,
+      "makeup-tools": 5
+    },
+    "Deza other shelf (by name)": {
+      "powders-and-blush": 1,
+      "total": 3,
+      "eye-makeup": 1,
+      "lip-makeup": 1
+    },
+    "El Jamón (by name)": {
+      "powders-and-blush": 1,
+      "total": 19,
+      "eye-makeup": 2,
+      "lip-makeup": 1,
+      "makeup-tools": 15
+    },
+    "outside facial-care": {
+      "eye-makeup": 2,
+      "total": 9,
+      "nail-care": 7
+    },
+    "Mercadona Manicura y pedicura": {
+      "nail-care": 32,
+      "total": 32
+    }
+  },
+  "count": 50,
+  "naturalKeys": {
+    "products": 0,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje > Bases de maquillaje y corrector","toLeaf":"face-makeup"},"decision":{"action":"move-to-leaf","slug":"face-makeup"},"products":38,"examples":["Bruma facial bifásica multifuncional Make Up Fixer","Corrector fluido Hydra 100 porcelana","Corrector fluido Hydra 200 vainilla"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje > Colorete y polvos","toLeaf":"powders-and-blush"},"decision":{"action":"move-to-leaf","slug":"powders-and-blush"},"products":25,"examples":["Colorete compacto Blush Luminoso 01 rosa","Colorete compacto Blush Luminoso 02 coral","Colorete compacto Blush Luminoso 03 dorado"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje > Ojos","toLeaf":"eye-makeup"},"decision":{"action":"move-to-leaf","slug":"eye-makeup"},"products":44,"examples":["Delineador de ojos 02 marrón","Delineador de ojos negro","Delineador dúo para ojos y pecas Caramel Kiss marrón"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje > Labios","toLeaf":"lip-makeup"},"decision":{"action":"move-to-leaf","slug":"lip-makeup"},"products":49,"examples":["Aceite labial Lip Oil Caramel Kiss miel","Bálsamo labial Color Balm 301 perlado","Bálsamo labial Color Balm 302 rosa"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje > Pinceles y brochas","toLeaf":"makeup-tools"},"decision":{"action":"move-to-leaf","slug":"makeup-tools"},"products":4,"examples":["Kit de pinceles ojos","Kit de pinceles rostro","Kit esponjas de maquillaje"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Cuidado facial y corporal > Manicura y pedicura","toLeaf":"nail-care"},"decision":{"action":"move-to-leaf","slug":"nail-care"},"products":32,"examples":["Alicate de uñas","Cepillo de uñas","Laca de uñas alto brillo 149 rosa medio"],"status":"applied on 2026-10-07 (stage c6)","why":"The shelf of Mercadona names the leaf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje","nameMatches":"^Bronceador facial fluido","toLeaf":"powders-and-blush"},"decision":{"action":"move-to-leaf","slug":"powders-and-blush"},"products":1,"examples":["Bronceador facial fluido Bronzer luminoso 01 terracota"],"status":"applied on 2026-10-07 (stage c6)","why":"The name says another leaf than the shelf of Mercadona. This rule wins over the shelf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje","nameMatches":"^Iluminador facial fluido","toLeaf":"powders-and-blush"},"decision":{"action":"move-to-leaf","slug":"powders-and-blush"},"products":1,"examples":["Iluminador facial fluido Highlighter 01 champagne"],"status":"applied on 2026-10-07 (stage c6)","why":"The name says another leaf than the shelf of Mercadona. This rule wins over the shelf."},
+    {"rule":{"fromLeaf":"facial-care","shelfMatches":"^Mercadona: Maquillaje","nameMatches":"^Rizador de pestañas","toLeaf":"makeup-tools"},"decision":{"action":"move-to-leaf","slug":"makeup-tools"},"products":1,"examples":["Rizador de pestañas"],"status":"applied on 2026-10-07 (stage c6)","why":"The name says another leaf than the shelf of Mercadona. This rule wins over the shelf."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Laca de uñas|Base de uñas|Top coat|Quitaesmalte)","toLeaf":"nail-care"},"decision":{"action":"move-to-leaf","slug":"nail-care"},"products":42,"examples":["Base de uñas Superstay 14 Days","Laca de uñas 10 Days Long n161","Laca de uñas 10 Days Long n21"],"onTheDezaColorShelf":42,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Brocha|Pincel|Sacapuntas|Rizador de pestañas|Esponja de maquillaje|Limpiador de brochas)","toLeaf":"makeup-tools"},"decision":{"action":"move-to-leaf","slug":"makeup-tools"},"products":25,"examples":["Brocha 111 Duo Fibre","Brocha 113 Face Blender","Brocha 114 Foundation"],"onTheDezaColorShelf":10,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Aceite (Confort|de|para) labios|Bálsamo labial (ColorGel|KissKiss|Lip Jam)|Barra de labios|Brillo (de labios|labial)|Carcasa de labial|Embellecedor de labios|Gloss|Labial líquido|Lápiz de labios|Lipstick|Mousse de labios|Perfilador de labios|Recarga de labial|Tinte de labios)","toLeaf":"lip-makeup"},"decision":{"action":"move-to-leaf","slug":"lip-makeup"},"products":558,"examples":["Aceite Confort labios décimo aniversario","Aceite Confort labios n00","Aceite Confort labios n01"],"onTheDezaColorShelf":556,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Cejas |Delineador|Eyeliner|Gel de cejas|Gel fijador de cejas|Graphik Ink Liner|Kajal|Laminador de cejas|Lápiz de cejas|Lápiz de ojos|Lápiz perfilador de cejas|Máscara|Micro lápiz perfilador de cejas|Paleta (de )?sombras|Perfilador de cejas|Perfilador de ojos|Perfilador Kajal|Rotulador de cejas|Set máscara de pestañas|Sombra|Tinte de cejas|Sculpture Brow)","toLeaf":"eye-makeup"},"decision":{"action":"move-to-leaf","slug":"eye-makeup"},"products":409,"examples":["Cejas Brow Xpert Infalible n3.0","Cejas Brow Xpert Infalible n5.0","Cejas Brow Xpert Infalible n6.0"],"onTheDezaColorShelf":406,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Colorete|Contorno en stick|Contouring|Gotas (bronceadoras|iluminadoras)|Iluminador|Paleta colorete|Perlas de polvos|Polvos?( |$)|Recarga de polvos)","toLeaf":"powders-and-blush"},"decision":{"action":"move-to-leaf","slug":"powders-and-blush"},"products":210,"examples":["Colorete A. Perfect n150","Colorete A. Perfect n165","Colorete Baked with Love n1"],"onTheDezaColorShelf":208,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"facial-care","nameMatches":"^(Base de maquillaje|BB cream|BB Sports|Corrector|Maquillaje|Prebase|Recambio maquillaje|Recarga de maquillaje|Recarga maquillaje|Sérum corrector True Match|Fijador de maquillaje|Spray fijador de maquillaje)","toLeaf":"face-makeup"},"decision":{"action":"move-to-leaf","slug":"face-makeup"},"products":411,"examples":["Base de maquillaje Accord Parfait n1R/C","Base de maquillaje Accord Parfait n2.D","Base de maquillaje Accord Parfait n2.N"],"onTheDezaColorShelf":411,"status":"applied on 2026-10-07 (stage c6)","why":"The curated name says the leaf. The shelf paths of El Jamón do not describe the product, and the Deza shelf \"Color\" holds every kind of make-up."},
+    {"rule":{"fromLeaf":"dyes","nameMatches":"^Tinte de cejas","brand":"Eylure","toLeaf":"eye-makeup"},"decision":{"action":"move-to-leaf","slug":"eye-makeup"},"products":2,"examples":["Tinte de cejas marrón oscuro","Tinte de cejas negro"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"shower-gel-and-sponges","nameMatches":"^Cepillo de uñas","toLeaf":"nail-care"},"decision":{"action":"move-to-leaf","slug":"nail-care"},"products":1,"examples":["Cepillo de uñas"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"parapharmacy","nameMatches":"^(Corta cutículas|Cortauñas pequeño|Cortaúñas manos y pies|Lima raspador de durezas para pies|Limas de cartón|Tijera de uñas)","toLeaf":"nail-care"},"decision":{"action":"move-to-leaf","slug":"nail-care"},"products":6,"examples":["Corta cutículas","Cortaúñas manos y pies","Cortauñas pequeño"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"white-wine","nameMatches":"^(Manzanilla muy fina|Vino manzanilla|Vino Pedro Ximénez|Vino dulce Pedro Ximénez|Vino amontillado|Vino fino|Vino oloroso|Vino dulce D\\.O\\. Montilla-Moriles)","toLeaf":"sherry-and-fortified-wines","alsoLeaves":["vermouth-and-aperitifs"]},"decision":{"action":"move-to-leaf","slug":"sherry-and-fortified-wines"},"products":38,"examples":["Manzanilla muy fina Sanlúcar de Barrameda","Vino amontillado D.O. Montilla-Moriles","Vino amontillado D.O. Montilla-Moriles"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"vermouth-and-aperitifs","nameMatches":"^(Manzanilla muy fina|Vino manzanilla|Vino Pedro Ximénez|Vino amontillado|Vino fino|Vino oloroso|Oloroso D\\.O\\.|Vino solera|Vino dulce( |$))","toLeaf":"sherry-and-fortified-wines","alsoLeaves":["white-wine"]},"decision":{"action":"move-to-leaf","slug":"sherry-and-fortified-wines"},"products":21,"examples":["Manzanilla muy fina Sanlúcar de Barrameda","Oloroso D.O. Montilla-Moriles","Vino amontillado D.O. Montilla-Moriles"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"vermouth-and-aperitifs","nameMatches":"^(Cóctel mojito|Fino spritz|Spritz$)","toLeaf":"premixed-drinks","alsoLeaves":["ron-and-whisky"]},"decision":{"action":"move-to-leaf","slug":"premixed-drinks"},"products":4,"examples":["Cóctel mojito","Fino spritz","Fino spritz Twist"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"ron-and-whisky","nameMatches":"^(Bebida preparada de ron|Cocktail mojito|Combinado de whisky|Cóctel mojito)","toLeaf":"premixed-drinks","alsoLeaves":["vermouth-and-aperitifs"]},"decision":{"action":"move-to-leaf","slug":"premixed-drinks"},"products":5,"examples":["Bebida preparada de ron sabor daiquiri fresa Ice","Bebida preparada de ron sabor mojito Ice","Cocktail mojito"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"gin-vodka-and-tequila","nameMatches":"^(Combinado de vodka|Cóctel de ginebra|Cóctel gin tonic|Ginebra con tónica)","toLeaf":"premixed-drinks"},"decision":{"action":"move-to-leaf","slug":"premixed-drinks"},"products":5,"examples":["Cóctel de ginebra","Cóctel gin tonic sin azúcar","Combinado de vodka con Sprite"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"creams-liqueurs-and-brandy","nameMatches":"^Bebida de (lima|mango|sandía)$","brand":"Breezer","toLeaf":"premixed-drinks"},"decision":{"action":"move-to-leaf","slug":"premixed-drinks"},"products":3,"examples":["Bebida de lima","Bebida de mango","Bebida de sandía"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"dog-treats-and-care","nameMatches":"^(Alfombra|Arnés|Bebedero|Bolso transportín|Cama |Casa cubierta|Caña juguete|Cinturón de seguridad|Cojín|Colgante|Collar (para|textil)|Comedero|Correa|Cuna|Juguete|Manta|Mordedor|Pelota|Rascador|Set alfombra|Transportín|Arenero|Pala de plástico para arenero)","toLeaf":"pet-accessories","alsoLeaves":["cat-treats-and-care"]},"decision":{"action":"move-to-leaf","slug":"pet-accessories"},"products":57,"examples":["Alfombra antideslizante para comedero","Alfombra para mascota","Alfombra para mascota huellas"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"cat-treats-and-care","nameMatches":"^(Alfombra|Arnés|Bebedero|Bolso transportín|Cama |Casa cubierta|Caña juguete|Cinturón de seguridad|Cojín|Colgante|Collar (para|textil)|Comedero|Correa|Cuna|Juguete|Manta|Mordedor|Pelota|Rascador|Set alfombra|Transportín|Arenero|Pala de plástico para arenero)","toLeaf":"pet-accessories","alsoLeaves":["dog-treats-and-care"]},"decision":{"action":"move-to-leaf","slug":"pet-accessories"},"products":48,"examples":["Alfombra antideslizante para comedero","Alfombra para mascota","Alfombra para mascota huellas"],"status":"applied on 2026-10-07 (stage c6)","why":"Both old leaves stood in for the missing leaf. A product that held both lost both."},
+    {"rule":{"fromLeaf":"batteries-kitchenware-and-bags","nameMatches":"^(Bombilla|Downlight|Lámpara LED|Linterna|Mini linterna|Adaptador|Base \\d tomas|Base móvil|Clavija|Prolongador|Cable alargador)","toLeaf":"lighting-and-electrical"},"decision":{"action":"move-to-leaf","slug":"lighting-and-electrical"},"products":67,"examples":["Adaptador 3 tomas 10A 250V blanco","Adaptador 3 tomas frontales 16A","Adaptador base 2 tomas"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"batteries-kitchenware-and-bags","nameMatches":"^(Batidor eléctrico|Batidora|Cafetera (Genio|Piccolo|de goteo|espresso|multicápsulas)|Envasadora|Espumador|Exprimidor inox 40 W|Freidora|Grill asar|Hervidor de agua|Horno eléctrico|Microondas|Placa vitrocerámica|Plancha de asar|Plancha de vapor|Sandwichera|Tostador|Dispensador de agua automático)","toLeaf":"small-appliances"},"decision":{"action":"move-to-leaf","slug":"small-appliances"},"products":41,"examples":["Batidor eléctrico mini","Batidora de mano 600 W con accesorios","Batidora de mano 600 W con accesorios"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"batteries-kitchenware-and-bags","nameMatches":"^(Adhesivo|Cinta precortada|Cola (blanca|de contacto)|Pegamento|Puntos de fijación|Silicona|Bridas)","toLeaf":"diy-and-hardware"},"decision":{"action":"move-to-leaf","slug":"diy-and-hardware"},"products":15,"examples":["Adhesivo de montaje Montack agarre total","Adhesivo instantáneo","Bridas de nylon 4,8x300 mm"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"batteries-kitchenware-and-bags","nameMatches":"^Caja de ordenación","toLeaf":"storage-and-organisation"},"decision":{"action":"move-to-leaf","slug":"storage-and-organisation"},"products":3,"examples":["Caja de ordenación 52 L","Caja de ordenación 70 L","Caja de ordenación bajo cama"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"batteries-kitchenware-and-bags","nameMatches":"^(Bolsa de pan bordada|Manopla estampada)","toLeaf":"home-textiles"},"decision":{"action":"move-to-leaf","slug":"home-textiles"},"products":2,"examples":["Bolsa de pan bordada","Manopla estampada"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"scouring-pads-cloths-and-gloves","nameMatches":"^Paño de cocina (bordado|piqué)","toLeaf":"home-textiles"},"decision":{"action":"move-to-leaf","slug":"home-textiles"},"products":2,"examples":["Paño de cocina bordado árbol","Paño de cocina piqué blanco 100% algodón"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"foams-and-fixers","nameMatches":"^(Cepillo alisador|Cepillo de aire caliente|Cepillo secador|Plancha de pelo|Rizador de pelo|Secador|Set moldeador)","toLeaf":"small-appliances"},"decision":{"action":"move-to-leaf","slug":"small-appliances"},"products":9,"examples":["Cepillo alisador 3 en 1 1200 W","Cepillo de aire caliente 1200 W","Cepillo secador 3 en 1 1200 W"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"fabric-softeners-and-laundry-care","nameMatches":"^Plancha de vapor","toLeaf":"small-appliances"},"decision":{"action":"move-to-leaf","slug":"small-appliances"},"products":2,"examples":["Plancha de vapor 1600 W","Plancha de vapor 2200 W"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"foams-and-fixers","brand":"Ponette","toLeaf":"hair-accessories"},"decision":{"action":"move-to-leaf","slug":"hair-accessories"},"products":12,"examples":["Cepillo desenredante eco Natural","Cepillo para recogidos con cerdas de jabalí","Coletero invisible decorado"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"dessert-mixes-and-decorations","nameMatches":"^(Velas? de cumpleaños|Bengala luminosa)","toLeaf":"party-and-celebrations"},"decision":{"action":"move-to-leaf","slug":"party-and-celebrations"},"products":23,"examples":["Bengala luminosa dorada","Vela de cumpleaños número 0","Vela de cumpleaños número 0"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"air-fresheners-refills-and-candles","nameMatches":"^Velas? de cumpleaños","toLeaf":"party-and-celebrations"},"decision":{"action":"move-to-leaf","slug":"party-and-celebrations"},"products":11,"examples":["Vela de cumpleaños número 0 roja","Vela de cumpleaños número 1 roja","Vela de cumpleaños número 2 roja"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"air-fresheners-refills-and-candles","nameMatches":"^(Ambientador (de )?coche|Ambientador colgante y pinza Auto)","toLeaf":"car-care"},"decision":{"action":"move-to-leaf","slug":"car-care"},"products":22,"examples":["Ambientador coche algodón","Ambientador coche azahar","Ambientador coche Bali"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"cleaning-floors-windows-and-furniture","nameMatches":"^(Lavaparabrisas|Limpia insectos|Limpiasalpicaderos)","toLeaf":"car-care"},"decision":{"action":"move-to-leaf","slug":"car-care"},"products":4,"examples":["Lavaparabrisas","Lavaparabrisas","Limpia insectos"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"cleaning-floors-windows-and-furniture","nameMatches":"^(Limpia tapicerías|Limpiacristales en spray)$","brand":"Lubrex","toLeaf":"car-care"},"decision":{"action":"move-to-leaf","slug":"car-care"},"products":2,"examples":["Limpia tapicerías","Limpiacristales en spray"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"scouring-pads-cloths-and-gloves","nameMatches":"^(Esponja grande lava coche|Esponja limpiasalpicaderos|Bayeta microfibra 2 en 1 especial coche|Cepillo multiusos lavacoches)","toLeaf":"car-care"},"decision":{"action":"move-to-leaf","slug":"car-care"},"products":4,"examples":["Bayeta microfibra 2 en 1 especial coche","Cepillo multiusos lavacoches","Esponja grande lava coche"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"air-fresheners-refills-and-candles","nameMatches":"^(Farol metálico|Vela led)","toLeaf":"home-decor"},"decision":{"action":"move-to-leaf","slug":"home-decor"},"products":2,"examples":["Farol metálico blanco","Vela led crema ancha baja"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"scouring-pads-cloths-and-gloves","nameMatches":"^Esponja de calzado","toLeaf":"shoe-care"},"decision":{"action":"move-to-leaf","slug":"shoe-care"},"products":2,"examples":["Esponja de calzado incolora brillo y protección","Esponja de calzado negra"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"air-fresheners-refills-and-candles","nameMatches":"^(Desodorante de calzado|Ambientador para calzado|Elimina olores zapatos)","toLeaf":"shoe-care"},"decision":{"action":"move-to-leaf","slug":"shoe-care"},"products":3,"examples":["Ambientador para calzado","Desodorante de calzado","Elimina olores zapatos y zapateros"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^Libro ","toLeaf":"books"},"decision":{"action":"move-to-leaf","slug":"books"},"products":10,"examples":["Libro Adiós al sufrimiento inútil","Libro Altitud","Libro Amiga mía"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^(Revista|Coleccionable)","toLeaf":"magazines-and-collectibles"},"decision":{"action":"move-to-leaf","slug":"magazines-and-collectibles"},"products":9,"examples":["Coleccionable Armonía de las piedras","Coleccionable Arqueología NG 2025","Coleccionable Crochet Susimiu"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^(Balón de cuero sintético|Pompero|Ventilador manual cangrejo)","toLeaf":"toys-and-games"},"decision":{"action":"move-to-leaf","slug":"toys-and-games"},"products":3,"examples":["Balón de cuero sintético","Pompero","Ventilador manual cangrejo"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^Portatodo","toLeaf":"stationery-and-school"},"decision":{"action":"move-to-leaf","slug":"stationery-and-school"},"products":3,"examples":["Portatodo Animales","Portatodo redondo capibara azul","Portatodo redondo capibara rosa"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^(Panel mandala|Gnomo músico|Campana de viento|Reloj de pared|Despertador)","toLeaf":"home-decor"},"decision":{"action":"move-to-leaf","slug":"home-decor"},"products":5,"examples":["Campana de viento de exterior mariposa","Despertador Abdul","Gnomo músico"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."},
+    {"rule":{"fromLeaf":"uncategorised","nameMatches":"^Birrete de graduación","toLeaf":"party-and-celebrations"},"decision":{"action":"move-to-leaf","slug":"party-and-celebrations"},"products":1,"examples":["Birrete de graduación"],"status":"applied on 2026-10-07 (stage c6)","why":"The old leaf stood in for the missing leaf."}
+  ]
+}

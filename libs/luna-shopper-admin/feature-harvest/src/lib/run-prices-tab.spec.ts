@@ -13,7 +13,7 @@ import {
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { RunPricesTab, toRunPriceRow } from './run-prices-tab';
+import { RunPricesTab, runUnitPrice, toRunPriceRow } from './run-prices-tab';
 
 /**
  * The "Prices written" tab (admin plan 0033), against the in memory harvester,
@@ -61,8 +61,14 @@ async function render(
         },
       },
       {
+        // A product's prices are its Prices tab (admin plan 0043).
         provide: ResourceRegistry,
-        useValue: { pathOf: () => ['/', 'catalog', 'items'] },
+        useValue: {
+          pathOf: (name: string, known: Record<string, string> = {}) =>
+            name === 'prices'
+              ? ['/', 'products', known['itemId'], 'prices']
+              : null,
+        },
       },
     ],
   }).compileComponents();
@@ -89,20 +95,18 @@ describe('the prices a run wrote', () => {
     expect(text(fixture)).toContain('harvest.run.prices.written.CONFIRMED');
   });
 
-  it('names the product and links it to its prices at every scope', async () => {
+  it('names the product and links it to its Prices tab, at the scope written', async () => {
     const fixture = await render('run-catalog-completed');
     const [first] = fixture.componentInstance.shown();
 
     expect(first.item).toBe('Whole milk 1 L');
-    expect(first.link).toEqual([
-      '/',
-      'catalog',
-      'items',
-      'it_milk_1l',
-      'prices',
-    ]);
+    expect(first.link).toEqual(['/', 'products', 'it_milk_1l', 'prices']);
+    expect(first.query).toEqual({ scope: first.query.scope });
+    expect(first.query.scope).not.toBe('');
     const link = fixture.nativeElement.querySelector('tbody a');
-    expect(link.getAttribute('href')).toBe('/catalog/items/it_milk_1l/prices');
+    expect(link.getAttribute('href')).toBe(
+      `/products/it_milk_1l/prices?scope=${first.query.scope}`
+    );
   });
 
   it('keeps a product the lookup cannot name as its id', async () => {
@@ -155,6 +159,33 @@ describe('the prices a run wrote', () => {
       fixture.nativeElement.querySelector('[role="alert"]')
     ).not.toBeNull();
     expect(text(fixture)).toContain('resource.action.retry');
+  });
+
+  it('prints the basis the catalog read, and not the label of the source (backend plan 0189)', () => {
+    const unitPriceOf = (row: Record<string, unknown>) => {
+      const read = toRunPriceRow({ id: 'p', itemId: 'i', ...row });
+      return read === null ? null : runUnitPrice(read);
+    };
+
+    // The price of a litre, which the chain sent under `100 ml`.
+    expect(
+      unitPriceOf({
+        unitPrice: 17,
+        unitPriceLabel: '100 ml',
+        unitBasis: 'LITER',
+      })
+    ).toBe('17 / L');
+    // No basis was read, so the label is what there is.
+    expect(
+      unitPriceOf({ unitPrice: 4.13, unitPriceLabel: '100gr', unitBasis: null })
+    ).toBe('4.13 / 100gr');
+    expect(unitPriceOf({ unitPrice: 0.92, unitPriceLabel: '1 L' })).toBe(
+      '0.92 / 1 L'
+    );
+    expect(unitPriceOf({ unitPrice: 2 })).toBe('2');
+    expect(unitPriceOf({ unitPriceLabel: 'kg', unitBasis: 'KILOGRAM' })).toBe(
+      ''
+    );
   });
 
   it('reads a written by it does not know as unknown', () => {

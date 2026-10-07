@@ -7,6 +7,10 @@ import {
   CategoryNotFoundException,
   ConflictException,
   ForbiddenException,
+  ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
+  ItemEanInvalidException,
   ItemNeedsACategoryException,
   NotFoundException,
   ValidationException,
@@ -25,6 +29,7 @@ import {
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { fakeCategories } from './category.testing';
+import { fakeItemEans } from './item-ean.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -69,6 +74,8 @@ function build(overrides: {
   brands?: Brand[];
   /** Which ids are roots or unknown to the category double (plan 0166). */
   categories?: Parameters<typeof fakeCategories>[0];
+  /** Rows of `item_eans` the spec did not write through the service. */
+  eans?: Parameters<typeof fakeItemEans>[0];
 }) {
   const admin = makeAdmin();
   // The lookup answers the whole registry rather than narrowing it the way the
@@ -96,6 +103,8 @@ function build(overrides: {
   ]);
   // Plan 0166: the leaves a write names, and what every read answers.
   const categories = fakeCategories(overrides.categories);
+  // Plan 0185: every barcode of every product, as one map.
+  const eans = fakeItemEans(overrides.eans);
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
@@ -105,9 +114,10 @@ function build(overrides: {
     admin,
     audit.service,
     events,
-    categories.service
+    categories.service,
+    eans.store
   );
-  return { service, admin, groups, events, audit, brands, categories };
+  return { service, admin, groups, events, audit, brands, categories, eans };
 }
 
 describe('ItemService', () => {
@@ -213,9 +223,18 @@ describe('ItemService', () => {
     expect(position).toBeGreaterThan(0);
     // Bound, never interpolated, like every other value in this query.
     expect(values[position - 1]).toBe('8480000181077');
+    // Any barcode of the product, not only its first (plan 0185): the same
+    // placeholder is looked up in `item_eans`.
+    expect(sql).toContain(
+      `SELECT ie."itemId" FROM "item_eans" ie WHERE ie."ean" = $${position}`
+    );
     // First key of the ordering, so the scanned product cannot be pushed under a
     // text hit that happened to score above the zero this query earns.
-    expect(sql).toContain(`ORDER BY (i."ean" = $${position}) DESC`);
+    expect(sql).toMatch(
+      new RegExp(
+        `ORDER BY \\(\\(i\\."ean" = \\$${position} OR i\\."id" = \\([^)]*\\)\\)\\) DESC NULLS LAST`
+      )
+    );
   });
 
   it('leaves the ean test out when the query is words', async () => {
@@ -295,6 +314,192 @@ describe('ItemService', () => {
 
     const sql = (items.query as jest.Mock).mock.calls[0][0] as string;
     expect(sql).toContain('i."productGroupId" IS NULL');
+  });
+
+  /**
+   * Admin plan 0043, section 2: "No category" in the back office's tree. On
+   * both branches, for the reason the ungrouped filter is.
+   */
+  it('lists the products on no category, on both branches', async () => {
+    const rows: Item[] = [];
+    const qb = makeQb(rows);
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'operator', withoutCategory: true });
+    expect(
+      (qb.andWhere as jest.Mock).mock.calls.some(
+        ([clause]) =>
+          typeof clause === 'string' &&
+          clause.includes('NOT EXISTS') &&
+          clause.includes('"item_categories"')
+      )
+    ).toBe(true);
+
+    await service.search({
+      userId: 'operator',
+      query: 'leche',
+      withoutCategory: true,
+    });
+    const sql = (items.query as jest.Mock).mock.calls[0][0] as string;
+    expect(sql).toContain('NOT EXISTS');
+    expect(sql).toContain('"item_categories" ic');
+  });
+
+  /**
+   * Plan 0187: the products one scope shows no price for. What a unit spec can
+   * hold is the shape: the scope is checked first, both branches take the
+   * clause, each asks one count, and no other read gains a `total`. That the
+   * clause lists the right products is `no-price-at-scope.integration.spec.ts`.
+   */
+  describe('the products a scope has no price for', () => {
+    const SCOPE = '3f2a1b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
+
+    /** A repository whose scope lookup, page and count each answer apart. */
+    function worklist(known: boolean, total: number) {
+      const qb = makeQb([]);
+      qb.select = jest.fn(() => qb);
+      qb.getRawOne = jest.fn(async () => ({ total: String(total) }));
+      const items = {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes('"price_scopes"')) {
+            return known ? [{}] : [];
+          }
+          return sql.includes('count(*)') ? [{ total: String(total) }] : [];
+        }),
+        createQueryBuilder: jest.fn(() => qb),
+      } as unknown as Repository<Item>;
+      return { qb, items, ...build({ items }) };
+    }
+
+    const statements = (items: Repository<Item>): string[] =>
+      (items.query as jest.Mock).mock.calls.map(([sql]) => sql as string);
+
+    it('narrows the listing branch and counts it in one more statement', async () => {
+      const { qb, items, service } = worklist(true, 7);
+
+      const page = await service.search({
+        userId: 'operator',
+        withoutPriceAtScopeId: SCOPE,
+      });
+
+      expect(page).toEqual({ items: [], nextCursor: null, total: 7 });
+      // The page and the count are two builders over the same clause.
+      expect(items.createQueryBuilder).toHaveBeenCalledTimes(2);
+      const clauses = (qb.andWhere as jest.Mock).mock.calls.filter(
+        ([clause]) =>
+          typeof clause === 'string' &&
+          clause.includes('NOT EXISTS') &&
+          clause.includes('"supermarket_items"')
+      );
+      expect(clauses).toHaveLength(2);
+      expect(clauses[0][0]).toContain(
+        '(np."price" IS NOT NULL OR NOT np."available")'
+      );
+      expect(clauses[0][1]).toEqual({ withoutPriceAtScopeId: SCOPE });
+      expect(qb.getRawOne).toHaveBeenCalledTimes(1);
+    });
+
+    it('narrows the ranked branch and counts it with the same filter', async () => {
+      const { items, service } = worklist(true, 3);
+
+      const page = await service.search({
+        userId: 'operator',
+        query: 'leche',
+        withoutPriceAtScopeId: SCOPE,
+      });
+
+      expect(page.total).toBe(3);
+      const [, ...read] = statements(items);
+      expect(read).toHaveLength(2);
+      for (const sql of read) {
+        expect(sql).toContain('FROM "supermarket_items" np');
+        expect(sql).toContain('to_tsquery');
+      }
+      const count = read.find((sql) => sql.includes('count(*)'));
+      expect(count).toBeDefined();
+      expect(count).not.toContain('ORDER BY');
+      expect(count).not.toContain('LIMIT');
+    });
+
+    /**
+     * Postgres refuses a statement that is sent a parameter it never names
+     * (42P18). The count has no ranking keys, so each parameter it binds has
+     * to be one its filter reads, for every shape of text.
+     */
+    it('binds nothing to the ranked count that the count does not name', async () => {
+      // Under four characters, four and over, a barcode, and digits that are
+      // not one.
+      for (const query of ['te', 'pan', 'leche', '8480000181077', '12']) {
+        const { items, service } = worklist(true, 0);
+
+        await service.search({
+          userId: 'operator',
+          query,
+          categoryId: SCOPE,
+          withoutPriceAtScopeId: SCOPE,
+        });
+
+        const read = (items.query as jest.Mock).mock.calls
+          .slice(1)
+          .map(([sql, values]) => ({
+            sql: sql as string,
+            values: values as unknown[],
+          }));
+        expect(read).toHaveLength(2);
+        for (const { sql, values } of read) {
+          const named = new Set(
+            [...sql.matchAll(/\$(\d+)/g)].map(([, n]) => Number(n))
+          );
+          expect([...named].sort((a, b) => a - b)).toEqual(
+            values.map((_, index) => index + 1)
+          );
+        }
+        // The page still binds the text as typed second, as it always did.
+        const page = read.find(({ sql }) => !sql.includes('count(*)'));
+        expect(page?.values[1]).toBe(query);
+      }
+    });
+
+    it('answers 404 for a scope that does not exist, and reads nothing', async () => {
+      const { items, service } = worklist(false, 0);
+
+      await expect(
+        service.search({ userId: 'operator', withoutPriceAtScopeId: SCOPE })
+      ).rejects.toMatchObject({
+        code: 'not_found',
+        message: 'Price scope not found',
+      });
+      expect(items.createQueryBuilder).not.toHaveBeenCalled();
+      expect(statements(items)).toHaveLength(1);
+    });
+
+    it('answers 404 for an id that is not a uuid, without asking', async () => {
+      const { items, service } = worklist(true, 0);
+
+      await expect(
+        service.search({ userId: 'operator', withoutPriceAtScopeId: 'none' })
+      ).rejects.toMatchObject({ code: 'not_found' });
+      expect(items.query).not.toHaveBeenCalled();
+    });
+
+    it('puts no total on a read that names no scope', async () => {
+      const { qb, items, service } = worklist(true, 9);
+
+      const listed = await service.search({ userId: 'operator' });
+      const ranked = await service.search({
+        userId: 'operator',
+        query: 'leche',
+      });
+
+      expect(listed).toEqual({ items: [], nextCursor: null });
+      expect(ranked).toEqual({ items: [], nextCursor: null });
+      expect(qb.getRawOne).not.toHaveBeenCalled();
+      expect(statements(items)).toHaveLength(1);
+    });
   });
 
   it('quotes no price when the caller names no scopes (section 3.1)', async () => {
@@ -432,8 +637,8 @@ describe('ItemService', () => {
         service.createMany({
           userId: ADMIN,
           items: [
-            milk({ ean: '8480000123456' }),
-            milk({ ean: '8480000123456' }),
+            milk({ ean: '8480000123459' }),
+            milk({ ean: '8480000123459' }),
           ],
         })
       ).rejects.toBeInstanceOf(ValidationException);
@@ -594,6 +799,527 @@ describe('ItemService', () => {
     });
   });
 
+  /**
+   * Plan 0184. A product holds a real barcode or none, and the check runs on
+   * a write that sets or changes the EAN, never on one that leaves it alone:
+   * 211 products already hold an in-store code, and each of them still has to
+   * load and still has to save its other fields.
+   */
+  describe('the EAN a product may hold (plan 0184)', () => {
+    const IN_STORE = '2204500000000';
+    const REAL = '4006381333931';
+
+    /** A catalog holding one product, with the EAN the test names. */
+    function holding(ean: string | null) {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({
+          id: 'i1',
+          name: { en: 'Cheese', es: 'Queso' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean,
+          unitSize: 1,
+          packCount: null,
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+          productGroupId: null,
+        })),
+      } as unknown as Repository<Item>;
+    }
+
+    const cheese = (ean: string | null | undefined) => ({
+      name: { en: 'Cheese', es: 'Queso' },
+      categoryIds: ['milk'],
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      ean,
+    });
+
+    it.each([
+      ['an in-store code', IN_STORE, 'IN_STORE'],
+      ['an 11 digit code', '84100100012', 'LENGTH'],
+      ['a wrong check digit', '4006381333932', 'CHECK_DIGIT'],
+      ['a code with a space in it', '4006381 333931', 'NOT_DIGITS'],
+      ['an empty string', '', 'EMPTY'],
+    ])(
+      'refuses a create with %s, naming the code and the reason',
+      async (_what, ean, reason) => {
+        const { service, audit } = build({ items: holding(null) });
+
+        const refusal = await service
+          .create({ userId: ADMIN, ...cheese(ean) })
+          .catch((error: unknown) => error);
+
+        expect(refusal).toBeInstanceOf(ItemEanInvalidException);
+        expect((refusal as ItemEanInvalidException).code).toBe(
+          'item_ean_invalid'
+        );
+        expect((refusal as ItemEanInvalidException).details).toEqual({
+          ean,
+          reason,
+        });
+        expect(audit.recorded).toEqual([]);
+      }
+    );
+
+    it('creates with a real barcode, trimmed, and with none', async () => {
+      const { service } = build({ items: holding(null) });
+
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(` ${REAL} `) })).ean
+      ).toBe(REAL);
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(null) })).ean
+      ).toBeNull();
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(undefined) })).ean
+      ).toBeNull();
+    });
+
+    it('refuses a whole batch for one bad EAN, before it writes anything', async () => {
+      const { service, audit } = build({ items: holding(null) });
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [cheese(REAL), cheese(IN_STORE)],
+        })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(audit.recorded).toEqual([]);
+    });
+
+    it('refuses an update that changes the EAN to an invalid one', async () => {
+      const { service, audit } = build({ items: holding(REAL) });
+
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', ean: IN_STORE })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', ean: '84100100012' })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(audit.recorded).toEqual([]);
+    });
+
+    it('lets a product that holds an in-store code load', async () => {
+      const { service } = build({ items: holding(IN_STORE) });
+
+      expect((await service.get({ userId: ADMIN, itemId: 'i1' })).ean).toBe(
+        IN_STORE
+      );
+    });
+
+    it('does not refuse an update that does not name the EAN', async () => {
+      const { service } = build({ items: holding(IN_STORE) });
+
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        sku: 'X-1',
+      });
+
+      expect(updated.sku).toBe('X-1');
+      expect(updated.ean).toBe(IN_STORE);
+    });
+
+    it('does not refuse an update that sends back the EAN the product holds', async () => {
+      // What a client that sends the whole product back does. The back office
+      // sends only what changed, so this is the rule for every other writer.
+      const { service } = build({ items: holding(IN_STORE) });
+
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: IN_STORE,
+        sku: 'X-1',
+      });
+
+      expect(updated.sku).toBe('X-1');
+      expect(updated.ean).toBe(IN_STORE);
+    });
+
+    it('lets an update replace an in-store code with a real barcode, or clear it', async () => {
+      // Two catalogs, because `holding` answers the same row on every read: a
+      // second edit through the first one would start from the in-store code
+      // again while the barcode rows remember the first edit.
+      const replacing = build({ items: holding(IN_STORE) });
+      expect(
+        (
+          await replacing.service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            ean: REAL,
+          })
+        ).ean
+      ).toBe(REAL);
+
+      const clearing = build({ items: holding(IN_STORE) });
+      expect(
+        (
+          await clearing.service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            ean: null,
+          })
+        ).ean
+      ).toBeNull();
+    });
+  });
+
+  /**
+   * Plan 0185. A product holds several barcodes, `items.ean` is the first of
+   * them, and a barcode names one product. What the database itself holds,
+   * the primary key and the cascade, is in `item-eans.integration.spec.ts`.
+   */
+  describe('more than one barcode (plan 0185)', () => {
+    const FIRST = '8402001002083';
+    const SECOND = '8402001047251';
+    const THIRD = '4006381333931';
+    const IN_STORE = '2204500000000';
+
+    /** A catalog that remembers what it was told, unlike the fixtures above. */
+    function remembering(rows: Partial<Item>[]) {
+      const held = new Map<string, Item>(
+        rows.map((row) => [
+          row.id as string,
+          {
+            name: { en: 'Whole milk', es: 'Leche entera' },
+            brand: null,
+            imageUrl: null,
+            sku: null,
+            ean: null,
+            unitSize: 1000,
+            packCount: null,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+            productGroupId: null,
+            ...row,
+          } as Item,
+        ])
+      );
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x: Item) => {
+          const row = { ...x, id: x.id ?? `new-${held.size + 1}` } as Item;
+          held.set(row.id, row);
+          return row;
+        }),
+        findOne: jest.fn(async (options: { where: { id: string } }) => {
+          const row = held.get(options.where.id);
+          return row ? { ...row } : null;
+        }),
+        // `In(...)` is not read: the service indexes what comes back by id.
+        find: jest.fn(async () =>
+          [...held.values()].map((row) => ({ ...row }))
+        ),
+      } as unknown as Repository<Item>;
+    }
+
+    const milkInput = (ean: string | null) => ({
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      categoryIds: ['milk'],
+      defaultUnit: UnitOfMeasure.MILLILITER,
+      ean,
+    });
+    const milk = (ean: string | null) => ({
+      userId: ADMIN,
+      ...milkInput(ean),
+    });
+
+    it('writes the first barcode of a created product as a row, and answers it in eans', async () => {
+      const { service, eans } = build({ items: remembering([]) });
+
+      const created = await service.create(milk(FIRST));
+      expect(created.ean).toBe(FIRST);
+      expect(created.eans).toEqual([FIRST]);
+      expect(eans.rows.get(FIRST)).toBe(created.id);
+
+      const bare = await service.create(milk(null));
+      expect(bare.eans).toEqual([]);
+
+      const many = await service.createMany({
+        userId: ADMIN,
+        items: [milkInput(SECOND), milkInput(null)],
+      });
+      expect(many.items.map((item) => item.eans)).toEqual([[SECOND], []]);
+      expect(eans.rows.get(SECOND)).toBe(many.items[0].id);
+    });
+
+    it('refuses a create whose barcode is one of another product’s further barcodes', async () => {
+      // `uq_items_ean` cannot see this one: it is not that product's first.
+      const { service } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+        ],
+      });
+
+      await expect(service.create(milk(SECOND))).rejects.toBeInstanceOf(
+        ConflictException
+      );
+    });
+
+    it('adds a barcode beside the first one, and finds the product by either', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [[FIRST, 'i1']],
+      });
+
+      await expect(
+        service.addEan({ userId: 'intruder', itemId: 'i1', ean: SECOND })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: ` ${SECOND} `,
+      });
+      expect(view.ean).toBe(FIRST);
+      expect(view.eans).toEqual([FIRST, SECOND]);
+      expect(eans.rows.get(SECOND)).toBe('i1');
+
+      // The acceptance criterion: `findByEan` finds it by its second barcode.
+      const bySecond = await service.findByEan({ userId: ADMIN, ean: SECOND });
+      expect(bySecond.item?.id).toBe('i1');
+      expect(bySecond.item?.eans).toEqual([FIRST, SECOND]);
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: FIRST })).item?.id
+      ).toBe('i1');
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: THIRD })).item
+      ).toBeNull();
+
+      // Both barcodes in one batch lookup answer the one product once.
+      const both = await service.findByEans({
+        userId: ADMIN,
+        eans: [FIRST, SECOND, THIRD],
+      });
+      expect(both.items.map((item) => item.id)).toEqual(['i1']);
+
+      // Adding it again changes nothing and refuses nothing.
+      const again = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(again.eans).toEqual([FIRST, SECOND]);
+    });
+
+    it('makes an added barcode the first one of a product that had none', async () => {
+      const { service, audit } = build({
+        items: remembering([{ id: 'i1', ean: null }]),
+      });
+
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(view.ean).toBe(SECOND);
+      expect(view.eans).toEqual([SECOND]);
+      // The first barcode is a column of the product, so the trail has it.
+      expect(audit.recorded).toEqual([
+        expect.objectContaining({
+          action: 'UPDATE',
+          entityId: 'i1',
+          before: { ean: null },
+          after: { ean: SECOND },
+        }),
+      ]);
+    });
+
+    it('never takes an in-store code as a barcode, and leaves one that is already the first where it is', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: IN_STORE }]),
+      });
+
+      await expect(
+        service.addEan({ userId: ADMIN, itemId: 'i1', ean: IN_STORE })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(eans.rows.size).toBe(0);
+
+      // A real barcode beside it: `items.ean` keeps the old code, which is in
+      // no row and so in no list.
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: FIRST,
+      });
+      expect(view.ean).toBe(IN_STORE);
+      expect(view.eans).toEqual([FIRST]);
+      // And the old code finds nothing: it joins nothing (plan 0184).
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: IN_STORE })).item
+      ).toBeNull();
+    });
+
+    it('refuses a barcode another product holds with item_ean_held, naming the holder', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: 'i1', ean: FIRST },
+          { id: 'i2', ean: SECOND },
+        ]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i2'],
+        ],
+      });
+
+      const refusal = await service
+        .addEan({ userId: ADMIN, itemId: 'i1', ean: SECOND })
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ItemEanHeldException);
+      expect((refusal as ItemEanHeldException).code).toBe('item_ean_held');
+      expect((refusal as ItemEanHeldException).details).toEqual({
+        [ITEM_EAN_DETAIL]: SECOND,
+        [ITEM_EAN_HOLDER_DETAIL]: 'i2',
+      });
+      expect(eans.rows.get(SECOND)).toBe('i2');
+    });
+
+    it('removes a barcode, and promotes the oldest of the rest when the first one goes', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+          [THIRD, 'i1'],
+        ],
+      });
+
+      // One it does not hold is a 404, and nothing moves.
+      await expect(
+        service.removeEan({ userId: ADMIN, itemId: 'i1', ean: '96385074' })
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const withoutThird = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: THIRD,
+      });
+      expect(withoutThird.ean).toBe(FIRST);
+      expect(withoutThird.eans).toEqual([FIRST, SECOND]);
+
+      const withoutFirst = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: FIRST,
+      });
+      expect(withoutFirst.ean).toBe(SECOND);
+      expect(withoutFirst.eans).toEqual([SECOND]);
+
+      const bare = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(bare.ean).toBeNull();
+      expect(bare.eans).toEqual([]);
+      expect(eans.rows.size).toBe(0);
+    });
+
+    it('treats the ean of an update as the first barcode: it replaces that one and keeps the rest', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: 'i1', ean: FIRST },
+          { id: 'i2', ean: null },
+        ]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+        ],
+      });
+
+      // A new first barcode: the old first one is taken off the product.
+      const replaced = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: THIRD,
+      });
+      expect(replaced.ean).toBe(THIRD);
+      expect(replaced.eans).toEqual([THIRD, SECOND]);
+      expect(eans.rows.has(FIRST)).toBe(false);
+
+      // A barcode the product already holds is a reorder: it becomes the
+      // first, and the old first barcode stays one of the product's barcodes.
+      const promoted = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(promoted.ean).toBe(SECOND);
+      expect(promoted.eans).toEqual([SECOND, THIRD]);
+      expect(eans.rows.get(THIRD)).toBe('i1');
+
+      // Another product's further barcode is a conflict `uq_items_ean` cannot
+      // see, and it is refused all the same.
+      await service.addEan({ userId: ADMIN, itemId: 'i1', ean: FIRST });
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i2', ean: FIRST })
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // Clearing the first barcode promotes the oldest of the rest.
+      const cleared = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: null,
+      });
+      expect(cleared.ean).toBe(THIRD);
+      expect(cleared.eans).toEqual([THIRD, FIRST]);
+      // And the barcode it gave up is free for the other product.
+      const taken = await service.update({
+        userId: ADMIN,
+        itemId: 'i2',
+        ean: SECOND,
+      });
+      expect(taken.eans).toEqual([SECOND]);
+    });
+
+    it('teaches a batch of barcodes, and names the ones it could not write', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: '11111111-1111-4111-8111-111111111111', ean: FIRST },
+          { id: '22222222-2222-4222-8222-222222222222', ean: null },
+        ]),
+        eans: [[FIRST, '11111111-1111-4111-8111-111111111111']],
+      });
+      const one = '11111111-1111-4111-8111-111111111111';
+      const two = '22222222-2222-4222-8222-222222222222';
+      const gone = '99999999-9999-4999-8999-999999999999';
+
+      await expect(
+        service.teachEans({ userId: 'intruder', entries: [] })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      const result = await service.teachEans({
+        userId: ADMIN,
+        entries: [
+          { itemId: one, ean: SECOND },
+          // Already this product's: nothing to do, and not a refusal.
+          { itemId: one, ean: FIRST },
+          // Held by the first product.
+          { itemId: two, ean: FIRST },
+          { itemId: two, ean: IN_STORE },
+          { itemId: gone, ean: THIRD },
+          { itemId: two, ean: THIRD },
+        ],
+      });
+
+      expect(result.added).toBe(2);
+      expect(result.refused).toEqual([
+        { itemId: two, ean: IN_STORE, reason: 'INVALID', heldBy: null },
+        { itemId: two, ean: FIRST, reason: 'HELD', heldBy: one },
+        { itemId: gone, ean: THIRD, reason: 'NOT_FOUND', heldBy: null },
+      ]);
+      expect(eans.rows.get(SECOND)).toBe(one);
+      // The product with no first barcode took the one it was taught.
+      expect(eans.rows.get(THIRD)).toBe(two);
+      expect((await service.get({ userId: ADMIN, itemId: two })).ean).toBe(
+        THIRD
+      );
+    });
+  });
+
   describe('a barcode the catalog already holds', () => {
     /** What the driver raises on `uq_items_ean`, as the service reads it. */
     function duplicateEan(detail?: string) {
@@ -633,7 +1359,7 @@ describe('ItemService', () => {
           name: { en: 'Milk', es: 'Leche' },
           categoryIds: ['milk'],
           defaultUnit: UnitOfMeasure.LITER,
-          ean: '8480000123456',
+          ean: '8480000123459',
         })
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -645,7 +1371,7 @@ describe('ItemService', () => {
         service.update({
           userId: ADMIN,
           itemId: 'i1',
-          ean: '8480000123456',
+          ean: '8480000123459',
         })
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -661,7 +1387,7 @@ describe('ItemService', () => {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
-              ean: '8480000123456',
+              ean: '8480000123459',
             },
           ],
         })
@@ -670,7 +1396,7 @@ describe('ItemService', () => {
 
     it('names the barcode in the batch refusal (plan 0158)', async () => {
       const { service } = build({
-        items: refusingItems('Key (ean)=(8480000123456) already exists.'),
+        items: refusingItems('Key (ean)=(8480000123459) already exists.'),
       });
 
       await expect(
@@ -681,11 +1407,11 @@ describe('ItemService', () => {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
-              ean: '8480000123456',
+              ean: '8480000123459',
             },
           ],
         })
-      ).rejects.toThrow(/EAN 8480000123456/);
+      ).rejects.toThrow(/EAN 8480000123459/);
     });
 
     it('leaves an error that is not a duplicate barcode alone', async () => {

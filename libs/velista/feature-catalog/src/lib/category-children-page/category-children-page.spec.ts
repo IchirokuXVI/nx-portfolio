@@ -33,14 +33,17 @@ async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
 async function render(
   parentSlug: string,
   current: string | null = null,
-  tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES)
+  tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES),
+  /** What else the tab was narrowed by when it opened this page. */
+  rest: Record<string, string> = {}
 ) {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
   const params = convertToParamMap({ parentSlug });
-  const query = convertToParamMap(
-    current === null ? {} : { category: current }
-  );
+  const query = convertToParamMap({
+    ...(current === null ? {} : { category: current }),
+    ...rest,
+  });
 
   await TestBed.configureTestingModule({
     imports: [CategoryChildrenPage, RokuTranslatorTestingModule.forTesting()],
@@ -128,6 +131,37 @@ describe('CategoryChildrenPage (velista 0119)', () => {
     expect(milk?.querySelector('lib-check-icon')).not.toBeNull();
     expect(children?.[0]?.hasAttribute('aria-current')).toBe(false);
     expect(everything?.[0]?.hasAttribute('aria-current')).toBe(false);
+  });
+
+  it('changes the category and nothing else: every row hands back the supermarket, the text and the order', async () => {
+    const { fixture, pages } = await render(
+      'eggs-milk-and-butter',
+      'milk',
+      undefined,
+      {
+        chain: 'chain-deza',
+        shop: 'location-deza-1',
+        q: 'leche',
+        order: 'created',
+      }
+    );
+    const rest = '&chain=chain-deza&shop=location-deza-1&q=leche&order=created';
+    const [everything, children] = cards(fixture);
+
+    expect(everything?.[0]?.getAttribute('href')).toBe(
+      `/velista/en/catalog?category=eggs-milk-and-butter${rest}`
+    );
+    expect(children?.[0]?.getAttribute('href')).toBe(
+      `/velista/en/catalog?category=eggs${rest}`
+    );
+
+    // The chevron's fallback is the tab as it was, not the tab plain.
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('lib-page-header button.lead')
+      ?.click();
+    expect(pages.back).toHaveBeenCalledWith(
+      `/velista/en/catalog?category=milk${rest}`
+    );
   });
 
   it('goes back one step, with the catalog tab as the fallback', async () => {

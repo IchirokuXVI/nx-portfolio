@@ -79,9 +79,9 @@ export class PriceScope extends BaseEntity {
    * that happens to create scopes today.
    *
    * "A creator that states no priority takes the default for its kind" is a
-   * property of a scope, and there are four creators: the admin route, the
-   * store scope a location makes for itself, the reference seed and a run.
-   * Written once in a service, the other three insert a null into a NOT NULL
+   * property of a scope, and there are several creators: the admin route, the
+   * store scope a location makes for itself, a seed and a run. Written once in
+   * a service, the others insert a null into a NOT NULL
    * column, and the failure is a constraint violation rather than a sentence.
    *
    * There is no database default beside it on purpose: the right number

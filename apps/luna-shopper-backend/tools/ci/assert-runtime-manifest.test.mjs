@@ -71,14 +71,14 @@ test('fails, and names the package and the bundle', () => {
   const dir = distDir(
     {
       'main.js': 'require("typeorm");',
-      'seed-reference.js': 'require("uuid");',
+      'admin-cli.js': 'require("uuid");',
     },
     ['typeorm']
   );
   const { status, output } = run(dir);
   assert.equal(status, 1);
   assert.match(output, /uuid/);
-  assert.match(output, /seed-reference\.js/);
+  assert.match(output, /admin-cli\.js/);
 });
 
 // The 2026-09-03 outage exactly: the service's own bundle is complete, and a

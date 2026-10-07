@@ -38,6 +38,8 @@ import {
   type ImportDiscoveredPlaceRequest,
   type ItemSourceEntryPage,
   type LinkDiscoveredPlaceRequest,
+  type LinkPlacesByRefRequest,
+  type LinkPlacesByRefResult,
   type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunPresetsRequest,
@@ -48,12 +50,15 @@ import {
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
+  type PlaceLinkResult,
   type PostalCodeDiscoveryIdRequest,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
   type SetSupermarketSourceEnabledRequest,
+  type SettleItemAtChainRequest,
+  type SettleItemAtChainResult,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -314,8 +319,15 @@ export class HarvestController {
   @MessagePattern(DISCOVERED_PLACE_PATTERNS.link)
   linkPlace(
     @Payload() req: LinkDiscoveredPlaceRequest
-  ): Promise<DiscoveredPlaceView> {
+  ): Promise<PlaceLinkResult> {
     return this.places.link(req);
+  }
+
+  @MessagePattern(DISCOVERED_PLACE_PATTERNS.linkByRef)
+  linkPlacesByRef(
+    @Payload() req: LinkPlacesByRefRequest
+  ): Promise<LinkPlacesByRefResult> {
+    return this.places.linkByRef(req);
   }
 
   @MessagePattern(DISCOVERED_PLACE_PATTERNS.reject)
@@ -408,6 +420,17 @@ export class HarvestController {
     @Payload() req: SourceEntryIdRequest
   ): Promise<SourceCatalogEntryView> {
     return this.entries.reject(req);
+  }
+
+  /**
+   * Settle a product at a chain (plan 0191): withdraw from catalog what the
+   * chain stated for the product and no bound row states any more.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.settleItem)
+  settleItem(
+    @Payload() req: SettleItemAtChainRequest
+  ): Promise<SettleItemAtChainResult> {
+    return this.entries.settleItem(req);
   }
 
   // --- Source locations: which shop of theirs is which of ours (plan 0084) --

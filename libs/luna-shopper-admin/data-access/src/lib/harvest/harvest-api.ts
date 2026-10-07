@@ -163,14 +163,28 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
-  /** A POST to a verb, like import and reject beside it (backend plan 0152). */
+  /**
+   * A POST to a verb, like import and reject beside it (backend plan 0152).
+   * It answers the place and what the link filled on the shop (backend plan
+   * 0193).
+   */
   linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+  ): Promise<Wire.HarvestPlaceLinkResult> {
     return this._send('post', `${ROOT}/places/${segment(id)}/link`, {
       body: input,
     });
+  }
+
+  /**
+   * The bulk link, dry or applied (backend plan 0193, target 8). One route for
+   * both, and the body says which: `{}` changes nothing.
+   */
+  linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult> {
+    return this._send('post', `${ROOT}/places/link-by-ref`, { body: input });
   }
 
   /**
@@ -181,7 +195,7 @@ export class HarvestApi implements HarvestServiceI {
    * decisions below are addressed by the row's own id, which is unique and which
    * an operator acting on a row has, so none of them names the chain twice.
    */
-  listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage> {
+  listEntries(query: EntryQuery): Promise<Wire.HarvestQueuedSourceEntryPage> {
     return this._send('get', `${ROOT}/entries`, { params: toParams(query) });
   }
 

@@ -166,19 +166,20 @@ describe('a reference filter', () => {
   });
 
   /**
-   * A filter is always clearable, whatever the column it stands for allows.
-   * "Every zone" is the resting state of this screen rather than a missing
-   * value, so the picker offers a way back to it.
+   * A filter can be put back to every row, whatever the column it stands for
+   * allows. "Every zone" is the resting state of this screen rather than a
+   * missing value, so the list starts with "Any" (plan 0050, section 2).
    */
-  it('can always be emptied again', () => {
-    const fixture = host([OWNER], { userId: 'u1' });
-
-    const buttons = [...fixture.nativeElement.querySelectorAll('button')];
-    const labels = buttons.map((button) =>
-      (button as HTMLButtonElement).textContent?.trim()
+  it('starts its list with Any unless the descriptor says no', () => {
+    const fixture = host([OWNER, { ...GROUP, emptyOption: false }]);
+    const pickers = fixture.debugElement.queryAll(
+      (node) => node.name === 'lib-reference-picker'
     );
 
-    expect(labels).toContain('resource.reference.clear');
+    expect(pickers.map((picker) => picker.componentInstance.empty())).toEqual([
+      'any',
+      null,
+    ]);
   });
 
   /**

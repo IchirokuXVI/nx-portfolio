@@ -68,10 +68,12 @@ function emptyRepository<T>() {
     find: jest.fn(async () => []),
     findOne: jest.fn(async () => null),
     count: jest.fn(async () => 0),
+    query: jest.fn(async () => [{ count: 0 }]),
   } as unknown as Repository<T> & {
     createQueryBuilder: jest.Mock;
     find: jest.Mock;
     count: jest.Mock;
+    query: jest.Mock;
   };
 }
 
@@ -96,6 +98,7 @@ function build() {
       gate
     ),
     runs,
+    entries,
     sources,
   };
 }
@@ -153,5 +156,35 @@ describe('HarvestDashboardService', () => {
     expect(block.runs.byStatus).toEqual(
       Object.values(HarvestRunStatus).map((status) => ({ status, count: 0 }))
     );
+  });
+
+  /**
+   * Admin plan 0044, section 2. The registry is catalog's and travels in the
+   * request, as a bound parameter and never as text in the statement.
+   */
+  it('counts the suggested brands against the keys the request carries', async () => {
+    const { svc, entries } = build();
+    entries.query.mockResolvedValueOnce([{ count: 7 }]);
+
+    const block = await svc.dashboard({
+      ...request(signAdmin()),
+      registeredBrandKeys: ['hacendado', 'mahou'],
+    });
+
+    expect(block.queues.brands).toBe(7);
+    expect(entries.query).toHaveBeenCalledTimes(1);
+    const [sql, values] = entries.query.mock.calls[0];
+    expect(values).toEqual([['hacendado', 'mahou']]);
+    expect(sql).toContain('count(DISTINCT e."brandKey")');
+    expect(sql).not.toContain('hacendado');
+  });
+
+  it('answers no brand count, and asks nothing, without the registry', async () => {
+    const { svc, entries } = build();
+
+    const block = await svc.dashboard(request(signAdmin()));
+
+    expect(block.queues.brands).toBeNull();
+    expect(entries.query).not.toHaveBeenCalled();
   });
 });

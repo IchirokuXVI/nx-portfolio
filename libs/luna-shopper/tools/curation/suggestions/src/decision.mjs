@@ -8,6 +8,7 @@
  */
 
 import {
+  barcodesOf,
   brandKey,
   canonicalBrand,
   carriesBrand,
@@ -15,11 +16,17 @@ import {
   carriesSize,
   chainName,
   chainNamesById,
+  endsInPack,
   findBrand,
   findCanonicalBrand,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   printedUnit,
+  productGtin,
   sameBaseSize,
+  sourceBrands,
   toBaseSize,
+  toBaseUnit,
 } from './rules.mjs';
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
@@ -151,6 +158,12 @@ export function checkDecisionShape(value) {
     if (!isString(item.nameEs)) {
       return { ok: false, error: 'a CREATE needs "item.nameEs"' };
     }
+    // Both names, always (backend plan 0184). The bulk route translates
+    // nothing and refuses a product with no English name, so a reply without
+    // one is a malformed reply and is asked again, like a missing unit.
+    if (!isString(item.nameEn)) {
+      return { ok: false, error: 'a CREATE needs "item.nameEn"' };
+    }
     const categorySlugs = Array.isArray(item.categorySlugs)
       ? [
           ...new Set(
@@ -175,9 +188,29 @@ export function checkDecisionShape(value) {
     ) {
       return { ok: false, error: '"item.unitSize" must be a number or null' };
     }
+    // How many the pack holds (backend plans 0162 and 0177). Optional, and a
+    // count of 1 is not a pack, so null, absent and 1 all mean the same thing:
+    // the decision states no count and the create takes the row's own.
+    const statesPackCount =
+      item.packCount !== null &&
+      item.packCount !== undefined &&
+      item.packCount !== 1;
+    if (
+      statesPackCount &&
+      !(
+        Number.isInteger(item.packCount) &&
+        item.packCount >= PACK_COUNT_MIN &&
+        item.packCount <= PACK_COUNT_MAX
+      )
+    ) {
+      return {
+        ok: false,
+        error: `"item.packCount" must be a whole number from ${PACK_COUNT_MIN} to ${PACK_COUNT_MAX}, or null`,
+      };
+    }
     decision.item = {
       nameEs: item.nameEs.trim(),
-      nameEn: isString(item.nameEn) ? item.nameEn.trim() : null,
+      nameEn: item.nameEn.trim(),
       brand: isString(item.brand) ? item.brand.trim() : null,
       unitSize:
         item.unitSize === null || item.unitSize === undefined
@@ -185,7 +218,15 @@ export function checkDecisionShape(value) {
           : item.unitSize,
       defaultUnit: item.defaultUnit.trim(),
       categorySlugs,
-      ean: isString(item.ean) ? item.ean.trim() : null,
+      // A real barcode or none (backend plan 0184). The prompt asks for the
+      // entry's own barcode, and 211 entries of one chain printed a code of
+      // its scales there. Catalog refuses such a code on a product, so it is
+      // dropped here, once, and the rehearsal create and the bulk create then
+      // agree. The entry keeps what the chain printed.
+      ean: productGtin(item.ean),
+      // Present only when the decision states one. An absent key is what lets
+      // the bulk route fall back to the count the row itself read.
+      ...(statesPackCount ? { packCount: item.packCount } : {}),
     };
   }
 
@@ -217,31 +258,183 @@ export function sharedEanIssue(entry, sharedWith) {
   );
 }
 
-/** A size as a person reads it, with its unit when there is one. */
-function describeSize(size, unit) {
-  return unit ? `${size} ${unit}` : String(size);
+/**
+ * A size as a person reads it, with its unit when there is one, and the pack
+ * count beside it when the side states one.
+ */
+function describeSize(size, unit, packCount = null) {
+  const text = unit ? `${size} ${unit}` : String(size);
+  return packCountOf(packCount) === null
+    ? text
+    : `${text} (pack of ${packCount})`;
 }
 
 /**
- * Whether the entry and the link target are one format (plan 0006).
+ * The entry's size in its family's base unit, or null (backend plan 0177).
  *
- * Both sides are converted to grams, millilitres or units first. The entry's
- * unit is the word its `sizeFormat` ends in and the target's is its
- * `defaultUnit`, so a chain printing 0.42 `kg` and a product of 420 `GRAM` are
- * one format, and a weight is never the same format as a volume. When either
- * unit is one the table cannot read, the two numbers are compared as they
- * stand, which is what this check did before it read units at all.
+ * **The row's own `sizeUnit` first.** The adapter that read the size states
+ * which catalog unit the number is in, and that is the only thing that can:
+ * one source converts `75cl` to 750 and another keeps `6x33cl` at 198, so the
+ * printed text is right for one of them and wrong for the other. A stated unit
+ * needs no factor, because the number is already in it.
+ *
+ * **The printed text only for a row with no `sizeUnit`**, which is a row no
+ * run has seen since that plan. It is the guess this check made for every row
+ * before, kept so those rows compare exactly as they did.
  */
-export function sameFormat(entry, linkTarget) {
+export function entryBaseSize(entry) {
+  if (entry.sizeUnit) {
+    return toBaseSize(entry.unitSize, entry.sizeUnit);
+  }
   const printed = printedUnit(entry.sizeFormat);
-  const entryBase = printed
+  return printed
     ? toBaseSize(entry.unitSize, printed.unit, printed.factor)
     : null;
+}
+
+/** A pack count as a number, or null for a side that states none. */
+function packCountOf(value) {
+  const count = Number(value);
+  return value !== null && value !== undefined && Number.isInteger(count)
+    ? count
+    : null;
+}
+
+/**
+ * Whether a count and a weight or volume are one box (backend plan 0177).
+ *
+ * One chain prints a box of capsules as `16 ud` and another as 160 g. Neither
+ * number converts into the other, so the sizes can never agree, and the one
+ * product became two. What joins them is the pack count: the side sized by
+ * content has to state how many pieces it holds, and the side sized by count
+ * has to state the same number, as its own pack count or as the size itself.
+ *
+ * **A side that states no pack count joins nothing.** `16 ud` against 160 g
+ * with no pack count is two formats, because nothing says the 160 g holds
+ * sixteen of anything.
+ */
+function samePack(counted, measured) {
+  const pieces = packCountOf(measured.packCount);
+  if (pieces === null) {
+    return false;
+  }
+  return (
+    packCountOf(counted.packCount) === pieces ||
+    sameBaseSize(counted.base, { family: 'count', value: pieces })
+  );
+}
+
+/**
+ * Whether the entry and the link target are one format (plan 0006, and
+ * backend plan 0177).
+ *
+ * Both sides are converted to grams, millilitres or units first. The entry's
+ * unit is its own `sizeUnit` ({@link entryBaseSize}) and the target's is its
+ * `defaultUnit`, so a chain stating 0.42 `KILOGRAM` and a product of 420
+ * `GRAM` are one format, and a weight is never the same format as a volume.
+ * A count against a weight or a volume is one format only through the pack
+ * count ({@link samePack}). When either unit is one the table cannot read,
+ * the two numbers are compared as they stand, which is what this check did
+ * before it read units at all.
+ */
+export function sameFormat(entry, linkTarget) {
+  const entryBase = entryBaseSize(entry);
   const targetBase = toBaseSize(linkTarget.unitSize, linkTarget.defaultUnit);
   if (entryBase && targetBase) {
-    return sameBaseSize(entryBase, targetBase);
+    if (entryBase.family === targetBase.family) {
+      return sameBaseSize(entryBase, targetBase);
+    }
+    const entrySide = { base: entryBase, packCount: entry.packCount };
+    const targetSide = { base: targetBase, packCount: linkTarget.packCount };
+    if (entryBase.family === 'count') {
+      return samePack(entrySide, targetSide);
+    }
+    if (targetBase.family === 'count') {
+      return samePack(targetSide, entrySide);
+    }
+    return false;
   }
   return sameNumber(entry.unitSize, linkTarget.unitSize);
+}
+
+/**
+ * Whether the entry and the link target are one brand (backend plan 0185).
+ *
+ * The target's brand, through a link if a person made one, against every
+ * registered brand the entry's printed brand names. When the registry holds
+ * none of those, the two printed texts are compared by key.
+ *
+ * **An entry or a target with no brand agrees with nothing.** A chain can
+ * leave `entry.brand` null on a product whose name states one, so "both have
+ * none" does not say the two are the same brand.
+ */
+export function sameBrand(entry, linkTarget, brands) {
+  const targetKey =
+    findCanonicalBrand(brands, linkTarget?.brand)?.key ??
+    brandKey(linkTarget?.brand);
+  if (!targetKey) {
+    return false;
+  }
+  const sources = sourceBrands(brands, entry).map((source) => source.brand.key);
+  if (sources.length > 0) {
+    return sources.includes(targetKey);
+  }
+  return brandKey(entry?.brand) === targetKey;
+}
+
+/**
+ * The barcode conflict of a LINK, or null (backend plan 0185).
+ *
+ * A maker prints a new barcode when it changes a factory, a supplier or a
+ * label, and the product on the shelf is the same. So a barcode that differs
+ * from the target's is no longer a conflict by itself. Two things are:
+ *
+ * - **Another product holds the entry's barcode.** A barcode names one
+ *   product, so the entry belongs to that product or the barcode sits on the
+ *   wrong one. The backend refuses this accept too, with `EAN_HELD`.
+ * - **The target holds other barcodes, and the brand or the format is not
+ *   known to be the same.** Then nothing says the two barcodes are one
+ *   product, and a person looks. A missing size on either side is "not known".
+ *
+ * A target that holds the entry's barcode is the ordinary case and passes. So
+ * does a target with no barcode at all, as it always did.
+ */
+function linkEanConflict({ entry, linkTarget, rowEanOwner, brands }) {
+  const printed = isString(entry.ean) ? entry.ean.trim() : null;
+  if (!printed) {
+    return null;
+  }
+  const held = barcodesOf(linkTarget);
+  if (held.includes(printed)) {
+    return null;
+  }
+  if (rowEanOwner && rowEanOwner.id !== linkTarget.id) {
+    return issue(
+      'EAN_CONFLICT',
+      `The entry states EAN ${printed}, and catalog item ${rowEanOwner.id} holds it, not ${linkTarget.id}. A barcode names one product: link onto that item instead.`
+    );
+  }
+  if (held.length === 0) {
+    return null;
+  }
+  const brandAgrees = sameBrand(entry, linkTarget, brands);
+  const formatAgrees =
+    entry.unitSize !== null &&
+    entry.unitSize !== undefined &&
+    linkTarget.unitSize !== null &&
+    linkTarget.unitSize !== undefined &&
+    sameFormat(entry, linkTarget);
+  if (brandAgrees && formatAgrees) {
+    return null;
+  }
+  const missing = [
+    ...(brandAgrees ? [] : ['the same brand']),
+    ...(formatAgrees ? [] : ['the same format']),
+  ].join(' and ');
+  return issue(
+    'EAN_CONFLICT',
+    `The entry states EAN ${printed} and item ${linkTarget.id} carries ${held.join(', ')}. A second barcode of one product needs the same brand and the same format, and this pair does not show ${missing}.`
+  );
 }
 
 /**
@@ -259,6 +452,9 @@ export function validateDecision({
   // (plan 0006). Only `decide` knows, because only it holds the handout.
   linkTargetShown = true,
   eanOwner = null,
+  // The catalog product that holds the entry's own barcode, or null (backend
+  // plan 0185). Read on a LINK: a barcode another product holds is a conflict.
+  rowEanOwner = null,
   brands = new Map(),
   supermarkets = [],
   categories = [],
@@ -279,6 +475,30 @@ export function validateDecision({
   }
 
   if (decision.decision === 'CREATE' && item) {
+    // A product carries a name in both languages (backend plan 0184). The
+    // shape check already asked a reply without one again, so what reaches
+    // here is a decision built some other way, and it goes to a person
+    // rather than to a route that would refuse the whole file for it.
+    if (!isString(item.nameEn)) {
+      issues.push(
+        issue(
+          'NAME_EN_MISSING',
+          `"${item.nameEs}" has no nameEn. A CREATE writes both names: a brand name, a range word and a foreign product name stay as printed in both.`
+        )
+      );
+    }
+    // The pack count carries it (backend plan 0184). A name that ends in the
+    // word states a size with no number in it, which rule 3 forbids as surely
+    // as `6 pack`, so it is the same code. `6 pack` itself is left to the
+    // check below, so one name is not reported twice.
+    if (endsInPack(item.nameEs) && !carriesSize(item.nameEs)) {
+      issues.push(
+        issue(
+          'NAME_CARRIES_SIZE',
+          `nameEs "${item.nameEs}" ends in "pack". The pack count says it, in packCount, and the name does not (rule 3).`
+        )
+      );
+    }
     for (const [field, name] of [
       ['nameEs', item.nameEs],
       ['nameEn', item.nameEn],
@@ -334,6 +554,22 @@ export function validateDecision({
       );
     }
 
+    // A created product is measured in grams, millilitres or a count (backend
+    // plan 0183). One chain prints a bottle as `1,5 l` and another as
+    // `1500 ml`, and the same product in two units never matches itself. A
+    // `KILOGRAM` with no size passes: that is a product sold by weight. The
+    // detail names the pair to write, so the row a person reads says what the
+    // answer should have been.
+    const base = toBaseUnit(item.unitSize, item.defaultUnit);
+    if (base.unit !== item.defaultUnit) {
+      issues.push(
+        issue(
+          'NOT_A_BASE_UNIT',
+          `${describeSize(item.unitSize ?? 'no size', item.defaultUnit)} is not a base unit. A CREATE is written in GRAM, MILLILITER or UNIT: write ${describeSize(base.unitSize ?? 'no size', base.unit)}.`
+        )
+      );
+    }
+
     if (item.ean && eanOwner) {
       issues.push(
         issue(
@@ -363,13 +599,14 @@ export function validateDecision({
         )
       );
     } else {
-      if (entry.ean && linkTarget.ean && entry.ean !== linkTarget.ean) {
-        issues.push(
-          issue(
-            'EAN_CONFLICT',
-            `The entry states EAN ${entry.ean} and item ${linkTarget.id} carries ${linkTarget.ean}.`
-          )
-        );
+      const conflict = linkEanConflict({
+        entry,
+        linkTarget,
+        rowEanOwner,
+        brands,
+      });
+      if (conflict) {
+        issues.push(conflict);
       }
       if (
         entry.unitSize !== null &&
@@ -381,7 +618,7 @@ export function validateDecision({
         issues.push(
           issue(
             'FORMAT_MISMATCH',
-            `The entry is ${describeSize(entry.unitSize, entry.sizeFormat)} and item ${linkTarget.id} is ${describeSize(linkTarget.unitSize, linkTarget.defaultUnit)}. Same brand plus same format merges, and nothing else does (rule 1).`
+            `The entry is ${describeSize(entry.unitSize, entry.sizeUnit ?? entry.sizeFormat, entry.packCount)} and item ${linkTarget.id} is ${describeSize(linkTarget.unitSize, linkTarget.defaultUnit, linkTarget.packCount)}. Same brand plus same format merges, and nothing else does (rule 1).`
           )
         );
       }
@@ -397,7 +634,9 @@ export function validateDecision({
   // what the row needs is the person who can register it. `BRAND_IS_LINKED` is
   // the exception, for the reason `RETRYABLE_ISSUE_CODES` gives.
   if (decision.decision === 'CREATE' && item) {
-    const sourceBrand = canonicalBrand(brands, findBrand(brands, entry?.brand));
+    // Every brand the printed brand names (backend plan 0178). Usually one,
+    // and several when a person registered a homonym for the printed key.
+    const sources = sourceBrands(brands, entry).map((source) => source.brand);
     const writtenBrand = findBrand(brands, item.brand);
     const writtenCanonical = canonicalBrand(brands, writtenBrand);
 
@@ -437,14 +676,26 @@ export function validateDecision({
     // person's time. Both sides are compared as canonical brands (plan 0005):
     // a chain printing `DEBORAH 48H` and a decision writing `Deborah` agree,
     // and it is `BRAND_IS_LINKED` above that answers the other way round.
+    //
+    // **Any brand the printed brand names is the source's brand** (backend plan
+    // 0178). One printed name can belong to two businesses, so a chain printing
+    // `Poseidón` on salmon agrees with a decision writing `Poseidon Food` once
+    // a person registered that homonym, and with one writing `Poseidon` too:
+    // which of them made the product is the curator's reading, not the gate's.
     const writtenKey = writtenCanonical
       ? writtenCanonical.key
       : brandKey(item.brand);
-    if (sourceBrand && writtenKey !== sourceBrand.key) {
+    if (
+      sources.length > 0 &&
+      !sources.some((source) => source.key === writtenKey)
+    ) {
+      const written = item.brand ? `"${item.brand}"` : 'no brand';
       issues.push(
         issue(
           'BRAND_DIFFERS_FROM_SOURCE',
-          `the chain prints "${entry.brand}", a registered brand, and the decision writes ${item.brand ? `"${item.brand}"` : 'no brand'}.`
+          sources.length === 1
+            ? `the chain prints "${entry.brand}", a registered brand, and the decision writes ${written}.`
+            : `the chain prints "${entry.brand}", which names the registered brands ${sources.map((source) => `"${source.label}"`).join(' and ')}, and the decision writes ${written}.`
         )
       );
     }

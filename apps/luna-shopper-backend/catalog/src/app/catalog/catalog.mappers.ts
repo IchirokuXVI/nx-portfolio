@@ -226,6 +226,9 @@ export function toProductGroupView(row: ProductGroup): ProductGroupView {
 export function toItemView(
   row: Item,
   categories: ItemView['categories'],
+  // Every barcode of the product, the first one leading (plan 0185). Handed
+  // in like the categories, because they are rows of another table.
+  eans: ItemView['eans'],
   bestOffer?: ItemOfferView
 ): ItemView {
   const view: ItemView = {
@@ -235,6 +238,7 @@ export function toItemView(
     imageUrl: row.imageUrl,
     sku: row.sku,
     ean: row.ean,
+    eans,
     unitSize: toNumber(row.unitSize),
     packCount: row.packCount ?? null,
     categories,
@@ -372,8 +376,14 @@ export function toPricePolicyView(row: PricePolicy): PricePolicyView {
   };
 }
 
+/**
+ * @param item the product the row is about, for the name and brand the view
+ * joins on (admin plan 0042, section 2). Read by the caller, once per page, and
+ * null when it found none: the row still maps, with both left null.
+ */
 export function toSupermarketLocationItemView(
-  row: SupermarketLocationItem
+  row: SupermarketLocationItem,
+  item: Pick<Item, 'name' | 'brand'> | null
 ): SupermarketLocationItemView {
   return {
     id: row.id,
@@ -386,5 +396,7 @@ export function toSupermarketLocationItemView(
       ? row.availabilityObservedAt.toISOString()
       : null,
     availabilitySourceRunId: row.availabilitySourceRunId,
+    itemName: item?.name ?? null,
+    itemBrand: item?.brand ?? null,
   };
 }

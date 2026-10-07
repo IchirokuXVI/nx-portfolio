@@ -57,6 +57,14 @@ const COMBINING_MARKS = new RegExp(
 );
 
 /**
+ * A product set as one comparable string, whatever order it was given in. Empty
+ * for free text. It stands in for the digest the server compares.
+ */
+function productSetKey(itemIds: readonly string[]): string {
+  return [...new Set(itemIds)].sort().join(',');
+}
+
+/**
  * A line's words as the merge rule compares them, which is the server's
  * `normalizeContent` (backend `0091`).
  *
@@ -326,6 +334,16 @@ const SKIP_WINDOW_MS = 12 * 60 * 60 * 1000;
  */
 const LINK_VISIT_MS = LINK_VISIT_HOURS * 60 * 60 * 1000;
 
+/**
+ * How long a purchase made through another basket keeps its row here (backend
+ * `0188`): six hours, which is the server's `PURCHASE_SESSION_GAP_MS`.
+ *
+ * By the **server's** clock, like {@link SKIP_WINDOW_MS}. This class holds the
+ * number because it stands in for the server, and nothing above it counts hours:
+ * the row leaves when a read no longer holds it.
+ */
+const ELSEWHERE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 /** A moment {@link LINK_VISIT_MS} after another, which is every expiry here. */
 function visitEnd(from: Date): Date {
   return new Date(from.getTime() + LINK_VISIT_MS);
@@ -457,6 +475,19 @@ interface Settlement {
    */
   readonly priceScopeId?: string;
   reverted: boolean;
+}
+
+/**
+ * A purchase of one covered line made through **another** basket, or through
+ * none (backend `0188`).
+ *
+ * It carries no person and no basket, because the server loads neither: a reader
+ * learns how many were bought and when, and never who bought them.
+ */
+interface ElsewherePurchase {
+  readonly lineId: string;
+  readonly quantity: number;
+  readonly at: Date;
 }
 
 /**
@@ -622,7 +653,51 @@ export class BasketMemory implements BasketServiceI {
       deleted: true,
       skippedAt: null,
     },
+    {
+      // A line somebody bought to zero through another basket (velista `0131`).
+      // It asks for nothing and this basket bought none of it, and it is still a
+      // row: `_elsewhere` below holds the purchase that keeps it. Seeded for the
+      // reason the `REMOVED` row above is, because no write on this surface can
+      // make one. It takes a second basket.
+      id: 'zl-7',
+      listId: 'list-weekly',
+      content: 'Butter',
+      quantity: 0,
+      optionIds: [],
+      approved: true,
+      demandEditable: true,
+      deleted: false,
+      skippedAt: null,
+    },
   ];
+
+  /**
+   * What other baskets bought of the covered lines (backend `0188`).
+   *
+   * The butter is stamped when this fake is made rather than at a fixed date, so
+   * the row is on screen whenever a developer opens the app: a fixed date would
+   * be outside the six hours on every day but one.
+   */
+  private _elsewhere: ElsewherePurchase[] = [
+    { lineId: 'zl-7', quantity: 1, at: new Date() },
+  ];
+
+  /**
+   * Somebody buys units of one line through another basket (velista `0131`).
+   *
+   * A knob and not a part of `BasketServiceI`, for {@link servesLists}'s reason:
+   * no route of this basket can do it, so a spec that needs the row calls this.
+   * The list asks for that many fewer, never below zero, as it does after any
+   * purchase.
+   */
+  buyElsewhere(lineId: string, quantity: number): void {
+    const line = this._lines.find((held) => held.id === lineId);
+    if (line === undefined) {
+      return;
+    }
+    this._elsewhere.push({ lineId, quantity, at: this.now() });
+    line.quantity = Math.max(0, line.quantity - quantity);
+  }
 
   /**
    * What this basket has said about those lines.
@@ -978,6 +1053,11 @@ export class BasketMemory implements BasketServiceI {
     }
 
     this._requireFrom(body.from, row.bought);
+    if (row.bought === 0) {
+      // Nothing of this basket's to take back. A purchase another basket made is
+      // not this basket's to revert (backend `0188`, target 8).
+      throw this._refuse('validation_failed', 400, 'Nothing to take back');
+    }
 
     // Newest first, which is the order a person takes a purchase back in: the
     // one they just made is the one they meant.
@@ -1100,10 +1180,13 @@ export class BasketMemory implements BasketServiceI {
    * section 7).
    *
    * **It merges**, because the list's own add does (backend `0091`): a line
-   * whose normalized content matches one the target list already holds raises
-   * that line rather than making a second. So the answer can be a row that was
-   * already on the screen, under a key the caller never named, which is exactly
-   * what the store has to fold correctly.
+   * whose normalized content **and products** match one the target list already
+   * holds raises that line rather than making a second. So the answer can be a
+   * row that was already on the screen, under a key the caller never named, which
+   * is exactly what the store has to fold correctly.
+   *
+   * The name alone is not a match. Two products of one name that differ in brand
+   * or in format are two lines, and free text meets only free text.
    *
    * A list this reader was not served is refused, which is the redaction being a
    * rule rather than a caption: a target you were not told about is one you may
@@ -1124,11 +1207,13 @@ export class BasketMemory implements BasketServiceI {
 
     const quantity = Math.max(1, Math.trunc(body.quantity));
     const key = normalizeContent(content);
+    const wanted = productSetKey(body.itemIds ?? []);
     const held = this._lines.find(
       (line) =>
         !line.deleted &&
         line.listId === body.targetListId &&
-        normalizeContent(line.content) === key
+        normalizeContent(line.content) === key &&
+        productSetKey(line.optionIds) === wanted
     );
 
     if (held !== undefined) {
@@ -1421,7 +1506,16 @@ export class BasketMemory implements BasketServiceI {
       const entries = live.map((line) => this._entry(line));
       const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
       const left = entries.reduce((sum, entry) => sum + entry.left, 0);
+      const boughtElsewhere = entries.reduce(
+        (sum, entry) => sum + entry.boughtElsewhere,
+        0
+      );
       const newest = this._newestOn(lines);
+      // `SKIPPED_EARLIER` wins when both apply, which is the server's order
+      // (backend `0188`, target 4).
+      const skipNote = this._note(lines, bought);
+      const note: BasketRowNote | null =
+        skipNote ?? (boughtElsewhere > 0 ? 'BOUGHT_ON_ANOTHER_BASKET' : null);
 
       // **A row nothing asks for and nothing was bought of is not a thing to
       // buy**, so it leaves the view (backend `0136`). That is what a demand
@@ -1430,7 +1524,15 @@ export class BasketMemory implements BasketServiceI {
       //
       // A `REMOVED` row is the other way round and stays: its lines left the
       // coverage, which is information about the basket rather than nothing.
-      if (live.length > 0 && left === 0 && bought === 0) {
+      //
+      // A purchase another basket made lately keeps the row too (backend
+      // `0188`): the line asks for nothing because somebody bought it.
+      if (
+        live.length > 0 &&
+        left === 0 &&
+        bought === 0 &&
+        boughtElsewhere === 0
+      ) {
         continue;
       }
 
@@ -1440,13 +1542,20 @@ export class BasketMemory implements BasketServiceI {
         left,
         bought,
         asked: bought + left,
-        state: this._state(lines, left, bought),
+        boughtElsewhere,
+        state: this._state(lines, left, bought, boughtElsewhere),
         // What a skip leaves behind once its window has passed (backend `0137`).
         // Inside the window the state says it and there is no note; outside it
-        // the row is ordinary again and the note is the only trace.
-        note: this._note(lines, bought),
+        // the row is ordinary again and the note is the only trace. A purchase
+        // made through another basket is the other note (backend `0188`), dated
+        // by the newest such purchase.
+        note,
         noteAt:
-          this._note(lines, bought) === null ? null : this._skippedAt(lines),
+          note === null
+            ? null
+            : skipNote !== null
+              ? this._skippedAt(lines)
+              : this._newestElsewhereAt(live),
         // Filled below, once every row exists: a mark is decided by the
         // unseen changes that resolve to this row, and resolving one needs
         // the row it names to have been built.
@@ -1576,6 +1685,9 @@ export class BasketMemory implements BasketServiceI {
     const bought = this._standing()
       .filter((act) => act.lineId === line.id && act.outcome === 'BOUGHT')
       .reduce((sum, act) => sum + act.quantity, 0);
+    const boughtElsewhere = this._recentElsewhere()
+      .filter((purchase) => purchase.lineId === line.id)
+      .reduce((sum, purchase) => sum + purchase.quantity, 0);
 
     return {
       lineId: line.id,
@@ -1588,7 +1700,8 @@ export class BasketMemory implements BasketServiceI {
       left: line.quantity,
       bought,
       asked: bought + line.quantity,
-      state: this._entryState(line, bought),
+      boughtElsewhere,
+      state: this._entryState(line, bought, boughtElsewhere),
       awaitingApproval: !line.approved,
       demandEditable: line.demandEditable,
     };
@@ -1604,7 +1717,8 @@ export class BasketMemory implements BasketServiceI {
   private _state(
     lines: readonly StoredLine[],
     left: number,
-    bought: number
+    bought: number,
+    boughtElsewhere: number
   ): BasketRowState {
     if (lines.every((line) => line.deleted)) {
       return 'REMOVED';
@@ -1619,7 +1733,9 @@ export class BasketMemory implements BasketServiceI {
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    if (left === 0 && bought > 0) {
+    // Nothing left, and somebody bought it: this basket, or another one lately
+    // (backend `0188`, target 5).
+    if (left === 0 && (bought > 0 || boughtElsewhere > 0)) {
       return 'DONE';
     }
     if (left > 0 && bought > 0) {
@@ -1628,13 +1744,40 @@ export class BasketMemory implements BasketServiceI {
     return 'WANTED';
   }
 
+  /**
+   * The purchases other baskets made that are still inside the window.
+   *
+   * By {@link now}, which is the server's clock here. A purchase past the six
+   * hours gives no row and no number, with no event: the next read simply does
+   * not hold it.
+   */
+  private _recentElsewhere(): readonly ElsewherePurchase[] {
+    const now = this.now().getTime();
+    return this._elsewhere.filter(
+      (purchase) => now - purchase.at.getTime() < ELSEWHERE_WINDOW_MS
+    );
+  }
+
+  /** The newest purchase another basket made on these lines, or null. */
+  private _newestElsewhereAt(lines: readonly StoredLine[]): Date | null {
+    const ids = new Set(lines.map((line) => line.id));
+    const times = this._recentElsewhere()
+      .filter((purchase) => ids.has(purchase.lineId))
+      .map((purchase) => purchase.at.getTime());
+    return times.length === 0 ? null : new Date(Math.max(...times));
+  }
+
   /** One entry's own state, by the same table over that line alone. */
-  private _entryState(line: StoredLine, bought: number): BasketRowState {
+  private _entryState(
+    line: StoredLine,
+    bought: number,
+    boughtElsewhere: number
+  ): BasketRowState {
     const newest = this._newestOn([line]);
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    if (line.quantity === 0 && bought > 0) {
+    if (line.quantity === 0 && (bought > 0 || boughtElsewhere > 0)) {
       return 'DONE';
     }
     if (line.quantity > 0 && bought > 0) {

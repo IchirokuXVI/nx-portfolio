@@ -1,0 +1,22 @@
+{
+  "step": "C9",
+  "title": "Decision 10: the El Pozo burger \"king\" gets a product of its own",
+  "sources": [
+    "stage-c2/step1.create.answer.json"
+  ],
+  "keys": "Each product is keyed as it stood at the start of the stage of plan 0192 that changed it (the items-snapshot of that stage). A product that a stage created is keyed as the create answered it. Each queue row is keyed as it stood at the start of stage 1 (stage-c1/rows-snapshot.c0-start.json).",
+  "decidedBy": "The owner, 2026-10-06 (decision 10).",
+  "count": 1,
+  "naturalKeys": {
+    "products": 2,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 1,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"row":{"chain":"El Jamón","sourceKind":"OFFICIAL_WEB","externalId":"93003273","printedName":"burger pavo con espinacas king","printedBrand":"ELPOZO","sizeFormat":"240g","barcode":null,"localId":"67a821e4-69c0-49be-9c52-15f6dbe25c23"},"movedFrom":{"brand":"El Pozo","nameEs":"Burger de pavo con espinacas bienStar","size":240,"unit":"GRAM","packCount":2,"barcode":null,"localId":"7541e849-c084-412d-90a4-26bbf5376953"},"decision":{"action":"create","product":{"brand":"El Pozo","nameEs":"Burger de pavo con espinacas King","size":240,"unit":"GRAM","packCount":null,"barcode":null,"localId":"34f9a57e-ab64-4889-a8a6-01bad1ec3aa0","nameEn":"King turkey and spinach burger","categories":["uncategorised"]}},"pricesWritten":1,"settleOfTheOldProduct":{"pricesWithdrawn":1,"pricesRestated":1,"offersRemoved":0},"status":"applied in stage 2","openDecision":10,"ownerDecision":"Decided by the owner, 2026-10-06: the row gets a product of its own, 240 g as printed. A printed size wins over a size worked out from a unit price.","why":"Two articles of El Jamón, at 2.45 and at 2.95, stood on one product. The row that prints \"king\" got a product of its own, 240 g as printed (rule R32). The settle of plan 0191 took the 2.95 off the old product and wrote the 2.45 again."}
+  ]
+}

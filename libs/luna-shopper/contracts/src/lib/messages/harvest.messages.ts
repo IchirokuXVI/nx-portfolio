@@ -15,18 +15,25 @@ import type {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceLinkField,
+  PlaceLinkSkipReason,
   PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
   SourceLocationStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { SourceSizeUnit } from '../units/source-size';
 import type { AdminCredential } from './admin-auth.messages';
 import type {
+  BrandMatchView,
   BulkOperationError,
   ContentLocale,
   ItemView,
   LocalizedText,
+  LocationRefHolder,
+  OfferKeptReason,
+  UnitBasis,
 } from './catalog.messages';
 
 /**
@@ -116,6 +123,12 @@ export const DISCOVERED_PLACE_PATTERNS = {
    * It fills only the fields the shop lacks, and never creates one.
    */
   link: 'place.link',
+  /**
+   * Link every undecided place to the one shop that carries its own reference
+   * (plan 0193). Without `apply` it answers what it would do and writes
+   * nothing.
+   */
+  linkByRef: 'place.linkByRef',
   reject: 'place.reject',
 } as const;
 
@@ -191,6 +204,17 @@ export const SOURCE_ENTRY_PATTERNS = {
    * shared EAN is how two walk rows of one chain end up on one product.
    */
   listByItem: 'sourceEntry.listByItem',
+  /**
+   * Settle a product at a chain (plan 0191): make catalog agree with the rows
+   * of the chain that are bound to the product now.
+   *
+   * A bound row that is moved to another product, or rejected, leaves behind
+   * what it wrote on the old product: price rows, offers and shop rows. Nothing
+   * in catalog names the row that wrote them, so nothing else takes them back.
+   * `accept`, `createItem` and `reject` call this for the old product. A person
+   * calls it for a product a row left before the plan landed.
+   */
+  settleItem: 'sourceEntry.settleItem',
 } as const;
 
 /**
@@ -713,6 +737,16 @@ export interface DiscoveredPlaceView {
   supermarketLocationId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /**
+   * The catalog shops this place may be, best first (plan 0193).
+   *
+   * Filled for a `NEW` place on the list read only. It is empty for every
+   * other status and on every other read. It is worked out on the read and
+   * stored nowhere, so a shop that was linked, edited or created a moment ago
+   * is already in the answer. A candidate is a hint for a person: nothing
+   * links on one.
+   */
+  candidates: PlaceLocationCandidate[];
 }
 
 /**
@@ -743,7 +777,8 @@ export interface DiscoveredPlaceGroup {
  *
  * The fields fall into two groups, and the split is the contract. The first is
  * the **source's**, and every run rewrites it verbatim: `name`, `brand`, `ean`,
- * `unitSize`, `sizeFormat`, `categoryPath`, `url`, `extra`. The second is a
+ * `unitSize`, `sizeUnit`, `soldByWeight`, `sizeFormat`, `categoryPath`, `url`,
+ * `extra`. The second is a
  * **person's**, or the EAN rung's, and a run only reads it: `itemId`,
  * `candidateEntryId`, `status`, `matchedBy`, `confidence`, `decidedAt`.
  *
@@ -764,6 +799,25 @@ export interface SourceCatalogEntryView {
   /** The one identifier that joins across chains. Leaflets and DEZA rarely fill it. */
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The unit `unitSize` is in, as the source's own adapter stated it (plan
+   * 0177). Null when `unitSize` is null, on a row no run has seen since that
+   * plan, and for a size printed in a unit the catalog does not hold, such as
+   * a length. The printed text cannot say it: one source converts `75cl` to
+   * 750 and another keeps `6x33cl` at 198.
+   */
+  sizeUnit: SourceSizeUnit | null;
+  /**
+   * Whether the source sells the product by weight (plan 0181): a piece of
+   * cheese, a tray of meat, loose fruit, whose weight is not the same on
+   * every pack. The row then states no size (`unitSize` and `sizeUnit` are
+   * null) and every price it holds is the price of a kilo. A product created
+   * from it defaults to `KILOGRAM` with no size.
+   *
+   * False on a row no run has read whole since that plan, and for a source
+   * whose payload has no field that says it.
+   */
+  soldByWeight: boolean;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**
@@ -828,11 +882,25 @@ export interface SourceCatalogEntryView {
  * So they are a row of their own, and accepting the entry writes every one of
  * them that is still valid, each into its own scope and stamped with the run
  * that observed it.
+ *
+ * **And one per kind of source** (plan 0190). A website and a leaflet of one
+ * chain can share a row, and each states its own price, so a row can hold two
+ * prices for one scope, one of each kind.
  */
 export interface SourceEntryPriceView {
   id: string;
   /** Opaque here, as every catalog id is. */
   priceScopeId: string;
+  /**
+   * The kind of the run that stated this price (plan 0190), which is the kind
+   * an accept writes it to catalog under. It can differ from the `sourceKind`
+   * of the row, which says who owns the text of the row: a row that a website
+   * walk owns can hold a leaflet price.
+   *
+   * Null only for a price from before plan 0190 whose kind could not be
+   * read. Such a price is shown and is not written by an accept.
+   */
+  sourceKind: PriceSourceKind | null;
   /**
    * The till price for one unit. Null when the source stated only a comparison
    * figure, a per kilogram price with no pack price.
@@ -841,8 +909,19 @@ export interface SourceEntryPriceView {
   currency: string;
   /** The source's own normalized price, stored verbatim and never recomputed. */
   unitPrice: number | null;
-  /** The source's own label for that number. Display text, never a unit. */
+  /**
+   * What the adapter says that number is per. It is the text the source
+   * printed when that text is true of the number, and the adapter's own `L`,
+   * `kg` or `ud` when the source labelled another figure (plan 0189). Display
+   * text, never a unit: {@link unitBasis} is the unit.
+   */
   unitPriceLabel: string | null;
+  /**
+   * What {@link unitPrice} is per, read from the label by the table catalog
+   * reads its own prices with (plans 0157 and 0189). Null for a label the
+   * table does not name.
+   */
+  unitBasis: UnitBasis | null;
   /** A file's window. Null for a storefront price, which has none. */
   validFrom: string | null;
   validUntil: string | null;
@@ -1234,21 +1313,94 @@ export interface NewChainInput {
 /** Bind a place to a shop the catalog already holds (plan 0152, section 3). */
 export interface LinkDiscoveredPlaceRequest extends AdminCredential {
   placeId: string;
-  /** A shop of the place's own chain. */
+  /**
+   * The shop the person named. It decides the chain (plan 0193): a place that
+   * resolves to no chain links to it with no question.
+   */
   supermarketLocationId: string;
+  /**
+   * Link although the place resolves to another chain than the shop belongs
+   * to (plan 0193). Without it that case answers 409
+   * `place_names_another_chain` and writes nothing. It mirrors `force` on
+   * import.
+   */
+  acrossChains?: boolean;
 }
 
 /**
- * One catalog shop a discovered place may be, as the 409
- * `place_matches_location` lists it under `details.candidates` (plan 0152,
- * section 2).
+ * What a link did (plan 0193): the place, now imported and naming its shop,
+ * and each thing the link wrote on the shop because the shop lacked it. An
+ * empty `filled` is a link that wrote only the mark.
+ */
+export interface PlaceLinkResult {
+  place: DiscoveredPlaceView;
+  filled: PlaceLinkField[];
+  /**
+   * The shop that already holds the reference of the place (plan 0195).
+   *
+   * Present only when the shop linked had no reference and the link could not
+   * give it this one, because the catalog holds one shop for each reference.
+   * The link is made all the same: `filled` then lacks `EXTERNAL_REF`, and
+   * the place names its shop through `supermarketLocationId`. Null when that
+   * shop was gone by the time it was read.
+   */
+  refHeldBy?: LocationRefHolder | null;
+}
+
+/**
+ * One catalog shop a discovered place may be. The places list carries them on
+ * a `NEW` place (plan 0193), and the 409 `place_matches_location` lists them
+ * under `details.candidates` (plan 0152, section 2).
  */
 export interface PlaceLocationCandidate {
   supermarketLocationId: string;
+  /** The chain of the shop, which a place with no chain cannot say itself. */
+  supermarketId: string;
   label: LocalizedText | null;
   address: string | null;
+  city: string | null;
   postalCode: string | null;
   rung: PlaceMatchRung;
+  /**
+   * How far the shop is from the place, in whole metres. Null for a shop with
+   * no position.
+   */
+  metres: number | null;
+}
+
+/**
+ * Link every `NEW` place to the shop that was made from it (plan 0193).
+ *
+ * A place is linked when exactly one catalog shop carries its `externalRef`
+ * and that shop names the same `externalProvider`. Nothing else links here,
+ * and no distance does.
+ */
+export interface LinkPlacesByRefRequest extends AdminCredential {
+  /** Write the links. Absent or false answers what a call would do. */
+  apply?: boolean;
+}
+
+/** One place the bulk act links, or would link without `apply`. */
+export interface PlaceRefLink {
+  place: DiscoveredPlaceView;
+  /** The one shop that carries the reference of the place. */
+  shop: PlaceLocationCandidate;
+  /** What the link fills on the shop, or would fill. */
+  filled: PlaceLinkField[];
+}
+
+/** One place the bulk act left alone, with the shops that made it do so. */
+export interface PlaceRefSkip {
+  place: DiscoveredPlaceView;
+  reason: PlaceLinkSkipReason;
+  shops: PlaceLocationCandidate[];
+}
+
+export interface LinkPlacesByRefResult {
+  /** Whether this call wrote. False is the dry answer. */
+  applied: boolean;
+  linked: PlaceRefLink[];
+  skipped: PlaceRefSkip[];
 }
 
 export interface DiscoveredPlaceIdRequest extends AdminCredential {
@@ -1325,6 +1477,35 @@ export interface ItemSourceEntryView extends SourceCatalogEntryView {
    * EAN.
    */
   eanSharedBy: number | null;
+  /**
+   * The other rows of this chain and source kind that are bound to the same
+   * product and hold an open price at a scope this row also holds an open
+   * price at (plan 0191). Their ids, oldest decision first.
+   *
+   * Catalog keeps one current price per product, scope and kind, so two such
+   * rows cannot both be shown. When their amounts differ and they are not
+   * both sold by weight, neither price is written until a person makes a
+   * second product or removes a row. Empty for a row that is not `ACTIVE`.
+   */
+  scopeSharedWith: string[];
+}
+
+/**
+ * A row as the queue answers it, with the brands its printed brand names
+ * (plan 0178).
+ *
+ * Composed at the gateway, as the brand suggestions are: the registry lives in
+ * catalog and the harvester holds no copy of it, so the harvester answers the
+ * rows and catalog answers what each printed key names.
+ *
+ * **Several brands is an ordinary answer.** The key's own brand comes first,
+ * and every brand a homonym points that key at follows. One printed name can
+ * belong to two businesses, and which one made this product is read from the
+ * product, by a person or by the curator. Empty when the row prints no brand
+ * or nothing registered answers to it.
+ */
+export interface QueuedSourceEntryView extends SourceCatalogEntryView {
+  brandMatches: BrandMatchView[];
 }
 
 /** Bind a queued row to a product the catalog already holds. */
@@ -1380,6 +1561,130 @@ export interface SourceEntryAcceptResult {
   pricesWritten: number;
   /** The product this call created, or null when it bound an existing one. */
   createdItem: ItemView | null;
+  /**
+   * The scopes whose price was not written, because another bound row of the
+   * chain states another amount there (plan 0191). The row is bound all the
+   * same. Empty when every open price of the row was sent.
+   */
+  pricesWithheld: SourceEntryPriceWithheld[];
+  /**
+   * What settling the product the row left did (plan 0191). Null when the row
+   * was not bound before, or was bound to this same product.
+   */
+  settled: SettleItemAtChainResult | null;
+}
+
+/**
+ * A price that was not sent to catalog (plan 0191, after plan 0155).
+ *
+ * Two rows of one chain and one source kind are bound to one product, both
+ * hold an open price at one scope, and the amounts differ. Catalog keeps one
+ * current price there, and no rule picks between two packs. The price that
+ * was current before stays and ages until a person makes a second product or
+ * removes a row.
+ */
+export interface SourceEntryPriceWithheld {
+  /** The row whose price was not sent. */
+  entryId: string;
+  priceScopeId: string;
+  /** The other bound rows that state another amount at that scope. */
+  otherEntryIds: string[];
+  /**
+   * Present and true when the price was not sent for another reason (plan
+   * 0190): it is a price from before that plan whose kind could not be read,
+   * and a price is never sent under a guessed kind. `otherEntryIds` is then
+   * empty. The row is still bound, and a row with no other open price is
+   * offered with no price.
+   */
+  kindUnknown?: true;
+}
+
+/** Settle a product at a chain (plan 0191). */
+export interface SettleItemAtChainRequest extends AdminCredential {
+  itemId: string;
+  supermarketId: string;
+  /** True answers what a call would do, and writes nothing. */
+  dryRun?: boolean;
+}
+
+/**
+ * What settling a product at a chain did, or with `dryRun` would do (plan
+ * 0191). The two answers have one shape and count the same things.
+ */
+export interface SettleItemAtChainResult {
+  itemId: string;
+  supermarketId: string;
+  dryRun: boolean;
+  /** The rows of the chain that are bound to the product now. */
+  boundEntryIds: string[];
+  /**
+   * Price rows a harvest run wrote that were removed from the product. Only
+   * what no bound row accounts for. A scope at which a bound row holds a
+   * price row, open or not, loses only a row of the run of the row that left
+   * or of the run of the price the bound rows state there now.
+   */
+  pricesWithdrawn: number;
+  /** The same rows by scope and kind. A pair that lost no row is left out. */
+  pricesWithdrawnAt: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    deleted: number;
+  }[];
+  /**
+   * Prices of the bound rows that are the current price of their scope and
+   * kind in catalog after the call, one per scope and kind. A price catalog
+   * already held as current changes nothing, so this counts what is stated
+   * and current, not what changed. `pricesWritten` counts that.
+   */
+  pricesRestated: number;
+  /**
+   * Prices a bound row states that are **not** the current price of their
+   * scope and kind. Catalog holds a newer row there that says something
+   * else, written by a run that no bound row and no leaving row names, and
+   * that row stays. A row can hold an older observation than catalog does: a
+   * file import stamps the instant of its document.
+   */
+  pricesNotCurrent: { priceScopeId: string; sourceKind: PriceSourceKind }[];
+  /**
+   * Prices a bound row states that catalog cannot write, because the scope
+   * the price was copied from is gone. Nothing at that scope and kind
+   * changed.
+   */
+  pricesNotWritable: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  /**
+   * `item_prices` rows catalog inserted for those statements. Zero on a
+   * product that was already settled: a second call changes nothing.
+   */
+  pricesWritten: number;
+  /**
+   * Statements catalog did not apply, because it holds the price of that run
+   * at that scope under another kind than the run's. The price stays under
+   * the kind it was written with, and nothing at that scope and kind changes.
+   */
+  pricesKeptAsWritten: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    heldAs: PriceSourceKind;
+  }[];
+  /** Prices of the bound rows that were not sent, and the rows they met. */
+  pricesWithheld: SourceEntryPriceWithheld[];
+  /**
+   * The scopes whose offer was removed. Always empty while a bound row of the
+   * chain names the product: a chain that lists a product sells it.
+   */
+  offersRemoved: string[];
+  /** The offers that stayed although no bound row names the product, and why. */
+  offersKept: { priceScopeId: string; reason: OfferKeptReason }[];
+  /** Shop rows of the chain's shops that were removed whole. */
+  shopRowsRemoved: number;
+  /** Shop rows that keep a position a person typed, with no availability now. */
+  shopRowsCleared: number;
+  /** Shop rows whose availability a person wrote. Left alone. */
+  shopRowConflicts: { supermarketLocationId: string; held: boolean | null }[];
 }
 
 // --- Bulk entry decisions (plan 0100) ---------------------------------------
@@ -1659,6 +1964,7 @@ export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceEntryPage = Paginated<ItemSourceEntryView>;
+export type QueuedSourceEntryPage = Paginated<QueuedSourceEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
 

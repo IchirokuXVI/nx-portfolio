@@ -12,7 +12,15 @@
  * It is wrong in the ordinary way an extractor like this is wrong. `ARIEL
  * BÁSICO` names a variant as well as a brand, and `G1 PÉREZ BARQUERO` a line as
  * well as a house. Neither costs anything, because nothing decides on this field.
+ *
+ * **One kind of run is never the brand** (plan 0178). The chain also shouts a
+ * protected origin: `Vino tinto D.O Toro PRIMA crianza`. `D.O` and `PRIMA` tie,
+ * the first used to win, and 92 wines carried `D.O` as their brand, which the
+ * curation gate then held every one of them to once somebody registered it. A
+ * run made only of the words `NEVER_A_BRAND` lists is skipped, so the brand is
+ * the other run.
  */
+import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
 
 /** A word that counts towards a run: at least two characters, no lower case. */
 function isCapitalised(word: string): boolean {
@@ -26,11 +34,26 @@ function isCapitalised(word: string): boolean {
 }
 
 /**
+ * True when a run is made only of words that are never a brand.
+ *
+ * Asked of the whole run and of each word, because the list holds both: `VINO
+ * DE LA TIERRA` is one entry of four words, and `D.O. IGP` is two entries.
+ */
+function isNeverABrandRun(run: readonly string[]): boolean {
+  return (
+    isNeverABrand(run.join(' ')) || run.every((word) => isNeverABrand(word))
+  );
+}
+
+/**
  * The longest run of capitalised words, or null when there is none.
  *
  * Ties go to the first run, which is where a chain that names two things in
  * capitals puts the brand: `Choco wafer MILKA 5x30 g` has one run, and a
  * description with a brand and a shouted variant has the brand first.
+ *
+ * A run made only of listed words is not a candidate at all, so it neither wins
+ * a tie nor wins on length.
  *
  * Call it with the **name**, not the whole description: a trailing `2 L` would
  * otherwise be scanned, and `L` on its own is one character short of counting
@@ -38,7 +61,7 @@ function isCapitalised(word: string): boolean {
  */
 export function extractBrand(name: string): string | null {
   const words = name.split(/\s+/).filter((word) => word.length > 0);
-  let best: string[] = [];
+  const runs: string[][] = [];
   let current: string[] = [];
   for (const word of words) {
     // Punctuation the chain hangs off a name (`ST.PIERRE`, `blan/color`) is not
@@ -46,13 +69,19 @@ export function extractBrand(name: string): string | null {
     // in what is returned.
     const bare = word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
     if (bare && isCapitalised(bare)) {
-      current.push(word);
-      if (current.length > best.length) {
-        best = [...current];
+      if (current.length === 0) {
+        runs.push(current);
       }
+      current.push(word);
       continue;
     }
     current = [];
+  }
+  let best: string[] = [];
+  for (const run of runs) {
+    if (run.length > best.length && !isNeverABrandRun(run)) {
+      best = run;
+    }
   }
   return best.length > 0 ? best.join(' ') : null;
 }

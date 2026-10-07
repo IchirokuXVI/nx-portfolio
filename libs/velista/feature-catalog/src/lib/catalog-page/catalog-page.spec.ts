@@ -1,4 +1,5 @@
-import { signal } from '@angular/core';
+import { Location } from '@angular/common';
+import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import {
   ActivatedRoute,
@@ -8,6 +9,7 @@ import {
   type ParamMap,
   type UrlTree,
 } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -45,6 +47,10 @@ interface RenderOptions {
   readonly chain?: string;
   /** The shop in `?shop=` on arrival (velista 0124). */
   readonly shop?: string;
+  /** The text in `?q=` on arrival. */
+  readonly q?: string;
+  /** The order in `?order=` on arrival. */
+  readonly order?: string;
   /** The tree the store holds; null is a tree that has not landed. */
   readonly tree?: FakeCategoryStore;
 }
@@ -74,6 +80,8 @@ async function render(
       ...(options.category === undefined ? {} : { category: options.category }),
       ...(options.chain === undefined ? {} : { chain: options.chain }),
       ...(options.shop === undefined ? {} : { shop: options.shop }),
+      ...(options.q === undefined ? {} : { q: options.q }),
+      ...(options.order === undefined ? {} : { order: options.order }),
     })
   );
   const tree = options.tree ?? fakeCategoryStore(MEMORY_CATEGORIES);
@@ -460,6 +468,222 @@ describe('CatalogPage', () => {
     );
   });
 
+  describe('no filter is reset by choosing another', () => {
+    it('opens with the text and the order the URL holds, as a picker hands them back', async () => {
+      const { fixture, browse } = await render('priced', {
+        chain: 'chain-deza',
+        q: 'leche',
+        order: 'created',
+      });
+
+      expect(field(fixture).value).toBe('leche');
+      expect(pills(fixture)).toEqual({
+        orders: ['relevance', 'name', 'created'],
+        checked: 'created',
+      });
+      expect(lastQuery(browse)).toMatchObject({
+        query: 'leche',
+        order: 'created',
+        soldBy: 'chain-deza',
+      });
+    });
+
+    it('opens text alone on Best match, and ignores an order the text does not offer', async () => {
+      const typed = await render('priced', { q: 'leche' });
+      expect(lastQuery(typed.browse)).toMatchObject({ order: 'relevance' });
+
+      const plain = await render('priced', { order: 'relevance' });
+      expect(lastQuery(plain.browse)).toMatchObject({
+        query: '',
+        order: 'name',
+      });
+    });
+
+    it('writes the text and the order into the URL in place of the entry, as they change', async () => {
+      const { fixture } = await render('priced', { chain: 'chain-deza' });
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigateByUrl')
+        .mockResolvedValue(true);
+      jest.spyOn(router, 'url', 'get').mockReturnValue('/velista/en/catalog');
+      jest.useFakeTimers();
+
+      const input = field(fixture);
+      input.value = 'leche';
+      input.dispatchEvent(new Event('input'));
+      jest.advanceTimersByTime(CATALOG_SEARCH_DEBOUNCE_MS);
+      await settle(fixture);
+
+      expect(lastUrl(navigate)).toBe(
+        '/velista/en/catalog?chain=chain-deza&q=leche'
+      );
+      expect(navigate.mock.calls[navigate.mock.calls.length - 1][1]).toEqual({
+        replaceUrl: true,
+      });
+
+      host(fixture)
+        .querySelector<HTMLInputElement>(
+          'lib-order-pills input[value="created"]'
+        )
+        ?.click();
+      await settle(fixture);
+
+      expect(lastUrl(navigate)).toBe(
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=created'
+      );
+    });
+
+    it('hands the text and the order to both pickers', async () => {
+      const { fixture } = await render('priced', {
+        chain: 'chain-deza',
+        q: 'leche',
+        order: 'name',
+      });
+      const navigate = jest
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      supermarket(fixture).querySelector<HTMLButtonElement>('.body')?.click();
+      expect(lastUrl(navigate)).toBe(
+        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=name'
+      );
+      expect(
+        host(fixture)
+          .querySelector<HTMLAnchorElement>('a.categories-link')
+          ?.getAttribute('href')
+      ).toBe(
+        '/velista/en/catalog/categories?chain=chain-deza&q=leche&order=name'
+      );
+    });
+
+    it('carries what is in the field to a picker opened before the debounce', async () => {
+      const { fixture } = await render();
+      const navigate = jest
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+      jest.useFakeTimers();
+
+      const input = field(fixture);
+      input.value = 'leche';
+      input.dispatchEvent(new Event('input'));
+      supermarket(fixture).querySelector<HTMLButtonElement>('.body')?.click();
+
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog/supermarket?q=leche');
+    });
+
+    it('reads the text again on a pop onto another entry of the tab', async () => {
+      const { fixture, browse, query } = await render('priced', {
+        q: 'leche',
+      });
+
+      query.next(convertToParamMap({ category: 'milk' }));
+      await settle(fixture);
+
+      expect(field(fixture).value).toBe('');
+      expect(lastQuery(browse)).toMatchObject({
+        query: '',
+        order: 'name',
+        categoryId: 'cat-milk',
+      });
+    });
+  });
+
+  describe('through the real router', () => {
+    @Component({ template: '' })
+    class PickerStub {}
+
+    /** Real time, because the router and the debounce both have to run. */
+    async function wait(harness: RouterTestingHarness): Promise<void> {
+      await new Promise((resolve) =>
+        setTimeout(resolve, CATALOG_SEARCH_DEBOUNCE_MS + 100)
+      );
+      harness.detectChanges();
+    }
+
+    it('keeps the text and the order across a picker, and across a pop back onto the tab', async () => {
+      TestBed.resetTestingModule();
+      const memory = new CatalogBrowseMemory();
+      const browse = jest.spyOn(memory, 'browse');
+      await TestBed.configureTestingModule({
+        imports: [RokuTranslatorTestingModule.forTesting()],
+        providers: [
+          provideVelistaTesting({ basePath: '/velista' }),
+          provideRouter([
+            { path: 'velista/en/catalog', component: CatalogPage },
+            { path: 'velista/en/catalog/supermarket', component: PickerStub },
+          ]),
+          provideFakeCategoryStore(fakeCategoryStore(MEMORY_CATEGORIES)),
+          { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
+          { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+        ],
+      }).compileComponents();
+      const router = TestBed.inject(Router);
+      const location = TestBed.inject(Location);
+      // A test bed's router does not listen for a pop until it is told to.
+      router.setUpLocationChangeListener();
+      const harness = await RouterTestingHarness.create(
+        '/velista/en/catalog?chain=chain-deza'
+      );
+      const page = () => harness.routeNativeElement as HTMLElement;
+      const input = () =>
+        page().querySelector<HTMLInputElement>('#catalog-search');
+      const checked = () =>
+        page().querySelector<HTMLInputElement>('lib-order-pills input:checked')
+          ?.value;
+      await wait(harness);
+
+      // Typing, then an order: both land in the URL, and the field keeps its text.
+      const field = input() as HTMLInputElement;
+      field.value = 'leche';
+      field.dispatchEvent(new Event('input'));
+      await wait(harness);
+      page()
+        .querySelector<HTMLInputElement>('lib-order-pills input[value="name"]')
+        ?.click();
+      await wait(harness);
+      expect(router.url).toBe(
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=name'
+      );
+      expect(input()?.value).toBe('leche');
+
+      // The picker, a page of its own: the tab is destroyed under it.
+      page()
+        .querySelector<HTMLButtonElement>('lib-supermarket-button .body')
+        ?.click();
+      await wait(harness);
+      expect(router.url).toBe(
+        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=name'
+      );
+
+      // The chevron pops onto the tab's entry, which was written in place.
+      location.back();
+      await wait(harness);
+      expect(router.url).toBe(
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=name'
+      );
+      expect(input()?.value).toBe('leche');
+      expect(checked()).toBe('name');
+      expect(lastQuery(browse)).toMatchObject({
+        query: 'leche',
+        order: 'name',
+        soldBy: 'chain-deza',
+      });
+
+      // An answer from the picker: another chain, everything else as it was.
+      await harness.navigateByUrl(
+        '/velista/en/catalog?chain=chain-mercadona&q=leche&order=name'
+      );
+      await wait(harness);
+      expect(input()?.value).toBe('leche');
+      expect(checked()).toBe('name');
+      expect(lastQuery(browse)).toMatchObject({
+        query: 'leche',
+        order: 'name',
+        soldBy: 'chain-mercadona',
+      });
+    });
+  });
+
   describe('a category (velista 0119)', () => {
     function categoriesLink(fixture: ComponentFixture<CatalogPage>) {
       return host(fixture).querySelector<HTMLAnchorElement>(
@@ -543,8 +767,8 @@ describe('CatalogPage', () => {
         soldBy: 'chain-deza',
       });
 
-      // The chip cleared: the URL loses the parameter and the chain stays.
-      query.next(convertToParamMap({ chain: 'chain-deza' }));
+      // The chip cleared: the URL loses the parameter, and the chain and the text stay.
+      query.next(convertToParamMap({ chain: 'chain-deza', q: 'leche' }));
       await settle(fixture);
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',

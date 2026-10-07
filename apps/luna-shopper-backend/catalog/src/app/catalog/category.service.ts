@@ -33,7 +33,7 @@ import {
   type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
-import { categoryId } from '../db/reference/ids';
+import { categoryId } from '../db/taxonomy/ids';
 import { Category } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { PlatformAdminService } from './platform-admin.service';

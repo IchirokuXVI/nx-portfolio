@@ -1,18 +1,23 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type {
   EnumOption,
   FieldDescriptor,
   FilterDescriptor,
+  InfoContent,
   NamedAction,
   ResourceRow,
   ResourceRowView,
 } from '@portfolio/luna-shopper-admin/models';
+import { InfoButton } from '../info/info-button';
+import { PageHeader } from '../page/page-header';
 import type { ReferenceLookup } from './reference-lookup';
 import { ResourceCellView } from './resource-cell';
 import { ResourceFilters, type FilterChange } from './resource-filters';
@@ -48,32 +53,128 @@ export interface RowAction {
  */
 @Component({
   selector: 'lib-resource-list',
-  imports: [RokuTranslatorPipe, ResourceCellView, ResourceFilters],
+  imports: [
+    RokuTranslatorPipe,
+    ResourceCellView,
+    ResourceFilters,
+    PageHeader,
+    InfoButton,
+  ],
   template: `
-    <header class="head">
-      <h1>{{ titleKey() | rokuT }}</h1>
-      @if (canCreate()) {
-        <button (click)="create.emit()" class="primary" type="button">
-          {{ 'resource.action.create' | rokuT }}
-        </button>
+    @switch (heading()) {
+      @case ('page') {
+        <lib-page-header [heading]="titleKey() | rokuT" [info]="info()">
+          @if (canCreate()) {
+            <button
+              (click)="create.emit()"
+              class="primary"
+              pageAction
+              type="button"
+            >
+              {{ createKey() | rokuT }}
+            </button>
+          }
+        </lib-page-header>
       }
-    </header>
-
-    @if (noteKey(); as note) {
-      <p class="note">{{ note | rokuT }}</p>
+      @case ('pane') {
+        <!-- The list is a column beside the row that is open, and that row's
+             page draws the header. The column says what it lists. -->
+        <div class="pane-head">
+          @if (headingLevel() === 1) {
+            <h1>{{ titleKey() | rokuT }}</h1>
+          } @else {
+            <h2>{{ titleKey() | rokuT }}</h2>
+          }
+          @if (info(); as content) {
+            <lib-info-button [info]="content" />
+          }
+          @if (canCreate()) {
+            <button (click)="create.emit()" type="button" data-create>
+              {{ createKey() | rokuT }}
+            </button>
+          }
+        </div>
+      }
+      @default {
+        <!-- A tab: the page above already drew the header and the tab says
+             what is listed, so only the action is left to draw. -->
+        @if (canCreate() || info() !== null) {
+          <div class="tools">
+            @if (info(); as content) {
+              <lib-info-button [info]="content" />
+            }
+            @if (canCreate()) {
+              <button
+                (click)="create.emit()"
+                class="primary"
+                type="button"
+                data-create
+              >
+                {{ createKey() | rokuT }}
+              </button>
+            }
+          </div>
+        }
+      }
     }
 
     @for (notice of noticeKeys(); track notice) {
       <p class="notice" role="status">{{ notice | rokuT }}</p>
     }
 
-    @if (filters().length > 0 || sorts().length > 0) {
+    @if (layout() === 'rows') {
+      <!-- A column has room for one field. The search stays in view, and the
+           other filters and the order open under a button, which says how
+           many of them are narrowing the list. -->
+      @if (searchFilters().length > 0 || hasMoreFilters()) {
+        <div class="column-tools">
+          @if (searchFilters().length > 0) {
+            <lib-resource-filters
+              (filterChange)="filterChange.emit($event)"
+              [filters]="searchFilters()"
+              [lookup]="lookup()"
+              [scope]="filterScope()"
+              [sorts]="[]"
+              [values]="filterValues()"
+              class="column-search"
+            />
+          }
+          @if (hasMoreFilters()) {
+            <button
+              (click)="filtersOpen.set(!filtersOpen())"
+              [attr.aria-expanded]="filtersOpen()"
+              class="filter-toggle"
+              type="button"
+              data-more-filters
+            >
+              {{ 'resource.filter.more' | rokuT }}
+              @if (narrowedBy(); as count) {
+                <span class="filter-count">{{ count }}</span>
+              }
+            </button>
+          }
+        </div>
+        @if (filtersOpen() && hasMoreFilters()) {
+          <lib-resource-filters
+            (filterChange)="filterChange.emit($event)"
+            (orderChange)="orderChange.emit($event)"
+            [filters]="otherFilters()"
+            [lookup]="lookup()"
+            [order]="order()"
+            [scope]="filterScope()"
+            [sorts]="sorts()"
+            [values]="filterValues()"
+          />
+        }
+      }
+    } @else if (filters().length > 0 || sorts().length > 0) {
       <lib-resource-filters
         (filterChange)="filterChange.emit($event)"
         (orderChange)="orderChange.emit($event)"
         [filters]="filters()"
         [lookup]="lookup()"
         [order]="order()"
+        [scope]="filterScope()"
         [sorts]="sorts()"
         [values]="filterValues()"
       />
@@ -87,17 +188,29 @@ export interface RowAction {
          the panel one of them opened (admin plan 0035, section 2). -->
     <ng-content select="[listBulk]" />
 
-    @if (blockedBy(); as needed) {
-      <p class="state" role="status">
-        {{ 'resource.list.blocked' | rokuT: { filters: needed } }}
-      </p>
-    } @else if (loading()) {
+    @if (loading()) {
       <p class="state" role="status">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (failed()) {
       <div class="state error" role="alert">
         <p>{{ errorKey() | rokuT }}</p>
         <button (click)="retry.emit()" type="button">
           {{ 'resource.action.retry' | rokuT }}
+        </button>
+      </div>
+    } @else if (idNotFound()) {
+      <!-- An ID was typed into the search and no row of this resource has it
+           (admin plan 0051). Its own sentence: nothing is hidden by a filter,
+           and the list is not empty. -->
+      <div class="state" role="status" data-id-not-found>
+        <p>
+          @if (oneKey() !== '') {
+            {{ 'resource.id.notFound' | rokuT: { thing: oneKey() | rokuT } }}
+          } @else {
+            {{ 'resource.id.notFoundHere' | rokuT }}
+          }
+        </p>
+        <button (click)="clear.emit()" type="button">
+          {{ 'resource.action.clearFilters' | rokuT }}
         </button>
       </div>
     } @else if (noMatch()) {
@@ -108,7 +221,45 @@ export interface RowAction {
         </button>
       </div>
     } @else if (empty()) {
-      <p class="state" role="status">{{ 'resource.list.empty' | rokuT }}</p>
+      <p class="state" role="status">{{ emptyKey() | rokuT }}</p>
+    } @else if (layout() === 'rows') {
+      <!-- A column beside the open row: a name, one line, and the row's
+           states. No delete here, since the open row's own page has it. -->
+      <ul class="rows">
+        @for (row of rows(); track row.id) {
+          <li>
+            <button
+              (click)="open.emit(row.id)"
+              [attr.aria-current]="row.id === currentId() ? 'true' : null"
+              [class.current]="row.id === currentId()"
+              class="row"
+              type="button"
+              data-row
+            >
+              <span class="row-main">
+                <span class="row-heading">{{
+                  row.brief?.heading ?? row.title
+                }}</span>
+                @if (row.brief?.line || (row.states ?? []).length > 0) {
+                  <span class="row-line">
+                    @if (row.brief?.line; as line) {
+                      <span>{{ line }}</span>
+                    }
+                    @for (state of row.states ?? []; track state.label) {
+                      <span [attr.data-tone]="state.tone" class="state-chip">{{
+                        state.label | rokuT: state.args
+                      }}</span>
+                    }
+                  </span>
+                }
+              </span>
+              @if (row.brief?.trailing; as trailing) {
+                <span class="row-trailing">{{ trailing }}</span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
     } @else if (compact()) {
       <ul class="cards">
         @for (row of rows(); track row.id) {
@@ -133,6 +284,15 @@ export interface RowAction {
               </button>
             } @else {
               <p class="title plain">{{ row.title }}</p>
+            }
+            @if ((row.states ?? []).length > 0) {
+              <p class="states">
+                @for (state of row.states ?? []; track state.label) {
+                  <span [attr.data-tone]="state.tone" class="state-chip">{{
+                    state.label | rokuT: state.args
+                  }}</span>
+                }
+              </p>
             }
             <dl>
               @for (field of compactColumns(); track field.name) {
@@ -230,6 +390,15 @@ export interface RowAction {
                     } @else {
                       <lib-resource-cell [cell]="cellOf(row, field.name)" />
                     }
+                    @if (index === 0) {
+                      @for (state of row.states ?? []; track state.label) {
+                        <span
+                          [attr.data-tone]="state.tone"
+                          class="state-chip beside"
+                          >{{ state.label | rokuT: state.args }}</span
+                        >
+                      }
+                    }
                   </td>
                 }
                 <td class="row-actions">
@@ -286,17 +455,178 @@ export interface RowAction {
       gap: var(--admin-space-4);
     }
 
-    .head {
+    .pane-head {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
+      gap: var(--admin-space-2);
       align-items: center;
-      justify-content: space-between;
+      min-block-size: 3.25rem;
+      margin-inline: calc(-1 * var(--admin-page-inline));
+      margin-block-start: calc(-1 * var(--admin-page-block));
+      padding-inline: var(--admin-page-inline);
+      border-block-end: 1px solid var(--admin-border);
     }
 
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
+    .pane-head h1,
+    .pane-head h2 {
+      flex: 1;
+      overflow: hidden;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .column-tools {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: flex-end;
+    }
+
+    .column-search {
+      flex: 1;
+      min-inline-size: 0;
+    }
+
+    .filter-toggle {
+      display: inline-flex;
+      flex: none;
+      gap: 0.375rem;
+      align-items: center;
+    }
+
+    .filter-toggle[aria-expanded='true'] {
+      border-color: var(--admin-accent);
+    }
+
+    .filter-count {
+      padding: 0.0625rem 0.375rem;
+      border-radius: 0.5625rem;
+      background: var(--admin-accent-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-accent-on-wash);
+    }
+
+    .tools {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* The rows of a column reach its edges, so that the wash of the open row
+       is a band and not a box inside a box. */
+    .rows {
+      display: flex;
+      flex-direction: column;
+      margin-inline: calc(-1 * var(--admin-page-inline));
+      border-block-end: 1px solid var(--admin-border);
+      list-style: none;
+    }
+
+    button.row {
+      display: flex;
+      gap: var(--admin-space-3);
+      align-items: center;
+      inline-size: 100%;
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-page-inline);
+      border: none;
+      border-block-start: 1px solid var(--admin-border);
+      border-radius: 0;
+      background: none;
+      text-align: start;
+    }
+
+    button.row.current {
+      background: var(--admin-accent-wash);
+      color: var(--admin-accent-on-wash);
+    }
+
+    button.row:focus-visible {
+      outline-offset: -2px;
+    }
+
+    .row-main {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 0.125rem;
+      min-inline-size: 0;
+    }
+
+    .row-heading {
+      overflow-wrap: anywhere;
+    }
+
+    .current .row-heading {
+      font-weight: 600;
+    }
+
+    .row-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-1) var(--admin-space-2);
+      align-items: center;
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .current .row-line {
+      color: var(--admin-accent-on-wash);
+    }
+
+    .row-trailing {
+      flex: none;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-ink-muted);
+    }
+
+    .current .row-trailing {
+      color: var(--admin-accent-on-wash);
+    }
+
+    .states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-1) var(--admin-space-2);
+    }
+
+    .state-chip {
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--admin-neutral-on-wash);
+    }
+
+    .state-chip.beside {
+      margin-inline-start: var(--admin-space-2);
+    }
+
+    .state-chip[data-tone='good'] {
+      background: var(--admin-accent-wash);
+      color: var(--admin-accent-on-wash);
+    }
+
+    /* On the wash of the open row the good state would be the wash on itself,
+       so it takes the raised surface there. */
+    .current .state-chip[data-tone='good'] {
+      background: var(--admin-surface-raised);
+    }
+
+    .state-chip[data-tone='waiting'] {
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
+    }
+
+    .state-chip[data-tone='danger'] {
+      background: var(--admin-danger-wash);
+      color: var(--admin-danger-on-wash);
     }
 
     .state {
@@ -382,23 +712,15 @@ export interface RowAction {
       text-align: end;
     }
 
-    .note {
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink-muted);
-    }
-
-    /* A notice is something that is true today rather than always, so it is not
-       muted the way a permanent explanation is. A tinted box takes the wash and
+    /* A notice is something that is true today rather than always, so it is on
+       the page and not behind the info button. A tinted box takes the wash and
        the wash's ink, which is the rule the tokens file states. */
     .notice {
       padding: var(--admin-space-3);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
 
     .title.plain {
@@ -424,14 +746,24 @@ export interface RowAction {
       justify-content: flex-end;
     }
 
+    /* In the table the actions stay a cell. As a flex box the cell took the
+       height of its buttons and not of its row, so its line sat above or below
+       the line of the cells beside it once a row and a button stopped being
+       the same height. */
+    td.row-actions {
+      display: table-cell;
+      text-align: end;
+      vertical-align: middle;
+    }
+
+    td.row-actions button {
+      margin-block: 0.125rem;
+      margin-inline-start: var(--admin-space-2);
+    }
+
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -505,6 +837,34 @@ export interface RowAction {
 export class ResourceList {
   /** The resource's plural label, as a key. */
   readonly titleKey = input.required<string>();
+  /**
+   * What the list draws above itself (admin plan 0042).
+   *
+   * - `page`: the page header, for a list that is the whole page.
+   * - `pane`: a title and the add button, for a list that is a column beside
+   *   the row that is open. That row's page draws the page header.
+   * - `none`: the add button alone, for a list that is a tab of a page.
+   */
+  readonly heading = input<'page' | 'pane' | 'none'>('page');
+  /**
+   * The level of the `pane` title: 1 while nothing is open beside the column,
+   * since the column is then all the page has, and 2 under an open row.
+   */
+  readonly headingLevel = input<1 | 2>(2);
+  /** What the add button says, as a key. */
+  readonly createKey = input('resource.action.create');
+  /**
+   * `rows` draws each row as one line of a column, from its `brief`, whatever
+   * the width. `auto` is a table, or cards when {@link compact}.
+   */
+  readonly layout = input<'auto' | 'rows'>('auto');
+  /** The row that is open beside a `rows` list, which is marked as current. */
+  readonly currentId = input<string | null>(null);
+  /**
+   * A name that keeps the ids of this list's filters apart from those of
+   * another list on the same page. Empty for a list that is the whole page.
+   */
+  readonly filterScope = input('');
   readonly columns = input.required<readonly FieldDescriptor[]>();
   /** The subset that survives to a phone, in card order. */
   readonly compactColumns = input.required<readonly FieldDescriptor[]>();
@@ -525,18 +885,13 @@ export class ResourceList {
   /** The key for whatever went wrong, chosen by the page. */
   readonly errorKey = input('resource.error.unknown');
   readonly empty = input(false);
+  /** The key for what an empty list says, chosen by the page. */
+  readonly emptyKey = input('resource.list.empty');
   readonly noMatch = input(false);
-  /**
-   * The filters this list is waiting for, already translated and joined, or
-   * `null` when it is waiting for none.
-   *
-   * A third state beside empty and no match. "There are no shops here" and "you
-   * have not said whose shops" are different sentences and only one of them is
-   * true, so a list that cannot be read yet says which filter would let it be.
-   * Translated by the page, because a pipe cannot resolve keys that are
-   * themselves the argument of another key.
-   */
-  readonly blockedBy = input<string | null>(null);
+  /** The search holds a record ID that no row of this resource has. */
+  readonly idNotFound = input(false);
+  /** What one row is called ("product"), as a key, for that sentence. */
+  readonly oneKey = input('');
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
 
@@ -550,12 +905,12 @@ export class ResourceList {
    * is worse than a plain name, and a keyboard reaches it first.
    */
   readonly canOpen = input(true);
-  /** A sentence above the list, as a key. For a screen whose shape needs explaining. */
-  readonly noteKey = input<string | null>(null);
+  /** What the info button in the header says. No button without it. */
+  readonly info = input<InfoContent | null>(null);
   /**
-   * Sentences that are true right now, as keys, under the note.
+   * Sentences that are true right now, as keys, above the rows.
    *
-   * The note explains the screen and never changes. These say what the screen
+   * The info button explains the screen and never changes. These say what the screen
    * has just found out: that nothing is draining the queue it is showing, or
    * that a column could not be filled in. Empty is the ordinary case.
    */
@@ -596,6 +951,33 @@ export class ResourceList {
   readonly orderChange = output<string>();
   /** A row's tick box was pressed. */
   readonly pick = output<string>();
+
+  /** Whether the filters behind the button of a column are shown. */
+  readonly filtersOpen = signal(false);
+
+  /** The filters a column keeps in view: what the operator types into. */
+  readonly searchFilters = computed(() =>
+    this.filters().filter((filter) => filter.kind === 'search')
+  );
+
+  /** The filters a column puts behind its button. */
+  readonly otherFilters = computed(() =>
+    this.filters().filter((filter) => filter.kind !== 'search')
+  );
+
+  readonly hasMoreFilters = computed(
+    () => this.otherFilters().length > 0 || this.sorts().length > 0
+  );
+
+  /** How many of the filters behind the button are set, order included. */
+  readonly narrowedBy = computed(() => {
+    const values = this.filterValues();
+    const set = this.otherFilters().filter(
+      (filter) => (values[filter.param] ?? '') !== ''
+    ).length;
+
+    return set + (this.order() === undefined ? 0 : 1);
+  });
 
   isSelected(id: string): boolean {
     return this.selected().has(id);

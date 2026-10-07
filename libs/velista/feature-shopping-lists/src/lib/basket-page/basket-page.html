@@ -253,6 +253,7 @@
                     [busy]="isBusy(row.row)"
                     [canSwap]="canSwap(row.row)"
                     [chosenId]="insteadOf(row.row)"
+                    [elsewhere]="row.elsewhere"
                     [entry]="row.entry"
                     [finished]="finished()"
                     [groupCheaper]="groupCheaper(row.row)"
@@ -392,6 +393,21 @@
           </p>
 
           <!--
+            What the lines on screen come to (velista 0132, section 3), at the
+            trailing edge before the filter. Drawn while a visible line adds a
+            price: with none there is no number to stand behind, and the small row
+            under this bar says so instead (rule T8).
+          -->
+          @if (total().withPrice > 0) {
+            <lib-basket-total
+              [chainName]="totalChain()"
+              [locale]="locale()"
+              [total]="total()"
+              listToolsTrail
+            />
+          }
+
+          <!--
             What the sheet turned on, named on the page (plan 0075, section 5). Absent
             entirely when nothing is on, so the lines move up. The chips name the order
             and the grouping as well as the filters, because a basket that is suddenly
@@ -408,7 +424,35 @@
               listToolsBelow
             />
           }
+
+          <!--
+            How much of that total is bought (section 4): under the chips, or
+            directly under the row with none on, and inside the sticky bar.
+          -->
+          @if (total().withPrice > 0) {
+            <lib-basket-total-bar
+              [locale]="locale()"
+              [total]="total()"
+              class="total-bar"
+              listToolsBelow
+            />
+          }
         </lib-list-tools>
+
+        <!--
+          No visible line has a price (velista 0132, section 6), so there is no
+          number and no bar, and one small row says why. First in the scroll,
+          under the sticky bar and above the changes banner. It goes by itself
+          when a line gets a price.
+        -->
+        @if (total().lines > 0 && total().withPrice === 0) {
+          <lib-no-prices-note
+            [guest]="isGuest()"
+            [shopChosen]="pricedAtShop()"
+            [total]="total()"
+            class="no-prices"
+          />
+        }
 
         <!--
           What changed on the lists while somebody was shopping (velista 0093,
@@ -595,6 +639,7 @@
                         [busy]="isBusy(row.row)"
                         [canSwap]="canSwap(row.row)"
                         [chosenId]="insteadOf(row.row)"
+                        [elsewhere]="row.elsewhere"
                         [entry]="row.entry"
                         [finished]="finished()"
                         [groupCheaper]="groupCheaper(row.row)"

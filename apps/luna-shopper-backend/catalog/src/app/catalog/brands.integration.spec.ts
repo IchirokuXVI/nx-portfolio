@@ -13,7 +13,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
-import { categoryId } from '../db/reference/ids';
+import { categoryId } from '../db/taxonomy/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
@@ -27,6 +27,7 @@ import type { CatalogEventsPublisher } from '../events/catalog-events.publisher'
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -105,7 +106,8 @@ describeIntegration('the brand registry (real Postgres)', () => {
       admin,
       audit,
       events,
-      new CategoryService(dataSource.getRepository(Category), admin, audit)
+      new CategoryService(dataSource.getRepository(Category), admin, audit),
+      itemEanStoreOf(dataSource)
     );
   }, 180_000);
 

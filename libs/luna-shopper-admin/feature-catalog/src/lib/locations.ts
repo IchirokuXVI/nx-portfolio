@@ -1,18 +1,63 @@
-import { inject } from '@angular/core';
+import { computed, inject, Injector } from '@angular/core';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
+import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
   defineResource,
+  fieldMessage,
   localizedTextValue,
+  type FieldMessage,
   type ResourceRow,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { POSTAL_CODE_SOURCE_OPTIONS } from './catalog-enums';
+import {
+  POSTAL_CODE_SOURCE_OPTIONS,
+  PRICE_SCOPE_KIND_OPTIONS,
+  priceScopeMark,
+} from './catalog-enums';
 import { locationSource } from './catalog-sources';
-import { LocationFormPage } from './location-form-page';
+import { ShopSectionsTab } from './chains/section-tabs';
 
-/** One shop of one chain, as the gateway describes it. */
-export type Location = Wire.CatalogSupermarketLocationView;
+/**
+ * One shop of one chain, as the gateway describes it.
+ *
+ * `mapUrl` is no column. The page draws it as a row of its own, worked out
+ * from the two coordinates, and a field has to be named by a property.
+ */
+export type Location = Wire.CatalogSupermarketLocationView & {
+  readonly mapUrl?: string | null;
+};
+
+/** The key of the Sections tab of a shop: the `name` of the part. */
+const SHOP_SECTIONS_TAB = 'sections';
+
+/** Whether the postal code of a shop was inferred, and never checked. */
+function postalCodeGuessed(row: Partial<Location>): boolean {
+  return row.postalCodeSource === 'DERIVED';
+}
+
+/**
+ * Where a shop is on OpenStreetMap, or `null` when a coordinate is missing
+ * (admin plan 0056, target 8). A link and no map: a map is a field kind of
+ * its own, and it brings a dependency.
+ */
+export function shopMapUrl(row: Partial<Location>): string | null {
+  const { latitude, longitude } = row;
+  // A number that does not read is no place either: the form hands over
+  // what was typed, and that can be anything.
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+  return (
+    `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}` +
+    `#map=18/${latitude}/${longitude}`
+  );
+}
 
 /**
  * The kinds a shop's picker offers: every kind but `STORE` (admin plan 0028,
@@ -43,6 +88,70 @@ export function isOwnStoreScope(
     scope['kind'] === 'STORE' &&
     scope['externalKey'] === shop.id
   );
+}
+
+/**
+ * What a shop calls one of the scopes that price it, where the title of the
+ * scope is not that name (admin plan 0056, target 7).
+ *
+ * Its own single shop scope is "This shop only". The title of that scope is
+ * its kind and the id of the shop, which says the same thing in a way nobody
+ * reads.
+ *
+ * A scope with no label is called by its kind in the words of this app, with
+ * the key its source gave it: "Chain region 3421". Its title says the kind
+ * as the gateway spells it, since a title has no translator. A kind this app
+ * has no word for keeps the title.
+ */
+export function shopScopeName(
+  shop: Partial<Location>,
+  scope: ResourceRow
+): FieldMessage | undefined {
+  if (isOwnStoreScope(shop, scope)) {
+    return fieldMessage('catalog.shops.pricedBy.own');
+  }
+
+  const kind = scope['kind'];
+  if (
+    localizedTextValue(scope['label'], CONTENT_LOCALES) !== '' ||
+    !PRICE_SCOPE_KIND_OPTIONS.some((option) => option.value === kind)
+  ) {
+    return undefined;
+  }
+
+  const key = scope['externalKey'];
+  return typeof key === 'string' && key !== ''
+    ? fieldMessage(`catalog.priceScopes.unlabelled.${kind}`, { key })
+    : fieldMessage(`catalog.priceScopeKind.${kind}`);
+}
+
+/**
+ * How far a price scope reaches, as the number catalog ranks it by. The
+ * widest scope has the highest.
+ */
+function scopePriority(scope: ResourceRow): number {
+  const priority = scope['priority'];
+  return typeof priority === 'number' ? priority : 0;
+}
+
+/** A column that holds something to read. */
+function present(part: string | null | undefined): part is string {
+  return part != null && part !== '';
+}
+
+/**
+ * What a shop is called when it has no label, no address and no town (admin
+ * plan 0049, target 3): its postal code, then the reference its source gave
+ * it, then its id.
+ *
+ * Never nothing. Every one of those three columns can be null, and a shop
+ * that had none of them was a row with no text in it: the tab above the list
+ * counted two shops and the operator saw one. The id is the last answer for
+ * the reason a shopping list with no name is called by its id: a row has to
+ * be something a person can point at.
+ */
+function lastName(row: Location): string {
+  return [row.postalCode, row.externalRef].find(present) ?? row.id;
 }
 
 /**
@@ -89,8 +198,21 @@ export function isOwnStoreScope(
  */
 export const LOCATIONS = defineResource<Location>({
   name: 'locations',
-  segment: 'locations',
-  labels: { one: 'catalog.locations.one', many: 'catalog.locations.many' },
+  // The Shops tab of a chain, at `/chains/{chainId}/shops` (admin plan 0042).
+  segment: 'shops',
+  labels: {
+    one: 'catalog.locations.one',
+    many: 'catalog.locations.many',
+    create: 'catalog.locations.add',
+  },
+
+  // The chain is in the address. It used to be a filter the operator had to
+  // pick before the list would read anything.
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
 
   /**
    * A shop's name is usually its address, because that is what distinguishes
@@ -102,7 +224,8 @@ export const LOCATIONS = defineResource<Location>({
     if (label !== '') {
       return label;
     }
-    return [row.address, row.city].filter((part) => part !== null).join(', ');
+    const place = [row.address, row.city].filter(present).join(', ');
+    return place !== '' ? place : lastName(row);
   },
 
   fields: [
@@ -145,6 +268,13 @@ export const LOCATIONS = defineResource<Location>({
             }
           : null,
       locked: (row, scope) => isOwnStoreScope(row, scope),
+      // How far each scope reaches, from the mark the price scope list
+      // draws for the same kind.
+      mark: (scope) => priceScopeMark(scope['kind']),
+      nameOf: (row, scope) => shopScopeName(row, scope),
+      // Most general first, as the line above the tabs of a shop read them
+      // before that plan: nationwide, then the region, then the shop's own.
+      readOrder: (a, b) => scopePriority(b) - scopePriority(a),
     },
     {
       kind: 'localized-text',
@@ -176,6 +306,11 @@ export const LOCATIONS = defineResource<Location>({
       help: 'catalog.locations.postalCodeHelp',
       nullable: true,
       maxLength: 16,
+      // A guess is the one value of a shop a person has to look at.
+      check: (row) =>
+        postalCodeGuessed(row)
+          ? { label: 'catalog.locations.postalCodeGuessed' }
+          : null,
     },
     {
       kind: 'enum',
@@ -212,6 +347,17 @@ export const LOCATIONS = defineResource<Location>({
       max: 180,
     },
     {
+      // For display only: the two numbers above, as a place on a map.
+      kind: 'text',
+      name: 'mapUrl',
+      label: 'catalog.locations.mapUrl',
+      format: 'url',
+      linkLabel: 'catalog.locations.openOnMap',
+      editable: false,
+      setBy: 'catalog.locations.mapFollows',
+      read: (row) => shopMapUrl(row),
+    },
+    {
       kind: 'text',
       name: 'externalRef',
       label: 'catalog.locations.externalRef',
@@ -223,6 +369,8 @@ export const LOCATIONS = defineResource<Location>({
       kind: 'text',
       name: 'externalProvider',
       label: 'catalog.locations.externalProvider',
+      // The key of a provider, copied letter by letter.
+      format: 'code',
       nullable: true,
       maxLength: 32,
     },
@@ -240,9 +388,43 @@ export const LOCATIONS = defineResource<Location>({
     // the two columns this screen exists for: the postal code and whether
     // anybody actually knows it.
     compact: ['city', 'postalCode', 'postalCodeSource'],
+    // The column beside the open shop: the address, then the town and the
+    // postal code. The states below say the rest.
+    brief: {
+      heading: (row, locales) =>
+        localizedTextValue(row.label, locales) ||
+        row.address ||
+        row.city ||
+        lastName(row),
+      line: ['city', 'postalCode'],
+    },
   },
 
-  note: 'catalog.locations.note',
+  /**
+   * What a row says beside its address, at most two today.
+   *
+   * "Map" for a shop with a walk shown to shoppers, and "Postal code guessed"
+   * for a code that was inferred and that nobody has checked, which is the
+   * one a person has to look at.
+   *
+   * The mock has a third, "Own section order". The list read does not say
+   * whether a shop's sections are its own or its chain's: only the read of one
+   * shop's sections does. So the shop's Sections tab says it, and the row does
+   * not guess.
+   */
+  rowStates: () => (row) => [
+    ...(row.hasMap
+      ? [{ label: 'catalog.locations.state.map', tone: 'neutral' as const }]
+      : []),
+    ...(postalCodeGuessed(row)
+      ? [
+          {
+            label: 'catalog.locations.state.postalCodeGuessed',
+            tone: 'waiting' as const,
+          },
+        ]
+      : []),
+  ],
 
   filters: [
     /**
@@ -263,12 +445,6 @@ export const LOCATIONS = defineResource<Location>({
       label: 'catalog.locations.filter.query',
     },
     {
-      kind: 'reference',
-      param: 'supermarketId',
-      label: 'catalog.locations.filter.supermarketId',
-      resource: 'supermarkets',
-    },
-    {
       kind: 'enum',
       param: 'postalCodeSource',
       label: 'catalog.locations.filter.postalCodeSource',
@@ -282,15 +458,75 @@ export const LOCATIONS = defineResource<Location>({
     },
   ],
 
-  // Nothing can be read until a chain is named, because there is no route that
-  // lists shops across chains. The screen says so rather than drawing an empty
-  // table, which would be a claim nothing had checked.
-  requires: ['supermarketId'],
-
   actions: { create: true, edit: true, delete: true },
 
-  // The generic form, with the shop's sections under it (admin plan 0037).
-  editor: LocationFormPage,
+  // What the page of a shop draws (admin plan 0056, section 3.2). Details is
+  // the first tab. The chain is the parent and is named in no section: a new
+  // shop shows it as a locked value, and a saved one sits under its chain.
+  record: {
+    sections: [
+      { title: 'catalog.locations.section.name', fields: ['label'] },
+      {
+        title: 'catalog.locations.section.address',
+        fields: [
+          'address',
+          'city',
+          'postalCode',
+          'country',
+          'latitude',
+          'longitude',
+          'mapUrl',
+        ],
+      },
+      {
+        title: 'catalog.locations.section.prices',
+        fields: ['priceScopeIds'],
+      },
+      {
+        title: 'catalog.locations.section.source',
+        fields: ['externalProvider', 'externalRef'],
+      },
+    ],
+    children: [
+      {
+        as: 'tab',
+        name: SHOP_SECTIONS_TAB,
+        label: 'catalog.shops.tabs.sections',
+        component: ShopSectionsTab,
+      },
+      // A list whose rows open, so `chainsRoutes` hands the route over.
+      {
+        as: 'tab',
+        resource: 'location-items',
+        by: 'supermarketLocationId',
+        label: 'catalog.shops.tabs.products',
+      },
+    ],
+    facts: { also: ['postalCodeSource'] },
+    // Catalog deletes the order of its sections and its own scope with it.
+    deleteBody: 'catalog.shops.deleteBody',
+    /**
+     * The sections the shop walks, counted off the shop's own row.
+     *
+     * Through `counts` and not a field: the count beside a tab is read from
+     * the property a child names, and the length of a list is no property.
+     * The page is found when the count is read and not when this is built,
+     * since the page builds its counts while it is itself being built. The
+     * row is a signal, so the count follows every read of the shop.
+     */
+    counts: () => {
+      const injector = inject(Injector);
+      return () =>
+        computed(() => {
+          const sections = injector.get(RECORD_CONTEXT).row()?.['sections'];
+          return {
+            [SHOP_SECTIONS_TAB]: Array.isArray(sections)
+              ? sections.length
+              : null,
+          };
+        });
+    },
+  },
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<Location>(locationSource()),
 });

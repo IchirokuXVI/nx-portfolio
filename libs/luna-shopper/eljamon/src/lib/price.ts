@@ -1,3 +1,8 @@
+import {
+  toBaseUnit,
+  UnitOfMeasure,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 import { decodeText } from './html';
 
 /**
@@ -58,4 +63,78 @@ export function parseUnitPrice(
     return null;
   }
   return { unitPrice, unitPriceLabel };
+}
+
+/**
+ * What one unit of a printed label is, in the base unit a size is measured
+ * in: `Kilo` is a thousand grams and `100gr` is a hundred. Keyed on the
+ * label lower cased with its spaces removed. `Unidad` and `Lavados` are not
+ * here: a count has no tenth, and a row that prints one is never judged.
+ */
+const LABEL_QUANTITIES: Readonly<
+  Record<string, { unit: UnitOfMeasure; per: number }>
+> = {
+  kilo: { unit: UnitOfMeasure.GRAM, per: 1000 },
+  '100gr': { unit: UnitOfMeasure.GRAM, per: 100 },
+  litro: { unit: UnitOfMeasure.MILLILITER, per: 1000 },
+  '100ml': { unit: UnitOfMeasure.MILLILITER, per: 100 },
+};
+
+/** A printed price is rounded to the cent, so it is true within half of one. */
+const HALF_A_CENT = 0.005;
+
+/** The room left for a size the chain rounded before it divided. */
+const TENFOLD_ROOM = 0.02;
+
+/**
+ * Whether a printed unit price is ten times, or one tenth of, the figure the
+ * row's own price and its own printed size give (plan 0189, decision 2A).
+ *
+ * The chain prints some rows with a figure that fits another label than the
+ * one beside it: 2,89 € for 70 g printed as `41,29 €/100gr`, which is the
+ * price of a kilo, and 1,50 € for 100 g printed as `1,50 €/Kilo`, which is
+ * the price of 100 g. The defect is on the page. Such a figure makes a product
+ * look ten times cheaper or dearer in a comparison, so the adapter writes no
+ * unit price for the row. Nothing is computed and written in its place: the
+ * division here is evidence, and the answer is only yes or no.
+ *
+ * False whenever the row gives nothing to judge by: no price, a label this
+ * table does not name, no size, or a size in a unit of another kind than the
+ * label. A row that is off by any other factor is not this defect and keeps
+ * what the chain printed.
+ */
+export function contradictsItsSizeTenfold(
+  price: number | null,
+  unit: UnitPrice,
+  size: { unitSize: number | null; sizeUnit: SourceSizeUnit | null }
+): boolean {
+  const key = unit.unitPriceLabel.replace(/\s+/g, '').toLowerCase();
+  const quantity = Object.prototype.hasOwnProperty.call(LABEL_QUANTITIES, key)
+    ? LABEL_QUANTITIES[key]
+    : null;
+  if (
+    price === null ||
+    price <= 0 ||
+    unit.unitPrice <= 0 ||
+    quantity === null ||
+    size.sizeUnit === null
+  ) {
+    return false;
+  }
+  const base = toBaseUnit(size.unitSize, size.sizeUnit);
+  if (
+    base.unitSize === null ||
+    base.unitSize <= 0 ||
+    base.unit !== quantity.unit
+  ) {
+    return false;
+  }
+  const perLabel = quantity.per / base.unitSize;
+  const low = (price - HALF_A_CENT) * perLabel;
+  const high = (price + HALF_A_CENT) * perLabel;
+  return [10, 0.1].some(
+    (factor) =>
+      unit.unitPrice + HALF_A_CENT >= low * factor * (1 - TENFOLD_ROOM) &&
+      unit.unitPrice - HALF_A_CENT <= high * factor * (1 + TENFOLD_ROOM)
+  );
 }

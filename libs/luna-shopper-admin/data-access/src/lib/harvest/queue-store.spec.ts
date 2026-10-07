@@ -8,13 +8,6 @@ interface Item {
 
 const items = (...ids: string[]): Item[] => ids.map((id) => ({ id }));
 
-/** Let every microtask that is ready run, which is how a worker pool settles. */
-const drain = async (): Promise<void> => {
-  for (let turn = 0; turn < 20; turn++) {
-    await Promise.resolve();
-  }
-};
-
 function pages(...answers: QueuePage<Item>[]) {
   let call = 0;
   const reads: (string | undefined)[] = [];
@@ -57,7 +50,7 @@ describe('QueueStore', () => {
     await queue.decide(async () => undefined);
 
     expect(queue.current()).toEqual({ id: 'b' });
-    expect(queue.decided()).toBe(1);
+    expect(queue.items()).toEqual(items('b'));
   });
 
   it('calls the action with the item being decided', async () => {
@@ -89,11 +82,15 @@ describe('QueueStore', () => {
     });
 
     expect(queue.current()).toEqual({ id: 'a' });
-    expect(queue.decided()).toBe(0);
+    expect(queue.items()).toEqual(items('a', 'b'));
     expect(queue.error()?.code).toBe('conflict');
   });
 
-  it('puts a skipped item at the back rather than deciding it', async () => {
+  /**
+   * Admin plan 0049, target 5. Skipping moves on and moves nothing: the row
+   * that was skipped is where the operator left it.
+   */
+  it('goes to the next item on a skip and leaves every row in its place', async () => {
     const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
     const queue = new QueueStore(source.read, (item) => item.id);
     await queue.load();
@@ -102,7 +99,7 @@ describe('QueueStore', () => {
 
     expect(queue.current()).toEqual({ id: 'b' });
     expect(queue.upcoming()).toEqual(items('c', 'a'));
-    expect(queue.decided()).toBe(0);
+    expect(queue.items()).toEqual(items('a', 'b', 'c'));
   });
 
   /**
@@ -188,40 +185,263 @@ describe('QueueStore', () => {
     );
 
     await queue.decide(async () => undefined);
-    expect(queue.decided()).toBe(0);
+    expect(queue.items()).toEqual(items('a', 'b'));
 
     release();
     await slow;
-    expect(queue.decided()).toBe(1);
+    expect(queue.items()).toEqual(items('b'));
   });
 });
 
 /**
- * Plan 0020, section 7. The list view's half of the store: what is ticked, how
- * more rows arrive without a decision to trigger the prefetch, and what a row
- * that is decided where it sits does.
+ * Admin plan 0049, target 5. The row being decided is named by its id, and the
+ * rows keep the order the gateway gave them.
+ *
+ * Choosing the fifth row used to turn the list until the fifth was first, so
+ * the four above it went to the end and the column jumped under the pointer.
  */
-describe('QueueStore, as a list', () => {
-  /**
-   * A list view has no decisions to trigger the queue's own prefetch, so it asks
-   * for the next page itself. The selection is by id and the rows it names are
-   * still loaded, so nothing about it changes.
-   */
-  it('keeps the selection when a later page arrives', async () => {
+describe('QueueStore, the row in front', () => {
+  it('chooses a row and moves no row', async () => {
+    const source = pages({
+      items: items('a', 'b', 'c', 'd', 'e', 'f'),
+      nextCursor: null,
+    });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('e');
+
+    expect(queue.current()).toEqual({ id: 'e' });
+    expect(queue.items()).toEqual(items('a', 'b', 'c', 'd', 'e', 'f'));
+    // The rows after it, then the rows before it.
+    expect(queue.upcoming()).toEqual(items('f', 'a', 'b', 'c', 'd'));
+  });
+
+  it('ignores a row that is not in the queue', async () => {
+    const source = pages({ items: items('a', 'b'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('nowhere');
+
+    expect(queue.current()).toEqual({ id: 'a' });
+  });
+
+  /** The row under the decided one comes up, and the rows above stay. */
+  it('brings up the row under a decided row, and keeps the rows above it', async () => {
+    const source = pages({
+      items: items('a', 'b', 'c', 'd', 'e', 'f'),
+      nextCursor: null,
+    });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('e');
+    await queue.decide(async () => undefined);
+
+    expect(queue.items()).toEqual(items('a', 'b', 'c', 'd', 'f'));
+    expect(queue.current()).toEqual({ id: 'f' });
+  });
+
+  it('goes back to the first row after the last one is decided', async () => {
+    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('c');
+    await queue.decide(async () => undefined);
+
+    expect(queue.items()).toEqual(items('a', 'b'));
+    expect(queue.current()).toEqual({ id: 'a' });
+  });
+
+  it('goes from the last row to the first on a skip', async () => {
+    const source = pages({ items: items('a', 'b'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.skip();
+    queue.skip();
+
+    expect(queue.current()).toEqual({ id: 'a' });
+    expect(queue.items()).toEqual(items('a', 'b'));
+  });
+
+  /** A row decided where it sits, while another one is in front. */
+  it('stays on the row in front when another row is decided', async () => {
+    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('b');
+    await queue.decideAt('a', async () => null);
+
+    expect(queue.items()).toEqual(items('b', 'c'));
+    expect(queue.current()).toEqual({ id: 'b' });
+  });
+
+  it('keeps the row in front when a later page arrives', async () => {
     const source = pages(
-      { items: items('a', 'b'), nextCursor: '2' },
-      { items: items('c', 'd'), nextCursor: null }
+      { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' },
+      { items: items('f', 'g'), nextCursor: null }
     );
     const queue = new QueueStore(source.read, (item) => item.id);
     await queue.load();
 
-    queue.toggle('a');
+    queue.focus('b');
     await queue.loadMore();
 
-    expect([...queue.selected()]).toEqual(['a']);
-    expect(queue.items().map((item) => item.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(queue.current()).toEqual({ id: 'b' });
+    expect(queue.items()).toEqual(items('a', 'b', 'c', 'd', 'e', 'f', 'g'));
   });
 
+  /**
+   * An operator who chose a row far down the column is as close to the end of
+   * what is loaded as one who decided every row above it.
+   */
+  it('reads the next page when few rows are left under the row in front', async () => {
+    const source = pages(
+      { items: items('a', 'b', 'c', 'd', 'e', 'f'), nextCursor: '6' },
+      { items: items('g', 'h'), nextCursor: null }
+    );
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('b');
+    await Promise.resolve();
+    expect(source.calls).toBe(1);
+
+    queue.focus('e');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(source.calls).toBe(2);
+    expect(queue.items()).toEqual(
+      items('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')
+    );
+    expect(queue.current()).toEqual({ id: 'e' });
+  });
+
+  /**
+   * A press on a row, a skip and a decision can each ask for the next page.
+   * Quick presses ask several times before the first answer, and the cursor
+   * must still be sent once.
+   */
+  it('sends a cursor once, however many presses ask for the next page', async () => {
+    const source = pages(
+      { items: items('a', 'b', 'c'), nextCursor: '3' },
+      { items: items('d', 'e', 'f', 'g', 'h'), nextCursor: null }
+    );
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('b');
+    queue.focus('c');
+    queue.focus('a');
+    void queue.loadMore();
+    for (let turn = 0; turn < 6; turn++) {
+      await Promise.resolve();
+    }
+
+    expect(source.reads).toEqual([undefined, '3']);
+    expect(queue.items()).toEqual(
+      items('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')
+    );
+  });
+
+  /**
+   * The last row that is loaded is not the last row of the queue while the
+   * gateway holds another page. Going back to the first row there would hide
+   * every row that was not read yet.
+   */
+  it('waits for the next page on a skip at the last loaded row, and opens its first row', async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let call = 0;
+    const queue = new QueueStore<Item>(
+      async () => {
+        call += 1;
+        if (call === 1) {
+          return { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' };
+        }
+        await gate;
+        return { items: items('f', 'g'), nextCursor: null };
+      },
+      (item) => item.id
+    );
+    await queue.load();
+    queue.focus('e');
+
+    const skipped = queue.skip();
+    await Promise.resolve();
+    // Not the first row, and not yet the next one: the page is being read.
+    expect(queue.current()).toEqual({ id: 'e' });
+
+    release();
+    await skipped;
+
+    expect(queue.current()).toEqual({ id: 'f' });
+    expect(queue.items()).toEqual(items('a', 'b', 'c', 'd', 'e', 'f', 'g'));
+    expect(call).toBe(2);
+  });
+
+  it('leaves the row the operator chose while the next page was read', async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let call = 0;
+    const queue = new QueueStore<Item>(
+      async () => {
+        call += 1;
+        if (call === 1) {
+          return { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' };
+        }
+        await gate;
+        return { items: items('f'), nextCursor: null };
+      },
+      (item) => item.id
+    );
+    await queue.load();
+    queue.focus('e');
+
+    const skipped = queue.skip();
+    queue.focus('b');
+    release();
+    await skipped;
+
+    expect(queue.current()).toEqual({ id: 'b' });
+  });
+
+  it('goes back to the first row when the next page brings nothing', async () => {
+    const source = pages(
+      { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' },
+      { items: [], nextCursor: null }
+    );
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+    // Chosen with no read ahead in the way: the page is asked for by the skip.
+    queue.focus('e');
+    for (let turn = 0; turn < 6; turn++) {
+      await Promise.resolve();
+    }
+
+    await queue.skip();
+
+    expect(queue.current()).toEqual({ id: 'a' });
+  });
+
+  it('opens on the first row again after a reload', async () => {
+    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('c');
+    await queue.load();
+
+    expect(queue.current()).toEqual({ id: 'a' });
+  });
+});
+
+describe('QueueStore, a row decided where it sits', () => {
   it('offers no more to load once the last page has arrived', async () => {
     const source = pages({ items: items('a'), nextCursor: null });
     const queue = new QueueStore(source.read, (item) => item.id);
@@ -231,58 +451,6 @@ describe('QueueStore, as a list', () => {
 
     await queue.loadMore();
     expect(source.calls).toBe(1);
-  });
-
-  /**
-   * The store holds the rows it has fetched and knows no more than that, so the
-   * control names the number it is actually about rather than claiming four
-   * thousand it cannot see.
-   */
-  it('selects the loaded rows and no more', async () => {
-    const source = pages(
-      { items: items('a', 'b'), nextCursor: '2' },
-      { items: items('c'), nextCursor: null }
-    );
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-
-    queue.selectLoaded();
-
-    expect([...queue.selected()].sort()).toEqual(['a', 'b']);
-    expect(queue.selectedCount()).toBe(2);
-  });
-
-  it('takes a decided row out of the selection', async () => {
-    const source = pages({ items: items('a', 'b'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-
-    queue.selectLoaded();
-    await queue.decide(async () => undefined);
-
-    expect([...queue.selected()]).toEqual(['b']);
-  });
-
-  it('untoggles a row that was already ticked', async () => {
-    const source = pages({ items: items('a', 'b'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-
-    queue.toggle('a');
-    queue.toggle('a');
-
-    expect(queue.selectedCount()).toBe(0);
-  });
-
-  it('puts a clicked row in front without deciding it', async () => {
-    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-
-    queue.focus('c');
-
-    expect(queue.items().map((item) => item.id)).toEqual(['c', 'a', 'b']);
-    expect(queue.decided()).toBe(0);
   });
 
   /**
@@ -298,7 +466,7 @@ describe('QueueStore, as a list', () => {
     await queue.decideAt('a', async () => ({ id: 'a', seen: true }));
 
     expect(queue.items()[0]).toEqual({ id: 'a', seen: true });
-    expect(queue.decided()).toBe(1);
+    expect(queue.current()).toEqual({ id: 'a', seen: true });
   });
 
   it('refuses to decide a row that is not in the queue', async () => {
@@ -309,194 +477,45 @@ describe('QueueStore, as a list', () => {
     const went = await queue.decideAt('nowhere', async () => null);
 
     expect(went).toBe(false);
-    expect(queue.decided()).toBe(0);
+    expect(queue.items()).toEqual(items('a'));
   });
 });
 
 /**
- * Plan 0020, sections 5, 6 and 7. There is no bulk route and this plan does not
- * add one, so all of the honesty about one call per row lives here.
+ * A row that was decided somewhere else leaves as a decided row does, and
+ * the refusal that said so goes with it.
  */
-describe('QueueStore, over a selection', () => {
-  /**
-   * Section 5's number, and the reason for it: enough that two hundred rows are
-   * not two hundred round trips end to end, few enough that draining a queue
-   * does not arrive at the gateway as a burst.
-   */
-  it('runs at most four calls at once', async () => {
-    const source = pages({
-      items: items('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'),
-      nextCursor: null,
-    });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-    queue.selectLoaded();
-
-    let running = 0;
-    let most = 0;
-    const release: (() => void)[] = [];
-
-    const run = queue.decideMany(async () => {
-      running += 1;
-      most = Math.max(most, running);
-      await new Promise<void>((resolve) => release.push(resolve));
-      running -= 1;
-      return null;
-    });
-
-    // Every worker that is going to start has started by now.
-    await drain();
-    expect(most).toBe(4);
-
-    while (release.length > 0) {
-      const next = release.pop();
-      next?.();
-      await drain();
-    }
-
-    await run;
-    expect(most).toBe(4);
-  });
-
-  /**
-   * Section 6, the rule the whole feature rests on. Two hundred calls will not
-   * all succeed, and a bulk that reports one word is a bulk an operator cannot
-   * recover from.
-   */
-  it('names what failed, leaves it in the queue and leaves it selected', async () => {
-    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-    queue.selectLoaded();
-
-    const result = await queue.decideMany(async (item) => {
-      if (item.id === 'b') {
-        throw new GatewayError({
-          code: 'conflict',
-          status: 409,
-          correlationId: '',
-        });
-      }
-      return null;
-    });
-
-    expect([...result.succeeded].sort()).toEqual(['a', 'c']);
-    expect(result.failed).toEqual([
-      { id: 'b', error: expect.objectContaining({ code: 'conflict' }) },
-    ]);
-    expect(queue.items().map((item) => item.id)).toEqual(['b']);
-    // Pressing the action again retries exactly the failure, with nothing to
-    // reselect. A row that went through is done and must not be sent twice.
-    expect([...queue.selected()]).toEqual(['b']);
-  });
-
-  /**
-   * "I did not try" and "I tried and it was refused" are different sentences,
-   * so they are two lists and the skipped row never reaches the act at all.
-   */
-  it('never passes a row the act cannot apply to, and reports it apart', async () => {
-    const source = pages({ items: items('a', 'b'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-    queue.selectLoaded();
-
-    const seen: string[] = [];
-    const result = await queue.decideMany(
-      async (item) => {
-        seen.push(item.id);
-        return null;
-      },
-      (item) => item.id === 'a'
+describe('QueueStore, a row that somebody else decided', () => {
+  const refused = () =>
+    Promise.reject(
+      new GatewayError({ code: 'conflict', status: 409, correlationId: '' })
     );
 
-    expect(seen).toEqual(['a']);
-    expect(result.skipped).toEqual(['b']);
-    expect(result.failed).toEqual([]);
-    expect(result.total).toBe(1);
-    // Never attempted, so still there and still ticked.
-    expect([...queue.selected()]).toEqual(['b']);
-  });
-
-  it('acts only on the rows that are ticked', async () => {
+  it('takes the row out, brings the next one up, and holds no refusal', async () => {
     const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
     const queue = new QueueStore(source.read, (item) => item.id);
     await queue.load();
-    queue.toggle('b');
+    queue.focus('b');
+    await queue.decide(refused);
+    expect(queue.error()).not.toBeNull();
 
-    const seen: string[] = [];
-    await queue.decideMany(async (item) => {
-      seen.push(item.id);
-      return null;
-    });
+    queue.drop('b');
 
-    expect(seen).toEqual(['b']);
-    expect(queue.items().map((item) => item.id)).toEqual(['a', 'c']);
+    expect(queue.items()).toEqual(items('a', 'c'));
+    expect(queue.current()).toEqual({ id: 'c' });
+    expect(queue.error()).toBeNull();
   });
 
-  /**
-   * A "cancel" read as an undo on a screen that writes to the catalog is the
-   * worst possible misreading, so stopping stops between rows and the rows
-   * behind it are simply untouched.
-   */
-  it('stops between rows and leaves what went through alone', async () => {
-    const source = pages({
-      items: items('a', 'b', 'c', 'd', 'e', 'f'),
-      nextCursor: null,
-    });
+  it('leaves a queue that it empties empty, and not broken', async () => {
+    const source = pages({ items: items('a'), nextCursor: null });
     const queue = new QueueStore(source.read, (item) => item.id);
     await queue.load();
-    queue.selectLoaded();
+    await queue.decide(refused);
 
-    const seen: string[] = [];
-    const result = await queue.decideMany(async (item) => {
-      seen.push(item.id);
-      if (seen.length === 2) {
-        queue.stopBulk();
-      }
-      return null;
-    });
+    queue.drop('a');
 
-    expect(result.stopped).toBe(true);
-    // Whatever had already been sent finishes; no row behind the stop starts.
-    expect(seen).toEqual(['a', 'b']);
-    expect(result.succeeded).toEqual(['a', 'b']);
-    expect(queue.items().map((item) => item.id)).toEqual(['c', 'd', 'e', 'f']);
-    expect([...queue.selected()].sort()).toEqual(['c', 'd', 'e', 'f']);
-  });
-
-  it('reports what it set out to do, so a stopped run can say what it did not', async () => {
-    const source = pages({ items: items('a', 'b'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-    queue.selectLoaded();
-
-    const result = await queue.decideMany(async () => null);
-
-    expect(result.total).toBe(2);
-    expect(result.stopped).toBe(false);
-    expect(queue.bulk()).toBeNull();
-    expect(queue.result()).toBe(result);
-  });
-
-  it('refuses a single decision while a bulk run is going', async () => {
-    const source = pages({ items: items('a', 'b'), nextCursor: null });
-    const queue = new QueueStore(source.read, (item) => item.id);
-    await queue.load();
-    queue.selectLoaded();
-
-    const release: (() => void)[] = [];
-    const run = queue.decideMany(async () => {
-      await new Promise<void>((resolve) => release.push(resolve));
-      return null;
-    });
-    await drain();
-
-    await queue.decide(async () => undefined);
-    expect(queue.decided()).toBe(0);
-
-    for (const let_go of release) {
-      let_go();
-    }
-    await run;
+    expect(queue.current()).toBeNull();
+    expect(queue.empty()).toBe(true);
+    expect(queue.failed()).toBe(false);
   });
 });

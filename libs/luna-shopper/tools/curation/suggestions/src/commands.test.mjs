@@ -8,6 +8,7 @@ import {
   apply,
   buildOperations,
   candidateIdentities,
+  collectCandidates,
   composeBatch,
   decide,
   end,
@@ -15,7 +16,7 @@ import {
   sameCandidates,
   start,
 } from './commands.mjs';
-import { makeGateway } from './gateway.mjs';
+import { makeGateway, toCreateItemBody } from './gateway.mjs';
 import { categoryVocabulary } from './rules.mjs';
 import { readJsonl } from './run-dir.mjs';
 import {
@@ -35,7 +36,7 @@ const SUPERMARKETS = [
 
 const VOCABULARIES = {
   ...categoryVocabulary(CATEGORY_TREE),
-  units: ['UNIT', 'LITER', 'GRAM'],
+  units: ['UNIT', 'LITER', 'GRAM', 'MILLILITER', 'KILOGRAM'],
 };
 
 /** The registry the fake main gateway answers, one house label and one not. */
@@ -168,8 +169,9 @@ const CREATE_MILK = {
     nameEs: 'Leche entera',
     nameEn: 'Whole milk',
     brand: null,
-    unitSize: 1,
-    defaultUnit: 'LITER',
+    // A CREATE is written in a base unit (backend plan 0183).
+    unitSize: 1000,
+    defaultUnit: 'MILLILITER',
     categorySlugs: ['milk'],
     ean: null,
   },
@@ -572,6 +574,67 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
   assert.deepEqual(row.item.categoryIds, ['cat-milk']);
 });
 
+test('a CREATE carries a pack count through the rehearsal and into the bulk operation (backend plan 0177)', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      // The row read its own count, and the decision states none.
+      entry('e1', 'Café con leche en cápsula', {
+        unitSize: 0.16,
+        sizeUnit: 'KILOGRAM',
+        sizeFormat: 'kg',
+        packCount: 16,
+      }),
+      // The row read none, and the decision states one.
+      entry('e2', 'Leche entera pack 6', { unitSize: 6, sizeUnit: 'LITER' }),
+    ],
+  });
+  await startIn(dir, w);
+
+  const decideRow = (entryId, item) =>
+    decide({
+      runDir: dir,
+      entryId,
+      input: { ...CREATE_MILK, item: { ...CREATE_MILK.item, ...item } },
+      gateways: w.gateways,
+      vocabularies: VOCABULARIES,
+    });
+  assert.equal(
+    (await decideRow('e1', { nameEs: 'Café con leche en cápsula' })).accepted,
+    true
+  );
+  assert.equal(
+    (await decideRow('e2', { nameEs: 'Leche entera', packCount: 6 })).accepted,
+    true
+  );
+
+  // The rehearsal product carries the count the real create will write, so a
+  // later row of the run is compared against what the catalog will hold.
+  assert.deepEqual(
+    w.rehearsalCatalog.rows.map((row) => row.packCount),
+    [16, 6]
+  );
+
+  const [, first, second] = readJsonl(join(dir, 'decisions.jsonl'));
+
+  // A resume rebuilds the rehearsal products from the recorded item alone,
+  // with no row beside it (`cli/src/run-files.mjs`). The record therefore
+  // carries the row's count, and the rebuilt product is the one the walk made.
+  assert.equal(first.item.rowPackCount, 16);
+  assert.equal('packCount' in first.item, false);
+  assert.equal(toCreateItemBody(first.item).packCount, 16);
+  assert.equal('rowPackCount' in second.item, false);
+  assert.equal(toCreateItemBody(second.item).packCount, 6);
+
+  const operations = buildOperations([first, second]);
+  // The row's count is the rehearsal's business only: the bulk route reads
+  // the row for itself, and the key never reaches the main catalog.
+  assert.equal('rowPackCount' in operations[0].item, false);
+  // Absent on the first, so the bulk route takes the row's own 16.
+  assert.equal('packCount' in operations[0].item, false);
+  assert.equal(operations[1].item.packCount, 6);
+});
+
 test('a slug the rehearsal slot does not hold is a REVIEW, and writes nothing', async () => {
   const dir = runDir();
   const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
@@ -694,7 +757,11 @@ test('a glitched name is retryable and writes nothing', async () => {
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
@@ -723,7 +790,11 @@ test('--final records a second glitch as a REVIEW carrying the code', async () =
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     final: true,
     gateways: w.gateways,
@@ -754,7 +825,7 @@ test('a sizeless CREATE from a local model is recorded as a REVIEW', async () =>
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -796,7 +867,7 @@ test('the same sizeless CREATE from a Claude model is a CREATE', async () => {
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -979,7 +1050,7 @@ test('a row raising both retryable codes carries both details into one retry', a
       item: {
         ...CREATE_MILK.item,
         nameEs: 'May1onesa',
-        nameEn: null,
+        nameEn: 'Mayonnaise',
         brand: 'DEBORAH 48H',
       },
     },
@@ -1203,11 +1274,11 @@ const CREATE_ROW = {
     nameEn: 'Whole milk',
     brand: null,
     ean: null,
-    unitSize: 1,
+    unitSize: 1000,
     categorySlugs: ['milk'],
     // The rehearsal slot's ids, which `decide` records for a resume.
     categoryIds: ['cat-milk'],
-    defaultUnit: 'LITER',
+    defaultUnit: 'MILLILITER',
   },
   expect: { status: 'CANDIDATE', lastSeenAt: '2026-09-08T10:00:00.000Z' },
 };
@@ -1254,9 +1325,9 @@ test('buildOperations keeps the decided order and skips every REVIEW', () => {
     name: { es: 'Leche entera', en: 'Whole milk' },
     brand: null,
     ean: null,
-    unitSize: 1,
+    unitSize: 1000,
     categorySlugs: ['milk'],
-    defaultUnit: 'LITER',
+    defaultUnit: 'MILLILITER',
   });
   assert.deepEqual(operations[0].expect, CREATE_ROW.expect);
 });
@@ -1810,12 +1881,12 @@ test('start stops on an empty registry, prints propose-brands and writes no run'
 function sharedEanWorld(catalogItems = []) {
   return world({
     entries: [
-      entry('e1', 'Alubias blancas', { ean: '8480000000017' }),
+      entry('e1', 'Alubias blancas', { ean: '8480000000019' }),
       entry('e2', 'Pan de molde'),
-      entry('e3', 'Alubias pintas', { ean: '8480000000017' }),
-      entry('e4', 'Alubias rojas', { ean: '8480000000017' }),
+      entry('e3', 'Alubias pintas', { ean: '8480000000019' }),
+      entry('e4', 'Alubias rojas', { ean: '8480000000019' }),
       entry('e5', 'Alubias negras', {
-        ean: '8480000000017',
+        ean: '8480000000019',
         supermarketId: 'sm-2',
       }),
     ],
@@ -1856,7 +1927,7 @@ test('a LINK on a shared EAN is a REVIEW, even when both sides print that EAN', 
       id: 'i1',
       name: { es: 'Alubias blancas' },
       brand: null,
-      ean: '8480000000017',
+      ean: '8480000000019',
       unitSize: null,
       defaultUnit: 'UNIT',
     },
@@ -1878,7 +1949,7 @@ test('a LINK on a shared EAN is a REVIEW, even when both sides print that EAN', 
   assert.equal(answer.decision.proposedDecision, 'LINK');
   assert.equal(answer.decision.itemId, null);
   assert.deepEqual(codesOf(answer.issues), ['SHARED_EAN']);
-  assert.match(answer.issues[0].detail, /8480000000017.*e3, e4/);
+  assert.match(answer.issues[0].detail, /8480000000019.*e3, e4/);
 });
 
 test('a CREATE on a shared EAN is a REVIEW and writes nothing to the rehearsal', async () => {
@@ -1894,7 +1965,7 @@ test('a CREATE on a shared EAN is a REVIEW and writes nothing to the rehearsal',
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Alubias pintas',
-        ean: '8480000000017',
+        ean: '8480000000019',
       },
     },
     gateways: w.gateways,
@@ -2069,3 +2140,153 @@ test('the proposed item is dropped only when the catalog answers 404', async () 
 function codesOf(issues) {
   return (issues ?? []).map((entry) => entry.code);
 }
+
+// ---------------------------------------------------------------------------
+// The barcode lookup reads only a real barcode (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+/** A gateway that answers one product for any barcode, and records the asks. */
+function eanRecordingGateway(holder) {
+  const asked = [];
+  return {
+    asked,
+    searchItems: async () => [],
+    getItem: async () => null,
+    findByEan: async (ean) => {
+      if (!ean) {
+        return null;
+      }
+      asked.push(ean);
+      return { ...holder, ean };
+    },
+  };
+}
+
+const SCALE_PRODUCT = {
+  id: 'i-scale',
+  name: { es: 'Queso al corte' },
+  brand: null,
+  unitSize: null,
+  defaultUnit: 'KILOGRAM',
+};
+
+test('an in-store code is not looked up, so it is never handed over as eanMatch', async () => {
+  // 211 products hold a code of one chain's scales. Another chain printing
+  // the same digits is another product, and `eanMatch` is what the prompt
+  // tells the model to link onto first.
+  for (const ean of ['2204500000000', '2000000000008', '84100100012', '']) {
+    const main = eanRecordingGateway(SCALE_PRODUCT);
+    const rehearsal = eanRecordingGateway(SCALE_PRODUCT);
+    const collected = await collectCandidates({
+      entry: entry('e1', 'Queso al corte', { ean }),
+      main,
+      rehearsal,
+      createdRefs: {},
+    });
+
+    assert.equal(collected.eanMatch, null, ean);
+    assert.deepEqual(collected.candidates, [], ean);
+    assert.deepEqual(main.asked, [], ean);
+    assert.deepEqual(rehearsal.asked, [], ean);
+  }
+});
+
+test('a real barcode is still looked up, trimmed, in both catalogs', async () => {
+  const main = eanRecordingGateway(SCALE_PRODUCT);
+  const rehearsal = eanRecordingGateway(SCALE_PRODUCT);
+  const collected = await collectCandidates({
+    entry: entry('e1', 'Galletas', { ean: ' 4006381333931 ' }),
+    main,
+    rehearsal,
+    createdRefs: {},
+  });
+
+  assert.deepEqual(main.asked, ['4006381333931']);
+  assert.deepEqual(rehearsal.asked, ['4006381333931']);
+  assert.equal(collected.eanMatch.itemId, 'i-scale');
+});
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+/** Whole milk from a second factory: the same product, another barcode. */
+const SECOND_BARCODE_ROW = entry('e1', 'Leche entera', {
+  brand: 'Hacendado',
+  ean: '8402001047251',
+  unitSize: 1,
+  sizeUnit: 'LITER',
+  sizeFormat: '1 L',
+});
+
+const MILK_IN_CATALOG = {
+  id: 'i1',
+  name: { es: 'Leche entera', en: 'Whole milk' },
+  brand: 'Hacendado',
+  ean: '8402001002083',
+  eans: ['8402001002083'],
+  unitSize: 1000,
+  defaultUnit: 'MILLILITER',
+};
+
+test('a LINK onto a product with another barcode, the same brand and the same format is recorded as a LINK', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [SECOND_BARCODE_ROW],
+    catalogItems: [MILK_IN_CATALOG],
+  });
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  // Nobody holds the row's barcode, and the packet shows every barcode the
+  // candidate does hold.
+  assert.equal(row.eanMatch, null);
+  assert.deepEqual(row.candidates[0].eans, ['8402001002083']);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'LINK');
+  assert.equal(answer.decision.itemId, 'i1');
+  assert.deepEqual(codesOf(answer.issues), []);
+});
+
+test('a LINK is a REVIEW when another catalog product holds the row’s barcode, as any of its barcodes', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [SECOND_BARCODE_ROW],
+    catalogItems: [
+      MILK_IN_CATALOG,
+      // It holds the row's barcode as its second one.
+      {
+        id: 'i2',
+        name: { es: 'Leche entera sin lactosa', en: 'Lactose free milk' },
+        brand: 'Hacendado',
+        ean: '4006381333931',
+        eans: ['4006381333931', '8402001047251'],
+        unitSize: 1000,
+        defaultUnit: 'MILLILITER',
+      },
+    ],
+  });
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.equal(row.eanMatch.itemId, 'i2');
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'LINK');
+  assert.deepEqual(codesOf(answer.issues), ['EAN_CONFLICT']);
+  assert.match(answer.issues[0].detail, /item i2 holds it, not i1/);
+});

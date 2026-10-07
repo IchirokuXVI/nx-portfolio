@@ -10,6 +10,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { toGatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
+import type { InfoContent } from '@portfolio/luna-shopper-admin/models';
+import { PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import {
   DEFAULT_POSTAL_CODE_COUNTRY,
   PostalCodeQueueGateway,
@@ -35,7 +37,7 @@ const AT_ONCE = 4;
  *
  * **The codes field accepts several.** An operator adding a city adds twelve
  * codes, not one, and a form used twelve times is a form nobody uses. That is
- * the whole reason this screen exists instead of the generic form: everything
+ * the whole reason this screen exists instead of the record page: everything
  * else about it is three fields.
  *
  * The route keeps one code per call (backend plan 0097, section 6.1), because a
@@ -52,12 +54,12 @@ const AT_ONCE = 4;
  */
 @Component({
   selector: 'lib-postal-code-add-page',
-  imports: [FormsModule, RokuTranslatorPipe],
+  imports: [PageHeader, FormsModule, RokuTranslatorPipe],
   template: `
-    <header>
-      <h1>{{ 'harvest.postalCodes.add.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'harvest.postalCodes.add.lead' | rokuT }}</p>
-    </header>
+    <lib-page-header
+      [heading]="'harvest.postalCodes.add.heading' | rokuT"
+      [info]="info"
+    />
 
     <form (ngSubmit)="submit()">
       <label class="country">
@@ -149,15 +151,6 @@ const AT_ONCE = 4;
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    .lead {
-      color: var(--admin-ink-muted);
     }
 
     form {
@@ -265,6 +258,15 @@ const AT_ONCE = 4;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PostalCodeAddPage {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'harvest.postalCodes.add.heading',
+    points: [
+      'harvest.postalCodes.add.info.looks',
+      'harvest.postalCodes.add.info.refused',
+    ],
+  };
+
   private readonly _gateway = inject(PostalCodeQueueGateway);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);

@@ -7,6 +7,7 @@ import {
   type ApplySourceEntryDecisionsRequest,
   type ItemView,
   type SourceEntryDecisionOperation,
+  type SourceEntryPriceWithheld,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -17,6 +18,7 @@ import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
+import type { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import type { SourceEntryPriceWriter } from './source-entry-write';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -108,6 +110,24 @@ function item(id: string): ItemView {
   } as unknown as ItemView;
 }
 
+/** What the chain EAN count query answers over these rows. */
+function chainEanRows(
+  rows: readonly SourceCatalogEntry[],
+  eans: readonly string[]
+): { supermarketId: string; ean: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.ean && eans.includes(row.ean)) {
+      const key = `${row.supermarketId}|${row.ean}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([key, count]) => {
+    const [supermarketId, ean] = key.split('|');
+    return { supermarketId, ean, count };
+  });
+}
+
 /** The ids an `In(...)` criterion names, whichever way TypeORM wrapped them. */
 function idsOf(where: unknown): string[] {
   const id = (where as { id?: FindOperator<string> | string })?.id;
@@ -123,13 +143,21 @@ function build(
     rows?: SourceCatalogEntry[];
     /** Fail the save of this entry, which is a step three failure. */
     failSaveOf?: string;
+    /** Prices the writer withheld for an entry (plan 0191), by entry id. */
+    withheldFor?: Record<string, SourceEntryPriceWithheld[]>;
     /** Fail the price write for these entries, which is a step four skip. */
     failPricesOf?: string[];
+    /** Fail the availability write, which is a step four skip of every row. */
+    failAvailability?: boolean;
     /** Fail the cleanup delete, so the product is reported as an orphan. */
     failDelete?: boolean;
     createItems?: jest.Mock;
     /** Barcodes catalog already holds, and the product holding each. */
     takenEans?: Record<string, string>;
+    /** Barcodes another product took between the check and the write. */
+    teachHeldBy?: Record<string, string>;
+    /** Fail the barcode write, which is a step four skip of those rows. */
+    failTeach?: boolean;
     /** The chain's adapter, which decides what language its printed name is in. */
     adapterKey?: string | null;
   } = {}
@@ -163,6 +191,11 @@ function build(
         .map((id) => byId.get(id))
         .filter(Boolean)
     ),
+    // How many rows of each chain print each EAN (plan 0185), counted over
+    // the rows the test holds, as the real query counts the table.
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      chainEanRows(rows, eans)
+    ),
   } as unknown as Repository<SourceCatalogEntry>;
 
   const createItems =
@@ -183,11 +216,30 @@ function build(
     }),
   }));
   const categoryTree = jest.fn(async () => fakeCategoryTree());
+  // Plan 0185: the barcodes the accepted rows give their products, in one
+  // call. It answers what catalog would for barcodes nobody holds, unless a
+  // test names the ones it refuses or makes the call fail.
+  const teachItemEans = jest.fn(
+    async (pairs: { itemId: string; ean: string }[]) => {
+      if (options.failTeach) {
+        throw new Error('catalog is away');
+      }
+      const refused = pairs
+        .filter((pair) => options.teachHeldBy?.[pair.ean])
+        .map((pair) => ({
+          ...pair,
+          reason: 'HELD' as const,
+          heldBy: options.teachHeldBy?.[pair.ean] as string,
+        }));
+      return { added: pairs.length - refused.length, refused };
+    }
+  );
   const catalog = {
     createItems,
     categoryTree,
     deleteItem,
     findItemsByEans,
+    teachItemEans,
   } as unknown as CatalogClient;
 
   const write = jest.fn(async (row: SourceCatalogEntry) => {
@@ -196,7 +248,29 @@ function build(
     }
     return (row.prices ?? []).length;
   });
-  const prices = { write } as unknown as SourceEntryPriceWriter;
+  // The bulk route reads the named answer since plan 0191. `write` stays the
+  // spy every test below asserts on.
+  const prices = {
+    writeNamed: async (row: SourceCatalogEntry) => ({
+      written: await write(row),
+      withheld: options.withheldFor?.[row.id] ?? [],
+    }),
+  } as unknown as SourceEntryPriceWriter;
+
+  // The availability half of step four (plan 0182). What it sends is its own
+  // spec; what matters here is when it is called, with which rows, and what a
+  // failure does to the answer.
+  const writeAvailability = jest.fn(
+    async (_bound: readonly SourceCatalogEntry[]) => {
+      if (options.failAvailability) {
+        throw new Error('catalog is away');
+      }
+      return { written: 0, shops: 0, conflicts: [], pricelessOffers: 0 };
+    }
+  );
+  const availability = {
+    writeForEntries: writeAvailability,
+  } as unknown as SourceEntryAvailabilityWriter;
 
   const admin = {
     requireAdmin: jest.fn(async (credential: { userId: string }) => {
@@ -225,15 +299,18 @@ function build(
     catalog,
     prices,
     admin,
-    sources
+    sources,
+    availability
   );
   return {
     service,
+    writeAvailability,
     saved,
     createItems,
     categoryTree,
     deleteItem,
     findItemsByEans,
+    teachItemEans,
     write,
     manager,
     admin,
@@ -250,6 +327,12 @@ const expectFresh = {
   status: SourceEntryStatus.UNRESOLVED,
   lastSeenAt: SEEN.toISOString(),
 };
+
+/**
+ * A name in both languages, for the files whose name is not what the test is
+ * about. A `createItem` with no English name is refused (plan 0184).
+ */
+const BOTH = { es: 'Leche', en: 'Milk' };
 
 describe('SourceEntryBatchService', () => {
   it('refuses a caller who is not the platform admin', async () => {
@@ -297,7 +380,7 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: { name: { es: 'Leche semidesnatada' } },
+          item: { name: { es: 'Leche semidesnatada', en: 'In English' } },
           expect: expectFresh,
         },
         // The second row of the same product, bound to the item the first
@@ -343,7 +426,10 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: { name: { es: 'Something else entirely' }, brand: 'Other' },
+          item: {
+            name: { es: 'Something else entirely', en: 'In English' },
+            brand: 'Other',
+          },
           expect: expectFresh,
         },
       ])
@@ -387,7 +473,7 @@ describe('SourceEntryBatchService', () => {
 
     it("takes the row's count when the operation names none", async () => {
       const createItems = await created(
-        { name: { es: 'Leche entera' } },
+        { name: { es: 'Leche entera', en: 'In English' } },
         { sizeFormat: 'pack de 6 unidades de 1 l.', packCount: 6 }
       );
       expect(createItems).toHaveBeenCalledWith([
@@ -397,7 +483,7 @@ describe('SourceEntryBatchService', () => {
 
     it('takes the count the operation names over the row', async () => {
       const createItems = await created(
-        { name: { es: 'Leche entera' }, packCount: 4 },
+        { name: { es: 'Leche entera', en: 'In English' }, packCount: 4 },
         { sizeFormat: 'pack de 6 unidades de 1 l.', packCount: 6 }
       );
       expect(createItems).toHaveBeenCalledWith([
@@ -406,10 +492,342 @@ describe('SourceEntryBatchService', () => {
     });
 
     it('creates none from a row that is not a pack', async () => {
-      const createItems = await created({ name: { es: 'Leche' } }, {});
+      const createItems = await created(
+        { name: { es: 'Leche', en: 'In English' } },
+        {}
+      );
       expect(createItems).toHaveBeenCalledWith([
         expect.objectContaining({ packCount: null }),
       ]);
+    });
+
+    describe('the unit of a created product (plan 0177)', () => {
+      const wine = {
+        unitSize: 750,
+        sizeUnit: UnitOfMeasure.MILLILITER,
+        sizeFormat: '75 cl',
+      };
+
+      it('takes the unit the row states its size in, not a guess from the text', async () => {
+        // The text maps to no unit, and the size is already millilitres.
+        const createItems = await created(
+          { name: { es: 'Vino', en: 'In English' } },
+          wine
+        );
+        expect(createItems).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 750,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+          }),
+        ]);
+      });
+
+      it('takes the unit the operation names over the row', async () => {
+        const createItems = await created(
+          {
+            name: { es: 'Vino', en: 'In English' },
+            defaultUnit: UnitOfMeasure.LITER,
+          },
+          wine
+        );
+        expect(createItems).toHaveBeenCalledWith([
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.LITER }),
+        ]);
+      });
+
+      it('falls back to the printed text for a row with no unit, then to UNIT', async () => {
+        expect(
+          await created(
+            { name: { es: 'Queso', en: 'In English' } },
+            { unitSize: 0.5, sizeUnit: null, sizeFormat: 'kg' }
+          )
+        ).toHaveBeenCalledWith([
+          // The text says kilograms, and a sized kilogram is written in grams
+          // (plan 0183).
+          expect.objectContaining({
+            unitSize: 500,
+            defaultUnit: UnitOfMeasure.GRAM,
+          }),
+        ]);
+        expect(
+          await created(
+            { name: { es: 'Vino', en: 'In English' } },
+            { unitSize: null, sizeUnit: null, sizeFormat: '75 cl' }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.UNIT }),
+        ]);
+      });
+    });
+
+    describe('a created product is in a base unit (plan 0183)', () => {
+      it('writes a row of 0.25 kg as 250 GRAM', async () => {
+        expect(
+          await created(
+            { name: { es: 'Queso', en: 'In English' } },
+            {
+              unitSize: 0.25,
+              sizeUnit: UnitOfMeasure.KILOGRAM,
+              sizeFormat: 'kg',
+            }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 250,
+            defaultUnit: UnitOfMeasure.GRAM,
+          }),
+        ]);
+      });
+
+      it('writes a row of 1.5 l as 1500 MILLILITER', async () => {
+        expect(
+          await created(
+            { name: { es: 'Agua', en: 'In English' } },
+            {
+              unitSize: 1.5,
+              sizeUnit: UnitOfMeasure.LITER,
+              sizeFormat: '1,5 l',
+            }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 1500,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+          }),
+        ]);
+      });
+
+      it('keeps KILOGRAM for a row with no size, which is sold by weight', async () => {
+        expect(
+          await created(
+            { name: { es: 'Bacon', en: 'In English' } },
+            { unitSize: null, sizeUnit: null, sizeFormat: 'kg' }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: null,
+            defaultUnit: UnitOfMeasure.KILOGRAM,
+          }),
+        ]);
+      });
+
+      describe('a row sold by weight (plan 0181)', () => {
+        it('creates KILOGRAM with no size when the operation names no size', async () => {
+          expect(
+            await created(
+              { name: { es: 'Queso semicurado', en: 'In English' } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'kg',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it('does so whatever the row prints as its size', async () => {
+          expect(
+            await created(
+              { name: { es: 'Solomillo de cerdo', en: 'In English' } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it('reads a size named as null as no size named', async () => {
+          expect(
+            await created(
+              {
+                name: { es: 'Solomillo de cerdo', en: 'In English' },
+                ...{ unitSize: null },
+              },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it.each([
+          UnitOfMeasure.KILOGRAM,
+          UnitOfMeasure.GRAM,
+          UnitOfMeasure.UNIT,
+        ])(
+          'takes a unit named alone as %p, with no size',
+          async (defaultUnit) => {
+            // The row holds no size to carry over, so only the unit is named.
+            expect(
+              await created(
+                {
+                  name: { es: 'Solomillo de cerdo', en: 'In English' },
+                  ...{ defaultUnit },
+                },
+                {
+                  soldByWeight: true,
+                  unitSize: null,
+                  sizeUnit: null,
+                  sizeFormat: 'pieza',
+                }
+              )
+            ).toHaveBeenCalledWith([
+              expect.objectContaining({ unitSize: null, defaultUnit }),
+            ]);
+          }
+        );
+
+        it('lets an operation that names a size overrule it', async () => {
+          expect(
+            await created(
+              { name: { es: 'Queso', en: 'In English' }, unitSize: 0.3 },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'kg',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: 300,
+              defaultUnit: UnitOfMeasure.GRAM,
+            }),
+          ]);
+        });
+      });
+
+      it('converts a size the operation names with the row unit', async () => {
+        expect(
+          await created(
+            { name: { es: 'Queso', en: 'In English' }, unitSize: 0.5 },
+            {
+              unitSize: 0.25,
+              sizeUnit: UnitOfMeasure.KILOGRAM,
+              sizeFormat: 'kg',
+            }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 500,
+            defaultUnit: UnitOfMeasure.GRAM,
+          }),
+        ]);
+      });
+
+      describe('an operation that names the unit and leaves the size as read', () => {
+        const kilo = {
+          unitSize: 0.25,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          sizeFormat: 'kg',
+        };
+
+        it.each([
+          [kilo, UnitOfMeasure.GRAM, 250],
+          [kilo, UnitOfMeasure.KILOGRAM, 0.25],
+          [
+            { unitSize: 1.5, sizeUnit: UnitOfMeasure.LITER, sizeFormat: 'l' },
+            UnitOfMeasure.MILLILITER,
+            1500,
+          ],
+          [
+            {
+              unitSize: 750,
+              sizeUnit: UnitOfMeasure.MILLILITER,
+              sizeFormat: '75 cl',
+            },
+            UnitOfMeasure.LITER,
+            0.75,
+          ],
+        ])('expresses %p in %p as %p', async (row, defaultUnit, unitSize) => {
+          expect(
+            await created(
+              { name: { es: 'Queso', en: 'In English' }, defaultUnit },
+              row
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({ unitSize, defaultUnit }),
+          ]);
+        });
+
+        it('keeps the number when the two units are of different kinds', async () => {
+          expect(
+            await created(
+              {
+                name: { es: 'Queso', en: 'In English' },
+                defaultUnit: UnitOfMeasure.UNIT,
+              },
+              kilo
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: 0.25,
+              defaultUnit: UnitOfMeasure.UNIT,
+            }),
+          ]);
+        });
+
+        it('keeps the number when the row states no unit', async () => {
+          expect(
+            await created(
+              {
+                name: { es: 'Queso', en: 'In English' },
+                defaultUnit: UnitOfMeasure.GRAM,
+              },
+              { unitSize: 0.25, sizeUnit: null, sizeFormat: 'kg' }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: 0.25,
+              defaultUnit: UnitOfMeasure.GRAM,
+            }),
+          ]);
+        });
+      });
+
+      it('writes a unit the operation names exactly as it was sent', async () => {
+        expect(
+          await created(
+            {
+              name: { es: 'Agua', en: 'In English' },
+              unitSize: 1,
+              defaultUnit: UnitOfMeasure.LITER,
+            },
+            {
+              unitSize: 1.5,
+              sizeUnit: UnitOfMeasure.LITER,
+              sizeFormat: '1,5 l',
+            }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 1,
+            defaultUnit: UnitOfMeasure.LITER,
+          }),
+        ]);
+      });
     });
   });
 
@@ -428,7 +846,7 @@ describe('SourceEntryBatchService', () => {
             op: 'createItem',
             entryId: 'e-1',
             ref: 'milk',
-            item: { name: { es: 'Leche' } },
+            item: { name: { es: 'Leche', en: 'In English' } },
             expect: expectFresh,
           },
           {
@@ -436,7 +854,7 @@ describe('SourceEntryBatchService', () => {
             entryId: 'e-2',
             ref: 'cola',
             item: {
-              name: { es: 'Refresco' },
+              name: { es: 'Refresco', en: 'In English' },
               categorySlugs: ['cola', 'orange'],
             },
             expect: expectFresh,
@@ -465,7 +883,7 @@ describe('SourceEntryBatchService', () => {
             op: 'createItem',
             entryId: 'e-2',
             ref: 'unknown',
-            item: { name: { es: 'Algo' } },
+            item: { name: { es: 'Algo', en: 'In English' } },
             expect: expectFresh,
           },
         ])
@@ -485,14 +903,17 @@ describe('SourceEntryBatchService', () => {
             op: 'createItem',
             entryId: 'e-1',
             ref: 'milk',
-            item: { name: { es: 'Leche' }, categorySlugs: ['ice-creem'] },
+            item: {
+              name: { es: 'Leche', en: 'In English' },
+              categorySlugs: ['ice-creem'],
+            },
             expect: expectFresh,
           },
           {
             op: 'createItem',
             entryId: 'e-2',
             ref: 'cola',
-            item: { name: { es: 'Refresco' } },
+            item: { name: { es: 'Refresco', en: 'In English' } },
             expect: expectFresh,
           },
         ])
@@ -549,12 +970,67 @@ describe('SourceEntryBatchService', () => {
       return { result, createItems };
     }
 
-    it('takes Spanish alone when that is what the file gave', async () => {
-      const { createItems } = await nameFrom({ name: { es: 'Leche entera' } });
+    /**
+     * Plan 0184. This route translates nothing, so a product with no English
+     * name is refused on its own operation, before a row is locked for the
+     * bind or a product is created. 100 products of the first catalog had no
+     * `en` key, and every one of them came through here with `{ es }` alone.
+     */
+    it('refuses a create with only Spanish, naming the code, and writes nothing', async () => {
+      const { result, createItems } = await nameFrom({
+        name: { es: 'Leche entera' },
+      });
 
-      expect(createItems).toHaveBeenCalledWith([
-        expect.objectContaining({ name: { es: 'Leche entera' } }),
-      ]);
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.NAME_EN_MISSING,
+        detail: expect.stringContaining('no English name'),
+      });
+      expect(createItems).not.toHaveBeenCalled();
+    });
+
+    it('reads a blank English name as no English name', async () => {
+      const { result, createItems } = await nameFrom({
+        name: { es: 'Leche entera', en: '   ' },
+      });
+
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.NAME_EN_MISSING
+      );
+      expect(createItems).not.toHaveBeenCalled();
+    });
+
+    it('refuses only the operation that lacks it, and still lands nothing', async () => {
+      const rows = [entry(), entry({ id: 'e-2', externalId: '4242' })];
+      const { service, createItems, saved } = build({ rows });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: { es: 'Leche entera', en: 'Whole milk' } },
+            expect: expectFresh,
+          },
+          {
+            op: 'createItem',
+            entryId: 'e-2',
+            ref: 'cream',
+            item: { name: { es: 'Nata' } },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.results[0].error).toBeNull();
+      expect(result.results[1].error?.code).toBe(
+        BulkOperationErrorCode.NAME_EN_MISSING
+      );
+      expect(createItems).not.toHaveBeenCalled();
+      expect(saved).toEqual([]);
     });
 
     it('takes English alone, and writes no Spanish key', async () => {
@@ -583,14 +1059,16 @@ describe('SourceEntryBatchService', () => {
       ]);
     });
 
-    it('falls back to the printed name, under the language the chain prints in', async () => {
-      const { createItems } = await nameFrom({});
+    it('refuses a file that names nothing for a chain that prints Spanish', async () => {
+      // The fallback is the printed string under the language the chain
+      // prints in, which is Spanish here, so the product would have no
+      // English name. The file has to state one (plan 0184).
+      const { result, createItems } = await nameFrom({});
 
-      expect(createItems).toHaveBeenCalledWith([
-        expect.objectContaining({
-          name: { es: 'Leche semidesnatada Hacendado' },
-        }),
-      ]);
+      expect(result.results[0].error?.code).toBe(
+        BulkOperationErrorCode.NAME_EN_MISSING
+      );
+      expect(createItems).not.toHaveBeenCalled();
     });
 
     it('refuses the file when nothing names the product', async () => {
@@ -615,7 +1093,7 @@ describe('SourceEntryBatchService', () => {
 
   it('refuses the whole file for one stale expect, and writes nothing anywhere', async () => {
     const rows = [entry(), entry({ id: 'e-2', externalId: '4242' })];
-    const { service, saved, createItems } = build({ rows });
+    const { service, saved, createItems, writeAvailability } = build({ rows });
 
     const result = await service.applyDecisions(
       request([
@@ -623,7 +1101,7 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
         {
@@ -644,6 +1122,8 @@ describe('SourceEntryBatchService', () => {
     expect(saved).toEqual([]);
     // Step two never ran, so the catalog holds nothing this file created.
     expect(createItems).not.toHaveBeenCalled();
+    // Nor step four: a refused file states no availability either (plan 0182).
+    expect(writeAvailability).not.toHaveBeenCalled();
     expect(result.results[0].error).toBeNull();
     expect(result.results[0].applied).toBe(false);
     expect(result.results[1].error?.code).toBe(
@@ -725,14 +1205,14 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
         {
           op: 'createItem',
           entryId: 'e-2',
           ref: 'bread',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
       ])
@@ -761,7 +1241,7 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
       ])
@@ -797,11 +1277,124 @@ describe('SourceEntryBatchService', () => {
     ]);
   });
 
+  /**
+   * Plan 0191, decision 2A, reaches this route through the writer it shares
+   * with the one row routes. The route itself is unchanged: the bind stands,
+   * and a price that was not written is named where every such price is.
+   */
+  it('names a price the writer withheld because another row states another amount', async () => {
+    const { service } = build({
+      rows: [entry()],
+      withheldFor: {
+        'e-1': [
+          { entryId: 'e-1', priceScopeId: 'scope-1', otherEntryIds: ['e-9'] },
+        ],
+      },
+    });
+
+    const result = await service.applyDecisions(
+      request([
+        { op: 'accept', entryId: 'e-1', itemId: 'i-1', expect: expectFresh },
+      ])
+    );
+
+    expect(result.applied).toBe(true);
+    expect(result.results[0].applied).toBe(true);
+    expect(result.priceSkips).toEqual([
+      {
+        entryId: 'e-1',
+        itemId: 'i-1',
+        reason: expect.stringMatching(/scope-1.*e-9.*another amount/),
+      },
+    ]);
+  });
+
+  describe('the availability the bound rows are owed (plan 0182)', () => {
+    const twoRows = () => [entry(), entry({ id: 'e-2', externalId: '4242' })];
+    const twoAccepts = () =>
+      request([
+        { op: 'accept', entryId: 'e-1', itemId: 'i-1', expect: expectFresh },
+        { op: 'accept', entryId: 'e-2', itemId: 'i-2', expect: expectFresh },
+      ]);
+
+    it('writes it once for the whole file, after every price, with the rows as bound', async () => {
+      const { service, write, writeAvailability } = build({ rows: twoRows() });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.applied).toBe(true);
+      // One pass and not one per row: a DEZA row has no price and up to ten
+      // shops, and a thousand of them a row at a time outlasts the route.
+      expect(writeAvailability).toHaveBeenCalledTimes(1);
+      const [bound] = writeAvailability.mock.calls[0];
+      expect(bound.map((row) => [row.id, row.itemId])).toEqual([
+        ['e-1', 'i-1'],
+        ['e-2', 'i-2'],
+      ]);
+      // The rule the prices follow in this route: after the bind, in step four.
+      expect(Math.max(...write.mock.invocationCallOrder)).toBeLessThan(
+        writeAvailability.mock.invocationCallOrder[0]
+      );
+      expect(result.priceSkips).toEqual([]);
+    });
+
+    it('leaves every bind standing when it fails, and names the rows', async () => {
+      const { service, saved } = build({
+        rows: twoRows(),
+        failAvailability: true,
+      });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.applied).toBe(true);
+      expect(saved).toHaveLength(2);
+      expect(result.results.map((outcome) => outcome.applied)).toEqual([
+        true,
+        true,
+      ]);
+      // The prices landed, and the answer still says so.
+      expect(result.results.map((outcome) => outcome.pricesWritten)).toEqual([
+        1, 1,
+      ]);
+      expect(result.priceSkips).toEqual([
+        {
+          entryId: 'e-1',
+          itemId: 'i-1',
+          reason: 'Availability: catalog is away',
+        },
+        {
+          entryId: 'e-2',
+          itemId: 'i-2',
+          reason: 'Availability: catalog is away',
+        },
+      ]);
+    });
+
+    it('names a row once when its prices and the availability both fail', async () => {
+      const { service } = build({
+        rows: twoRows(),
+        failPricesOf: ['e-1'],
+        failAvailability: true,
+      });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.priceSkips).toEqual([
+        { entryId: 'e-1', itemId: 'i-1', reason: 'scope is gone' },
+        {
+          entryId: 'e-2',
+          itemId: 'i-2',
+          reason: 'Availability: catalog is away',
+        },
+      ]);
+    });
+  });
+
   it('refuses a create whose barcode catalog holds, naming the row and the product', async () => {
     const rows = [entry(), entry({ id: 'e-2', externalId: '4242' })];
     const { service, saved, createItems } = build({
       rows,
-      takenEans: { '8480000123456': 'item-held' },
+      takenEans: { '8480000123459': 'item-held' },
     });
 
     const result = await service.applyDecisions(
@@ -810,14 +1403,14 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: { ean: '8480000123456' },
+          item: { name: BOTH, ean: '8480000123459' },
           expect: expectFresh,
         },
         {
           op: 'createItem',
           entryId: 'e-2',
           ref: 'cream',
-          item: { ean: '8480000999999' },
+          item: { name: BOTH, ean: '8480000999993' },
           expect: expectFresh,
         },
       ])
@@ -828,7 +1421,7 @@ describe('SourceEntryBatchService', () => {
     expect(result.results[0].error).toEqual({
       code: BulkOperationErrorCode.ALREADY_TAKEN,
       detail: expect.stringContaining(
-        'Catalog already holds an item with EAN 8480000123456 (item-held)'
+        'Catalog already holds an item with EAN 8480000123459 (item-held)'
       ),
     });
     expect(result.results[1].error).toBeNull();
@@ -838,8 +1431,8 @@ describe('SourceEntryBatchService', () => {
 
   it('asks catalog about the barcode the row printed when the file names none', async () => {
     const { service, findItemsByEans } = build({
-      rows: [entry({ ean: '8480000123456' })],
-      takenEans: { '8480000123456': 'item-held' },
+      rows: [entry({ ean: '8480000123459' })],
+      takenEans: { '8480000123459': 'item-held' },
     });
 
     const result = await service.applyDecisions(
@@ -848,13 +1441,13 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
       ])
     );
 
-    expect(findItemsByEans).toHaveBeenCalledWith(['8480000123456']);
+    expect(findItemsByEans).toHaveBeenCalledWith(['8480000123459']);
     expect(result.results[0].error?.code).toBe(
       BulkOperationErrorCode.ALREADY_TAKEN
     );
@@ -870,7 +1463,7 @@ describe('SourceEntryBatchService', () => {
     ];
     const { service, findItemsByEans } = build({
       rows,
-      takenEans: { '8480000999999': 'item-held' },
+      takenEans: { '8480000999993': 'item-held' },
     });
 
     const result = await service.applyDecisions(
@@ -879,21 +1472,21 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: { ean: '8480000123456' },
+          item: { name: BOTH, ean: '8480000123459' },
           expect: expectFresh,
         },
         {
           op: 'createItem',
           entryId: 'e-2',
           ref: 'cream',
-          item: { ean: '8480000999999' },
+          item: { name: BOTH, ean: '8480000999993' },
           expect: expectFresh,
         },
         {
           op: 'createItem',
           entryId: 'e-3',
           ref: 'butter',
-          item: { ean: '8480000123456' },
+          item: { name: BOTH, ean: '8480000123459' },
           expect: expectFresh,
         },
       ])
@@ -901,13 +1494,199 @@ describe('SourceEntryBatchService', () => {
 
     expect(findItemsByEans).toHaveBeenCalledTimes(1);
     expect(findItemsByEans).toHaveBeenCalledWith([
-      '8480000123456',
-      '8480000999999',
+      '8480000123459',
+      '8480000999993',
     ]);
     expect(result.results[0].error).toBeNull();
     expect(result.results[1].error?.code).toBe(
       BulkOperationErrorCode.ALREADY_TAKEN
     );
+  });
+
+  /**
+   * Plan 0184: a product holds a real barcode or none, and the row keeps what
+   * the chain printed.
+   */
+  describe('the EAN a created product gets (plan 0184)', () => {
+    async function createdFrom(
+      row: Partial<SourceCatalogEntry>,
+      item: Record<string, unknown> = {}
+    ) {
+      const built = build({ rows: [entry(row)] });
+      const result = await built.service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'cheese',
+            item: { name: BOTH, ...item },
+            expect: expectFresh,
+          },
+        ])
+      );
+      return { ...built, result };
+    }
+
+    it('creates a product with a null EAN from a row whose EAN starts with 2, and the row keeps its code', async () => {
+      const { result, createItems, saved, findItemsByEans } = await createdFrom(
+        { ean: '2204500000000' }
+      );
+
+      expect(result.applied).toBe(true);
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: null }),
+      ]);
+      // The row is the chain's own record: the matcher and the approximate
+      // weight work both read the code it printed.
+      expect(saved[0].ean).toBe('2204500000000');
+      expect(saved[0].status).toBe(SourceEntryStatus.ACTIVE);
+      // Nothing is asked about a code no product will hold.
+      expect(findItemsByEans).not.toHaveBeenCalled();
+    });
+
+    it('does the same for an in-store code the file itself names', async () => {
+      const { createItems } = await createdFrom(
+        { ean: null },
+        { ean: '2000000000008' }
+      );
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: null }),
+      ]);
+    });
+
+    it.each([
+      ['an 11 digit code', '84100100012'],
+      ['a wrong check digit', '8480000123456'],
+    ])('creates a product with a null EAN from %s', async (_what, ean) => {
+      const { createItems, saved } = await createdFrom({ ean });
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: null }),
+      ]);
+      expect(saved[0].ean).toBe(ean);
+    });
+
+    it('writes a real barcode as it is', async () => {
+      const { createItems } = await createdFrom({ ean: '8480000123459' });
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: '8480000123459' }),
+      ]);
+    });
+  });
+
+  /**
+   * Every decision is `MANUAL` (plan 0184, Target state 7, which was not
+   * built). `unbindSharedEans` reopens an `ACTIVE` row stamped `EAN` when a
+   * second row of the chain prints the same barcode, and it skips `MANUAL`
+   * rows, so the stamp is what keeps a run from undoing a person's decision.
+   */
+  describe('what a bound row says matched it (plan 0184)', () => {
+    it('stamps MANUAL on an accept, also when the product holds the row’s own real barcode', async () => {
+      const { service, saved, teachItemEans } = build({
+        rows: [entry({ ean: '8480000123459' })],
+        takenEans: { '8480000123459': 'item-held' },
+      });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'accept',
+            entryId: 'e-1',
+            itemId: 'item-held',
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
+      expect(saved[0].confidence).toBe(1);
+      // The stamp does not depend on who holds the barcode. The file does
+      // ask catalog who holds it since plan 0185, and the product that
+      // already holds it is taught nothing.
+      expect(teachItemEans).not.toHaveBeenCalled();
+    });
+
+    it('stamps MANUAL on an accept onto a product with no EAN, and for a row with an in-store code', async () => {
+      const rows = [
+        entry({ ean: '8480000123459' }),
+        entry({ id: 'e-2', externalId: '4242', ean: '2204500000000' }),
+      ];
+      const { service, saved } = build({ rows });
+
+      await service.applyDecisions(
+        request([
+          {
+            op: 'accept',
+            entryId: 'e-1',
+            itemId: 'item-with-no-ean',
+            expect: expectFresh,
+          },
+          {
+            op: 'accept',
+            entryId: 'e-2',
+            itemId: 'item-with-no-ean',
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(saved.map((row) => row.matchedBy)).toEqual([
+        ItemSourceMatch.MANUAL,
+        ItemSourceMatch.MANUAL,
+      ]);
+    });
+
+    it('stamps MANUAL on a created product’s own row and on a second row with the same barcode', async () => {
+      const rows = [
+        entry({ ean: '8480000123459' }),
+        entry({ id: 'e-2', externalId: '4242', ean: '8480000123459' }),
+        entry({ id: 'e-3', externalId: '4243', ean: null }),
+      ];
+      // Catalog answers the product as it stored it, barcode included.
+      const createItems = jest.fn(async (inputs: { ean: string | null }[]) => ({
+        items: inputs.map((input, index) => ({
+          ...item(`item-new-${index + 1}`),
+          ean: input.ean,
+        })),
+      }));
+      const { service, saved } = build({ rows, createItems });
+
+      await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: BOTH },
+            expect: expectFresh,
+          },
+          {
+            op: 'accept',
+            entryId: 'e-2',
+            itemRef: 'milk',
+            expect: expectFresh,
+          },
+          {
+            op: 'accept',
+            entryId: 'e-3',
+            itemRef: 'milk',
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: '8480000123459' }),
+      ]);
+      expect(saved.map((row) => row.matchedBy)).toEqual([
+        ItemSourceMatch.MANUAL,
+        ItemSourceMatch.MANUAL,
+        ItemSourceMatch.MANUAL,
+      ]);
+    });
   });
 
   /**
@@ -924,7 +1703,7 @@ describe('SourceEntryBatchService', () => {
         status: 409,
         code: 'conflict',
         detail:
-          'A product of this batch carries EAN 8480000123456, which the ' +
+          'A product of this batch carries EAN 8480000123459, which the ' +
           'catalog already holds, so none of them were created.',
         message: 'That conflicts with the current state.',
         correlationId: 'c-1',
@@ -938,7 +1717,7 @@ describe('SourceEntryBatchService', () => {
           op: 'createItem',
           entryId: 'e-1',
           ref: 'milk',
-          item: {},
+          item: { name: BOTH },
           expect: expectFresh,
         },
       ])
@@ -946,7 +1725,7 @@ describe('SourceEntryBatchService', () => {
 
     expect(result.applied).toBe(false);
     expect(result.failedStep).toBe('CREATE_ITEMS');
-    expect(result.error).toContain('EAN 8480000123456');
+    expect(result.error).toContain('EAN 8480000123459');
     expect(result.error).not.toContain('[object Object]');
     expect(saved).toEqual([]);
   });

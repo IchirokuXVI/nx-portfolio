@@ -88,7 +88,10 @@ export class SupermarketLocationItemService {
     req: UpsertSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
     const actor = await this.admin.requireAdmin(req);
-    await this.requireItemAndLocation(req.itemId, req.supermarketLocationId);
+    const item = await this.requireItemAndLocation(
+      req.itemId,
+      req.supermarketLocationId
+    );
 
     const existing = await this.rows.findOne({
       where: {
@@ -113,7 +116,9 @@ export class SupermarketLocationItemService {
         ? tx.update(SupermarketLocationItem, before, row)
         : tx.create(SupermarketLocationItem, row)
     );
-    return toSupermarketLocationItemView(saved);
+    // The product read for the existence check above is the one the answer
+    // names, so the name and brand cost no second read here.
+    return toSupermarketLocationItemView(saved, item);
   }
 
   /**
@@ -266,7 +271,10 @@ export class SupermarketLocationItemService {
         'No store specific entry for that item at that location'
       );
     }
-    return toSupermarketLocationItemView(row);
+    return toSupermarketLocationItemView(
+      row,
+      await this.items.findOne({ where: { id: row.itemId } })
+    );
   }
 
   async listByLocation(
@@ -294,8 +302,23 @@ export class SupermarketLocationItemService {
     const hasMore = found.length > limit;
     const page = found.slice(0, limit);
     const last = page[page.length - 1];
+
+    // The product's name and brand, joined on as the admin price list joins
+    // its name (admin plan 0042, section 2): a shop's page of products is a page
+    // of distinct products, so resolving them client side would cost a request
+    // per row. One batched read per page here instead, by distinct id. A row
+    // whose item is gone keeps both null and still lists.
+    const itemIds = [...new Set(page.map((row) => row.itemId))];
+    const named =
+      itemIds.length === 0
+        ? []
+        : await this.items.find({ where: { id: In(itemIds) } });
+    const byId = new Map(named.map((item) => [item.id, item]));
+
     return {
-      items: page.map(toSupermarketLocationItemView),
+      items: page.map((row) =>
+        toSupermarketLocationItemView(row, byId.get(row.itemId) ?? null)
+      ),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
@@ -468,10 +491,11 @@ export class SupermarketLocationItemService {
     };
   }
 
+  /** Refuses a product or a shop that does not exist, and answers the product. */
   private async requireItemAndLocation(
     itemId: string,
     supermarketLocationId: string
-  ): Promise<void> {
+  ): Promise<Item> {
     const [item, location] = await Promise.all([
       this.items.findOne({ where: { id: itemId } }),
       this.locations.findOne({ where: { id: supermarketLocationId } }),
@@ -482,7 +506,75 @@ export class SupermarketLocationItemService {
     if (!location) {
       throw new NotFoundException('Supermarket location not found');
     }
+    return item;
   }
+}
+
+/** What {@link withdrawHarvestedShopRows} did with the shop rows of a product. */
+export interface ShopRowsWithdrawn {
+  removed: number;
+  cleared: number;
+  conflicts: { supermarketLocationId: string; held: boolean | null }[];
+}
+
+/**
+ * Take back what harvest runs said about one product at these shops (plan
+ * 0191), inside the caller's audited transaction.
+ *
+ * The caller says that no bound row of the chain names the product any more,
+ * so no source stands behind those claims. What happens to a row follows the
+ * ladder of {@link SupermarketLocationItemService.setAvailability}, read for a
+ * removal:
+ *
+ * - **A person wrote its availability**: left alone and reported as a
+ *   conflict, exactly as an automated write that meets such a row reports it.
+ * - **It has no opinion** (`available` is null): left alone. It holds a
+ *   position somebody typed and nothing a run said.
+ * - **A run wrote its availability and a person typed its position**: the
+ *   availability is cleared and the row stays. Nothing a person typed is
+ *   removed.
+ * - **A run wrote all it holds**: the row is removed.
+ *
+ * The scope flags are not derived again. Every row left with an opinion is a
+ * person's, and what follows for the offers is the caller's next step.
+ */
+export async function withdrawHarvestedShopRows(
+  tx: AuditedWrite,
+  itemId: string,
+  supermarketLocationIds: readonly string[]
+): Promise<ShopRowsWithdrawn> {
+  const outcome: ShopRowsWithdrawn = { removed: 0, cleared: 0, conflicts: [] };
+  for (const chunk of chunks([...supermarketLocationIds], CHUNK)) {
+    const rows = await tx.manager.find(SupermarketLocationItem, {
+      where: { itemId, supermarketLocationId: In(chunk) },
+      order: { supermarketLocationId: 'ASC' },
+    });
+    for (const row of rows) {
+      if (ownedByAPerson(row)) {
+        outcome.conflicts.push({
+          supermarketLocationId: row.supermarketLocationId,
+          held: row.available,
+        });
+        continue;
+      }
+      if (row.available === null && row.availabilitySourceKind === null) {
+        continue;
+      }
+      if (row.positionInStore === null) {
+        await tx.delete(SupermarketLocationItem, row);
+        outcome.removed += 1;
+        continue;
+      }
+      const before = { ...row };
+      row.available = null;
+      row.availabilitySourceKind = null;
+      row.availabilityObservedAt = null;
+      row.availabilitySourceRunId = null;
+      await tx.update(SupermarketLocationItem, before, row);
+      outcome.cleared += 1;
+    }
+  }
+  return outcome;
 }
 
 /**

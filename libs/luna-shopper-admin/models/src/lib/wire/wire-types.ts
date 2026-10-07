@@ -40,10 +40,24 @@ export type AddBasketParticipantDto = {
 };
 
 /**
+ * `AddBrandHomonymDto` in the gateway's OpenAPI document.
+ */
+export type AddBrandHomonymDto = {
+  printedKey: string;
+};
+
+/**
  * `AddCommentDto` in the gateway's OpenAPI document.
  */
 export type AddCommentDto = {
   body: string;
+};
+
+/**
+ * `AddItemEanDto` in the gateway's OpenAPI document.
+ */
+export type AddItemEanDto = {
+  ean: string;
 };
 
 /**
@@ -451,6 +465,14 @@ export type JoinZoneDto = {
  */
 export type LinkDiscoveredPlaceDto = {
   supermarketLocationId: string;
+  acrossChains?: boolean;
+};
+
+/**
+ * `LinkPlacesByRefDto` in the gateway's OpenAPI document.
+ */
+export type LinkPlacesByRefDto = {
+  apply?: boolean;
 };
 
 /**
@@ -563,17 +585,23 @@ export type ProblemDetails = {
     | 'brand_link_owns_no_chain'
     | 'brand_link_keeps_key'
     | 'brand_not_linked'
+    | 'brand_homonym_is_own_key'
+    | 'brand_in_use'
     | 'place_already_imported'
     | 'place_matches_location'
+    | 'place_names_another_chain'
     | 'scope_not_found'
     | 'category_too_deep'
     | 'category_not_a_leaf'
     | 'item_needs_a_category'
+    | 'item_ean_invalid'
+    | 'item_ean_held'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
     | 'section_of_another_chain'
     | 'section_slug_taken'
+    | 'location_external_ref_taken'
     | 'catalog_location_exclusive'
     | 'supermarket_location_not_found'
     | 'permission_required'
@@ -878,6 +906,14 @@ export type SettleBasketRowDto = {
   priceScopeId?: string;
   supermarketLocationId?: string;
   allocations?: BasketAllocationDto[];
+};
+
+/**
+ * `SettleItemAtChainDto` in the gateway's OpenAPI document.
+ */
+export type SettleItemAtChainDto = {
+  supermarketId: string;
+  dryRun?: boolean;
 };
 
 /**
@@ -1446,6 +1482,7 @@ export type AdminCoreAdminZoneDetailView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1500,6 +1537,7 @@ export type AdminCoreAdminZoneRowView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1617,6 +1655,7 @@ export type AdminDashboardAdminHarvestDashboard = {
     entries: AdminDashboardAdminHarvestQueueEntry[];
     places: number;
     shops: AdminDashboardAdminHarvestShopQueue[];
+    brands: number | null;
   };
   sources: {
     total: number;
@@ -2045,6 +2084,7 @@ export type BasketBasketProductView = {
   imageUrl: string | null;
   sku: string | null;
   ean: string | null;
+  eans: string[];
   unitSize: number | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
@@ -2098,6 +2138,7 @@ export type BasketBasketRowEntryView = {
   listId?: string;
   left: number;
   bought: number;
+  boughtElsewhere: number;
   state: EnumsBasketRowState;
   approvalStatus: EnumsLineApprovalStatus;
   demandEditable: boolean;
@@ -2131,6 +2172,7 @@ export type BasketBasketRowView = {
   left: number;
   bought: number;
   asked: number;
+  boughtElsewhere: number;
   state: EnumsBasketRowState;
   note: EnumsBasketRowNote | null;
   noteAt: string | null;
@@ -2287,6 +2329,25 @@ export type CatalogAppendShopWalkEntryResult = {
 };
 
 /**
+ * `catalog.BrandHomonymsView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandHomonymsView = {
+  brandId: string;
+  printedKeys: string[];
+};
+
+/**
+ * `catalog.BrandMatchView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandMatchView = {
+  brandId: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  printedAs: string | null;
+};
+
+/**
  * `catalog.BrandPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2438,6 +2499,7 @@ export type CatalogItemOfferView = {
 export type CatalogItemPage = {
   items: CatalogItemView[];
   nextCursor: string | null;
+  total?: number;
 };
 
 /**
@@ -2580,6 +2642,7 @@ export type CatalogItemView = {
   imageUrl: string | null;
   sku: string | null;
   ean: string | null;
+  eans: string[];
   unitSize: number | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
@@ -3212,6 +3275,8 @@ export type CatalogSupermarketLocationItemView = {
   availabilitySourceKind: EnumsPriceSourceKind | null;
   availabilityObservedAt: string | null;
   availabilitySourceRunId: string | null;
+  itemName: CatalogLocalizedText | null;
+  itemBrand: string | null;
 };
 
 /**
@@ -3290,6 +3355,7 @@ export type CatalogSupermarketView = {
   websiteUrl: string | null;
   externalBrandKey: string | null;
   defaultPriceScopeId: string | null;
+  locationCount?: number;
 };
 
 /**
@@ -3374,7 +3440,7 @@ export type EnumsBasketRowMark = 'ADDED' | 'CHANGED' | 'REMOVED';
 /**
  * `enums.BasketRowNote` in the gateway's OpenAPI document.
  */
-export type EnumsBasketRowNote = 'SKIPPED_EARLIER';
+export type EnumsBasketRowNote = 'SKIPPED_EARLIER' | 'BOUGHT_ON_ANOTHER_BASKET';
 
 /**
  * `enums.BasketRowState` in the gateway's OpenAPI document.
@@ -3416,7 +3482,9 @@ export type EnumsBulkOperationErrorCode =
   | 'DUPLICATE_SUBJECT'
   | 'UNKNOWN_REFERENCE'
   | 'MALFORMED_OPERATION'
-  | 'ALREADY_TAKEN';
+  | 'ALREADY_TAKEN'
+  | 'NAME_EN_MISSING'
+  | 'EAN_HELD';
 
 /**
  * `enums.CommentTranscription` in the gateway's OpenAPI document.
@@ -3489,7 +3557,8 @@ export type EnumsHarvestWarningCode =
   | 'COPY_TARGET_GONE'
   | 'COPY_SOURCE_NOT_WRITTEN'
   | 'SCOPE_KIND_MISMATCH'
-  | 'DETAIL_SKIPPED_UNKNOWN';
+  | 'DETAIL_SKIPPED_UNKNOWN'
+  | 'PRICE_SOLD_ANOTHER_WAY';
 
 /**
  * `enums.ItemPriceWrittenBy` in the gateway's OpenAPI document.
@@ -3582,6 +3651,32 @@ export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
  * `enums.Permission` in the gateway's OpenAPI document.
  */
 export type EnumsPermission = 'shopMap.record';
+
+/**
+ * `enums.PlaceLinkField` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceLinkField =
+  | 'COORDINATES'
+  | 'EXTERNAL_REF'
+  | 'POSTAL_CODE'
+  | 'FOOTPRINT'
+  | 'ADDRESS'
+  | 'CITY'
+  | 'COUNTRY';
+
+/**
+ * `enums.PlaceLinkSkipReason` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceLinkSkipReason = 'SEVERAL_SHOPS' | 'PROVIDER_NOT_NAMED';
+
+/**
+ * `enums.PlaceMatchRung` in the gateway's OpenAPI document.
+ */
+export type EnumsPlaceMatchRung =
+  | 'EXTERNAL_REF'
+  | 'NEARBY'
+  | 'ADDRESS'
+  | 'SAME_CHAIN_NEAR';
 
 /**
  * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
@@ -3964,6 +4059,7 @@ export type HarvestDiscoveredPlaceView = {
   supermarketLocationId: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  candidates: HarvestPlaceLocationCandidate[];
 };
 
 /**
@@ -4110,6 +4206,8 @@ export type HarvestItemSourceEntryView = {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  soldByWeight: boolean;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -4130,6 +4228,70 @@ export type HarvestItemSourceEntryView = {
   decidedAt: string | null;
   prices: HarvestSourceEntryPriceView[];
   eanSharedBy: number | null;
+  scopeSharedWith: string[];
+};
+
+/**
+ * `harvest.LinkPlacesByRefResult` in the gateway's OpenAPI document.
+ */
+export type HarvestLinkPlacesByRefResult = {
+  applied: boolean;
+  linked: HarvestPlaceRefLink[];
+  skipped: HarvestPlaceRefSkip[];
+};
+
+/**
+ * `harvest.LocationRefHolder` in the gateway's OpenAPI document.
+ */
+export type HarvestLocationRefHolder = {
+  supermarketLocationId: string;
+  supermarketId: string;
+  supermarketName: CatalogLocalizedText;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  externalProvider: string | null;
+};
+
+/**
+ * `harvest.PlaceLinkResult` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceLinkResult = {
+  place: HarvestDiscoveredPlaceView;
+  filled: EnumsPlaceLinkField[];
+  refHeldBy?: HarvestLocationRefHolder | null;
+};
+
+/**
+ * `harvest.PlaceLocationCandidate` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceLocationCandidate = {
+  supermarketLocationId: string;
+  supermarketId: string;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  rung: EnumsPlaceMatchRung;
+  metres: number | null;
+};
+
+/**
+ * `harvest.PlaceRefLink` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceRefLink = {
+  place: HarvestDiscoveredPlaceView;
+  shop: HarvestPlaceLocationCandidate;
+  filled: EnumsPlaceLinkField[];
+};
+
+/**
+ * `harvest.PlaceRefSkip` in the gateway's OpenAPI document.
+ */
+export type HarvestPlaceRefSkip = {
+  place: HarvestDiscoveredPlaceView;
+  reason: EnumsPlaceLinkSkipReason;
+  shops: HarvestPlaceLocationCandidate[];
 };
 
 /**
@@ -4177,13 +4339,93 @@ export type HarvestPostalCodeDiscoverySummaryView = {
 };
 
 /**
- * `harvest.SourceCatalogEntryPage` in the gateway's OpenAPI document.
+ * `harvest.QueuedSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
  */
-export type HarvestSourceCatalogEntryPage = {
-  items: HarvestSourceCatalogEntryView[];
+export type HarvestQueuedSourceEntryPage = {
+  items: HarvestQueuedSourceEntryView[];
   nextCursor: string | null;
+};
+
+/**
+ * `harvest.QueuedSourceEntryView` in the gateway's OpenAPI document.
+ */
+export type HarvestQueuedSourceEntryView = {
+  id: string;
+  supermarketId: string;
+  externalId: string;
+  sourceKind: EnumsPriceSourceKind;
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  soldByWeight: boolean;
+  sizeFormat: string | null;
+  packCount: number | null;
+  categoryPath: string[];
+  url: string | null;
+  extra: {
+    [key: string]: unknown;
+  } | null;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
+  itemId: string | null;
+  candidateEntryId: string | null;
+  status: EnumsSourceEntryStatus;
+  matchedBy: EnumsItemSourceMatch | null;
+  confidence: number;
+  decidedAt: string | null;
+  prices: HarvestSourceEntryPriceView[];
+  brandMatches: CatalogBrandMatchView[];
+};
+
+/**
+ * `harvest.SettleItemAtChainResult` in the gateway's OpenAPI document.
+ */
+export type HarvestSettleItemAtChainResult = {
+  itemId: string;
+  supermarketId: string;
+  dryRun: boolean;
+  boundEntryIds: string[];
+  pricesWithdrawn: number;
+  pricesWithdrawnAt: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    deleted: number;
+  }[];
+  pricesRestated: number;
+  pricesNotCurrent: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+  }[];
+  pricesNotWritable: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  pricesWritten: number;
+  pricesKeptAsWritten: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    heldAs: EnumsPriceSourceKind;
+  }[];
+  pricesWithheld: HarvestSourceEntryPriceWithheld[];
+  offersRemoved: string[];
+  offersKept: {
+    priceScopeId: string;
+    reason: 'PRICED' | 'SHOP_ROW' | 'PERSON' | 'NO_TRAIL';
+  }[];
+  shopRowsRemoved: number;
+  shopRowsCleared: number;
+  shopRowConflicts: {
+    supermarketLocationId: string;
+    held: boolean | null;
+  }[];
 };
 
 /**
@@ -4198,6 +4440,8 @@ export type HarvestSourceCatalogEntryView = {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  soldByWeight: boolean;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -4226,6 +4470,8 @@ export type HarvestSourceEntryAcceptResult = {
   entry: HarvestSourceCatalogEntryView;
   pricesWritten: number;
   createdItem: CatalogItemView | null;
+  pricesWithheld: HarvestSourceEntryPriceWithheld[];
+  settled: HarvestSettleItemAtChainResult | null;
 };
 
 /**
@@ -4256,10 +4502,12 @@ export type HarvestSourceEntryPriceSkip = {
 export type HarvestSourceEntryPriceView = {
   id: string;
   priceScopeId: string;
+  sourceKind: EnumsPriceSourceKind | null;
   price: number | null;
   currency: string;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   validFrom: string | null;
   validUntil: string | null;
   details: {
@@ -4267,6 +4515,16 @@ export type HarvestSourceEntryPriceView = {
   } | null;
   observedAt: string;
   runId: string | null;
+};
+
+/**
+ * `harvest.SourceEntryPriceWithheld` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryPriceWithheld = {
+  entryId: string;
+  priceScopeId: string;
+  otherEntryIds: string[];
+  kindUnknown?: true;
 };
 
 /**

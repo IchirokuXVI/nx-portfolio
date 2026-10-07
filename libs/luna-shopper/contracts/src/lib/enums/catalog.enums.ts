@@ -129,6 +129,17 @@ export enum BulkOperationErrorCode {
   MALFORMED_OPERATION = 'MALFORMED_OPERATION',
   /** Another row already holds the identifier this one would take. */
   ALREADY_TAKEN = 'ALREADY_TAKEN',
+  /**
+   * A `createItem` whose product would have no English name (plan 0184). The
+   * route translates nothing, so the file states both names.
+   */
+  NAME_EN_MISSING = 'NAME_EN_MISSING',
+  /**
+   * An `accept` of a row whose real barcode another product holds (plan 0185).
+   * A barcode names one product, so the row belongs to the product that holds
+   * it, or the barcode sits on the wrong product. A person settles which.
+   */
+  EAN_HELD = 'EAN_HELD',
 }
 
 /**

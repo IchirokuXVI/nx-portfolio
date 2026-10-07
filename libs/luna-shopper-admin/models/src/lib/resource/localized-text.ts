@@ -2,7 +2,7 @@
  * A `jsonb` column holding one string per locale (plan 0004, section 2).
  *
  * Every name and label on supermarkets, items, locations and price scopes is
- * one of these, so the generic form renders one input per locale from the
+ * one of these, so the record page renders one input per locale from the
  * start. Retrofitting that when the first Spanish name is needed would mean
  * touching every screen at once.
  *

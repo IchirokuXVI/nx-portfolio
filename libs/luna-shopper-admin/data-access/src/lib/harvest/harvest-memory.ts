@@ -19,7 +19,9 @@ import {
   HARVEST_RUN_PRICE_SEED,
   HARVEST_RUN_SEED,
   ITEM_SOURCE_ENTRY_SEED,
-  PLACE_CANDIDATE_SEED,
+  PLACE_CHAIN_SEED,
+  PLACE_FOOTPRINT_SEED,
+  PLACE_SHOP_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
@@ -42,6 +44,17 @@ import type {
   ShopQuery,
   SourceEntryAcceptResult,
 } from './harvest-service';
+import {
+  asRefHolder,
+  candidate,
+  chainOfPlace,
+  decideByRef,
+  linkFields,
+  refHolder,
+  strictShops,
+  suggestShops,
+  type LinkableShop,
+} from './place-linking';
 
 /** How many rows a page holds when nothing asks for a size. */
 const PAGE_SIZE = 25;
@@ -75,6 +88,11 @@ export class HarvestMemory implements HarvestServiceI {
   private readonly _places: Wire.HarvestDiscoveredPlaceView[] = clone(
     DISCOVERED_PLACE_SEED
   );
+  /**
+   * The shops of the catalog that a place can be linked to. A link fills these
+   * rows, so the next read works its candidates out against what was written.
+   */
+  private readonly _placeShops: LinkableShop[] = clone(PLACE_SHOP_SEED);
   private readonly _entries: Wire.HarvestSourceCatalogEntryView[] =
     clone(SOURCE_ENTRY_SEED);
   private readonly _sources: Wire.HarvestSupermarketSourceView[] = clone(
@@ -334,7 +352,19 @@ export class HarvestMemory implements HarvestServiceI {
           place.postalCode === query.postalCode)
     );
 
-    return page(matching, query);
+    // The candidates are worked out on the read and stored nowhere, and only
+    // for a place nobody decided (backend plan 0193, target 5).
+    const read = page(matching, query);
+    return {
+      ...read,
+      items: read.items.map((place) => ({
+        ...place,
+        candidates:
+          place.status === 'NEW'
+            ? suggestShops(place, this._placeShops, PLACE_CHAIN_SEED)
+            : [],
+      })),
+    };
   }
 
   async placeGroups(
@@ -373,12 +403,24 @@ export class HarvestMemory implements HarvestServiceI {
    * An import, refused the ways the server refuses one (backend plans 0152 and
    * 0153).
    *
-   * An imported place answers `place_already_imported`. A place the seed says
-   * the catalog may already hold answers `place_matches_location` with the
-   * candidates under `details`, unless `force` is sent. An OpenStreetMap place
+   * An imported place answers `place_already_imported`. A place that one of
+   * the three strict rungs finds a shop for answers `place_matches_location`
+   * with the candidates under `details`, unless `force` is sent. A shop that
+   * is only near is a hint, and it refuses nothing. An OpenStreetMap place
    * with no brand key and no chain named answers the plain conflict the
    * harvester answers, because the place cannot say what language its name is
    * in; `newChain` is the way through.
+   *
+   * **The strict rungs read the shops of one chain**: the chain that the
+   * request names, else the chain of the place. A place that resolves to no
+   * chain gets a chain of its own, which has no shop yet, so nothing is
+   * matched.
+   *
+   * **A reference that another shop holds refuses the import, also with
+   * `force`** (backend plan 0195). The answer is 409
+   * `location_external_ref_taken` with the reference and the holder under
+   * `details`. The holder is any shop with that reference: the catalog reads
+   * neither the chain nor the provider.
    */
   async importPlace(
     id: string,
@@ -386,8 +428,18 @@ export class HarvestMemory implements HarvestServiceI {
   ): Promise<Wire.HarvestDiscoveredPlaceView> {
     const place = this._undecidedPlace(id);
 
-    if (input.force !== true) {
-      const candidates = PLACE_CANDIDATE_SEED[place.id] ?? [];
+    const picked = (input.supermarketId ?? '').trim();
+    const chainId =
+      picked !== ''
+        ? picked
+        : (chainOfPlace(place, PLACE_CHAIN_SEED)?.id ?? null);
+
+    if (input.force !== true && chainId !== null) {
+      const candidates = strictShops(
+        place,
+        this._placeShops.filter((shop) => shop.supermarketId === chainId),
+        true
+      );
       if (candidates.length > 0) {
         throw new GatewayError({
           code: 'place_matches_location',
@@ -415,16 +467,117 @@ export class HarvestMemory implements HarvestServiceI {
       });
     }
 
+    const holder = refHolder(place.externalRef, this._placeShops);
+    if (holder !== null) {
+      throw new GatewayError({
+        code: 'location_external_ref_taken',
+        status: 409,
+        correlationId: '',
+        details: {
+          externalRef: place.externalRef,
+          heldBy: asRefHolder(holder, PLACE_CHAIN_SEED),
+        },
+      });
+    }
+
     return this._decidePlace(id, 'IMPORTED', input.supermarketId ?? null);
   }
 
-  /** A place joins a shop the catalog holds, and nothing is created. */
+  /**
+   * A place joins a shop the catalog holds, and nothing is created (backend
+   * plan 0193, targets 1 to 4).
+   *
+   * The shop that is named decides the chain. A place that names no chain
+   * links with no question. A place that names another chain answers 409
+   * `place_names_another_chain` with that chain under `details`, and writes
+   * nothing, unless `acrossChains` is sent. The answer says which fields of
+   * the shop the link filled.
+   *
+   * A reference that another shop holds is left empty, and the link is made
+   * (backend plan 0195). The answer then lacks `EXTERNAL_REF` and names the
+   * holder in `refHeldBy`.
+   */
   async linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
-  ): Promise<Wire.HarvestDiscoveredPlaceView> {
-    this._undecidedPlace(id);
-    return this._decidePlace(id, 'IMPORTED', input.supermarketLocationId);
+  ): Promise<Wire.HarvestPlaceLinkResult> {
+    const place = this._undecidedPlace(id);
+    const shop = this._placeShops.find(
+      (row) => row.id === input.supermarketLocationId
+    );
+    if (shop === undefined) {
+      throw notFound();
+    }
+
+    if (input.acrossChains !== true) {
+      const chain = chainOfPlace(place, PLACE_CHAIN_SEED);
+      if (chain !== null && chain.id !== shop.supermarketId) {
+        throw new GatewayError({
+          code: 'place_names_another_chain',
+          status: 409,
+          correlationId: '',
+          details: { chain: { id: chain.id, name: { ...chain.name } } },
+        });
+      }
+    }
+
+    return this._linkPlace(place, shop);
+  }
+
+  /**
+   * Link every place that a shop was made from (backend plan 0193, target 8).
+   *
+   * Without `apply` nothing changes and the answer says what would. A place is
+   * linked when exactly one shop carries its reference and names the same
+   * provider. A second call with `apply` finds nothing, because a linked place
+   * is no longer `NEW`.
+   */
+  async linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult> {
+    const apply = input.apply === true;
+    const result: Wire.HarvestLinkPlacesByRefResult = {
+      applied: apply,
+      linked: [],
+      skipped: [],
+    };
+
+    for (const place of this._places) {
+      if (place.status !== 'NEW') {
+        continue;
+      }
+      const decision = decideByRef(place, this._placeShops);
+      if (decision === null) {
+        continue;
+      }
+      if (decision.kind === 'skip') {
+        result.skipped.push({
+          place: { ...place, candidates: [] },
+          reason: decision.reason,
+          shops: decision.shops.map((shop) =>
+            candidate(place, shop, 'EXTERNAL_REF')
+          ),
+        });
+        continue;
+      }
+
+      const shop = candidate(place, decision.shop, 'EXTERNAL_REF');
+      // The dry answer shows the place as it is and what the link would
+      // write. With `apply` the same row comes back imported.
+      const linked = apply
+        ? this._linkPlace(place, decision.shop)
+        : {
+            place: { ...place, candidates: [] },
+            filled: linkFields(
+              place,
+              decision.shop,
+              PLACE_FOOTPRINT_SEED[place.id] ?? null
+            ).filled,
+          };
+      result.linked.push({ ...linked, shop });
+    }
+
+    return result;
   }
 
   /**
@@ -445,7 +598,7 @@ export class HarvestMemory implements HarvestServiceI {
    */
   async listEntries(
     query: EntryQuery
-  ): Promise<Wire.HarvestSourceCatalogEntryPage> {
+  ): Promise<Wire.HarvestQueuedSourceEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
     const chain = query.supermarketId ?? '';
     const matching = this._entries.filter(
@@ -468,7 +621,14 @@ export class HarvestMemory implements HarvestServiceI {
           (entry.ean ?? '').includes(term))
     );
 
-    return page(matching, query);
+    // The route answers each row with the registered brands its printed brand
+    // names (backend plan 0178). Nothing here reads them yet, and this fake
+    // holds no registry to answer from, so every row names none.
+    const { items, nextCursor } = page(matching, query);
+    return {
+      items: items.map((entry) => ({ ...entry, brandMatches: [] })),
+      nextCursor,
+    };
   }
 
   /**
@@ -489,6 +649,10 @@ export class HarvestMemory implements HarvestServiceI {
       entry: { ...entry },
       pricesWritten: writablePrices(entry),
       createdItem: null,
+      // Backend plan 0191. This double holds no second row of a product and
+      // no product a row left, so it withholds nothing and settles nothing.
+      pricesWithheld: [],
+      settled: null,
     };
   }
 
@@ -509,13 +673,17 @@ export class HarvestMemory implements HarvestServiceI {
     const es = input.name?.es ?? entry.name;
     const en = input.name?.en;
 
+    // The barcode the product is created with, and the list a product answers
+    // every barcode it holds in (backend plan 0185): this one, or none.
+    const ean = input.ean ?? entry.ean;
     const item: Wire.CatalogItemView = {
       id: `item-${this._nextId++}`,
       name: en === undefined || en === '' ? { es } : { es, en },
       brand: input.brand ?? entry.brand,
       imageUrl: null,
       sku: entry.externalId,
-      ean: input.ean ?? entry.ean,
+      ean,
+      eans: ean ? [ean] : [],
       unitSize: input.unitSize ?? entry.unitSize,
       packCount:
         input.packCount === undefined ? entry.packCount : input.packCount,
@@ -530,6 +698,8 @@ export class HarvestMemory implements HarvestServiceI {
       entry: { ...entry },
       pricesWritten: writablePrices(entry),
       createdItem: item,
+      pricesWithheld: [],
+      settled: null,
     };
   }
 
@@ -868,6 +1038,8 @@ export class HarvestMemory implements HarvestServiceI {
                   other.supermarketId === entry.supermarketId &&
                   other.ean === entry.ean
               ).length,
+        // Backend plan 0191: the rows that price a scope this row prices too.
+        scopeSharedWith: [],
       }));
 
     return page(matching, query);
@@ -1252,6 +1424,43 @@ export class HarvestMemory implements HarvestServiceI {
     place.status = status;
     place.supermarketLocationId = supermarketLocationId;
     return { ...place };
+  }
+
+  /**
+   * Fill what the shop lacks from the place, and mark the place imported.
+   *
+   * A reference that another shop holds is not written, and neither is its
+   * provider. The other fields are, and the answer names the holder.
+   */
+  private _linkPlace(
+    place: Wire.HarvestDiscoveredPlaceView,
+    shop: LinkableShop
+  ): Wire.HarvestPlaceLinkResult {
+    const { patch, filled } = linkFields(
+      place,
+      shop,
+      PLACE_FOOTPRINT_SEED[place.id] ?? null
+    );
+    const holder =
+      patch.externalRef === undefined
+        ? null
+        : refHolder(patch.externalRef, this._placeShops, shop.id);
+    if (holder !== null) {
+      delete patch.externalRef;
+      delete patch.externalProvider;
+    }
+
+    Object.assign(shop, patch);
+    return {
+      place: this._decidePlace(place.id, 'IMPORTED', shop.id),
+      filled:
+        holder === null
+          ? filled
+          : filled.filter((field) => field !== 'EXTERNAL_REF'),
+      ...(holder === null
+        ? {}
+        : { refHeldBy: asRefHolder(holder, PLACE_CHAIN_SEED) }),
+    };
   }
 
   private _preset(id: string): StoredPreset {

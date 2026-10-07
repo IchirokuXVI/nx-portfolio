@@ -12,6 +12,7 @@ import {
   ServerReachability,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { EntryCard } from '@portfolio/luna-shopper-admin/ui';
 
 /**
  * The gateway stopped answering, and nothing was lost (plan 0008, sections 4
@@ -51,14 +52,16 @@ import {
  */
 @Component({
   selector: 'lib-server-down-overlay',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, EntryCard],
   template: `
-    <section>
-      <h2 id="server-down-heading">{{ 'serverDown.heading' | rokuT }}</h2>
+    <lib-entry-card
+      [heading]="'serverDown.heading' | rokuT"
+      headingId="server-down-heading"
+    >
       <p>{{ 'serverDown.body' | rokuT }}</p>
 
       @if (signedIn()) {
-        <p class="warning" role="alert">
+        <p class="entry-warning" role="alert">
           {{ 'serverDown.doNotReload' | rokuT }}
         </p>
       }
@@ -81,7 +84,7 @@ import {
       >
         {{ (checking() ? 'serverDown.checking' : 'serverDown.retry') | rokuT }}
       </button>
-    </section>
+    </lib-entry-card>
   `,
   host: {
     role: 'dialog',
@@ -106,61 +109,8 @@ import {
       overflow-y: auto;
     }
 
-    section {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-2);
-      inline-size: 100%;
-      max-inline-size: 22rem;
-      padding: var(--admin-space-6);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
-
-    h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    p {
-      font-size: 0.875rem;
-      color: var(--admin-ink-muted);
-    }
-
-    .warning {
-      margin-block-start: var(--admin-space-3);
-      padding: var(--admin-space-3);
-      border-radius: var(--admin-radius);
-      background: var(--admin-danger-wash);
-      font-weight: 600;
-      color: var(--admin-ink);
-    }
-
     .status {
-      margin-block-start: var(--admin-space-3);
-    }
-
-    button {
-      margin-block-start: var(--admin-space-4);
-      min-block-size: 2.75rem;
-      border: 1px solid transparent;
-      border-radius: var(--admin-radius);
-      background: var(--admin-accent);
-      font: inherit;
-      font-weight: 600;
-      color: var(--admin-accent-ink);
-      cursor: pointer;
-    }
-
-    button:focus-visible {
-      outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
-    }
-
-    button:disabled {
-      opacity: 0.55;
-      cursor: default;
+      margin-block-start: var(--admin-space-2);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

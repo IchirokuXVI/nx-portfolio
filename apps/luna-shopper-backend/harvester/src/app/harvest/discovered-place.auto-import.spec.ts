@@ -335,6 +335,83 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     expect(harness.stored[0].supermarketLocationId).toBeFalsy();
   });
 
+  it('leaves a place 60 metres from a shop of its chain in the queue (plan 0193)', async () => {
+    // Outside the strict 50 metres, so a hand import would not stop on it.
+    // The run has nobody watching, so it waits on the hint too: two real
+    // shops of the first catalog sit 54.9 m and 61.8 m from their place.
+    const harness = build({
+      locations: [
+        {
+          id: 'loc-seeded',
+          supermarketId: 'chain-lidl',
+          latitude: 37.8882 + 60 / 111_194.93,
+          longitude: -4.8035,
+          externalRef: null,
+          externalProvider: null,
+        } as SupermarketLocationView,
+      ],
+    });
+
+    const result = await harness.service.observe([observed()], options());
+
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+    expect(result.imported).toBe(0);
+    expect(result.blocked).toEqual([]);
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+    expect(harness.stored[0].supermarketLocationId).toBeFalsy();
+  });
+
+  it('imports a place 300 metres from the nearest shop of its chain', async () => {
+    // Beyond the hint, so it is another shop and the trusted path creates it.
+    const harness = build({
+      locations: [
+        {
+          id: 'loc-seeded',
+          supermarketId: 'chain-lidl',
+          latitude: 37.8882 + 300 / 111_194.93,
+          longitude: -4.8035,
+          externalRef: null,
+          externalProvider: null,
+        } as SupermarketLocationView,
+      ],
+    });
+
+    const result = await harness.service.observe([observed()], options());
+
+    expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+    expect(result.imported).toBe(1);
+  });
+
+  it('never reopens a rejected place that now sits beside a shop', async () => {
+    const harness = build({
+      existing: {
+        id: 'place-1',
+        provider: 'LIDL',
+        externalRef: 'lidl/1234',
+        status: DiscoveredPlaceStatus.REJECTED,
+        supermarketLocationId: null,
+        footprintM2: null,
+      },
+      locations: [
+        {
+          id: 'loc-seeded',
+          supermarketId: 'chain-lidl',
+          latitude: 37.8882,
+          longitude: -4.8035,
+          externalRef: 'lidl/1234',
+          externalProvider: 'LIDL',
+        } as SupermarketLocationView,
+      ],
+    });
+
+    await harness.service.observe([observed()], options());
+
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.REJECTED);
+    expect(harness.stored[0].supermarketLocationId).toBeNull();
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+    expect(harness.catalog.listAllSupermarketLocations).not.toHaveBeenCalled();
+  });
+
   it('lists a chain’s shops once per run, and matches the shops it created', async () => {
     // Two places of one shop in one run: the second meets the shop the first
     // created rather than creating another.
@@ -387,5 +464,39 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     expect(result.imported).toBe(1);
     expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
     expect(harness.stored[1].status).toBe(DiscoveredPlaceStatus.IMPORTED);
+  });
+
+  it('keeps the run past a place whose reference another shop holds (plan 0195)', async () => {
+    // Catalog holds one shop for each reference. The place stays in the
+    // queue for a person, and the run never creates a shop with no
+    // reference. No import does.
+    const harness = build();
+    harness.catalog.createLocation.mockRejectedValueOnce({
+      status: 409,
+      code: 'location_external_ref_taken',
+      message: 'Another shop already holds that external reference.',
+      correlationId: 'corr-1',
+      details: {
+        externalRef: 'lidl/1',
+        heldBy: { supermarketLocationId: 'loc-holder' },
+      },
+    });
+
+    const result = await harness.service.observe(
+      [
+        observed({ externalRef: 'lidl/1' }),
+        observed({ externalRef: 'lidl/2', latitude: 37.9 }),
+      ],
+      options()
+    );
+
+    expect(result.imported).toBe(1);
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+    expect(harness.stored[0].supermarketLocationId ?? null).toBeNull();
+    expect(harness.stored[1].status).toBe(DiscoveredPlaceStatus.IMPORTED);
+    expect(harness.catalog.createLocation).toHaveBeenCalledTimes(2);
+    for (const [sent] of harness.catalog.createLocation.mock.calls) {
+      expect(sent).toHaveProperty('externalRef');
+    }
   });
 });

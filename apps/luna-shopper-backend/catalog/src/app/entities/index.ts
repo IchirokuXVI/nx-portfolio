@@ -1,7 +1,9 @@
+import { BrandHomonym } from './brand-homonym.entity';
 import { Brand } from './brand.entity';
 import { CatalogAudit } from './catalog-audit.entity';
 import { CategoryMember } from './category-member.entity';
 import { Category } from './category.entity';
+import { ItemEan } from './item-ean.entity';
 import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { ItemPrice } from './item-price.entity';
 import { Item } from './item.entity';
@@ -23,6 +25,7 @@ import {
 import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
+export { BrandHomonym } from './brand-homonym.entity';
 export { Brand } from './brand.entity';
 export {
   AuditAction,
@@ -31,6 +34,7 @@ export {
 } from './catalog-audit.entity';
 export { CategoryMember } from './category-member.entity';
 export { Category } from './category.entity';
+export { ItemEan } from './item-ean.entity';
 export { ItemPriceDetailsRow } from './item-price-details.entity';
 export { ItemPrice } from './item-price.entity';
 export { Item } from './item.entity';
@@ -63,7 +67,11 @@ export const CATALOG_ENTITIES = [
   // The registry a person fills, before items: an item may point at one
   // (plan 0115, section 3.2).
   Brand,
+  // The other brands a printed key names (plan 0178), after the brands.
+  BrandHomonym,
   Item,
+  // Every barcode of every product (plan 0185), after the products.
+  ItemEan,
   // The category tree, and the products on its leaves (plan 0166). The tree
   // comes after nothing it names; the membership after both sides.
   Category,

@@ -68,6 +68,7 @@ const item = (id: string, extra: Partial<ItemView> = {}): ItemView => ({
   imageUrl: null,
   sku: null,
   ean: null,
+  eans: [],
   unitSize: 1,
   categories: [
     {

@@ -8,10 +8,28 @@ import {
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
-import { itemSource } from './catalog-sources';
-import { ItemFormPage } from './item-form-page';
+import { itemSource, priceSource } from './catalog-sources';
+import { ProductCounts } from './products/product-context';
+import {
+  productListGateway,
+  type ScopePriced,
+} from './products/product-list-gateway';
+import { ProductPricesTab } from './products/product-prices-tab';
+import { ProductSourcesTab, ProductWhereTab } from './products/product-tabs';
 import { SetCategoriesPanel } from './set-categories-panel';
 import { SetGroupPanel } from './set-group-panel';
+
+/**
+ * The Prices tab of a product: its prices by chain and scope. The name of the
+ * part, the key of its count, and the segment the `prices` resource is at.
+ */
+export const PRODUCT_PRICES_TAB = 'prices';
+
+/** The "Where it is" tab: the product in each chain's shops. */
+export const PRODUCT_WHERE_TAB = 'where';
+
+/** The Sources tab: the chain rows that name the product. */
+export const PRODUCT_SOURCES_TAB = 'sources';
 
 /**
  * A product, as the gateway describes it, plus the ids of its categories.
@@ -24,7 +42,7 @@ import { SetGroupPanel } from './set-group-panel';
  */
 export type Item = Wire.CatalogItemView & {
   readonly categoryIds: readonly string[];
-};
+} & ScopePriced;
 
 /** A product row with the ids its categories carry, in their order. */
 export function withCategoryIds(row: Wire.CatalogItemView): Item {
@@ -62,8 +80,14 @@ export function itemGateway(
  * answer rather than a gap** (backend plan 0073, section 4). The admin read
  * names no price scopes, because an operator has no postal code and no shopping
  * profile, so there is no set of scopes that is theirs and inventing one would
- * price the catalog from somewhere arbitrary. What a product costs is the price
- * screen, which lists prices as prices and says which scope each belongs to.
+ * price the catalog from somewhere arbitrary. What a product costs is asked
+ * at one scope the operator names: the list's "Prices at" picker reads the
+ * shown price of every row of a page at that scope, in one request, and lays
+ * it on the row as `scopePrice` (admin plan 0043).
+ *
+ * **The products sit at their section's own address**, `/products`, so the
+ * segment is empty. Their groups, their categories and the price rules are
+ * the other tabs of that section, each one segment under it.
  *
  * **"None" on the group filter is the filter with no user facing counterpart**
  * (plan 0012, section 2). An ungrouped product is invisible to every "show me
@@ -80,14 +104,15 @@ export function itemGateway(
  */
 export const ITEMS = defineResource<Item>({
   name: 'items',
-  segment: 'items',
-  labels: { one: 'catalog.items.one', many: 'catalog.items.many' },
+  // At the section's own address: see above.
+  segment: '',
+  labels: {
+    one: 'catalog.items.one',
+    many: 'catalog.items.many',
+    create: 'catalog.items.add',
+  },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
-
-  // The generic form, with the source products panel and the way to the
-  // product's prices at every scope below it (admin plan 0033).
-  editor: ItemFormPage,
 
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.items.id', editable: false },
@@ -100,6 +125,9 @@ export const ITEMS = defineResource<Item>({
       maxLength: 200,
     },
     {
+      // Text, and not a picker over the registered brands: the gateway reads
+      // and writes the brand of a product as text, and works out the
+      // registered brand by itself (admin plan 0055, section 3).
       kind: 'text',
       name: 'brand',
       label: 'catalog.items.brand',
@@ -111,6 +139,7 @@ export const ITEMS = defineResource<Item>({
       name: 'ean',
       label: 'catalog.items.ean',
       help: 'catalog.items.eanHelp',
+      format: 'code',
       nullable: true,
       maxLength: 32,
     },
@@ -118,6 +147,7 @@ export const ITEMS = defineResource<Item>({
       kind: 'text',
       name: 'sku',
       label: 'catalog.items.sku',
+      format: 'code',
       nullable: true,
       maxLength: 120,
     },
@@ -143,6 +173,8 @@ export const ITEMS = defineResource<Item>({
       label: 'catalog.items.defaultUnit',
       options: UNIT_OF_MEASURE_OPTIONS,
       required: true,
+      // What most of the catalog is sold by, so a new product starts there.
+      initial: 'UNIT',
     },
     {
       kind: 'number',
@@ -169,7 +201,8 @@ export const ITEMS = defineResource<Item>({
       kind: 'text',
       name: 'imageUrl',
       label: 'catalog.items.imageUrl',
-      format: 'url',
+      // Its address, with the picture beside it.
+      format: 'image',
       nullable: true,
       maxLength: 500,
     },
@@ -240,6 +273,52 @@ export const ITEMS = defineResource<Item>({
     ],
   },
 
+  // What the record page draws (admin plan 0055, section 2.1). Details is
+  // the first tab, and the three that follow are parts of the product's own
+  // library. The page of a new product has no tabs.
+  record: {
+    sections: [
+      {
+        title: 'catalog.items.section.name',
+        fields: ['name', 'brand', 'ean', 'sku'],
+      },
+      {
+        title: 'catalog.items.section.where',
+        fields: ['categoryIds', 'productGroupId'],
+      },
+      {
+        title: 'catalog.items.section.sold',
+        fields: ['defaultUnit', 'unitSize', 'imageUrl'],
+      },
+    ],
+    children: [
+      {
+        as: 'tab',
+        name: PRODUCT_PRICES_TAB,
+        label: 'catalog.products.tabs.prices',
+        component: ProductPricesTab,
+      },
+      {
+        as: 'tab',
+        name: PRODUCT_WHERE_TAB,
+        label: 'catalog.products.tabs.where',
+        component: ProductWhereTab,
+      },
+      {
+        as: 'tab',
+        name: PRODUCT_SOURCES_TAB,
+        label: 'catalog.products.tabs.sources',
+        component: ProductSourcesTab,
+      },
+    ],
+    // No field of a product holds either count: the scopes that price it and
+    // the chain rows that name it are each another read.
+    counts: () => inject(ProductCounts).of,
+    // Catalog deletes the prices of a product with it (`item_prices` cascades
+    // on the item), so the question says so.
+    deleteBody: 'catalog.products.deleteBody',
+  },
+
   // What the server refuses about a product's categories is said under them.
   errorFields: {
     category_not_a_leaf: 'categoryIds',
@@ -247,8 +326,12 @@ export const ITEMS = defineResource<Item>({
     category_not_found: 'categoryIds',
   },
 
-  gateway: () =>
-    itemGateway(
-      inject(RESOURCE_GATEWAYS).for<Wire.CatalogItemView>(itemSource())
-    ),
+  gateway: () => {
+    const gateways = inject(RESOURCE_GATEWAYS);
+    // The products, able to show the price at one scope when the list asks.
+    return productListGateway(
+      itemGateway(gateways.for<Wire.CatalogItemView>(itemSource())),
+      gateways.for(priceSource())
+    );
+  },
 });

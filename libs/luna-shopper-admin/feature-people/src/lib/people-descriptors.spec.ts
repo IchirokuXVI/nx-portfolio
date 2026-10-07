@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import {
+  ACCOUNT_ROLES,
   RESOURCE_GATEWAYS,
   ResourceListStore,
   type ResourceSource,
@@ -11,17 +12,19 @@ import {
   fieldOf,
   hasDetailScreen,
   idOf,
+  recordLayout,
+  recordTabs,
   toInput,
   toRowView,
   type AnyResourceDescriptor,
   type ResourceGateway,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { ADMINS, toAdminPage } from './admins';
-import { BASKETS } from './baskets';
+import { BASKETS, ZONE_BASKETS } from './baskets';
 import { LIST_LINES } from './list-lines';
 import { LISTS } from './lists';
 import { MEMBERSHIPS } from './memberships';
+import { madeAt } from './people-format';
 import {
   ADMIN_SEED,
   BASKET_SEED,
@@ -31,8 +34,10 @@ import {
   USER_SEED,
   ZONE_SEED,
 } from './people-seed';
-import { USERS } from './users';
-import { ZONES } from './zones';
+import { ZONE_CAUTION } from './shopper-params';
+import { roleActions } from './user-roles';
+import { USERS, type User } from './users';
+import { ZONES, type Zone } from './zones';
 
 /**
  * The people descriptors, asserted rather than claimed.
@@ -50,7 +55,6 @@ const ALL: readonly AnyResourceDescriptor[] = [
   LISTS,
   LIST_LINES,
   BASKETS,
-  ADMINS,
 ];
 
 /** The five plan 0009 made editable, and the two it deliberately did not. */
@@ -62,7 +66,7 @@ const EDITABLE: readonly AnyResourceDescriptor[] = [
   LIST_LINES,
 ];
 
-const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS, ADMINS];
+const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS];
 
 const RENDER = { locale: 'en', contentLocales: CONTENT_LOCALES };
 
@@ -357,6 +361,158 @@ describe('the users descriptor', () => {
   });
 });
 
+describe('the page of a person', () => {
+  it('opens on Details, then its zones and its shopping lists', () => {
+    expect(recordTabs(USERS).map((tab) => tab.key)).toEqual([
+      'details',
+      'zones',
+      'baskets',
+    ]);
+  });
+
+  it('reads the account and its access as two sections', () => {
+    const layout = recordLayout(USERS, 'read');
+
+    expect(
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      [
+        'people.users.section.account',
+        ['username', 'displayName', 'email', 'kind'],
+      ],
+      [
+        'people.users.section.access',
+        ['roles', 'emailVerifiedAt', 'hasPassword', 'providers'],
+      ],
+    ]);
+    expect(layout.facts.added?.name).toBe('createdAt');
+    expect(layout.facts.changed?.name).toBe('updatedAt');
+    expect(layout.facts.addedLabel).toBe('people.users.record.signedUp');
+  });
+
+  it('links to the zones narrowed to the person two ways, with no count', () => {
+    expect(
+      (USERS.record?.children ?? [])
+        .filter((child) => child.as === 'link')
+        .map((child) => ('by' in child ? [child.by, child.count] : []))
+    ).toEqual([
+      ['ownerUserId', undefined],
+      ['userId', undefined],
+    ]);
+  });
+
+  it('says "Not yet" for an address nobody confirmed, and nothing else', () => {
+    const [rosa, marc, , guest] = USER_SEED;
+    const field = USERS.fields.find(
+      (entry) => entry.name === 'emailVerifiedAt'
+    );
+    const check = (row: User) => field?.check?.(row) ?? null;
+
+    expect(check(marc)).toEqual({ label: 'people.users.notConfirmed' });
+    expect(check(rosa)).toBeNull();
+    // A guest has no address, so there is nothing to confirm.
+    expect(check(guest)).toBeNull();
+  });
+
+  it('prints the sign in providers as one line', () => {
+    const [rosa] = USER_SEED;
+    const field = USERS.fields.find((entry) => entry.name === 'providers');
+
+    expect(field?.read?.({ ...rosa, providers: ['google', 'apple'] })).toBe(
+      'google, apple'
+    );
+  });
+});
+
+describe('the roles of a person, as actions', () => {
+  const [rosa, marc, , guest] = USER_SEED;
+  const offered = (row: User) =>
+    namedActionsOf(USERS)
+      .filter((action) => action.available?.(row) !== false)
+      .map((action) => action.name)
+      .filter((name) => name.includes('-role-'));
+
+  it('builds one to give and one to take away for every role', () => {
+    expect(
+      namedActionsOf(USERS)
+        .map((action) => action.name)
+        .filter((name) => name.includes('-role-'))
+    ).toEqual(
+      ACCOUNT_ROLES.flatMap((role) => [
+        `give-role-${role}`,
+        `take-role-${role}`,
+      ])
+    );
+  });
+
+  it('offers a person who holds a role to take it away, and to give the others', () => {
+    // marc holds the admin role.
+    expect(offered(marc)).toEqual(['take-role-admin', 'give-role-premium']);
+  });
+
+  it('offers a person who holds none to give each', () => {
+    expect(offered(rosa)).toEqual(['give-role-admin', 'give-role-premium']);
+  });
+
+  it('never offers a role to a guest', () => {
+    expect(offered(guest)).toEqual([]);
+  });
+
+  it('asks before each, with the words of the role, and destroys nothing', () => {
+    const roles = namedActionsOf(USERS).filter((action) =>
+      action.name.includes('-role-')
+    );
+
+    expect(
+      roles.map((action) => [action.confirm?.body, action.danger ?? false])
+    ).toEqual(
+      ACCOUNT_ROLES.flatMap((role) => [
+        [`people.users.confirm.grantRole.body.${role}`, false],
+        [`people.users.confirm.removeRole.body.${role}`, false],
+      ])
+    );
+    // A heading is drawn with no values put in, so it holds none.
+    expect(roles.map((action) => action.confirm?.heading)).toEqual(
+      ACCOUNT_ROLES.flatMap(() => [
+        'people.users.confirm.grantRole.heading',
+        'people.users.confirm.removeRole.heading',
+      ])
+    );
+  });
+
+  it('sends the whole set with one role changed', async () => {
+    const sent: string[] = [];
+    const actions = roleActions({
+      setUserRoles: async (id, roles) =>
+        void sent.push(`${id}:${roles.join(',')}`),
+    });
+    const run = (name: string, row: User) =>
+      actions.find((action) => action.name === name)?.run(row);
+
+    await run('give-role-premium', marc);
+    await run('take-role-admin', marc);
+    await run('give-role-admin', { ...marc, roles: ['premium'] });
+
+    expect(sent).toEqual([
+      `${marc.userId}:admin,premium`,
+      `${marc.userId}:`,
+      // In the order the server lists the roles, whatever was held first.
+      `${marc.userId}:admin,premium`,
+    ]);
+  });
+
+  it('marks the delete of an account as the one action that destroys', () => {
+    expect(
+      namedActionsOf(USERS)
+        .filter((action) => action.danger === true)
+        .map((action) => [action.name, action.after])
+    ).toEqual([['delete-account', 'leave']]);
+  });
+});
+
 describe('the zones descriptor', () => {
   /** One filter, by one user, which is the whole requirement (plan 0007, section 2). */
   it('filters by a single user, chosen by name', () => {
@@ -390,9 +546,101 @@ describe('the zones descriptor', () => {
     const named = toRowView(ZONES, kitchen, RENDER);
     const unresolved = toRowView(ZONES, allotment, RENDER);
 
-    expect(named.cells['ownerName'].text).toBe('rosa');
-    expect(unresolved.cells['ownerName'].text).toBe(allotment.ownerUserId);
-    expect(unresolved.cells['ownerName'].key).toBeUndefined();
+    expect(named.cells['ownerUserId'].text).toBe('rosa');
+    expect(unresolved.cells['ownerUserId'].text).toBe(allotment.ownerUserId);
+    expect(unresolved.cells['ownerUserId'].key).toBeUndefined();
+  });
+
+  /** The page of a zone resolves the name itself, and links to the person. */
+  it('holds the owner as a reference to the person that nobody types', () => {
+    const owner = ZONES.fields.find((field) => field.name === 'ownerUserId');
+
+    expect(owner).toMatchObject({
+      kind: 'reference',
+      resource: 'users',
+      nameFrom: 'ownerName',
+      editable: false,
+    });
+    expect(ZONES.fields.map((field) => field.name)).not.toContain('ownerName');
+  });
+
+  /**
+   * The sentence beside an open zone says the owner by name. The read of one
+   * zone carries no name, so the owner is named as the member they are, and
+   * an owner nothing names is left out. Never the ID.
+   */
+  it('names the owner in the brief sentence, and never by ID', () => {
+    const [kitchen, allotment] = ZONE_SEED;
+    const sentence = (row: Zone) => ZONES.list.brief?.sentence?.(row);
+
+    expect(sentence(kitchen)).toMatchObject({
+      key: 'people.zones.brief.owned',
+      args: { owner: 'rosa' },
+    });
+    // As the read of one zone answers: no name on the row, the members there.
+    expect(sentence({ ...kitchen, ownerName: null })).toMatchObject({
+      key: 'people.zones.brief.owned',
+      args: { owner: 'rosa' },
+    });
+    expect(sentence(allotment)).toMatchObject({
+      key: 'people.zones.brief.counts',
+    });
+    expect(JSON.stringify(sentence(allotment))).not.toContain(
+      String(allotment.ownerUserId)
+    );
+    expect(sentence({ ...allotment, ownerUserId: null })).toMatchObject({
+      key: 'people.zones.brief.noOwner',
+    });
+  });
+
+  it('opens on its members, with Details last, and counts two tabs', () => {
+    expect(recordTabs(ZONES).map((tab) => tab.key)).toEqual([
+      'members',
+      'lists',
+      'zone-baskets',
+      'details',
+    ]);
+    expect(
+      (ZONES.record?.children ?? []).map((child) => child.count ?? null)
+    ).toEqual(['memberCount', 'listCount', null]);
+  });
+
+  it('reads the zone, its state and its settings as three sections', () => {
+    const layout = recordLayout(ZONES, 'read');
+
+    expect(
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      ['people.zones.section.zone', ['name', 'ownerUserId', 'joinCode']],
+      [
+        'people.zones.section.state',
+        ['status', 'markedForDeletionAt', 'pendingCount'],
+      ],
+      ['people.zones.section.settings', ['config']],
+    ]);
+    expect(layout.facts.added?.name).toBe('createdAt');
+    expect(layout.facts.changed?.name).toBe('updatedAt');
+    expect(
+      ZONES.fields.find((field) => field.name === 'joinCode')
+    ).toMatchObject({ format: 'code' });
+  });
+
+  it('marks the three actions that harm, and leaves after the delete', () => {
+    expect(
+      namedActionsOf(ZONES).map((action) => [
+        action.name,
+        action.danger ?? false,
+        action.after ?? 'reload',
+      ])
+    ).toEqual([
+      ['regenerate-join-code', true, 'reload'],
+      ['mark-for-deletion', true, 'reload'],
+      ['restore-zone', false, 'reload'],
+      ['delete-zone', true, 'leave'],
+    ]);
   });
 
   it('offers the four zone actions and no membership action', () => {
@@ -440,60 +688,92 @@ describe('the list and shopping list descriptors', () => {
     expect(BASKETS.list.columns).toContain('lineCount');
   });
 
-  it('filters lists by zone and by owner', () => {
-    expect(LISTS.filters?.map((filter) => filter.param)).toEqual([
-      'zoneId',
-      'createdByUserId',
+  /**
+   * Admin plan 0045: the lists are a tab of their zone, so the zone comes from
+   * the address. Lists by who made them is dropped, by the owner's decision.
+   */
+  it('reads the zone of a list from the address, and offers no filter', () => {
+    expect(LISTS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(LISTS.filters).toBeUndefined();
+    expect(LISTS.list.columns).not.toContain('zoneName');
+  });
+
+  it('says behind the info button who adds a line and who corrects one', () => {
+    expect(LISTS.info?.points).toEqual([
+      'people.lists.info.corrects',
+      'people.lists.info.adds',
     ]);
   });
 
-  it('filters shopping lists by owner and by zone', () => {
-    expect(BASKETS.filters?.map((filter) => filter.param)).toEqual([
-      'ownerUserId',
-      'zoneId',
-    ]);
+  /**
+   * One collection, two tabs. A person's tab takes the owner from the address
+   * and a zone's tab takes the zone, and each still offers the other filter.
+   */
+  it('lists shopping lists under a person and under a zone', () => {
+    expect(BASKETS.parent).toEqual({
+      resource: 'users',
+      param: 'userId',
+      filter: 'ownerUserId',
+    });
+    expect(ZONE_BASKETS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(ZONE_BASKETS.segment).toBe(BASKETS.segment);
+    expect(ZONE_BASKETS.fields).toEqual(BASKETS.fields);
+
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(descriptor.filters?.map((filter) => filter.param)).toEqual([
+        'ownerUserId',
+        'zoneId',
+      ]);
+    }
   });
 
   /** A basket needs no name, and an unnamed one is the ordinary case. */
-  it('calls an unnamed shopping list by its id', () => {
+  it('calls an unnamed shopping list by when it was made, never by its ID', () => {
     const [named, unnamed] = BASKET_SEED;
 
     expect(BASKETS.title(named, CONTENT_LOCALES)).toBe('Saturday');
-    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(unnamed.id);
+    // The function the heading of its page reads, so the two cannot name one
+    // shopping list by two days.
+    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(
+      madeAt(unnamed.generatedAt, CONTENT_LOCALES)
+    );
+    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).not.toContain(unnamed.id);
   });
-});
 
-describe('the admins descriptor', () => {
+  /** A shopper makes more than one list in a day. */
+  it('tells two unnamed shopping lists of one day apart', () => {
+    const [, unnamed] = BASKET_SEED;
+    const at = (generatedAt: string) =>
+      BASKETS.title({ ...unnamed, generatedAt }, CONTENT_LOCALES);
+
+    expect(at('2026-02-02T10:00:00.000Z')).not.toBe(
+      at('2026-02-02T10:07:00.000Z')
+    );
+  });
+
   /**
-   * Plan 0071, section 6 and plan 0007, section 2: an admin can be seen and
-   * cannot be created, edited or deleted from here, ever. There is no detail
-   * screen either, so `resourceRoutes` declares one route and the list draws
-   * its rows as text.
+   * The day where the operator is, and not the UTC day cut out of the
+   * timestamp, which is the day before or after for part of every day.
    */
-  it('can be read and can never be written', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.detail).toBeUndefined();
-    expect(hasDetailScreen(ADMINS)).toBe(false);
-  });
+  it('writes the day and the time through Intl, in the reading language', () => {
+    const made = '2026-02-02T10:00:00.000Z';
+    const words = (locale: string) =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(made));
 
-  it('says in place how an admin is actually managed', () => {
-    expect(ADMINS.note).toBe('people.admins.note');
-  });
-
-  /** The one collection under `/v1/admin/**` that answers `{ admins }`. */
-  it('reads a page out of the shape that route really answers with', () => {
-    const page = toAdminPage({ admins: ADMIN_SEED });
-
-    expect(page.items).toHaveLength(ADMIN_SEED.length);
-    expect(page.nextCursor).toBeNull();
-  });
-
-  it('answers an empty page for a body it cannot read', () => {
-    expect(toAdminPage(null)).toEqual({ items: [], nextCursor: null });
-    expect(toAdminPage({ items: ADMIN_SEED })).toEqual({
-      items: [],
-      nextCursor: null,
-    });
+    expect(madeAt(made, ['en', 'es'])).toBe(words('en'));
+    expect(madeAt(made, ['es', 'en'])).toBe(words('es'));
+    expect(madeAt(made, [])).toBe(words('en'));
   });
 });
 
@@ -505,11 +785,15 @@ describe('the admins descriptor', () => {
  * refuses to draw anything until its parent is named.
  */
 describe('the membership descriptor', () => {
-  it('reads with no zone named, and offers the zone as a filter', () => {
-    expect(MEMBERSHIPS.requires).toBeUndefined();
-    expect(MEMBERSHIPS.filters?.map((filter) => filter.param)).toEqual([
-      'zoneId',
-    ]);
+  /** Admin plan 0045: the members are a tab of their zone. */
+  it('reads the zone from the address, and offers no filter', () => {
+    expect(MEMBERSHIPS.segment).toBe('members');
+    expect(MEMBERSHIPS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(MEMBERSHIPS.filters).toBeUndefined();
   });
 
   /**
@@ -561,12 +845,15 @@ describe('the membership descriptor', () => {
    * service method per edge, and each edge does more than write the enum. So it
    * is locked, and the four verbs are four actions.
    */
-  it('locks the status and offers the four verbs that move it', () => {
+  it('locks the status and offers the verbs that move it', () => {
     expect(fieldOf(MEMBERSHIPS, 'status')?.editable).toBe(false);
     expect(fieldOf(MEMBERSHIPS, 'status')?.help).toBeDefined();
+    // Handing the zone over is here too since admin plan 0045: the zone's
+    // page used to declare it by hand, and one place declares an action.
     expect(namedActionsOf(MEMBERSHIPS).map((action) => action.name)).toEqual([
       'approve-member',
       'reject-member',
+      'transfer-ownership',
       'kick-member',
       'ban-member',
     ]);
@@ -577,18 +864,32 @@ describe('the membership descriptor', () => {
    * against one, and only a waiting member can be let in or refused.
    */
   it('offers each verb only where core would accept it', () => {
-    const [approve, reject, kick, ban] = namedActionsOf(MEMBERSHIPS);
+    const [approve, reject, transfer, kick, ban] = namedActionsOf(MEMBERSHIPS);
     const [owner] = MEMBERSHIP_SEED.filter((row) => row.role === 'OWNER');
     const [waiting] = MEMBERSHIP_SEED.filter((row) => row.status === 'PENDING');
+    const [member] = MEMBERSHIP_SEED.filter(
+      (row) => row.role !== 'OWNER' && row.status === 'APPROVED'
+    );
 
     // The fixture is what makes this test mean anything, so it is asserted.
-    expect([owner, waiting]).not.toContain(undefined);
+    expect([owner, waiting, member]).not.toContain(undefined);
 
-    expect(kick.available?.(owner)).toBe(false);
-    expect(ban.available?.(owner)).toBe(false);
+    // Nothing applies to an owner, which is why the owner's row has no menu.
+    for (const action of [approve, reject, transfer, kick, ban]) {
+      expect(action.available?.(owner)).toBe(false);
+    }
+
+    // A request is answered, and the zone is not handed to somebody who is
+    // not in it yet.
     expect(approve.available?.(waiting)).toBe(true);
     expect(reject.available?.(waiting)).toBe(true);
-    expect(approve.available?.(owner)).toBe(false);
+    expect(transfer.available?.(waiting)).toBe(false);
+
+    // Somebody in the zone can be handed it, removed or banned.
+    expect(transfer.available?.(member)).toBe(true);
+    expect(kick.available?.(member)).toBe(true);
+    expect(ban.available?.(member)).toBe(true);
+    expect(approve.available?.(member)).toBe(false);
   });
 
   /**
@@ -605,16 +906,20 @@ describe('the membership descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(MEMBERSHIPS.formNote).toBe('people.broadcast');
+    expect(MEMBERSHIPS.caution).toBe(ZONE_CAUTION);
   });
 });
 
 describe('the list line descriptor', () => {
-  it('reads with no list named, and offers the list as a filter', () => {
-    expect(LIST_LINES.requires).toBeUndefined();
-    expect(LIST_LINES.filters?.map((filter) => filter.param)).toEqual([
-      'listId',
-    ]);
+  /** Admin plan 0045: a line sits under its list, which sits under its zone. */
+  it('reads the list from the address, and offers no filter', () => {
+    expect(LIST_LINES.segment).toBe('lines');
+    expect(LIST_LINES.parent).toEqual({
+      resource: 'lists',
+      param: 'listId',
+      filter: 'listId',
+    });
+    expect(LIST_LINES.filters).toBeUndefined();
   });
 
   it('lists at a flat path and still opens a row under its list', () => {
@@ -642,9 +947,11 @@ describe('the list line descriptor', () => {
    * is no route that creates one. The list says so where the control would be,
    * rather than offering a button the gateway refuses.
    */
-  it('offers no way to add a line, and says why in place', () => {
+  it('offers no way to add a line', () => {
+    // Who adds one is said by the list's own info button, on the page the
+    // lines are drawn on (admin plan 0045, target 7).
     expect(LIST_LINES.actions?.create).toBeUndefined();
-    expect(LIST_LINES.note).toBe('people.lines.note');
+    expect(LIST_LINES.info).toBeUndefined();
   });
 
   it('locks the approval and offers the two acts that move it', () => {
@@ -654,6 +961,18 @@ describe('the list line descriptor', () => {
       'approve-line',
       'reject-line',
     ]);
+  });
+
+  /** Admin plan 0045, target 5: on a line that waits, and on no other. */
+  it('offers the two acts on a line that waits alone', () => {
+    const line = (approvalStatus: string) =>
+      ({ ...LIST_LINE_SEED[0], approvalStatus }) as ResourceRow;
+
+    for (const action of namedActionsOf(LIST_LINES)) {
+      expect(action.available?.(line('PENDING'))).toBe(true);
+      expect(action.available?.(line('APPROVED'))).toBe(false);
+      expect(action.available?.(line('REJECTED'))).toBe(false);
+    }
   });
 
   it('changes what a line says and how many, and nothing else', () => {
@@ -671,7 +990,7 @@ describe('the list line descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(LIST_LINES.formNote).toBe('people.broadcast');
+    expect(LIST_LINES.caution).toBe(ZONE_CAUTION);
   });
 });
 
@@ -681,18 +1000,12 @@ describe('what plan 0009 deliberately left read only', () => {
    * and settlements written against them, so a changed content or quantity
    * contradicts rows already on disk, inside one person's private document.
    */
-  it('says on the basket screen why there is nothing to press', () => {
+  it('says on the basket screen that there is nothing to press', () => {
     expect(BASKETS.actions).toBeUndefined();
-    expect(BASKETS.note).toBe('people.baskets.note');
-  });
-
-  /**
-   * Plan 0071, section 6, permanently: a back office that can create back
-   * office accounts is one where a single compromised session is forever.
-   */
-  it('leaves the admin table exactly as plan 0007 left it', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.note).toBe('people.admins.note');
+    expect(BASKETS.info?.points).toEqual([
+      'people.baskets.info.record',
+      'people.baskets.info.correct',
+    ]);
   });
 });
 
@@ -708,7 +1021,7 @@ describe('what plan 0009 deliberately left read only', () => {
 describe('an edit that is seen by whoever is holding the app', () => {
   it('warns on exactly the four resources that broadcast', () => {
     const warned = ALL.filter(
-      (descriptor) => descriptor.formNote === 'people.broadcast'
+      (descriptor) => descriptor.caution === ZONE_CAUTION
     ).map((descriptor) => descriptor.name);
 
     expect(warned).toEqual(['zones', 'memberships', 'lists', 'list-lines']);
@@ -773,8 +1086,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(MEMBERSHIPS);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(MEMBERSHIP_SEED.length);
     // The fixture spans more than one household, which is what makes the
     // assertion above mean anything.
@@ -794,8 +1105,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(LIST_LINES);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(LIST_LINE_SEED.length);
     expect(
       new Set(LIST_LINE_SEED.map((row) => row.listId)).size
@@ -807,5 +1116,130 @@ describe('a list with no parent chosen', () => {
       LIST_LINE_SEED.filter((row) => row.listId === LIST_SEED[0].id).length
     );
     expect(store.rows().length).toBeLessThan(LIST_LINE_SEED.length);
+  });
+});
+
+/**
+ * Admin plan 0058: a list, one of its lines and a shopping list are each a
+ * record page, and the `record` block of each says what that page draws.
+ */
+describe('the record pages of a list, a line and a shopping list', () => {
+  const drawn = (descriptor: AnyResourceDescriptor, mode: 'read' | 'edit') =>
+    recordLayout(descriptor, mode).sections.map((section) => [
+      section.title,
+      section.fields.map((field) => field.name),
+    ]);
+
+  const facts = (descriptor: AnyResourceDescriptor) => {
+    const { added, addedBy, changed, changedBy, also } = recordLayout(
+      descriptor,
+      'read'
+    ).facts;
+
+    return {
+      added: added?.name,
+      addedBy: addedBy?.name,
+      changed: changed?.name,
+      changedBy: changedBy?.name,
+      also: also.map((field) => field.name),
+    };
+  };
+
+  it('draws a list as one section, with no field left over', () => {
+    const sections = [
+      [
+        'people.lists.section.list',
+        ['name', 'autoApproveLines', 'sharedWithZone'],
+      ],
+    ];
+
+    expect(drawn(LISTS, 'read')).toEqual(sections);
+    expect(drawn(LISTS, 'edit')).toEqual(sections);
+    expect(recordTabs(LISTS)).toEqual([]);
+  });
+
+  it('holds the lines of a list as one panel, counted by the list', () => {
+    expect(
+      (LISTS.record?.children ?? []).map((child) => [
+        child.as,
+        'name' in child ? child.name : child.resource,
+        child.count,
+      ])
+    ).toEqual([['panel', 'lines', 'lineCount']]);
+  });
+
+  it('says who made a list and a line, from the row', () => {
+    expect(facts(LISTS)).toEqual({
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      changedBy: undefined,
+      also: ['zoneName'],
+    });
+    expect(facts(LIST_LINES)).toEqual({
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      changedBy: undefined,
+      also: ['listName'],
+    });
+    // A person, by name, and never a field the form could change.
+    for (const descriptor of [LISTS, LIST_LINES]) {
+      expect(fieldOf(descriptor, 'createdByUserId')).toMatchObject({
+        kind: 'reference',
+        resource: 'users',
+        editable: false,
+      });
+      expect(fieldOf(descriptor, 'updatedAt')).toMatchObject({
+        kind: 'date',
+        time: true,
+        editable: false,
+      });
+    }
+  });
+
+  it('draws a line as one section, with no field left over', () => {
+    expect(drawn(LIST_LINES, 'read')).toEqual([
+      ['people.lines.section.line', ['content', 'quantity', 'approvalStatus']],
+    ]);
+  });
+
+  it('draws a shopping list as one section and a panel, made and by nobody', () => {
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(drawn(descriptor, 'read')).toEqual([
+        [
+          'people.baskets.section.list',
+          ['name', 'kind', 'status', 'lineCount'],
+        ],
+      ]);
+      expect(
+        (descriptor.record?.children ?? []).map((child) => [
+          child.as,
+          'name' in child ? child.name : child.resource,
+        ])
+      ).toEqual([['panel', 'lines']]);
+      expect(facts(descriptor)).toEqual({
+        added: 'generatedAt',
+        addedBy: undefined,
+        changed: undefined,
+        changedBy: undefined,
+        also: ['zoneIds'],
+      });
+      expect(recordLayout(descriptor, 'read').facts.addedLabel).toBe(
+        'people.baskets.record.made'
+      );
+    }
+  });
+
+  /**
+   * Nothing of a shopping list can be changed, so no action says that it has
+   * a page. The `record` block does, and no `detail` component is left.
+   */
+  it('opens a shopping list though it has no action', () => {
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(descriptor.detail).toBeUndefined();
+      expect(descriptor.actions).toBeUndefined();
+      expect(hasDetailScreen(descriptor)).toBe(true);
+    }
   });
 });

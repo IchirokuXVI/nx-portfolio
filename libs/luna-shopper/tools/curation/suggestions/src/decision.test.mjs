@@ -11,7 +11,7 @@ import { indexBrands } from './rules.mjs';
 
 /** Leaf slugs of the category tree (backend plan 0173, appendix A). */
 const CATEGORIES = ['milk', 'oils', 'uncategorised'];
-const UNITS = ['UNIT', 'LITER', 'GRAM'];
+const UNITS = ['UNIT', 'LITER', 'GRAM', 'KILOGRAM', 'MILLILITER', 'PACK'];
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
 const EL_JAMON = { id: 'sm-2', name: { es: 'El Jamón', en: 'El Jamón' } };
@@ -58,6 +58,23 @@ const BRANDS = indexBrands([
     privateLabelSupermarketId: null,
     canonicalBrandId: 'b-hacendado',
   },
+  // One name, two businesses (backend plan 0178): the registered `Poseidon` is
+  // a cologne, and `Poseidon Food` is the fish brand El Jamón prints as
+  // `Poseidón`.
+  {
+    id: 'b-poseidon',
+    key: 'poseidon',
+    label: 'Poseidon',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
+  {
+    id: 'b-poseidon-food',
+    key: 'poseidonfood',
+    label: 'Poseidon Food',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
 ]);
 
 const ENTRY = {
@@ -74,8 +91,9 @@ function goodItem(overrides = {}) {
     nameEs: 'Leche entera',
     nameEn: 'Whole milk',
     brand: 'Hacendado',
-    unitSize: 1,
-    defaultUnit: 'LITER',
+    // A CREATE is written in a base unit (backend plan 0183).
+    unitSize: 1000,
+    defaultUnit: 'MILLILITER',
     categorySlugs: ['milk'],
     ean: null,
     ...overrides,
@@ -147,6 +165,7 @@ test('the schema check refuses what it cannot act on', () => {
       confidence: 1,
       item: {
         nameEs: 'Leche',
+        nameEn: 'Milk',
         categorySlugs: ['milk'],
         defaultUnit: 'LITER',
         unitSize: '1',
@@ -161,7 +180,12 @@ test('the schema check refuses what it cannot act on', () => {
       checkDecisionShape({
         decision: 'CREATE',
         confidence: 1,
-        item: { nameEs: 'Leche', categorySlugs, defaultUnit: 'LITER' },
+        item: {
+          nameEs: 'Leche',
+          nameEn: 'Milk',
+          categorySlugs,
+          defaultUnit: 'LITER',
+        },
       }).error,
       /needs "item.categorySlugs", one or more category slugs/,
       JSON.stringify(categorySlugs)
@@ -186,7 +210,7 @@ test('the schema check normalizes what it accepts', () => {
     confidence: 0.95,
     item: {
       nameEs: '  Leche entera  ',
-      nameEn: '',
+      nameEn: '  Whole milk ',
       brand: '  Hacendado ',
       categorySlugs: [' milk ', 'plant-based-drinks-and-horchata', 'milk', ''],
       defaultUnit: ' LITER ',
@@ -201,7 +225,7 @@ test('the schema check normalizes what it accepts', () => {
     'milk',
     'plant-based-drinks-and-horchata',
   ]);
-  assert.equal(checked.decision.item.nameEn, null);
+  assert.equal(checked.decision.item.nameEn, 'Whole milk');
   assert.equal(checked.decision.item.brand, 'Hacendado');
   assert.equal(checked.decision.item.unitSize, null);
   assert.equal(checked.decision.reasoning, 'because');
@@ -314,7 +338,7 @@ test('NAME_GLITCH leaves a real name alone, digit or no digit', () => {
     'Sombra dúo Monochrome n30',
   ]) {
     const issues = validateDecision({
-      decision: createDecision(goodItem({ nameEs: name, nameEn: null })),
+      decision: createDecision(goodItem({ nameEs: name })),
       entry: ENTRY,
       supermarket: MERCADONA,
       brands: BRANDS,
@@ -647,6 +671,102 @@ test('BRAND_DIFFERS_FROM_SOURCE fires for another brand and for null', () => {
   assert.ok(codes(dropped).includes('BRAND_DIFFERS_FROM_SOURCE'));
 });
 
+/**
+ * A salmon loin El Jamón prints `Poseidón` on, as the queue answers it.
+ *
+ * `brandMatches` is what the gateway composes: the key's own brand, then every
+ * brand a homonym points that key at. With no homonym registered it holds the
+ * cologne alone.
+ */
+function salmon(brandMatches) {
+  return {
+    ...ENTRY,
+    supermarketId: 'sm-2',
+    name: 'Lomos de salmón 250 g',
+    brand: 'Poseidón',
+    brandMatches,
+  };
+}
+const POSEIDON_MATCH = {
+  brandId: 'b-poseidon',
+  key: 'poseidon',
+  label: 'Poseidon',
+  privateLabelSupermarketId: null,
+  printedAs: null,
+};
+const POSEIDON_FOOD_MATCH = {
+  brandId: 'b-poseidon-food',
+  key: 'poseidonfood',
+  label: 'Poseidon Food',
+  privateLabelSupermarketId: null,
+  printedAs: null,
+};
+
+function decideSalmon(entry, brand) {
+  return validateDecision({
+    decision: createDecision(goodItem({ brand })),
+    entry,
+    supermarket: EL_JAMON,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('a CREATE under Poseidon Food is accepted for a row printed "Poseidón" when the homonym is registered (backend plan 0178)', () => {
+  const withHomonym = salmon([POSEIDON_MATCH, POSEIDON_FOOD_MATCH]);
+
+  assert.deepEqual(decideSalmon(withHomonym, 'Poseidon Food'), []);
+  // The key's own brand stays an answer: the curator chooses, the gate does
+  // not.
+  assert.deepEqual(decideSalmon(withHomonym, 'Poseidon'), []);
+});
+
+test('the same CREATE is refused when the homonym is not registered', () => {
+  for (const entry of [
+    salmon([POSEIDON_MATCH]),
+    // A gateway that predates the plan sends no list at all.
+    salmon(undefined),
+  ]) {
+    const issues = decideSalmon(entry, 'Poseidon Food');
+    assert.deepEqual(codes(issues), ['BRAND_DIFFERS_FROM_SOURCE']);
+    assert.match(
+      issues[0].detail,
+      /the chain prints "Poseidón", a registered brand/
+    );
+    assert.match(issues[0].detail, /"Poseidon Food"/);
+  }
+});
+
+test('a homonym widens the answer to the brands it names, and no further', () => {
+  const withHomonym = salmon([POSEIDON_MATCH, POSEIDON_FOOD_MATCH]);
+
+  const other = decideSalmon(withHomonym, 'Carbonell');
+  assert.deepEqual(codes(other), ['BRAND_DIFFERS_FROM_SOURCE']);
+  // Both brands are named, so the person reading the REVIEW sees the choice.
+  assert.match(
+    other[0].detail,
+    /names the registered brands "Poseidon" and "Poseidon Food", and the decision writes "Carbonell"/
+  );
+
+  const dropped = decideSalmon(withHomonym, null);
+  assert.deepEqual(codes(dropped), ['BRAND_DIFFERS_FROM_SOURCE']);
+  assert.match(dropped[0].detail, /writes no brand/);
+});
+
+test('a homonym on a printed key nothing holds makes its brand the source’s brand', () => {
+  const entry = {
+    ...salmon([POSEIDON_FOOD_MATCH]),
+    brand: 'Salmones del Norte',
+  };
+
+  assert.deepEqual(decideSalmon(entry, 'Poseidon Food'), []);
+  assert.deepEqual(codes(decideSalmon(entry, 'Carbonell')), [
+    'BRAND_DIFFERS_FROM_SOURCE',
+  ]);
+});
+
 test('BRAND_DIFFERS_FROM_SOURCE is quiet when the chain prints no registered brand', () => {
   const issues = validateDecision({
     decision: createDecision(goodItem({ brand: 'Hacendado' })),
@@ -938,6 +1058,199 @@ test('FORMAT_MISMATCH compares the numbers when a unit cannot be read', () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Backend plan 0177: the row states its own unit, and a pack count joins a
+// count to a weight
+// ---------------------------------------------------------------------------
+
+test('"75 cl" stated as 750 ml links onto a 750 ml product', () => {
+  // What LIDL and the leaflet import write: the number is already millilitres
+  // and the printed text still says centilitres. The row's own unit is read,
+  // so the text is never multiplied by ten on top of it.
+  const entry = { unitSize: 750, sizeUnit: 'MILLILITER', sizeFormat: '75 cl' };
+  assert.deepEqual(
+    linkIssues(entry, { unitSize: 750, defaultUnit: 'MILLILITER' }),
+    []
+  );
+  assert.deepEqual(
+    linkIssues(entry, { unitSize: 0.75, defaultUnit: 'LITER' }),
+    []
+  );
+});
+
+test('"75 cl" stated as 750 ml is refused onto a 500 ml product', () => {
+  const found = validateDecision({
+    decision: linkDecision(),
+    entry: {
+      ...ENTRY,
+      unitSize: 750,
+      sizeUnit: 'MILLILITER',
+      sizeFormat: '75 cl',
+    },
+    supermarket: MERCADONA,
+    linkTarget: { id: 'i1', unitSize: 500, defaultUnit: 'MILLILITER' },
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(codes(found), ['FORMAT_MISMATCH']);
+  // The detail states the unit the row is in, not the printed word.
+  assert.match(found[0].detail, /750 MILLILITER.*500 MILLILITER/);
+});
+
+test('the row unit is read first, whatever the printed text ends in', () => {
+  // The six leaflet links the October 2026 curation saw refused: Burn 50 cl,
+  // a vinegar "37,5 cl" and the rest, each already in millilitres.
+  for (const [unitSize, sizeFormat] of [
+    [500, '50 cl'],
+    [375, '37,5 cl'],
+    [750, '75cl'],
+  ]) {
+    assert.deepEqual(
+      linkIssues(
+        { unitSize, sizeUnit: 'MILLILITER', sizeFormat },
+        { unitSize, defaultUnit: 'MILLILITER' }
+      ),
+      [],
+      sizeFormat
+    );
+  }
+  // One source, two shapes: LIDL keeps `1,28 l` at 1.28 and says so.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 1.28, sizeUnit: 'LITER', sizeFormat: '1,28 l' },
+      { unitSize: 1280, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+});
+
+test('a row with no sizeUnit falls back to the printed text, as before', () => {
+  // A row no run has seen since the plan. It compares exactly as it did, which
+  // is right for a source that kept the printed unit...
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 33, sizeUnit: null, sizeFormat: '33 cl' },
+      { unitSize: 330, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+  // ...and still wrong for one that had already converted, which is the
+  // defect a run rewriting the row removes.
+  assert.ok(
+    linkIssues(
+      { unitSize: 750, sizeFormat: '75 cl' },
+      { unitSize: 750, defaultUnit: 'MILLILITER' }
+    ).includes('FORMAT_MISMATCH')
+  );
+});
+
+test('"16 ud" links onto 160 g with packCount 16', () => {
+  // A box of sixteen capsules, sized by count at one chain and by weight at
+  // another. The pack count is what says they are one box.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 160, defaultUnit: 'GRAM', packCount: 16 }
+    ),
+    []
+  );
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 0.16, defaultUnit: 'KILOGRAM', packCount: 16 }
+    ),
+    []
+  );
+});
+
+test('"16 ud" is refused onto 160 g with no pack count', () => {
+  for (const packCount of [null, undefined]) {
+    const found = validateDecision({
+      decision: linkDecision(),
+      entry: {
+        ...ENTRY,
+        unitSize: 16,
+        sizeUnit: 'UNIT',
+        sizeFormat: '16 ud',
+      },
+      supermarket: MERCADONA,
+      linkTarget: { id: 'i1', unitSize: 160, defaultUnit: 'GRAM', packCount },
+      categories: CATEGORIES,
+      units: UNITS,
+    });
+    assert.deepEqual(codes(found), ['FORMAT_MISMATCH']);
+    assert.match(found[0].detail, /16 UNIT.*160 GRAM/);
+  }
+});
+
+test('a count and a weight are joined by the same pack count and by nothing else', () => {
+  // A different count is a different box.
+  assert.ok(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 300, defaultUnit: 'GRAM', packCount: 30 }
+    ).includes('FORMAT_MISMATCH')
+  );
+  // The other way round: the row is the one sized by weight, as Mercadona
+  // states product 11801, and the product was created from a `16 ud` row.
+  const byWeight = {
+    unitSize: 0.16,
+    sizeUnit: 'KILOGRAM',
+    sizeFormat: 'kg',
+    packCount: 16,
+  };
+  assert.deepEqual(
+    linkIssues(byWeight, { unitSize: 16, defaultUnit: 'UNIT' }),
+    []
+  );
+  assert.ok(
+    linkIssues(
+      { ...byWeight, packCount: null },
+      { unitSize: 16, defaultUnit: 'UNIT' }
+    ).includes('FORMAT_MISMATCH')
+  );
+  // Both sides stating one count agree, whatever the count side's size reads.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 1, sizeUnit: 'UNIT', sizeFormat: 'ud', packCount: 16 },
+      { unitSize: 160, defaultUnit: 'GRAM', packCount: 16 }
+    ),
+    []
+  );
+  // A weight is still never a volume, pack count or not.
+  assert.ok(
+    linkIssues(
+      { unitSize: 160, sizeUnit: 'GRAM', sizeFormat: '160 g', packCount: 16 },
+      { unitSize: 160, defaultUnit: 'MILLILITER', packCount: 16 }
+    ).includes('FORMAT_MISMATCH')
+  );
+});
+
+test('a CREATE can carry packCount, and only a count that is one', () => {
+  const shape = (packCount) =>
+    checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      issues: [],
+      reasoning: '',
+      item: { ...goodItem(), packCount },
+    });
+
+  assert.equal(shape(16).decision.item.packCount, 16);
+  // Null, absent and 1 state no count, and the key is then absent, which is
+  // what lets the create take the count the row itself read.
+  for (const none of [null, undefined, 1]) {
+    const checked = shape(none);
+    assert.equal(checked.ok, true);
+    assert.equal('packCount' in checked.decision.item, false);
+  }
+  for (const bad of [0, 1001, 2.5, '16']) {
+    const checked = shape(bad);
+    assert.equal(checked.ok, false, String(bad));
+    assert.match(checked.error, /item\.packCount/);
+  }
+});
+
 test('LINK_TARGET_NOT_SHOWN fires in place of LINK_TARGET_MISSING', () => {
   const found = validateDecision({
     decision: linkDecision('i-real'),
@@ -973,4 +1286,366 @@ test('SHARED_EAN names the barcode and the other entries, and only when shared',
   assert.match(found.detail, /EAN 8480000000017 .*e3, e4/);
   assert.equal(sharedEanIssue(ENTRY, null), null);
   assert.equal(sharedEanIssue(ENTRY, []), null);
+});
+
+// ---------------------------------------------------------------------------
+// Base units (backend plan 0183)
+// ---------------------------------------------------------------------------
+
+function createIssues(item) {
+  return validateDecision({
+    decision: createDecision(goodItem(item)),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('NOT_A_BASE_UNIT refuses a CREATE of 1 LITER, and names what to write', () => {
+  const found = createIssues({ unitSize: 1, defaultUnit: 'LITER' });
+  assert.deepEqual(codes(found), ['NOT_A_BASE_UNIT']);
+  assert.equal(
+    found[0].detail,
+    '1 LITER is not a base unit. A CREATE is written in GRAM, MILLILITER or UNIT: write 1000 MILLILITER.'
+  );
+});
+
+test('NOT_A_BASE_UNIT passes a CREATE of KILOGRAM with a null size', () => {
+  // A product sold by weight: priced per kilo and weighed at the till.
+  assert.deepEqual(
+    createIssues({ unitSize: null, defaultUnit: 'KILOGRAM' }),
+    []
+  );
+});
+
+test('NOT_A_BASE_UNIT refuses a sized KILOGRAM, any LITER and any PACK', () => {
+  const sized = createIssues({ unitSize: 0.25, defaultUnit: 'KILOGRAM' });
+  assert.deepEqual(codes(sized), ['NOT_A_BASE_UNIT']);
+  assert.match(sized[0].detail, /write 250 GRAM\.$/);
+
+  const litre = createIssues({ unitSize: null, defaultUnit: 'LITER' });
+  assert.deepEqual(codes(litre), ['NOT_A_BASE_UNIT']);
+  assert.match(litre[0].detail, /write no size MILLILITER\.$/);
+
+  const pack = createIssues({ unitSize: 6, defaultUnit: 'PACK' });
+  assert.deepEqual(codes(pack), ['NOT_A_BASE_UNIT']);
+  assert.match(pack[0].detail, /write 6 UNIT\.$/);
+});
+
+test('NOT_A_BASE_UNIT passes grams, millilitres and a count, sized or not', () => {
+  for (const item of [
+    { unitSize: 250, defaultUnit: 'GRAM' },
+    { unitSize: 1500, defaultUnit: 'MILLILITER' },
+    { unitSize: 16, defaultUnit: 'UNIT' },
+    { unitSize: null, defaultUnit: 'UNIT' },
+  ]) {
+    assert.deepEqual(createIssues(item), []);
+  }
+});
+
+test('NOT_A_BASE_UNIT is not worth a second attempt and says nothing about a LINK', () => {
+  assert.deepEqual(
+    retryableIssues([issue('NOT_A_BASE_UNIT', '1 LITER is not a base unit.')]),
+    []
+  );
+  // A LINK creates nothing: the product it names keeps the unit it has.
+  assert.deepEqual(
+    validateDecision({
+      decision: linkDecision(),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      linkTarget: {
+        id: 'i1',
+        brand: 'Hacendado',
+        unitSize: 1,
+        defaultUnit: 'LITER',
+        ean: null,
+      },
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
+      categories: CATEGORIES,
+      units: UNITS,
+    }),
+    []
+  );
+});
+
+// ---------------------------------------------------------------------------
+// What a created product must carry (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+function createIssuesOf(item) {
+  return validateDecision({
+    decision: createDecision(item),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('the schema check refuses a CREATE with no nameEn, so the row is asked again', () => {
+  for (const nameEn of [undefined, null, '', '   ', 42]) {
+    const checked = checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      item: { ...goodItem(), nameEn },
+    });
+    assert.equal(checked.ok, false, JSON.stringify(nameEn));
+    assert.match(checked.error, /needs "item.nameEn"/);
+  }
+});
+
+test('NAME_EN_MISSING fires on a CREATE that reached the validators with no nameEn', () => {
+  // The shape check refuses such a reply, so this is a decision built some
+  // other way. It goes to a person and not to a route that would refuse the
+  // whole file for it.
+  for (const nameEn of [null, undefined, '', '  ']) {
+    const issues = createIssuesOf(goodItem({ nameEn }));
+    assert.deepEqual(
+      codes(issues),
+      ['NAME_EN_MISSING'],
+      JSON.stringify(nameEn)
+    );
+    assert.match(issues[0].detail, /Leche entera/);
+  }
+});
+
+test('NAME_EN_MISSING is quiet on a CREATE with both names, and on a LINK', () => {
+  assert.deepEqual(createIssuesOf(goodItem()), []);
+  // A brand name, a range word and a foreign product name are written the
+  // same in both languages, and that is a name in both.
+  assert.deepEqual(
+    createIssuesOf(
+      goodItem({ nameEs: 'Pain au chocolat', nameEn: 'Pain au chocolat' })
+    ),
+    []
+  );
+  assert.deepEqual(
+    validateDecision({
+      decision: linkDecision(),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      linkTarget: {
+        id: 'i1',
+        brand: 'Hacendado',
+        unitSize: 1,
+        defaultUnit: 'LITER',
+        ean: null,
+      },
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
+      categories: CATEGORIES,
+      units: UNITS,
+    }),
+    []
+  );
+});
+
+test('NAME_EN_MISSING is a judgment for a person, not a second attempt', () => {
+  assert.deepEqual(
+    retryableIssues([issue('NAME_EN_MISSING', 'no nameEn')]),
+    []
+  );
+});
+
+test('NAME_CARRIES_SIZE fires on a Spanish name that ends in the word pack', () => {
+  for (const nameEs of [
+    'Cerveza pack',
+    'Cerveza Pack',
+    'Cerveza PACK',
+    'Cerveza especial (pack)',
+    'Cerveza pack.',
+    'Yogur natural, pack',
+  ]) {
+    const issues = createIssuesOf(goodItem({ nameEs }));
+    assert.deepEqual(codes(issues), ['NAME_CARRIES_SIZE'], nameEs);
+    assert.match(issues[0].detail, /ends in "pack"/, nameEs);
+    assert.match(issues[0].detail, /packCount/, nameEs);
+  }
+});
+
+test('a name that only holds the letters of pack, or says it elsewhere, is left alone', () => {
+  for (const nameEs of [
+    'Mochila Backpack',
+    'Pack de cervezas',
+    'Cerveza packs',
+    'Leche entera',
+  ]) {
+    assert.deepEqual(createIssuesOf(goodItem({ nameEs })), [], nameEs);
+  }
+});
+
+test('a name that ends in a counted pack is reported once, by the size check', () => {
+  const issues = createIssuesOf(goodItem({ nameEs: 'Cerveza 6 pack' }));
+  assert.deepEqual(codes(issues), ['NAME_CARRIES_SIZE']);
+  assert.match(issues[0].detail, /states a size/);
+});
+
+test('a CREATE keeps a real barcode and drops an in-store or invalid one', () => {
+  const eanOf = (ean) =>
+    checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      item: { ...goodItem(), ean },
+    }).decision.item.ean;
+
+  assert.equal(eanOf('4006381333931'), '4006381333931');
+  assert.equal(eanOf(' 4006381333931 '), '4006381333931');
+  // One shop's own code, a stub of one, a short code and a wrong check digit.
+  for (const ean of [
+    '2000000000008',
+    '2204500000000',
+    '84100100012',
+    '4006381333932',
+    '',
+    null,
+    undefined,
+  ]) {
+    assert.equal(eanOf(ean), null, JSON.stringify(ean));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+/** Whole milk as Mercadona prints it from a second factory. */
+const MILK_ROW = {
+  ...ENTRY,
+  brand: 'Hacendado',
+  ean: '8402001047251',
+  unitSize: 1,
+  sizeUnit: 'LITER',
+};
+
+/** The catalog product, created from the first factory's barcode. */
+const MILK_PRODUCT = {
+  id: 'i1',
+  brand: 'Hacendado',
+  ean: '8402001002083',
+  eans: ['8402001002083'],
+  unitSize: 1000,
+  defaultUnit: 'MILLILITER',
+};
+
+function secondBarcodeIssues(overrides = {}) {
+  return validateDecision({
+    decision: linkDecision(),
+    entry: MILK_ROW,
+    supermarket: MERCADONA,
+    linkTarget: MILK_PRODUCT,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+    ...overrides,
+  });
+}
+
+test('a LINK with a different EAN, the same brand and the same format passes', () => {
+  // The case the plan was written about: the same brand, the same name, the
+  // same size, another barcode. It used to be an EAN_CONFLICT, and the row
+  // stayed in the queue for ever.
+  assert.deepEqual(secondBarcodeIssues(), []);
+});
+
+test('a LINK onto a product while another product holds the row’s EAN is refused', () => {
+  const issues = secondBarcodeIssues({ rowEanOwner: { id: 'i9' } });
+  assert.deepEqual(codes(issues), ['EAN_CONFLICT']);
+  assert.match(issues[0].detail, /8402001047251/);
+  assert.match(issues[0].detail, /item i9 holds it, not i1/);
+
+  // Also when the target holds no barcode at all: the barcode still names
+  // another product.
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({
+        linkTarget: { ...MILK_PRODUCT, ean: null, eans: [] },
+        rowEanOwner: { id: 'i9' },
+      })
+    ),
+    ['EAN_CONFLICT']
+  );
+});
+
+test('a LINK onto the product that holds the row’s EAN passes, whichever of its barcodes it is', () => {
+  const holder = {
+    ...MILK_PRODUCT,
+    eans: ['8402001002083', '8402001047251'],
+  };
+  assert.deepEqual(
+    secondBarcodeIssues({ linkTarget: holder, rowEanOwner: { id: 'i1' } }),
+    []
+  );
+  // The barcode is its second one, so `ean` alone would have said "different".
+  assert.notEqual(holder.ean, MILK_ROW.ean);
+});
+
+test('a different EAN is still a conflict when the brand is not the same', () => {
+  // Another brand, an entry with no brand, and a target with none. A chain
+  // can leave the brand off a product whose name states one, so "both have
+  // none" does not say the two are one brand.
+  for (const [entry, linkTarget] of [
+    [{ ...MILK_ROW, brand: 'Carbonell' }, MILK_PRODUCT],
+    [{ ...MILK_ROW, brand: null }, MILK_PRODUCT],
+    [MILK_ROW, { ...MILK_PRODUCT, brand: null }],
+    [
+      { ...MILK_ROW, brand: null },
+      { ...MILK_PRODUCT, brand: null },
+    ],
+  ]) {
+    const issues = secondBarcodeIssues({ entry, linkTarget });
+    assert.deepEqual(codes(issues), ['EAN_CONFLICT'], String(entry.brand));
+    assert.match(issues[0].detail, /does not show the same brand\./);
+  }
+});
+
+test('a different EAN is still a conflict when the format is not known to be the same', () => {
+  // A size missing on either side is "not known", and a person looks.
+  const sizeless = secondBarcodeIssues({
+    entry: { ...MILK_ROW, unitSize: null },
+  });
+  assert.deepEqual(codes(sizeless), ['EAN_CONFLICT']);
+  assert.match(sizeless[0].detail, /does not show the same format\./);
+
+  // Another size is two issues, as it always was: the format, and the barcode
+  // that nothing now explains.
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({ entry: { ...MILK_ROW, unitSize: 1.5 } })
+    ).sort(),
+    ['EAN_CONFLICT', 'FORMAT_MISMATCH']
+  );
+});
+
+test('a registered spelling of the target’s brand is the same brand', () => {
+  // The chain prints `Hacendado +Proteínas`, which a person linked to
+  // `Hacendado`: one brand, so a second barcode is allowed.
+  assert.deepEqual(
+    secondBarcodeIssues({
+      entry: { ...MILK_ROW, brand: 'Hacendado +Proteínas' },
+    }),
+    []
+  );
+});
+
+test('a product from a gateway that lists no eans is read by its one ean', () => {
+  const old = { ...MILK_PRODUCT };
+  delete old.eans;
+  assert.deepEqual(secondBarcodeIssues({ linkTarget: old }), []);
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({
+        entry: { ...MILK_ROW, brand: null },
+        linkTarget: old,
+      })
+    ),
+    ['EAN_CONFLICT']
+  );
 });

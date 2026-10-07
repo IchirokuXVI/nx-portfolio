@@ -204,14 +204,12 @@ describe('the translation catalogue', () => {
    * scan, so deleting the screen's strings fails here even if the screen goes
    * with them.
    */
-  it('holds the twelve the chain sources screen needs', () => {
+  it('holds the ten the chain sources need', () => {
     const keys = [
       'harvest.sources.heading',
-      'harvest.sources.lead',
-      'harvest.sources.empty',
-      'harvest.sources.edit',
-      'harvest.sources.enabled',
-      'harvest.sources.disabled',
+      'harvest.sources.caution',
+      'harvest.sources.field.enabled',
+      'harvest.sources.field.autoImportPlaces',
       'harvest.sources.field.adapter',
       'harvest.sources.field.workers',
       'harvest.sources.field.rate',

@@ -1,3 +1,5 @@
+import type { ActivatedRouteSnapshot } from '@angular/router';
+
 /**
  * The keys the resource screens read off their route.
  *
@@ -9,8 +11,104 @@
 /** Route `data` key holding the {@link ResourceDescriptor} for the screen. */
 export const RESOURCE_DESCRIPTOR = 'descriptor';
 
-/** Route `data` key holding `'create'` or `'edit'`. */
+/**
+ * Route `data` key holding `'create'` on the route that adds a record. Every
+ * other route leaves it out: the page there reads first.
+ */
 export const RESOURCE_FORM_MODE = 'mode';
 
-/** Route parameter holding the row's id, on the edit route. */
+/** Route parameter holding the row's id, on the route that opens a record. */
 export const RESOURCE_ID_PARAM = 'id';
+
+/**
+ * Route `data` key naming the route parameter that holds the row's id, when it
+ * is not {@link RESOURCE_ID_PARAM} (admin plan 0042).
+ *
+ * A chain's form is the Details tab at `/chains/:chainId/details`. The id is a
+ * parameter of the page above the tab and is called what that page calls it.
+ * The form looks for it on its own route and then on each route above.
+ */
+export const RESOURCE_ID_FROM = 'idParam';
+
+/**
+ * Route `data` key saying that the list is part of a larger page (admin plan
+ * 0042), and which part.
+ *
+ * - `'tab'`: the list is a tab of a page that already drew the header, so it
+ *   draws none and keeps its table.
+ * - `'column'`: the list is a column beside the row that is open, so it draws
+ *   one line per row and marks the open one.
+ *
+ * Absent, the list is the whole page, which is what it always was.
+ */
+export const RESOURCE_LIST_EMBED = 'embed';
+
+/** What {@link RESOURCE_LIST_EMBED} holds. */
+export type ResourceListEmbed = 'tab' | 'column';
+
+/**
+ * Route `data` key naming the filter that a list tab of a record is fixed by
+ * (admin plan 0054, section 2.2).
+ *
+ * The products of a group are the products list with `productGroupId` fixed
+ * to the group that is open. The list sends that filter on every read and
+ * offers no control for it, as it does for a `parent`.
+ *
+ * The route says which filter, and `RECORD_CONTEXT` says which record. The ID
+ * is not in the route data: a route is built once, before any record is open.
+ */
+export const RESOURCE_LIST_FIXED = 'fixedBy';
+
+/**
+ * Route `data` key that marks a child route of the record page as one of its
+ * tabs, and holds the key of the tab: `details`, the `name` of a part, or the
+ * `resource` of a list (admin plan 0054, section 2.2).
+ *
+ * The page reads the address of each tab from the route that carries its key,
+ * so a tab can never point at an address the route table does not have.
+ */
+export const RECORD_TAB = 'recordTab';
+
+/**
+ * Route `data` key on the route of a record page: the path of the child
+ * route that the page gives way to (admin plan 0056, section 2).
+ *
+ * A chain's Shops tab is a split, and a shop opens inside it. Below 72 rem a
+ * split shows one pane, so the shop is the whole page: the chain then draws
+ * no header and no tabs, and the shop's own header stands where they were.
+ * The page gives way while any route under the named child is open, and only
+ * below 72 rem. `recordRoute` writes the key from its `yieldsTo` option.
+ */
+export const RECORD_YIELDS_TO = 'recordYieldsTo';
+
+/**
+ * Route `data` key: whether a list drawn as a column sits under a page header
+ * that the page holding it drew (admin plan 0042).
+ *
+ * A chain's shops are split under the chain's header and its Shops tab. The
+ * column then needs no title of its own, and on a wide screen the shop that is
+ * open titles a pane and not the page. The chains themselves are split under
+ * nothing: their column says "Chains", and the chain that is open titles the
+ * page.
+ */
+export const SPLIT_UNDER_HEADER = 'splitUnderHeader';
+
+/**
+ * A route parameter, read from the closest route that holds it.
+ *
+ * A child route does not inherit the parameters of a parent that has a
+ * component, so a tab cannot read the id of the page it is a tab of from its
+ * own snapshot. This walks up instead, closest first.
+ */
+export function routeParam(
+  route: ActivatedRouteSnapshot,
+  name: string
+): string | null {
+  for (const snapshot of [...route.pathFromRoot].reverse()) {
+    const value = snapshot.paramMap.get(name);
+    if (value !== null && value !== '') {
+      return value;
+    }
+  }
+  return null;
+}
