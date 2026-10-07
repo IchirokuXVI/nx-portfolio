@@ -136,30 +136,11 @@ lunaShopperBackend:
     enabled: true
     harvestEnabled: true
 
-  # The catalog database gets one core and 1Gi. The other three keep the shared
-  # 250m and 256Mi.
-  #
-  # Measured on this cluster on 2026-10-07, with the node 85% idle. A query that
-  # needed 7.7 s of CPU took 31.2 s, throttled in 308 of 314 scheduler periods:
-  # 250m is a quarter of a core, and a query cannot use more than its limit while
-  # the other three cores sit free. `GET /v1/catalog/suggest` answered in 6 to 9
-  # seconds. The database is 349 MB and did not fit in 256Mi either. Its cgroup
-  # reached the memory limit 27,394 times, and the cache hit rate was 68%.
-  #
-  # The node had 2,560m of its 4,000m requested before this, and 3,310m after.
-  # Requests stay equal to limits, so the pod stays Guaranteed (plan 0004).
-  postgres:
-    instanceOverrides:
-      luna-shopper-backend-catalog-db:
-        resources:
-          requests:
-            cpu: '1'
-            memory: 1Gi
-          limits:
-            cpu: '1'
-            memory: 1Gi
-        sharedBuffers: 256MB
-        workMem: 8MB
+  # The catalog database keeps the one core that values.yaml gives it, and Redis
+  # keeps its 100m. Both would take more, and this node has four cores: 3,310m of
+  # the 4,000m is requested, and a deploy needs the rest for the pods that it
+  # surges. A stateful pod cannot take a higher limit alone, because its request
+  # must equal its limit to stay Guaranteed (plan 0004).
 
   # No nightly backups in staging: it is disposable by design. The CronJobs render
   # suspended, because a release task (`k8s/release-tasks`) dumps every database
