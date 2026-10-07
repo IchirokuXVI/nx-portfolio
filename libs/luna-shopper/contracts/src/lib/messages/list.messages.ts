@@ -31,6 +31,12 @@ export const LIST_PATTERNS = {
    */
   holdingItem: 'list.holdingItem',
   /**
+   * Every readable list, with the lines of each one that hold a product (plan
+   * 0196, section 3). A list that does not hold the product is in the answer
+   * too, with no lines.
+   */
+  linesHoldingItem: 'list.linesHoldingItem',
+  /**
    * The shopping trips that touched a list, newest first (plan 0122, section 3).
    * Live trips ride on the first response, ended ones come a page at a time.
    */
@@ -1122,6 +1128,67 @@ export interface ListHoldingItemView {
 export interface ListsHoldingItemResult {
   lists: ListHoldingItemView[];
   /** Whether the cap cut the answer short. */
+  hasMore: boolean;
+}
+
+/** How much one {@link LIST_PATTERNS.linesHoldingItem} read may answer with. */
+export const LISTS_WITH_ITEM_LINES_LIMITS = {
+  /**
+   * A ceiling, not a page size. Past it the answer says that more lists exist.
+   * A person who reads more than a hundred lists is not the case this serves.
+   */
+  maxLists: 100,
+  /** How many lines of one list the answer holds, the first by position. */
+  maxLinesPerList: 20,
+} as const;
+
+/**
+ * Every list the caller can read, with the lines of each one that hold a
+ * product (plan 0196, section 3).
+ *
+ * The same access rule as {@link ListsHoldingItemRequest}, at request time.
+ * The item id must be a uuid, and it is not checked against the catalog.
+ */
+export interface ListsWithItemLinesRequest {
+  userId: string;
+  itemId: string;
+}
+
+/** One line that holds the product, with what a stepper needs to show it. */
+export interface ItemLineView {
+  id: string;
+  content: string;
+  /** Zero is a real answer: the line holds the product and wants none of it. */
+  quantity: number;
+  /** `APPROVED` or `PENDING`. A rejected line is never in the answer. */
+  approvalStatus: LineApprovalStatus;
+}
+
+/**
+ * One readable list, with its lines that hold the product.
+ *
+ * `lines` is empty for a list that does not hold the product. That is the
+ * difference from {@link ListHoldingItemView}, which names only the lists
+ * that want it.
+ */
+export interface ListWithItemLinesView {
+  listId: string;
+  name: string;
+  zoneId: string;
+  zoneName: string;
+  autoApproveLines: boolean;
+  /** What the caller holds on this list, in the order {@link ListView} uses. */
+  myPermissions: ListPermission[];
+  /** By position, at most {@link LISTS_WITH_ITEM_LINES_LIMITS.maxLinesPerList}. */
+  lines: ItemLineView[];
+}
+
+/**
+ * The lists by zone name, zone id, list name, list id. `hasMore` says that
+ * {@link LISTS_WITH_ITEM_LINES_LIMITS.maxLists} cut the answer.
+ */
+export interface ListsWithItemLinesResult {
+  lists: ListWithItemLinesView[];
   hasMore: boolean;
 }
 

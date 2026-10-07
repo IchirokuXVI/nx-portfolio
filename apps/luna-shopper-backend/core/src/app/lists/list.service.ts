@@ -3,10 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   LIST_HOLDING_ITEM_LIMITS,
   ListPermission,
+  LISTS_WITH_ITEM_LINES_LIMITS,
   RealtimeEvent,
   ZoneRole,
   type CreateListRequest,
   type GetListAccessRequest,
+  type ItemLineView,
+  type LineApprovalStatus,
   type ListAccessView,
   type ListCounts,
   type ListIdRequest,
@@ -16,6 +19,8 @@ import {
   type ListPage,
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
+  type ListsWithItemLinesRequest,
+  type ListsWithItemLinesResult,
   type ListView,
   type SetListAccessRequest,
   type UpdateListRequest,
@@ -51,6 +56,12 @@ import {
   LISTS_HOLDING_ITEM_SQL,
   type ListHoldingItemRow,
 } from './list-holding.sql';
+import {
+  LINES_HOLDING_ITEM_SQL,
+  READABLE_LISTS_WITH_PERMISSIONS_SQL,
+  type LineHoldingItemRow,
+  type ReadableListRow,
+} from './list-item-lines.sql';
 import { EMPTY_LIST_COUNTS, toListView } from './list.mappers';
 import {
   SHARED_WITH_ZONE_PERMISSIONS,
@@ -776,6 +787,90 @@ export class ListService {
         quantity: row.quantity,
       })),
       hasMore: rows.length > cap,
+    };
+  }
+
+  /**
+   * Every list the caller can read, with the lines of each one that hold a
+   * product (plan 0196, section 3).
+   *
+   * The read behind the sheet that adds a product from the catalog tab: one
+   * row for each list, with a stepper that changes the line that holds the
+   * product, or adds one. A list with no such line is in the answer with
+   * `lines: []`, which is the difference from {@link holdingItem}.
+   *
+   * No zone membership is required up front and the item id is checked for
+   * shape alone, both for the reasons {@link holdingItem} gives.
+   *
+   * Two statements. The first answers the readable lists with what the caller
+   * holds on each, and it is the whole of the authorization. The second reads
+   * the lines for exactly those list ids. A caller who reads no list costs one
+   * statement.
+   */
+  async linesHoldingItem(
+    req: ListsWithItemLinesRequest
+  ): Promise<ListsWithItemLinesResult> {
+    if (!isUuid(req.itemId ?? '')) {
+      throw new ValidationException('itemId must be a valid item reference', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+
+    const cap = LISTS_WITH_ITEM_LINES_LIMITS.maxLists;
+    const readable = await this.lists.query<ReadableListRow[]>(
+      READABLE_LISTS_WITH_PERMISSIONS_SQL,
+      [req.userId, cap + 1]
+    );
+    const page = readable.slice(0, cap);
+
+    const linesByList = new Map<string, ItemLineView[]>();
+    if (page.length > 0) {
+      const rows = await this.lists.query<LineHoldingItemRow[]>(
+        LINES_HOLDING_ITEM_SQL,
+        [
+          req.itemId,
+          page.map((row) => row.listId),
+          LISTS_WITH_ITEM_LINES_LIMITS.maxLinesPerList,
+        ]
+      );
+      // The statement orders by list and then by position, so each list's
+      // lines arrive in the order the answer holds them.
+      for (const row of rows) {
+        const line: ItemLineView = {
+          id: row.id,
+          content: row.content,
+          quantity: row.quantity,
+          approvalStatus: row.approvalStatus as LineApprovalStatus,
+        };
+        const held = linesByList.get(row.listId);
+        if (held) {
+          held.push(line);
+        } else {
+          linesByList.set(row.listId, [line]);
+        }
+      }
+    }
+
+    return {
+      lists: page.map((row) => {
+        // Staff hold all four by derivation. Everybody else holds their row,
+        // in the one order `ListView.myPermissions` uses.
+        const stored = new Set<string>(row.permissions);
+        return {
+          listId: row.listId,
+          name: row.name,
+          zoneId: row.zoneId,
+          zoneName: row.zoneName,
+          autoApproveLines: row.autoApproveLines,
+          myPermissions: row.staff
+            ? [...ALL_LIST_PERMISSIONS]
+            : ALL_LIST_PERMISSIONS.filter((permission) =>
+                stored.has(permission)
+              ),
+          lines: linesByList.get(row.listId) ?? [],
+        };
+      }),
+      hasMore: readable.length > cap,
     };
   }
 

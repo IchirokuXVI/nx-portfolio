@@ -78,6 +78,10 @@ export const CATALOG_SCHEMA_IDS = {
   localizedSynonyms: schemaId('catalog/LocalizedSynonyms'),
   productGroupView: schemaId('catalog/ProductGroupView'),
   itemOfferView: schemaId('catalog/ItemOfferView'),
+  itemPricePointView: schemaId('catalog/ItemPricePointView'),
+  itemPriceSeriesView: schemaId('catalog/ItemPriceSeriesView'),
+  itemPriceHistoryView: schemaId('catalog/ItemPriceHistoryView'),
+  itemPriceHistoryRequest: schemaId('msg/item.priceHistory/request'),
   productGroupOfferView: schemaId('catalog/ProductGroupOfferView'),
   productGroupPage: schemaId('catalog/ProductGroupPage'),
   productGroupOfferPage: schemaId('catalog/ProductGroupOfferPage'),
@@ -523,6 +527,54 @@ const itemOfferView = object(
     'sourceKind',
     'stale',
   ]
+);
+
+// The price history of one product (plan 0196, section 2). Every field of a
+// point is required, and a null says "nothing was shown", so a reader never
+// has to tell an absent field from a null one.
+const itemPricePointView = object(
+  CATALOG_SCHEMA_IDS.itemPricePointView,
+  {
+    at: string({ format: 'date-time' }),
+    price: numberOrNull(),
+    currency: nullableString(),
+    unitPrice: numberOrNull(),
+    unitPriceLabel: nullableString(),
+    unitBasis: nullableUnitBasis(),
+  },
+  ['at', 'price', 'currency', 'unitPrice', 'unitPriceLabel', 'unitBasis']
+);
+const itemPriceSeriesView = object(
+  CATALOG_SCHEMA_IDS.itemPriceSeriesView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    points: array(ref(CATALOG_SCHEMA_IDS.itemPricePointView)),
+  },
+  ['priceScopeId', 'supermarketId', 'points']
+);
+const itemPriceHistoryView = object(
+  CATALOG_SCHEMA_IDS.itemPriceHistoryView,
+  {
+    itemId: nonEmptyString(),
+    from: string({ format: 'date-time' }),
+    to: string({ format: 'date-time' }),
+    series: array(ref(CATALOG_SCHEMA_IDS.itemPriceSeriesView)),
+  },
+  ['itemId', 'from', 'to', 'series']
+);
+// `from` and `to` are plain strings here. The gateway checks that each one is
+// an ISO instant, and the service checks it again and checks their order.
+const itemPriceHistoryRequest = object(
+  CATALOG_SCHEMA_IDS.itemPriceHistoryRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    priceScopeIds: array(nonEmptyString()),
+    from: string(),
+    to: string(),
+  },
+  ['userId', 'itemId', 'priceScopeIds']
 );
 
 /**
@@ -1811,6 +1863,9 @@ const searchItemsRequest = object(
     offers: string({ enum: ['best', 'all'] }),
     cursor: string(),
     limit: integer({ minimum: 1 }),
+    // One of `ITEM_ORDERS`, which plan 0196 widened with `category`, `price`
+    // and `unitPrice`. A free string here, as it always was: the service
+    // reads a value it does not know as the default order.
     order: string(),
   },
   ['userId']
@@ -3107,6 +3162,10 @@ export const catalogSchemas: JsonSchema[] = [
   priceScopeView,
   productGroupView,
   itemOfferView,
+  itemPricePointView,
+  itemPriceSeriesView,
+  itemPriceHistoryView,
+  itemPriceHistoryRequest,
   categoryView,
   categoryTreeView,
   categoryPage,
@@ -3372,6 +3431,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.searchOffers]: {
     request: CATALOG_SCHEMA_IDS.searchOffersRequest,
     response: CATALOG_SCHEMA_IDS.productGroupOfferPage,
+  },
+  [ITEM_PATTERNS.priceHistory]: {
+    request: CATALOG_SCHEMA_IDS.itemPriceHistoryRequest,
+    response: CATALOG_SCHEMA_IDS.itemPriceHistoryView,
   },
   [ITEM_PATTERNS.findByEan]: {
     request: CATALOG_SCHEMA_IDS.findItemByEanRequest,

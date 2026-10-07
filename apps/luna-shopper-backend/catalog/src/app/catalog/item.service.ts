@@ -106,10 +106,101 @@ interface ItemCursor {
   order: ItemOrder;
   /** The language the `value` was cut under (plan 0111, section 5). */
   locale: SupportedLocale;
-  /** A sort value for a keyset order; an offset for `relevance`. */
+  /**
+   * A sort value for a keyset order; an offset for `relevance`. Under
+   * `category`, `price` and `unitPrice` it is the name, which is the second
+   * key of each of them (plan 0196).
+   */
   value: string;
   id: string;
+  /** Under `category`: the rank of the last row's first category in the tree. */
+  rank?: number;
+  /**
+   * Under `price` and `unitPrice`: the last row's lowest price or unit price,
+   * as Postgres printed it, so no digit is lost on the way back. Null means
+   * the row had none, and every row after it has none either.
+   */
+  price?: string | null;
 }
+
+/** The orders that sort by a value worked out for each product (plan 0196). */
+type KeyedOrder = 'category' | 'price' | 'unitPrice';
+
+function isKeyedOrder(order: ItemOrder): order is KeyedOrder {
+  return order === 'category' || order === 'price' || order === 'unitPrice';
+}
+
+/**
+ * The rank of a product with no category: after every rank of the tree. A
+ * constant and not the size of the tree, so a category added between two
+ * pages does not move these rows across the cursor.
+ */
+const NO_CATEGORY_RANK = 2147483647;
+
+/** The alias of the sort value in a keyed listing, and its raw column. */
+const SORT_KEY = 'sort_key';
+
+/** A numeric as Postgres prints it. A cursor that holds anything else starts over. */
+const NUMERIC_TEXT = /^\d+(\.\d+)?$/;
+
+/**
+ * The first category of the product aliased `i`, as its rank in the tree
+ * (plan 0196, section 1).
+ *
+ * The first category is the one at `item_categories.position` 0, or at the
+ * lowest position when none is 0. The tree comes in as two arrays, the ids
+ * and their ranks, read one time for the request. A scalar subquery and not a
+ * join, for the reason {@link soldByChainSql} gives, and because a join beside
+ * `take()` makes TypeORM cut the page in a second query.
+ *
+ * **The rank is looked up in the arrays and the arrays are not unnested.**
+ * `array_position` finds the category among the ids, and its index reads the
+ * rank beside it. Joining `unnest` of the two arrays said the same and built
+ * a hash of the whole tree one time for each product: 700 ms for the first
+ * page of 22,000 products against 67 ms for this, on the developer's catalog.
+ * The one row read is the first of `uq_item_categories_position`, which
+ * starts with the product and is in the order of the position.
+ */
+const FIRST_CATEGORY_RANK_SQL = `coalesce((
+        SELECT (:treeRanks::int[])[array_position(:treeIds::uuid[], ic."categoryId")]
+        FROM "item_categories" ic
+        WHERE ic."itemId" = i."id"
+        ORDER BY ic."position" ASC
+        LIMIT 1
+      ), ${NO_CATEGORY_RANK})`;
+
+/**
+ * The lowest price, or unit price, the product aliased `i` has at the scopes
+ * of the read (plan 0196, section 1).
+ *
+ * The same test as `cheapest` in the ranked branch: a row of
+ * `supermarket_items` at one of the scopes that is `available` and has a till
+ * price (plan 0157). The price order takes the lowest `price` of those rows
+ * and the unit price order the lowest `unitPrice`. NULL when no row passes,
+ * and under `unitPrice` when no row that passes states one.
+ *
+ * One lookup on `uq_supermarket_item_scope` for each product the filters
+ * keep. No index serves the sort itself, and plan 0196 adds none.
+ */
+function lowestAtScopesSql(column: 'price' | 'unitPrice'): string {
+  return `(
+        SELECT min(sk."${column}")
+        FROM "supermarket_items" sk
+        WHERE sk."itemId" = i."id"
+          AND sk."priceScopeId" = ANY(:sortScopeIds::uuid[])
+          AND sk."available"
+          AND sk."price" IS NOT NULL
+      )`;
+}
+
+/** A page of the listing branch, with the sort value of each row of a keyed order. */
+interface ListedItems {
+  rows: Item[];
+  /** By product id. Empty for an order that sorts by a column of the product. */
+  sortKeys: ReadonlyMap<string, string | number | null>;
+}
+
+const NO_SORT_KEYS: ReadonlyMap<string, string | number | null> = new Map();
 
 /** Collects positional parameters while a query is assembled around them. */
 function params() {
@@ -928,16 +1019,22 @@ export class ItemService {
     // The caller's language, off the request context the gateway propagated
     // (plan 0111, section 3).
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
-    const cursor = decodeCursorForLocale<ItemCursor>(req.cursor, locale);
     const term = parseSearchTerm(req.query);
     const order = this.resolveOrder(req.order, term);
+    // A cursor cut under another order starts over, as one cut under another
+    // language does (plan 0196, section 1). Its sort value means nothing to
+    // this order, and a seek on it would repeat rows or skip them.
+    const decoded = decodeCursorForLocale<ItemCursor>(req.cursor, locale);
+    const cursor = decoded?.order === order ? decoded : undefined;
 
     // One statement for the page and, for the worklist of plan 0187 alone,
     // one for the count. The count is of the whole request and not of what is
     // left after the cursor, so every page of one request carries one number.
-    const [rows, matching] = await Promise.all([
+    const [listed, matching] = await Promise.all([
       order === 'relevance' && term
-        ? this.rankedItems(req, term, limit, cursor)
+        ? this.rankedItems(req, term, limit, cursor).then(
+            (ranked): ListedItems => ({ rows: ranked, sortKeys: NO_SORT_KEYS })
+          )
         : this.listedItems(req, term, order, locale, limit, cursor),
       !counted
         ? undefined
@@ -945,6 +1042,7 @@ export class ItemService {
           ? this.rankedCount(req, term)
           : this.listedCount(req, term),
     ]);
+    const { rows, sortKeys } = listed;
     const total = matching === undefined ? {} : { total: matching };
 
     const hasMore = rows.length > limit;
@@ -953,22 +1051,28 @@ export class ItemService {
     const nextCursor =
       !hasMore || !last
         ? null
-        : this.nextCursor(order, locale, cursor, limit, last);
+        : this.nextCursor(order, locale, cursor, limit, last, sortKeys);
 
     const pageIds = page.map((row) => row.id);
     const view = await this.viewer(page);
     const scopeIds = req.priceScopeIds ?? [];
+    // Plan 0196, section 1: under `unitPrice` the offer on a row is the one
+    // with the lowest unit price, so the row shows the number that placed it.
+    const byUnitPrice = order === 'unitPrice';
     if (req.offers === 'all' && scopeIds.length > 0) {
       // Plan 0161, section 1: what `getMany` answers for `all`, for the same
       // reason. `bestOffer` is the first entry of the one array rather than a
-      // second query, so the two cannot disagree.
+      // second query, so the two cannot disagree. Under `unitPrice` it is
+      // still an entry of that array, the one {@link lowestUnitPriceOffer}
+      // picks, and the array keeps its order.
       const perItem = await this.allOffersFor(pageIds, scopeIds);
       return {
         items: page.map((row) => {
           const offers = perItem.get(row.id) ?? [];
           return {
             ...view(row),
-            bestOffer: offers[0] ?? null,
+            bestOffer:
+              (byUnitPrice ? lowestUnitPriceOffer(offers) : offers[0]) ?? null,
             offers,
           };
         }),
@@ -976,7 +1080,11 @@ export class ItemService {
         ...total,
       };
     }
-    const offers = await this.offersFor(pageIds, req.priceScopeIds);
+    const offers = await this.offersFor(
+      pageIds,
+      req.priceScopeIds,
+      byUnitPrice
+    );
     return {
       items: page.map((row) => view(row, offers.get(row.id))),
       nextCursor,
@@ -1433,16 +1541,23 @@ export class ItemService {
    * Mercadona row for the same product. Every row this picks between prices one
    * product, so the till price is the comparison, and a search result and a
    * basket line cannot name two different best offers.
+   *
+   * `byUnitPrice` is the one exception, and only the listing ordered by unit
+   * price asks for it (plan 0196, section 1). There the row was placed by its
+   * lowest unit price, so the offer it shows is the row with that unit price,
+   * by {@link orderOffersByUnitPrice}. A row with no till price still comes
+   * after every row that has one.
    */
   private async offersFor(
     itemIds: string[],
-    priceScopeIds?: string[]
+    priceScopeIds?: string[],
+    byUnitPrice = false
   ): Promise<Map<string, ItemOfferView>> {
     const offers = new Map<string, ItemOfferView>();
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
-    const rows = await orderOffers(
+    const rows = await (byUnitPrice ? orderOffersByUnitPrice : orderOffers)(
       this.prices
         .createQueryBuilder('si')
         .distinctOn(['si."itemId"'])
@@ -1702,6 +1817,9 @@ export class ItemService {
    * A caller can still ask for `name` with a query, and it means what it says:
    * every match, alphabetically. That is what an admin filtering a table wants,
    * and it is why the order parameter was not simply overridden.
+   *
+   * The three orders of plan 0196 take this branch too, with or without a
+   * term: {@link listedByKey}.
    */
   private async listedItems(
     req: SearchItemsRequest,
@@ -1710,10 +1828,110 @@ export class ItemService {
     locale: SupportedLocale,
     limit: number,
     cursor?: ItemCursor
-  ): Promise<Item[]> {
+  ): Promise<ListedItems> {
     const qb = this.listedMatch(req, term).take(limit + 1);
+    if (isKeyedOrder(order)) {
+      return this.listedByKey(qb, req, order, locale, cursor);
+    }
     this.applyOrder(qb, order, locale, cursor);
-    return qb.getMany();
+    return { rows: await qb.getMany(), sortKeys: NO_SORT_KEYS };
+  }
+
+  /**
+   * The listing under `category`, `price` or `unitPrice` (plan 0196, section
+   * 1): a value worked out for each product, then the name, then the id.
+   *
+   * **The value is a scalar subquery and never a join.** `take()` beside a
+   * join makes TypeORM cut the page in a second query, and each filter of
+   * {@link listedMatch} is an `EXISTS` for the same reason. It is selected
+   * under an alias, so the page reads it back for the cursor with no second
+   * statement, and the `ORDER BY` names the alias.
+   *
+   * **The keyset.** The category order has no null, because a product with
+   * no category takes {@link NO_CATEGORY_RANK}, so the seek is one row
+   * comparison on `(rank, name, id)`. A price order puts the products with no
+   * price last, and its seek says so with one more leading member: whether
+   * the value is null. After a row with price `p` come the higher prices, the
+   * same price with a later `(name, id)`, and every row with none. After a
+   * row with none come the rows with none and a later `(name, id)`.
+   *
+   * **With no scope, no product has a price.** The price orders then answer
+   * every product in the order of the name, and the cursor says "no price"
+   * for every row. That is correct and not an error.
+   */
+  private async listedByKey(
+    qb: SelectQueryBuilder<Item>,
+    req: SearchItemsRequest,
+    order: KeyedOrder,
+    locale: SupportedLocale,
+    cursor?: ItemCursor
+  ): Promise<ListedItems> {
+    const name = displayNameSql('i', locale);
+    const scopeIds = req.priceScopeIds ?? [];
+
+    if (order !== 'category' && scopeIds.length === 0) {
+      qb.orderBy(name, 'ASC').addOrderBy('i.id', 'ASC');
+      if (cursor && cursor.price === null) {
+        qb.andWhere(`(${name}, i.id) > (:cv, :cid)`, {
+          cv: cursor.value,
+          cid: cursor.id,
+        });
+      }
+      const rows = await qb.getMany();
+      return {
+        rows,
+        sortKeys: new Map(rows.map((row) => [row.id, null])),
+      };
+    }
+
+    let key: string;
+    if (order === 'category') {
+      // The tree, read one time for the request and ranked in the service.
+      const tree = await this.categories.treeRanks();
+      key = FIRST_CATEGORY_RANK_SQL;
+      qb.setParameters({ treeIds: tree.ids, treeRanks: tree.ranks });
+      if (cursor && typeof cursor.rank === 'number') {
+        qb.andWhere(`(${key}, ${name}, i.id) > (:cRank::int, :cv, :cid)`, {
+          cRank: cursor.rank,
+          cv: cursor.value,
+          cid: cursor.id,
+        });
+      }
+    } else {
+      key = lowestAtScopesSql(order);
+      qb.setParameters({ sortScopeIds: scopeIds });
+      if (
+        cursor &&
+        (cursor.price === null ||
+          (typeof cursor.price === 'string' && NUMERIC_TEXT.test(cursor.price)))
+      ) {
+        qb.andWhere(
+          `((${key}) IS NULL, coalesce(${key}, 0), ${name}, i.id)
+             > (:cNone::boolean, :cPrice::numeric, :cv, :cid)`,
+          {
+            cNone: cursor.price === null,
+            cPrice: cursor.price ?? '0',
+            cv: cursor.value,
+            cid: cursor.id,
+          }
+        );
+      }
+    }
+
+    qb.addSelect(key, SORT_KEY)
+      .orderBy(SORT_KEY, 'ASC', 'NULLS LAST')
+      .addOrderBy(name, 'ASC')
+      .addOrderBy('i.id', 'ASC');
+    const { entities, raw } =
+      await qb.getRawAndEntities<Record<string, unknown>>();
+    // By id and not by index, so nothing depends on the two arrays lining up.
+    const sortKeys = new Map<string, string | number | null>(
+      raw.map((row) => [
+        String(row['i_id']),
+        (row[SORT_KEY] ?? null) as string | number | null,
+      ])
+    );
+    return { rows: entities, sortKeys };
   }
 
   /**
@@ -1819,7 +2037,8 @@ export class ItemService {
     locale: SupportedLocale,
     cursor: ItemCursor | undefined,
     limit: number,
-    last: Item
+    last: Item,
+    sortKeys: ReadonlyMap<string, string | number | null>
   ): string {
     if (order === 'relevance') {
       const offset = Number(cursor?.value ?? 0) || 0;
@@ -1828,6 +2047,20 @@ export class ItemService {
         locale,
         value: String(offset + limit),
         id: '',
+      });
+    }
+    if (isKeyedOrder(order)) {
+      // The name and the id, as under `name`, and the value that placed the
+      // row before either of them (plan 0196, section 1).
+      const key = sortKeys.get(last.id) ?? null;
+      return encodeCursor({
+        order,
+        locale,
+        value: displayName(last.name, locale),
+        id: last.id,
+        ...(order === 'category'
+          ? { rank: Number(key ?? NO_CATEGORY_RANK) }
+          : { price: key === null ? null : String(key) }),
       });
     }
     return encodeCursor({
@@ -2278,12 +2511,23 @@ export class ItemService {
    * so the default stays `name`. An explicit order always wins, including
    * `relevance` with no query, which quietly degrades to `name` rather than
    * sorting everything by zero.
+   *
+   * `category`, `price` and `unitPrice` (plan 0196) are never a default. A
+   * caller asks for each by name, with or without a query, and gets the
+   * listing branch.
    */
   private resolveOrder(
     order: string | undefined,
     term: SearchTerm | null
   ): ItemOrder {
-    if (order === 'created' || order === 'updated' || order === 'name') {
+    if (
+      order === 'created' ||
+      order === 'updated' ||
+      order === 'name' ||
+      order === 'category' ||
+      order === 'price' ||
+      order === 'unitPrice'
+    ) {
       return order;
     }
     if (order === 'relevance') {
@@ -2479,6 +2723,50 @@ function orderOffers(
     .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."priceScopeId"', 'ASC');
+}
+
+/**
+ * {@link orderOffers} with the unit price before the price, for the listing
+ * ordered by unit price and for nothing else (plan 0196, section 1).
+ *
+ * A row with a till price still comes first, so the first row of a product
+ * is the one whose unit price is the `min` that placed the product in the
+ * page: both read the rows that are available and have a price. A product
+ * whose priced rows state no unit price gets its cheapest row, as under every
+ * other order.
+ */
+function orderOffersByUnitPrice(
+  query: SelectQueryBuilder<SupermarketItem>
+): SelectQueryBuilder<SupermarketItem> {
+  return query
+    .orderBy('si."itemId"', 'ASC')
+    .addOrderBy('si."price" IS NULL', 'ASC')
+    .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."priceScopeId"', 'ASC');
+}
+
+/**
+ * The entry of one product's offers that {@link orderOffersByUnitPrice} puts
+ * first, for a read that already holds every offer (`offers: 'all'`). The
+ * same keys in the same order, so the two ways of reading a page agree.
+ */
+function lowestUnitPriceOffer(
+  offers: readonly ItemOfferView[]
+): ItemOfferView | undefined {
+  const nullsLast = (a: number | null, b: number | null): number =>
+    a === null ? (b === null ? 0 : 1) : b === null ? -1 : a - b;
+  return [...offers].sort(
+    (a, b) =>
+      Number(a.price === null) - Number(b.price === null) ||
+      nullsLast(a.unitPrice, b.unitPrice) ||
+      nullsLast(a.price, b.price) ||
+      (a.priceScopeId < b.priceScopeId
+        ? -1
+        : a.priceScopeId > b.priceScopeId
+          ? 1
+          : 0)
+  )[0];
 }
 
 /**
