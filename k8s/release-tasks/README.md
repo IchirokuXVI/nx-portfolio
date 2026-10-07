@@ -308,10 +308,10 @@ is restored (k8s plan 0012).
 empty catalog and harvester databases (k8s plan 0012).
 `k8s/catalog-import/README.md` describes the procedure and how to revert it.
 
-- **It is armed for staging and disarmed for production.** The staging window
-  ends on 2026-10-09. The production window says `never`, so no release runs it
-  there. The owner arms production in a pull request that writes that date and
-  `PRODUCTION_RELEASE`.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-10-09. The production window ends on 2026-10-14, and
+  `PRODUCTION_RELEASE` is `0.13.2`. That release runs it in production, and no
+  other version does.
 - **It states four ceilings**, two per environment: the most products and the
   most `source_catalog_entries` that the restore replaces. `check.sh` refuses
   above either one. It also refuses a cluster with no backup Secret, because
