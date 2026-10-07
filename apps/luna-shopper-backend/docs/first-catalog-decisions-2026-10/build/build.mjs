@@ -3,7 +3,8 @@
 //   node build/build.mjs <path to .curation-runs/2026-10-audit-repair>
 //
 // It reads files only. It opens no database and calls no service. It writes the sixteen
-// `aNN-*.json` and `bNN-*.json` files of plan 0186, the thirteen `cNN-*.json` files of plan 0192
+// `aNN-*.json` and `bNN-*.json` files of plan 0186, the thirteen `cNN-*.json` files of plan 0192,
+// the six `dNN-*.json` files of the re-file and the second walk of 2026-10-07,
 // and `gaps.json` beside this folder.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +12,7 @@ import { OUT, rowIndex } from './lib.mjs';
 import { stageA } from './stage-a.mjs';
 import { stageB } from './stage-b.mjs';
 import { stageC } from './stage-c.mjs';
+import { stageD } from './stage-d.mjs';
 import { buildState, checkReplay } from './state.mjs';
 
 const state = buildState();
@@ -36,6 +38,7 @@ const files = [
   ...stageA({ ...state, rows }),
   ...stageB({ ...state, rows }),
   ...stageC(),
+  ...stageD(),
 ];
 
 const gaps = {

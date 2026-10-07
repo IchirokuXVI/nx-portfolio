@@ -33,6 +33,13 @@ dumps and what stays wrong. Every other section describes the catalog as it was 
 > are the dumps that ship. The last section holds them under "The coordinates of the shop
 > of `T7`, and the dumps that ship".
 
+> **Note of 2026-10-07, after the second walk.** Slot 1 moved on twice more that day. A
+> re-file put 2,250 products on the leaves of plan 0179, and a second curation walk
+> created 2,430 products from queue rows that the first walk could not place. The dumps
+> were taken again at 12:28 Madrid time, and those are the dumps that ship now. The last
+> section holds all of it under "The re-file and the second walk (2026-10-07)". The dumps
+> of 01:32 no longer ship.
+
 ## The state in numbers
 
 | | Count |
@@ -84,6 +91,26 @@ and after" in the last section splits them by chain.
 **Note of 2026-10-07:** the dumps that ship now hold 105 price scopes. The tenth Deza shop
 made one. The other seven counts are the same.
 
+After the re-file and the second walk, on 2026-10-07 at 10:28 UTC, slot 1 and the dumps
+that ship hold:
+
+| | Count in the dumps that ship now |
+| --- | ---: |
+| Supermarkets | 5 |
+| Price scopes | 105 |
+| Categories | 309 |
+| Brands | 2,830 |
+| Products (`items`) | 22,203 |
+| Price rows (`item_prices`) | 25,074 |
+| Queue rows (`source_catalog_entries`) | 25,861 |
+| Queue rows linked to a product (`ACTIVE`) | 24,223 |
+| Queue rows left for a person | 1,638 `UNRESOLVED` and 0 `CANDIDATE` |
+
+These are the eight counts that `k8s/catalog-import/first-catalog.manifest` holds now.
+The table before this one is the state of 2026-10-06 and no longer the state of the
+dumps that ship. "The dumps that ship" in the last section splits the new counts by
+chain.
+
 ## What production must do before it serves this state
 
 Release task `0003-restore-the-first-catalog` copies this state into a cluster
@@ -111,6 +138,11 @@ The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
 > **Note of 2026-10-07.** Those dumps do not ship either. The dumps that ship were taken at
 > 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time), after three more changes. The
 > manifest states what they hold. They are not uploaded to a bucket yet.
+
+> **Note of 2026-10-07, after the second walk.** The dumps of 01:32 do not ship either.
+> The dumps that ship were taken at 2026-10-07T10:28:17Z (12:28 Madrid time), after the
+> re-file and the second walk. The manifest states what they hold. They are not uploaded
+> to a bucket yet.
 
 1. **Run the same code.** In the dumps of 2026-10-03 the catalog database holds 26
    migrations, the last one `DiaCategoryTree1758500000000` (plan 0173, PR #597). The
@@ -366,12 +398,20 @@ side. Note that two pieces of one cheese can cost a different amount per kilo (9
 - 11 winery labels held as unsure (801, 822, C.B., Solera 13, Heredad 26 and others).
 - Products created twice because of the size defects below, such as Dolce Gusto capsule
   boxes sized in grams at Mercadona and in units at Deza and El Jamón.
-- Make-up filed under `facial-care` until plan 0179 gives it its own branch.
+- Make-up filed under `facial-care` until plan 0179 gives it its own branch. **Note of
+  2026-10-07: done.** The re-file moved 1,859 make-up products onto the six leaves of
+  "Maquillaje".
 
 "What stays wrong" in the section "Repairs after the audit" is the list as it stood after
 the repairs of plan 0186. **Note of 2026-10-06, after plan 0192:** "What stays wrong or
 open" in the last section is the list as it stands now. The queue holds 4,082 `UNRESOLVED`
 rows and no `CANDIDATE` row.
+
+**Note of 2026-10-07, after the second walk:** the queue holds 1,638 `UNRESOLVED` rows
+and no `CANDIDATE` row. The second walk decided the rows that waited for the categories
+of plan 0179, the skipped Deza sections among them. The about 30 products that the first
+batches created under `uncategorised` are on their leaves, and that leaf holds no
+product.
 
 ## Defects found, and their plans (PR #599)
 
@@ -754,6 +794,8 @@ Slot 1 is down and locked, with its databases kept.
 > of slot 1. Plan 0192 wrote to slot 1 after it. The dumps that ship are in
 > `stage-c3/final/` of the same folder, and the last section names them.
 > **Note of 2026-10-07:** the dumps that ship are in `stage-c5/final/` now.
+> **Note of 2026-10-07, after the second walk:** the dumps that ship are in
+> `stage-c7/final/` now.
 
 ### What stays wrong
 
@@ -969,6 +1011,11 @@ ignored folder `.curation-runs/2026-10-audit-repair/` of the checkout that did i
 > corrected counts. "The coordinates of the shop of `T7`, and the dumps that ship", after
 > it, holds a third change of that day and the dumps that ship. The text and the tables
 > before them describe the state of 2026-10-06 and stay as they were written.
+
+> **Note of 2026-10-07, after the second walk.** Two data stages followed the three
+> changes, and the dumps were taken again at 12:28 Madrid time. "The re-file and the
+> second walk (2026-10-07)", below, holds both stages, the new counts and the dumps that
+> ship now. The dumps of 01:32 no longer ship.
 
 Every change went through the gateway of slot 1 as `admin@curation.local`. No SQL write was
 made. The register, `first-catalog-decisions-2026-10/README.md`, holds each decision with
@@ -1298,12 +1345,345 @@ of the run folder, beside a `VERIFY.txt` and `manifest-values.json`.
   holds no coordinates for the shop of `T7`, and it lacks the audit row of that write.
 - **The two files are not uploaded to a bucket.**
 
+> **Note of 2026-10-07, after the second walk.** These dumps no longer ship, and the
+> manifest no longer holds their values. The column "Ships" and the last three points of
+> the list were true at 01:32. The next section holds the dumps that ship.
+
+### The re-file and the second walk (2026-10-07)
+
+Written on 2026-10-07. Two data stages ran on slot 1 that day, after the dumps of 01:32.
+Neither is a plan. Every figure below was read from the folders `stage-c6/` and
+`stage-c7/` of the run folder. Every write went through the gateway of slot 1 as
+`admin@curation.local`. No SQL write was made, and no harvest run was started. The
+register, `first-catalog-decisions-2026-10/README.md`, holds the rules (section 1), both
+stages (section 6) and the open decisions (section 7). Its files `d01` to `d06` hold the
+rows.
+
+#### The re-file onto the leaves of plan 0179
+
+Plan 0179 added 34 categories on 2026-10-05. Until this stage, the products that belong
+on them sat on the nearest leaf that existed, or on `uncategorised`.
+
+- **2,250 products moved onto 23 leaves,** in four calls of
+  `PATCH /v1/admin/catalog/items/batch`, at about 11:10 Madrid time. Each call answered
+  200 at the first try.
+- **Make-up: 1,859 products on six leaves.** 1,850 came out of `facial-care` and 9 out of
+  three other leaves. `facial-care` went from 2,346 products to 496.
+- **The 31 products of `uncategorised` all moved.** The leaf holds no product now.
+- **92 products were left for a person.** Each fits two leaves, or its name does not say
+  what it is. Nothing was sent for them.
+
+| Leaf | Products moved | They came from |
+| --- | ---: | --- |
+| `lip-makeup` "Labios" | 607 | `facial-care` |
+| `eye-makeup` "Ojos" | 455 | `facial-care` 453, `dyes` 2 |
+| `face-makeup` "Bases y correctores" | 449 | `facial-care` |
+| `powders-and-blush` "Polvos y colorete" | 237 | `facial-care` |
+| `nail-care` "Manicura y pedicura" | 81 | `facial-care` 74, `parapharmacy` 6, `shower-gel-and-sponges` 1 |
+| `makeup-tools` "Brochas y accesorios" | 30 | `facial-care` |
+| `pet-accessories` | 68 | Dog care 57 and cat care 48. 37 products held both |
+| `lighting-and-electrical` | 67 | `batteries-kitchenware-and-bags` |
+| `small-appliances` | 52 | Kitchenware 41, hair styling 9, laundry care 2 |
+| `sherry-and-fortified-wines` | 50 | White wine 38 and vermouth 21. 9 products held both |
+| `party-and-celebrations` | 35 | Dessert decorations 23, candles 11, `uncategorised` 1 |
+| `car-care` | 32 | Air fresheners 22, floor cleaners 6, cloths 4 |
+| `premixed-drinks` | 16 | Four leaves of spirits |
+| `diy-and-hardware` | 15 | `batteries-kitchenware-and-bags` |
+| `hair-accessories` | 12 | Hair styling |
+| `books` | 10 | `uncategorised` |
+| `magazines-and-collectibles` | 9 | `uncategorised` |
+| `home-decor` | 7 | `uncategorised` 5, candles 2 |
+| `shoe-care` | 5 | Air fresheners 3, cloths 2. The leaf holds 8 with the three shoe creams |
+| `home-textiles` | 4 | Kitchenware 2, cloths 2 |
+| `stationery-and-school` | 3 | `uncategorised` |
+| `storage-and-organisation` | 3 | `batteries-kitchenware-and-bags` |
+| `toys-and-games` | 3 | `uncategorised` |
+
+How a product found its leaf:
+
+- The shelf of Mercadona names the make-up leaf. The Deza shelf "Color" holds every kind
+  of make-up, and the shelf paths of El Jamón do not describe the product, so there the
+  curated name decided. 1,633 of the make-up products came from the Deza shelf "Color".
+- Setting sprays and primers went to "Bases y correctores". Bronzers and highlighters
+  went to "Polvos y colorete". Tinted lip balms and lip oils with a shade number went to
+  "Labios". Lip care stayed in facial care.
+- A product that held two leaves which both stood in for the missing one lost both. Any
+  other category was kept: 7 Shiseido "BB Sports" keep `sunscreen`.
+
+Checked after the last call: each of the 2,250 products is where the proposal put it, and
+no other product changed. No name, brand, size or bound row differs. Of all 35 tables of
+the two databases, only `item_categories` changed, from 21,707 rows to 21,660. The
+category route writes no audit row, so `catalog_audit` is the same.
+
+#### The second curation walk
+
+The first walk, on 2026-10-03, left every row whose category did not exist. The queue
+held 4,082 rows, all `UNRESOLVED`. The owner approved a second walk on 2026-10-07. It
+covered 2,586 of them:
+
+| Group | Rows | What it is |
+| ---: | ---: | --- |
+| 1 | 1,072 | The driver of the first walk skipped the row with no model call ("Sections skipped without a decider") |
+| 2 | 1,379 | A decider of the first walk left the row with `NO_CATEGORY` |
+| 3 | 135 | The row was first seen on 2026-10-05 or 2026-10-06, after the first walk |
+
+2,515 rows are of Deza, 42 of El Jamón and 29 of Mercadona. Most of the Deza rows come
+from five shelves: the kiosk, home textiles, the bazaar, stationery and clothing. 79 rows
+hold a price. The other 1,496 queue rows were not in the walk, because a new category
+does not answer their reason.
+
+**How it ran.** The method is that of the first walk, with blind deciders. A decider read
+its prompt, the category list and one packet, and called no service.
+
+- Brand deciders answered nine packets with the 629 printed brands that the registry did
+  not hold.
+- Product deciders (Opus) answered 26 batches of about 100 rows, in 8 lanes by brand.
+- An offline check read every answer. The session then corrected the answers, as the
+  list below says, and wrote each correction into a final file beside the answer.
+- The brands were sent first, then one request for each batch to
+  `POST /v1/admin/harvest/entries/decisions`, between 12:11 and 12:23 Madrid time. All 41
+  brand requests and all 27 batch requests answered 201 at the first try.
+
+**Brands.** 26 brands and 22 spellings were registered. 579 printed texts are not a
+brand, and 303 of them are book titles. 9 answers are `REVIEW`. The session changed seven
+of those from `REGISTER`, because the printed key was too short or the masthead was not
+confirmed: `AR`, `MAS`, `PIN`, `ARQUITECTURA`, `BRAINROT`, `COCHES` and `SABER VIVIR MUY`.
+
+**The corrections before the batches were sent.**
+
+| What | Rows | What was done |
+| --- | ---: | --- |
+| An artificial flower or plant with no height in its name | 160 | The printed height was added to both names |
+| A garbled measure (`1416 cm`, `1114 cm`) | 2 | Left in the queue |
+| A colour printed with a slash on a product to create | 9 | Left in the queue: it may be a choice of two products |
+| A link that the decider itself doubted | 2 | Left in the queue |
+| The brand `Golden`, which the registry holds for a coaster, on stationery and a mirror | 7 | Left in the queue as a brand homonym |
+| A product to create that the live catalog already held | 0 | Checked before each batch. None was found |
+| Two products to create, in two batches, that are equal | 0 | None was found |
+
+**Numbers before and after.**
+
+| | Before the walk | After the walk |
+| --- | ---: | ---: |
+| Products (`items`) | 19,773 | 22,203 |
+| Brands in the registry, with their spellings | 2,782 | 2,830 |
+| Brands that are a spelling | 506 | 528 |
+| Price rows (`item_prices`) | 24,964 | 25,074 |
+| Barcodes (`item_eans`) | 3,990 | 4,013 |
+| Rows of `item_categories` | 21,660 | 24,177 |
+| Offers (`supermarket_items`) | 305,218 | 330,733 |
+| Shop rows (`supermarket_location_items`) | 110,890 | 132,890 |
+| `catalog_audit` | 292,080 | 341,006 |
+| Queue rows (`source_catalog_entries`) | 25,861 | 25,861 |
+| Queue rows `ACTIVE` | 21,779 | 24,223 |
+| Queue rows `UNRESOLVED` | 4,082 | 1,638 |
+
+- Of the 2,586 rows, 2,444 are bound and 142 stay in the queue. 2,436 rows are bound to
+  one of **2,430 new products**, and 8 rows to a product from before the walk.
+- 1,325 of the new products carry a brand and 1,105 carry none. 87 sit in two leaves.
+  1,975 are sold by the piece with no size.
+- **One product from before the walk changed, in its barcode only.** Dove "Desodorante en
+  crema original" (`3f323fdc`) now holds the barcode `80466468`. The Mercadona row that
+  was linked onto it prints that barcode, and an accept teaches it to the product (plan
+  0185). Nothing was renamed, merged or deleted.
+- 110 price rows were written, on 72 products: 63 from the Mercadona API, 42 from the
+  El Jamón website and 5 of the Deza leaflet.
+- 25,515 offers were written, all on products of the walk. 24,337 of them hold no price,
+  because the Deza website prints none. 22,000 shop rows were written, all of Deza: 2,200
+  bound rows hold a claim for each of the ten shops.
+- The 23,275 harvest rows outside the walk did not change, by a hash of each row, of its
+  prices and of its availability claims.
+
+**Products created, by their first leaf.**
+
+| Leaf | Products |
+| --- | ---: |
+| `home-textiles` | 362 |
+| `home-decor` | 358 |
+| `stationery-and-school` | 329 |
+| `books` | 318 |
+| `clothing` | 191 |
+| `magazines-and-collectibles` | 139 |
+| `garden-and-plants` | 114 |
+| `party-and-celebrations` | 103 |
+| `clothing-accessories` | 96 |
+| `diy-and-hardware` | 87 |
+| `storage-and-organisation` | 45 |
+| `shoe-care` | 44 |
+| `small-appliances` | 32 |
+| `bird-food-and-care` | 25 |
+| `beach-and-pool` | 19 |
+| `nail-care` | 18 |
+| `lighting-and-electrical` | 18 |
+| `toys-and-games` | 15 |
+| `car-care` | 13 |
+| `perfumes-and-colognes` | 12 |
+| `batteries-kitchenware-and-bags` | 11 |
+| `small-animal-food-and-care` | 11 |
+| `fish-and-reptile-care` | 8 |
+| `hair-accessories` | 8 |
+| `fabric-softeners-and-laundry-care` | 8 |
+| 34 other leaves, 1 to 5 products each | 46 |
+
+Only `uncategorised` holds no product now, as it must. Seven other leaves were empty
+before the walk: `clothing` holds 191 products, `clothing-accessories` 99,
+`garden-and-plants` 117, `beach-and-pool` 24, `bird-food-and-care` 25,
+`small-animal-food-and-care` 11 and `fish-and-reptile-care` 8.
+
+**The naming rules for the new kinds of product.** The first walk had no rule for them,
+because it created none. Each rule follows what the catalog already held, and the owner
+can change each one. The register holds them as rules R39 to R54.
+
+- **A book** is "Libro" plus its title ("Libro El asesinato de Aristóteles"), with no
+  brand, no size and `UNIT`. The English name is "Book" plus the same title, never
+  translated. The printed brand of a book row is its title. A licence that the registry
+  holds is the one exception: "Libro Abuelitas", brand `Bluey`.
+- **A magazine** carries its masthead as the brand, and the name is "Revista" plus the
+  edition word: "Revista Easy", brand `Burda`. A plain issue is named "Revista" alone.
+  The issue of the week is not a product.
+- **A collectible** is "Coleccionable" plus the name of the collection, with no brand. A
+  licence that the registry holds is the brand and leaves the name.
+- **A garment** holds its model, its colour and its size in the name: "Braguita de
+  algodón camel talla XXL". Each size and each colour is one product.
+- **A measure goes in the name when it tells two products apart,** at the end and as the
+  row prints it: "Sábana bajera rosa 90 cm". A measure or a capacity is never the size.
+  A count is: 3 pairs of socks are 3 `UNIT`.
+- **An artificial flower or plant always holds its height:** "Ramo artificial atado de
+  rosas blanco 35 cm".
+- **Deza's lone letter "G" is its mark for a product with no brand.** It is never a brand
+  and never part of a name.
+
+**What is left in the queue, and why.** 1,638 rows are `UNRESOLVED`, and none is
+`CANDIDATE`.
+
+The 142 rows of the walk: 122 by the answer of a decider and 20 by a correction.
+
+| Reason code | Rows |
+| --- | ---: |
+| `PRODUCT_UNCLEAR`, the printed name does not say what the product is | 35 |
+| `SEVERAL_PRODUCTS`, an offer over several products | 23 |
+| `BRAND_UNKNOWN`, the product has a brand and nobody can tell which | 21 |
+| `NO_CATEGORY`, no leaf fits even now | 16 |
+| `POSSIBLE_DUPLICATE`, probably a product that exists | 10 |
+| `SIZE_UNREADABLE`, a clothing size or a measure that cannot be read | 10 |
+| `BRAND_HOMONYM`, the registry holds the word for another kind of goods | 9 |
+| `OTHER` | 7 |
+| `FORMAT_UNKNOWN`, the size is needed and not printed | 6 |
+| `AMBIGUOUS_CANDIDATE` | 3 |
+| `MULTIPACK_SIZE`, a multipack with no size of its pieces | 2 |
+
+The 1,496 rows that were never in the walk each kept the reason of the first walk. That
+walk wrote 129 different codes on them. The register groups the codes by their own words
+(`build/stage-d.mjs`, `OUTSIDE_GROUPS`):
+
+| Group | Rows | The largest codes |
+| --- | ---: | --- |
+| Unreadable size | 593 | `FORMAT_UNKNOWN` 224, `MULTIPACK_SIZE` 114 |
+| Unknown brand | 432 | `BRAND_UNREGISTERED` 243, `BRAND_UNKNOWN` 45, `BRAND_UNCLEAR` 43 |
+| Unsure match | 253 | `POSSIBLE_DUPLICATE` 84, `SHARED_EAN` 48, `AMBIGUOUS` 30 |
+| Unclear | 142 | `PRODUCT_UNCLEAR` 45, `VARIANT_UNKNOWN` 17 |
+| Several products | 76 | `SEVERAL_PRODUCTS` 46, `GIFT_SET` 17 |
+
+A third walk does not help these rows. Each needs a person, a brand in the registry, or a
+source that prints the size.
+
+**What a person must still decide.** The register holds each one in section 7.
+
+- **Golden.** Seven rows print the word on stationery and a mirror. Register a second
+  brand for it, or say that the coaster and the stationery are one brand.
+- **Eden.** 16 shoe care products "EDEN Natural Comfort" were created under the brand of
+  one toilet gel product, because Deza prints both on one shelf. If they are two
+  businesses, the 16 need a brand of their own.
+- **Two tones, or a choice.** A buddha head "blanco/oro" and two ficus leaves are probably
+  one article each. Six slippers with two colours can be either.
+- **Brands that wait for a person:** `Pronto` the magazine, the lantern `RAM`, seven
+  mastheads (Arquitectura y Diseño, Brainrot, Coches, Cocina cada día con alma, Más y Más,
+  Pin y Pon, Saber Vivir) and the mark `AR`.
+- **Three rows marked "G"** that no decider could name.
+- **The barcode on the Dove deodorant.** It came from a link with a confidence of 0.95.
+- **Names are not uniform across batches.** The English name of an artificial bouquet
+  puts the colour first in two batches and last in one. The tea colour is "color té" in
+  three batches and "té" in one.
+- **The 92 products that the re-file left.**
+
+**Not verified.** Nobody read the 2,430 names one by one. They were checked by rule and
+not by eye, apart from the rows that a correction touched and the two magazine batches.
+Nothing was looked at in a browser, and no search was run on the new products. The checks
+of plan 0186 were not read again.
+
+#### The dumps that ship
+
+The final state, read from slot 1 at 2026-10-07T10:28:32Z, right after the dumps.
+
+Catalog:
+
+| Table | Rows |
+| --- | ---: |
+| `items` | 22,203 (4,013 with an EAN) |
+| `brands` | 2,830 (528 of them spellings of another brand) |
+| `item_prices` | 25,074 |
+| `item_eans` | 4,013 |
+| `item_categories` | 24,177 |
+| `supermarket_items` | 330,733 |
+| `supermarket_location_items` | 132,890 |
+| `supermarkets` | 5 |
+| `supermarket_locations` | 42 |
+| `categories` | 309 |
+| `price_scopes` | 105 |
+| `product_groups` | 0 |
+| `catalog_audit` | 341,006 |
+
+Harvester queue (`source_catalog_entries`, 25,861 rows):
+
+| Chain | Kind | `ACTIVE` | `UNRESOLVED` | `CANDIDATE` |
+| --- | --- | ---: | ---: | ---: |
+| Mercadona | `OFFICIAL_API` | 4,181 | 130 | 0 |
+| LIDL | `OFFICIAL_API` | 78 | 43 | 0 |
+| Deza | `OFFICIAL_WEB` | 13,532 | 818 | 0 |
+| Deza | `OFFICIAL_LEAFLET` | 106 | 82 | 0 |
+| El Jamón | `OFFICIAL_WEB` | 6,326 | 565 | 0 |
+| **Total** | | **24,223** | **1,638** | **0** |
+
+The harvester also holds 25,470 rows of `source_entry_prices`, 155,067 rows of
+`source_entry_availability`, 11 Deza shop codes (10 mapped, 1 ignored), 85 discovered
+places and 15 harvest runs, all `COMPLETED`. All four `supermarket_sources` rows are on.
+The restore turns them off.
+
+The dumps were taken at 2026-10-07T10:28:17Z (12:28 Madrid time) with `pg_dump -Fc`
+(PostgreSQL 16.15), on the code of `dev` at `b67f6f94`. Only the gateway ran, and it holds
+no database, so nothing wrote. The hash of every table right before and right after the
+dumps equals the hash of the verification. They stand in `stage-c7/final/` of the run
+folder, beside a `VERIFY.txt` and `manifest-values.json`.
+
+| Dump | Bytes | sha256 | Ships |
+| --- | ---: | --- | --- |
+| `catalog.dump` | 51,092,778 | `f81e6023528d17f6b6e457a8e27a216ecb388d43883a0b9b9c145c9d92a04880` | Yes |
+| `harvester.dump` | 11,629,145 | `e75f10e693304f357060e3dc42d8c68c8cbf18ae09dbde830f975ed256d20f08` | Yes |
+| `auth.dump` | 26,068 | `b8dd6886dd86d784ae3ecd9a80d69c34598ff89a75814f65e2260d1eb28e30a6` | No |
+| `core.dump` | 99,428 | `a4cfe4728bb12dcf4c2aab8af9c1ecd35c15621fb366c72aa0f20fad1dc0eb39` | No |
+
+- The migrations are the same 29 and 21, with the same last names.
+- Copies of `catalog.dump` and `harvester.dump` were restored with
+  `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
+  slot 1. Both exited 0. All 39 values read from the copies equal those read from slot 1,
+  and all 35 tables of the copies hold the row count and the hash of slot 1.
+- `k8s/catalog-import/first-catalog.manifest` holds the values of these dumps. Six of its
+  lines changed against the dumps of 01:32: the two checksums, and the counts of brands,
+  products, price rows and `ACTIVE` queue rows.
+- **The owner has not said that slot 1 is final.** The copy that the owner is checking on
+  slot 0 is the restore of the dumps of 00:33. It holds neither the re-file nor the second
+  walk.
+- **The two files are not uploaded to a bucket.**
+- Slot 1 is down and locked, with its databases kept.
+
 ### What stays wrong or open
 
 This list replaces "What stays wrong" of the section before it. Each item has its own
 title, so that it can be found and fixed later. It was written on 2026-10-06. A note of
 2026-10-07 stands on each item that the changes of that day made false, and the items
-under "What a shopper would notice" are new.
+under "What a shopper would notice" are new. A note "after the second walk" stands on
+each item that the re-file or the second walk changed. "What a person must still decide"
+in the section before this one holds the points that those two stages opened.
 
 #### In the data
 
@@ -1359,7 +1739,10 @@ under "What a shopper would notice" are new.
   mappings of stage 1 wrote, and the four mappings of stage 3 wrote more. The owner said
   that they stay. **Note of 2026-10-07:** the count is 121,327 now. The shop of `T7` and
   its mapping added 11,022. 121,242 of the offers are Deza offers, on 11,022 products, and
-  85 are Mercadona offers, on 59 products.
+  85 are Mercadona offers, on 59 products. **Note of 2026-10-07, after the second walk:**
+  the walk wrote 24,337 more offers with no price, nearly all of Deza, on the products it
+  created. 121,327 and 24,337 make 145,664. Nobody counted the offers with no price again
+  after the walk.
 - **The two Coca Cola packs hold no container in the name.** They are 2000 ml with pack
   count 4, beside the 2 L bottle of the same name. The stored link states the count and
   not the container. The owner said that they stay.
@@ -1378,7 +1761,14 @@ under "What a shopper would notice" are new.
   labels `Cebolla`, `409` and `Frizz`, and the BBQ skewers that plan 0191 asks a dry run
   for.
 - **The queue holds 4,082 `UNRESOLVED` rows:** 3,191 from the Deza website, 86 from the
-  Deza leaflet, 155 from Mercadona, 607 from El Jamón and 43 from LIDL.
+  Deza leaflet, 155 from Mercadona, 607 from El Jamón and 43 from LIDL. **Note of
+  2026-10-07, after the second walk:** it holds 1,638 now: 818 from the Deza website, 82
+  from the Deza leaflet, 130 from Mercadona, 565 from El Jamón and 43 from LIDL. "What is
+  left in the queue, and why" in the section before this one says why each row waits.
+- **Open since the re-file and the second walk (2026-10-07):** the 92 products that the
+  re-file left on a leaf that may not be theirs, the brand `Golden`, the 16 shoe care
+  products under the brand `Eden`, the brands that wait for a person, and names that are
+  not uniform across batches. "What a person must still decide" holds each one.
 
 #### What a shopper would notice (read on 2026-10-07)
 
@@ -1394,6 +1784,9 @@ id is the first eight characters of the uuid on slot 1.
   product in any of its six leaves ("Ojos", "Bases y correctores", "Labios", "Brochas y
   accesorios", "Manicura y pedicura", "Polvos y colorete"). Two examples: Beter "Lápiz de
   cejas n01 medium" (`90034ecd`) and Clarins "Aceite Confort labios n00" (`63dc45ea`).
+  **Note of 2026-10-07, after the second walk: done.** The re-file moved 1,859 products
+  onto the six leaves. `facial-care` holds 497 products. The largest leaf is now
+  `perfumes-and-colognes`, with 707.
 - **132 products show the price of a kilo as the price of the pack.** Each holds a size
   in grams or millilitres, and its shelf price equals its price per kilo or litre: 128 at
   Mercadona and 4 at El Jamón. They read like products that the chain sells by weight.
@@ -1408,7 +1801,9 @@ id is the first eight characters of the uuid on slot 1.
   2026-10-08. The other 11,022 products never had a price: the website prints none. Two
   examples of an offer with no price: Bonnatur "Jamón asado al horno 98% carne"
   (`20e8698f`) and Carchelejo "Salchichón Gran Reserva" (`6ca9937d`). The file names no
-  product among the 87.
+  product among the 87. **Note of 2026-10-07, after the second walk:** the walk wrote
+  Deza offers on 2,372 products. It wrote five leaflet price rows among them, and the
+  other products have no price.
 - **The El Jamón prices go stale on 2026-10-10 without a run.** All 6,276 El Jamón
   products have a price, and every one was observed on 2026-10-03 at 03:56 UTC, by the
   one El Jamón run. A website price is stale after seven days (`price_policies`). It is
@@ -1417,11 +1812,14 @@ id is the first eight characters of the uuid on slot 1.
   magazines and 6 collectibles. The leaves "Libros" and "Revistas y coleccionables" exist
   and hold no product. Two examples: "Libro Altitud" (`a021de31`) and Burda "Revista Easy"
   (`cd8e66c3`). Four roots hold no product at all: "Ropa y complementos", "Hogar y
-  jardín", "Ocio y papelería" and "Maquillaje".
+  jardín", "Ocio y papelería" and "Maquillaje". **Note of 2026-10-07, after the second
+  walk: done.** The re-file moved all 31. `uncategorised` is the only leaf with no
+  product, and each of the four roots holds products.
 - **27 pack counts are over 30 and read like a measurement.** Two examples: Great Plastic
   "Comedero dispensador para mascotas" with pack count 260 (`1c844cc3`), and Nobleza "Manta
   de felpa panda" with pack count 75 (`1416515f`).
-- **No product has an image.** 19,773 of 19,773.
+- **No product has an image.** 19,773 of 19,773. **Note of 2026-10-07, after the second
+  walk:** 22,203 of 22,203.
 
 #### In the code and the documents
 
@@ -1452,7 +1850,10 @@ id is the first eight characters of the uuid on slot 1.
 - **The dumps are not uploaded,** and the owner has not said that slot 1 is final. On
   2026-10-07 the owner is checking the data on slot 0, on a restore of the dumps of 00:33
   of that day. The dumps that ship were taken after it, at 01:32. They differ from that
-  copy in the coordinates of one shop and in one audit row.
+  copy in the coordinates of one shop and in one audit row. **Note of 2026-10-07, after
+  the second walk:** the dumps that ship are those of 12:28 now. That copy holds neither
+  the re-file nor the second walk, so it lacks 2,430 products and holds make-up under
+  `facial-care`.
 - **Prices age.** The newest Mercadona prices were read on 2026-10-06, for three Córdoba
   warehouses. The Deza leaflet prices end on 2026-10-08. The El Jamón prices are stale
   from 2026-10-10 (2026-10-07).
