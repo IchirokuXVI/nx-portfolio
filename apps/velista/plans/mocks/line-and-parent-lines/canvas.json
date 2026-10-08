@@ -1,0 +1,104 @@
+{
+  "title": "Velista: the line page and parent lines",
+  "lede": "The line page shows its products as cards with a price, keeps the buy history on a page of its own, and says which other lists hold the same line. A line can be a parent: it holds lines, each with the amount needed for one of it, and its number on the list moves theirs. Lines go under a parent on a page of their own, which searches the list and the catalog. Plan <code>0135</code>. Drawn on Day. Every price, date and count is a sample value. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 918, "title": "A line with products, under a parent" },
+    { "file": "Parent.dc.html", "x": 470, "y": 0, "w": 390, "h": 918, "title": "A parent line" },
+    { "file": "ParentReorder.dc.html", "x": 940, "y": 0, "w": 390, "h": 438, "title": "Changing the order" },
+    { "file": "Menu.dc.html", "x": 1410, "y": 0, "w": 390, "h": 560, "title": "The three dots" },
+    { "file": "Delete.dc.html", "x": 1880, "y": 0, "w": 390, "h": 620, "title": "Deleting a parent" },
+    { "file": "ToList.dc.html", "x": 2350, "y": 0, "w": 390, "h": 844, "title": "Add to another list" },
+    { "file": "History.dc.html", "x": 2820, "y": 0, "w": 390, "h": 837, "title": "Buy history, on its own page" },
+    { "file": "Rows.dc.html", "x": 3290, "y": 0, "w": 390, "h": 770, "title": "Rows on the list" },
+    { "file": "AddPage.dc.html", "x": 0, "y": 1560, "w": 390, "h": 844, "title": "The add page, typing" },
+    { "file": "AddPagePicked.dc.html", "x": 470, "y": 1560, "w": 390, "h": 844, "title": "The add page, lines picked" },
+    { "file": "Info.dc.html", "x": 940, "y": 1560, "w": 390, "h": 900, "title": "The info button" },
+    { "file": "Products.dc.html", "x": 1410, "y": 1560, "w": 390, "h": 844, "title": "The products of a line, on their own page" }
+  ],
+  "annotations": [
+    {
+      "id": "l1",
+      "x": 0,
+      "y": -470,
+      "w": 420,
+      "text": "RULE L1: THE LINE PAGE, TOP TO BOTTOM. The header with the three dots. Where the line is, who added it, and the number on the list as a stepper. The row that names its parent, when it has one. The products as cards that scroll sideways. Buy history and Comments as two rows that open their own pages. Then the lists that hold the same line, and 'Add to another list'.\nThe page draws no history of its own. The two long lists that were here moved to the history page."
+    },
+    {
+      "id": "l2",
+      "x": 470,
+      "y": -470,
+      "w": 420,
+      "text": "RULE P1: A PARENT HOLDS LINES AND NOTHING ELSE. No products, no group, no buy history. In their place is one card of its lines. The number beside each line is the amount for 1 of the parent, and the small text under the name is the number on the list.\nUnder the card: 'Add lines', 'Change the order', and the cost. The cost has two figures, for 1 of the parent and for what is on the list now, and one sentence that says how many lines have no price."
+    },
+    {
+      "id": "p2",
+      "x": 940,
+      "y": -470,
+      "w": 420,
+      "text": "RULE P2: THE ORDER IS CHANGED IN ITS OWN STATE. 'Change the order' swaps the amounts for a grip and two arrows on each row, the same controls as the reorder mode of the list. 'Done' brings the amounts back. The order of the card is the order of the rows under the parent on the list."
+    },
+    {
+      "id": "m1",
+      "x": 1410,
+      "y": -470,
+      "w": 420,
+      "text": "RULE M1: THE THREE DOTS HOLD WHAT IS RARE. Change the name, add to another list, take the line out of its parent, delete. A line with no parent has no third row. Taking a line out keeps its number on the list."
+    },
+    {
+      "id": "d1",
+      "x": 1880,
+      "y": -470,
+      "w": 420,
+      "text": "RULE D1: DELETING A PARENT ASKS ABOUT ITS LINES. One checkbox, off when the sheet opens. Off: the lines stay on the list with the numbers they have. On: they are deleted with it."
+    },
+    {
+      "id": "c1",
+      "x": 2350,
+      "y": -470,
+      "w": 420,
+      "text": "RULE C1: A LINE IS BUILT ONCE AND COPIED. The sheet shows every list the person can write, under its group. The list the line is on, and a list that already holds the same line, are switched off and say why. A parent goes with all its lines and their amounts, and starts at 0 on the new list."
+    },
+    {
+      "id": "h1",
+      "x": 2820,
+      "y": -470,
+      "w": 420,
+      "text": "RULE H1: THE HISTORY HAS A PAGE. Two scopes, this list and everywhere the person shops. Three figures, then one card for each month. Each row names the product that was bought, which the old rows did not."
+    },
+    {
+      "id": "r1",
+      "x": 3290,
+      "y": -470,
+      "w": 420,
+      "text": "RULE R1: A PARENT ON THE LIST IS OPEN. Its lines sit under it, indented, each with its own number. The chevron closes it for this visit only. A list always loads with every parent open.\nThe same thing can be under two parents. That is two lines, each with its own parent and its own number: see Toothpaste."
+    },
+    {
+      "id": "a1",
+      "x": 0,
+      "y": 1050,
+      "w": 420,
+      "text": "RULE A1: LINES ARE ADDED ON A PAGE, BECAUSE OF THE KEYBOARD. With the keyboard up, half the screen is gone. A page gives the field, the results and a bar that sits on the keyboard.\nThe field searches two places, like the field of the list: the lines of this list, then the catalog. A catalog result makes a new line with that product. 'Add as a new line' makes a line with no product. A line that is under another parent can still be picked. That adds a second line and leaves the first alone."
+    },
+    {
+      "id": "a2",
+      "x": 470,
+      "y": 1050,
+      "w": 420,
+      "text": "RULE A2: THE PAGE SAYS WHAT WILL HAPPEN BEFORE IT HAPPENS. A picked line gets a stepper for its amount. A line that was on the list keeps its number, and its row says so. A new line gets what the parent needs, and its row says how many.\nWhen a picked line does not hold enough, the parent drops. The sentence above the button names both numbers and the line that causes it."
+    },
+    {
+      "id": "q1",
+      "x": 940,
+      "y": 1050,
+      "w": 420,
+      "text": "RULE Q1: THE AMOUNTS, IN THE WORDS OF THE APP. Raising the parent adds each amount to its line. Lowering it takes each amount away and stops at 0. A line can be changed alone. The parent then follows: down when a line no longer holds enough, up when every line holds enough for one more. Buying the parent buys every line under it."
+    },
+    {
+      "id": "e1",
+      "x": 1410,
+      "y": 1050,
+      "w": 420,
+      "text": "RULE E1: THE PRODUCTS ARE CHANGED ON A PAGE. 'Change' beside 'Any of these will do' opens it. The field searches the catalog and is not focused on arrival, so the products are in sight first. Each product has its cross, and a product the catalog put there has 'Keep'. Typing shows catalog results under the field, drawn like those of the add page.\nIt is a page and not a sheet for the reason of rule A1: the keyboard."
+    }
+  ]
+}
