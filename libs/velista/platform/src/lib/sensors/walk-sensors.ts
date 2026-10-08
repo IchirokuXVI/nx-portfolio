@@ -105,6 +105,12 @@ export class WebXrWalkSensors implements WalkSensorsI {
     listener: WalkSensorListener
   ): Promise<WalkSensorSession | WalkSensorsRefusal> {
     const win = this._window;
+    // The tracking guard measures a loss as the time between a compass reading
+    // and the last pose, so both must be on one clock. A browser timestamp that
+    // is missing, or that is not within a second of now, is replaced by now: the
+    // rule the walk lab stamps its rows by.
+    const stamp = (eventTime: number | undefined) =>
+      onPerformanceClock(eventTime, win?.performance.now() ?? 0);
     let wanted = true;
     let camera: XrCamera | null = null;
     let wakeLock: WakeLockSentinel | null = null;
@@ -132,13 +138,14 @@ export class WebXrWalkSensors implements WalkSensorsI {
       overlayRoot,
       wanted: () => wanted,
       frame: (time, pose) => {
+        const t = stamp(time);
         if (pose === null || pose.emulatedPosition) {
-          listener.pose(untracked(time));
+          listener.pose(untracked(t));
           return;
         }
         const { position: p, orientation: o } = pose.transform;
         listener.pose({
-          t: time,
+          t,
           x: p.x,
           y: p.y,
           z: p.z,
@@ -160,7 +167,7 @@ export class WebXrWalkSensors implements WalkSensorsI {
       listenToOrientation(win, 'absolute', {
         reading: (_source, q, eventTime) =>
           listener.compass({
-            t: eventTime ?? win?.performance.now() ?? 0,
+            t: stamp(eventTime),
             qx: q[0],
             qy: q[1],
             qz: q[2],
@@ -208,6 +215,25 @@ export class WebXrWalkSensors implements WalkSensorsI {
       end,
     };
   }
+}
+
+/** A browser timestamp may be this far from now and still be believed. */
+export const CLOCK_SLACK_MS = 1_000;
+
+/**
+ * `eventTime` when it is on the `performance.now()` clock, else `now`. A sensor
+ * that stamps its readings on another clock (the time since boot, say) is seconds
+ * or days away from the camera's frames, which the tracking guard reads as a loss.
+ */
+export function onPerformanceClock(
+  eventTime: number | undefined,
+  now: number
+): number {
+  return typeof eventTime === 'number' &&
+    Number.isFinite(eventTime) &&
+    Math.abs(eventTime - now) <= CLOCK_SLACK_MS
+    ? eventTime
+    : now;
 }
 
 function untracked(t: number): WalkPoseReading {
