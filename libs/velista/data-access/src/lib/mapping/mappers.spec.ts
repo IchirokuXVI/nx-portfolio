@@ -8,6 +8,7 @@ import {
   toCatalogSuggestion,
   toCatalogSuggestions,
   toComment,
+  toItemLists,
   toLine,
   toLineSettlement,
   toListAccessEntries,
@@ -1539,6 +1540,172 @@ describe('toLineSettlement, what one unit cost (velista 0095, section 7)', () =>
       const settlement = toLineSettlement(raw);
       expect(settlement?.unitPriceCents).toBeNull();
       expect(settlement?.currency).toBeNull();
+    }
+  });
+});
+
+/** `GET /v1/items/:id/list-lines` (backend `0196`, section 3). */
+describe('toItemLists', () => {
+  const WEEKLY = {
+    listId: 'list-weekly',
+    name: 'Weekly shop',
+    zoneId: 'zone-flat',
+    zoneName: 'Flat 3B',
+    autoApproveLines: true,
+    myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+    lines: [
+      { id: 'ln-1', content: 'Leche', quantity: 2, approvalStatus: 'APPROVED' },
+      {
+        id: 'ln-2',
+        content: 'Leche para el café',
+        quantity: 0,
+        approvalStatus: 'PENDING',
+      },
+    ],
+  };
+  const SUNDAY = {
+    listId: 'list-sunday',
+    name: 'Sunday lunch',
+    zoneId: 'zone-parents',
+    zoneName: "Mum and Dad's",
+    autoApproveLines: false,
+    myPermissions: ['READ'],
+    lines: [],
+  };
+
+  it('flattens the lists and their lines apart', () => {
+    expect(
+      toItemLists({ lists: [WEEKLY, SUNDAY], hasMore: false }, 'item-milk')
+    ).toEqual({
+      lists: [
+        {
+          listId: 'list-weekly',
+          zoneId: 'zone-flat',
+          name: 'Weekly shop',
+          zoneName: 'Flat 3B',
+          autoApproveLines: true,
+          permissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+        },
+        // A list with no such line is still a row of the table.
+        {
+          listId: 'list-sunday',
+          zoneId: 'zone-parents',
+          name: 'Sunday lunch',
+          zoneName: "Mum and Dad's",
+          autoApproveLines: false,
+          permissions: ['READ'],
+        },
+      ],
+      lines: [
+        {
+          lineId: 'ln-1',
+          listId: 'list-weekly',
+          name: 'Leche',
+          quantity: 2,
+          pending: false,
+          itemIds: ['item-milk'],
+        },
+        {
+          lineId: 'ln-2',
+          listId: 'list-weekly',
+          name: 'Leche para el café',
+          quantity: 0,
+          pending: true,
+          itemIds: ['item-milk'],
+        },
+      ],
+      hasMore: false,
+    });
+  });
+
+  it('drops a permission it does not know, alone', () => {
+    // A newer server never grants more here than it meant to.
+    const { lists } = toItemLists(
+      {
+        lists: [
+          { ...WEEKLY, myPermissions: ['READ', 'AUDIT', 7, null, 'WRITE'] },
+          { ...SUNDAY, myPermissions: 'READ' },
+        ],
+      },
+      'item-milk'
+    );
+
+    expect(lists.map((list) => list.permissions)).toEqual([
+      ['READ', 'WRITE'],
+      [],
+    ]);
+  });
+
+  it('drops a list it cannot read, with its lines, and keeps the rest', () => {
+    const answer = toItemLists(
+      {
+        lists: [
+          { ...WEEKLY, listId: null },
+          { ...WEEKLY, name: undefined },
+          { ...WEEKLY, zoneId: 3 },
+          { ...WEEKLY, zoneName: null },
+          'list-weekly',
+          null,
+          SUNDAY,
+        ],
+      },
+      'item-milk'
+    );
+
+    expect(answer.lists.map((list) => list.listId)).toEqual(['list-sunday']);
+    expect(answer.lines).toEqual([]);
+  });
+
+  it('drops a line with no id or no name, and reads a missing quantity as none', () => {
+    const { lines } = toItemLists(
+      {
+        lists: [
+          {
+            ...WEEKLY,
+            lines: [
+              { content: 'Leche', quantity: 1 },
+              { id: 'ln-1', quantity: 1 },
+              { id: 'ln-2', content: 'Leche', quantity: '2' },
+              'ln-3',
+            ],
+          },
+        ],
+      },
+      'item-milk'
+    );
+
+    expect(lines).toEqual([
+      {
+        lineId: 'ln-2',
+        listId: 'list-weekly',
+        name: 'Leche',
+        quantity: 0,
+        pending: false,
+        itemIds: ['item-milk'],
+      },
+    ]);
+  });
+
+  it('reads only a true as approving lines by itself, and as more', () => {
+    const answer = toItemLists(
+      { lists: [{ ...WEEKLY, autoApproveLines: 'yes' }], hasMore: 'yes' },
+      'item-milk'
+    );
+
+    expect(answer.lists[0]?.autoApproveLines).toBe(false);
+    expect(answer.hasMore).toBe(false);
+    expect(toItemLists({ lists: [], hasMore: true }, 'item-milk').hasMore).toBe(
+      true
+    );
+  });
+
+  it('answers nothing, and never throws, for a body that is not the answer', () => {
+    for (const raw of [undefined, null, 0, 'oops', [], {}, { lists: 'x' }]) {
+      expect(toItemLists(raw, 'item-milk')).toEqual({
+        lists: [],
+        lines: [],
+        hasMore: false,
+      });
     }
   });
 });

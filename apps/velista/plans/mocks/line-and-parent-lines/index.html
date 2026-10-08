@@ -1,0 +1,1432 @@
+<title>Velista: the line page and parent lines</title>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Main .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Main .app * { box-sizing:border-box }
+#ab-Main .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Main .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Main .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Main .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Main .app a:hover { text-decoration:underline }
+#ab-Main .app :where(p) { margin:0;padding:0 }
+#ab-Main .app :where(h1) { margin:0;padding:0 }
+#ab-Main .app :where(h2) { margin:0;padding:0 }
+#ab-Main .app :where(ul) { margin:0;padding:0 }
+#ab-Main .app :where(li) { list-style:none }
+#ab-Main .app :where(svg) { display:block }
+#ab-Main .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Main .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Main .ph .ib:first-child { margin-left:-12px }
+#ab-Main .ph h1 + .ib { margin-right:-12px }
+#ab-Main .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Main .sec { padding:0 16px }
+#ab-Main .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Main .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Main .h2 a { font-size:14px }
+#ab-Main .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Main .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Main .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Main .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Main .card > li + li { border-top:1px solid var(--line) }
+#ab-Main .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Main .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Main .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Main .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Main .qty.zero { background:none;color:var(--muted) }
+#ab-Main .grow { flex:1;min-width:0 }
+#ab-Main .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Main .where { font-size:14px;color:var(--text2) }
+#ab-Main .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Main .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Main .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Main .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Main .links { border-top:1px solid var(--line) }
+#ab-Main .links li { border-bottom:1px solid var(--line) }
+#ab-Main .app a.lk, #ab-Main .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Main .lk .v { font-size:14px;color:var(--muted) }
+#ab-Main .lk svg { color:var(--strong) }
+#ab-Main .app a.txt, #ab-Main .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Main .end { height:32px;flex:none }
+#ab-Main .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Main .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Main .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Main .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Main .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Main .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Main .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Main .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Main .pick:first-child { border-top:0 }
+#ab-Main .pick.off { color:var(--muted) }
+#ab-Main .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Main .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Main .par { margin-top:16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line) }
+#ab-Main .rail { display:flex;gap:12px;padding:0 16px;overflow-x:auto;scrollbar-width:none }
+#ab-Main .rail li { display:flex }
+#ab-Main .pc { display:block;width:156px;flex:none;padding:12px }
+#ab-Main .img { display:grid;place-items:center;height:96px;border-radius:12px;background:var(--sunken);color:var(--strong) }
+#ab-Main .pc .nm { font-size:14px;line-height:1.3;min-height:36px;margin-top:12px }
+#ab-Main .price { display:block;font-size:18px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums;margin-top:12px }
+#ab-Main .chain { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Main .gap { margin-top:28px }
+#ab-Parent .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Parent .app * { box-sizing:border-box }
+#ab-Parent .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Parent .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Parent .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Parent .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Parent .app a:hover { text-decoration:underline }
+#ab-Parent .app :where(p) { margin:0;padding:0 }
+#ab-Parent .app :where(h1) { margin:0;padding:0 }
+#ab-Parent .app :where(h2) { margin:0;padding:0 }
+#ab-Parent .app :where(ul) { margin:0;padding:0 }
+#ab-Parent .app :where(li) { list-style:none }
+#ab-Parent .app :where(svg) { display:block }
+#ab-Parent .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Parent .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Parent .ph .ib:first-child { margin-left:-12px }
+#ab-Parent .ph h1 + .ib { margin-right:-12px }
+#ab-Parent .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Parent .sec { padding:0 16px }
+#ab-Parent .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Parent .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Parent .h2 a { font-size:14px }
+#ab-Parent .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Parent .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Parent .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Parent .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Parent .card > li + li { border-top:1px solid var(--line) }
+#ab-Parent .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Parent .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Parent .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Parent .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Parent .qty.zero { background:none;color:var(--muted) }
+#ab-Parent .grow { flex:1;min-width:0 }
+#ab-Parent .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Parent .where { font-size:14px;color:var(--text2) }
+#ab-Parent .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Parent .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Parent .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Parent .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Parent .links { border-top:1px solid var(--line) }
+#ab-Parent .links li { border-bottom:1px solid var(--line) }
+#ab-Parent .app a.lk, #ab-Parent .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Parent .lk .v { font-size:14px;color:var(--muted) }
+#ab-Parent .lk svg { color:var(--strong) }
+#ab-Parent .app a.txt, #ab-Parent .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Parent .end { height:32px;flex:none }
+#ab-Parent .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Parent .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Parent .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Parent .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Parent .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Parent .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Parent .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Parent .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Parent .pick:first-child { border-top:0 }
+#ab-Parent .pick.off { color:var(--muted) }
+#ab-Parent .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Parent .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-Parent .kb.flow { position:static }
+#ab-Parent .sheet.up { bottom:300px }
+#ab-Parent .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-Parent .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-Parent .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-Parent .list { margin-top:8px }
+#ab-Parent .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-Parent .facts { display:flex }
+#ab-Parent .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-Parent .facts li:first-child { padding-left:0;border-left:0 }
+#ab-Parent .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-Parent .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Parent .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Parent .gap { margin-top:28px }
+#ab-Parent .acts { display:flex;justify-content:space-between }
+#ab-Parent .cost { margin-top:16px;padding-top:16px;border-top:1px solid var(--line) }
+#ab-Parent .cost + .sub { margin:8px 0 0 }
+#ab-ParentReorder .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-ParentReorder .app * { box-sizing:border-box }
+#ab-ParentReorder .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-ParentReorder .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-ParentReorder .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-ParentReorder .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-ParentReorder .app a:hover { text-decoration:underline }
+#ab-ParentReorder .app :where(p) { margin:0;padding:0 }
+#ab-ParentReorder .app :where(h1) { margin:0;padding:0 }
+#ab-ParentReorder .app :where(h2) { margin:0;padding:0 }
+#ab-ParentReorder .app :where(ul) { margin:0;padding:0 }
+#ab-ParentReorder .app :where(li) { list-style:none }
+#ab-ParentReorder .app :where(svg) { display:block }
+#ab-ParentReorder .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-ParentReorder .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-ParentReorder .ph .ib:first-child { margin-left:-12px }
+#ab-ParentReorder .ph h1 + .ib { margin-right:-12px }
+#ab-ParentReorder .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-ParentReorder .sec { padding:0 16px }
+#ab-ParentReorder .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-ParentReorder .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-ParentReorder .h2 a { font-size:14px }
+#ab-ParentReorder .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-ParentReorder .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-ParentReorder .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-ParentReorder .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-ParentReorder .card > li + li { border-top:1px solid var(--line) }
+#ab-ParentReorder .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-ParentReorder .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-ParentReorder .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-ParentReorder .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-ParentReorder .qty.zero { background:none;color:var(--muted) }
+#ab-ParentReorder .grow { flex:1;min-width:0 }
+#ab-ParentReorder .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-ParentReorder .where { font-size:14px;color:var(--text2) }
+#ab-ParentReorder .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-ParentReorder .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-ParentReorder .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-ParentReorder .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-ParentReorder .links { border-top:1px solid var(--line) }
+#ab-ParentReorder .links li { border-bottom:1px solid var(--line) }
+#ab-ParentReorder .app a.lk, #ab-ParentReorder .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-ParentReorder .lk .v { font-size:14px;color:var(--muted) }
+#ab-ParentReorder .lk svg { color:var(--strong) }
+#ab-ParentReorder .app a.txt, #ab-ParentReorder .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-ParentReorder .end { height:32px;flex:none }
+#ab-ParentReorder .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-ParentReorder .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-ParentReorder .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-ParentReorder .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-ParentReorder .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-ParentReorder .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-ParentReorder .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-ParentReorder .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-ParentReorder .pick:first-child { border-top:0 }
+#ab-ParentReorder .pick.off { color:var(--muted) }
+#ab-ParentReorder .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-ParentReorder .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-ParentReorder .kb.flow { position:static }
+#ab-ParentReorder .sheet.up { bottom:300px }
+#ab-ParentReorder .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-ParentReorder .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-ParentReorder .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-ParentReorder .list { margin-top:8px }
+#ab-ParentReorder .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-ParentReorder .facts { display:flex }
+#ab-ParentReorder .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-ParentReorder .facts li:first-child { padding-left:0;border-left:0 }
+#ab-ParentReorder .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-ParentReorder .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-ParentReorder .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-ParentReorder .ro { display:flex;align-items:center;gap:4px;min-height:56px;padding:4px 4px 4px 8px }
+#ab-ParentReorder .grip { width:32px;height:44px;flex:none;display:grid;place-items:center;color:var(--strong);cursor:grab }
+#ab-ParentReorder .ro .ib { color:var(--text2) }
+#ab-ParentReorder .ro .ib:disabled { color:var(--line);cursor:default }
+#ab-Menu .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Menu .app * { box-sizing:border-box }
+#ab-Menu .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Menu .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Menu .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Menu .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Menu .app a:hover { text-decoration:underline }
+#ab-Menu .app :where(p) { margin:0;padding:0 }
+#ab-Menu .app :where(h1) { margin:0;padding:0 }
+#ab-Menu .app :where(h2) { margin:0;padding:0 }
+#ab-Menu .app :where(ul) { margin:0;padding:0 }
+#ab-Menu .app :where(li) { list-style:none }
+#ab-Menu .app :where(svg) { display:block }
+#ab-Menu .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Menu .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Menu .ph .ib:first-child { margin-left:-12px }
+#ab-Menu .ph h1 + .ib { margin-right:-12px }
+#ab-Menu .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Menu .sec { padding:0 16px }
+#ab-Menu .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Menu .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Menu .h2 a { font-size:14px }
+#ab-Menu .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Menu .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Menu .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Menu .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Menu .card > li + li { border-top:1px solid var(--line) }
+#ab-Menu .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Menu .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Menu .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Menu .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Menu .qty.zero { background:none;color:var(--muted) }
+#ab-Menu .grow { flex:1;min-width:0 }
+#ab-Menu .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Menu .where { font-size:14px;color:var(--text2) }
+#ab-Menu .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Menu .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Menu .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Menu .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Menu .links { border-top:1px solid var(--line) }
+#ab-Menu .links li { border-bottom:1px solid var(--line) }
+#ab-Menu .app a.lk, #ab-Menu .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Menu .lk .v { font-size:14px;color:var(--muted) }
+#ab-Menu .lk svg { color:var(--strong) }
+#ab-Menu .app a.txt, #ab-Menu .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Menu .end { height:32px;flex:none }
+#ab-Menu .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Menu .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Menu .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Menu .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Menu .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Menu .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Menu .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Menu .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Menu .pick:first-child { border-top:0 }
+#ab-Menu .pick.off { color:var(--muted) }
+#ab-Menu .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Menu .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Menu .acts { margin-top:8px }
+#ab-Menu .app a.act, #ab-Menu .act { display:flex;align-items:center;width:100%;min-height:56px;border-top:1px solid var(--line);font-size:16px;font-weight:400;color:var(--text) }
+#ab-Menu .acts li:first-child .act { border-top:0 }
+#ab-Menu .act.bad { color:var(--bad) }
+#ab-Delete .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Delete .app * { box-sizing:border-box }
+#ab-Delete .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Delete .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Delete .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Delete .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Delete .app a:hover { text-decoration:underline }
+#ab-Delete .app :where(p) { margin:0;padding:0 }
+#ab-Delete .app :where(h1) { margin:0;padding:0 }
+#ab-Delete .app :where(h2) { margin:0;padding:0 }
+#ab-Delete .app :where(ul) { margin:0;padding:0 }
+#ab-Delete .app :where(li) { list-style:none }
+#ab-Delete .app :where(svg) { display:block }
+#ab-Delete .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Delete .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Delete .ph .ib:first-child { margin-left:-12px }
+#ab-Delete .ph h1 + .ib { margin-right:-12px }
+#ab-Delete .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Delete .sec { padding:0 16px }
+#ab-Delete .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Delete .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Delete .h2 a { font-size:14px }
+#ab-Delete .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Delete .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Delete .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Delete .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Delete .card > li + li { border-top:1px solid var(--line) }
+#ab-Delete .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Delete .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Delete .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Delete .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Delete .qty.zero { background:none;color:var(--muted) }
+#ab-Delete .grow { flex:1;min-width:0 }
+#ab-Delete .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Delete .where { font-size:14px;color:var(--text2) }
+#ab-Delete .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Delete .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Delete .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Delete .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Delete .links { border-top:1px solid var(--line) }
+#ab-Delete .links li { border-bottom:1px solid var(--line) }
+#ab-Delete .app a.lk, #ab-Delete .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Delete .lk .v { font-size:14px;color:var(--muted) }
+#ab-Delete .lk svg { color:var(--strong) }
+#ab-Delete .app a.txt, #ab-Delete .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Delete .end { height:32px;flex:none }
+#ab-Delete .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Delete .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Delete .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Delete .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Delete .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Delete .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Delete .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Delete .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Delete .pick:first-child { border-top:0 }
+#ab-Delete .pick.off { color:var(--muted) }
+#ab-Delete .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Delete .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-Delete .kb.flow { position:static }
+#ab-Delete .sheet.up { bottom:300px }
+#ab-Delete .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-Delete .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-Delete .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-Delete .list { margin-top:8px }
+#ab-Delete .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-Delete .facts { display:flex }
+#ab-Delete .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-Delete .facts li:first-child { padding-left:0;border-left:0 }
+#ab-Delete .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-Delete .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Delete .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Delete .pick { margin-top:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line) }
+#ab-Delete .pick:first-child { border-top:1px solid var(--line) }
+#ab-Delete .danger { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--bad);color:var(--bad);text-align:center;font-weight:600 }
+#ab-Delete .quiet { margin-top:8px;border:0 }
+#ab-ToList .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-ToList .app * { box-sizing:border-box }
+#ab-ToList .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-ToList .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-ToList .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-ToList .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-ToList .app a:hover { text-decoration:underline }
+#ab-ToList .app :where(p) { margin:0;padding:0 }
+#ab-ToList .app :where(h1) { margin:0;padding:0 }
+#ab-ToList .app :where(h2) { margin:0;padding:0 }
+#ab-ToList .app :where(ul) { margin:0;padding:0 }
+#ab-ToList .app :where(li) { list-style:none }
+#ab-ToList .app :where(svg) { display:block }
+#ab-ToList .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-ToList .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-ToList .ph .ib:first-child { margin-left:-12px }
+#ab-ToList .ph h1 + .ib { margin-right:-12px }
+#ab-ToList .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-ToList .sec { padding:0 16px }
+#ab-ToList .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-ToList .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-ToList .h2 a { font-size:14px }
+#ab-ToList .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-ToList .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-ToList .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-ToList .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-ToList .card > li + li { border-top:1px solid var(--line) }
+#ab-ToList .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-ToList .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-ToList .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-ToList .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-ToList .qty.zero { background:none;color:var(--muted) }
+#ab-ToList .grow { flex:1;min-width:0 }
+#ab-ToList .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-ToList .where { font-size:14px;color:var(--text2) }
+#ab-ToList .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-ToList .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-ToList .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-ToList .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-ToList .links { border-top:1px solid var(--line) }
+#ab-ToList .links li { border-bottom:1px solid var(--line) }
+#ab-ToList .app a.lk, #ab-ToList .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-ToList .lk .v { font-size:14px;color:var(--muted) }
+#ab-ToList .lk svg { color:var(--strong) }
+#ab-ToList .app a.txt, #ab-ToList .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-ToList .end { height:32px;flex:none }
+#ab-ToList .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-ToList .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-ToList .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-ToList .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-ToList .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-ToList .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-ToList .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-ToList .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-ToList .pick:first-child { border-top:0 }
+#ab-ToList .pick.off { color:var(--muted) }
+#ab-ToList .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-ToList .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-History .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-History .app * { box-sizing:border-box }
+#ab-History .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-History .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-History .app a:hover { text-decoration:underline }
+#ab-History .app :where(p) { margin:0;padding:0 }
+#ab-History .app :where(h1) { margin:0;padding:0 }
+#ab-History .app :where(h2) { margin:0;padding:0 }
+#ab-History .app :where(ul) { margin:0;padding:0 }
+#ab-History .app :where(li) { list-style:none }
+#ab-History .app :where(svg) { display:block }
+#ab-History .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-History .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-History .ph .ib:first-child { margin-left:-12px }
+#ab-History .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-History .sec { padding:0 16px }
+#ab-History .h2 { font-size:14px;font-weight:600;color:var(--text2);line-height:1.2;margin:24px 0 8px }
+#ab-History .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-History .card li + li { border-top:1px solid var(--line) }
+#ab-History .grow { flex:1;min-width:0 }
+#ab-History .where { font-size:14px;color:var(--text2);padding-top:16px }
+#ab-History .seg { display:flex;gap:4px;margin-top:16px;padding:4px;border-radius:14px;background:var(--sunken) }
+#ab-History .seg button { flex:1;height:44px;border-radius:10px;text-align:center;font-size:14px;font-weight:600;color:var(--text2) }
+#ab-History .seg button[aria-pressed="true"] { background:var(--raised);color:var(--text);box-shadow:0 1px 2px rgba(17,20,31,.04),0 2px 6px rgba(17,20,31,.05) }
+#ab-History .facts { display:flex;margin-top:20px }
+#ab-History .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-History .facts li:first-child { padding-left:0;border-left:0 }
+#ab-History .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-History .fl { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-History .hr { display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 16px }
+#ab-History .d { width:44px;flex:none;font-size:14px;color:var(--muted) }
+#ab-History .nm { display:block;font-size:14px;line-height:1.3 }
+#ab-History .dt { display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-History .p { font-size:14px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap }
+#ab-History .nm.none { color:var(--bad) }
+#ab-History .more { display:block;width:100%;min-height:44px;margin-top:12px;text-align:center;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-History .end { height:32px;flex:none }
+#ab-Rows .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Rows .app * { box-sizing:border-box }
+#ab-Rows .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Rows .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Rows .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Rows .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Rows .app a:hover { text-decoration:underline }
+#ab-Rows .app :where(p) { margin:0;padding:0 }
+#ab-Rows .app :where(h1) { margin:0;padding:0 }
+#ab-Rows .app :where(h2) { margin:0;padding:0 }
+#ab-Rows .app :where(ul) { margin:0;padding:0 }
+#ab-Rows .app :where(li) { list-style:none }
+#ab-Rows .app :where(svg) { display:block }
+#ab-Rows .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Rows .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Rows .ph .ib:first-child { margin-left:-12px }
+#ab-Rows .ph h1 + .ib { margin-right:-12px }
+#ab-Rows .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Rows .sec { padding:0 16px }
+#ab-Rows .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Rows .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Rows .h2 a { font-size:14px }
+#ab-Rows .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Rows .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Rows .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Rows .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Rows .card > li + li { border-top:1px solid var(--line) }
+#ab-Rows .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Rows .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Rows .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Rows .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Rows .qty.zero { background:none;color:var(--muted) }
+#ab-Rows .grow { flex:1;min-width:0 }
+#ab-Rows .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Rows .where { font-size:14px;color:var(--text2) }
+#ab-Rows .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Rows .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Rows .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Rows .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Rows .links { border-top:1px solid var(--line) }
+#ab-Rows .links li { border-bottom:1px solid var(--line) }
+#ab-Rows .app a.lk, #ab-Rows .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Rows .lk .v { font-size:14px;color:var(--muted) }
+#ab-Rows .lk svg { color:var(--strong) }
+#ab-Rows .app a.txt, #ab-Rows .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Rows .end { height:32px;flex:none }
+#ab-Rows .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Rows .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Rows .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Rows .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Rows .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Rows .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Rows .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Rows .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Rows .pick:first-child { border-top:0 }
+#ab-Rows .pick.off { color:var(--muted) }
+#ab-Rows .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Rows .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-Rows .kb.flow { position:static }
+#ab-Rows .sheet.up { bottom:300px }
+#ab-Rows .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-Rows .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-Rows .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-Rows .list { margin-top:8px }
+#ab-Rows .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-Rows .facts { display:flex }
+#ab-Rows .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-Rows .facts li:first-child { padding-left:0;border-left:0 }
+#ab-Rows .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-Rows .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Rows .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Rows .rows { display:flex;flex-direction:column;gap:4px }
+#ab-Rows .row { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px;background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Rows .row.open { border-radius:16px 16px 4px 4px }
+#ab-Rows .row .nm { line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Rows .fold { color:var(--strong);margin-left:-12px }
+#ab-Rows .kids { display:flex;flex-direction:column;gap:4px;margin:4px 0 0 20px }
+#ab-Rows .kids .row { min-height:48px;border-radius:12px }
+#ab-Rows .kids li:last-child .row { border-radius:12px 12px 16px 16px }
+#ab-Rows .kids .qty { height:36px }
+#ab-AddPage .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-AddPage .app * { box-sizing:border-box }
+#ab-AddPage .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-AddPage .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-AddPage .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-AddPage .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-AddPage .app a:hover { text-decoration:underline }
+#ab-AddPage .app :where(p) { margin:0;padding:0 }
+#ab-AddPage .app :where(h1) { margin:0;padding:0 }
+#ab-AddPage .app :where(h2) { margin:0;padding:0 }
+#ab-AddPage .app :where(ul) { margin:0;padding:0 }
+#ab-AddPage .app :where(li) { list-style:none }
+#ab-AddPage .app :where(svg) { display:block }
+#ab-AddPage .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-AddPage .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-AddPage .ph .ib:first-child { margin-left:-12px }
+#ab-AddPage .ph h1 + .ib { margin-right:-12px }
+#ab-AddPage .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-AddPage .sec { padding:0 16px }
+#ab-AddPage .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-AddPage .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-AddPage .h2 a { font-size:14px }
+#ab-AddPage .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-AddPage .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-AddPage .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-AddPage .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-AddPage .card > li + li { border-top:1px solid var(--line) }
+#ab-AddPage .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-AddPage .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-AddPage .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-AddPage .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-AddPage .qty.zero { background:none;color:var(--muted) }
+#ab-AddPage .grow { flex:1;min-width:0 }
+#ab-AddPage .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-AddPage .where { font-size:14px;color:var(--text2) }
+#ab-AddPage .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-AddPage .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-AddPage .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-AddPage .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-AddPage .links { border-top:1px solid var(--line) }
+#ab-AddPage .links li { border-bottom:1px solid var(--line) }
+#ab-AddPage .app a.lk, #ab-AddPage .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-AddPage .lk .v { font-size:14px;color:var(--muted) }
+#ab-AddPage .lk svg { color:var(--strong) }
+#ab-AddPage .app a.txt, #ab-AddPage .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-AddPage .end { height:32px;flex:none }
+#ab-AddPage .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-AddPage .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-AddPage .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-AddPage .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-AddPage .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-AddPage .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-AddPage .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-AddPage .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-AddPage .pick:first-child { border-top:0 }
+#ab-AddPage .pick.off { color:var(--muted) }
+#ab-AddPage .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-AddPage .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-AddPage .kb.flow { position:static }
+#ab-AddPage .sheet.up { bottom:300px }
+#ab-AddPage .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-AddPage .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-AddPage .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-AddPage .list { margin-top:8px }
+#ab-AddPage .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-AddPage .facts { display:flex }
+#ab-AddPage .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-AddPage .facts li:first-child { padding-left:0;border-left:0 }
+#ab-AddPage .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-AddPage .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-AddPage .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-AddPage .body { flex:1;min-height:0;overflow:hidden }
+#ab-AddPage .sec .fl { margin-top:12px }
+#ab-AddPage .grp { margin:16px 0 0 }
+#ab-AddPage .pick { min-height:56px;padding:4px 0 }
+#ab-AddPage .thumb { width:40px;height:40px;flex:none;border-radius:12px;background:var(--sunken);color:var(--strong);display:grid;place-items:center }
+#ab-AddPage .amt { display:block;font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2;text-align:right;white-space:nowrap }
+#ab-AddPage .cap { display:block;font-size:11px;color:var(--muted);text-align:right;white-space:nowrap;margin-top:2px }
+#ab-AddPage .txt { margin-top:8px }
+#ab-AddPage .bar { display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(--raised);border-top:1px solid var(--line) }
+#ab-AddPage .done { height:44px;padding:0 20px;border-radius:12px;background:#ffb454;color:#0a0c14;font-weight:600 }
+#ab-AddPagePicked .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-AddPagePicked .app * { box-sizing:border-box }
+#ab-AddPagePicked .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-AddPagePicked .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-AddPagePicked .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-AddPagePicked .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-AddPagePicked .app a:hover { text-decoration:underline }
+#ab-AddPagePicked .app :where(p) { margin:0;padding:0 }
+#ab-AddPagePicked .app :where(h1) { margin:0;padding:0 }
+#ab-AddPagePicked .app :where(h2) { margin:0;padding:0 }
+#ab-AddPagePicked .app :where(ul) { margin:0;padding:0 }
+#ab-AddPagePicked .app :where(li) { list-style:none }
+#ab-AddPagePicked .app :where(svg) { display:block }
+#ab-AddPagePicked .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-AddPagePicked .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-AddPagePicked .ph .ib:first-child { margin-left:-12px }
+#ab-AddPagePicked .ph h1 + .ib { margin-right:-12px }
+#ab-AddPagePicked .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-AddPagePicked .sec { padding:0 16px }
+#ab-AddPagePicked .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-AddPagePicked .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-AddPagePicked .h2 a { font-size:14px }
+#ab-AddPagePicked .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-AddPagePicked .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-AddPagePicked .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-AddPagePicked .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-AddPagePicked .card > li + li { border-top:1px solid var(--line) }
+#ab-AddPagePicked .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-AddPagePicked .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-AddPagePicked .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-AddPagePicked .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-AddPagePicked .qty.zero { background:none;color:var(--muted) }
+#ab-AddPagePicked .grow { flex:1;min-width:0 }
+#ab-AddPagePicked .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-AddPagePicked .where { font-size:14px;color:var(--text2) }
+#ab-AddPagePicked .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-AddPagePicked .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-AddPagePicked .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-AddPagePicked .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-AddPagePicked .links { border-top:1px solid var(--line) }
+#ab-AddPagePicked .links li { border-bottom:1px solid var(--line) }
+#ab-AddPagePicked .app a.lk, #ab-AddPagePicked .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-AddPagePicked .lk .v { font-size:14px;color:var(--muted) }
+#ab-AddPagePicked .lk svg { color:var(--strong) }
+#ab-AddPagePicked .app a.txt, #ab-AddPagePicked .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-AddPagePicked .end { height:32px;flex:none }
+#ab-AddPagePicked .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-AddPagePicked .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-AddPagePicked .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-AddPagePicked .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-AddPagePicked .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-AddPagePicked .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-AddPagePicked .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-AddPagePicked .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-AddPagePicked .pick:first-child { border-top:0 }
+#ab-AddPagePicked .pick.off { color:var(--muted) }
+#ab-AddPagePicked .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-AddPagePicked .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-AddPagePicked .kb.flow { position:static }
+#ab-AddPagePicked .sheet.up { bottom:300px }
+#ab-AddPagePicked .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-AddPagePicked .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-AddPagePicked .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-AddPagePicked .list { margin-top:8px }
+#ab-AddPagePicked .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-AddPagePicked .facts { display:flex }
+#ab-AddPagePicked .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-AddPagePicked .facts li:first-child { padding-left:0;border-left:0 }
+#ab-AddPagePicked .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-AddPagePicked .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-AddPagePicked .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-AddPagePicked .body { flex:1;min-height:0;overflow:hidden }
+#ab-AddPagePicked .sec .fl { margin-top:12px }
+#ab-AddPagePicked .thumb { width:40px;height:40px;flex:none;border-radius:12px;background:var(--sunken);color:var(--strong);display:grid;place-items:center }
+#ab-AddPagePicked .bar { padding:12px 16px 20px;background:var(--raised);border-top:1px solid var(--line) }
+#ab-AddPagePicked .warn { font-size:14px;color:var(--text2) }
+#ab-Info .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Info .app * { box-sizing:border-box }
+#ab-Info .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Info .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Info .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Info .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Info .app a:hover { text-decoration:underline }
+#ab-Info .app :where(p) { margin:0;padding:0 }
+#ab-Info .app :where(h1) { margin:0;padding:0 }
+#ab-Info .app :where(h2) { margin:0;padding:0 }
+#ab-Info .app :where(ul) { margin:0;padding:0 }
+#ab-Info .app :where(li) { list-style:none }
+#ab-Info .app :where(svg) { display:block }
+#ab-Info .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Info .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Info .ph .ib:first-child { margin-left:-12px }
+#ab-Info .ph h1 + .ib { margin-right:-12px }
+#ab-Info .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Info .sec { padding:0 16px }
+#ab-Info .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Info .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Info .h2 a { font-size:14px }
+#ab-Info .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Info .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Info .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Info .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Info .card > li + li { border-top:1px solid var(--line) }
+#ab-Info .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Info .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Info .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Info .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Info .qty.zero { background:none;color:var(--muted) }
+#ab-Info .grow { flex:1;min-width:0 }
+#ab-Info .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Info .where { font-size:14px;color:var(--text2) }
+#ab-Info .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Info .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Info .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Info .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Info .links { border-top:1px solid var(--line) }
+#ab-Info .links li { border-bottom:1px solid var(--line) }
+#ab-Info .app a.lk, #ab-Info .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Info .lk .v { font-size:14px;color:var(--muted) }
+#ab-Info .lk svg { color:var(--strong) }
+#ab-Info .app a.txt, #ab-Info .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Info .end { height:32px;flex:none }
+#ab-Info .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Info .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Info .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Info .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Info .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Info .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Info .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Info .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Info .pick:first-child { border-top:0 }
+#ab-Info .pick.off { color:var(--muted) }
+#ab-Info .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Info .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-Info .kb.flow { position:static }
+#ab-Info .sheet.up { bottom:300px }
+#ab-Info .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-Info .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-Info .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-Info .list { margin-top:8px }
+#ab-Info .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-Info .facts { display:flex }
+#ab-Info .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-Info .facts li:first-child { padding-left:0;border-left:0 }
+#ab-Info .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-Info .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Info .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Info .say { font-size:16px;margin-top:12px }
+#ab-Info .ex { margin-top:8px;border-top:1px solid var(--line) }
+#ab-Info .ex li { display:flex;align-items:baseline;gap:12px;min-height:44px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px }
+#ab-Info .ex .a { width:92px;flex:none;color:var(--muted) }
+#ab-Info .ex .b { width:92px;flex:none;text-align:right;font-weight:650;font-variant-numeric:tabular-nums }
+#ab-Info .exh { font-size:14px;font-weight:600;color:var(--text2);margin-top:20px }
+#ab-Products .app { color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden }
+#ab-Products .app * { box-sizing:border-box }
+#ab-Products .app :where(button) { font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer }
+#ab-Products .app :where(input[type="text"]) { font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0 }
+#ab-Products .app input::placeholder { color:var(--muted);opacity:1 }
+#ab-Products .app :where(a) { color:var(--amber-fg);text-decoration:none;font-weight:600 }
+#ab-Products .app a:hover { text-decoration:underline }
+#ab-Products .app :where(p) { margin:0;padding:0 }
+#ab-Products .app :where(h1) { margin:0;padding:0 }
+#ab-Products .app :where(h2) { margin:0;padding:0 }
+#ab-Products .app :where(ul) { margin:0;padding:0 }
+#ab-Products .app :where(li) { list-style:none }
+#ab-Products .app :where(svg) { display:block }
+#ab-Products .ph { height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line) }
+#ab-Products .ib { width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text) }
+#ab-Products .ph .ib:first-child { margin-left:-12px }
+#ab-Products .ph h1 + .ib { margin-right:-12px }
+#ab-Products .ph h1 { flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+#ab-Products .sec { padding:0 16px }
+#ab-Products .h2 { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px }
+#ab-Products .h2 span { font-size:12px;font-weight:400;color:var(--muted) }
+#ab-Products .h2 a { font-size:14px }
+#ab-Products .h2.wi { align-items:center;margin:16px 0 0 }
+#ab-Products .h2.wi .ib { margin-right:-12px;color:var(--text2) }
+#ab-Products .sub { font-size:12px;color:var(--muted);margin:-6px 0 12px }
+#ab-Products .card { background:var(--raised);border:1px solid var(--line);border-radius:16px }
+#ab-Products .card > li + li { border-top:1px solid var(--line) }
+#ab-Products .nm { display:block;font-size:16px;line-height:1.2 }
+#ab-Products .dt { display:block;font-size:12px;color:var(--muted);margin-top:2px }
+#ab-Products .word { display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px }
+#ab-Products .qty { width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Products .qty.zero { background:none;color:var(--muted) }
+#ab-Products .grow { flex:1;min-width:0 }
+#ab-Products .top { display:flex;align-items:center;gap:12px;padding-top:16px }
+#ab-Products .where { font-size:14px;color:var(--text2) }
+#ab-Products .step { display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken) }
+#ab-Products .step button { width:44px;height:44px;display:grid;place-items:center }
+#ab-Products .step span { min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums }
+#ab-Products .lr { display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px }
+#ab-Products .links { border-top:1px solid var(--line) }
+#ab-Products .links li { border-bottom:1px solid var(--line) }
+#ab-Products .app a.lk, #ab-Products .lk { display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400 }
+#ab-Products .lk .v { font-size:14px;color:var(--muted) }
+#ab-Products .lk svg { color:var(--strong) }
+#ab-Products .app a.txt, #ab-Products .txt { display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+#ab-Products .end { height:32px;flex:none }
+#ab-Products .scrim { position:absolute;inset:0;background:rgba(17,20,31,.42) }
+#ab-Products .sheet { position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16) }
+#ab-Products .handle { width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line) }
+#ab-Products .st { font-size:18px;font-weight:650;line-height:1.25 }
+#ab-Products .ss { font-size:14px;color:var(--text2);margin-top:4px }
+#ab-Products .primary { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600 }
+#ab-Products .quiet { display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600 }
+#ab-Products .pick { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Products .pick:first-child { border-top:0 }
+#ab-Products .pick.off { color:var(--muted) }
+#ab-Products .ck { width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12 }
+#ab-Products .kb { position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2) }
+#ab-Products .kb.flow { position:static }
+#ab-Products .sheet.up { bottom:300px }
+#ab-Products .fl { display:block;font-size:12px;color:var(--text2);margin:16px 0 4px }
+#ab-Products .app input.field { flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised) }
+#ab-Products .app input.field.on { outline:2px solid #2563eb;outline-offset:1px }
+#ab-Products .list { margin-top:8px }
+#ab-Products .note { font-size:14px;color:var(--text2);margin-top:12px }
+#ab-Products .facts { display:flex }
+#ab-Products .facts li { flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line) }
+#ab-Products .facts li:first-child { padding-left:0;border-left:0 }
+#ab-Products .fv { display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums }
+#ab-Products .fd { display:block;font-size:11px;color:var(--muted);margin-top:2px }
+#ab-Products .grp { font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px }
+#ab-Products .sec .fl { margin-top:12px }
+#ab-Products .thumb { width:40px;height:40px;flex:none;border-radius:12px;background:var(--sunken);color:var(--strong);display:grid;place-items:center }
+#ab-Products .pr { display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line) }
+#ab-Products .pr:first-child { border-top:0 }
+#ab-Products .pr .ib { color:var(--strong);margin-right:-12px }
+#ab-Products .keep { min-height:44px;padding:0 8px;font-size:14px;font-weight:600;color:var(--amber-fg) }
+</style>
+
+<header>
+  <h1>Velista: the line page and parent lines</h1>
+  <p class="lede">The line page shows its products as cards with a price, keeps the buy history on a page of its own, and says which other lists hold the same line. A line can be a parent: it holds lines, each with the amount needed for one of it, and its number on the list moves theirs. Lines go under a parent on a page of their own, which searches the list and the catalog. Plan <code>0135</code>. Drawn on Day. Every price, date and count is a sample value. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 3710px; height: 2930px;">
+      <figure class="board" style="left: 0px; top: 470px; width: 390px;">
+        <figcaption>A line with products, under a parent</figcaption>
+        <div class="frame" id="ab-Main" style="width: 390px; height: 918px;">
+          <div class="app" style="height: 918px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Shampoo</h1>
+          <a class="ib" href="Menu.dc.html" aria-label="More for this line"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></a>
+          </header>
+
+          <div class="sec top">
+          <div class="grow">
+          <p class="where">On Weekly shop, in Home</p>
+          <p class="dt">Added by Marta</p>
+          </div>
+          <div class="step" role="group" aria-label="How many on the list">
+          <button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <span>3</span>
+          <button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          </div>
+          </div>
+
+          <div class="sec">
+          <div class="par">
+          <a class="lk" href="Parent.dc.html"><span class="grow">Under Bathroom things</span><span class="v">1 for each</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a>
+          </div>
+          </div>
+
+          <section>
+          <div class="sec"><h2 class="h2">Any of these will do <a href="Products.dc.html">Change</a></h2></div>
+          <ul class="rail">
+          <li><button class="pc card" type="button">
+          <span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
+          <span class="nm">Shampoo for normal hair</span>
+          <span class="dt">400 ml · Deliplus</span>
+          <span class="price">2,15 €</span>
+          <span class="chain">Mercadona · 5,38 € / L</span>
+          <span class="word">CHEAPEST</span>
+          </button></li>
+          <li><button class="pc card" type="button">
+          <span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
+          <span class="nm">Classic care shampoo</span>
+          <span class="dt">385 ml · Pantene</span>
+          <span class="price">3,45 €</span>
+          <span class="chain">Carrefour · 8,96 € / L</span>
+          </button></li>
+          <li><button class="pc card" type="button">
+          <span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
+          <span class="nm">Anti dandruff shampoo</span>
+          <span class="dt">360 ml · H&amp;S</span>
+          <span class="price">4,95 €</span>
+          <span class="chain">Carrefour · 13,75 € / L</span>
+          </button></li>
+          </ul>
+          </section>
+
+          <div class="sec">
+          <ul class="links gap">
+          <li><a class="lk" href="History.dc.html"><span class="grow">Buy history</span><span class="v">12 times</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+          <li><button class="lk" type="button"><span class="grow">Comments</span><span class="v">3</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          </ul>
+          </div>
+
+          <section class="sec">
+          <h2 class="h2">Also on <span>lists with the same products</span></h2>
+          <ul class="links">
+          <li><button class="lk" type="button"><span class="grow"><span class="nm">Party list</span><span class="dt">in Home, as “Champú”</span></span><span class="v">1</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          <li><button class="lk" type="button"><span class="grow"><span class="nm">Beach flat</span><span class="dt">in Summer house</span></span><span class="v">2</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          </ul>
+          <a class="txt" href="ToList.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add to another list</a>
+          </section>
+          <div class="end"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 470px; width: 390px;">
+        <figcaption>A parent line</figcaption>
+        <div class="frame" id="ab-Parent" style="width: 390px; height: 918px;">
+          <div class="app" style="height: 918px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Bathroom things</h1>
+          <a class="ib" href="Delete.dc.html" aria-label="More for this line"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></a>
+          </header>
+
+          <div class="sec top">
+          <div class="grow">
+          <p class="where">On Weekly shop, in Home</p>
+          <p class="dt">Added by you</p>
+          </div>
+          <div class="step" role="group" aria-label="How many on the list">
+          <button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <span>2</span>
+          <button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          </div>
+          </div>
+
+          <section class="sec">
+          <h2 class="h2 wi">Lines under Bathroom things <a class="ib" href="Info.dc.html" aria-label="How the amounts work"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.4v.2"/></svg></a></h2>
+          <p class="sub">How many of each you need for 1 Bathroom things</p>
+          <ul class="card">
+          <li class="lr"><span class="grow"><span class="nm">Toilet paper</span><span class="dt">4 on the list</span></span><button class="qty" type="button" aria-label="Toilet paper: 2 for each. Change">2</button></li>
+          <li class="lr"><span class="grow"><span class="nm">Shampoo</span><span class="dt">3 on the list</span></span><button class="qty" type="button" aria-label="Shampoo: 1 for each. Change">1</button></li>
+          <li class="lr"><span class="grow"><span class="nm">Toothpaste</span><span class="dt">4 on the list</span></span><button class="qty" type="button" aria-label="Toothpaste: 2 for each. Change">2</button></li>
+          <li class="lr"><span class="grow"><span class="nm">Shower gel</span><span class="dt">2 on the list</span></span><button class="qty" type="button" aria-label="Shower gel: 1 for each. Change">1</button></li>
+          <li class="lr"><span class="grow"><span class="nm">Hand soap</span><span class="dt">2 on the list</span></span><button class="qty" type="button" aria-label="Hand soap: 1 for each. Change">1</button></li>
+          </ul>
+          <div class="acts">
+          <a class="txt" href="AddPage.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add lines</a>
+          <a class="txt" href="ParentReorder.dc.html">Change the order</a>
+          </div>
+          <ul class="facts cost">
+          <li><span class="fv">about 11,10 €</span><span class="fd">for 1 Bathroom things</span></li>
+          <li><span class="fv">about 24,35 €</span><span class="fd">for what is on the list</span></li>
+          </ul>
+          <p class="sub">Cheapest prices today. 2 lines have no price yet.</p>
+          </section>
+
+          <div class="sec">
+          <ul class="links gap">
+          <li><button class="lk" type="button"><span class="grow">Comments</span><span class="v">1</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          </ul>
+          </div>
+
+          <section class="sec">
+          <h2 class="h2">Also on <span>lists with the same lines</span></h2>
+          <ul class="links">
+          <li><button class="lk" type="button"><span class="grow"><span class="nm">Beach flat</span><span class="dt">in Summer house</span></span><span class="v">1</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          </ul>
+          <a class="txt" href="ToList.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add to another list</a>
+          </section>
+          <div class="end"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 470px; width: 390px;">
+        <figcaption>Changing the order</figcaption>
+        <div class="frame" id="ab-ParentReorder" style="width: 390px; height: 438px;">
+          <div class="app" style="height: 438px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Bathroom things</h1>
+          </header>
+
+          <section class="sec">
+          <h2 class="h2">Lines under Bathroom things <a href="Parent.dc.html">Done</a></h2>
+          <ul class="card">
+          <li class="ro"><span class="grip" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="grow"><span class="nm">Toilet paper</span></span>
+          <button class="ib" type="button" aria-label="Move Toilet paper up" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+          <button class="ib" type="button" aria-label="Move Toilet paper down"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button></li>
+          <li class="ro"><span class="grip" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="grow"><span class="nm">Shampoo</span></span>
+          <button class="ib" type="button" aria-label="Move Shampoo up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+          <button class="ib" type="button" aria-label="Move Shampoo down"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button></li>
+          <li class="ro"><span class="grip" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="grow"><span class="nm">Toothpaste</span></span>
+          <button class="ib" type="button" aria-label="Move Toothpaste up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+          <button class="ib" type="button" aria-label="Move Toothpaste down"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button></li>
+          <li class="ro"><span class="grip" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="grow"><span class="nm">Shower gel</span></span>
+          <button class="ib" type="button" aria-label="Move Shower gel up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+          <button class="ib" type="button" aria-label="Move Shower gel down"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button></li>
+          <li class="ro"><span class="grip" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="grow"><span class="nm">Hand soap</span></span>
+          <button class="ib" type="button" aria-label="Move Hand soap up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg></button>
+          <button class="ib" type="button" aria-label="Move Hand soap down" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button></li>
+          </ul>
+          </section>
+          <div class="end"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 470px; width: 390px;">
+        <figcaption>The three dots</figcaption>
+        <div class="frame" id="ab-Menu" style="width: 390px; height: 560px;">
+          <div class="app" style="height: 560px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Shampoo</h1>
+          </header>
+          <div class="sec top"><p class="where">On Weekly shop, in Home</p></div>
+          <div class="scrim"></div>
+
+          <div class="sheet" role="dialog" aria-labelledby="menu-title">
+          <div class="handle"></div>
+          <h2 class="st" id="menu-title">Shampoo</h2>
+          <ul class="acts">
+          <li><button class="act" type="button">Change the name</button></li>
+          <li><a class="act" href="ToList.dc.html">Add to another list</a></li>
+          <li><button class="act" type="button">Take it out of Bathroom things</button></li>
+          <li><button class="act bad" type="button">Delete this line</button></li>
+          </ul>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 470px; width: 390px;">
+        <figcaption>Deleting a parent</figcaption>
+        <div class="frame" id="ab-Delete" style="width: 390px; height: 620px;">
+          <div class="app" style="height: 620px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Bathroom things</h1>
+          </header>
+          <div class="sec top"><p class="where">On Weekly shop, in Home</p></div>
+          <div class="scrim"></div>
+
+          <div class="sheet" role="dialog" aria-labelledby="del-title">
+          <div class="handle"></div>
+          <h2 class="st" id="del-title">Delete Bathroom things?</h2>
+          <p class="ss">Its 5 lines stay on Weekly shop, with the numbers they have now.</p>
+          <div><label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Delete its 5 lines too</span></span></label></div>
+          <button class="danger" type="button">Delete</button>
+          <button class="quiet" type="button">Keep it</button>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 2350px; top: 470px; width: 390px;">
+        <figcaption>Add to another list</figcaption>
+        <div class="frame" id="ab-ToList" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Bathroom things</h1>
+          </header>
+          <div class="sec top"><p class="where">On Weekly shop, in Home</p></div>
+          <div class="scrim"></div>
+
+          <div class="sheet" role="dialog" aria-labelledby="to-title">
+          <div class="handle"></div>
+          <h2 class="st" id="to-title">Add Bathroom things to another list</h2>
+          <p class="ss">Its 5 lines go with it, with the same amounts. It starts at 0 on the new list.</p>
+
+          <p class="grp">Home</p>
+          <div>
+          <label class="pick off"><input class="ck" type="checkbox" disabled><span class="grow"><span class="nm">Weekly shop</span><span class="dt">It is on this list</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox" checked><span class="grow"><span class="nm">Party list</span></span></label>
+          </div>
+
+          <p class="grp">Summer house</p>
+          <div>
+          <label class="pick off"><input class="ck" type="checkbox" disabled><span class="grow"><span class="nm">Beach flat</span><span class="dt">Already there</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Barbecue</span></span></label>
+          </div>
+
+          <button class="primary" type="button">Add to 1 list</button>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 2820px; top: 470px; width: 390px;">
+        <figcaption>Buy history, on its own page</figcaption>
+        <div class="frame" id="ab-History" style="width: 390px; height: 837px;">
+          <div class="app" style="height: 837px">
+          <header class="ph">
+          <a class="ib" href="Main.dc.html" aria-label="Back to Shampoo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+          <h1>Buy history</h1>
+          </header>
+
+          <div class="sec">
+          <p class="where">Shampoo, on Weekly shop</p>
+          <div class="seg" role="group" aria-label="Which purchases">
+          <button type="button" aria-pressed="true">This list</button>
+          <button type="button" aria-pressed="false">Everywhere you shop</button>
+          </div>
+          <ul class="facts">
+          <li><span class="fv">12 times</span><span class="fl">since March</span></li>
+          <li><span class="fv">every 9 days</span><span class="fl">between buys</span></li>
+          <li><span class="fv">2,15 €</span><span class="fl">last paid for one</span></li>
+          </ul>
+          </div>
+
+          <section class="sec">
+          <h2 class="h2">September</h2>
+          <ul class="card">
+          <li class="hr"><span class="d">28</span><span class="grow"><span class="nm">Marta bought 2</span><span class="dt">Shampoo for normal hair · Deliplus</span></span><span class="p">4,30 €</span></li>
+          <li class="hr"><span class="d">19</span><span class="grow"><span class="nm">You bought 1</span><span class="dt">Shampoo for normal hair · Deliplus</span></span><span class="p">2,15 €</span></li>
+          <li class="hr"><span class="d">10</span><span class="grow"><span class="nm">Marta bought 2</span><span class="dt">Shampoo for normal hair · Deliplus</span></span><span class="p">4,30 €</span></li>
+          <li class="hr"><span class="d">1</span><span class="grow"><span class="nm none">You found none</span></span></li>
+          </ul>
+          </section>
+
+          <section class="sec">
+          <h2 class="h2">August</h2>
+          <ul class="card">
+          <li class="hr"><span class="d">23</span><span class="grow"><span class="nm">You bought 2</span><span class="dt">Classic care shampoo · Pantene</span></span><span class="p">6,90 €</span></li>
+          <li class="hr"><span class="d">14</span><span class="grow"><span class="nm">Marta bought 1</span><span class="dt">Classic care shampoo · Pantene</span></span><span class="p">3,45 €</span></li>
+          <li class="hr"><span class="d">5</span><span class="grow"><span class="nm">Marta bought 2</span><span class="dt">Classic care shampoo · Pantene</span></span><span class="p">6,90 €</span></li>
+          </ul>
+          <button class="more" type="button">Show older</button>
+          </section>
+          <div class="end"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 3290px; top: 470px; width: 390px;">
+        <figcaption>Rows on the list</figcaption>
+        <div class="frame" id="ab-Rows" style="width: 390px; height: 770px;">
+          <div class="app" style="height: 770px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Weekly shop</h1>
+          </header>
+
+          <section class="sec">
+          <h2 class="h2">To buy</h2>
+          <ul class="rows">
+          <li class="row"><span class="grow"><span class="nm">Bread</span></span><span class="qty">1</span></li>
+
+          <li>
+          <div class="row open">
+          <button class="ib fold" type="button" aria-label="Hide the lines under Bathroom things" aria-expanded="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button>
+          <span class="grow"><span class="nm">Bathroom things</span><span class="dt">5 lines, about 24,35 €</span></span>
+          <span class="qty">2</span>
+          </div>
+          <ul class="kids">
+          <li><div class="row"><span class="grow"><span class="nm">Toilet paper</span><span class="dt">12 rolls · Scottex</span></span><span class="qty">4</span></div></li>
+          <li><div class="row"><span class="grow"><span class="nm">Shampoo</span><span class="dt">3 products</span></span><span class="qty">3</span></div></li>
+          <li><div class="row"><span class="grow"><span class="nm">Toothpaste</span></span><span class="qty">4</span></div></li>
+          <li><div class="row"><span class="grow"><span class="nm">Shower gel</span><span class="dt">750 ml · Deliplus</span></span><span class="qty">2</span></div></li>
+          <li><div class="row"><span class="grow"><span class="nm">Hand soap</span></span><span class="qty">2</span></div></li>
+          </ul>
+          </li>
+
+          <li class="row"><span class="grow"><span class="nm">Milk</span><span class="dt">1 L · Hacendado</span></span><span class="qty">6</span></li>
+
+          <li>
+          <div class="row open">
+          <button class="ib fold" type="button" aria-label="Hide the lines under Travel bag" aria-expanded="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg></button>
+          <span class="grow"><span class="nm">Travel bag</span><span class="dt">2 lines, about 3,10 €</span></span>
+          <span class="qty">1</span>
+          </div>
+          <ul class="kids">
+          <li><div class="row"><span class="grow"><span class="nm">Cotton wool</span></span><span class="qty">1</span></div></li>
+          <li><div class="row"><span class="grow"><span class="nm">Toothpaste</span><span class="dt">Travel size</span></span><span class="qty">1</span></div></li>
+          </ul>
+          </li>
+          </ul>
+          </section>
+          <div class="end"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 2030px; width: 390px;">
+        <figcaption>The add page, typing</figcaption>
+        <div class="frame" id="ab-AddPage" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+          <header class="ph">
+          <a class="ib" href="Parent.dc.html" aria-label="Back to Bathroom things"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+          <h1>Add lines</h1>
+          </header>
+
+          <div class="sec body">
+          <label class="fl" for="add-search">Search Weekly shop and the catalog, or write a new line</label>
+          <input class="field on" id="add-search" type="text" value="cot">
+          <button class="txt" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add “cot” as a new line</button>
+
+          <p class="grp">On Weekly shop</p>
+          <div>
+          <label class="pick"><input class="ck" type="checkbox" checked><span class="grow"><span class="nm">Cotton pads</span><span class="dt">1 on the list</span></span>
+          <span class="step" role="group" aria-label="Cotton pads for each"><button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span>1</span><button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Cotton wool</span><span class="dt">Under Travel bag. This adds a second line</span></span></label>
+          </div>
+
+          <p class="grp">From the catalog</p>
+          <div>
+          <label class="pick"><input class="ck" type="checkbox"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Cotton buds</span><span class="dt">200 pieces · Deliplus</span></span><span><span class="amt">0,85 €</span><span class="cap">Mercadona</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Round cotton pads</span><span class="dt">80 pieces · Carrefour</span></span><span><span class="amt">1,09 €</span><span class="cap">Carrefour</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Cotton wool</span><span class="dt">100 g · Bosque Verde</span></span><span><span class="amt">0,95 €</span><span class="cap">Mercadona</span></span></label>
+          </div>
+          </div>
+
+          <div class="bar">
+          <span class="grow"><span class="nm">Under Bathroom things</span><span class="dt">1 line picked</span></span>
+          <button class="done" type="button">Add</button>
+          </div>
+          <div class="kb flow" aria-hidden="true">Keyboard</div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 2030px; width: 390px;">
+        <figcaption>The add page, lines picked</figcaption>
+        <div class="frame" id="ab-AddPagePicked" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+          <header class="ph">
+          <a class="ib" href="Parent.dc.html" aria-label="Back to Bathroom things"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+          <h1>Add lines</h1>
+          </header>
+
+          <div class="sec body">
+          <label class="fl" for="add-search">Search Weekly shop and the catalog, or write a new line</label>
+          <input class="field" id="add-search" type="text">
+          <p class="grp">Going under Bathroom things</p>
+          <div>
+          <label class="pick"><input class="ck" type="checkbox" checked><span class="grow"><span class="nm">Cotton pads</span><span class="dt">Stays at 1 on the list</span></span>
+          <span class="step" role="group" aria-label="Cotton pads for each"><button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span>1</span><button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></label>
+          <label class="pick"><input class="ck" type="checkbox" checked><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Cotton buds</span><span class="dt">New line, gets 2 on the list</span></span>
+          <span class="step" role="group" aria-label="Cotton buds for each"><button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span>1</span><button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></label>
+          </div>
+          <p class="grp">On Weekly shop</p>
+          <div>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Bread</span><span class="dt">1 on the list</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Deodorant</span><span class="dt">none on the list</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Milk</span><span class="dt">6 on the list</span></span></label>
+          <label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Olive oil</span><span class="dt">1 on the list</span></span></label>
+          </div>
+          </div>
+
+          <div class="bar">
+          <p class="warn">Bathroom things will go from 2 to 1. There is only 1 Cotton pads on the list.</p>
+          <button class="primary" type="button">Add 2 lines</button>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 2030px; width: 390px;">
+        <figcaption>The info button</figcaption>
+        <div class="frame" id="ab-Info" style="width: 390px; height: 900px;">
+          <div class="app" style="height: 900px">
+          <header class="ph">
+          <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <h1>Bathroom things</h1>
+          </header>
+          <div class="sec top"><p class="where">On Weekly shop, in Home</p></div>
+          <div class="scrim"></div>
+
+          <div class="sheet" role="dialog" aria-labelledby="info-title">
+          <div class="handle"></div>
+          <h2 class="st" id="info-title">How the amounts work</h2>
+          <p class="say">The number beside each line here is not the number on the list. It is how many you need for 1 Bathroom things.</p>
+          <p class="say">When you add 1 Bathroom things, the list asks for that many more of each line. When you take 1 away, it asks for that many fewer, and it stops at 0.</p>
+          <p class="say">You can still change one line on the list by itself. If a line no longer has enough, Bathroom things goes down. When every line has enough for one more, it goes up.</p>
+          <p class="say">Buying Bathroom things buys all of its lines at once.</p>
+          <p class="exh">With Bathroom things at 2</p>
+          <ul class="ex">
+          <li><span class="grow">Toilet paper</span><span class="a">2 for each</span><span class="b">4 on the list</span></li>
+          <li><span class="grow">Hand soap</span><span class="a">1 for each</span><span class="b">2 on the list</span></li>
+          </ul>
+          <button class="quiet" type="button">Close</button>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 2030px; width: 390px;">
+        <figcaption>The products of a line, on their own page</figcaption>
+        <div class="frame" id="ab-Products" style="width: 390px; height: 844px;">
+          <div class="app" style="height: 844px">
+          <header class="ph">
+          <a class="ib" href="Main.dc.html" aria-label="Back to Shampoo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+          <h1>Products of Shampoo</h1>
+          </header>
+
+          <div class="sec">
+          <label class="fl" for="product-search">Search the catalog to add a product</label>
+          <input class="field" id="product-search" type="text">
+
+          <p class="grp">Added by you</p>
+          <ul>
+          <li class="pr"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Shampoo for normal hair</span><span class="dt">400 ml · Deliplus</span></span><button class="ib" type="button" aria-label="Remove Shampoo for normal hair"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>
+          <li class="pr"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Classic care shampoo</span><span class="dt">385 ml · Pantene</span></span><button class="ib" type="button" aria-label="Remove Classic care shampoo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>
+          </ul>
+
+          <p class="grp">From Shampoos</p>
+          <ul>
+          <li class="pr"><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Anti dandruff shampoo</span><span class="dt">360 ml · H&amp;S</span></span><button class="keep" type="button">Keep</button><button class="ib" type="button" aria-label="Remove Anti dandruff shampoo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>
+          </ul>
+          </div>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>RULE L1: THE LINE PAGE, TOP TO BOTTOM. The header with the three dots. Where the line is, who added it, and the number on the list as a stepper. The row that names its parent, when it has one. The products as cards that scroll sideways. Buy history and Comments as two rows that open their own pages. Then the lists that hold the same line, and 'Add to another list'.</p><p>The page draws no history of its own. The two long lists that were here moved to the history page.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>RULE P1: A PARENT HOLDS LINES AND NOTHING ELSE. No products, no group, no buy history. In their place is one card of its lines. The number beside each line is the amount for 1 of the parent, and the small text under the name is the number on the list.</p><p>Under the card: 'Add lines', 'Change the order', and the cost. The cost has two figures, for 1 of the parent and for what is on the list now, and one sentence that says how many lines have no price.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 420px;"><p>RULE P2: THE ORDER IS CHANGED IN ITS OWN STATE. 'Change the order' swaps the amounts for a grip and two arrows on each row, the same controls as the reorder mode of the list. 'Done' brings the amounts back. The order of the card is the order of the rows under the parent on the list.</p></aside>
+      <aside class="note" style="left: 1410px; top: 0px; width: 420px;"><p>RULE M1: THE THREE DOTS HOLD WHAT IS RARE. Change the name, add to another list, take the line out of its parent, delete. A line with no parent has no third row. Taking a line out keeps its number on the list.</p></aside>
+      <aside class="note" style="left: 1880px; top: 0px; width: 420px;"><p>RULE D1: DELETING A PARENT ASKS ABOUT ITS LINES. One checkbox, off when the sheet opens. Off: the lines stay on the list with the numbers they have. On: they are deleted with it.</p></aside>
+      <aside class="note" style="left: 2350px; top: 0px; width: 420px;"><p>RULE C1: A LINE IS BUILT ONCE AND COPIED. The sheet shows every list the person can write, under its group. The list the line is on, and a list that already holds the same line, are switched off and say why. A parent goes with all its lines and their amounts, and starts at 0 on the new list.</p></aside>
+      <aside class="note" style="left: 2820px; top: 0px; width: 420px;"><p>RULE H1: THE HISTORY HAS A PAGE. Two scopes, this list and everywhere the person shops. Three figures, then one card for each month. Each row names the product that was bought, which the old rows did not.</p></aside>
+      <aside class="note" style="left: 3290px; top: 0px; width: 420px;"><p>RULE R1: A PARENT ON THE LIST IS OPEN. Its lines sit under it, indented, each with its own number. The chevron closes it for this visit only. A list always loads with every parent open.</p><p>The same thing can be under two parents. That is two lines, each with its own parent and its own number: see Toothpaste.</p></aside>
+      <aside class="note" style="left: 0px; top: 1520px; width: 420px;"><p>RULE A1: LINES ARE ADDED ON A PAGE, BECAUSE OF THE KEYBOARD. With the keyboard up, half the screen is gone. A page gives the field, the results and a bar that sits on the keyboard.</p><p>The field searches two places, like the field of the list: the lines of this list, then the catalog. A catalog result makes a new line with that product. 'Add as a new line' makes a line with no product. A line that is under another parent can still be picked. That adds a second line and leaves the first alone.</p></aside>
+      <aside class="note" style="left: 470px; top: 1520px; width: 420px;"><p>RULE A2: THE PAGE SAYS WHAT WILL HAPPEN BEFORE IT HAPPENS. A picked line gets a stepper for its amount. A line that was on the list keeps its number, and its row says so. A new line gets what the parent needs, and its row says how many.</p><p>When a picked line does not hold enough, the parent drops. The sentence above the button names both numbers and the line that causes it.</p></aside>
+      <aside class="note" style="left: 940px; top: 1520px; width: 420px;"><p>RULE Q1: THE AMOUNTS, IN THE WORDS OF THE APP. Raising the parent adds each amount to its line. Lowering it takes each amount away and stops at 0. A line can be changed alone. The parent then follows: down when a line no longer holds enough, up when every line holds enough for one more. Buying the parent buys every line under it.</p></aside>
+      <aside class="note" style="left: 1410px; top: 1520px; width: 420px;"><p>RULE E1: THE PRODUCTS ARE CHANGED ON A PAGE. 'Change' beside 'Any of these will do' opens it. The field searches the catalog and is not focused on arrival, so the products are in sight first. Each product has its cross, and a product the catalog put there has 'Keep'. Typing shows catalog results under the field, drawn like those of the add page.</p><p>It is a page and not a sheet for the reason of rule A1: the keyboard.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 3710;
+    var h = 2930;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

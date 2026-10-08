@@ -7,6 +7,7 @@ import type {
   CatalogProduct,
   CatalogScopeOffer,
   Page,
+  ProductPriceHistory,
   Supermarket,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
@@ -17,6 +18,7 @@ import {
   toCatalogLocation,
   toCatalogProduct,
   toCatalogScopeOffer,
+  toProductPriceHistory,
 } from '../mapping/catalog-browse-mappers';
 import { toSupermarket } from '../mapping/mappers';
 import { isRecord, mapArray, nullableStr } from '../mapping/primitives';
@@ -134,6 +136,23 @@ export class CatalogBrowseApi implements CatalogBrowseServiceI {
     }
 
     return rows;
+  }
+
+  async priceHistory(
+    itemId: string,
+    from: Date,
+    to: Date
+  ): Promise<ProductPriceHistory | null> {
+    // No scope selector, so the server resolves the person's default profile:
+    // the same scopes the price table above the chart is read at.
+    const body = await this._get(
+      `/v1/catalog/items/${encodeURIComponent(itemId)}/price-history`,
+      new HttpParams()
+        .set('from', from.toISOString())
+        .set('to', to.toISOString()),
+      'catalog.priceHistory'
+    );
+    return toProductPriceHistory(body);
   }
 
   async location(locationId: string): Promise<CatalogLocation | null> {

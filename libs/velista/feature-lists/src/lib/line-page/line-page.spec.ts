@@ -953,7 +953,7 @@ describe('LinePage similar products', () => {
   function similarRows(fixture: ComponentFixture<LinePage>): HTMLElement[] {
     return [
       ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-        'lib-similar-products .row'
+        'lib-similar-products .row .open'
       ),
     ];
   }
@@ -1002,7 +1002,7 @@ describe('LinePage similar products', () => {
     await drain(fixture);
 
     expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
-      `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}/sheet/products/item-milk-pascual`
+      '/velista/en/catalog/products/item-milk-pascual'
     );
     expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual(['item-milk-a']);
   });

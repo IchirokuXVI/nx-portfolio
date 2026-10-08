@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   AlsoOnVm,
+  ItemLists,
   Line,
   LineApprovalStatus,
   LineOrder,
@@ -22,6 +23,15 @@ import { LineApi } from './line-api';
 export interface LineUpdateResult {
   readonly line: Line;
   readonly absorbedLineId: string | null;
+}
+
+/**
+ * What an add answers (backend plan 0091): the line, and whether it is a line the
+ * list already held, raised, rather than a new one.
+ */
+export interface LineAddResult {
+  readonly line: Line;
+  readonly merged: boolean;
 }
 
 /**
@@ -69,6 +79,23 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[]
   ): Promise<Line>;
+
+  /**
+   * The same add, answering what it did as well (velista `0134`, section 4.4).
+   *
+   * A list holds one line for each name and product identity, so an add that
+   * matches raises that line and answers `merged: true`. The catalog asks this way
+   * because it has to undo an add exactly: a new line is deleted, and a raised one
+   * goes back to the quantity it had. A screen that holds the list in `LineStore`
+   * uses {@link addLine}, because the store upserts by id and the difference never
+   * reaches it.
+   */
+  addLineResult(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
+  ): Promise<LineAddResult>;
 
   /**
    * Change what a line says, how many, or which products (`PATCH /v1/lines/:id`).
@@ -193,6 +220,20 @@ export interface LineServiceI {
     itemId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<Page<LineSettlement>>;
+
+  /**
+   * Every list the caller can read, in every group, and the lines of each that
+   * hold one product (`GET /v1/items/:id/list-lines`, backend `0196`, section 3).
+   *
+   * The read behind the product page's table of lists (velista `0134`, section 7).
+   * It differs from {@link listsHoldingItem} in what the table needs: a list with
+   * no such line is still answered, each line comes with its id, its name and its
+   * quantity, lines that wait and lines at zero are included, and each list says
+   * what the caller may do on it.
+   *
+   * Capped, not paged: `hasMore` says the server cut the lists short.
+   */
+  linesHoldingItem(itemId: string): Promise<ItemLists>;
 
   /**
    * Decide a suggested line (`POST /v1/lines/:id/approval`).

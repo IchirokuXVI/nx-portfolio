@@ -6,6 +6,9 @@ import {
   LINE_QUANTITY_MIN,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
+  type HeldLine,
+  type ItemList,
+  type ItemLists,
   type Line,
   type LineApprovalStatus,
   type LineOrder,
@@ -18,7 +21,11 @@ import {
 import { GatewayError } from '../errors';
 import { ListMemory } from '../lists/list-memory';
 import { ZoneMemory } from '../zones/zone-memory';
-import type { LineServiceI, LineUpdateResult } from './line-service';
+import type {
+  LineAddResult,
+  LineServiceI,
+  LineUpdateResult,
+} from './line-service';
 import { SEED_LINES } from './static-line-data';
 
 /**
@@ -120,6 +127,46 @@ export class LineMemory implements LineServiceI {
    * Nothing here has ever been bought, in all three, because a line cannot acquire a
    * history in the same breath as being created.
    */
+  /**
+   * The add that says what it did. Unlike {@link addLine} it models the merge
+   * (backend plan 0091): a line of the same name, or holding exactly the same
+   * products, is raised and answered instead of a second one being made.
+   */
+  async addLineResult(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
+  ): Promise<LineAddResult> {
+    this._require(listId, 'WRITE');
+
+    const name = content.trim().toLocaleLowerCase();
+    const set = [...(itemIds ?? [])].sort().join(',');
+    const existing = this._lines(listId).find(
+      (held) =>
+        held.content.trim().toLocaleLowerCase() === name ||
+        (set !== '' && [...held.itemIds].sort().join(',') === set)
+    );
+    if (existing === undefined) {
+      return {
+        line: await this.addLine(listId, content, quantity, itemIds),
+        merged: false,
+      };
+    }
+
+    this._maybeFail();
+    const raised: Line = {
+      ...existing,
+      quantity: existing.quantity + (quantity ?? 1),
+      version: existing.version + 1,
+    };
+    this._write(
+      listId,
+      this._lines(listId).map((held) => (held.id === raised.id ? raised : held))
+    );
+    return { line: raised, merged: true };
+  }
+
   async addLine(
     listId: string,
     content: string,
@@ -533,6 +580,61 @@ export class LineMemory implements LineServiceI {
   }
 
   /**
+   * Every list the caller can read, with the lines of each that hold a product
+   * (backend plan 0196, section 3).
+   *
+   * A list with no such line is answered too, and a line at zero or one that waits
+   * is included: the table of lists draws a stepper for each. A rejected line is
+   * left out, as the server leaves it out, because an add does not raise it.
+   */
+  async linesHoldingItem(itemId: string): Promise<ItemLists> {
+    if (itemId === '') {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    const lists: ItemList[] = [];
+    const lines: HeldLine[] = [];
+
+    for (const zone of this._zones.zones()) {
+      // A group the caller is not approved in refuses the read, and has no list
+      // of theirs to answer.
+      const page = await this._lists
+        .listLists(zone.id, { limit: 100 })
+        .catch(() => null);
+      for (const list of page?.items ?? []) {
+        if (!list.myPermissions.includes('READ')) {
+          continue;
+        }
+        lists.push({
+          listId: list.id,
+          zoneId: zone.id,
+          name: list.name,
+          zoneName: zone.name,
+          autoApproveLines: list.autoApproveLines,
+          permissions: list.myPermissions,
+        });
+        for (const line of order(this._lines(list.id), 'position')) {
+          if (
+            line.itemIds.includes(itemId) &&
+            line.approvalStatus !== 'REJECTED'
+          ) {
+            lines.push({
+              lineId: line.id,
+              listId: list.id,
+              name: line.content,
+              quantity: line.quantity,
+              pending: line.approvalStatus === 'PENDING',
+              itemIds: line.itemIds,
+            });
+          }
+        }
+      }
+    }
+
+    return { lists, lines, hasMore: false };
+  }
+
+  /**
    * A page of settlements, newest first, cursored on the boundary row's own id.
    *
    * An id rather than a timestamp, for the reason the server's cursor is one: two
@@ -621,13 +723,17 @@ export class LineMemory implements LineServiceI {
    * `WRITE` reaches a `PENDING` or `REJECTED` line and stops there; deleting an approved
    * line is `MANAGE`, and not `DECIDE`, because un-approving it first is the path a
    * decider already has and it leaves the line's history saying what happened.
+   *
+   * On a list that approves lines by itself `WRITE` reaches an approved line too
+   * (backend plan 0196, section 4): nobody agreed to that line, so there is no
+   * agreement for a writer to undo.
    */
   async deleteLine(lineId: string): Promise<string> {
     const line = this._lineOrThrow(lineId);
-    this._require(
-      line.listId,
-      line.approvalStatus === 'APPROVED' ? 'MANAGE' : 'WRITE'
-    );
+    const agreed =
+      line.approvalStatus === 'APPROVED' &&
+      this._lists.listById(line.listId)?.autoApproveLines !== true;
+    this._require(line.listId, agreed ? 'MANAGE' : 'WRITE');
     this._maybeFail();
 
     this._write(

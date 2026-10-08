@@ -1,0 +1,98 @@
+// The catalog's two selectors (velista 0134, section 2), as the `Main` and
+// `CatalogChosen` artboards draw them.
+:host {
+  display: flex;
+  gap: var(--app-space-3);
+}
+
+.pick {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 0;
+  align-items: stretch;
+  min-inline-size: 0;
+  block-size: var(--app-control-height);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  overflow: hidden;
+
+  // "All supermarkets" is the longer text of the two.
+  &.is-wide {
+    flex-grow: 1.2;
+  }
+
+  // A choice: the amber edge, the quiet fill and the amber text. Never colour
+  // alone, because the text itself changed from "All ..." to the choice.
+  &.is-set {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-quiet-bg);
+    color: var(--app-action-quiet-fg);
+    font-weight: 650;
+  }
+}
+
+.body,
+.clear {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  padding-inline: var(--app-space-3) var(--app-space-2);
+  text-align: start;
+}
+
+.lead,
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.pick.is-set .lead,
+.pick.is-set .chevron {
+  color: inherit;
+}
+
+.chevron {
+  margin-inline-start: auto;
+}
+
+.text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Its own button, 40 wide and the row's 44 tall, behind a hairline.
+.clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-space-9);
+  padding: 0;
+  border-inline-start: 1px solid var(--app-action-quiet-border);
+}
+
+.clear-glyph {
+  font-size: var(--app-icon-sm);
+}

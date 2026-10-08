@@ -1,0 +1,79 @@
+// The price at each supermarket (velista 0134, section 5), as the `Product`
+// artboard draws it: one card, a hairline between its rows.
+:host {
+  display: block;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-line-row-height);
+  padding-inline: var(--app-space-4) var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+
+  &:last-child {
+    border-block-end: none;
+  }
+}
+
+.chain {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.row.is-absent .chain {
+  color: var(--app-text-muted);
+}
+
+// A word and a colour: the word carries it.
+.cheapest {
+  flex: none;
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  color: var(--app-status-success-fg);
+}
+
+.price {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.amount {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+}
+
+.unit {
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-muted);
+}
+
+// Old, by the server's own judgement. Muted and nothing else.
+.price.is-stale .amount {
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+
+.absent {
+  flex: none;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}

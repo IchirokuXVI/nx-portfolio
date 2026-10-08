@@ -103,6 +103,17 @@ function service(seed: readonly Line[]) {
           version: 1,
         })
       ),
+    addLineResult: async (listId, content, quantity) => ({
+      line: await answer(
+        line('server-id', {
+          listId,
+          content,
+          quantity: quantity ?? 1,
+          version: 1,
+        })
+      ),
+      merged: false,
+    }),
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
       const absorbedLineId = absorbNext;
       absorbNext = null;
@@ -143,6 +154,8 @@ function service(seed: readonly Line[]) {
     listItemSettlements: async () => ({ items: [], nextCursor: null }),
     // Nothing in this file draws the "also on" indicator; the store does not hold it.
     listsHoldingItem: async () => ({ places: [], hasMore: false }),
+    // The catalog's read, which `CatalogAddStore` makes and this store never does.
+    linesHoldingItem: async () => ({ lists: [], lines: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
     reorder: async () => {

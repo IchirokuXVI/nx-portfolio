@@ -235,6 +235,15 @@ export const ITEM_PATTERNS = {
    * sends, changes one, so a correction survives every later run.
    */
   fillPackCounts: 'item.fillPackCounts',
+  /**
+   * The price a shopper saw for one product, at each scope asked, over a
+   * range of time (plan 0196, section 2).
+   *
+   * A read that replays the price rule over the rows of `item_prices`. It
+   * writes nothing, and it is open to any account, as
+   * {@link ITEM_PATTERNS.get} is.
+   */
+  priceHistory: 'item.priceHistory',
 } as const;
 
 /**
@@ -1120,6 +1129,71 @@ export interface ItemOfferView {
   priceCopiedFromScopeId: string | null;
   /** Plan 0080, section 5: shown because nothing better exists, not because it is current. */
   stale: boolean;
+}
+
+/** The bounds of one {@link ITEM_PATTERNS.priceHistory} read (plan 0196). */
+export const PRICE_HISTORY_LIMITS = {
+  /** How far back `from` goes when the caller names none, in days. */
+  defaultDays: 365,
+  /** The longest range one read answers, in days. A longer one is cut at its start. */
+  maxDays: 400,
+  /** How many scopes one read replays. The gateway sends no more. */
+  maxScopes: 50,
+  /** How many points one series holds. The oldest go first. */
+  maxPoints: 500,
+} as const;
+
+/**
+ * The price history of one product (plan 0196, section 2).
+ *
+ * `from` and `to` are ISO instants. An absent `to` is now, and an absent
+ * `from` is {@link PRICE_HISTORY_LIMITS.defaultDays} before `to`. The scopes
+ * come resolved from the gateway, as on every priced read: this service
+ * invents none.
+ */
+export interface ItemPriceHistoryRequest {
+  userId: string;
+  itemId: string;
+  priceScopeIds: string[];
+  from?: string;
+  to?: string;
+}
+
+/**
+ * One step of a price series: the price that was shown from `at` until the
+ * next point, or until `to` for the last one.
+ */
+export interface ItemPricePointView {
+  at: string;
+  /** Null when nothing was shown from here. */
+  price: number | null;
+  currency: string | null;
+  /** Verbatim, and never recomputed (plan 0038, section 2.4). */
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  /** What `unitPrice` is a price per, read from the label (plan 0157). */
+  unitBasis: UnitBasis | null;
+}
+
+/** The price of one product at one scope, oldest point first. */
+export interface ItemPriceSeriesView {
+  priceScopeId: string;
+  supermarketId: string;
+  points: ItemPricePointView[];
+}
+
+/**
+ * What {@link ITEM_PATTERNS.priceHistory} answers (plan 0196, section 2).
+ *
+ * `from` and `to` are the range that was read, after the defaults and the cut.
+ * `series` holds one entry for each scope that exists, in the order asked. A
+ * scope id that names no scope is left out.
+ */
+export interface ItemPriceHistoryView {
+  itemId: string;
+  from: string;
+  to: string;
+  series: ItemPriceSeriesView[];
 }
 
 /**
@@ -3768,8 +3842,22 @@ export interface PriceScopeChainView {
  * given**, which is what makes the search a search. With no query there is
  * nothing to be relevant to, so the default stays `name` and the admin surface's
  * listing is unchanged.
+ *
+ * `category`, `price` and `unitPrice` arrived with plan 0196 for the catalog
+ * tab of velista. A caller asks for each by name, and none is ever a default.
+ * `category` is the place of the first category of a product in the tree.
+ * `price` and `unitPrice` are the lowest of each at the scopes of the read,
+ * and a product with none comes last.
  */
-export const ITEM_ORDERS = ['relevance', 'name', 'created', 'updated'] as const;
+export const ITEM_ORDERS = [
+  'relevance',
+  'name',
+  'created',
+  'updated',
+  'category',
+  'price',
+  'unitPrice',
+] as const;
 export type ItemOrder = (typeof ITEM_ORDERS)[number];
 
 export const PRODUCT_GROUP_ORDERS = [

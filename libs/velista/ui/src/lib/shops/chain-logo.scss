@@ -21,6 +21,10 @@
   user-select: none;
 }
 
+:host(.is-xs) {
+  --logo-size: var(--app-chain-logo-xs);
+}
+
 :host(.is-sm) {
   --logo-size: var(--app-chain-logo-sm);
 }

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The menu of a line</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden}
+.app *{box-sizing:border-box}
+.app :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer}
+.app :where(input[type="text"]){font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0}
+.app input::placeholder{color:var(--muted);opacity:1}
+.app :where(a){color:var(--amber-fg);text-decoration:none;font-weight:600}
+.app a:hover{text-decoration:underline}
+.app :where(p){margin:0;padding:0}
+.app :where(h1){margin:0;padding:0}
+.app :where(h2){margin:0;padding:0}
+.app :where(ul){margin:0;padding:0}
+.app :where(li){list-style:none}
+.app :where(svg){display:block}
+.ph{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ib{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text)}
+.ph .ib:first-child{margin-left:-12px}
+.ph h1 + .ib{margin-right:-12px}
+.ph h1{flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{padding:0 16px}
+.h2{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px}
+.h2 span{font-size:12px;font-weight:400;color:var(--muted)}
+.h2 a{font-size:14px}
+.h2.wi{align-items:center;margin:16px 0 0}
+.h2.wi .ib{margin-right:-12px;color:var(--text2)}
+.sub{font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.card{background:var(--raised);border:1px solid var(--line);border-radius:16px}
+.card > li + li{border-top:1px solid var(--line)}
+.nm{display:block;font-size:16px;line-height:1.2}
+.dt{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.word{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px}
+.qty{width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums}
+.qty.zero{background:none;color:var(--muted)}
+.grow{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding-top:16px}
+.where{font-size:14px;color:var(--text2)}
+.step{display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken)}
+.step button{width:44px;height:44px;display:grid;place-items:center}
+.step span{min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.lr{display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px}
+.links{border-top:1px solid var(--line)}
+.links li{border-bottom:1px solid var(--line)}
+.app a.lk,.lk{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400}
+.lk .v{font-size:14px;color:var(--muted)}
+.lk svg{color:var(--strong)}
+.app a.txt,.txt{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg)}
+.end{height:32px;flex:none}
+.scrim{position:absolute;inset:0;background:rgba(17,20,31,.42)}
+.sheet{position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16)}
+.handle{width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line)}
+.st{font-size:18px;font-weight:650;line-height:1.25}
+.ss{font-size:14px;color:var(--text2);margin-top:4px}
+.primary{display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600}
+.quiet{display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600}
+.pick{display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line)}
+.pick:first-child{border-top:0}
+.pick.off{color:var(--muted)}
+.ck{width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12}
+.grp{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px}
+.acts{margin-top:8px}
+.app a.act,.act{display:flex;align-items:center;width:100%;min-height:56px;border-top:1px solid var(--line);font-size:16px;font-weight:400;color:var(--text)}
+.acts li:first-child .act{border-top:0}
+.act.bad{color:var(--bad)}
+</style>
+</helmet>
+<div class="app" style="height: 560px">
+<header class="ph">
+<button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+<h1>Shampoo</h1>
+</header>
+<div class="sec top"><p class="where">On Weekly shop, in Home</p></div>
+<div class="scrim"></div>
+
+<div class="sheet" role="dialog" aria-labelledby="menu-title">
+<div class="handle"></div>
+<h2 class="st" id="menu-title">Shampoo</h2>
+<ul class="acts">
+<li><button class="act" type="button">Change the name</button></li>
+<li><a class="act" href="ToList.dc.html">Add to another list</a></li>
+<li><button class="act" type="button">Take it out of Bathroom things</button></li>
+<li><button class="act bad" type="button">Delete this line</button></li>
+</ul>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":560}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

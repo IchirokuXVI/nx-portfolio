@@ -1,0 +1,78 @@
+// The line above the tab bar (velista 0134, section 4.2), as the `CatalogAdding`
+// artboard draws it: raised, with a hairline above. No shadow: the app's
+// elevations fall downward, and under this line is the tab bar.
+:host {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-adding-bar-height);
+  padding-inline: var(--app-space-5);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+}
+
+// The heading of Similar products: the same words with no bar around them.
+:host(.is-compact) {
+  min-block-size: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--app-text-xs);
+}
+
+.lead {
+  flex: none;
+}
+
+.list,
+.count {
+  display: flex;
+  align-items: center;
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.list {
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 650;
+}
+
+:host(.is-compact) .list {
+  font-size: var(--app-text-sm);
+}
+
+.list-name {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
+.count {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+  white-space: nowrap;
+}

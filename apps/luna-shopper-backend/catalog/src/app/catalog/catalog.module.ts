@@ -25,6 +25,7 @@ import { NearbyShopsController } from './nearby-shops.controller';
 import { NearbyShopsService } from './nearby-shops.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
+import { PriceHistoryService } from './price-history.service';
 import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupAssignmentService } from './product-group-assignment.service';
@@ -84,6 +85,8 @@ import { SupermarketService } from './supermarket.service';
     LocationScopeService,
     EffectivePriceSweep,
     ItemPriceService,
+    // The price a shopper saw over time, replayed from the rows (plan 0196).
+    PriceHistoryService,
     PricePolicyService,
     SupermarketService,
     PriceScopeService,

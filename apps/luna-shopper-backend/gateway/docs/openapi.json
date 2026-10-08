@@ -8601,6 +8601,101 @@
         ]
       }
     },
+    "/v1/items/{id}/list-lines": {
+      "get": {
+        "operationId": "ItemHistoryController_listLines_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `list.linesHoldingItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.list.linesHoldingItem.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
     "/v1/baskets/live": {
       "get": {
         "operationId": "BasketLiveController_live_v1",
@@ -12895,14 +12990,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -13111,14 +13209,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -13582,14 +13683,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -13731,14 +13835,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -13933,14 +14040,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -14287,6 +14397,187 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.SupermarketItemPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/items/{id}/price-history": {
+      "get": {
+        "operationId": "CatalogItemsController_priceHistory_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "relevance",
+                "name",
+                "created",
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
+              ]
+            }
+          },
+          {
+            "name": "priceScopeId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Where the range starts, as an ISO 8601 instant. Defaults to 365 days before `to`. A range longer than 400 days is cut at its start, and the answer states the range that was read. A `from` after `to` is refused.",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Where the range ends, as an ISO 8601 instant. Defaults to now.",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `item.priceHistory` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemPriceHistoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -16382,14 +16673,17 @@
             "name": "order",
             "required": false,
             "in": "query",
-            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.",
             "schema": {
               "type": "string",
               "enum": [
                 "relevance",
                 "name",
                 "created",
-                "updated"
+                "updated",
+                "category",
+                "price",
+                "unitPrice"
               ]
             }
           },
@@ -34796,6 +35090,36 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ItemPriceHistoryView": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemPriceSeriesView"
+            }
+          }
+        },
+        "required": [
+          "itemId",
+          "from",
+          "to",
+          "series"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemPriceOverride": {
         "type": "object",
         "properties": {
@@ -34846,6 +35170,90 @@
             ]
           }
         }
+      },
+      "catalog.ItemPricePointView": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unitPriceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "at",
+          "price",
+          "currency",
+          "unitPrice",
+          "unitPriceLabel",
+          "unitBasis"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemPriceSeriesView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemPricePointView"
+            }
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "supermarketId",
+          "points"
+        ],
+        "additionalProperties": false
       },
       "catalog.ItemPriceView": {
         "type": "object",
@@ -40984,6 +41392,32 @@
         ],
         "additionalProperties": false
       },
+      "list.ItemLineView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "quantity",
+          "approvalStatus"
+        ],
+        "additionalProperties": false
+      },
       "list.LinePage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -41490,6 +41924,50 @@
         ],
         "additionalProperties": false
       },
+      "list.ListWithItemLinesView": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "autoApproveLines": {
+            "type": "boolean"
+          },
+          "myPermissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.ListPermission"
+            }
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ItemLineView"
+            }
+          }
+        },
+        "required": [
+          "listId",
+          "name",
+          "zoneId",
+          "zoneName",
+          "autoApproveLines",
+          "myPermissions",
+          "lines"
+        ],
+        "additionalProperties": false
+      },
       "list.TripPage": {
         "type": "object",
         "properties": {
@@ -41954,6 +42432,25 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/list.ListHoldingItemView"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lists",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "msg.list.linesHoldingItem.response": {
+        "type": "object",
+        "properties": {
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ListWithItemLinesView"
             }
           },
           "hasMore": {

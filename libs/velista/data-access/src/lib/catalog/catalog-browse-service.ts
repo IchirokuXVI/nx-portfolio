@@ -7,6 +7,7 @@ import type {
   CatalogProduct,
   CatalogScopeOffer,
   Page,
+  ProductPriceHistory,
 } from '@portfolio/velista/models';
 import { CatalogBrowseApi } from './catalog-browse-api';
 
@@ -44,6 +45,17 @@ export interface CatalogBrowseServiceI {
    * (`GET /v1/catalog/items/:id/offers`). The sheet keeps the person's own.
    */
   scopeOffers(itemId: string): Promise<readonly CatalogScopeOffer[] | null>;
+
+  /**
+   * What the scopes of the person's shopping profile showed for one product
+   * between two moments (`GET /v1/catalog/items/:id/price-history`, backend
+   * `0196`, section 2). The server cuts a range longer than 400 days.
+   */
+  priceHistory(
+    itemId: string,
+    from: Date,
+    to: Date
+  ): Promise<ProductPriceHistory | null>;
 
   /**
    * One shop, named (`GET /v1/catalog/locations/:id`), for the note that says

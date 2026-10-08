@@ -2693,11 +2693,20 @@ export class LineService {
   /**
    * Delete a line (plan 0007, section 2; plan 0036, section 4.1).
    *
-   * `WRITE` on a `PENDING` or `REJECTED` line, `MANAGE` on any line. The same
-   * asymmetry as {@link update} and for the same reason: a writer whose line has
-   * been agreed to cannot quietly remove what was agreed to, and a list admin has
-   * to be able to remove an approved line that should never have existed, which
-   * includes a remainder somebody minds (plan 0037, section 4.2).
+   * `MANAGE` deletes any line. `WRITE` deletes a `PENDING` or `REJECTED` line
+   * on every list, and an `APPROVED` line on a list that approves lines by
+   * itself (plan 0196, section 4). `DECIDE` alone deletes nothing.
+   *
+   * The refusal protects an agreement: a writer cannot quietly remove a line
+   * that somebody with `DECIDE` approved. A list admin can, because somebody
+   * has to be able to remove an approved line that should never have existed,
+   * which includes a remainder somebody minds (plan 0037, section 4.2).
+   *
+   * On a list with `autoApproveLines` on, nobody agreed to anything. Each new
+   * line starts approved, and the status says only that the list asks for no
+   * approval. The refusal there stopped a writer from removing their own
+   * mistake, so it does not apply. Who edits a line and who changes its
+   * quantity did not change with that plan.
    *
    * Since plan 0132 it is a **soft** delete. The row stays, marked, and keeps its
    * `line_settlements` rows; {@link removeLineContents} takes everything else
@@ -2711,9 +2720,12 @@ export class LineService {
       req.userId
     );
     if (!permissions.has(ListPermission.MANAGE)) {
-      if (line.approvalStatus === LineApprovalStatus.APPROVED) {
+      if (
+        line.approvalStatus === LineApprovalStatus.APPROVED &&
+        !list.autoApproveLines
+      ) {
         throw new ForbiddenException(
-          'This line has been approved, so only an admin of this list can delete it'
+          'This line was approved on a list that asks for approval, so only an admin of this list can delete it'
         );
       }
       if (!permissions.has(ListPermission.WRITE)) {

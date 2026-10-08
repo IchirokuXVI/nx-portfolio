@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Adding lines under a parent, lines picked</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{color-scheme:light;--ground:#f7f8fc;--raised:#ffffff;--sunken:#eef0f7;--text:#11141f;--text2:#525a78;--muted:#616a8a;--line:#dde1ed;--strong:#6f7899;--amber-fg:#8a5a12;--ok:#047857;--bad:#be123c;position:relative;width:390px;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ground);color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.5;overflow:hidden}
+.app *{box-sizing:border-box}
+.app :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:inherit;cursor:pointer}
+.app :where(input[type="text"]){font:inherit;color:inherit;border:0;background:none;flex:1;min-width:0;height:44px;padding:0}
+.app input::placeholder{color:var(--muted);opacity:1}
+.app :where(a){color:var(--amber-fg);text-decoration:none;font-weight:600}
+.app a:hover{text-decoration:underline}
+.app :where(p){margin:0;padding:0}
+.app :where(h1){margin:0;padding:0}
+.app :where(h2){margin:0;padding:0}
+.app :where(ul){margin:0;padding:0}
+.app :where(li){list-style:none}
+.app :where(svg){display:block}
+.ph{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ib{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:12px;color:var(--text)}
+.ph .ib:first-child{margin-left:-12px}
+.ph h1 + .ib{margin-right:-12px}
+.ph h1{flex:1;min-width:0;font-family:'Marcellus',Georgia,serif;font-size:20px;font-weight:400;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{padding:0 16px}
+.h2{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:16px;font-weight:650;line-height:1.2;margin:28px 0 12px}
+.h2 span{font-size:12px;font-weight:400;color:var(--muted)}
+.h2 a{font-size:14px}
+.h2.wi{align-items:center;margin:16px 0 0}
+.h2.wi .ib{margin-right:-12px;color:var(--text2)}
+.sub{font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.card{background:var(--raised);border:1px solid var(--line);border-radius:16px}
+.card > li + li{border-top:1px solid var(--line)}
+.nm{display:block;font-size:16px;line-height:1.2}
+.dt{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.word{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--ok);margin-top:4px}
+.qty{width:52px;height:40px;flex:none;border-radius:12px;background:var(--sunken);display:grid;place-items:center;font-weight:600;font-variant-numeric:tabular-nums}
+.qty.zero{background:none;color:var(--muted)}
+.grow{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:12px;padding-top:16px}
+.where{font-size:14px;color:var(--text2)}
+.step{display:flex;align-items:center;height:44px;flex:none;border-radius:999px;background:var(--sunken)}
+.step button{width:44px;height:44px;display:grid;place-items:center}
+.step span{min-width:20px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.lr{display:flex;align-items:center;gap:8px;min-height:56px;padding:4px 8px 4px 16px}
+.links{border-top:1px solid var(--line)}
+.links li{border-bottom:1px solid var(--line)}
+.app a.lk,.lk{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:6px 0;color:var(--text);font-weight:400}
+.lk .v{font-size:14px;color:var(--muted)}
+.lk svg{color:var(--strong)}
+.app a.txt,.txt{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-top:4px;font-size:14px;font-weight:600;color:var(--amber-fg)}
+.end{height:32px;flex:none}
+.scrim{position:absolute;inset:0;background:rgba(17,20,31,.42)}
+.sheet{position:absolute;left:0;right:0;bottom:0;padding:12px 20px 24px;border-radius:22px 22px 0 0;background:var(--raised);box-shadow:0 -12px 32px rgba(17,20,31,.16)}
+.handle{width:48px;height:5px;margin:0 auto 16px;border-radius:999px;background:var(--line)}
+.st{font-size:18px;font-weight:650;line-height:1.25}
+.ss{font-size:14px;color:var(--text2);margin-top:4px}
+.primary{display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;background:#ffb454;color:#0a0c14;text-align:center;font-weight:600}
+.quiet{display:block;width:100%;height:52px;margin-top:16px;border-radius:12px;border:1px solid var(--strong);text-align:center;font-weight:600}
+.pick{display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 0;border-top:1px solid var(--line)}
+.pick:first-child{border-top:0}
+.pick.off{color:var(--muted)}
+.ck{width:24px;height:24px;flex:none;margin:0;accent-color:#8a5a12}
+.kb{position:absolute;left:0;right:0;bottom:0;height:300px;flex:none;display:grid;place-items:center;background:#dde1ed;border-top:1px solid var(--strong);font-size:14px;color:var(--text2)}
+.kb.flow{position:static}
+.sheet.up{bottom:300px}
+.fl{display:block;font-size:12px;color:var(--text2);margin:16px 0 4px}
+.app input.field{flex:none;width:100%;height:44px;padding:0 12px;border:1px solid var(--strong);border-radius:12px;background:var(--raised)}
+.app input.field.on{outline:2px solid #2563eb;outline-offset:1px}
+.list{margin-top:8px}
+.note{font-size:14px;color:var(--text2);margin-top:12px}
+.facts{display:flex}
+.facts li{flex:1;min-width:0;padding-left:12px;border-left:1px solid var(--line)}
+.facts li:first-child{padding-left:0;border-left:0}
+.fv{display:block;font-size:16px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums}
+.fd{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.grp{font-size:14px;font-weight:600;color:var(--text2);margin:20px 0 4px}
+.body{flex:1;min-height:0;overflow:hidden}
+.sec .fl{margin-top:12px}
+.thumb{width:40px;height:40px;flex:none;border-radius:12px;background:var(--sunken);color:var(--strong);display:grid;place-items:center}
+.bar{padding:12px 16px 20px;background:var(--raised);border-top:1px solid var(--line)}
+.warn{font-size:14px;color:var(--text2)}
+</style>
+</helmet>
+<div class="app" style="height: 844px">
+<header class="ph">
+<a class="ib" href="Parent.dc.html" aria-label="Back to Bathroom things"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+<h1>Add lines</h1>
+</header>
+
+<div class="sec body">
+<label class="fl" for="add-search">Search Weekly shop and the catalog, or write a new line</label>
+<input class="field" id="add-search" type="text">
+<p class="grp">Going under Bathroom things</p>
+<div>
+<label class="pick"><input class="ck" type="checkbox" checked><span class="grow"><span class="nm">Cotton pads</span><span class="dt">Stays at 1 on the list</span></span>
+<span class="step" role="group" aria-label="Cotton pads for each"><button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span>1</span><button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></label>
+<label class="pick"><input class="ck" type="checkbox" checked><span class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span><span class="grow"><span class="nm">Cotton buds</span><span class="dt">New line, gets 2 on the list</span></span>
+<span class="step" role="group" aria-label="Cotton buds for each"><button type="button" aria-label="One less"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span>1</span><button type="button" aria-label="One more"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span></label>
+</div>
+<p class="grp">On Weekly shop</p>
+<div>
+<label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Bread</span><span class="dt">1 on the list</span></span></label>
+<label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Deodorant</span><span class="dt">none on the list</span></span></label>
+<label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Milk</span><span class="dt">6 on the list</span></span></label>
+<label class="pick"><input class="ck" type="checkbox"><span class="grow"><span class="nm">Olive oil</span><span class="dt">1 on the list</span></span></label>
+</div>
+</div>
+
+<div class="bar">
+<p class="warn">Bathroom things will go from 2 to 1. There is only 1 Cotton pads on the list.</p>
+<button class="primary" type="button">Add 2 lines</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+// What the two sheets of velista 0134, section 4, share: the title, the quiet
+// note under it, and the Close button. Mixins and not a component, for the reason
+// `_picker-page.scss` beside this gives.
+
+@mixin title {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+@mixin note {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+@mixin close {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-6);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

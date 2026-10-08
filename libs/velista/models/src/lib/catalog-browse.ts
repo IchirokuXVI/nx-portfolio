@@ -8,13 +8,18 @@ import {
 } from './shopping-profile';
 
 /**
- * The orders the catalog tab offers (velista `0100`, section 2).
+ * The orders the catalog tab offers (velista `0134`, section 3; backend `0196`,
+ * section 1).
  *
- * Three of the server's four. `updated` is left out because nothing on the screen
- * could explain it to a shopper, and a price order is left out because the read has
- * none (section 8).
+ * - `category` is the catalog's own order: by aisle, then by name. The tab opens
+ *   on it.
+ * - `price` is the lowest price at the scopes of the read.
+ * - `unitPrice` is the lowest price per kilo or litre.
+ * - `relevance` is Best match, and exists only while the field has text.
+ *
+ * A to Z and Newest are gone (section 1).
  */
-export type CatalogOrder = 'relevance' | 'name' | 'created';
+export type CatalogOrder = 'relevance' | 'category' | 'price' | 'unitPrice';
 
 /**
  * A catalog name in the reader's language, or in the other one when it has only
@@ -34,17 +39,50 @@ export function catalogName(name: LocalizedName, locale: string): string {
 }
 
 /**
- * Which pills the screen draws, in order (rule C2 of the mock).
+ * Which orders the menu offers, in order (rule C2 of velista `0100`).
  *
  * **Best match exists only while there is something to match.** That is the
- * server's own rule: the read defaults to relevance with a query and to name
- * without one, and relevance with no words is an arbitrary order wearing a
- * confident label.
+ * server's own rule: relevance with no words is an arbitrary order wearing a
+ * confident label. With words it comes first, because somebody who typed a name
+ * wants that product before they want the cheapest thing near it.
  */
 export function catalogOrdersFor(query: string): readonly CatalogOrder[] {
   return query.trim() === ''
-    ? ['name', 'created']
-    : ['relevance', 'name', 'created'];
+    ? ['category', 'price', 'unitPrice']
+    : ['relevance', 'category', 'price', 'unitPrice'];
+}
+
+/**
+ * Where the "Without a price" line stands (velista `0134`, section 3): before the
+ * first row with no price that follows a row with one. Null when no line is drawn.
+ *
+ * Only a price order has the line, because only there do the rows with no price
+ * come last. A list where no row has a price draws none either: the line separates
+ * two parts, and one part needs no separator.
+ *
+ * `unitPrice` reads the price per kilo or litre, since that is what placed the row.
+ */
+export function unpricedStart(
+  order: CatalogOrder,
+  products: readonly CatalogProduct[]
+): number | null {
+  if (order !== 'price' && order !== 'unitPrice') {
+    return null;
+  }
+  const priced = (product: CatalogProduct): boolean => {
+    const offer = product.offer;
+    return (
+      offer !== null &&
+      (order === 'price' ? offer.price : offer.unitPrice) !== null
+    );
+  };
+
+  for (let index = 1; index < products.length; index++) {
+    if (!priced(products[index]) && priced(products[index - 1])) {
+      return index;
+    }
+  }
+  return null;
 }
 
 /**
@@ -229,10 +267,12 @@ export interface CatalogScopeOffer {
   readonly available: boolean;
 }
 
-/** One line of the product sheet: a chain near the person, and what it charges. */
+/** One row of a product's price table: a chain near the person, and what it charges. */
 export interface ProductShopPrice {
   readonly supermarketId: string;
   readonly chain: LocalizedName;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
   /**
    * `priced` has a price, `unpriced` stocks it with no price anybody saw, and
    * `notSold` has no available row at any of the person's scopes.
@@ -246,12 +286,12 @@ export interface ProductShopPrice {
 
 /**
  * Every chain near the person and what it charges for one product (velista
- * `0100`, section 5), cheapest first.
+ * `0100`, section 5, and the product page of `0134`), cheapest first.
  *
  * Only the person's own scopes count. The source rows come from every scope in the
  * country, and a price in a town somebody never shops in is not their price.
  *
- * A chain is named once, at its cheapest scope, because the question the sheet
+ * A chain is named once, at its cheapest scope, because the question the table
  * answers is "what does this cost at Mercadona", not "at which warehouse". Priced
  * chains come first by price, then chains that stock it with no price, then the
  * chains near the person that do not sell it. A chain the read resolved a scope
@@ -286,6 +326,7 @@ export function productShopPrices(
       stocked.push({
         supermarketId,
         chain,
+        logoUrl: logoOf(context, supermarketId),
         kind: offer.price === null ? 'unpriced' : 'priced',
         offer,
         cheapest: false,
@@ -299,6 +340,7 @@ export function productShopPrices(
     .map((chain) => ({
       supermarketId: chain.supermarketId,
       chain: chain.name,
+      logoUrl: chain.logoUrl,
       kind: 'notSold',
       offer: null,
       cheapest: false,
@@ -313,10 +355,10 @@ export function productShopPrices(
 }
 
 /**
- * The newest moment any priced line was seen, for the sheet's foot.
+ * The newest moment any priced line was seen, for the note under the table.
  *
  * The newest rather than the cheapest's, because the sentence is about how far
- * behind the shelf the whole sheet can be, and it says "a price can be behind".
+ * behind the shelf the whole table can be, and it says "a price can be behind".
  */
 export function productPricesSeenAt(
   lines: readonly ProductShopPrice[]
@@ -351,6 +393,16 @@ function byPrice(a: ProductShopPrice, b: ProductShopPrice): number {
     return -1;
   }
   return left - right;
+}
+
+function logoOf(
+  context: CatalogBrowseContext,
+  supermarketId: string
+): string | null {
+  return (
+    context.chains.find((chain) => chain.supermarketId === supermarketId)
+      ?.logoUrl ?? null
+  );
 }
 
 function nameOf(

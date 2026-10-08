@@ -7,8 +7,8 @@ import {
 } from '@angular/core';
 import { StoreIcon } from '../icons/icons';
 
-/** The four sizes a logo is drawn at, each a token (`--app-chain-logo-*`). */
-export type ChainLogoSize = 'sm' | 'md' | 'lg' | 'xl';
+/** The five sizes a logo is drawn at, each a token (`--app-chain-logo-*`). */
+export type ChainLogoSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 /**
  * What a logo draws, decided by whoever names the chain.
@@ -54,6 +54,7 @@ export interface ChainLogoView {
   styleUrl: './chain-logo.scss',
   host: {
     'aria-hidden': 'true',
+    '[class.is-xs]': "size() === 'xs'",
     '[class.is-sm]': "size() === 'sm'",
     '[class.is-md]': "size() === 'md'",
     '[class.is-lg]': "size() === 'lg'",

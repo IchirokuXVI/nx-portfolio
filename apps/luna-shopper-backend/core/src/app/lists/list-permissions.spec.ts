@@ -9,6 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ListLine } from '../entities';
 import {
   LineComment,
@@ -18,7 +19,6 @@ import {
   ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
 import { CommentService } from './comment.service';
@@ -778,6 +778,105 @@ describe('a member holding {READ, MANAGE} (acceptance 5)', () => {
     await expect(
       w.lines.delete({ userId: USER_ID, lineId: 'li1' })
     ).resolves.toEqual({ id: 'li1' });
+  });
+});
+
+describe('deleting an approved line (plan 0196, section 4)', () => {
+  // The refusal protects an agreement. On a list that approves lines by
+  // itself nobody agreed to anything, so a writer deletes there. The table is
+  // the two kinds of list crossed with the three callers who do not manage it.
+  const APPROVED = { approvalStatus: LineApprovalStatus.APPROVED };
+  const remove = (w: World) =>
+    w.lines.delete({ userId: USER_ID, lineId: 'li1' });
+
+  it('lets a writer delete it on a list that approves lines by itself', async () => {
+    const w = world({
+      permissions: WRITER,
+      autoApproveLines: true,
+      line: APPROVED,
+    });
+
+    await expect(remove(w)).resolves.toEqual({ id: 'li1' });
+    expect(w.deleted).toContain('li1');
+  });
+
+  it('still refuses a writer on a list that asks for approval', async () => {
+    const w = world({
+      permissions: WRITER,
+      autoApproveLines: false,
+      line: APPROVED,
+    });
+
+    await expect(remove(w)).rejects.toThrow(/only an admin of this list/);
+    expect(w.deleted).toEqual([]);
+  });
+
+  it('refuses a reader on both', async () => {
+    for (const autoApproveLines of [true, false]) {
+      const w = world({
+        permissions: READ_ONLY,
+        autoApproveLines,
+        line: APPROVED,
+      });
+
+      await expect(remove(w)).rejects.toThrow();
+      expect(w.deleted).toEqual([]);
+    }
+  });
+
+  it('tells a reader on a list that approves by itself that it is write access they lack', async () => {
+    const w = world({
+      permissions: READ_ONLY,
+      autoApproveLines: true,
+      line: APPROVED,
+    });
+
+    await expect(remove(w)).rejects.toThrow(/write access to this list/);
+  });
+
+  it('refuses a decider without write on both', async () => {
+    for (const autoApproveLines of [true, false]) {
+      const w = world({
+        permissions: DECIDER,
+        autoApproveLines,
+        line: APPROVED,
+      });
+
+      await expect(remove(w)).rejects.toThrow();
+      expect(w.deleted).toEqual([]);
+    }
+  });
+
+  it('refuses a decider without write on a pending line too', async () => {
+    // `DECIDE` alone deletes nothing, whatever the list and the status.
+    for (const autoApproveLines of [true, false]) {
+      const w = world({ permissions: DECIDER, autoApproveLines });
+
+      await expect(remove(w)).rejects.toThrow(/write access to this list/);
+    }
+  });
+
+  it('changes nothing for a writer on a pending or a rejected line', async () => {
+    for (const approvalStatus of [
+      LineApprovalStatus.PENDING,
+      LineApprovalStatus.REJECTED,
+    ]) {
+      const w = world({ permissions: WRITER, line: { approvalStatus } });
+
+      await expect(remove(w)).resolves.toEqual({ id: 'li1' });
+    }
+  });
+
+  it('changes nothing for a list admin, who deletes on both', async () => {
+    for (const autoApproveLines of [true, false]) {
+      const w = world({
+        permissions: LIST_ADMIN,
+        autoApproveLines,
+        line: APPROVED,
+      });
+
+      await expect(remove(w)).resolves.toEqual({ id: 'li1' });
+    }
   });
 });
 

@@ -4,12 +4,15 @@ import type {
   CatalogBrowseQuery,
   CatalogChain,
   CatalogLocation,
+  CatalogOrder,
   CatalogPriceState,
   CatalogProduct,
   CatalogScopeOffer,
   Page,
+  PricePoint,
   PriceUnitBasis,
   ProductOffer,
+  ProductPriceHistory,
   UnitOfMeasure,
 } from '@portfolio/velista/models';
 import type { CatalogBrowseServiceI } from './catalog-browse-service';
@@ -92,23 +95,65 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
         inCategory(row, query.categoryId)
     );
 
-    const ordered =
-      query.order === 'created'
-        ? [...matched].reverse()
-        : query.order === 'relevance'
-          ? [...matched].sort(
-              (a, b) =>
-                Number(!startsWith(b, needle)) - Number(!startsWith(a, needle))
-            )
-          : [...matched].sort((a, b) => a.es.localeCompare(b.es, 'es'));
+    const ordered = inOrder(
+      matched.map((row) => ({
+        row,
+        product: toProduct(row, scopes, query.order),
+      })),
+      query.order,
+      needle
+    );
 
     const start = query.cursor === null ? 0 : Number(query.cursor);
     const page = ordered.slice(start, start + query.limit);
     const next = start + query.limit;
 
     return {
-      items: page.map((row) => toProduct(row, scopes)),
+      items: page.map((entry) => entry.product),
       nextCursor: next < ordered.length ? String(next) : null,
+    };
+  }
+
+  /**
+   * A history with something to draw: each chain that prices the product was a
+   * little dearer at the start of the range and moved twice since, on days that
+   * differ by chain so the lines do not step together.
+   */
+  async priceHistory(
+    itemId: string,
+    from: Date,
+    to: Date
+  ): Promise<ProductPriceHistory | null> {
+    const row = PRODUCTS.find((product) => product.id === itemId);
+    if (row === undefined || this.state !== 'priced') {
+      return { from, to, series: [] };
+    }
+
+    const day = 24 * 60 * 60 * 1000;
+    const cents = (value: number) => Math.round(value * 100) / 100;
+    return {
+      from,
+      to,
+      series: (Object.keys(row.prices) as ChainKey[]).map((chain, index) => {
+        const price = row.prices[chain] ?? null;
+        const at = (daysAgo: number, value: number | null): PricePoint => ({
+          at: new Date(Math.max(from.getTime(), to.getTime() - daysAgo * day)),
+          price: value,
+          unitPrice: null,
+        });
+        return {
+          priceScopeId: scopeOf(chain),
+          supermarketId: chain,
+          points:
+            price === null
+              ? [{ at: from, price: null, unitPrice: null }]
+              : [
+                  { at: from, price: cents(price * 1.06), unitPrice: null },
+                  at(50 - index * 9, cents(price * 0.97)),
+                  at(14 - index * 3, price),
+                ],
+        };
+      }),
     };
   }
 
@@ -355,6 +400,51 @@ function inCategory(row: Fixture, categoryId: string | null): boolean {
   return leaf.id === categoryId || leaf.parentId === categoryId;
 }
 
+interface Listed {
+  readonly row: Fixture;
+  readonly product: CatalogProduct;
+}
+
+/**
+ * The server's orders (backend `0196`, section 1). A price order puts the rows
+ * with no price last, and each order falls to the name.
+ */
+function inOrder(
+  rows: readonly Listed[],
+  order: CatalogOrder,
+  needle: string
+): readonly Listed[] {
+  const byName = (a: Listed, b: Listed) =>
+    a.row.es.localeCompare(b.row.es, 'es');
+  const last = (value: number | null | undefined) =>
+    value === null || value === undefined ? Number.POSITIVE_INFINITY : value;
+
+  switch (order) {
+    case 'relevance':
+      return [...rows].sort(
+        (a, b) =>
+          Number(!startsWith(b.row, needle)) -
+          Number(!startsWith(a.row, needle))
+      );
+    case 'price':
+      return [...rows].sort(
+        (a, b) =>
+          last(a.product.offer?.price) - last(b.product.offer?.price) ||
+          byName(a, b)
+      );
+    case 'unitPrice':
+      return [...rows].sort(
+        (a, b) =>
+          last(a.product.offer?.unitPrice) - last(b.product.offer?.unitPrice) ||
+          byName(a, b)
+      );
+    case 'category':
+      return [...rows].sort(
+        (a, b) => a.row.category.localeCompare(b.row.category) || byName(a, b)
+      );
+  }
+}
+
 function startsWith(row: Fixture, needle: string): boolean {
   return (
     row.es.toLocaleLowerCase().startsWith(needle) ||
@@ -386,17 +476,23 @@ function offerAt(row: Fixture, chain: ChainKey): ProductOffer {
   };
 }
 
-function toProduct(row: Fixture, scopes: ReadonlySet<string>): CatalogProduct {
+function toProduct(
+  row: Fixture,
+  scopes: ReadonlySet<string>,
+  order: CatalogOrder
+): CatalogProduct {
+  // Under the unit price order the offer of a row is the one that placed it.
+  const by = (offer: ProductOffer) =>
+    order === 'unitPrice' ? offer.unitPrice : offer.price;
   let best: ProductOffer | null = null;
   for (const chain of Object.keys(row.prices) as ChainKey[]) {
     if (!scopes.has(scopeOf(chain))) {
       continue;
     }
     const offer = offerAt(row, chain);
-    if (
-      offer.price !== null &&
-      (best === null || best.price === null || offer.price < best.price)
-    ) {
+    const value = by(offer);
+    const held = best === null ? null : by(best);
+    if (value !== null && (held === null || value < held)) {
       best = offer;
     }
   }

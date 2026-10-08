@@ -45,6 +45,9 @@ import {
   type CommentRecording,
   type CommentTranscription,
   type Contact,
+  type HeldLine,
+  type ItemList,
+  type ItemLists,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -454,6 +457,88 @@ export function toAlsoOnPlace(raw: unknown): AlsoOnPlaceVm | null {
   }
 
   return { listId, listName, zoneName };
+}
+
+/**
+ * From `ListsWithItemLinesResult` (`GET /v1/items/:id/list-lines`, backend `0196`).
+ *
+ * The lists and their lines are flattened apart: the table reads the lists as a
+ * directory and the lines out of the one place every write also lands in.
+ * `itemId` is the product that was asked for, which is the one product each of
+ * these lines is known to hold.
+ *
+ * A list this build cannot read is dropped with its lines. A permission it does
+ * not know is dropped alone, so a newer server never grants more here than it
+ * meant to.
+ */
+export function toItemLists(raw: unknown, itemId: string): ItemLists {
+  const lists: ItemList[] = [];
+  const lines: HeldLine[] = [];
+
+  for (const entry of isRecord(raw) && Array.isArray(raw['lists'])
+    ? raw['lists']
+    : []) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const listId = str(entry['listId']);
+    const name = str(entry['name']);
+    const zoneId = str(entry['zoneId']);
+    const zoneName = str(entry['zoneName']);
+    if (
+      listId === null ||
+      name === null ||
+      zoneId === null ||
+      zoneName === null
+    ) {
+      continue;
+    }
+
+    lists.push({
+      listId,
+      zoneId,
+      name,
+      zoneName,
+      autoApproveLines: entry['autoApproveLines'] === true,
+      permissions: mapArray(entry['myPermissions'], (value) =>
+        oneOfOrNull(value, LIST_PERMISSIONS)
+      ),
+    });
+    for (const line of mapArray(entry['lines'], (value) =>
+      toHeldLine(value, listId, itemId)
+    )) {
+      lines.push(line);
+    }
+  }
+
+  return {
+    lists,
+    lines,
+    hasMore: isRecord(raw) && raw['hasMore'] === true,
+  };
+}
+
+function toHeldLine(
+  raw: unknown,
+  listId: string,
+  itemId: string
+): HeldLine | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const lineId = str(raw['id']);
+  const name = str(raw['content']);
+  if (lineId === null || name === null) {
+    return null;
+  }
+  return {
+    lineId,
+    listId,
+    name,
+    quantity: numOr(raw['quantity'], 0),
+    pending: raw['approvalStatus'] === 'PENDING',
+    itemIds: [itemId],
+  };
 }
 
 export function toLineSettlement(raw: unknown): LineSettlement | null {

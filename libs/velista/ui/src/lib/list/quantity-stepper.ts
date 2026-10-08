@@ -4,6 +4,7 @@ import {
   computed,
   input,
   model,
+  output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -28,6 +29,7 @@ import {
   imports: [RokuTranslatorPipe],
   template: `
     <div
+      [attr.aria-disabled]="disabled() ? 'true' : null"
       [attr.aria-label]="label() ?? ('list.add.quantity' | rokuT)"
       [attr.aria-valuemax]="max"
       [attr.aria-valuemin]="min()"
@@ -60,6 +62,10 @@ import {
   `,
   styleUrl: './quantity-stepper.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '[class.is-accent]': 'accent()',
+    '[class.is-compact]': 'compact()',
+  },
 })
 export class QuantityStepper {
   readonly value = model.required<number>();
@@ -82,6 +88,26 @@ export class QuantityStepper {
    */
   readonly label = input<string | null>(null);
 
+  /**
+   * Drawn in the quiet action colour, for a count that says something is on a
+   * list (velista `0134`, section 4.1), rather than a number being typed.
+   */
+  readonly accent = input(false);
+
+  /** Smaller buttons, for a stepper that shares a row with a name and a price. */
+  readonly compact = input(false);
+
+  /**
+   * The container owns the number (velista `0134`, section 4.1). A press changes
+   * nothing here and is reported through {@link stepped}, so the control always
+   * draws the count it is given: a write that is refused leaves no stale number,
+   * and the direction of a press never depends on a count that has not moved yet.
+   */
+  readonly controlled = input(false);
+
+  /** A press: one more, or one fewer. Emitted in both modes. */
+  readonly stepped = output<1 | -1>();
+
   readonly canDecrease = computed(
     () => !this.disabled() && this.value() > this.min()
   );
@@ -95,6 +121,9 @@ export class QuantityStepper {
       return;
     }
 
-    this.value.set(next);
+    if (!this.controlled()) {
+      this.value.set(next);
+    }
+    this.stepped.emit(by > 0 ? 1 : -1);
   }
 }

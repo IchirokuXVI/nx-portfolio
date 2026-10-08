@@ -32,6 +32,8 @@ import {
   type ListPage,
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
+  type ListsWithItemLinesRequest,
+  type ListsWithItemLinesResult,
   type ListView,
   type ReorderLinesRequest,
   type SetCommentTranscriptionRequest,
@@ -96,6 +98,14 @@ export class ListController {
     @Payload() req: ListsHoldingItemRequest
   ): Promise<ListsHoldingItemResult> {
     return this.lists.holdingItem(req);
+  }
+
+  /** Every readable list, with its lines that hold a product (plan 0196). */
+  @MessagePattern(LIST_PATTERNS.linesHoldingItem)
+  linesHoldingItem(
+    @Payload() req: ListsWithItemLinesRequest
+  ): Promise<ListsWithItemLinesResult> {
+    return this.lists.linesHoldingItem(req);
   }
 
   @MessagePattern(LINE_PATTERNS.add)

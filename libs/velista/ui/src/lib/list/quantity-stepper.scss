@@ -42,3 +42,23 @@
   color: var(--app-text-primary);
   text-align: center;
 }
+
+// A count that says the product is on a list (velista 0134, section 4.1).
+:host(.is-accent) {
+  .stepper {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-quiet-bg);
+  }
+
+  .value {
+    font-size: var(--app-text-base);
+    font-weight: 700;
+    color: var(--app-action-quiet-fg);
+  }
+}
+
+// Beside a name and a price, where 44 a button would leave the name two words.
+:host(.is-compact) .step {
+  width: var(--app-space-9);
+  height: var(--app-space-9);
+}

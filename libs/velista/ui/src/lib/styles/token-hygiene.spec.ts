@@ -44,7 +44,7 @@ const TOKEN_FILES = [
 
 /** The layer 1 ramps. A component naming one of these is naming a raw colour. */
 const PRIMITIVE_RAMPS =
-  /var\(\s*--app-(ink|neutral|white|amber|mint|coral|violet|sky)\b/;
+  /var\(\s*--app-(ink|neutral|white|amber|mint|coral|violet|sky|chart-day|chart-night)\b/;
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 const COLOUR_FUNCTION = /\b(rgba?|hsla?|color-mix|lab|lch|oklch)\s*\(/;
@@ -148,6 +148,8 @@ describe('token hygiene', () => {
       'background: rgba(0, 0, 0, 0.5);',
       'color: white;',
       'color: var(--app-amber-500);',
+      'stroke: var(--app-chart-day-1);',
+      'fill: var(--app-chart-night-5);',
       'padding: 13px;',
     ];
 
@@ -168,6 +170,9 @@ describe('token hygiene', () => {
       'gap: var(--app-space-3);',
       'font-size: var(--app-text-lg);',
       'width: 100%;',
+      // A chart names its series and its line width, which follow the theme.
+      '--series: var(--app-chart-series-1);',
+      'stroke-width: var(--app-chart-line-width);',
     ]) {
       const matched = [
         HEX,
