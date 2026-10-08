@@ -44,7 +44,7 @@ export interface CatalogChoice {
   readonly order: CatalogOrder | null;
 }
 
-/** The order a search opens on: Best match with text, A to Z without (rule C2). */
+/** The order a search opens on: Best match with text, the catalog's own without (rule C2). */
 export function defaultCatalogOrder(query: string): CatalogOrder {
   return catalogOrdersFor(query)[0];
 }
@@ -52,6 +52,9 @@ export function defaultCatalogOrder(query: string): CatalogOrder {
 /**
  * The order once this text has been asked for (rule C2): Best match is chosen the
  * moment a search begins and dropped the moment it ends.
+ *
+ * A price order somebody chose stays through both. They asked for the cheapest,
+ * and typing a word narrows what is cheapest. It does not take the question back.
  */
 export function catalogOrderAfter(
   before: string,
@@ -59,9 +62,9 @@ export function catalogOrderAfter(
   order: CatalogOrder
 ): CatalogOrder {
   if (before.trim() === '' && after.trim() !== '') {
-    return 'relevance';
+    return order === 'category' ? 'relevance' : order;
   }
-  return after.trim() === '' && order === 'relevance' ? 'name' : order;
+  return after.trim() === '' && order === 'relevance' ? 'category' : order;
 }
 
 /**

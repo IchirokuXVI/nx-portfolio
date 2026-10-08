@@ -4,6 +4,8 @@
   display: block;
 }
 
+// The card. The product button fills it, and the plus sits after that button as
+// its sibling (velista 0134, section 4.1).
 .row {
   box-sizing: border-box;
   display: flex;
@@ -15,6 +17,27 @@
   border-radius: var(--app-card-radius);
   background: var(--app-surface-raised);
   color: var(--app-text-primary);
+
+  // The plus is a full touch target with its ring inside, so the card gives up
+  // some of its own padding at that end. The lines that hold the product take a
+  // row of their own under the product, so the card wraps.
+  &.has-add {
+    flex-wrap: wrap;
+    padding-inline-end: var(--app-space-3);
+  }
+}
+
+.open {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-inline-size: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: inherit;
   font: inherit;
   text-align: start;
   cursor: pointer;
@@ -23,6 +46,90 @@
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
+}
+
+// The plus: 44 square to press, and a ring of 36 to see.
+.add {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.add-dot {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  inline-size: var(--app-add-dot-size);
+  block-size: var(--app-add-dot-size);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-lg);
+}
+
+// The lines of the chosen list that hold this product (velista 0134, section 4.1).
+// A hairline and no fill: they belong to the card, and a tinted box inside a card
+// would read as a second card.
+.held {
+  display: flex;
+  flex: 1 0 100%;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  padding-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.held-title {
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.held-lines {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.held-line {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+}
+
+.held-what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.held-name {
+  font-size: var(--app-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.held-pending {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
 }
 
 // Square, and the carton sits in the middle when there is no picture. The ground
@@ -118,7 +225,7 @@
   font-weight: 600;
 }
 
-.row:disabled {
+.open:disabled {
   cursor: default;
   opacity: 0.6;
 }

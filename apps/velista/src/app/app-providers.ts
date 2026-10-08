@@ -27,6 +27,7 @@ import {
   BasketListApi,
   CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
+  CatalogAddStore,
   CatalogApi,
   CatalogBrowseApi,
   COMMENT_SERVICE,
@@ -390,6 +391,23 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
     const chrome = inject(NavChrome);
 
     effect(() => chrome.setUsable(session.isAuthenticated()));
+  }),
+
+  // Tell the catalog's add store where the app is (velista `0134`, section 4.5).
+  // The record of what a visit added is erased when a navigation ends outside the
+  // catalog, and the store lives in `data-access`, which reads no router. `NavChrome`
+  // already holds the URL after each navigation, so it is handed over from here.
+  //
+  // Started here and not by whatever injects the store first, so the erase runs on
+  // the way out of the catalog whichever page was the last to hold it.
+  provideEnvironmentInitializer(() => {
+    const chrome = inject(NavChrome);
+    const adds = inject(CatalogAddStore);
+
+    effect(() => {
+      const url = chrome.url();
+      untracked(() => adds.visited(url));
+    });
   }),
 
   // Tell the tour what it needs from `data-access`, and send its one write (velista

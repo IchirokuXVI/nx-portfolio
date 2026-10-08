@@ -48,8 +48,8 @@ import {
   lineIdOf,
   listIdOf,
   PageNavigation,
+  productPagePath,
   SHEET_SEGMENT,
-  sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
@@ -751,7 +751,7 @@ export class LinePage {
    * With the right to edit the line, the products of that group on the line
    * are **replaced** by the one chosen, in place, so the line keeps its words,
    * its quantity and its history. The set never grows, so the cap cannot refuse
-   * it. Without that right the row opens the product over this page instead.
+   * it. Without that right the row opens the product's own page instead.
    */
   async pickSimilar(
     replaces: readonly string[],
@@ -764,17 +764,7 @@ export class LinePage {
 
     if (!this._canEdit()) {
       await this._router.navigateByUrl(
-        appPath(
-          this._localeStore.locale(),
-          this._basePath,
-          'zones',
-          this.zoneId(),
-          'lists',
-          this.listId(),
-          'lines',
-          this.lineId(),
-          ...sheetSegments('products', itemId)
-        )
+        productPagePath(this._localeStore.locale(), this._basePath, itemId)
       );
       return;
     }

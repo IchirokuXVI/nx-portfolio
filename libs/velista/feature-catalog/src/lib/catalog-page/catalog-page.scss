@@ -6,9 +6,10 @@
 // while every other page keeps the slot's. The host is exactly as tall as the slot, so
 // the slot never overflows.
 //
-// The host is a column of the page header and then the scroller (velista 0130): the
-// header is outside the box that scrolls, so it stays, and the tools stick to the top
-// of that box, directly under it.
+// The host is a column of the page header, the scroller, and the line that says
+// which list the plus adds to (velista 0130 and 0134). The header and that line are
+// outside the box that scrolls, so they stay, and the tools stick to the top of
+// that box, directly under the header.
 :host {
   display: flex;
   flex-direction: column;
@@ -34,21 +35,27 @@
   }
 }
 
-// The pills, then the quiet text at the row's end. It wraps under them on a narrow
-// phone with four orders rather than squeezing a pill.
-.order-row {
+// The line that heads the list (velista 0134, section 3): the note at one end and
+// the order at the other, 44 tall because the order is a control.
+.head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--app-space-2) var(--app-space-3);
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-5);
 }
 
-.near {
-  flex: none;
-  margin-inline-start: auto;
+.head-note {
+  min-inline-size: 0;
+  overflow: hidden;
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.head-order {
+  margin-inline-start: auto;
 }
 
 // Sticky on the page's own ground, so the rows passing under it never show through.
@@ -58,8 +65,8 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-4);
-  padding: var(--app-space-4) var(--app-space-5) var(--app-space-3);
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5) 0;
   background: var(--app-surface-ground);
 }
 
@@ -148,160 +155,65 @@
   font-size: var(--app-icon-sm);
 }
 
-// The category row runs to the screen's edges, so a long "Frozen · Ice cream"
-// scrolls rather than wrapping (velista 0119, rule P3). The chain chips that shared
-// it became the Supermarket button above it (velista 0124).
-.chip-row {
+.list {
   display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  margin-inline: calc(-1 * var(--app-space-5));
-  padding-inline: var(--app-space-5);
-  overflow-x: auto;
-  scrollbar-width: none;
-  overscroll-behavior-inline: contain;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: 0 var(--app-space-5);
+}
 
-  &::-webkit-scrollbar {
+// A failed add, in the live region. It takes no room while it says nothing.
+.add-failed {
+  flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5);
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+  font-size: var(--app-text-sm);
+
+  &:empty {
     display: none;
   }
 }
 
-// The way in: a link, so it wears the chevron every picker row wears.
-.categories-link {
+// The lists, or the lines of the chosen one, did not load. It stands where the
+// line above the tab bar would be, at the same height, so nothing moves when the
+// second try answers.
+.adds-failed {
   box-sizing: border-box;
-  display: inline-flex;
+  display: flex;
   flex: none;
   align-items: center;
-  gap: var(--app-space-2);
-  min-block-size: var(--app-control-height);
-  padding-inline: var(--app-space-4) var(--app-space-3);
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-chip-radius);
+  gap: var(--app-space-3);
+  min-block-size: var(--app-adding-bar-height);
+  margin: 0;
+  padding-inline: var(--app-space-5);
+  border-block-start: 1px solid var(--app-border-subtle);
   background: var(--app-surface-raised);
-  color: var(--app-text-primary);
   font-size: var(--app-text-sm);
+}
+
+.adds-failed-text {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--app-text-secondary);
+}
+
+.adds-failed-retry {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
   font-weight: 600;
-  white-space: nowrap;
-  text-decoration: none;
+  cursor: pointer;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
-}
-
-.categories-link-lead {
-  font-size: var(--app-icon-sm);
-  color: var(--app-action-quiet-fg);
-}
-
-.categories-link-chevron {
-  font-size: var(--app-icon-sm);
-  color: var(--app-text-muted);
-}
-
-// The chosen category (rule P4): one pill of two controls, filled like a chosen
-// chain because both narrow the list. The body is a link to the root's children
-// page and the cross is its own button behind a hairline.
-.category-chip {
-  box-sizing: border-box;
-  display: inline-flex;
-  flex: none;
-  align-items: stretch;
-  min-block-size: var(--app-control-height);
-  max-inline-size: var(--app-category-chip-max-width);
-  border-radius: var(--app-chip-radius);
-  background: var(--app-action-bg);
-  color: var(--app-text-on-action);
-  overflow: hidden;
-}
-
-.category-chip-body {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--app-space-2);
-  min-inline-size: 0;
-  padding-inline: var(--app-space-5) var(--app-space-3);
-  color: inherit;
-  font-size: var(--app-text-sm);
-  text-decoration: none;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: calc(-2 * var(--app-focus-ring-width));
-  }
-}
-
-// The root gives way and the leaf never does: about ten letters of the root, then
-// an ellipsis.
-.category-chip-root {
-  flex: 0 1 auto;
-  min-inline-size: 0;
-  max-inline-size: 7em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.category-chip-mid {
-  flex: none;
-  font-weight: 500;
-}
-
-.category-chip-leaf {
-  flex: none;
-  white-space: nowrap;
-  font-weight: 700;
-}
-
-.category-chip-clear {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  padding: 0;
-  border: none;
-  position: relative;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-
-  // The hairline between the two controls, in the text's own colour made faint, so
-  // it follows the fill in both themes without a colour of its own.
-  &::before {
-    content: '';
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    inline-size: 1px;
-    background: currentColor;
-    opacity: 0.22;
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: calc(-2 * var(--app-focus-ring-width));
-  }
-}
-
-.category-chip-clear-glyph {
-  font-size: var(--app-icon-sm);
-}
-
-.note {
-  margin: 0;
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-4);
-  padding: var(--app-space-3) var(--app-space-5) 0;
 }
 
 .rows {
@@ -311,6 +223,13 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+// Where the rows with no price start, in a price order (section 3).
+.unpriced {
+  padding-block-start: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
 }
 
 // The one card a priceless read draws, in the quiet action colour: it is a thing

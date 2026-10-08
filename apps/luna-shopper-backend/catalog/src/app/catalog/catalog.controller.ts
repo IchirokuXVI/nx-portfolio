@@ -60,6 +60,8 @@ import {
   type ItemEanRequest,
   type ItemIdRequest,
   type ItemPage,
+  type ItemPriceHistoryRequest,
+  type ItemPriceHistoryView,
   type ItemPriceIdRequest,
   type ItemPricePage,
   type ItemPricesByItemRequest,
@@ -145,6 +147,7 @@ import { CatalogDashboardService } from './dashboard.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PostalCodeService } from './postal-code.service';
+import { PriceHistoryService } from './price-history.service';
 import { PricePolicyService } from './price-policy.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupAssignmentService } from './product-group-assignment.service';
@@ -177,7 +180,9 @@ export class CatalogController {
     private readonly postalCodes: PostalCodeService,
     private readonly itemPrices: ItemPriceService,
     private readonly pricePolicies: PricePolicyService,
-    private readonly dashboard: CatalogDashboardService
+    private readonly dashboard: CatalogDashboardService,
+    // Last, so a spec that builds this positionally keeps its arguments.
+    private readonly priceHistories: PriceHistoryService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -349,6 +354,17 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.get)
   getItem(@Payload() req: ItemIdRequest): Promise<ItemView> {
     return this.items.get(req);
+  }
+
+  /**
+   * The price a shopper saw for one product over time (plan 0196, section 2).
+   * A read open to any account, as the product is, and it writes nothing.
+   */
+  @MessagePattern(ITEM_PATTERNS.priceHistory)
+  itemPriceHistory(
+    @Payload() req: ItemPriceHistoryRequest
+  ): Promise<ItemPriceHistoryView> {
+    return this.priceHistories.forItem(req);
   }
 
   /**

@@ -1,0 +1,31 @@
+@use '../add-sheet';
+
+.title {
+  @include add-sheet.title;
+}
+
+.note {
+  @include add-sheet.note;
+}
+
+.close {
+  @include add-sheet.close;
+}
+
+// The second try after the lists did not load.
+.retry {
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

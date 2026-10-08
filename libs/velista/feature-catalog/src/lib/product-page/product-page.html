@@ -1,0 +1,249 @@
+<!--
+  The one page header (velista 0130). H6: it never loads, so until the name
+  arrives the title is the word for the kind of page.
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'catalog.product.back' | rokuT"
+  [title]="name() || ('catalog.product.title' | rokuT)"
+/>
+
+<main class="page">
+  @switch (status()) {
+    @case ('loading') {
+      <!-- Bones in the shape of the product and the price table (section 5). -->
+      <div aria-live="polite" role="status">
+        <span class="visually-hidden">
+          {{ 'catalog.product.loading' | rokuT }}
+        </span>
+        <div aria-hidden="true" class="product">
+          <span class="picture bone"></span>
+          <span class="about">
+            <span class="bone bone-title"></span>
+            <span class="bone bone-detail"></span>
+          </span>
+        </div>
+        <div aria-hidden="true" class="skeleton">
+          <span class="bone-row"></span>
+          <span class="bone-row"></span>
+          <span class="bone-row"></span>
+        </div>
+      </div>
+    }
+    @case ('failed') {
+      <div class="state" role="alert">
+        <p class="state-title">{{ 'catalog.product.failedTitle' | rokuT }}</p>
+        <p class="state-body">{{ 'catalog.error.body' | rokuT }}</p>
+        <button (click)="retry()" class="secondary" type="button">
+          {{ 'catalog.error.retry' | rokuT }}
+        </button>
+      </div>
+    }
+    @case ('gone') {
+      <div class="state">
+        <p class="state-title">{{ 'catalog.product.goneTitle' | rokuT }}</p>
+        <p class="state-body">{{ 'catalog.product.goneBody' | rokuT }}</p>
+        <a [routerLink]="catalogPath()" class="secondary">
+          {{ 'catalog.product.toCatalog' | rokuT }}
+        </a>
+      </div>
+    }
+    @default {
+      <!--
+        The product. The name is repeated whole here, because the header cuts a
+        long one to a line.
+      -->
+      <div class="product">
+        <span aria-hidden="true" class="picture">
+          @if (image(); as src) {
+            <img
+              (error)="brokenImage.set(src)"
+              [src]="src"
+              alt=""
+              class="picture-image"
+              decoding="async"
+            />
+          } @else {
+            <lib-product-icon class="picture-glyph" />
+          }
+        </span>
+        <div class="about">
+          <p class="about-name">{{ name() }}</p>
+          @if (detail(); as text) {
+            <p class="about-detail">{{ text }}</p>
+          }
+          @if (category(); as link) {
+            <a
+              [queryParams]="link.query"
+              [routerLink]="catalogPath()"
+              class="about-category"
+            >
+              {{ link.label }}
+              <lib-chevron-right-icon class="about-chevron" />
+            </a>
+          }
+        </div>
+      </div>
+
+      <section aria-labelledby="product-prices-title" class="section">
+        <h2 class="heading" id="product-prices-title">
+          {{ 'catalog.product.pricesTitle' | rokuT }}
+        </h2>
+        @if (priced()) {
+          <lib-price-table [rows]="prices()" />
+          @if (seen(); as when) {
+            <p class="note">{{ 'catalog.product.seen' | rokuT: { when } }}</p>
+          }
+        } @else {
+          <!-- No shopping place: the catalog's own note, with its action. -->
+          <div class="state is-start">
+            <p class="state-body">{{ 'catalog.product.noShops' | rokuT }}</p>
+            <a [routerLink]="placePath()" class="secondary">
+              {{ 'catalog.noScope.add' | rokuT }}
+            </a>
+          </div>
+        }
+      </section>
+
+      @if (priced()) {
+        <section aria-labelledby="product-history-title" class="section">
+          <h2 class="heading" id="product-history-title">
+            {{ 'catalog.history.title' | rokuT }}
+          </h2>
+          @switch (historyStatus()) {
+            @case ('loading') {
+              <div aria-hidden="true" class="skeleton is-inline">
+                <span class="bone-row"></span>
+                <span class="bone-row"></span>
+              </div>
+            }
+            @case ('failed') {
+              <div class="state is-start" role="alert">
+                <p class="state-body">
+                  {{ 'catalog.history.failed' | rokuT }}
+                </p>
+                <button
+                  (click)="retryHistory()"
+                  class="secondary"
+                  type="button"
+                >
+                  {{ 'catalog.error.retry' | rokuT }}
+                </button>
+              </div>
+            }
+            @default {
+              @if (historyWindow(); as window) {
+                <lib-price-history
+                  (rangeChosen)="chooseRange($event)"
+                  [currency]="currency()"
+                  [from]="window.from"
+                  [lines]="historyLines()"
+                  [locale]="locale()"
+                  [product]="name()"
+                  [range]="range()"
+                  [to]="window.to"
+                />
+              }
+            }
+          }
+        </section>
+      }
+
+      <!--
+        In your lists (section 7). A guest has none. A person whose lists did not
+        load is told so, with a second try.
+      -->
+      @if (signedIn()) {
+        @switch (listsStatus()) {
+          @case ('loading') {
+            <section aria-hidden="true" class="section">
+              <div class="skeleton is-inline">
+                <span class="bone-row"></span>
+                <span class="bone-row"></span>
+              </div>
+            </section>
+          }
+          @case ('failed') {
+            <section aria-labelledby="product-lists-title" class="section">
+              <h2 class="heading" id="product-lists-title">
+                {{ 'catalog.inLists.title' | rokuT }}
+              </h2>
+              <div class="state is-start" role="alert">
+                <p class="state-body">
+                  {{ 'catalog.inLists.failed' | rokuT }}
+                </p>
+                <button (click)="retryLists()" class="secondary" type="button">
+                  {{ 'catalog.error.retry' | rokuT }}
+                </button>
+              </div>
+            </section>
+          }
+          @default {
+            @if (listGroups().length > 0) {
+              <section aria-labelledby="product-lists-title" class="section">
+                <h2 class="heading" id="product-lists-title">
+                  {{ 'catalog.inLists.title' | rokuT }}
+                </h2>
+                <lib-lists-table
+                  (added)="addToList($event)"
+                  (lineStepped)="stepListLine($event)"
+                  [groups]="listGroups()"
+                />
+              </section>
+            }
+          }
+        }
+      }
+
+      @if (similar(); as group) {
+        @if (group.failed) {
+          <p class="note">{{ 'catalog.similar.failed' | rokuT }}</p>
+        } @else if (group.loading) {
+          <lib-product-row-skeleton class="section" />
+        } @else if (group.rows.length > 0) {
+          <section aria-labelledby="product-similar-title" class="section">
+            <div class="similar-head">
+              <h2 class="heading" id="product-similar-title">
+                {{ 'catalog.similar.title' | rokuT }}
+              </h2>
+              <!--
+                Which list the plus below adds to. The same sheet as the catalog's
+                line, and the same value.
+              -->
+              @if (addTarget(); as target) {
+                <lib-adding-bar
+                  (listPressed)="openLists()"
+                  [compact]="true"
+                  [list]="target.name"
+                />
+              }
+            </div>
+            <ul class="rows">
+              @for (row of group.rows; track row.id) {
+                <li>
+                  <lib-product-row
+                    (added)="addProduct(row)"
+                    (lineStepped)="stepLine(row, $event)"
+                    (opened)="openSimilar($event)"
+                    [add]="addOf(row.id)"
+                    [row]="row"
+                  />
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      }
+    }
+  }
+</main>
+
+<!-- A write that failed, said once (section 4.1). -->
+<p aria-live="polite" class="add-failed" role="status">
+  @if (addFailed()) {
+    {{ 'catalog.add.failed' | rokuT }}
+  }
+</p>
+
+<!-- The sheet of lists, a child route over this page (section 4.3). -->
+<router-outlet />

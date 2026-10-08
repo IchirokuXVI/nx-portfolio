@@ -6,13 +6,11 @@ import {
 import type { CatalogBrowseContext } from '@portfolio/velista/models';
 
 /**
- * Where the person shops, read once for the catalog tab and its sheet.
+ * Where the person shops, read once for a page of the catalog.
  *
- * Provided by `CatalogPage`, so the product sheet drawn in the page's outlet asks
- * the same holder and reuses the answer rather than making the page's three reads
- * again on every tap. A sheet opened cold, with no page under it yet, still gets
- * the page's holder, because the page is the sheet's parent route and is created
- * first.
+ * Provided by `CatalogPage` and by `ProductPage`, each for itself: the holder
+ * lets a page ask more than once, for the first page of products and for a chain
+ * chosen later, and make the three reads behind the answer only once.
  *
  * A failed read is not kept: the next caller asks again, so a tap after the
  * connection came back does not inherit the old failure.

@@ -29,6 +29,7 @@ export * from './lib/baskets/basket-store';
 export * from './lib/baskets/basket-view-store';
 export * from './lib/baskets/live-basket-store';
 export * from './lib/baskets/shared-list-store';
+export * from './lib/catalog/catalog-add-store';
 export * from './lib/catalog/catalog-api';
 export * from './lib/catalog/catalog-browse-api';
 export * from './lib/catalog/catalog-browse-memory';

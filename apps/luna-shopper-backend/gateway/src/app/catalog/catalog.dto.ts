@@ -1235,15 +1235,35 @@ export class ListPriceScopesQueryDto extends PageQueryDto {
  * `relevance` is what a search does by default when it is given a query, so a
  * caller states it only to ask for it back after asking for something else. With
  * no query it degrades to `name`: there is nothing to be relevant to.
+ *
+ * `category`, `price` and `unitPrice` are the three orders of plan 0196. The
+ * product listing reads them, with or without a query. A read that does not
+ * list products ignores them.
  */
 export class SearchOrderQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
-    enum: ['relevance', 'name', 'created', 'updated'],
+    enum: [
+      'relevance',
+      'name',
+      'created',
+      'updated',
+      'category',
+      'price',
+      'unitPrice',
+    ],
     description:
-      'Defaults to `relevance` when a query is given and to `name` when one is not.',
+      'Defaults to `relevance` when a query is given and to `name` when one is not. `category` orders by the place of the first category of a product in the tree. `price` and `unitPrice` order by the lowest of each at the scopes of the read. Each of the three then orders by name, and a product with no category or no price comes last.',
   })
   @IsOptional()
-  @IsIn(['relevance', 'name', 'created', 'updated'])
+  @IsIn([
+    'relevance',
+    'name',
+    'created',
+    'updated',
+    'category',
+    'price',
+    'unitPrice',
+  ])
   order?: string;
 }
 
@@ -1407,6 +1427,38 @@ export class SearchOffersQueryDto extends PriceScopedQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+}
+
+/**
+ * The price history of one product (plan 0196, section 2): where the caller
+ * shops, said in the three ways of {@link PriceScopedQueryDto}, and a range.
+ *
+ * Both instants are on the DTO, because the validation pipe refuses a query
+ * parameter that the class does not carry. The check here is the shape. The
+ * catalog service checks the order of the two and cuts a range that is too
+ * long, so that rule has one home.
+ *
+ * `cursor`, `limit` and `order` come with the parent and mean nothing here:
+ * the answer is one document and not a page.
+ */
+export class PriceHistoryQueryDto extends PriceScopedQueryDto {
+  @ApiPropertyOptional({
+    format: 'date-time',
+    description:
+      'Where the range starts, as an ISO 8601 instant. Defaults to 365 days before `to`. A range longer than 400 days is cut at its start, and the answer states the range that was read. A `from` after `to` is refused.',
+  })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({
+    format: 'date-time',
+    description:
+      'Where the range ends, as an ISO 8601 instant. Defaults to now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
 
 /**

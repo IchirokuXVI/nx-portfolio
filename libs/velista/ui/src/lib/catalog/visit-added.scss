@@ -1,0 +1,94 @@
+// The sheet of what a visit added (velista 0134, section 4.4), as the
+// `CatalogAdded` artboard draws it.
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.heading {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-space-11);
+  padding-block: var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.detail,
+.pending {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// A state, in words. Violet is the app's colour for something that waits.
+.pending {
+  font-weight: 600;
+  color: var(--app-status-attention-fg);
+}
+
+.quiet,
+.open {
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.quiet {
+  align-self: flex-start;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.open {
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font-weight: 600;
+  text-align: center;
+}

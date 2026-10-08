@@ -327,8 +327,22 @@ $app-content-max: 480px;
   --app-chain-logo-xl: 56px;
   // A chain button: two to a row, tall enough for the logo, the name and the count.
   --app-chain-button-height: 108px;
-  // The catalog's one Supermarket button, which is the logo and two lines of type.
-  --app-supermarket-button-height: 60px;
+  // The catalog tools and adding from the catalog (velista 0134).
+  //
+  // A chain's logo inside the Supermarket selector, which is half a row wide and
+  // one line of type tall.
+  --app-chain-logo-xs: 20px;
+  // The plus on a product row: a ring drawn inside a full touch target.
+  --app-add-dot-size: 36px;
+  // The line above the tab bar that names the list the plus adds to.
+  --app-adding-bar-height: 52px;
+  // A product's picture on its own page: the one product there, so nearly twice
+  // the row's.
+  --app-product-page-image-size: 96px;
+  // A chart (velista 0134, section 6): how thick a line of data is, and the mark
+  // under the chosen range.
+  --app-chart-line-width: 2px;
+  --app-chart-range-mark: 3px;
   // One of a shop's sections under its row: small enough that five share a line.
   --app-section-chip-height: 24px;
   // A pick row's radio, a native one in the action colour, the mock's size.

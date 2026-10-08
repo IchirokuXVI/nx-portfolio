@@ -306,7 +306,6 @@
       "clear": "Borrar la búsqueda"
     },
     "supermarket": {
-      "label": "Supermercado",
       "title": "Supermercado",
       "back": "Volver al catálogo",
       "backToChains": "Volver a todas las cadenas",
@@ -314,24 +313,84 @@
       "allDetail": "Todos los productos de todas las cadenas",
       "any": "Cualquier tienda de {{chain}}",
       "anyDetail": "Todos los productos de {{chain}}",
-      "anyShop": "cualquier tienda",
       "pricesAt": "Precios en {{shop}}",
       "notPriced": "sin precio aquí",
       "clear": "Ver todos los supermercados"
     },
+    "selector": {
+      "supermarketAll": "Supermercado: todos los supermercados. Cambiar",
+      "supermarketAny": "Supermercado: {{chain}}, cualquier tienda. Cambiar",
+      "supermarketShop": "Supermercado: {{chain}}, una tienda. Cambiar",
+      "categoryAll": "Categoría: todas las categorías. Cambiar",
+      "categoryLeaf": "Categoría: {{root}}, {{leaf}}. Cambiar",
+      "categoryRoot": "Categoría: {{root}}. Cambiar"
+    },
     "order": {
       "label": "Orden",
       "relevance": "Más parecido",
-      "name": "A a Z",
-      "created": "Más nuevos"
+      "category": "Orden del catálogo",
+      "price": "Más barato primero",
+      "unitPrice": "Más barato por kilo o litro",
+      "short": {
+        "relevance": "Más parecido",
+        "category": "Catálogo",
+        "price": "Más barato",
+        "unitPrice": "Precio por kilo"
+      },
+      "hint": {
+        "relevance": "Primero lo que más se parece a lo que has escrito",
+        "category": "Por pasillos, como en la tienda",
+        "price": "Los productos sin precio van al final",
+        "unitPrice": "Para comparar un envase grande con uno pequeño"
+      }
+    },
+    "unpriced": "Sin precio",
+    "head": {
+      "chainNear": "Cualquier {{chain}} cerca de {{code}}"
     },
     "count": "{{count}} productos",
     "countMore": "Más de {{count}} productos",
-    "chain": {
-      "shops": "{{count}} tiendas cerca. Los precios son los de {{chain}} aquí."
-    },
     "row": {
-      "noPrice": "sin precio"
+      "noPrice": "sin precio",
+      "priceAt": "{{price}} en {{chain}}"
+    },
+    "add": {
+      "label": "Añadir {{name}} a {{list}}",
+      "failed": "No se ha guardado. Revisa la conexión e inténtalo de nuevo."
+    },
+    "held": {
+      "title": "En {{list}}",
+      "stepper": "Cuántos de {{line}} en {{list}}"
+    },
+    "adding": {
+      "to": "Se añade a",
+      "change": "Se añade a {{list}}. Cambiar de lista",
+      "count_one": "{{count}} producto añadido",
+      "count_other": "{{count}} productos añadidos",
+      "failedLists": "No se han cargado tus listas.",
+      "failedLines": "No se ha cargado {{list}}."
+    },
+    "lists": {
+      "title": "¿A qué lista lo añado?",
+      "toBuy_one": "{{count}} por comprar",
+      "toBuy_other": "{{count}} por comprar",
+      "none": "Todavía no tienes ninguna lista a la que puedas añadir.",
+      "loading": "Cargando tus listas",
+      "failed": "No se han cargado tus listas. Revisa la conexión e inténtalo de nuevo."
+    },
+    "added": {
+      "title": "Añadido a {{list}}",
+      "titleMany": "Añadido en esta visita",
+      "note": "Cambia la cantidad, o quita uno con el menos.",
+      "none": "No se ha añadido nada en esta visita.",
+      "pending": "Pendiente de aprobar",
+      "stepper": "Cantidad de {{name}}",
+      "takeAll_one": "Quitarlo",
+      "takeAll_other": "Quitar los {{count}}",
+      "open": "Abrir {{list}}"
+    },
+    "sheet": {
+      "close": "Cerrar"
     },
     "unit": {
       "KILOGRAM": "{{price}} / kg",
@@ -372,10 +431,53 @@
       "cheapest": "MÁS BARATO",
       "notSold": "aquí no se vende",
       "seen": "Visto {{when}}. Velista lee las tiendas, así que un precio puede ir por detrás del lineal.",
-      "loading": "Buscando los precios",
-      "failed": "No se han cargado los precios. Cierra y vuelve a intentarlo.",
+      "loading": "Cargando el producto",
       "noShops": "No sabemos dónde compras, así que no hay precios que mostrar.",
-      "close": "Cerrar"
+      "title": "Producto",
+      "back": "Volver",
+      "pricesTitle": "Precio en tus supermercados",
+      "failedTitle": "El producto no se ha cargado",
+      "goneTitle": "Este producto ya no está en el catálogo",
+      "goneBody": "Puede que se haya quitado, o que se haya unido con otro.",
+      "toCatalog": "Ir al catálogo"
+    },
+    "history": {
+      "title": "Cómo ha cambiado el precio",
+      "today": "Precios de hoy.",
+      "on": "Precios del {{day}}.",
+      "hide": "Pulsa un supermercado para ocultar su línea.",
+      "day": "El día del que se leen los precios",
+      "axisToday": "hoy",
+      "rangeLabel": "Desde cuándo",
+      "range": {
+        "month": "1 mes",
+        "quarter": "3 meses",
+        "year": "1 año"
+      },
+      "chart": {
+        "month_one": "Precio de {{name}} en {{count}} supermercado en el último mes",
+        "month_other": "Precio de {{name}} en {{count}} supermercados en el último mes",
+        "quarter_one": "Precio de {{name}} en {{count}} supermercado en los últimos tres meses",
+        "quarter_other": "Precio de {{name}} en {{count}} supermercados en los últimos tres meses",
+        "year_one": "Precio de {{name}} en {{count}} supermercado en el último año",
+        "year_other": "Precio de {{name}} en {{count}} supermercados en el último año"
+      },
+      "none": {
+        "month": "El precio no se ha movido en el último mes, o Velista no lo ha visto.",
+        "quarter": "El precio no se ha movido en los últimos tres meses, o Velista no lo ha visto.",
+        "year": "El precio no se ha movido en el último año, o Velista no lo ha visto."
+      },
+      "failed": "No se ha cargado el historial de precios."
+    },
+    "inLists": {
+      "title": "En tus listas",
+      "last": "La última",
+      "stepper": "Cuántos en {{list}}",
+      "other": "Ya está en esta lista, con este producto",
+      "otherPending": "Ya está en esta lista, pendiente de aprobar",
+      "readOnly": "Puedes ver esta lista. No puedes añadir nada.",
+      "readOnlyHolds": "Esta lista tiene {{count}}. Puedes verla, y no puedes cambiarla.",
+      "failed": "No se han cargado tus listas."
     },
     "similar": {
       "title": "Productos similares",
@@ -386,7 +488,7 @@
     },
     "categories": {
       "title": "Categorías",
-      "open": "Categorías",
+      "all": "Todas las categorías",
       "back": "Volver al catálogo",
       "backToRoots": "Volver a las categorías",
       "everything": "Todo en {{name}}",
@@ -394,8 +496,6 @@
       "count_other": "{{shown}} productos",
       "row": "{{name}}, {{amount}}",
       "rowChosen": "{{name}}, {{amount}}, elegida",
-      "chip": "{{root}}, {{leaf}}. Cambiar la categoría",
-      "chipRoot": "{{root}}. Cambiar la categoría",
       "clear": "Quitar la categoría",
       "search": "Buscar en {{category}}",
       "searchChain": "Buscar en {{category}} en {{chain}}",

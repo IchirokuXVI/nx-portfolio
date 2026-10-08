@@ -146,6 +146,10 @@ const STAYED: ReadonlyArray<readonly [string, string]> = [
   ['get', '/v1/catalog/items/{id}'],
   ['get', '/v1/catalog/items/offers'],
   ['get', '/v1/catalog/items/{id}/offers'],
+  // Plan 0196: two reads for the catalog tab of velista. The second is keyed
+  // on a product and answered by core, so it sits outside `/v1/catalog`.
+  ['get', '/v1/catalog/items/{id}/price-history'],
+  ['get', '/v1/items/{id}/list-lines'],
   ['get', '/v1/catalog/product-groups'],
   ['get', '/v1/catalog/product-groups/{id}'],
   ['get', '/v1/catalog/product-groups/{id}/items'],

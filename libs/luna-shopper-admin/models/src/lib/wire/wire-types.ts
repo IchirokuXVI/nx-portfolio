@@ -2518,6 +2518,16 @@ export type CatalogItemPriceDetails = {
 };
 
 /**
+ * `catalog.ItemPriceHistoryView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceHistoryView = {
+  itemId: string;
+  from: string;
+  to: string;
+  series: CatalogItemPriceSeriesView[];
+};
+
+/**
  * `catalog.ItemPriceOverride` in the gateway's OpenAPI document.
  */
 export type CatalogItemPriceOverride = {
@@ -2540,6 +2550,27 @@ export type CatalogItemPriceOverrides = {
 export type CatalogItemPricePage = {
   items: CatalogItemPriceView[];
   nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemPricePointView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPricePointView = {
+  at: string;
+  price: number | null;
+  currency: string | null;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+};
+
+/**
+ * `catalog.ItemPriceSeriesView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemPriceSeriesView = {
+  priceScopeId: string;
+  supermarketId: string;
+  points: CatalogItemPricePointView[];
 };
 
 /**
@@ -4642,6 +4673,16 @@ export type ListCommentView = {
 };
 
 /**
+ * `list.ItemLineView` in the gateway's OpenAPI document.
+ */
+export type ListItemLineView = {
+  id: string;
+  content: string;
+  quantity: number;
+  approvalStatus: EnumsLineApprovalStatus;
+};
+
+/**
  * `list.LinePage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4796,6 +4837,19 @@ export type ListListView = {
 };
 
 /**
+ * `list.ListWithItemLinesView` in the gateway's OpenAPI document.
+ */
+export type ListListWithItemLinesView = {
+  listId: string;
+  name: string;
+  zoneId: string;
+  zoneName: string;
+  autoApproveLines: boolean;
+  myPermissions: EnumsListPermission[];
+  lines: ListItemLineView[];
+};
+
+/**
  * `list.TripPage` in the gateway's OpenAPI document.
  */
 export type ListTripPage = {
@@ -4947,6 +5001,14 @@ export type MsgItemUpdateManyResponse = {
  */
 export type MsgListHoldingItemResponse = {
   lists: ListListHoldingItemView[];
+  hasMore: boolean;
+};
+
+/**
+ * `msg.list.linesHoldingItem.response` in the gateway's OpenAPI document.
+ */
+export type MsgListLinesHoldingItemResponse = {
+  lists: ListListWithItemLinesView[];
   hasMore: boolean;
 };
 

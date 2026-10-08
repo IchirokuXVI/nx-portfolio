@@ -158,18 +158,18 @@ describe('CategoriesPage (velista 0119)', () => {
   it('hands what the tab was narrowed by on to every row, and to the fallback', async () => {
     const { fixture, pages } = await render(
       fakeCategoryStore(MEMORY_CATEGORIES),
-      { chain: 'chain-deza', q: 'leche', order: 'created' }
+      { chain: 'chain-deza', q: 'leche', order: 'price' }
     );
 
     expect(links(fixture)[0]?.getAttribute('href')).toBe(
-      '/velista/en/catalog/categories/eggs-milk-and-butter?chain=chain-deza&q=leche&order=created'
+      '/velista/en/catalog/categories/eggs-milk-and-butter?chain=chain-deza&q=leche&order=price'
     );
 
     (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('lib-page-header button.lead')
       ?.click();
     expect(pages.back).toHaveBeenCalledWith(
-      '/velista/en/catalog?chain=chain-deza&q=leche&order=created'
+      '/velista/en/catalog?chain=chain-deza&q=leche&order=price'
     );
   });
 

@@ -1,0 +1,17 @@
+@use '../add-sheet';
+
+.title {
+  @include add-sheet.title;
+}
+
+.note {
+  @include add-sheet.note;
+}
+
+.added {
+  margin-block-start: var(--app-space-3);
+}
+
+.close {
+  @include add-sheet.close;
+}
