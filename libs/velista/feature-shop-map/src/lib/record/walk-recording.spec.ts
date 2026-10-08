@@ -223,6 +223,41 @@ describe('WalkRecording, a visit with no change', () => {
   });
 });
 
+describe('WalkRecording, a camera that has not found its place yet', () => {
+  it('does not stop a first session over the untracked poses a camera opens with', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    // Five seconds before the first tracked pose: longer than a loss may last.
+    lose(rec, 0, 5_000);
+
+    expect(rec.phase).toBe('walking');
+    expect(out.tones).toEqual([]);
+
+    walk(rec, 5_000, 10_000);
+    rec.stopWalk('button');
+
+    expect(out.tones).toEqual([]);
+    expect(out.pushes).toEqual([
+      { kind: 'stopped', reason: 'button', logTo: 4_900 },
+    ]);
+    // Log time counts from the first tracked pose.
+    expect(paths(out)[0]).toEqual([0, 0, 0]);
+  });
+
+  it('still stops a session that loses tracking after it had it', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    lose(rec, 0, 5_000);
+    walk(rec, 5_000, 10_000);
+    lose(rec, 10_000, 14_000);
+
+    expect(rec.phase).toBe('stopped');
+    expect(rec.stop).toBe('tracking-lost');
+  });
+});
+
 describe('WalkRecording (velista 0126)', () => {
   it('keeps path points while tracking is good and learns the baseline', () => {
     const out = output();

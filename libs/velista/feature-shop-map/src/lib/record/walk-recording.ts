@@ -335,6 +335,13 @@ export class WalkRecording {
     if (guard === null || this._phase === 'idle' || this._phase === 'stopped') {
       return;
     }
+    // A camera takes some seconds to find its place after it opens, and until
+    // then every pose is untracked. That is a session that has not started, not
+    // a loss: the guard would stop the walk after three seconds of it, with no
+    // mark to resume from. The session starts at its first tracked pose.
+    if (this._sessionStart === null && !raw.tracked) {
+      return;
+    }
 
     const aligned =
       this._transform !== null && raw.tracked
