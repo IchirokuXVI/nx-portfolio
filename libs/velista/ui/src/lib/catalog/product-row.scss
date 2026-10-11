@@ -27,9 +27,12 @@
   }
 }
 
+// A basis of zero, not `auto`: a card that wraps breaks its lines on the width
+// each item asks for, before anything shrinks. A long name thus asked for the
+// whole line and sent the plus to the next one.
 .open {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-items: center;
   gap: var(--app-space-4);
   min-inline-size: 0;
