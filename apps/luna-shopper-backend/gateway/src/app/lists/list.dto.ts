@@ -273,6 +273,33 @@ export class UpdateLineDto {
   @IsUUID(undefined, { each: true })
   adoptItemIds?: string[];
 
+  /**
+   * `@IsOptional()` skips the validators for null as well as for an absent key,
+   * and leaves the null on the object. That is the whole mechanism here: null
+   * reaches core as "clear" and an absent key as "leave alone".
+   */
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The favourite product of the line (plan 0199). Null clears it, and an absent field leaves it alone. The id must be one of the products of the line as the set stands after this same update, so one request can add a product and make it the favourite; any other id answers 400 validation_failed. A product that leaves the line stops being the favourite.',
+  })
+  @IsOptional()
+  @IsUUID()
+  favoriteItemId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The supermarket chain the line is bought at (plan 0199). A chain and never a shop. Null clears it, and an absent field leaves it alone. It does not depend on the products of the line.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredSupermarketId?: string | null;
+
   @ApiPropertyOptional({
     description:
       'Merge this line with the line the new content already belongs to (plan 0112, section 2). A rename onto a name another line of the list holds answers 409 line_merge_required and writes nothing unless this is true; the refusal names the other line in details. With it, the earlier of the two lines survives with the summed quantity and both lines’ products, comments, settlements and basket origins, and the answer names the removed line in absorbedLineId. It changes nothing on a rename to a free name.',

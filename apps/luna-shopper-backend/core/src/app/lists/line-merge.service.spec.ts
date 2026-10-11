@@ -2,6 +2,7 @@ import { LINE_ITEM_SET_MAX } from '@portfolio/luna-shopper/contracts';
 import {
   assertMergeFits,
   isEarlierLine,
+  mergedChoices,
   mergedItemIds,
 } from './line-merge.service';
 
@@ -43,6 +44,62 @@ describe('the products of a merged line (plan 0112, section 4)', () => {
       'c',
       'd',
     ]);
+  });
+});
+
+describe('the favourite and the chain of a merged line (plan 0199, section 2, rule 6)', () => {
+  const none = { favoriteItemId: null, preferredSupermarketId: null };
+
+  it('keeps both fields of the line that survives', () => {
+    expect(
+      mergedChoices(
+        { favoriteItemId: 'a', preferredSupermarketId: 'chain-1' },
+        { favoriteItemId: 'c', preferredSupermarketId: 'chain-2' },
+        ['a', 'b', 'c']
+      )
+    ).toEqual({ favoriteItemId: 'a', preferredSupermarketId: 'chain-1' });
+  });
+
+  it('takes both from the line that goes away where the survivor has none', () => {
+    expect(
+      mergedChoices(
+        none,
+        { favoriteItemId: 'c', preferredSupermarketId: 'chain-2' },
+        ['a', 'b', 'c']
+      )
+    ).toEqual({ favoriteItemId: 'c', preferredSupermarketId: 'chain-2' });
+  });
+
+  it('decides each field by itself', () => {
+    expect(
+      mergedChoices(
+        { favoriteItemId: null, preferredSupermarketId: 'chain-1' },
+        { favoriteItemId: 'c', preferredSupermarketId: 'chain-2' },
+        ['a', 'c']
+      )
+    ).toEqual({ favoriteItemId: 'c', preferredSupermarketId: 'chain-1' });
+    expect(
+      mergedChoices(
+        { favoriteItemId: 'a', preferredSupermarketId: null },
+        { favoriteItemId: 'c', preferredSupermarketId: 'chain-2' },
+        ['a', 'c']
+      )
+    ).toEqual({ favoriteItemId: 'a', preferredSupermarketId: 'chain-2' });
+  });
+
+  it('does not take a favourite that is not in the merged set', () => {
+    expect(
+      mergedChoices(
+        none,
+        { favoriteItemId: 'gone', preferredSupermarketId: null },
+        ['a', 'b']
+      )
+    ).toEqual(none);
+  });
+
+  it('leaves both null when neither line names one, also on rows read before the columns existed', () => {
+    expect(mergedChoices(none, none, [])).toEqual(none);
+    expect(mergedChoices({} as never, {} as never, ['a'])).toEqual(none);
   });
 });
 

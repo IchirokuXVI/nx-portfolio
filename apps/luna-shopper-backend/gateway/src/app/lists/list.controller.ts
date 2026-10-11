@@ -522,6 +522,10 @@ export class LinesController {
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       adoptItemIds: dto.adoptItemIds,
+      // Passed as they arrived (plan 0199): null clears, and an absent key is
+      // `undefined` here and is dropped on the way to core.
+      favoriteItemId: dto.favoriteItemId,
+      preferredSupermarketId: dto.preferredSupermarketId,
       confirmMerge: dto.confirmMerge,
     });
   }

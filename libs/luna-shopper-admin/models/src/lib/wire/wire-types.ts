@@ -1115,6 +1115,8 @@ export type UpdateLineDto = {
   quantity?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
+  favoriteItemId?: string | null;
+  preferredSupermarketId?: string | null;
   confirmMerge?: boolean;
 };
 
@@ -4762,6 +4764,8 @@ export type ListLineView = {
   itemSetHash: string | null;
   productGroupId: string | null;
   groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
   position: number;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;
@@ -4906,6 +4910,8 @@ export type ListUpdateLineResult = {
   itemSetHash: string | null;
   productGroupId: string | null;
   groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
   position: number;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;

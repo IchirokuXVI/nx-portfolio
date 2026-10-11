@@ -76,6 +76,7 @@ import { itemSetHash } from './item-set-hash';
 import { lineIdentities, normalizeContent } from './line-content';
 import {
   EMPTY_LINE_ITEM_SET,
+  keptFavorite,
   toLineItemSet,
   type LineItemSet,
 } from './line-item-set';
@@ -197,6 +198,12 @@ interface LineEdit {
   quantity?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
+  /**
+   * The favourite product and the chain (plan 0199). Null clears, and absent
+   * leaves alone. The operator path names neither.
+   */
+  favoriteItemId?: string | null;
+  preferredSupermarketId?: string | null;
   /**
    * Whether a rename that collides may merge (plan 0112, section 2). Only a
    * member's edit can say so: the operator path names no such field, so an
@@ -371,6 +378,93 @@ export class LineService {
       }
     }
     return [...new Set(itemIds)];
+  }
+
+  /**
+   * Write the favourite product and the chain of an edit onto the line, in
+   * memory (plan 0199, section 2).
+   *
+   * `nextItemIds` is the set this same edit replaces the products with, or
+   * `undefined` when the edit leaves the set alone. An adoption leaves it alone:
+   * it changes who owns a product and not which products the line holds (rule
+   * 3).
+   *
+   * ## The favourite
+   *
+   * - **An id** must be one of the products as the set stands after this edit
+   *   (rule 1). So the set is `nextItemIds` when the edit names one, and the
+   *   stored rows otherwise. One request can thus add a product and make it the
+   *   favourite.
+   * - **Null** clears it.
+   * - **Absent** leaves it alone, unless this edit took that product off the
+   *   line. Then it is cleared (rule 2).
+   *
+   * ## The chain
+   *
+   * Written when the edit names it and never otherwise (rule 4). It does not
+   * depend on the products, so no set, empty or not, clears it.
+   *
+   * It only assigns. Every refusal here happens before the caller writes a row,
+   * and a caller that is refused discards the object.
+   */
+  private async applyLineChoices(
+    line: ListLine,
+    req: LineEdit,
+    nextItemIds: readonly string[] | undefined,
+    manager?: EntityManager
+  ): Promise<void> {
+    const favorite = this.validateReference(
+      req.favoriteItemId,
+      'favoriteItemId'
+    );
+    const supermarket = this.validateReference(
+      req.preferredSupermarketId,
+      'preferredSupermarketId'
+    );
+
+    if (supermarket !== undefined) {
+      line.preferredSupermarketId = supermarket;
+    }
+
+    if (favorite === undefined) {
+      if (nextItemIds !== undefined) {
+        line.favoriteItemId = keptFavorite(line.favoriteItemId, nextItemIds);
+      }
+      return;
+    }
+    if (favorite !== null) {
+      const held =
+        nextItemIds ?? (await this.itemSetOf(line.id, manager)).itemIds;
+      if (!held.includes(favorite)) {
+        throw new ValidationException(
+          'favoriteItemId must be one of the products of the line',
+          { messageArgs: { field: 'favoriteItemId' } }
+        );
+      }
+    }
+    line.favoriteItemId = favorite;
+  }
+
+  /**
+   * An optional, nullable catalog id of an edit: `undefined`, null or a UUID.
+   *
+   * The gateway checks the same shape. It is checked here again because core is
+   * also reached in process, and because the value is written to a `uuid`
+   * column, where a wrong shape is an error of the database and not a refusal.
+   */
+  private validateReference(
+    value: string | null | undefined,
+    field: 'favoriteItemId' | 'preferredSupermarketId'
+  ): string | null | undefined {
+    if (value === undefined || value === null) {
+      return value;
+    }
+    if (typeof value !== 'string' || !isUuid(value)) {
+      throw new ValidationException(`${field} must be a valid reference`, {
+        messageArgs: { field },
+      });
+    }
+    return value;
   }
 
   /**
@@ -1533,6 +1627,8 @@ export class LineService {
     if (nextItemIds !== undefined) {
       line.itemSetHash = itemSetHash(nextItemIds);
     }
+    // The favourite and the chain (plan 0199). Neither is part of the hash.
+    await this.applyLineChoices(line, req, nextItemIds);
     this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
@@ -1644,6 +1740,12 @@ export class LineService {
                     .count({ where: { lineId: line.id } })
                 )
               );
+        // The favourite and the chain (plan 0199), against the set the renamed
+        // line will hold after the edit. In memory, and ahead of every refusal
+        // below, so a favourite outside that set is refused before anything is
+        // written. When the rename merges, the merge decides between the two
+        // lines (section 2, rule 6) from what is assigned here.
+        await this.applyLineChoices(line, req, nextItemIds, manager);
 
         // A concurrent rename can have given this line the name already, and then
         // there is nothing to collide with. Asked of the fresh row, because
@@ -2528,7 +2630,11 @@ export class LineService {
       decides &&
       req.content === undefined &&
       req.itemIds === undefined &&
-      req.adoptItemIds === undefined
+      req.adoptItemIds === undefined &&
+      // Guarded as `itemIds` is (plan 0199, section 2, rule 5): a request that
+      // names either one drops through to the write check.
+      req.favoriteItemId === undefined &&
+      req.preferredSupermarketId === undefined
     ) {
       return;
     }
@@ -2833,6 +2939,9 @@ export class LineService {
       {
         itemSetHash: null,
         productGroupId: null,
+        // A line with no products has no favourite (plan 0199, section 2, rule
+        // 2). The chain stays, because only an update clears it.
+        favoriteItemId: null,
         deletedByUserId,
       }
     );
