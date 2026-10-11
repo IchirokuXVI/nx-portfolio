@@ -33,6 +33,7 @@ function row(packCount: number | null): SourceCatalogEntry {
     packCount,
     categoryPath: [],
     url: null,
+    imageUrl: null,
     extra: null,
   } as SourceCatalogEntry;
 }
@@ -51,10 +52,42 @@ function fields(over: Partial<SourceEntryFields> = {}): SourceEntryFields {
     sizeFormat: 'pack de 6 unidades de 1 l.',
     categoryPath: [],
     url: null,
+    imageUrl: null,
     extra: null,
     ...over,
   };
 }
+
+describe('the photo address in the source group (plan 0198)', () => {
+  const PHOTO = 'https://prod-mercadona.imgix.net/images/a.jpg?fit=crop&h=300';
+
+  it('writes the address a run stated, verbatim, and a new address is a change', () => {
+    const stored = row(null);
+    expect(sourceGroupChanged(stored, fields({ imageUrl: PHOTO }))).toBe(true);
+
+    applySourceGroup(stored, fields({ imageUrl: PHOTO }));
+
+    expect(stored.imageUrl).toBe(PHOTO);
+    expect(sourceGroupChanged(stored, fields({ imageUrl: PHOTO }))).toBe(false);
+  });
+
+  it('clears the address when the source prints none any more', () => {
+    const stored = row(null);
+    stored.imageUrl = PHOTO;
+    expect(sourceGroupChanged(stored, fields())).toBe(true);
+
+    applySourceGroup(stored, fields());
+
+    expect(stored.imageUrl).toBeNull();
+  });
+
+  it('reads a row written before the column as holding none', () => {
+    const stored = row(null);
+    delete (stored as Partial<SourceCatalogEntry>).imageUrl;
+    expect(sourceGroupChanged(stored, fields())).toBe(false);
+    expect(sourceGroupChanged(stored, fields({ imageUrl: PHOTO }))).toBe(true);
+  });
+});
 
 describe('the size unit in the source group (plan 0177)', () => {
   it('writes the unit a run stated, and a new unit is a change', () => {

@@ -4,6 +4,7 @@ import { CatalogAudit } from './catalog-audit.entity';
 import { CategoryMember } from './category-member.entity';
 import { Category } from './category.entity';
 import { ItemEan } from './item-ean.entity';
+import { ItemLinkedImage } from './item-linked-image.entity';
 import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { ItemPrice } from './item-price.entity';
 import { Item } from './item.entity';
@@ -35,6 +36,7 @@ export {
 export { CategoryMember } from './category-member.entity';
 export { Category } from './category.entity';
 export { ItemEan } from './item-ean.entity';
+export { ItemLinkedImage } from './item-linked-image.entity';
 export { ItemPriceDetailsRow } from './item-price-details.entity';
 export { ItemPrice } from './item-price.entity';
 export { Item } from './item.entity';
@@ -72,6 +74,9 @@ export const CATALOG_ENTITIES = [
   Item,
   // Every barcode of every product (plan 0185), after the products.
   ItemEan,
+  // A link to the photo a chain prints (plan 0198), after the chains and the
+  // products it names.
+  ItemLinkedImage,
   // The category tree, and the products on its leaves (plan 0166). The tree
   // comes after nothing it names; the membership after both sides.
   Category,

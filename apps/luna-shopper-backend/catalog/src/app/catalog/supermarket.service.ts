@@ -5,6 +5,7 @@ import {
   PriceScopeKind,
   type CreateSupermarketRequest,
   type ListSupermarketsRequest,
+  type SetSupermarketLinkedImagesRequest,
   type SupermarketIdRequest,
   type SupermarketOrder,
   type SupermarketPage,
@@ -29,6 +30,11 @@ import {
   displayNameSql,
   toSupermarketView,
 } from './catalog.mappers';
+import {
+  itemIdsLinkedTo,
+  lockLinkedImageSwitches,
+  refreshLinkedImages,
+} from './item-linked-image.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
 
@@ -138,8 +144,65 @@ export class SupermarketService {
     // lost (plan 0075, section 1). The missing row is refused here instead of by
     // an affected count, which says the same thing one query earlier.
     const row = await this.load(req.supermarketId);
-    await this.audit.write(actor, (tx) => tx.delete(Supermarket, row));
+    await this.audit.write(actor, async (tx) => {
+      // The links of the chain go with it, by the cascade. The products that
+      // showed its photos are read first and computed again after, so none
+      // keeps a photo of a chain that no longer exists (plan 0198).
+      await lockLinkedImageSwitches(tx.manager, 'exclusive');
+      const shown = await itemIdsLinkedTo(tx.manager, row.id);
+      await tx.delete(Supermarket, row);
+      await refreshLinkedImages(tx.manager, { itemIds: shown });
+    });
     return { id: req.supermarketId };
+  }
+
+  /**
+   * Say whether the photos of one chain may be shown (plan 0198, section 4).
+   *
+   * The switch and what every product of the chain shows are written in one
+   * transaction: after it commits, no read of a product answers a photo of a
+   * chain that was turned off. The link rows stay, so turning the chain on
+   * again needs no harvest.
+   *
+   * The products are computed again also when the switch already says what
+   * was asked, which makes the request the repair for a list that disagrees
+   * with it. The trail records the switch only when it moved.
+   *
+   * What it cannot reach: a photo that a browser already holds, and a product
+   * that a client holds in memory until it reads again.
+   */
+  async setLinkedImagesEnabled(
+    req: SetSupermarketLinkedImagesRequest
+  ): Promise<SupermarketView> {
+    const actor = await this.admin.requireAdmin(req);
+    if (typeof req.enabled !== 'boolean') {
+      throw new ValidationException('enabled is true or false.');
+    }
+    const saved = await this.audit.write(actor, async (tx) => {
+      await lockLinkedImageSwitches(tx.manager, 'exclusive');
+      const row = await tx.manager.findOne(Supermarket, {
+        where: { id: req.supermarketId },
+      });
+      if (!row) {
+        throw new NotFoundException('Supermarket not found');
+      }
+      if (row.linkedImagesEnabled !== req.enabled) {
+        const before = { ...row };
+        // Its own statement: the ORM never writes this column (see the
+        // entity), so a save of the row would leave it as it was.
+        await tx.manager.query(
+          `UPDATE "supermarkets"
+              SET "linkedImagesEnabled" = $2, "updatedAt" = now()
+            WHERE "id" = $1`,
+          [row.id, req.enabled]
+        );
+        row.linkedImagesEnabled = req.enabled;
+        await tx.recordUpdate(Supermarket, before, row);
+      }
+      await refreshLinkedImages(tx.manager, { supermarketId: row.id });
+      return row;
+    });
+    return this.withLocationCount(saved);
   }
 
   async get(req: SupermarketIdRequest): Promise<SupermarketView> {

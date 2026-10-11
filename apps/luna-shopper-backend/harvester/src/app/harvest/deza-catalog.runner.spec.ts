@@ -190,6 +190,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       name: 'Perlas de perfume LENOR classic',
       sizeFormat: '195 g',
       brand: 'LENOR',
+      // The listing prints badges and no product photo (plan 0198).
+      imageUrl: null,
     });
   });
 

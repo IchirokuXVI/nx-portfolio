@@ -565,6 +565,8 @@ const sourceCatalogEntryProperties = {
   packCount: packCountOrNull(),
   categoryPath: array(string()),
   url: nullableString(),
+  // Plan 0198: the photo address the chain prints, on the chain's own host.
+  imageUrl: nullableString(),
   // Stored, shown, and never interpreted (plan 0086, section 6.1).
   extra: nullableObject(),
   timesSeen: integer({ minimum: 0 }),
@@ -599,6 +601,7 @@ const sourceCatalogEntryRequired = [
   'packCount',
   'categoryPath',
   'url',
+  'imageUrl',
   'extra',
   'timesSeen',
   'firstSeenAt',

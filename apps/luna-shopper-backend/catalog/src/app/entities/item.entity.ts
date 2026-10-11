@@ -22,8 +22,33 @@ export class Item extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   brand!: string | null;
 
+  /**
+   * The photo the owner chose. **A chain's address is never written here**
+   * (plan 0198): this column means "the owner chose this", and a link in it
+   * would lose the mark that says whose it is, so the switch could not find
+   * it. A chain's photo is a row of `item_linked_images`.
+   */
   @Column({ type: 'varchar', nullable: true })
   imageUrl!: string | null;
+
+  /**
+   * The chain photos a shopper may be given, materialized (plan 0198, section
+   * 3.1): the links of this product whose chain has `linkedImagesEnabled`, the
+   * oldest first, with one entry for an address two source rows state.
+   *
+   * `refreshLinkedImages` writes it with a plain `UPDATE`, inside the
+   * transaction of every write that can change the answer. Nothing else
+   * writes it, which is why the ORM is told never to: a save of a row that
+   * was loaded a moment ago would put a stale list back, and the list is what
+   * a switch that was just turned off emptied.
+   */
+  @Column({
+    type: 'jsonb',
+    default: () => `'[]'::jsonb`,
+    insert: false,
+    update: false,
+  })
+  linkedImages!: { url: string; supermarketId: string }[];
 
   @Column({ type: 'varchar', nullable: true })
   sku!: string | null;

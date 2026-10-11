@@ -239,6 +239,10 @@ export class FileImportRunner {
       sizeFormat,
       categoryPath: product.category_path ?? [],
       url: product.url ?? null,
+      // A file names no photo (plan 0198): a document that an admin uploads
+      // cannot name an address a shopper's browser will load. On a row that
+      // a walk owns this null is not written, like the rest of the group.
+      imageUrl: null,
       observedAt:
         parseInstant(product.observed_at) ?? context.fallbackObservedAt,
       // Stored and shown, never interpreted (D6). Whatever the producer knew

@@ -23,6 +23,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     // The national scope, as every chain gets since backend plan 0153. The
     // others carry none, which is what a chain made before it reads as.
     defaultPriceScopeId: 'ps_mercadona_national',
+    linkedImagesEnabled: false,
     // The shops `LOCATION_SEED` holds for it, as catalog counts them on a read
     // (admin plan 0042, section 2).
     locationCount: 3,
@@ -34,6 +35,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     websiteUrl: 'https://www.compraonline.bonpreuesclat.cat',
     externalBrandKey: 'Q11924747',
     defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
     locationCount: 0,
   },
   {
@@ -43,6 +45,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     websiteUrl: 'https://www.carrefour.es',
     externalBrandKey: 'Q217599',
     defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
     locationCount: 0,
   },
   {
@@ -52,6 +55,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     websiteUrl: 'https://www.carrefour.es',
     externalBrandKey: 'Q2940602',
     defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
     locationCount: 0,
   },
   {
@@ -61,6 +65,7 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     websiteUrl: 'https://www.consum.es',
     externalBrandKey: 'Q8350308',
     defaultPriceScopeId: null,
+    linkedImagesEnabled: false,
     locationCount: 1,
   },
 ];

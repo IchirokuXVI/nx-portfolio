@@ -15,6 +15,7 @@ import type { RunContext } from './run-context';
 import {
   SourceIngest,
   type PartialSourceObservation,
+  type ReportedObservation,
   type SourceObservation,
   type SourceObservationPrice,
 } from './source-ingest';
@@ -2819,5 +2820,250 @@ describe('SourceIngest, a row that a website and a leaflet both print (plan 0190
 
     expect(saved[0].sourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
     expect(counters.updated).toBe(1);
+  });
+});
+
+/**
+ * The photo a row states, and the link catalog holds for it (plan 0198).
+ *
+ * The address is a column of the source's group, and for a row that is bound
+ * to a product it is also a link in catalog, keyed on the row. What is
+ * asserted here is which rows a chunk sends and which it takes back. Every
+ * assertion is on strings: nothing opens an address.
+ */
+describe('SourceIngest, the photo a row states (plan 0198)', () => {
+  const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
+  const NEW_PHOTO =
+    'https://prod-mercadona.imgix.net/images/4241-b.jpg?fit=crop&h=300&w=300';
+
+  const bound = {
+    status: SourceEntryStatus.ACTIVE,
+    itemId: 'item-1',
+    matchedBy: ItemSourceMatch.MANUAL,
+    confidence: 1,
+  };
+
+  /** The harness, with a catalog that answers the two photo messages. */
+  function withLinks(
+    rows: Partial<SourceCatalogEntry>[],
+    options: { failLinks?: boolean } = {}
+  ) {
+    const built = build({ rows });
+    const linkItemImages = jest.fn(
+      async (links: { sourceEntryId: string }[]) => {
+        if (options.failLinks) {
+          throw new Error('catalog is away');
+        }
+        return {
+          linked: links.length,
+          moved: 0,
+          unchanged: 0,
+          rejected: [],
+        };
+      }
+    );
+    const unlinkItemImages = jest.fn(async (ids: string[]) => ({
+      unlinked: ids.length,
+    }));
+    Object.assign(built.catalog, { linkItemImages, unlinkItemImages });
+    return { ...built, linkItemImages, unlinkItemImages };
+  }
+
+  const run = (
+    built: ReturnType<typeof withLinks>,
+    observations: ReportedObservation[],
+    sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API
+  ) =>
+    built.ingest.ingest(built.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind,
+      observations,
+    });
+
+  it('sends one link message for a chunk, with its ACTIVE rows that hold an address and no other', async () => {
+    const built = withLinks([
+      { externalId: 'a', name: 'Leche', ...bound },
+      { externalId: 'b', name: 'Aceite', ...bound, itemId: 'item-2' },
+      // Waiting for a person: it states a photo and is bound to nothing.
+      { externalId: 'c', name: 'Pan' },
+    ]);
+
+    const { images } = await run(built, [
+      observation({ externalId: 'a', name: 'Leche', imageUrl: PHOTO }),
+      // Bound, and the source prints no photo for it.
+      observation({ externalId: 'b', name: 'Aceite', imageUrl: null }),
+      observation({ externalId: 'c', name: 'Pan', imageUrl: NEW_PHOTO }),
+    ]);
+
+    expect(built.linkItemImages).toHaveBeenCalledTimes(1);
+    expect(built.linkItemImages).toHaveBeenCalledWith([
+      {
+        sourceEntryId: 'held-1',
+        itemId: 'item-1',
+        supermarketId: CHAIN,
+        // Verbatim, as the adapter answered it.
+        url: PHOTO,
+        runId: RUN,
+      },
+    ]);
+    expect(built.unlinkItemImages).not.toHaveBeenCalled();
+    expect(images).toMatchObject({ linked: 1, unlinked: 0, failed: 0 });
+    // The address is kept on every row that states one, bound or not.
+    expect(built.stored.map((row) => row.imageUrl)).toEqual([
+      PHOTO,
+      null,
+      NEW_PHOTO,
+    ]);
+  });
+
+  it('sends a row again on every run, changed or not', async () => {
+    const built = withLinks([
+      { externalId: 'a', name: 'Leche', imageUrl: PHOTO, ...bound },
+    ]);
+
+    const { counters } = await run(built, [
+      observation({ externalId: 'a', name: 'Leche', imageUrl: PHOTO }),
+    ]);
+
+    expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+    expect(built.linkItemImages).toHaveBeenCalledTimes(1);
+  });
+
+  it('rewrites the address on a full read, and reports the row updated', async () => {
+    const built = withLinks([
+      { externalId: 'a', name: 'Leche', imageUrl: PHOTO, ...bound },
+    ]);
+
+    const { counters } = await run(built, [
+      observation({ externalId: 'a', name: 'Leche', imageUrl: NEW_PHOTO }),
+    ]);
+
+    expect(built.stored[0].imageUrl).toBe(NEW_PHOTO);
+    expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+    expect(built.linkItemImages.mock.calls[0][0][0].url).toBe(NEW_PHOTO);
+  });
+
+  it('takes the link back when a full read states no photo', async () => {
+    const built = withLinks([
+      { externalId: 'a', name: 'Leche', imageUrl: PHOTO, ...bound },
+    ]);
+
+    const { images } = await run(built, [
+      observation({ externalId: 'a', name: 'Leche', imageUrl: null }),
+    ]);
+
+    expect(built.stored[0].imageUrl).toBeNull();
+    expect(built.linkItemImages).not.toHaveBeenCalled();
+    expect(built.unlinkItemImages).toHaveBeenCalledWith(['held-1']);
+    expect(images.unlinked).toBe(1);
+  });
+
+  describe('a partial observation', () => {
+    const partial = (
+      over: Partial<PartialSourceObservation> = {}
+    ): PartialSourceObservation => ({
+      externalId: 'a',
+      detailFetched: false,
+      observedAt: new Date('2026-09-05T10:00:00.000Z'),
+      prices: [],
+      ...over,
+    });
+    const known = { externalId: 'a', name: 'Leche', imageUrl: PHOTO, ...bound };
+
+    it('leaves the stored address alone when it carries no field', async () => {
+      const built = withLinks([known]);
+
+      const { counters } = await run(built, [partial()]);
+
+      expect(built.stored[0].imageUrl).toBe(PHOTO);
+      expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+      // Still bound and still holding an address, so it is sent as ever.
+      expect(built.linkItemImages).toHaveBeenCalledTimes(1);
+      expect(built.unlinkItemImages).not.toHaveBeenCalled();
+    });
+
+    it('clears the address when it carries null, and takes the link back', async () => {
+      const built = withLinks([known]);
+
+      const { counters } = await run(built, [partial({ imageUrl: null })]);
+
+      expect(built.stored[0].imageUrl).toBeNull();
+      expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+      expect(built.unlinkItemImages).toHaveBeenCalledWith(['held-1']);
+    });
+
+    it('writes the address the listing states, with no detail read', async () => {
+      const built = withLinks([{ ...known, imageUrl: null }]);
+
+      await run(built, [partial({ imageUrl: NEW_PHOTO })]);
+
+      expect(built.stored[0].imageUrl).toBe(NEW_PHOTO);
+      expect(built.stored[0].name).toBe('Leche');
+      expect(built.linkItemImages.mock.calls[0][0][0]).toMatchObject({
+        sourceEntryId: 'held-1',
+        url: NEW_PHOTO,
+      });
+    });
+  });
+
+  it('leaves the address of a row that a walk owns alone when a leaflet observes it', async () => {
+    const built = withLinks([
+      {
+        externalId: 'a',
+        name: 'Leche',
+        imageUrl: PHOTO,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        ...bound,
+      },
+    ]);
+
+    // A file import states null for every product.
+    await run(
+      built,
+      [observation({ externalId: 'a', name: 'LECHE', imageUrl: null })],
+      PriceSourceKind.OFFICIAL_LEAFLET
+    );
+
+    expect(built.stored[0].imageUrl).toBe(PHOTO);
+    expect(built.unlinkItemImages).not.toHaveBeenCalled();
+  });
+
+  it('does not fail the chunk when the link message fails, and counts the rows', async () => {
+    const built = withLinks(
+      [{ externalId: 'a', name: 'Leche', ...bound }],
+      { failLinks: true }
+    );
+
+    const { images, outcomes } = await run(built, [
+      observation({ externalId: 'a', name: 'Leche', imageUrl: PHOTO }),
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(built.stored[0].imageUrl).toBe(PHOTO);
+    expect(images).toMatchObject({ linked: 0, failed: 1 });
+  });
+
+  it('adds up what every chunk of a session sent', async () => {
+    const built = withLinks([
+      { externalId: 'a', name: 'Leche', ...bound },
+      { externalId: 'b', name: 'Aceite', ...bound, itemId: 'item-2' },
+    ]);
+    const session = await built.ingest.open(built.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+
+    await session.push([
+      observation({ externalId: 'a', name: 'Leche', imageUrl: PHOTO }),
+    ]);
+    await session.push([
+      observation({ externalId: 'b', name: 'Aceite', imageUrl: NEW_PHOTO }),
+    ]);
+    const { images } = await session.close();
+
+    expect(built.linkItemImages).toHaveBeenCalledTimes(2);
+    expect(images.linked).toBe(2);
   });
 });

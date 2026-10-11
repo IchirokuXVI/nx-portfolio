@@ -13,6 +13,7 @@ import {
 import {
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
+  AdminCatalogLinkedImagesController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
   AdminCatalogPricePoliciesController,
@@ -173,6 +174,8 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogLocationItemsController,
   // Plan 0167: a section at its own id.
   AdminCatalogSectionsController,
+  // Plan 0198: the one stop for every chain photo.
+  AdminCatalogLinkedImagesController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
   // One queue over one table since plan 0086. `AdminHarvestItemRefsController`

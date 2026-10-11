@@ -1,6 +1,7 @@
 import {
   BrandBatchOutcome,
   BulkOperationErrorCode,
+  ItemImageSource,
   ItemPriceWrittenBy,
   NearbyShopNoPick,
   PostalCodeSource,
@@ -22,6 +23,9 @@ import {
   CATEGORY_KINDS,
   CATEGORY_PATTERNS,
   CATEGORY_SLUG_MAX_LENGTH,
+  ITEM_LINKED_IMAGE_BATCH_MAX,
+  ITEM_LINKED_IMAGE_PATTERNS,
+  ITEM_LINKED_IMAGE_URL_MAX_LENGTH,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   LOCATION_SECTIONS_SOURCES,
@@ -143,6 +147,29 @@ export const CATALOG_SCHEMA_IDS = {
   createSupermarketRequest: schemaId('msg/supermarket.create/request'),
   updateSupermarketRequest: schemaId('msg/supermarket.update/request'),
   supermarketIdRequest: schemaId('msg/supermarket.id/request'),
+  // Plan 0198: a chain photo is a link we can turn off.
+  itemImageSource: schemaId('enums/ItemImageSource'),
+  itemImageView: schemaId('catalog/ItemImageView'),
+  setSupermarketLinkedImagesRequest: schemaId(
+    'msg/supermarket.setLinkedImagesEnabled/request'
+  ),
+  itemLinkedImageLink: schemaId('catalog/ItemLinkedImageLink'),
+  itemLinkedImageRejection: schemaId('catalog/ItemLinkedImageRejection'),
+  linkItemImagesRequest: schemaId('msg/itemLinkedImage.linkBatch/request'),
+  linkItemImagesResult: schemaId('msg/itemLinkedImage.linkBatch/response'),
+  unlinkItemImagesRequest: schemaId('msg/itemLinkedImage.unlink/request'),
+  unlinkItemImagesResult: schemaId('msg/itemLinkedImage.unlink/response'),
+  disableAllLinkedImagesRequest: schemaId(
+    'msg/itemLinkedImage.disableAll/request'
+  ),
+  disableAllLinkedImagesResult: schemaId(
+    'msg/itemLinkedImage.disableAll/response'
+  ),
+  listItemLinkedImagesRequest: schemaId(
+    'msg/itemLinkedImage.listByItem/request'
+  ),
+  itemLinkedImageView: schemaId('catalog/ItemLinkedImageView'),
+  itemLinkedImagesView: schemaId('catalog/ItemLinkedImagesView'),
   listSupermarketsRequest: schemaId('msg/supermarket.list/request'),
   createLocationRequest: schemaId('msg/supermarketLocation.create/request'),
   updateLocationRequest: schemaId('msg/supermarketLocation.update/request'),
@@ -403,6 +430,8 @@ const supermarketView = object(
     externalBrandKey: nullableString(),
     // The last rung of the scope ladder (plan 0049, section 3.1).
     defaultPriceScopeId: nullableString(),
+    // Plan 0198, section 4: whether the photos of this chain may be shown.
+    linkedImagesEnabled: boolean(),
     // Deliberately NOT required (admin plan 0042, section 2): the reads of a
     // chain itself carry it, and a chain inside another view does not.
     locationCount: integer({
@@ -418,6 +447,7 @@ const supermarketView = object(
     'websiteUrl',
     'externalBrandKey',
     'defaultPriceScopeId',
+    'linkedImagesEnabled',
   ]
 );
 
@@ -646,7 +676,16 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   id: nonEmptyString(),
   name: ref(CATALOG_SCHEMA_IDS.localizedText),
   brand: nullableString(),
+  // Plan 0198, section 3.1. `imageUrl` is the address of the first entry of
+  // `images`: the owner's photo, else the first photo of a chain that is on.
   imageUrl: nullableString(),
+  imageSource: {
+    anyOf: [ref(CATALOG_SCHEMA_IDS.itemImageSource), { type: 'null' }],
+  },
+  imageSupermarketId: nullableString(),
+  // What the owner typed, which is what an edit form is filled from.
+  ownImageUrl: nullableString(),
+  images: array(ref(CATALOG_SCHEMA_IDS.itemImageView)),
   sku: nullableString(),
   ean: nullableString(),
   // Plan 0185: every barcode of the product, `ean` first. Empty for none.
@@ -676,6 +715,10 @@ export const itemViewRequired: string[] = [
   'name',
   'brand',
   'imageUrl',
+  'imageSource',
+  'imageSupermarketId',
+  'ownImageUrl',
+  'images',
   'sku',
   'ean',
   'eans',
@@ -685,6 +728,21 @@ export const itemViewRequired: string[] = [
   'defaultUnit',
   'productGroupId',
 ];
+
+/**
+ * One photo of a product and where it came from (plan 0198, section 3.1).
+ * `supermarketId` is null for the owner's photo and names the chain for a
+ * chain's.
+ */
+const itemImageView = object(
+  CATALOG_SCHEMA_IDS.itemImageView,
+  {
+    url: nonEmptyString(),
+    source: ref(CATALOG_SCHEMA_IDS.itemImageSource),
+    supermarketId: nullableString(),
+  },
+  ['url', 'source', 'supermarketId']
+);
 
 const itemView = object(
   CATALOG_SCHEMA_IDS.itemView,
@@ -1173,6 +1231,127 @@ const supermarketIdRequest = object(
   { ...adminCredentialProperties, supermarketId: nonEmptyString() },
   ['userId', 'supermarketId']
 );
+const setSupermarketLinkedImagesRequest = object(
+  CATALOG_SCHEMA_IDS.setSupermarketLinkedImagesRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    enabled: boolean(),
+  },
+  ['userId', 'supermarketId', 'enabled']
+);
+
+// --- Linked images (plan 0198) ----------------------------------------------
+
+const itemLinkedImageLink = object(
+  CATALOG_SCHEMA_IDS.itemLinkedImageLink,
+  {
+    sourceEntryId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    // Verbatim. Catalog refuses one that is not `https`, for that entry alone.
+    url: nonEmptyString(),
+    runId: nullableString(),
+  },
+  ['sourceEntryId', 'itemId', 'supermarketId', 'url', 'runId']
+);
+const linkItemImagesRequest = object(
+  CATALOG_SCHEMA_IDS.linkItemImagesRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.itemLinkedImageLink)),
+      maxItems: ITEM_LINKED_IMAGE_BATCH_MAX,
+    },
+  },
+  ['userId', 'entries']
+);
+const itemLinkedImageRejection = object(
+  CATALOG_SCHEMA_IDS.itemLinkedImageRejection,
+  {
+    sourceEntryId: nonEmptyString(),
+    reason: {
+      type: 'string',
+      enum: ['NOT_HTTPS', 'TOO_LONG', 'ITEM_NOT_FOUND', 'SUPERMARKET_NOT_FOUND'],
+    },
+  },
+  ['sourceEntryId', 'reason']
+);
+const linkItemImagesResult = object(
+  CATALOG_SCHEMA_IDS.linkItemImagesResult,
+  {
+    linked: integer({ minimum: 0 }),
+    moved: integer({ minimum: 0 }),
+    unchanged: integer({ minimum: 0 }),
+    rejected: array(ref(CATALOG_SCHEMA_IDS.itemLinkedImageRejection)),
+  },
+  ['linked', 'moved', 'unchanged', 'rejected']
+);
+const unlinkItemImagesRequest = object(
+  CATALOG_SCHEMA_IDS.unlinkItemImagesRequest,
+  {
+    ...adminCredentialProperties,
+    sourceEntryIds: {
+      ...array(nonEmptyString()),
+      maxItems: ITEM_LINKED_IMAGE_BATCH_MAX,
+    },
+  },
+  ['userId', 'sourceEntryIds']
+);
+const unlinkItemImagesResult = object(
+  CATALOG_SCHEMA_IDS.unlinkItemImagesResult,
+  { unlinked: integer({ minimum: 0 }) },
+  ['unlinked']
+);
+const disableAllLinkedImagesRequest = object(
+  CATALOG_SCHEMA_IDS.disableAllLinkedImagesRequest,
+  { ...adminCredentialProperties },
+  ['userId']
+);
+const disableAllLinkedImagesResult = object(
+  CATALOG_SCHEMA_IDS.disableAllLinkedImagesResult,
+  {
+    supermarkets: integer({
+      minimum: 0,
+      description: 'The chains that were on and are off now.',
+    }),
+    items: integer({
+      minimum: 0,
+      description: 'The products that showed a chain photo and show none now.',
+    }),
+  },
+  ['supermarkets', 'items']
+);
+const listItemLinkedImagesRequest = object(
+  CATALOG_SCHEMA_IDS.listItemLinkedImagesRequest,
+  { ...adminCredentialProperties, itemId: nonEmptyString() },
+  ['userId', 'itemId']
+);
+const itemLinkedImageView = object(
+  CATALOG_SCHEMA_IDS.itemLinkedImageView,
+  {
+    sourceEntryId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    url: nonEmptyString({ maxLength: ITEM_LINKED_IMAGE_URL_MAX_LENGTH }),
+    enabled: boolean(),
+    firstLinkedAt: nonEmptyString(),
+    lastSeenAt: nonEmptyString(),
+  },
+  [
+    'sourceEntryId',
+    'supermarketId',
+    'url',
+    'enabled',
+    'firstLinkedAt',
+    'lastSeenAt',
+  ]
+);
+const itemLinkedImagesView = object(
+  CATALOG_SCHEMA_IDS.itemLinkedImagesView,
+  { images: array(ref(CATALOG_SCHEMA_IDS.itemLinkedImageView)) },
+  ['images']
+);
+
 const listSupermarketsRequest = object(
   CATALOG_SCHEMA_IDS.listSupermarketsRequest,
   {
@@ -3155,9 +3334,11 @@ export const catalogSchemas: JsonSchema[] = [
     CATALOG_SCHEMA_IDS.brandBatchOutcome,
     Object.values(BrandBatchOutcome)
   ),
+  enumOf(CATALOG_SCHEMA_IDS.itemImageSource, Object.values(ItemImageSource)),
   localizedText,
   localizedSynonyms,
   supermarketView,
+  itemImageView,
   supermarketLocationView,
   priceScopeView,
   productGroupView,
@@ -3226,6 +3407,18 @@ export const catalogSchemas: JsonSchema[] = [
   createSupermarketRequest,
   updateSupermarketRequest,
   supermarketIdRequest,
+  setSupermarketLinkedImagesRequest,
+  itemLinkedImageLink,
+  linkItemImagesRequest,
+  itemLinkedImageRejection,
+  linkItemImagesResult,
+  unlinkItemImagesRequest,
+  unlinkItemImagesResult,
+  disableAllLinkedImagesRequest,
+  disableAllLinkedImagesResult,
+  listItemLinkedImagesRequest,
+  itemLinkedImageView,
+  itemLinkedImagesView,
   listSupermarketsRequest,
   createLocationRequest,
   updateLocationRequest,
@@ -3379,6 +3572,26 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.supermarketIdRequest,
     response: CATALOG_SCHEMA_IDS.supermarketView,
+  },
+  [SUPERMARKET_PATTERNS.setLinkedImagesEnabled]: {
+    request: CATALOG_SCHEMA_IDS.setSupermarketLinkedImagesRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketView,
+  },
+  [ITEM_LINKED_IMAGE_PATTERNS.linkBatch]: {
+    request: CATALOG_SCHEMA_IDS.linkItemImagesRequest,
+    response: CATALOG_SCHEMA_IDS.linkItemImagesResult,
+  },
+  [ITEM_LINKED_IMAGE_PATTERNS.unlink]: {
+    request: CATALOG_SCHEMA_IDS.unlinkItemImagesRequest,
+    response: CATALOG_SCHEMA_IDS.unlinkItemImagesResult,
+  },
+  [ITEM_LINKED_IMAGE_PATTERNS.disableAll]: {
+    request: CATALOG_SCHEMA_IDS.disableAllLinkedImagesRequest,
+    response: CATALOG_SCHEMA_IDS.disableAllLinkedImagesResult,
+  },
+  [ITEM_LINKED_IMAGE_PATTERNS.listByItem]: {
+    request: CATALOG_SCHEMA_IDS.listItemLinkedImagesRequest,
+    response: CATALOG_SCHEMA_IDS.itemLinkedImagesView,
   },
   [SUPERMARKET_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listSupermarketsRequest,

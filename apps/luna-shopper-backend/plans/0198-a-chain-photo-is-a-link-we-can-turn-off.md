@@ -1,3 +1,5 @@
+> **PR:** [#691](https://github.com/IchirokuXVI/nx-portfolio/pull/691)
+
 # 0198 A chain photo is a link we can turn off
 
 > Asked for by the owner on 2026-10-11: "create a plan to get the product's image url. It's

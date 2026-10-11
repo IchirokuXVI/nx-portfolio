@@ -4,12 +4,15 @@ import {
   brandKey,
   HarvestRunWrites,
   HarvestWarningCode,
+  ITEM_LINKED_IMAGE_BATCH_MAX,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  type ItemLinkedImageLink,
   type ItemPriceBatchEntry,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
@@ -113,6 +116,15 @@ export interface SourceObservation {
   packCount?: number | null;
   categoryPath: string[];
   url: string | null;
+  /**
+   * The address of the photo the source prints for the product, as its own
+   * adapter library answered it (plan 0198, section 2): `https`, on a host of
+   * the chain's list, verbatim. Required, so an adapter cannot forget to say:
+   * null is the answer of a source that prints none.
+   *
+   * It is an address and nothing else. No code here requests it.
+   */
+  imageUrl: string | null;
   observedAt: Date;
   extra: Record<string, unknown> | null;
   /**
@@ -149,6 +161,15 @@ export interface PartialSourceObservation {
    * together. Absent means the listing does not say, and the row is left alone.
    */
   soldByWeight?: boolean;
+  /**
+   * The photo address, when the listing prints one (plan 0198, section 2).
+   *
+   * It is not an identity field, and three listings state it, so a known
+   * product gets its address on the next walk with no new request. Absent
+   * leaves the stored address alone. Null is a statement that the source
+   * prints none, and clears it.
+   */
+  imageUrl?: string | null;
   /** Every price the listing stated for this product, as a full one carries. */
   prices: readonly SourceObservationPrice[];
 }
@@ -282,12 +303,38 @@ export interface SourceIngestCopies {
   pricesCopied: Map<string, number>;
 }
 
+/**
+ * What a run did with the photo links of its rows (plan 0198, section 3).
+ *
+ * Kept apart from {@link SourceIngestCounters}, as the copies are: those
+ * numbers describe rows and prices, and these describe a second message.
+ */
+export interface SourceIngestImages {
+  /** Rows that had no link in catalog, or state a new address. */
+  linked: number;
+  /** Rows whose link went to another product. */
+  moved: number;
+  /** Rows whose link already said this. Every chunk sends every bound row. */
+  unchanged: number;
+  /** Links catalog would not save. Each is logged with its reason. */
+  rejected: number;
+  /** Links removed: a row that left its product, or states no photo now. */
+  unlinked: number;
+  /**
+   * Rows whose message failed. **A failure here does not fail the run**:
+   * every price has been written by then, and every run sends every bound
+   * row again, so the next one repairs it.
+   */
+  failed: number;
+}
+
 export interface SourceIngestResult {
   outcomes: SourceEntryOutcome[];
   counters: SourceIngestCounters;
   copies: SourceIngestCopies;
   /** One per conflict {@link SourceIngestCounters.pricesConflicted} counts. */
   priceConflicts: PriceConflict[];
+  images: SourceIngestImages;
 }
 
 /**
@@ -410,8 +457,15 @@ export class SourceIngest {
     // barcode would otherwise take the barcode of a walked row out of the
     // count, and the next row to print it would bind as if nobody shared it.
     const chunkEans = new Set<string>();
+    // The rows that held a photo link when the chunk started (plan 0198): a
+    // bound row with an address. Read before the ladder runs, because the
+    // ladder writes onto the same objects.
+    const linkedBefore = new Set<string>();
     for (const observation of reported) {
       const known = byExternalId.get(observation.externalId);
+      if (known && activeItemOf(known) && known.imageUrl) {
+        linkedBefore.add(known.externalId);
+      }
       if (
         observation.detailFetched !== false &&
         (!known || writesSourceGroup(known, input.sourceKind))
@@ -437,7 +491,9 @@ export class SourceIngest {
           continue;
         }
         // Asked before the write, because the write is what makes it false.
-        changed = soldByWeightChanged(held, observation);
+        changed =
+          soldByWeightChanged(held, observation) ||
+          imageChanged(held, observation);
         outcome = await this.see(
           held,
           observation,
@@ -536,6 +592,16 @@ export class SourceIngest {
       }
     }
 
+    // The photo each bound row states, as a link in catalog (plan 0198).
+    const images = await this.syncImages(
+      context.runId,
+      outcomes,
+      linkedBefore,
+      [...unbound]
+        .map((externalId) => byExternalId.get(externalId))
+        .filter((row): row is SourceCatalogEntry => row !== undefined)
+    );
+
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
     await this.replaceScopePrices(context.runId, input.sourceKind, observed);
     // One row per price read at its scope. Counted here rather than inside the
@@ -633,7 +699,102 @@ export class SourceIngest {
         `${counters.pricesSoldAnotherWay} observation(s) priced another way ` +
         'than their row is sold and not written.'
     );
-    return { outcomes, counters, copies, priceConflicts };
+    return { outcomes, counters, copies, priceConflicts, images };
+  }
+
+  /**
+   * Send catalog the photo links of one chunk (plan 0198, section 3).
+   *
+   * **Every row of the chunk that is `ACTIVE` and holds an address is sent,
+   * changed or not.** That is one message for each chunk. It is what links
+   * the rows the migration filled, and it repairs a link that was lost.
+   * Catalog saves each link whatever the switch of the chain says.
+   *
+   * **A row that held a link and does not earn one any more is unlinked**: a
+   * full read in which the source prints no photo, and a row a shared EAN
+   * took back to the queue. The other ways a row leaves a product are
+   * decisions, and they send their own message.
+   *
+   * No address is opened here. A link is four ids and a string.
+   *
+   * A failure is counted and logged and does not fail the chunk, for the
+   * reason {@link SourceIngestImages.failed} gives.
+   */
+  private async syncImages(
+    runId: string,
+    outcomes: readonly SourceEntryOutcome[],
+    linkedBefore: ReadonlySet<string>,
+    unbound: readonly SourceCatalogEntry[]
+  ): Promise<SourceIngestImages> {
+    const images = emptyImages();
+    // By row, so a row reported twice in one chunk is sent once, as it is
+    // now.
+    const links = new Map<string, ItemLinkedImageLink>();
+    const unlinks = new Set<string>();
+    for (const outcome of outcomes) {
+      const row = outcome.entry;
+      if (outcome.itemId && row.imageUrl) {
+        unlinks.delete(row.id);
+        links.set(row.id, {
+          sourceEntryId: row.id,
+          itemId: outcome.itemId,
+          supermarketId: row.supermarketId,
+          url: row.imageUrl,
+          runId,
+        });
+      } else if (linkedBefore.has(row.externalId)) {
+        links.delete(row.id);
+        unlinks.add(row.id);
+      }
+    }
+    // A row an earlier chunk bound, or one that was loaded bound, is not in
+    // this chunk's outcomes when a later row of the chain takes it back.
+    for (const row of unbound) {
+      if (row.imageUrl) {
+        links.delete(row.id);
+        unlinks.add(row.id);
+      }
+    }
+
+    const toLink = [...links.values()];
+    for (let i = 0; i < toLink.length; i += ITEM_LINKED_IMAGE_BATCH_MAX) {
+      const batch = toLink.slice(i, i + ITEM_LINKED_IMAGE_BATCH_MAX);
+      try {
+        const result = await this.catalog.linkItemImages(batch);
+        images.linked += result.linked;
+        images.moved += result.moved;
+        images.unchanged += result.unchanged;
+        images.rejected += result.rejected.length;
+        for (const rejection of result.rejected) {
+          this.logger.warn(
+            `Run ${runId}: catalog did not save the photo link of row ` +
+              `${rejection.sourceEntryId} (${rejection.reason}).`
+          );
+        }
+      } catch (error) {
+        images.failed += batch.length;
+        this.logger.warn(
+          `Run ${runId}: the photo links of ${batch.length} row(s) were not ` +
+            `sent: ${describeError(error).message}. The next run sends them.`
+        );
+      }
+    }
+
+    const toUnlink = [...unlinks];
+    for (let i = 0; i < toUnlink.length; i += ITEM_LINKED_IMAGE_BATCH_MAX) {
+      const batch = toUnlink.slice(i, i + ITEM_LINKED_IMAGE_BATCH_MAX);
+      try {
+        const result = await this.catalog.unlinkItemImages(batch);
+        images.unlinked += result.unlinked;
+      } catch (error) {
+        images.failed += batch.length;
+        this.logger.warn(
+          `Run ${runId}: the photo links of ${batch.length} row(s) were not ` +
+            `removed: ${describeError(error).message}.`
+        );
+      }
+    }
+    return images;
   }
 
   /**
@@ -869,6 +1030,11 @@ export class SourceIngest {
    *   next whole read states one.
    *
    * `sizeFormat`, `externalId` and the name are not touched in either case.
+   *
+   * **The other is the photo address, when the listing prints one** (plan
+   * 0198). It is not an identity field. An observation that does not carry
+   * the field leaves the stored address alone, and one that carries null
+   * clears it.
    */
   private async see(
     row: SourceCatalogEntry,
@@ -884,6 +1050,9 @@ export class SourceIngest {
     if (observation.soldByWeight === true) {
       row.unitSize = null;
       row.sizeUnit = null;
+    }
+    if (observation.imageUrl !== undefined) {
+      row.imageUrl = observation.imageUrl;
     }
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
@@ -1268,6 +1437,31 @@ function emptyCopies(): SourceIngestCopies {
   return { pricedScopes: new Set(), pricesCopied: new Map() };
 }
 
+function emptyImages(): SourceIngestImages {
+  return {
+    linked: 0,
+    moved: 0,
+    unchanged: 0,
+    rejected: 0,
+    unlinked: 0,
+    failed: 0,
+  };
+}
+
+/**
+ * Whether a partial observation states another photo address than the row
+ * holds (plan 0198). Never when the listing does not carry the field.
+ */
+function imageChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  return (
+    observation.imageUrl !== undefined &&
+    (row.imageUrl ?? null) !== observation.imageUrl
+  );
+}
+
 /** Rung 2 answered, with an EAN another row of this chain carries too. */
 function isSharedEan(
   match: MatchResult,
@@ -1443,6 +1637,7 @@ function fieldsOf(
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,
+    imageUrl: observation.imageUrl ?? null,
     extra: observation.extra,
   };
 }
@@ -1503,6 +1698,7 @@ export class SourceIngestSession {
   private readonly counters = emptyCounters();
   private readonly copies = emptyCopies();
   private readonly priceConflicts: PriceConflict[] = [];
+  private readonly images = emptyImages();
   private closed = false;
 
   constructor(
@@ -1557,6 +1753,12 @@ export class SourceIngestSession {
     this.counters.pricesConflicted += result.counters.pricesConflicted;
     this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
     this.priceConflicts.push(...result.priceConflicts);
+    this.images.linked += result.images.linked;
+    this.images.moved += result.images.moved;
+    this.images.unchanged += result.images.unchanged;
+    this.images.rejected += result.images.rejected;
+    this.images.unlinked += result.images.unlinked;
+    this.images.failed += result.images.failed;
     for (const scopeId of result.copies.pricedScopes) {
       this.copies.pricedScopes.add(scopeId);
     }
@@ -1583,6 +1785,7 @@ export class SourceIngestSession {
       counters: this.counters,
       copies: this.copies,
       priceConflicts: this.priceConflicts,
+      images: this.images,
     };
   }
 }

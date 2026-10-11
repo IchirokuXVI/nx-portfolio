@@ -129,6 +129,24 @@ export interface RunReportResult {
    * of them: {@link pricesConflicted} is the whole number.
    */
   priceConflicts: PriceConflict[];
+  /**
+   * Photo links this run sent for its bound rows (plan 0198): rows that had
+   * no link or state a new address. Saved whatever the chain's switch says.
+   */
+  imagesLinked: number;
+  /** Rows whose link went to another product. */
+  imagesMoved: number;
+  /** Rows whose link already said this. Every run sends every bound row. */
+  imagesUnchanged: number;
+  /** Links catalog would not save, each logged with its reason. */
+  imagesRejected: number;
+  /** Links removed: a row that left its product or states no photo now. */
+  imagesUnlinked: number;
+  /**
+   * Rows whose link message failed. The run does not fail for it: every run
+   * sends every bound row again, so the next one repairs it.
+   */
+  imageLinksFailed: number;
   placesCreated: number;
   placesRefreshed: number;
   /** Catalog locations this run wrote itself, which only a trusted chain earns. */
@@ -246,6 +264,12 @@ export class RunReportSink implements RunReport {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     priceConflicts: [],
+    imagesLinked: 0,
+    imagesMoved: 0,
+    imagesUnchanged: 0,
+    imagesRejected: 0,
+    imagesUnlinked: 0,
+    imageLinksFailed: 0,
     placesCreated: 0,
     placesRefreshed: 0,
     placesImported: 0,
@@ -355,8 +379,14 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies, priceConflicts } =
+      const { outcomes, counters, copies, priceConflicts, images } =
         await this.session.close();
+      this.result.imagesLinked = images.linked;
+      this.result.imagesMoved = images.moved;
+      this.result.imagesUnchanged = images.unchanged;
+      this.result.imagesRejected = images.rejected;
+      this.result.imagesUnlinked = images.unlinked;
+      this.result.imageLinksFailed = images.failed;
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;

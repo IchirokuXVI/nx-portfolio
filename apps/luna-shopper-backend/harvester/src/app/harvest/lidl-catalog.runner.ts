@@ -7,12 +7,14 @@ import {
 import {
   isGroceryCategory,
   LidlClient,
+  photoAddressRead,
   type LidlListRow,
   type LidlProduct,
 } from '@portfolio/luna-shopper/lidl';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type { SourceObservation } from './source-ingest';
@@ -248,6 +250,9 @@ function observationOf(product: LidlProduct): SourceObservation {
     packCount: product.packCount,
     categoryPath: product.categoryPath,
     url: product.url,
+    // The search row's `image`, else the first of its `imageList` (plan
+    // 0198).
+    imageUrl: photoOf(photoAddressRead(product), product.externalId),
     observedAt: product.observedAt,
     // Stored, shown in the queue and never interpreted. The short code is
     // LIDL's own number for a weight item, and the aisle is a proposal a person

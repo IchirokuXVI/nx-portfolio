@@ -28,12 +28,17 @@ export type AuditFields = Record<string, unknown>;
  *   have not moved, so diffing it would write one audit row per product per run
  *   and grow the trail by a catalog per run. When it moves and the price does
  *   not, nothing happened that anybody will ever ask about.
+ * - `linkedImages` is derived (plan 0198): the chain photos a product shows,
+ *   materialized from `item_linked_images` and the switches of the chains. A
+ *   run moves it on thousands of products, and the act that a person asks
+ *   about is the switch, which is recorded on `supermarkets`.
  */
 const WRITE_BOOKKEEPING: ReadonlySet<string> = new Set([
   'id',
   'createdAt',
   'updatedAt',
   'priceObservedAt',
+  'linkedImages',
 ]);
 
 /**

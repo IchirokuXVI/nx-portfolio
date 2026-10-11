@@ -20,7 +20,8 @@ import { SourceEntryPrice } from './source-entry-price.entity';
  * The columns fall into two groups and **the split is the contract**:
  *
  * - The source's: `name`, `brand`, `ean`, `unitSize`, `sizeFormat`,
- *   `categoryPath`, `url`, `extra`. Every run rewrites these verbatim.
+ *   `categoryPath`, `url`, `imageUrl`, `extra`. Every run rewrites these
+ *   verbatim.
  * - A person's, or the EAN rung's: `itemId`, `candidateEntryId`, `status`,
  *   `matchedBy`, `confidence`, `decidedAt`. A run only reads these.
  *
@@ -163,6 +164,23 @@ export class SourceCatalogEntry extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   url!: string | null;
+
+  /**
+   * The address of the photo the chain prints for the product, as the chain
+   * printed it (plan 0198, section 2), or null when it prints none.
+   *
+   * The source's, like `url`: a read that states it rewrites it, and a
+   * decision never does. The adapter library answered it, so it is `https`,
+   * on a host of the chain's own list, and no longer than the column. No size
+   * parameter is added, removed or guessed.
+   *
+   * **It is an address and nothing else.** No code of the harvester requests
+   * it. For a row that is bound to a product it is sent to catalog as a link,
+   * and catalog decides, chain by chain, whether a shopper is given it.
+   * `items.imageUrl` is never written from it.
+   */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  imageUrl!: string | null;
 
   /**
    * The last observation's `extra` bag (plan 0086, section 6.1): a leaflet's

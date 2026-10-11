@@ -30,6 +30,8 @@ export { parseOpeningHours } from './lib/hours';
 export type { DiaOpeningHours } from './lib/hours';
 export { DIA_PAGE_SIZE, parseListing } from './lib/listing';
 export { DIA_OFFERS_CATEGORY_ID, parseMenu } from './lib/menu';
+export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
+export type { PhotoFields, PhotoRead } from './lib/photo';
 export { DIA_LOYALTY_PROGRAM, regularPrice } from './lib/price';
 export type {
   DiaPriceExtra,

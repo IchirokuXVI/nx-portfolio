@@ -18,6 +18,7 @@ import { CatalogDashboardService } from './dashboard.service';
 import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
 import { ItemEanStore } from './item-ean.store';
+import { ItemLinkedImageService } from './item-linked-image.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { LocationScopeService } from './location-scopes';
@@ -104,6 +105,9 @@ import { SupermarketService } from './supermarket.service';
     // Every barcode of every product (plan 0185), read and written by the
     // item service alone.
     ItemEanStore,
+    // The links to the photos chains print, and what a shopper is given of
+    // them (plan 0198).
+    ItemLinkedImageService,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

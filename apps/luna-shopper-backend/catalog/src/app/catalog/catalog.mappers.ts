@@ -1,7 +1,9 @@
 import {
   CONTENT_LOCALES,
+  ItemImageSource,
   type BrandView,
   type ContentLocale,
+  type ItemImageView,
   type ItemOfferView,
   type ItemPriceView,
   type ItemView,
@@ -144,7 +146,39 @@ export function toSupermarketView(row: Supermarket): SupermarketView {
     websiteUrl: row.websiteUrl,
     externalBrandKey: row.externalBrandKey,
     defaultPriceScopeId: row.defaultPriceScopeId,
+    linkedImagesEnabled: row.linkedImagesEnabled ?? false,
   };
+}
+
+/**
+ * Every photo of a product a client may show (plan 0198, section 3.1): the
+ * owner's first when there is one, then the chain photos.
+ *
+ * **This reads `items.linkedImages` and never `item_linked_images`.** The
+ * column holds the links of the chains that are turned on and nothing else,
+ * so a view built here cannot carry an address of a chain that is off. That
+ * is the whole gate, and it is on the server.
+ */
+export function itemImagesOf(
+  row: Pick<Item, 'imageUrl' | 'linkedImages'>
+): ItemImageView[] {
+  const images: ItemImageView[] = [];
+  if (row.imageUrl) {
+    images.push({
+      url: row.imageUrl,
+      source: ItemImageSource.OWNER,
+      supermarketId: null,
+    });
+  }
+  // A row that a write answered before the column was read back holds none.
+  for (const linked of row.linkedImages ?? []) {
+    images.push({
+      url: linked.url,
+      source: ItemImageSource.CHAIN,
+      supermarketId: linked.supermarketId,
+    });
+  }
+  return images;
 }
 
 /**
@@ -222,6 +256,10 @@ export function toProductGroupView(row: ProductGroup): ProductGroupView {
  * null: the field is optional in the contract precisely so the reads with no
  * scopes to price against say nothing about price at all, and a literal `null`
  * on `item.get` would be a claim that this product has no price anywhere.
+ *
+ * `imageUrl` is the first of {@link itemImagesOf} (plan 0198), which is the
+ * owner's photo whenever there is one. `ownImageUrl` is the column itself,
+ * for the form that edits it.
  */
 export function toItemView(
   row: Item,
@@ -231,11 +269,17 @@ export function toItemView(
   eans: ItemView['eans'],
   bestOffer?: ItemOfferView
 ): ItemView {
+  const images = itemImagesOf(row);
+  const first = images[0] ?? null;
   const view: ItemView = {
     id: row.id,
     name: row.name,
     brand: row.brand,
-    imageUrl: row.imageUrl,
+    imageUrl: first?.url ?? null,
+    imageSource: first?.source ?? null,
+    imageSupermarketId: first?.supermarketId ?? null,
+    ownImageUrl: row.imageUrl,
+    images,
     sku: row.sku,
     ean: row.ean,
     eans,
