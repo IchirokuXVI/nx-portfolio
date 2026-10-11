@@ -239,11 +239,22 @@ export class LinePage {
     // The prices the order of the cards compares: the first twenty products, read
     // when the page opens (velista `0137`, section 2). Past those the cards keep the
     // order of the line, so the rail reads them as it reaches them and two ahead.
+    // The favourite is the first card wherever the line holds it, so its price is
+    // always asked for.
     effect(() => {
-      const wanted = this._itemIds().slice(
+      const itemIds = this._itemIds();
+      const wanted = itemIds.slice(
         0,
         Math.max(LINE_PRICED_PRODUCTS_MAX, this._reached() + CARDS_READ_AHEAD)
       );
+      const favorite = this._line()?.favoriteItemId ?? null;
+      if (
+        favorite !== null &&
+        itemIds.includes(favorite) &&
+        !wanted.includes(favorite)
+      ) {
+        wanted.push(favorite);
+      }
       if (wanted.length > 0) {
         untracked(() => void this._prices.ensure(wanted));
       }

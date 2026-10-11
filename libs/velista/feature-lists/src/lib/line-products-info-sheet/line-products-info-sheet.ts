@@ -8,6 +8,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import { LineStore } from '@portfolio/velista/data-access';
 import { SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
+import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import { lineUrls } from '../line-page/line-urls';
 
 /**
@@ -27,23 +28,31 @@ import { lineUrls } from '../line-page/line-urls';
  */
 @Component({
   selector: 'lib-line-products-info-sheet',
-  imports: [RokuTranslatorPipe, SheetShell],
+  imports: [RokuTranslatorPipe, SheetShell, LineGoneNotice],
   template: `
     <lib-sheet-shell (dismiss)="dismiss()" labelledBy="line-products-info-title">
-      <h2 class="title" id="line-products-info-title">
-        {{ 'list.page.about.title' | rokuT }}
-      </h2>
+      @if (gone.reason(); as reason) {
+        <lib-line-gone-notice
+          (closed)="gone.acknowledge()"
+          [reason]="reason"
+          titleId="line-products-info-title"
+        />
+      } @else {
+        <h2 class="title" id="line-products-info-title">
+          {{ 'list.page.about.title' | rokuT }}
+        </h2>
 
-      <p class="say">
-        {{ 'list.page.about.any' | rokuT: { line: lineName() } }}
-      </p>
-      <p class="say">{{ 'list.page.about.favorite' | rokuT }}</p>
-      <p class="say">{{ 'list.page.about.cheapest' | rokuT }}</p>
-      <p class="say">{{ 'list.page.about.order' | rokuT }}</p>
+        <p class="say">
+          {{ 'list.page.about.any' | rokuT: { line: lineName() } }}
+        </p>
+        <p class="say">{{ 'list.page.about.favorite' | rokuT }}</p>
+        <p class="say">{{ 'list.page.about.cheapest' | rokuT }}</p>
+        <p class="say">{{ 'list.page.about.order' | rokuT }}</p>
 
-      <button (click)="dismiss()" class="secondary" type="button">
-        {{ 'list.page.about.close' | rokuT }}
-      </button>
+        <button (click)="dismiss()" class="secondary" type="button">
+          {{ 'list.page.about.close' | rokuT }}
+        </button>
+      }
     </lib-sheet-shell>
   `,
   styleUrl: './line-products-info-sheet.scss',
@@ -53,6 +62,12 @@ export class LineProductsInfoSheet {
   private readonly _lines = inject(LineStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _urls = lineUrls();
+
+  readonly gone = watchLineGone({
+    listId: this._urls.listId,
+    lineId: this._urls.lineId,
+    close: () => this.dismiss(),
+  });
 
   /** The line the sentences are about, or nothing while it has not arrived. */
   readonly lineName = computed(

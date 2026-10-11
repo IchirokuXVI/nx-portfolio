@@ -421,6 +421,19 @@ describe('LinePage', () => {
       ]);
     });
 
+    it('asks for the price of a favourite the line holds past the products it reads on opening', async () => {
+      const others = Array.from({ length: 24 }, (_, index) => `other-${index}`);
+      const { browse } = await render({
+        lines: [
+          line({ itemIds: [...others, 'classic'], favoriteItemId: 'classic' }),
+        ],
+      });
+
+      const asked = browse.scopeOffers.mock.calls.map(([itemId]) => itemId);
+      expect(asked).toContain('classic');
+      expect(asked).not.toContain('other-23');
+    });
+
     it('shows a reader the favourite as a mark, and no star to press', async () => {
       const { fixture } = await render({
         permissions: READER,
