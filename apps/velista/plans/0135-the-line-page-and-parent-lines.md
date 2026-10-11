@@ -1,3 +1,5 @@
+> **PR:** [#690](https://github.com/IchirokuXVI/nx-portfolio/pull/690) (stages 1 and 1b)
+
 # 0135: the line page and parent lines
 
 > Asked for by the owner on 2026-10-07 and 2026-10-08. The line page shows a product as a
