@@ -1,0 +1,131 @@
+# 0063: sections are the shop's
+
+> Asked for by the owner on 2026-10-11: "Sections of a shop are almost never the same for
+> other shops of the same chain, so sections are only shop-wide, not chain-wide (remove the
+> feature that adds sections to chains, only keep them for shops)." And: "Don't copy chain
+> sections to each shop, I don't want them."
+>
+> Backend plan `0200` moves sections from the chain to the shop and removes pins. This plan
+> is the back office that edits them. **Build it on a branch that holds plan `0200`**,
+> because the wire types it compiles against come from that contract.
+>
+> Prerequisite reading: backend plan `0200`, back office plan `0037` (shop sections in the
+> back office) and `0036` (categories), plan `0004` section 2 (the wire types are the view
+> models), and in `libs/luna-shopper-admin/feature-catalog/src/lib/`: `sections.ts`,
+> `chain-sections.ts`, `chains/section-tabs.ts`, `chains/chains-routes.ts`,
+> `location-sections.ts`, `shop-sections.ts`, `item-sections-panel.ts`,
+> `products/product-tabs.ts`, `section-rules.ts` and `section-seed.ts`.
+
+The back office edits sections on the record of a chain, lets a shop select and order them,
+and pins products to a section on the record of a product. After this plan a section is
+created, named, given its categories, ordered and deleted on the record of its shop, and
+nowhere else.
+
+## Brief for the agent
+
+### Objective
+
+Remove the sections tab of a chain and the section pins of a product, and make the
+sections tab of a shop the one place that creates, edits, orders and deletes the sections
+of that shop.
+
+Use the `nx-portfolio-angular-developer` skill.
+
+### Context
+
+Every statement below was read on `dev` at `6cced1bd`. The split of the files below is by
+their names. Open each one before you rely on it.
+
+- **Chain sections**: `chain-sections.ts`, `sections.ts` (the resource and its form) and
+  `ChainSectionsTab` in `chains/section-tabs.ts`, on the routes
+  `/chains/{chainId}/sections`, `/sections/new` and `/{id}` (`chains/chains-routes.ts`).
+- **Shop sections**: `location-sections.ts` (`LocationSections`, the panel that selects and
+  orders), `shop-sections.ts` (models and mappers) and `ShopSectionsTab`, on
+  `/chains/{chainId}/shops/{shopId}/sections`.
+- **Pins**: `item-sections-panel.ts` (`ItemChainSections`) on the record of a product,
+  wired in `products/product-tabs.ts`.
+- **Shared**: `section-rules.ts` and `section-seed.ts` (the in memory twin).
+- **The routes of the gateway after plan `0200`**:
+  `POST`, `GET` and `PUT admin/catalog/locations/:id/sections`,
+  `GET admin/catalog/locations/:id/item-sections` (the preview),
+  `GET`, `PATCH` and `DELETE admin/catalog/sections/:id`. The chain routes and the pin
+  routes are gone. No answer carries `source`, and no item is `PINNED`.
+
+### Target state
+
+1. The record of a chain has no sections tab, and its three routes are removed.
+2. The record of a product has no section panel.
+3. The sections tab of a shop lists the sections of that shop in order. From it an
+   operator adds a section, opens one to edit its name and its categories, changes the
+   order, and deletes one after a confirm.
+4. A shop with no sections shows an empty state that says the shop has none and offers
+   the add action. It never mentions the chain.
+5. The preview of which products fall in which section stays, with two states for a
+   product: covered by a category of a section, or in none.
+
+### Scope
+
+- `libs/luna-shopper-admin/feature-catalog`: the files named above, their specs and the
+  twin.
+- `libs/luna-shopper-admin/models`: only what the regenerated wire types of plan `0200`
+  require. Do not write a type by hand beside them.
+- The translation files of the back office for the strings that change.
+
+### Constraints
+
+- **Reuse the form of `sections.ts`** for the name and the categories. It moves under the
+  shop. Do not write a second form.
+- **The descriptor contract of the back office holds** (plan `0004` and the plans that
+  follow it). A section is a resource of a shop, addressed under its shop.
+- **Follow the look of the remodel** (plans `0041` onward) for anything new. No new colour
+  role.
+- **The content language rule holds** for the name of a section.
+
+### Action boundaries
+
+- Do not change the backend or `openapi.json`. If the contract lacks something, say what
+  and stop.
+- Do not add a "copy the sections of another shop" action. The owner refused it.
+- Do not touch the map screens of a shop, which read the same sections.
+
+### Progress evidence
+
+- `npx nx run-many -t lint test -p luna-shopper-admin/feature-catalog luna-shopper-admin/models`
+  pass.
+- `npx nx build luna-shopper-admin` passes. The pull request checks never build the back
+  office, so run it yourself and say so.
+- A browser walk on a slot: add two sections to a shop, give one a root category, reorder
+  them, delete one, and read the preview. Open another shop of the same chain and see that
+  it has no sections.
+
+## 1. What is removed
+
+- `chain-sections.ts`, `ChainSectionsTab` and the three chain routes.
+- `item-sections-panel.ts` and its tab on the record of a product.
+- Every string, fixture and spec that only they use.
+- In the twin (`section-seed.ts`), the chain sections and the pins. Its sections are owned
+  by shops, and two shops of one chain differ.
+
+## 2. The sections tab of a shop
+
+- The list is the order of the shop. Reordering writes
+  `PUT admin/catalog/locations/:id/sections`.
+- "Add a section" opens the form under the shop and writes
+  `POST admin/catalog/locations/:id/sections`. The new section goes last.
+- A row opens the section. Its form edits the name and the categories, and Delete asks
+  first, because a delete also removes the section from the shopping lists of shoppers in
+  that shop.
+- A slug is unique inside its shop. The form says so when the backend refuses one.
+- The preview keeps its place. A product that no category of a section covers is shown as
+  in no section.
+
+## 3. Tests
+
+- The tab: the empty state, add, edit, reorder, delete with its confirm, a refused slug.
+- The routes: the chain routes and the product tab are gone, the shop routes resolve.
+- The mappers: a section with no `source`, a preview with no pinned step.
+
+## 4. Not in this plan
+
+The backend (plan `0200`), the release task that removes the old rows, and the velista
+reader (velista plan `0138`).

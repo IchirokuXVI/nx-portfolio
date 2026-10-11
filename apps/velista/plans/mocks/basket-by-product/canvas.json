@@ -1,0 +1,58 @@
+{
+  "title": "Velista: a shopping list of products",
+  "lede": "A row of the shopping list is one product, with the lists that ask for it. The headings are parent categories, or the sections of the shop you are in. A row opens to its lists, and a line can take another product from there or from the catalog. Velista plans <code>0138</code> to <code>0141</code>, backend <code>0200</code> to <code>0202</code>, back office <code>0063</code>. Drawn on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "One row for each product, under parent categories" },
+    { "file": "AtShop.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "At a shop: its sections, then parent categories" },
+    { "file": "BuyingHere.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "The first buy asks where you are" },
+    { "file": "RowSheet.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844, "title": "A product row opened" },
+    { "file": "RowLists.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844, "title": "The same sheet, other lists shown" },
+    { "file": "Change.dc.html", "x": 2350, "y": 0, "w": 390, "h": 844, "title": "Change the product of one line" },
+    { "file": "ChangeAll.dc.html", "x": 2820, "y": 0, "w": 390, "h": 844, "title": "Change the product of every list" },
+    { "file": "CatalogPick.dc.html", "x": 3290, "y": 0, "w": 390, "h": 844, "title": "The catalog, opened to choose one product" }
+  ],
+  "annotations": [
+    {
+      "id": "rows",
+      "x": 0,
+      "y": -420,
+      "w": 420,
+      "text": "A ROW IS A PRODUCT.\nEach line counts as one product: its favourite, or else its cheapest. Lines with the same product make one row, and the quantity is their sum.\nThe caption gives the price and the lists that ask for it. A line with no product keeps its own name (Velas).\nThe headings are parent categories. A product under two parents is drawn under both."
+    },
+    {
+      "id": "shop",
+      "x": 470,
+      "y": -420,
+      "w": 420,
+      "text": "AT A SHOP.\nOnly the sections of that shop are headings. A chain has no sections. A row that no section covers goes under its parent category, below the band.\nA shop with no sections shows parent categories only."
+    },
+    {
+      "id": "first",
+      "x": 940,
+      "y": -420,
+      "w": 420,
+      "text": "THE FIRST BUY.\nThis is the shop picker the filter already has, with another title. It looks for the shop by itself only when the device already allows location. With no answer it is the plain picker.\nNo shop is a valid answer: the cheapest price is recorded, with no shop and no chain.\nDon't ask again is kept on the device."
+    },
+    {
+      "id": "sheet",
+      "x": 1410,
+      "y": -420,
+      "w": 420,
+      "text": "THE ROW SHEET.\nEach entry is a list: its name, then the zone and the name of the line. Change takes that line to another product, and the number is the quantity that list asks for.\nChange for all lists is a text action on the heading row.\nAdd it to another list is last and closed. Open, it shows the lists that hold the product at zero and the lists that do not hold it."
+    },
+    {
+      "id": "change",
+      "x": 2350,
+      "y": -420,
+      "w": 420,
+      "text": "CHANGE.\nOne list of products: the products of the line and the similar ones, with no headings between them.\nKeep it for next time is on when the sheet opens. On, the product becomes the favourite of the line. Off, the change holds for this trip only.\nA buy already made today for the line takes the new product and its price."
+    },
+    {
+      "id": "catalog",
+      "x": 3290,
+      "y": -420,
+      "w": 420,
+      "text": "THE CATALOG, TO CHOOSE.\nThe catalog page with its search, its two selectors and its order. It differs in four ways: a close button, the title, no bar of tabs, and a bar at the foot that names the list and the line."
+    }
+  ]
+}

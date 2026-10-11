@@ -1,0 +1,255 @@
+# 0201: a basket row is a product
+
+> Asked for by the owner on 2026-10-11: "The basket currently merges all lines with the same
+> name, which results in having the same product duplicated if different lines have the
+> same product. I think it would be way better to merge all lines with the same product,
+> and only show products on the basket."
+>
+> His rules, in his words:
+>
+> - "Each line always has a single product selected, unless it doesn't have any products.
+>   That means each basket row can have 0 or 1 products, never more than one. When
+>   translating zone list lines to the basket, only the first product (cheapest) or the
+>   favorite one is taken into account for the basket, unless the user changes it later on."
+> - "If a line doesn't have products, the line name will be used instead."
+> - "Even if the basket shows products, underneath everything is computed from lines."
+> - "It's important to show which lists requested each product."
+>
+> **This plan answers section 4 of velista plan `0137`** (pull request #692), which states
+> the need and no design. Section 8 below maps its four points.
+>
+> Velista plan `0139` is the screen. Plan `0202` is what a buy records and the change of a
+> product from the basket.
+>
+> Prerequisite reading: plan `0136` (the open basket is a view of its lists), plan `0130`
+> and its status in `0149`, plan `0199` (the favourite of a line), plan `0134` and `0142`
+> (purchases), plan `0138` (change rows), plan `0196` (the lists and lines that hold a
+> product), `core/src/app/baskets/basket-rows.ts`, `line-dedup.ts`,
+> `basket-row-resolver.ts`, `basket-read.service.ts`, `basket-read.sql.ts`,
+> `basket-settle.service.ts`, `basket-revert.service.ts`, `basket-line-add.service.ts`,
+> `gateway/src/app/baskets/basket.controller.ts`, `basket-catalog.service.ts`,
+> `basket.dto.ts` and `libs/luna-shopper/contracts/src/lib/messages/basket.messages.ts`.
+
+A basket row is a group of lines that hold the same set of products, or the same name when
+they hold none. This plan makes a row the group of lines that count as the same product.
+Each line counts as one product. Every write names the lines it means.
+
+## Brief for the agent
+
+### Objective
+
+Give each covered line one product for the basket, merge rows on that product, carry the
+list and the line of each entry in the row, address every row write by line ids, and serve
+the lists that can still take a product.
+
+### Context
+
+Every statement below was read on `dev` at `6cced1bd`. Check each one before you rely on
+it.
+
+- **Core merges the rows.** `mergeKey()` (`line-dedup.ts`) is `set:<itemSetHash>` for a
+  line with products and `text:<normalized name>` for a line with none. `groupEntries()`
+  (`basket-rows.ts`) groups the covered lines on it, and `toRowView` writes the row. Two
+  lines merge only when their whole set of products is the same.
+- **Core never sees a price.** It has no catalog client. The gateway reads prices after
+  the rows exist: `BasketCatalogService.compose` calls `item.getMany` with the option ids
+  of the rows, the scopes of the read and `offers: 'all'`.
+- **The scopes of a read** are the resolved scopes of the owner's profile. With a shop
+  (`locationId`, or the basket's own shop) the quoted scope of that shop is added.
+- **`item.getMany` answers for each item.** `offers: 'best'` gives one `bestOffer` for each
+  item, the cheapest across the scopes that were asked. Nothing answers "the cheapest of
+  these items".
+- **A row carries `optionIds`**, the union of the products of its entries, and the pick is
+  the first of them (`basketRowPick` in velista).
+- **Every row write is `rows/:rowKey/...`.** `rowKey` is the line id of any entry.
+  `BasketRowResolver.resolve` rebuilds the row from that line with `mergeKey`. Only two
+  bodies name lines: `allocations[].lineId` on a settle and `lineId` on a demand.
+- **A line has `favoriteItemId`** since plan `0199`. No basket code reads it.
+- **A buy names its product.** `line_settlements.itemId` is set when the row has one
+  option or the request names one (`resolvePick`).
+- **`POST /v1/baskets/:id/lines`** adds a line to a covered list the actor may write, with
+  `targetListId`, `content`, `quantity` and `itemIds`.
+
+### Target state
+
+1. Each covered line has one basket product or none, by the rule of section 1.
+2. Rows merge on that product, or on the normalized name for a line with no product
+   (section 2).
+3. The row view names its product, and each entry names its list, its zone, its line and
+   the products of that line (section 3).
+4. Settle, revert, demand, skip and rename act on the lines the request names (section 4).
+5. One read answers the covered lists that do not ask for a product yet (section 5).
+
+### Scope
+
+- `apps/luna-shopper-backend/core/src/app/baskets`: the product of a line, the merge key,
+  the read, a new resolver by lines, every row write, the new read of section 5.
+- `apps/luna-shopper-backend/gateway/src/app/baskets`: the read sequence, the DTOs, the new
+  route, `openapi.json`.
+- `libs/luna-shopper/contracts`: `BasketRowView`, `BasketRowEntryView`, the five write
+  requests, `BasketRowResult`, the new patterns and their schemas.
+- `libs/luna-shopper-admin/models`: the regenerated wire types only.
+
+### Constraints
+
+- **Everything is computed from lines.** A row is a view. No table stores a row, a row key
+  or a product of a row.
+- **Core still sees no price.** The gateway chooses the cheapest product and hands core an
+  item id. Core checks that the id is a product of that line.
+- **One comparison of prices**, in one pure function with a spec. It is the comparison the
+  cards of a line use (velista plan `0137` section 2): the price for each kilo or litre
+  first, then the price, and a tie keeps the order of the line.
+- **A write never rebuilds a row from a merge key.** It loads the named lines.
+- **The rules of who may do what do not change**: who may settle, who may change a demand
+  (`demandEditable`), who may add a line.
+- **`openapi.json` and the wire types are generated output.**
+
+### Action boundaries
+
+- Do not build plan `0202` or velista plan `0139`.
+- Do not change how a list page merges lines (`lineIdentities`), `list_lines`, or the
+  purchase history reads.
+- Do not change the frozen rows of a finished basket (`basket_trip_rows`).
+- Stop and ask before you add a table or a column. This plan needs none.
+
+### Progress evidence
+
+- `npx nx run-many -t lint test -p luna-shopper-backend-core luna-shopper-backend-gateway`
+  pass. The integration specs of the read and of each write run on a slot against a real
+  Postgres.
+- `npx nx run luna-shopper-backend-gateway:openapi` and
+  `npx nx run luna-shopper-admin/models:wire-types` are run and their diffs committed.
+- The pull request states the time of `GET /v1/baskets/live` for a basket of 100 lines
+  before and after, measured on a slot with a realistic catalog.
+
+## 1. The product of a line
+
+A covered line counts as the first of these that applies:
+
+1. **The product of its latest buy in this trip.** The trip is the current session of a
+   live basket (`BASKET_SESSION_SQL`), or the whole life of a generated basket. The buy is
+   a settlement of this line, through this basket, with the outcome bought, a product, and
+   no revert. This product does not have to be a product of the line. It is how a change
+   "for this trip only" holds after the first buy (plan `0202` section 3).
+2. **Its favourite**, when the favourite is one of its products. The favourite wins also
+   when the shop of the read does not sell it.
+3. **The cheapest of its products** at the scopes of the read. With a shop, only the
+   prices of that shop count. A product with no price there is not a candidate.
+4. **Its first product**, in the order the line holds them, when no product has a price.
+5. **Nothing**, for a line with no products.
+
+Core knows steps 1, 2, 4 and 5. Step 3 needs prices, so the gateway does it.
+
+**The read sequence of the gateway:**
+
+1. The shop and its chain, as today (`readShopOf`).
+2. A new core pattern, `basket.priceChoices`, answers the covered lines that reach step 3:
+   two or more products, no favourite among them, and no buy in this trip. For each, the
+   line id and its product ids in order.
+3. One `item.getMany` with `offers: 'best'` over the distinct ids and the scopes of the
+   read. The pure function of the constraints picks one id for each line.
+4. `basket.get` (or `basket.live`) with `picks: {lineId, itemId}[]`. Core ignores a pick
+   that is not a product of its line, and that line falls to step 4.
+5. `compose`, as today. It reads the products of the rows. Reuse the offers of step 3
+   where the ids overlap.
+
+A line with one product, a favourite or a buy in this trip costs nothing in steps 2 and 3.
+Batch step 3 under the limit of `item.getMany`.
+
+## 2. The merge
+
+- The key of a line is `item:<its product>` or `text:<its normalized name>`.
+- The oldest line of a row is its anchor, as today. The row of a product is named by the
+  catalog, so `content` is the name of the anchor only for a row with no product.
+- `left`, `bought`, `asked`, `boughtElsewhere`, `state`, the notes, the marks and the limit
+  of 1000 rows are computed over the entries, as today.
+- A change of shop can move a line to another row, because the cheapest product can
+  differ. That is correct.
+
+## 3. The row view
+
+- `BasketRowView` gains `productId: string | null` and loses `optionIds`.
+- `rowKey` stays the line id of the anchor. It is an address for a page, not an identity.
+- `BasketRowEntryView` gains:
+  - `content`, the name of the line.
+  - `itemIds`, the products of the line in order, and `favoriteItemId`.
+  - `listName`, `zoneId` and `zoneName`. Read first whether `BasketView` already carries
+    the served lists with their zones, and add only what is missing. An entry on a list
+    that is not served to the reader stays without `listId`, as today, and gains none of
+    the three.
+  - `canWrite`, true when the reader may edit that line.
+- `BasketResult.products` holds the product of every row and nothing else. The products
+  of a line that are not its basket product are read by the page that needs them.
+
+## 4. Writes name their lines
+
+The five routes keep their paths. `:rowKey` must be one of the named lines.
+
+| Route | Body after this plan |
+| --- | --- |
+| `POST .../settle` | `lineIds` (1 to 100), `outcome`, `quantity`, `from` (the sum of `left` over those lines), `itemId`, `allocations` (only over those lines) |
+| `POST .../revert` | `lineIds`, `target`, `units`, `from` (the sum of `bought` over those lines) |
+| `POST .../demand` | `lineId` (always required), `quantity`, `from` |
+| `PUT` and `DELETE .../skip` | `lineIds` |
+| `PATCH ...` (rename) | `lineIds`. Refused with `validation_failed` for a line that has a product |
+
+- A new resolver loads the named lines. Each must be covered by the basket and on a list
+  served to the actor, else the answer is the one "Row not found" of today.
+- **`itemId` on a settle** is the product of the row as the client drew it. It can be a
+  product that is not on the line (a change for this trip only). The gateway reads that
+  item for the price, and an id the catalog does not know is `validation_failed` on
+  `itemId`. A settle of lines with no product sends none.
+- **`BasketRowResult`** answers `entries` (the named lines as they are now), `progress` and
+  `skippedCount`. `row` and `replacedRowKey` are removed, because a row cannot be built
+  without the prices of a read. The page takes the row from its next read, which it
+  already makes.
+- The stale guard of `from` stays, over the named lines.
+
+## 5. The lists that can take a product
+
+`GET /v1/baskets/:id/products/:itemId/lists` answers, for an account participant, every
+covered list the actor may write that has no entry in the row of that product:
+
+- `listId`, `listName`, `zoneId`, `zoneName`.
+- `lineId`, `lineName` and `quantity` when the list holds a line with that product among
+  its products. Otherwise the three are null.
+
+A guest gets `forbidden`. The page raises a line that exists with the demand route, and
+creates one with `POST /v1/baskets/:id/lines` (`content` is the name of the product,
+`itemIds` is that one product). Read plan `0196` first: reuse its queries of the lines that
+hold a product where they fit.
+
+## 6. What stays the same
+
+Coverage, sharing, presence, the session rule, skips, "they had none", the rows bought
+through another basket, the change rows of plan `0138`, the usual shop of plan `0165`
+(counted for each line), the walk order, and the freeze when a basket is finished.
+
+## 7. Tests
+
+- The product of a line, as a pure function: each of the five steps, a favourite that is
+  no longer on the line, a pick that is not on the line, a buy in this trip that names a
+  product outside the line, a reverted buy.
+- The comparison: unit price before price, a tie, no price at all, the prices of one shop.
+- The merge on a real Postgres: two lines with different sets and the same product make
+  one row, two lines with the same set and different favourites make two, two lines with
+  no product and the same name make one.
+- Each write: it acts on the named lines only, it refuses a line that is not covered, and
+  the guard refuses a stale `from`.
+- The read of section 5: a list with the line at zero, a list without it, a list the actor
+  may not write, a guest.
+
+## 8. Velista plan 0137 section 4, answered
+
+| Its point | This plan |
+| --- | --- |
+| 1. The pick is the favourite of the line | Section 1, step 2 |
+| 2. With no favourite, the cheapest at the scopes of the read | Section 1, steps 3 and 4 |
+| 3. A pick changed by hand has to win, and for how long | Step 1: it wins from the first buy until the trip ends. Before that buy it lives on the device (velista plan `0140`). A change that is kept writes the favourite (plan `0202`) |
+| 4. A row that merges lines with two favourites | It cannot happen. Two lines with different products are two rows |
+
+## 9. Not in this plan
+
+What a buy records, the rewrite of the buys of a trip, and the route that changes the
+product of a line from the basket (all plan `0202`). The screens (velista `0139` and
+`0140`).
