@@ -234,12 +234,22 @@ function build(
       return { added: pairs.length - refused.length, refused };
     }
   );
+  // Plan 0198: the photo each bound row states, as a link in catalog.
+  const linkItemImages = jest.fn(
+    async (links: { sourceEntryId: string }[]) => ({
+      linked: links.length,
+      moved: 0,
+      unchanged: 0,
+      rejected: [] as { sourceEntryId: string; reason: string }[],
+    })
+  );
   const catalog = {
     createItems,
     categoryTree,
     deleteItem,
     findItemsByEans,
     teachItemEans,
+    linkItemImages,
   } as unknown as CatalogClient;
 
   const write = jest.fn(async (row: SourceCatalogEntry) => {
@@ -311,6 +321,7 @@ function build(
     deleteItem,
     findItemsByEans,
     teachItemEans,
+    linkItemImages,
     write,
     manager,
     admin,
@@ -1250,6 +1261,97 @@ describe('SourceEntryBatchService', () => {
     expect(result.applied).toBe(false);
     expect(deleteItem).toHaveBeenCalledTimes(1);
     expect(result.orphanedItemIds).toEqual(['item-new-1']);
+  });
+
+  describe('the photo a bound row states (plan 0198)', () => {
+    const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
+    const decide = [
+      { op: 'accept', entryId: 'e-1', itemId: 'i-1', expect: expectFresh },
+      { op: 'accept', entryId: 'e-2', itemId: 'i-2', expect: expectFresh },
+    ] as const;
+    const rows = () => [
+      entry({ imageUrl: PHOTO }),
+      // A row that states no photo sends nothing.
+      entry({ id: 'e-2', externalId: '4242' }),
+    ];
+
+    it('sends one link message for the file, with the bound rows that state a photo', async () => {
+      const { service, linkItemImages, createItems } = build({ rows: rows() });
+
+      const result = await service.applyDecisions(request([...decide]));
+
+      expect(result.applied).toBe(true);
+      expect(linkItemImages).toHaveBeenCalledTimes(1);
+      expect(linkItemImages).toHaveBeenCalledWith([
+        {
+          sourceEntryId: 'e-1',
+          itemId: 'i-1',
+          supermarketId: CHAIN,
+          url: PHOTO,
+          runId: 'run-monday',
+        },
+      ]);
+      expect(result.priceSkips).toEqual([]);
+      expect(createItems).not.toHaveBeenCalled();
+    });
+
+    it('creates a product with no photo of its own, whatever the row states', async () => {
+      const { service, createItems, linkItemImages } = build({
+        rows: [entry({ imageUrl: PHOTO })],
+      });
+
+      await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: { es: 'Leche', en: 'Milk' } },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(createItems.mock.calls[0][0][0].imageUrl).toBeNull();
+      expect(linkItemImages).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves every bind standing when the link message fails, and names the rows', async () => {
+      const { service, linkItemImages, saved } = build({ rows: rows() });
+      linkItemImages.mockRejectedValueOnce(new Error('catalog is away'));
+
+      const result = await service.applyDecisions(request([...decide]));
+
+      expect(result.applied).toBe(true);
+      expect(saved).toHaveLength(2);
+      expect(result.priceSkips).toEqual([
+        {
+          entryId: 'e-1',
+          itemId: 'i-1',
+          reason: 'Photo link: catalog is away',
+        },
+      ]);
+    });
+
+    it('names a link catalog would not save', async () => {
+      const { service, linkItemImages } = build({ rows: rows() });
+      linkItemImages.mockResolvedValueOnce({
+        linked: 0,
+        moved: 0,
+        unchanged: 0,
+        rejected: [{ sourceEntryId: 'e-1', reason: 'NOT_HTTPS' }],
+      });
+
+      const result = await service.applyDecisions(request([...decide]));
+
+      expect(result.priceSkips).toEqual([
+        {
+          entryId: 'e-1',
+          itemId: 'i-1',
+          reason: 'Photo link: catalog did not save it (NOT_HTTPS).',
+        },
+      ]);
+    });
   });
 
   it('skips only the failing row when a price write fails, and leaves its bind standing', async () => {

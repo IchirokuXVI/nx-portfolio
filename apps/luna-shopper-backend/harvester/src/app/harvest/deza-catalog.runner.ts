@@ -168,6 +168,8 @@ export class DezaCatalogRunner implements CatalogRunner {
         categoryPath: product.categoryPath,
         // There is no per product URL on this site; the listing is the page.
         url: null,
+        // The listing prints badges and no product photo (plan 0198).
+        imageUrl: null,
         observedAt,
         extra: null,
         prices: [],

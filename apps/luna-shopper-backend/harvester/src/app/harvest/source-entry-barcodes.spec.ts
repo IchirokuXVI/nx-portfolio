@@ -427,6 +427,7 @@ async function ingestFirstSight(
     sizeFormat: null,
     categoryPath: [],
     url: null,
+    imageUrl: null,
     observedAt: NOW,
     extra: null,
     prices: [

@@ -38,6 +38,8 @@ export {
 } from './lib/errors';
 export { readCard, readCards, splitCardName } from './lib/listing';
 export type { SplitCardName } from './lib/listing';
+export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
+export type { PhotoFields, PhotoRead } from './lib/photo';
 export { priceToCents, unitPriceLabel } from './lib/price';
 export { readDetail, readListing } from './lib/state';
 export {

@@ -49,6 +49,8 @@ function emptyRow(externalId: string): LidlListRow {
     sizeFormat: null,
     listPrice: null,
     ian: null,
+    image: null,
+    imageList: [],
   };
 }
 
@@ -79,6 +81,12 @@ describe('normalizeListPage', () => {
       sizeFormat: '4x1 / l',
       listPrice: 3.49,
       ian: '5704069',
+      image:
+        'https://www.lidl.es/assets/gcpdecd1bd9768046698465d4e0a882ebf5.png',
+      imageList: [
+        'https://www.lidl.es/assets/gcpdecd1bd9768046698465d4e0a882ebf5.png',
+        'https://www.lidl.es/assets/gcpa6ae9d31fb0947fe8fbbd32474e6c71d.png',
+      ],
     });
   });
 

@@ -55,6 +55,11 @@ export interface SourceEntryFields {
   packCount?: number | null;
   categoryPath: string[];
   url: string | null;
+  /**
+   * The photo address the source prints for the product, or null (plan 0198).
+   * Null is a statement, and is written.
+   */
+  imageUrl: string | null;
   /** The last observation's free bag. Stored and shown, never read (D6). */
   extra: Record<string, unknown> | null;
 }
@@ -85,6 +90,9 @@ export function sourceGroupChanged(
     (existing.sizeUnit ?? null) !== fields.sizeUnit ||
     (existing.soldByWeight ?? false) !== fields.soldByWeight ||
     existing.url !== fields.url ||
+    // A row from before plan 0198 holds none, so the first run that states
+    // one reports it `updated`, which is true.
+    (existing.imageUrl ?? null) !== fields.imageUrl ||
     existing.sourceKind !== fields.sourceKind
   );
 }
@@ -117,6 +125,7 @@ export function applySourceGroup(
   }
   row.categoryPath = fields.categoryPath;
   row.url = fields.url;
+  row.imageUrl = fields.imageUrl;
   row.extra = fields.extra;
 }
 

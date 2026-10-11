@@ -1860,6 +1860,22 @@ export class RegisterBrandsDto {
  * One field. It is refused with `item_ean_invalid` unless it is a real
  * barcode, by the same function the product create uses.
  */
+/**
+ * Whether the photos of one chain may be shown (plan 0198, section 4).
+ */
+export class SetLinkedImagesEnabledDto {
+  @ApiProperty({
+    description:
+      'True lets a product answer the photos this chain prints for it, each as a link to the chain\'s own host. False takes them out of every product in the same transaction. The links stay saved either way.',
+  })
+  // The value as the body spelled it. The pipe converts implicitly, and that
+  // conversion reads the string "false" as true, which here would turn a
+  // chain on. Only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['enabled'])
+  @IsBoolean()
+  enabled!: boolean;
+}
+
 export class AddItemEanDto {
   @ApiProperty({
     maxLength: 32,

@@ -28,6 +28,8 @@ export {
   parseListingPage,
   parseTopCategories,
 } from './lib/listing';
+export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
+export type { PhotoFields, PhotoRead } from './lib/photo';
 export { parseSpanishPrice, parseUnitPrice } from './lib/price';
 export type { UnitPrice } from './lib/price';
 export { parseBreadcrumb, parseProductPage } from './lib/product';

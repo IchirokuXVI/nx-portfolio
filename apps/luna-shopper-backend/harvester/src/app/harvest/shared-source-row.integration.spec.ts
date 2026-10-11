@@ -143,6 +143,7 @@ describeIntegration(
         packCount: 6,
         categoryPath: ['Lácteos', 'Leche'],
         url: 'https://example.test/leche-covap-entera',
+        imageUrl: null,
         observedAt: new Date('2026-10-03T01:42:00.000Z'),
         extra: { section: 'lacteos' },
         prices: [],
@@ -166,6 +167,7 @@ describeIntegration(
         sizeFormat: '1 L',
         categoryPath: [],
         url: null,
+        imageUrl: null,
         observedAt: new Date('2026-10-03T16:12:00.000Z'),
         extra: { page: 4 },
         prices: [

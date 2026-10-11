@@ -15303,6 +15303,111 @@
         ]
       }
     },
+    "/v1/admin/catalog/supermarkets/{id}/linked-images": {
+      "put": {
+        "operationId": "AdminCatalogSupermarketsController_setLinkedImages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLinkedImagesEnabledDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `supermarket.setLinkedImagesEnabled` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.SupermarketView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/supermarkets/{id}/locations": {
       "post": {
         "operationId": "AdminCatalogSupermarketsController_createLocation_v1",
@@ -17516,6 +17621,167 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/linked-images": {
+      "get": {
+        "operationId": "AdminCatalogItemsController_listLinkedImages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `itemLinkedImage.listByItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemLinkedImagesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/linked-images/disable-all": {
+      "post": {
+        "operationId": "AdminCatalogLinkedImagesController_disableAll_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `itemLinkedImage.disableAll` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.itemLinkedImage.disableAll.response"
                 }
               }
             }
@@ -28720,6 +28986,18 @@
           }
         }
       },
+      "SetLinkedImagesEnabledDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True lets a product answer the photos this chain prints for it, each as a link to the chain's own host. False takes them out of every product in the same transaction. The links stay saved either way."
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
       "CreateSupermarketLocationDto": {
         "type": "object",
         "properties": {
@@ -33502,6 +33780,34 @@
               "null"
             ]
           },
+          "imageSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemImageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemImageView"
+            }
+          },
           "sku": {
             "type": [
               "string",
@@ -33590,6 +33896,10 @@
           "name",
           "brand",
           "imageUrl",
+          "imageSource",
+          "imageSupermarketId",
+          "ownImageUrl",
+          "images",
           "sku",
           "ean",
           "eans",
@@ -34918,6 +35228,83 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ItemImageView": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "$ref": "#/components/schemas/enums.ItemImageSource"
+          },
+          "supermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "source",
+          "supermarketId"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLinkedImagesView": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemLinkedImageView"
+            }
+          }
+        },
+        "required": [
+          "images"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLinkedImageView": {
+        "type": "object",
+        "properties": {
+          "sourceEntryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "firstLinkedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sourceEntryId",
+          "supermarketId",
+          "url",
+          "enabled",
+          "firstLinkedAt",
+          "lastSeenAt"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemOfferView": {
         "type": "object",
         "properties": {
@@ -35632,6 +36019,34 @@
               "null"
             ]
           },
+          "imageSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemImageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemImageView"
+            }
+          },
           "sku": {
             "type": [
               "string",
@@ -35703,6 +36118,10 @@
           "name",
           "brand",
           "imageUrl",
+          "imageSource",
+          "imageSupermarketId",
+          "ownImageUrl",
+          "images",
           "sku",
           "ean",
           "eans",
@@ -37921,6 +38340,9 @@
               "null"
             ]
           },
+          "linkedImagesEnabled": {
+            "type": "boolean"
+          },
           "locationCount": {
             "type": "integer",
             "minimum": 0,
@@ -37933,7 +38355,8 @@
           "logoUrl",
           "websiteUrl",
           "externalBrandKey",
-          "defaultPriceScopeId"
+          "defaultPriceScopeId",
+          "linkedImagesEnabled"
         ],
         "additionalProperties": false
       },
@@ -38252,6 +38675,13 @@
           "SCOPE_KIND_MISMATCH",
           "DETAIL_SKIPPED_UNKNOWN",
           "PRICE_SOLD_ANOTHER_WAY"
+        ]
+      },
+      "enums.ItemImageSource": {
+        "type": "string",
+        "enum": [
+          "OWNER",
+          "CHAIN"
         ]
       },
       "enums.ItemPriceWrittenBy": {
@@ -39635,6 +40065,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -39739,6 +40175,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -40240,6 +40677,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -40336,6 +40779,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -40667,6 +41111,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -40756,6 +41206,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -42421,6 +42872,26 @@
           }
         },
         "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "msg.itemLinkedImage.disableAll.response": {
+        "type": "object",
+        "properties": {
+          "supermarkets": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The chains that were on and are off now."
+          },
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The products that showed a chain photo and show none now."
+          }
+        },
+        "required": [
+          "supermarkets",
           "items"
         ],
         "additionalProperties": false

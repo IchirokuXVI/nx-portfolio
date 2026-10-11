@@ -94,6 +94,8 @@ function listed(id: string, warehouse: string) {
     display_name: `Producto ${id}`,
     published: true,
     share_url: `https://fixtures.test/product/${id}`,
+    // As the chain prints it, size parameters included (plan 0198).
+    thumbnail: `https://prod-mercadona.imgix.net/images/${id}.jpg?fit=crop&h=300&w=300`,
     price_instructions: {
       size_format: 'l',
       unit_price: PRICE[warehouse],
@@ -752,14 +754,21 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       // A null for a field it did not read would blank the stored one, so the
       // field is not there at all (plan 0119, section 6). `soldByWeight` is
       // not an identity field: it says what the prices beside it are, and the
-      // listing states it (plan 0181).
+      // listing states it (plan 0181). Neither is the photo address, which
+      // the listing prints too (plan 0198).
       expect(Object.keys(shared ?? {}).sort()).toEqual([
         'detailFetched',
         'externalId',
+        'imageUrl',
         'observedAt',
         'prices',
         'soldByWeight',
       ]);
+      // The listing's own address, verbatim: no size parameter is added,
+      // removed or guessed, and no detail was read for it.
+      expect(shared?.imageUrl).toBe(
+        'https://prod-mercadona.imgix.net/images/4241.jpg?fit=crop&h=300&w=300'
+      );
       // One price per warehouse that listed it, from that warehouse's listing,
       // exactly as a product read whole carries.
       expect(shared?.prices).toEqual([

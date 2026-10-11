@@ -27,6 +27,7 @@ import { DiaCategoryTree1758500000000 } from './1758500000000-DiaCategoryTree';
 import { CategoriesBeyondDia1758600000000 } from './1758600000000-CategoriesBeyondDia';
 import { BrandHomonyms1758700000000 } from './1758700000000-BrandHomonyms';
 import { ItemEans1758800000000 } from './1758800000000-ItemEans';
+import { ItemLinkedImages1758900000000 } from './1758900000000-ItemLinkedImages';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -67,4 +68,5 @@ export const CATALOG_MIGRATIONS = [
   CategoriesBeyondDia1758600000000,
   BrandHomonyms1758700000000,
   ItemEans1758800000000,
+  ItemLinkedImages1758900000000,
 ];

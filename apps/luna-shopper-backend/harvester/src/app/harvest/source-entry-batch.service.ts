@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BULK_DECISION_MAX_OPERATIONS,
   BulkOperationErrorCode,
+  ITEM_LINKED_IMAGE_BATCH_MAX,
   SourceEntryStatus,
   type ApplySourceEntryDecisionsRequest,
   type ApplySourceEntryDecisionsResult,
@@ -93,6 +94,11 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * anything is written.
  * What is left for step 4 is the write itself, and a barcode that could not be
  * written is named in `priceSkips` with a reason that says it was the barcode.
+ *
+ * **The photo links follow the barcodes, under the same rule** (plan 0198).
+ * Every bound row that states a photo sends it to catalog as a link, in one
+ * call for the whole file. A link that could not be written is named in
+ * `priceSkips` with a reason that says it was the photo.
  *
  * ## A failed step 3 leaves orphans, and says so
  *
@@ -401,6 +407,43 @@ export class SourceEntryBatchService {
         this.logger.warn(
           `Bound ${pairs.length} entries but could not add their barcodes: ` +
             message
+        );
+      }
+    }
+
+    // The photo each bound row states, as a link in catalog (plan 0198).
+    // Last, and under the rule of this step: every bind stands.
+    const withPhoto = bound.filter((row) => row.itemId && row.imageUrl);
+    for (let i = 0; i < withPhoto.length; i += ITEM_LINKED_IMAGE_BATCH_MAX) {
+      const batch = withPhoto.slice(i, i + ITEM_LINKED_IMAGE_BATCH_MAX);
+      const skip = (entryId: string, itemId: string, why: string) =>
+        priceSkips.push({ entryId, itemId, reason: `Photo link: ${why}` });
+      try {
+        const { rejected } = await this.catalog.linkItemImages(
+          batch.map((row) => ({
+            sourceEntryId: row.id,
+            itemId: row.itemId as string,
+            supermarketId: row.supermarketId,
+            url: row.imageUrl as string,
+            runId: row.lastRunId ?? null,
+          }))
+        );
+        for (const rejection of rejected) {
+          const row = withPrices.get(rejection.sourceEntryId);
+          skip(
+            rejection.sourceEntryId,
+            row?.itemId ?? '',
+            `catalog did not save it (${rejection.reason}).`
+          );
+        }
+      } catch (error) {
+        const message = describeError(error).message;
+        for (const row of batch) {
+          skip(row.id, row.itemId ?? '', message);
+        }
+        this.logger.warn(
+          `Bound ${batch.length} entries but could not send their photo ` +
+            `links: ${message}`
         );
       }
     }
@@ -827,7 +870,8 @@ function itemFrom(
     // The row's count unless the operation names one (plan 0162).
     packCount:
       item.packCount === undefined ? (entry.packCount ?? null) : item.packCount,
-    // Never from the chain (plan 0038, section 5.7).
+    // The owner's column, so never the chain's address (plan 0198). The
+    // photo the row states goes to catalog as a link, in step 4.
     imageUrl: null,
     sku: null,
     // Resolved from slugs by `checkCategories`, through one read of the tree

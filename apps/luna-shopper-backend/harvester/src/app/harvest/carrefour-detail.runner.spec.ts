@@ -40,6 +40,8 @@ function row(externalId = 'p1'): BackfillEntry {
     unitSize: null,
     sizeUnit: null,
     packCount: null,
+    // The address the crawl read (plan 0198), carried like the count.
+    imageUrl: 'https://static.carrefour.es/hd_350x_/img_pim_food/p1_00_1.jpg',
     sizeFormat: '1,5 l.',
     categoryPath: ['Bebidas'],
   };
@@ -130,6 +132,8 @@ describe('CarrefourDetailRunner', () => {
       name: 'Agua CARREFOUR',
       sizeFormat: '1,5 l.',
       categoryPath: ['Bebidas'],
+      // Carried too, so the whole report does not blank it (plan 0198).
+      imageUrl: 'https://static.carrefour.es/hd_350x_/img_pim_food/p1_00_1.jpg',
     });
     // The crawl already wrote this chain's prices, and a backfill that reported
     // one would be a second path into what plan 0080 made one path.

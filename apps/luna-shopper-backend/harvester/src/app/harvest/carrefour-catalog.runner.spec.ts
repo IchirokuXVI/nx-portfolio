@@ -41,6 +41,10 @@ function card(
     price_per_unit: price,
     measure_unit: 'l',
     url: `/supermercado/${id}/p`,
+    images: {
+      desktop: `https://static.carrefour.es/hd_350x_/img_pim_food/${id}_00_1.jpg`,
+      mobile: `https://static.carrefour.es/hd_350x_/img_pim_food/${id}_00_1.jpg`,
+    },
     ...extra,
   };
 }
@@ -195,6 +199,8 @@ describe('CarrefourCatalogRunner', () => {
       sizeUnit: 'LITER',
       // The listing card carries none. The backfill is what fills it.
       ean: null,
+      // The card's own photo address, verbatim (plan 0198).
+      imageUrl: 'https://static.carrefour.es/hd_350x_/img_pim_food/p1_00_1.jpg',
       categoryPath: ['Bebidas'],
       // One price, naming no scope of its own: Carrefour publishes one price
       // for the whole site, so it falls to the scope the run was started with.

@@ -7,6 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   MercadonaClient,
+  photoAddressRead,
   type MercadonaListProduct,
   type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
@@ -18,6 +19,7 @@ import type {
   CatalogRunner,
   RunPriceScope,
 } from './catalog-runner';
+import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 
@@ -213,6 +215,12 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         detailFetched: false,
         observedAt,
         soldByWeight: product.listing.soldByWeight,
+        // The listing prints the photo address too (plan 0198), so a known
+        // product keeps it current with no request.
+        imageUrl: photoOf(
+          photoAddressRead(product.listing),
+          product.externalId
+        ),
         prices: pricesOf(product.externalId, CURRENCY, scopes, assortments),
       });
     }
@@ -272,6 +280,8 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           packCount: detail.packCount,
           categoryPath: detail.categoryPath,
           url: detail.sourceUrl,
+          // The detail's `thumbnail`, as printed (plan 0198).
+          imageUrl: photoOf(photoAddressRead(detail), detail.externalId),
           observedAt,
           extra: null,
           // One price per warehouse that listed it, each naming its own scope

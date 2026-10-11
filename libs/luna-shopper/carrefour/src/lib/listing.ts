@@ -379,6 +379,7 @@ export function readCard(
     unitPriceLabel: unitPriceLabel(measureUnit),
     measureUnit,
     path: card.url ?? null,
+    images: card.images ?? null,
     categoryPath,
   };
 }

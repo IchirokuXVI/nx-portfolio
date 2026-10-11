@@ -25,6 +25,7 @@ import type {
   PriceConflict,
   SourceIngest,
   SourceIngestCounters,
+  SourceIngestImages,
   SourceObservation,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
@@ -99,6 +100,8 @@ function build(
     counters?: Partial<SourceIngestCounters>;
     /** The conflicts the ingest named (plan 0191). */
     priceConflicts?: PriceConflict[];
+    /** What the ingest said about photo links (plan 0198). */
+    images?: Partial<SourceIngestImages>;
     /** The scopes this run copies to, by the scope copied from (plan 0118). */
     copies?: Record<string, string[]>;
     /** What the ingest said its copies wrote. */
@@ -130,6 +133,16 @@ function build(
       pricesCopied: new Map(Object.entries(options.pricesCopied ?? {})),
     },
     priceConflicts: options.priceConflicts ?? [],
+    // Plan 0198: what the ingest did with the photo links of its rows.
+    images: {
+      linked: 0,
+      moved: 0,
+      unchanged: 0,
+      rejected: 0,
+      unlinked: 0,
+      failed: 0,
+      ...options.images,
+    },
   }));
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
@@ -335,6 +348,24 @@ describe('RunReportSink', () => {
    * Plan 0191: the count said that a price was withheld and not for which
    * product, so finding the pair was a query. The report names it.
    */
+  it('carries what the ingest did with the photo links into the result (plan 0198)', async () => {
+    const { sink } = build({
+      images: { linked: 3, moved: 1, unchanged: 40, unlinked: 2, failed: 5 },
+    });
+    sink.product(observation());
+
+    const written = await sink.drain();
+
+    expect(written).toMatchObject({
+      imagesLinked: 3,
+      imagesMoved: 1,
+      imagesUnchanged: 40,
+      imagesRejected: 0,
+      imagesUnlinked: 2,
+      imageLinksFailed: 5,
+    });
+  });
+
   it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {
     const conflict = (n: number): PriceConflict => ({
       itemId: `item-${n}`,

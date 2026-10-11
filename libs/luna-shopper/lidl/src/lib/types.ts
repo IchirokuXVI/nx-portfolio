@@ -59,6 +59,14 @@ export interface LidlListRow {
   listPrice: number | null;
   /** LIDL's internal article number. Never an EAN (section 7). */
   ian: string | null;
+  /**
+   * `image`, as printed and not yet checked (plan 0198). `photoAddress` reads
+   * it, and {@link imageList} when it is null, and answers the address a row
+   * may hold.
+   */
+  image: string | null;
+  /** `imageList`, as printed: the same picture first, then further angles. */
+  imageList: string[];
 }
 
 /** One region of the price map: an opaque group of shops LIDL prices together. */
@@ -122,6 +130,12 @@ export interface LidlProduct {
   /** The `N` of a printed `NxQ` (plan 0162), or null for a size that multiplies nothing. */
   packCount: number | null;
   url: string | null;
+  /**
+   * As on {@link LidlListRow.image}, and carried from the index row (plan
+   * 0198): the index is where the source prints the two fields.
+   */
+  image: string | null;
+  imageList: string[];
   /**
    * `storeFacts.retail === true && storeFacts.online === false`, the clean
    * predicate of section 5. False means the online shop, which a shop stocks

@@ -68,6 +68,8 @@ function row(options: {
         productId: options.id,
         category: options.category,
         canonicalPath: `/p/x/p${options.id}`,
+        image: `https://www.lidl.es/assets/gcp${options.id}.png`,
+        imageList: [`https://www.lidl.es/assets/gcp${options.id}.png`],
         brand: { name: options.brand ?? 'Milbona' },
         keyfacts: {
           title: options.title,
@@ -338,6 +340,8 @@ describe('LidlCatalogRunner', () => {
       unitSize: 500,
       sizeUnit: 'GRAM',
       sizeFormat: '500 g',
+      // The search row's own photo address, verbatim (plan 0198).
+      imageUrl: 'https://www.lidl.es/assets/gcp1.png',
     });
     expect(report.products[0].prices[0]).toMatchObject({
       scopeKey: '1',

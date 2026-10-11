@@ -275,9 +275,27 @@ function build(
       _observedAt: Date
     ) => ({ written: 1, skipped: 0, conflicts: [] })
   );
+  // Plan 0198: the photo a bound row states, as a link in catalog.
+  const linkItemImages = jest.fn(
+    async (links: { sourceEntryId: string }[]) => {
+      calls.push('linkItemImages');
+      return {
+        linked: links.length,
+        moved: 0,
+        unchanged: 0,
+        rejected: [],
+      };
+    }
+  );
+  const unlinkItemImages = jest.fn(async (ids: string[]) => {
+    calls.push('unlinkItemImages');
+    return { unlinked: ids.length };
+  });
   const catalog = {
     addPrices,
     createItem,
+    linkItemImages,
+    unlinkItemImages,
     categoryTree,
     findItemByEan,
     teachItemEans,
@@ -385,6 +403,8 @@ function build(
     settle,
     calls,
     catalog,
+    linkItemImages,
+    unlinkItemImages,
   };
 }
 
@@ -414,6 +434,104 @@ function settled(
     shopRowConflicts: [],
   };
 }
+
+describe('SourceEntryService, the photo a row states (plan 0198)', () => {
+  const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
+
+  it('sends the link after an accept, keyed on the row, and after the prices', async () => {
+    const { service, linkItemImages, calls } = build({
+      row: entry({ imageUrl: PHOTO }),
+    });
+
+    await service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-1' });
+
+    expect(linkItemImages).toHaveBeenCalledWith([
+      {
+        sourceEntryId: 'e-1',
+        itemId: 'item-1',
+        supermarketId: CHAIN,
+        url: PHOTO,
+        runId: 'run-monday',
+      },
+    ]);
+    expect(calls.indexOf('linkItemImages')).toBeGreaterThan(
+      calls.indexOf('save')
+    );
+  });
+
+  it('creates the product with no photo of its own, and sends the link', async () => {
+    const { service, createItem, linkItemImages } = build({
+      row: entry({ imageUrl: PHOTO }),
+    });
+
+    await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+    // The owner's column is never the chain's address.
+    expect(createItem.mock.calls[0][0].imageUrl).toBeNull();
+    expect(linkItemImages).toHaveBeenCalledTimes(1);
+    expect(linkItemImages.mock.calls[0][0][0]).toMatchObject({
+      sourceEntryId: 'e-1',
+      url: PHOTO,
+    });
+  });
+
+  it('sends nothing for a row that states no photo', async () => {
+    const { service, linkItemImages, unlinkItemImages } = build();
+
+    await service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-1' });
+
+    expect(linkItemImages).not.toHaveBeenCalled();
+    expect(unlinkItemImages).not.toHaveBeenCalled();
+  });
+
+  it('removes the link when a bound row is rejected', async () => {
+    const { service, unlinkItemImages, linkItemImages } = build({
+      row: entry({
+        imageUrl: PHOTO,
+        status: SourceEntryStatus.ACTIVE,
+        matchedBy: ItemSourceMatch.MANUAL,
+        confidence: 1,
+        itemId: 'item-old',
+      }),
+    });
+
+    await service.reject({ userId: ADMIN, entryId: 'e-1' });
+
+    expect(unlinkItemImages).toHaveBeenCalledWith(['e-1']);
+    expect(linkItemImages).not.toHaveBeenCalled();
+  });
+
+  it('removes nothing when the rejected row was only a proposal', async () => {
+    const { service, unlinkItemImages } = build({
+      row: entry({
+        imageUrl: PHOTO,
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: 'item-proposed',
+      }),
+    });
+
+    await service.reject({ userId: ADMIN, entryId: 'e-1' });
+
+    expect(unlinkItemImages).not.toHaveBeenCalled();
+  });
+
+  it('names the rows a revert deletes before it deletes them', async () => {
+    const { service, unlinkItemImages, entries, calls } = build({
+      row: entry({ imageUrl: PHOTO }),
+    });
+    (entries.delete as jest.Mock).mockImplementation(async () => {
+      calls.push('delete');
+      return { affected: 1 };
+    });
+
+    await service.deleteUndecidedFrom('run-monday');
+
+    expect(unlinkItemImages).toHaveBeenCalledWith(['e-1']);
+    expect(calls.indexOf('unlinkItemImages')).toBeLessThan(
+      calls.indexOf('delete')
+    );
+  });
+});
 
 describe('SourceEntryService', () => {
   describe('accept', () => {

@@ -123,6 +123,7 @@ export class RunExecutor implements OnApplicationShutdown {
       sizeUnit: row.sizeUnit ?? null,
       sizeFormat: row.sizeFormat,
       packCount: row.packCount ?? null,
+      imageUrl: row.imageUrl ?? null,
       categoryPath: row.categoryPath ?? [],
     }));
   }
@@ -656,6 +657,14 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0191: the pairs behind `pricesConflicted`, named. Two rows of the
     // chain are bound to one product and state two amounts at one scope.
     priceConflicts: written.priceConflicts,
+    // Plan 0198: the photo links this run sent to catalog for its bound rows.
+    // A link is saved whatever the switch of the chain says.
+    imagesLinked: written.imagesLinked,
+    imagesMoved: written.imagesMoved,
+    imagesUnchanged: written.imagesUnchanged,
+    imagesRejected: written.imagesRejected,
+    imagesUnlinked: written.imagesUnlinked,
+    imageLinksFailed: written.imageLinksFailed,
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
     placesImported: written.placesImported,

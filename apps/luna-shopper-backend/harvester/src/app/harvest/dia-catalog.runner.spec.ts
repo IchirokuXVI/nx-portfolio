@@ -209,8 +209,13 @@ describe('DiaCatalogRunner', () => {
     const pack = report.products[1];
     expect(pack.extra).toMatchObject({
       diaCategoryIds: ['L2108', 'L2286'],
-      image: 'https://www.dia.es/product_images/38406/38406_ISO_0_ES.jpg',
     });
+    // The listing's path, made absolute, is the row's photo address now and
+    // is not in the bag any more (plan 0198).
+    expect(pack.extra).not.toHaveProperty('image');
+    expect(pack.imageUrl).toBe(
+      'https://www.dia.es/product_images/38406/38406_ISO_0_ES.jpg'
+    );
     // The path is the first leaf's. The pack is read as a pack of two.
     expect(pack.categoryPath).toEqual(['Agua y refrescos', 'Cola']);
     expect(pack).toMatchObject({

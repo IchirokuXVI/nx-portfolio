@@ -829,6 +829,12 @@ export interface SourceCatalogEntryView {
   categoryPath: string[];
   url: string | null;
   /**
+   * The address of the photo the chain prints for the product, verbatim, or
+   * null (plan 0198). It is on the chain's own host. Shown in the queue so a
+   * person can see what a link would be.
+   */
+  imageUrl: string | null;
+  /**
    * The last observation's `extra` bag: a leaflet's page and raw text, a
    * chain's loyalty block, whatever the producer knew and the import does not
    * read (plan 0086, section 6.1).

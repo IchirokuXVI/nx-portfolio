@@ -829,6 +829,13 @@ export type SetItemSectionPinsDto = {
 };
 
 /**
+ * `SetLinkedImagesEnabledDto` in the gateway's OpenAPI document.
+ */
+export type SetLinkedImagesEnabledDto = {
+  enabled: boolean;
+};
+
+/**
  * `SetListAccessDto` in the gateway's OpenAPI document.
  */
 export type SetListAccessDto = {
@@ -2082,6 +2089,10 @@ export type BasketBasketProductView = {
   name: CatalogLocalizedText;
   brand: string | null;
   imageUrl: string | null;
+  imageSource: EnumsItemImageSource | null;
+  imageSupermarketId: string | null;
+  ownImageUrl: string | null;
+  images: CatalogItemImageView[];
   sku: string | null;
   ean: string | null;
   eans: string[];
@@ -2475,6 +2486,34 @@ export type CatalogItemCategoryView = {
 };
 
 /**
+ * `catalog.ItemImageView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemImageView = {
+  url: string;
+  source: EnumsItemImageSource;
+  supermarketId: string | null;
+};
+
+/**
+ * `catalog.ItemLinkedImageView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemLinkedImageView = {
+  sourceEntryId: string;
+  supermarketId: string;
+  url: string;
+  enabled: boolean;
+  firstLinkedAt: string;
+  lastSeenAt: string;
+};
+
+/**
+ * `catalog.ItemLinkedImagesView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemLinkedImagesView = {
+  images: CatalogItemLinkedImageView[];
+};
+
+/**
  * `catalog.ItemOfferView` in the gateway's OpenAPI document.
  */
 export type CatalogItemOfferView = {
@@ -2671,6 +2710,10 @@ export type CatalogItemView = {
   name: CatalogLocalizedText;
   brand: string | null;
   imageUrl: string | null;
+  imageSource: EnumsItemImageSource | null;
+  imageSupermarketId: string | null;
+  ownImageUrl: string | null;
+  images: CatalogItemImageView[];
   sku: string | null;
   ean: string | null;
   eans: string[];
@@ -3386,6 +3429,7 @@ export type CatalogSupermarketView = {
   websiteUrl: string | null;
   externalBrandKey: string | null;
   defaultPriceScopeId: string | null;
+  linkedImagesEnabled: boolean;
   locationCount?: number;
 };
 
@@ -3590,6 +3634,11 @@ export type EnumsHarvestWarningCode =
   | 'SCOPE_KIND_MISMATCH'
   | 'DETAIL_SKIPPED_UNKNOWN'
   | 'PRICE_SOLD_ANOTHER_WAY';
+
+/**
+ * `enums.ItemImageSource` in the gateway's OpenAPI document.
+ */
+export type EnumsItemImageSource = 'OWNER' | 'CHAIN';
 
 /**
  * `enums.ItemPriceWrittenBy` in the gateway's OpenAPI document.
@@ -4243,6 +4292,7 @@ export type HarvestItemSourceEntryView = {
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
+  imageUrl: string | null;
   extra: {
     [key: string]: unknown;
   } | null;
@@ -4397,6 +4447,7 @@ export type HarvestQueuedSourceEntryView = {
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
+  imageUrl: string | null;
   extra: {
     [key: string]: unknown;
   } | null;
@@ -4477,6 +4528,7 @@ export type HarvestSourceCatalogEntryView = {
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
+  imageUrl: string | null;
   extra: {
     [key: string]: unknown;
   } | null;
@@ -4994,6 +5046,14 @@ export type MsgItemGetManyResponse = {
  */
 export type MsgItemUpdateManyResponse = {
   items: CatalogItemView[];
+};
+
+/**
+ * `msg.itemLinkedImage.disableAll.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemLinkedImageDisableAllResponse = {
+  supermarkets: number;
+  items: number;
 };
 
 /**

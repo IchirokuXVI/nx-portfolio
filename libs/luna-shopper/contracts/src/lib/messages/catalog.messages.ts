@@ -1,6 +1,7 @@
 import type {
   BrandBatchOutcome,
   BulkOperationErrorCode,
+  ItemImageSource,
   ItemPriceWrittenBy,
   NearbyShopNoPick,
   PostalCodeSource,
@@ -59,6 +60,48 @@ export const SUPERMARKET_PATTERNS = {
   delete: 'supermarket.delete',
   get: 'supermarket.get',
   list: 'supermarket.list',
+  /**
+   * Say whether the photos of one chain may be shown (plan 0198, section 4).
+   *
+   * It writes `supermarkets.linkedImagesEnabled` and, in the same
+   * transaction, takes the photos of that chain out of every product or puts
+   * them back. Off is the state of every chain until a person turns one on.
+   */
+  setLinkedImagesEnabled: 'supermarket.setLinkedImagesEnabled',
+} as const;
+
+/**
+ * The links to the photos chains print for their products (plan 0198).
+ *
+ * A link is an address on a chain's own host. No server of ours fetches it
+ * and no copy is kept. One link exists for each source row that is bound to a
+ * product and states a photo, so a product built from three rows has three.
+ * A link is saved whatever the switch of its chain says: the switch decides
+ * what a client is given, never what is kept.
+ */
+export const ITEM_LINKED_IMAGE_PATTERNS = {
+  /**
+   * Save the link of each of these source rows, keyed on the row. What the
+   * harvester sends after each chunk of a run and after a decision binds a
+   * row. A row that names another product than before moves its link.
+   */
+  linkBatch: 'itemLinkedImage.linkBatch',
+  /**
+   * Remove the links of these source rows: a row that left its product, a
+   * row whose source prints no photo any more, a row that was deleted.
+   */
+  unlink: 'itemLinkedImage.unlink',
+  /**
+   * Turn every chain off and take every chain photo out of every product, in
+   * one transaction. The stop is one step. Turning a chain back on is one
+   * request for each chain, on purpose.
+   */
+  disableAll: 'itemLinkedImage.disableAll',
+  /**
+   * Every link of one product, of chains that are off too, for an admin. The
+   * only read that answers the address of a chain that is off.
+   */
+  listByItem: 'itemLinkedImage.listByItem',
 } as const;
 
 export const SUPERMARKET_LOCATION_PATTERNS = {
@@ -735,6 +778,12 @@ export interface SupermarketView {
    */
   defaultPriceScopeId: string | null;
   /**
+   * Whether the photos this chain prints for its products may be shown (plan
+   * 0198, section 4). False until a person turns it on. While it is false, no
+   * read of a product answers a photo of this chain.
+   */
+  linkedImagesEnabled: boolean;
+  /**
    * How many shops the chain holds (admin plan 0042, section 2): its rows of
    * `supermarket_locations`, counted in one grouped query for the page.
    *
@@ -1339,11 +1388,49 @@ export interface ItemSectionsAtLocationView {
   items: ItemSectionsAtLocationEntry[];
 }
 
+/**
+ * One photo of a product, and where it came from (plan 0198, section 3.1).
+ *
+ * `source` says the kind. `supermarketId` says which chain, for a `CHAIN`
+ * photo, and is null for the owner's.
+ */
+export interface ItemImageView {
+  url: string;
+  source: ItemImageSource;
+  supermarketId: string | null;
+}
+
 export interface ItemView {
   id: string;
   name: LocalizedText;
   brand: string | null;
+  /**
+   * The address of the first entry of {@link images}, or null (plan 0198).
+   *
+   * The owner's photo when the product has one. Otherwise the first photo of
+   * a chain that is turned on, which is on that chain's host: read
+   * {@link imageSource} before you draw it. **Never fill an edit form from
+   * this field.** {@link ownImageUrl} is the one the owner typed.
+   */
   imageUrl: string | null;
+  /** The `source` of the first entry of {@link images}, or null. */
+  imageSource: ItemImageSource | null;
+  /** The `supermarketId` of the first entry of {@link images}, or null. */
+  imageSupermarketId: string | null;
+  /**
+   * The photo the owner chose for the product, or null: `items.imageUrl`,
+   * which is what the back office edits (plan 0198, section 3.1).
+   */
+  ownImageUrl: string | null;
+  /**
+   * Every photo a client may show (plan 0198, section 3.1): the owner's first
+   * when there is one, then the photos of the chains that are turned on, the
+   * oldest link first. An address two source rows state is one entry.
+   *
+   * No entry is a photo of a chain that is off. The server decides that, so a
+   * client does not need to know the rule to obey it.
+   */
+  images: ItemImageView[];
   sku: string | null;
   /**
    * The only identifier that joins a product across chains, and the reason
@@ -1764,6 +1851,105 @@ export interface UpdateSupermarketRequest extends AdminCredential {
 
 export interface SupermarketIdRequest extends AdminCredential {
   supermarketId: string;
+}
+
+/** Turn the photos of one chain on or off (plan 0198, section 4). */
+export interface SetSupermarketLinkedImagesRequest extends AdminCredential {
+  supermarketId: string;
+  enabled: boolean;
+}
+
+// --- Linked images (plan 0198) ----------------------------------------------
+
+/** The longest photo address a link holds, which is the width of its column. */
+export const ITEM_LINKED_IMAGE_URL_MAX_LENGTH = 500;
+
+/** How many source rows one link or unlink message may name. */
+export const ITEM_LINKED_IMAGE_BATCH_MAX = 1000;
+
+/** The photo one source row states for the product it is bound to. */
+export interface ItemLinkedImageLink {
+  /** The harvester's row. Opaque to catalog, and the key of the link. */
+  sourceEntryId: string;
+  itemId: string;
+  /** The chain the photo came from. */
+  supermarketId: string;
+  /** The address as the source printed it. `https` only. */
+  url: string;
+  /** The run that last stated it, or null. */
+  runId: string | null;
+}
+
+/** At most {@link ITEM_LINKED_IMAGE_BATCH_MAX} entries. */
+export interface LinkItemImagesRequest extends AdminCredential {
+  entries: ItemLinkedImageLink[];
+}
+
+/** Why one entry of a {@link LinkItemImagesRequest} was not saved. */
+export type ItemLinkedImageRejectReason =
+  /** The address is not `https`. */
+  | 'NOT_HTTPS'
+  /** The address is longer than {@link ITEM_LINKED_IMAGE_URL_MAX_LENGTH}. */
+  | 'TOO_LONG'
+  /** Catalog holds no such product. */
+  | 'ITEM_NOT_FOUND'
+  /** Catalog holds no such chain. */
+  | 'SUPERMARKET_NOT_FOUND';
+
+export interface ItemLinkedImageRejection {
+  sourceEntryId: string;
+  reason: ItemLinkedImageRejectReason;
+}
+
+export interface LinkItemImagesResult {
+  /** Rows that had no link, or whose link holds a new address now. */
+  linked: number;
+  /** Rows whose link went to another product. */
+  moved: number;
+  /** Rows whose link already said this. Only its clock moved. */
+  unchanged: number;
+  /** The entries that were not saved. They do not fail the batch. */
+  rejected: ItemLinkedImageRejection[];
+}
+
+/** At most {@link ITEM_LINKED_IMAGE_BATCH_MAX} rows. */
+export interface UnlinkItemImagesRequest extends AdminCredential {
+  sourceEntryIds: string[];
+}
+
+export interface UnlinkItemImagesResult {
+  /** How many links went. A row that held none is not counted. */
+  unlinked: number;
+}
+
+/** Turn every chain off. It carries the credential and nothing else. */
+export type DisableAllLinkedImagesRequest = AdminCredential;
+
+export interface DisableAllLinkedImagesResult {
+  /** The chains that were on and are off now. */
+  supermarkets: number;
+  /** The products that showed a chain photo and show none now. */
+  items: number;
+}
+
+export interface ListItemLinkedImagesRequest extends AdminCredential {
+  itemId: string;
+}
+
+/** One saved link, as the back office reads it (plan 0198, section 3.2). */
+export interface ItemLinkedImageView {
+  sourceEntryId: string;
+  supermarketId: string;
+  url: string;
+  /** Whether the chain is turned on, so whether a shopper is given this photo. */
+  enabled: boolean;
+  firstLinkedAt: string;
+  lastSeenAt: string;
+}
+
+export interface ItemLinkedImagesView {
+  /** Every link of the product, in the order a shopper would be given them. */
+  images: ItemLinkedImageView[];
 }
 
 export interface ListSupermarketsRequest extends PageQuery {

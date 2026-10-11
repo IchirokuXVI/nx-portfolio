@@ -183,6 +183,7 @@ export function toSourceCatalogEntryView(
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
     url: row.url,
+    imageUrl: row.imageUrl ?? null,
     extra: row.extra ?? null,
     timesSeen: row.timesSeen,
     firstSeenAt: row.firstSeenAt.toISOString(),

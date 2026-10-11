@@ -11,6 +11,7 @@ import {
   AdminCatalogCategoriesController,
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
+  AdminCatalogLinkedImagesController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
   AdminCatalogPricePoliciesController,
@@ -89,6 +90,8 @@ import {
     AdminCatalogSupermarketsController,
     AdminCatalogLocationsController,
     AdminCatalogItemsController,
+    // The one stop for every chain photo (plan 0198).
+    AdminCatalogLinkedImagesController,
     AdminCatalogProductGroupsController,
     // Plan 0166: the tree's two levels, and the four rules catalog enforces.
     AdminCatalogCategoriesController,

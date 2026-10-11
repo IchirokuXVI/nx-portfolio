@@ -51,6 +51,7 @@ describe('normalizeProduct', () => {
       available: true,
       sourceUrl:
         'https://tienda.mercadona.es/product/4241/aceite-de-oliva-04-hacendado-botella',
+      thumbnail: 'https://prod-mercadona.imgix.net/images/4241.jpg',
       observedAt: OBSERVED_AT,
     });
   });
