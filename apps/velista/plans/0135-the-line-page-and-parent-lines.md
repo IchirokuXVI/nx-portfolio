@@ -2,6 +2,11 @@
 
 # 0135: the line page and parent lines
 
+> **Stage 2 (parent lines) is parked.** The owner said on 2026-10-11: "Let's skip
+> parents for now, that was just an idea I had." Nothing of stage 2 is built, and the app
+> shows nothing about parents. Sections 7 to 10 and 12 stay as the record of the idea. Do
+> not build them until the owner asks.
+
 > Asked for by the owner on 2026-10-07 and 2026-10-08. The line page shows a product as a
 > name and nothing else, it does not draw the number on the list, and its two buy
 > histories take most of its height. The owner also wants a line that holds other lines
@@ -605,6 +610,10 @@ with a long parent name at 390 pixels. The heading "Lines under {name}" and the 
 
 Not in this plan: a parent inside a parent, the product page, a remembered close of a
 parent, a note on a line whose number no longer matches its parent, the shop map.
+
+Answers of the owner on 2026-10-11, for the day stage 2 is picked up: a parent cannot be
+under a parent (question 1). Parents are not shown in the basket, maybe later, so nothing
+has to make two parents the same (question 2). Question 3 is still open.
 
 Open questions:
 
