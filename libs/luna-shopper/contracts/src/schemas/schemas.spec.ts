@@ -312,6 +312,9 @@ describe('contract schemas', () => {
             // reason (plan 0070, section 9): a hand made line says so.
             productGroupId: null,
             groupItemIds: [],
+            // A new line names no favourite and no chain (plan 0199, rule 7).
+            favoriteItemId: null,
+            preferredSupermarketId: null,
             position: 1,
             approvalStatus: 'PENDING',
             createdByUserId: 'u',
@@ -351,6 +354,10 @@ describe('contract schemas', () => {
             // (plan 0070, section 9).
             productGroupId: '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52',
             groupItemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
+            // The one product is the favourite, and the line names a chain
+            // (plan 0199, section 1).
+            favoriteItemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+            preferredSupermarketId: '5d0e7a91-3c44-4b1e-9f27-000000000001',
             position: 1,
             approvalStatus: 'APPROVED',
             createdByUserId: 'u',
@@ -829,6 +836,73 @@ describe('contract schemas', () => {
           content: 'Something for dinner',
         }).valid
       ).toBe(true);
+    });
+
+    it('line.update request takes a favourite and a chain, each an id, a null or absent (plan 0199)', () => {
+      const base = { userId: 'u', lineId: 'l' };
+      // Absent leaves both alone, and is the request every older client sends.
+      expect(validateMessageRequest('line.update', base).valid).toBe(true);
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          favoriteItemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          preferredSupermarketId: '5d0e7a91-3c44-4b1e-9f27-000000000001',
+        }).valid
+      ).toBe(true);
+      // Null clears, so it is a value the request may carry.
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          favoriteItemId: null,
+          preferredSupermarketId: null,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('line.update', { ...base, favoriteItemId: 7 })
+          .valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          preferredSupermarketId: ['chain'],
+        }).valid
+      ).toBe(false);
+    });
+
+    it('a line without its favourite or its chain is not a LineView (plan 0199)', () => {
+      const line = {
+        id: 'l',
+        listId: 'li',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: [],
+        itemSetHash: null,
+        productGroupId: null,
+        groupItemIds: [],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
+        position: 1,
+        approvalStatus: 'PENDING',
+        createdByUserId: 'u',
+        approvedByUserId: null,
+        version: 1,
+        boughtCount: 0,
+        lastSettlementOutcome: null,
+        claimed: false,
+        claimedByUserId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      expect(validateMessageResponse('line.update', line).valid).toBe(true);
+      for (const field of ['favoriteItemId', 'preferredSupermarketId']) {
+        const { [field]: _dropped, ...without } = line as Record<
+          string,
+          unknown
+        >;
+        expect(validateMessageResponse('line.update', without).valid).toBe(
+          false
+        );
+      }
     });
 
     it('catalog item.create request + item.search response (plan 0012)', () => {

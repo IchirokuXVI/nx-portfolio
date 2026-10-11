@@ -117,6 +117,10 @@ export function toLineView(
     // answer for a hand made set rather than a stand in for an unread value.
     productGroupId: line.productGroupId,
     groupItemIds: [...items.groupItemIds],
+    // Null and never absent (plan 0199, section 1). The `??` is for a line that
+    // was built by hand and not read from the table, which has no such property.
+    favoriteItemId: line.favoriteItemId ?? null,
+    preferredSupermarketId: line.preferredSupermarketId ?? null,
     position: line.position,
     approvalStatus: line.approvalStatus,
     createdByUserId: line.createdByUserId,

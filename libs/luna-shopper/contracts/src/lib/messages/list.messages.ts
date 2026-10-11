@@ -309,6 +309,27 @@ export interface LineView {
    */
   groupItemIds: string[];
   /**
+   * The one product of {@link itemIds} the household wants, or null (plan 0199,
+   * section 1).
+   *
+   * On the line and not on a product, because a product here is an id and not an
+   * object. It is always one of `itemIds`: every write that takes that product
+   * off the line clears this in the same transaction (section 2, rule 2).
+   *
+   * Not part of the identity of a line. Two lines that differ only here are the
+   * same line, so it is in neither {@link itemSetHash} nor the merge key.
+   */
+  favoriteItemId: string | null;
+  /**
+   * The chain this line is bought at, or null (plan 0199, section 1). A
+   * supermarket and never a shop.
+   *
+   * An opaque catalog id, exactly as an `itemId` is: core never asks the catalog
+   * whether it exists. It does not depend on the products, so it stays when the
+   * set changes and when the set becomes empty. Only an update clears it.
+   */
+  preferredSupermarketId: string | null;
+  /**
    * A digest of the sorted distinct {@link itemIds}, or null while the set is
    * empty (plan 0048, section 1.1).
    *
@@ -734,6 +755,21 @@ export interface UpdateLineRequest {
    * ever settle a product onto the person holding the line.
    */
   adoptItemIds?: string[];
+  /**
+   * The favourite product of the line (plan 0199, section 2).
+   *
+   * **Null clears it, and an absent field leaves it alone.** An id must be one
+   * of the products of the line as the set stands after this same update, so one
+   * request can add a product and make it the favourite. Any other id is refused
+   * with `validation_failed`.
+   */
+  favoriteItemId?: string | null;
+  /**
+   * The chain the line is bought at (plan 0199, section 2). Null clears it, and
+   * an absent field leaves it alone. Opaque: core checks its shape and nothing
+   * else.
+   */
+  preferredSupermarketId?: string | null;
   /**
    * Merge this line with the line the new name already belongs to (plan 0112,
    * section 2).

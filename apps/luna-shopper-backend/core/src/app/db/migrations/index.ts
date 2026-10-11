@@ -31,6 +31,7 @@ import { GeneratedListsBecomeBaskets1756003200000 } from './1756003200000-Genera
 import { UserAppState1756003300000 } from './1756003300000-UserAppState';
 import { BasketShop1756003400000 } from './1756003400000-BasketShop';
 import { SettlementChain1756003500000 } from './1756003500000-SettlementChain';
+import { LineFavoriteAndSupermarket1756003600000 } from './1756003600000-LineFavoriteAndSupermarket';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -168,4 +169,9 @@ export const CORE_MIGRATIONS = [
   // holds; it follows plan 0143's migration and nothing else (plan 0163,
   // section 5).
   SettlementChain1756003500000,
+  // Two nullable columns on `list_lines`, which plan 0007's migration created
+  // and plan 0132's last reshaped. Every row is null in both, and it reads and
+  // writes no row, so it follows every migration that touched that table and
+  // nothing else (plan 0199, section 1).
+  LineFavoriteAndSupermarket1756003600000,
 ];

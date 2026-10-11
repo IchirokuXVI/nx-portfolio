@@ -100,6 +100,25 @@ export class ListLine extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   productGroupId!: string | null;
 
+  /**
+   * The one product of the line that the household wants, or null (plan 0199).
+   *
+   * Always one of the `list_line_items` rows of this line. Nothing in the
+   * database says so, because the set is in another table: every write that
+   * takes a product off a line asks `keptFavorite` for the value that is left.
+   * Opaque and with no foreign key, as every catalog id in core is.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  favoriteItemId!: string | null;
+
+  /**
+   * The chain the line is bought at, or null (plan 0199). A supermarket and
+   * never a shop. Opaque and with no foreign key. It does not depend on the
+   * products, and only an update clears it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  preferredSupermarketId!: string | null;
+
   @Column({ type: 'double precision', default: 0 })
   position!: number;
 
