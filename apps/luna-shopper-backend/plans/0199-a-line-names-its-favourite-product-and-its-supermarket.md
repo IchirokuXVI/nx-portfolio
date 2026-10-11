@@ -1,3 +1,5 @@
+> **PR:** [#689](https://github.com/IchirokuXVI/nx-portfolio/pull/689)
+
 # 0199: a line names its favourite product and its supermarket
 
 > Asked for by the owner on 2026-10-11, with the build of velista plan `0135`: "add an
