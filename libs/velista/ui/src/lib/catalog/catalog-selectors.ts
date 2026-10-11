@@ -139,9 +139,7 @@ export class CatalogSelectors {
       return { key: 'catalog.selector.supermarketAll', args: {} };
     }
     return {
-      key: view.anyShop
-        ? 'catalog.selector.supermarketAny'
-        : 'catalog.selector.supermarketShop',
+      key: 'catalog.selector.supermarketChain',
       args: { chain: view.name },
     };
   });

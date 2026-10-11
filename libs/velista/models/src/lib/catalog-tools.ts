@@ -11,10 +11,6 @@ export interface CatalogToolsInput {
   /** The chosen chain's name, or blank while it is not known yet. */
   readonly chainName: string;
   readonly chainLogoUrl: string | null;
-  /** Whether one shop of the chain is chosen. */
-  readonly shopChosen: boolean;
-  /** The chosen shop in words ("Calle Mayor 3, Córdoba"), or blank. */
-  readonly shopPlace: string;
   /** The chosen category, or null. `root` is null when the root is the choice. */
   readonly category: {
     readonly name: string;
@@ -30,8 +26,6 @@ export interface SupermarketSelectorView {
   /** The chain's name. Blank when nothing is chosen. */
   readonly name: string;
   readonly logoUrl: string | null;
-  /** A chain with no shop picked, which the accessible name says as "any shop". */
-  readonly anyShop: boolean;
 }
 
 /** The Category selector. `chosen` false draws "All categories". */
@@ -45,10 +39,9 @@ export interface CategorySelectorView {
 
 /**
  * The left end of the line that heads the list. Only one shows, in this order:
- * the shop, the chain, the postal code.
+ * the chain, the postal code.
  */
 export type CatalogHeadNote =
-  | { readonly kind: 'shop'; readonly shop: string }
   | {
       readonly kind: 'chain';
       readonly chain: string;
@@ -70,7 +63,6 @@ export function catalogToolsView(input: CatalogToolsInput): CatalogToolsView {
       chosen: chainChosen,
       name: chainChosen ? input.chainName : '',
       logoUrl: chainChosen ? input.chainLogoUrl : null,
-      anyShop: chainChosen && !input.shopChosen,
     },
     category:
       input.category === null
@@ -85,14 +77,6 @@ export function catalogToolsView(input: CatalogToolsInput): CatalogToolsView {
 }
 
 function headNote(input: CatalogToolsInput): CatalogHeadNote | null {
-  if (input.shopChosen && input.shopPlace !== '') {
-    return { kind: 'shop', shop: input.shopPlace };
-  }
-  // A shop whose words have not arrived says nothing rather than naming the whole
-  // chain, which is the one thing the read is not priced at.
-  if (input.shopChosen) {
-    return null;
-  }
   if (input.chainId !== null && input.chainName !== '') {
     return {
       kind: 'chain',

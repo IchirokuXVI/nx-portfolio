@@ -57,22 +57,19 @@
 
   <!--
     The line that heads the list (section 3): where the prices are from, and the
-    order. Only one note shows: the shop, else the chain, else the postal code.
+    order. Only one note shows: the chain, else the postal code.
   -->
   <div class="head">
     @if (tools().note; as note) {
       <span class="head-note">
         @switch (note.kind) {
-          @case ('shop') {
-            {{ 'catalog.supermarket.pricesAt' | rokuT: { shop: note.shop } }}
-          }
           @case ('chain') {
             @if (note.postalCode; as code) {
               {{
                 'catalog.head.chainNear' | rokuT: { chain: note.chain, code }
               }}
             } @else {
-              {{ 'catalog.supermarket.any' | rokuT: { chain: note.chain } }}
+              {{ note.chain }}
             }
           }
           @default {

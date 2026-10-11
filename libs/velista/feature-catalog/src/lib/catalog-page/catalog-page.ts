@@ -38,7 +38,6 @@ import {
   scopesOfChain,
   unpricedStart,
   type CatalogBrowseContext,
-  type CatalogLocation,
   type CatalogOrder,
   type CatalogProduct,
 } from '@portfolio/velista/models';
@@ -116,16 +115,15 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * When the lists cannot be read the line says so and offers a second try. Without
  * that a failed read looked exactly like having no list.
  *
- * ## A chain narrows the products and the prices, and a shop narrows them further
+ * ## A chain narrows the products and the prices
  *
- * The Supermarket selector opens the shop picker as a page of its own (velista
- * `0124`). A chain is enough and a shop is optional.
+ * The Supermarket selector opens the supermarket picker as a page of its own
+ * (velista `0124`). A chain is the whole choice: the catalog is never narrowed to
+ * one shop.
  *
  * With a chain, `soldBy` narrows which products are listed (backend `0146`), and
  * the chain's own scopes are sent as the price scopes, so every price on the screen
- * is what that chain charges here. With a shop, the read sends `locationId` alone
- * (backend `0170`) and is priced at that one shop, and a product it has no price
- * for says so rather than vanishing. With neither, the read resolves the person's
+ * is what that chain charges here. Without one, the read resolves the person's
  * profile and each row shows the cheapest of their shops.
  *
  * ## No postal code is not an empty catalog (`0069`, section 2)
@@ -145,8 +143,8 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * ## State lives in the URL, not in a store
  *
  * The pages of products are about the screen that is open and are thrown away with
- * it. Every filter is the URL's: the category, the chain, the shop, and the text and
- * the order too (`?q=`, `?order=`). The pickers are pages of their own, so the tab is
+ * it. Every filter is the URL's: the category, the chain, and the text and the
+ * order too (`?q=`, `?order=`). The pickers are pages of their own, so the tab is
  * destroyed while one is open, and a filter held only in a signal here came back
  * reset from choosing a supermarket or a category. The text and the order are
  * written in place of the entry as they change, so a pop back onto the tab finds
@@ -218,12 +216,6 @@ export class CatalogPage {
   /** The chosen chain's id, from `?chain=`, or null for every supermarket. */
   protected readonly chain = signal<string | null>(null);
 
-  /** The chosen shop's id, from `?shop=`, or null for any shop of the chain. */
-  protected readonly shop = signal<string | null>(null);
-
-  /** The chosen shop, named, once `GET /v1/catalog/locations/:id` answers. */
-  protected readonly location = signal<CatalogLocation | null>(null);
-
   protected readonly order = signal<CatalogOrder>(defaultCatalogOrder(''));
 
   protected readonly context = signal<CatalogBrowseContext | null>(null);
@@ -239,9 +231,6 @@ export class CatalogPage {
    * one is on its way the field is ahead of the URL, so the URL does not overrule it.
    */
   private _writes = 0;
-
-  /** Set when the tab is left, so an answer arriving later writes no URL. */
-  private _destroyed = false;
 
   private readonly _products = signal<readonly CatalogProduct[]>([]);
   private readonly _cursor = signal<string | null>(null);
@@ -267,8 +256,8 @@ export class CatalogPage {
 
   /**
    * The chosen chain's name. From the chains near the person, else from every
-   * chain the app knows: a shop from Recent or Near me can be outside the person's
-   * areas, and its chain is still worth naming.
+   * chain the app knows: a link can name a chain outside the person's areas, and
+   * it is still worth naming.
    */
   protected readonly chosenChainName = computed(() => {
     const id = this.chain();
@@ -280,30 +269,6 @@ export class CatalogPage {
     return name === null ? '' : catalogName(name, this._locale());
   });
 
-  /** The chosen shop in words: its own name, else its street, else its town. */
-  protected readonly shopName = computed(() => {
-    const location = this.location();
-    if (location === null) {
-      return '';
-    }
-    const label =
-      location.label === null
-        ? ''
-        : catalogName(location.label, this._locale());
-    return label || location.address?.trim() || location.city?.trim() || '';
-  });
-
-  /** Where the tab is priced: "Calle Mayor 3, Córdoba". */
-  protected readonly shopPlace = computed(() => {
-    const location = this.location();
-    const name = this.shopName();
-    if (location === null || name === '') {
-      return '';
-    }
-    const town = location.city?.trim() ?? '';
-    return town !== '' && town !== name ? `${name}, ${town}` : name;
-  });
-
   /** What the two selectors and the line that heads the list say. */
   protected readonly tools = computed(() => {
     const choice = this.choice();
@@ -312,8 +277,6 @@ export class CatalogPage {
       chainId: this.chain(),
       chainName: this.chosenChainName(),
       chainLogoUrl: this.chosenChain()?.logoUrl ?? null,
-      shopChosen: this.shop() !== null,
-      shopPlace: this.shopPlace(),
       category:
         choice === null
           ? null
@@ -366,7 +329,6 @@ export class CatalogPage {
     return {
       category: this.categorySlug(),
       chain: this.chain(),
-      shop: this.shop(),
       query: typed.trim() === '' ? null : typed,
       order: order === defaultCatalogOrder(typed) ? null : order,
     };
@@ -390,18 +352,13 @@ export class CatalogPage {
     appPath(this._locale(), this._basePath, 'account', 'profiles')
   );
 
-  /**
-   * The products as they are priced on this screen. A shop's read is priced at
-   * that shop by the server, so there is no other chain's price to strip from it.
-   */
+  /** The products as they are priced on this screen. */
   private readonly _shown = computed<readonly CatalogProduct[]>(() => {
     const context = this.context();
     const chosen = this.chain();
-    return this.shop() !== null
-      ? this._products()
-      : this._products().map((product) =>
-          this._pricedBy(product, context, chosen)
-        );
+    return this._products().map((product) =>
+      this._pricedBy(product, context, chosen)
+    );
   });
 
   /**
@@ -418,14 +375,12 @@ export class CatalogPage {
     // Read so the rows are drawn again once the words arrive.
     this._translator.loaded();
     const context = this.context();
-    const shopChosen = this.shop() !== null;
-    const chainChosen = this.chain() !== null || shopChosen;
+    const chainChosen = this.chain() !== null;
 
     return this._shown().map((product) =>
       productRowView(product, {
         locale,
         chainChosen,
-        shopChosen,
         translate: (key, args) =>
           this._translator.t(key, undefined, locale, args),
         chainOf: (scope) => this._chainName(context, scope, locale),
@@ -494,12 +449,11 @@ export class CatalogPage {
   constructor() {
     // The URL is the choice (0119 target 5, 0124 target 8). The first emission is
     // the arrival and starts the first page; a later one is a chip being cleared,
-    // the picker returning a chain or a shop, or a link landing on this same page.
+    // the picker returning a chain, or a link landing on this same page.
     const params = this._route.queryParamMap.subscribe((map) =>
       this._readChoice(catalogChoiceOf(map))
     );
     inject(DestroyRef).onDestroy(() => {
-      this._destroyed = true;
       params.unsubscribe();
       this._clearDebounce();
     });
@@ -597,7 +551,7 @@ export class CatalogPage {
   /** Its cross: every supermarket again, pushed like the category's cross. */
   protected clearSupermarket(): void {
     void this._router.navigateByUrl(
-      this._tabUrl({ ...this._choice(), chain: null, shop: null })
+      this._tabUrl({ ...this._choice(), chain: null })
     );
   }
 
@@ -692,7 +646,6 @@ export class CatalogPage {
   /** A choice arriving from the URL. The same choice again changes nothing. */
   private _readChoice(choice: CatalogChoice): void {
     const held = this._choice();
-    const shopChanged = choice.shop !== this.shop();
     // The text and the order are read on arrival and on a pop onto another entry
     // of the tab. The page's own write of them is not news to it.
     const typedHere = this._urlRead && this._writes > 0;
@@ -704,7 +657,6 @@ export class CatalogPage {
       this._urlRead &&
       choice.category === this.categorySlug() &&
       choice.chain === this.chain() &&
-      !shopChanged &&
       !wordsChanged
     ) {
       return;
@@ -712,7 +664,6 @@ export class CatalogPage {
     this._urlRead = true;
     this.categorySlug.set(choice.category);
     this.chain.set(choice.chain);
-    this.shop.set(choice.shop);
     if (wordsChanged) {
       const words = choice.query ?? '';
       this._clearDebounce();
@@ -720,43 +671,7 @@ export class CatalogPage {
       this.query.set(words);
       this.order.set(choice.order ?? defaultCatalogOrder(words));
     }
-    if (shopChanged) {
-      this._readLocation(choice.shop);
-    }
     void this._firstPage();
-  }
-
-  /**
-   * The chosen shop's words, for the note on the line that heads the list. A shop named without its
-   * chain takes the chain from the shop, so a hand typed link still says whose.
-   *
-   * The chain it takes is written into the URL too, in place of this entry. The URL
-   * is the choice, and a signal holding a chain the URL does not would read the next
-   * emission (a sheet closing onto `?shop=` alone, say) as a different
-   * choice: the chain dropped again and the first page read for nothing.
-   */
-  private _readLocation(shopId: string | null): void {
-    this.location.set(null);
-    if (shopId === null) {
-      return;
-    }
-    void this._browse.location(shopId).then((location) => {
-      // A tab left before the answer must not replace whatever page came next.
-      if (this._destroyed || location === null || this.shop() !== shopId) {
-        return;
-      }
-      this.location.set(location);
-      if (this.chain() === null) {
-        this.chain.set(location.supermarketId);
-        // The current URL, whatever covers the tab, with the choice as it now is.
-        const url = this._router.parseUrl(this._router.url);
-        url.queryParams = {
-          ...url.queryParams,
-          ...catalogQueryOf(this._choice()),
-        };
-        void this._router.navigateByUrl(url, { replaceUrl: true });
-      }
-    });
   }
 
   /**
@@ -837,12 +752,9 @@ export class CatalogPage {
     }
 
     // A chain's prices come from its own scopes, so the context has to be known
-    // before the read. With no chain the read resolves the profile by itself, and
-    // a shop's read is priced by the server at that shop.
+    // before the read. With no chain the read resolves the profile by itself.
     const context =
-      this.chain() === null || this.shop() !== null
-        ? this.context()
-        : await this._context.load();
+      this.chain() === null ? this.context() : await this._context.load();
     if (generation !== this._generation) {
       return;
     }
@@ -865,21 +777,6 @@ export class CatalogPage {
     context: CatalogBrowseContext | null = this.context()
   ) {
     const chain = this.chain();
-    const shop = this.shop();
-    if (shop !== null) {
-      // One shop (backend `0170`): the server takes its chain and its scope from
-      // the shop and refuses either beside it, so neither is sent.
-      return {
-        query: this.query(),
-        order: this.order(),
-        soldBy: null,
-        categoryId: this.choice()?.node.id ?? null,
-        priceScopeIds: [],
-        locationId: shop,
-        cursor,
-        limit: CATALOG_PAGE_SIZE,
-      };
-    }
     return {
       query: this.query(),
       order: this.order(),

@@ -3,17 +3,16 @@ import { catalogOrdersFor, type CatalogOrder } from '@portfolio/velista/models';
 import { CATEGORY_PARAM } from './category-choice';
 
 /**
- * The query parameters that hold the catalog's supermarket (velista `0124`,
+ * The query parameter that holds the catalog's supermarket (velista `0124`,
  * target 8), beside `?category=`.
  *
- * `?chain=<supermarketId>` narrows the tab to one chain, and `?shop=<locationId>`
- * narrows it further to one of that chain's shops. A shop also sets its chain, so a
- * link names both. The URL is the one place the choice lives, because the picker is
- * a page of its own and a component signal on the tab is a place that page cannot
- * reach. Nothing is remembered on the next visit.
+ * `?chain=<supermarketId>` narrows the tab to one chain. The catalog is never
+ * narrowed to one shop: a chain is the whole choice. The URL is the one place the
+ * choice lives, because the picker is a page of its own and a component signal on
+ * the tab is a place that page cannot reach. Nothing is remembered on the next
+ * visit.
  */
 export const CHAIN_PARAM = 'chain';
-export const SHOP_PARAM = 'shop';
 
 /**
  * The text in the field and the order pill, for the same reason. The pickers are
@@ -28,7 +27,6 @@ export const ORDER_PARAM = 'order';
 export const CATALOG_PARAMS: readonly string[] = [
   CATEGORY_PARAM,
   CHAIN_PARAM,
-  SHOP_PARAM,
   SEARCH_PARAM,
   ORDER_PARAM,
 ];
@@ -37,7 +35,6 @@ export const CATALOG_PARAMS: readonly string[] = [
 export interface CatalogChoice {
   readonly category: string | null;
   readonly chain: string | null;
-  readonly shop: string | null;
   /** The text in the field, or null for none. */
   readonly query: string | null;
   /** The order, or null for the one the text alone decides (rule C2). */
@@ -86,7 +83,6 @@ export function catalogChoiceOf(params: {
   return {
     category: read(CATEGORY_PARAM),
     chain: read(CHAIN_PARAM),
-    shop: read(SHOP_PARAM),
     query,
     order:
       order === undefined || order === defaultCatalogOrder(query ?? '')
@@ -103,9 +99,6 @@ export function catalogQueryOf(choice: CatalogChoice): Params {
   }
   if (choice.chain !== null) {
     query[CHAIN_PARAM] = choice.chain;
-  }
-  if (choice.shop !== null) {
-    query[SHOP_PARAM] = choice.shop;
   }
   if (choice.query !== null) {
     query[SEARCH_PARAM] = choice.query;

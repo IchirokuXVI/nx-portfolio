@@ -311,16 +311,11 @@
       "backToChains": "Volver a todas las cadenas",
       "all": "Todos los supermercados",
       "allDetail": "Todos los productos de todas las cadenas",
-      "any": "Cualquier tienda de {{chain}}",
-      "anyDetail": "Todos los productos de {{chain}}",
-      "pricesAt": "Precios en {{shop}}",
-      "notPriced": "sin precio aquí",
       "clear": "Ver todos los supermercados"
     },
     "selector": {
       "supermarketAll": "Supermercado: todos los supermercados. Cambiar",
-      "supermarketAny": "Supermercado: {{chain}}, cualquier tienda. Cambiar",
-      "supermarketShop": "Supermercado: {{chain}}, una tienda. Cambiar",
+      "supermarketChain": "Supermercado: {{chain}}. Cambiar",
       "categoryAll": "Categoría: todas las categorías. Cambiar",
       "categoryLeaf": "Categoría: {{root}}, {{leaf}}. Cambiar",
       "categoryRoot": "Categoría: {{root}}. Cambiar"

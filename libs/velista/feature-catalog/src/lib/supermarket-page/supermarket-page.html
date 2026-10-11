@@ -1,84 +1,54 @@
 <!--
-  The one page header (velista 0130). At the root the title is the page's, and Near
-  me is its one quick action. On a chain's screen the title is the chain's name, or
-  the page's word until the chains arrive, and there is no action: a chain's screen
-  lists its shops and nothing else.
+  The one page header (velista 0130): the page's title and the way back, and no
+  action. One press on this page is the whole answer.
 -->
 <lib-page-header
   (back)="back()"
-  [backLabel]="
-    (openKey === null
-      ? 'catalog.supermarket.back'
-      : 'catalog.supermarket.backToChains'
-    ) | rokuT
-  "
-  [title]="title() ?? ('catalog.supermarket.title' | rokuT)"
->
-  <ng-container pageHeaderActions>
-    @if (openKey === null) {
-      <!--
-        Near me (velista 0103) as a header's text action. The name, the busy state
-        and the glyphs are `lib-near-me-button`'s, which is a bordered pill and so
-        cannot be the quiet word a header holds. Never `disabled`, as there: a
-        second press is swallowed by `ShopFinder` and focus stays on the button.
-      -->
-      <button
-        (click)="findNear()"
-        [attr.aria-busy]="finding()"
-        [attr.aria-label]="
-          finding()
-            ? ('basket.view.shop.near.finding' | rokuT)
-            : ('basket.view.shop.near.buttonLabel' | rokuT)
-        "
-        [class.is-busy]="finding()"
-        class="near"
-        kind="text"
-        libPageHeaderAction
-        type="button"
-      >
-        @if (finding()) {
-          <lib-spinner-icon class="near-glyph" />
-          {{ 'basket.view.shop.near.finding' | rokuT }}
-        } @else {
-          <lib-locate-icon class="near-glyph" />
-          {{ 'basket.view.shop.near.button' | rokuT }}
-        }
-      </button>
-    }
-  </ng-container>
-</lib-page-header>
+  [backLabel]="'catalog.supermarket.back' | rokuT"
+  [title]="'catalog.supermarket.title' | rokuT"
+/>
 
 <main class="page">
-  <!--
-    One chain: its logo and how many of its shops are in the person's areas, as the
-    first line of the content. A header holds only a title (velista 0130).
-  -->
-  @if (head(); as chain) {
-    <div class="chain-line">
-      <lib-chain-logo [logo]="chain.logo" size="sm" />
-      <span>{{ 'shops.chain.inAreas' | rokuT: { count: chain.count } }}</span>
-    </div>
-  }
+  <!-- All supermarkets: the catalog with no chain, checked while none is chosen. -->
+  <div class="card">
+    <label class="any">
+      <lib-chain-logo [logo]="everyChain" class="any-logo" />
+      <span class="any-text">
+        <span class="any-title">{{ 'catalog.supermarket.all' | rokuT }}</span>
+        <span class="any-detail">
+          {{ 'catalog.supermarket.allDetail' | rokuT }}
+        </span>
+      </span>
+      <input
+        (change)="chooseAll()"
+        [checked]="pickedChain === null"
+        class="any-radio"
+        name="catalog-supermarket-all"
+        type="radio"
+      />
+    </label>
+  </div>
 
-  <lib-shop-picker
-    (about)="openShop($event)"
-    (anyChosen)="chooseAny()"
-    (chosen)="openChain($event)"
-    (picked)="pick($event)"
-    (queried)="onQuery($event)"
-    [anyRow]="anyRow()"
-    [chains]="chains()"
-    [groups]="groups()"
-    [matchCount]="matchCount()"
-    [matches]="matches()"
-    [near]="near()"
-    [openKey]="openKey"
-    [pickedChain]="pickedChain"
-    [pickedId]="pickedId"
-    [query]="query()"
-    [recent]="recent()"
-    [searchPending]="searchPending()"
-    [state]="state()"
-    fieldId="catalog-shop-search"
-  />
+  @switch (state()) {
+    @case ('loading') {
+      <p aria-live="polite" class="note" role="status">
+        <lib-spinner-icon class="spinner" />
+        {{ 'shops.loading' | rokuT }}
+      </p>
+    }
+    @case ('failed') {
+      <p class="note" role="alert">{{ 'shops.error.load' | rokuT }}</p>
+    }
+    @default {
+      <!--
+        One big button per chain, two to a row, with its logo and its count. A
+        press is the answer, and the chosen chain wears the tick.
+      -->
+      <lib-franchise-buttons
+        (chosen)="chooseChain($event)"
+        [chains]="chains()"
+        [openKey]="pickedChain"
+      />
+    }
+  }
 </main>
