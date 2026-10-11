@@ -1,0 +1,221 @@
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'list.history.back' | rokuT"
+  [title]="'list.history.title' | rokuT"
+/>
+
+<main class="page">
+  @if (history(); as view) {
+    <div class="content">
+      <p class="where">
+        @if (view.listName; as list) {
+          {{ 'list.history.where' | rokuT: { line: view.content, list: list } }}
+        } @else {
+          {{ view.content }}
+        }
+      </p>
+
+      <!--
+        Two scopes, as two buttons that say which one is pressed. Absent on a line
+        with no products, which has one history and nothing to choose.
+      -->
+      @if (view.scopes.length > 1) {
+        <div
+          [attr.aria-label]="'list.history.scope' | rokuT"
+          class="scopes"
+          role="group"
+        >
+          @for (scope of view.scopes; track scope) {
+            <button
+              (click)="choose(scope)"
+              [attr.aria-pressed]="view.scope === scope"
+              class="scope"
+              type="button"
+            >
+              {{ 'list.history.' + scope | rokuT }}
+            </button>
+          }
+        </div>
+      }
+
+      @if (view.facts; as facts) {
+        <ul class="facts">
+          @if (facts.times; as times) {
+            <li>
+              <span class="fact-value">
+                @if (times.more) {
+                  {{
+                    'list.history.timesMore' | rokuT: { count: times.count }
+                  }}
+                } @else {
+                  {{ 'list.history.times' | rokuT: { count: times.count } }}
+                }
+              </span>
+              <span class="fact-label">
+                @if (facts.since; as since) {
+                  {{ 'list.history.since' | rokuT: { month: since } }}
+                } @else {
+                  {{ 'list.history.bought' | rokuT }}
+                }
+              </span>
+            </li>
+          }
+          @if (facts.everyDays; as every) {
+            <li>
+              <span class="fact-value">
+                @if (every.rough) {
+                  {{ 'list.detail.rateRough' | rokuT }}
+                } @else {
+                  {{ 'list.detail.rateValue' | rokuT: { days: every.days } }}
+                }
+              </span>
+              <span class="fact-label">{{
+                'list.history.between' | rokuT
+              }}</span>
+            </li>
+          }
+          @if (facts.lastPaid; as paid) {
+            <li>
+              <span class="fact-value">{{ paid }}</span>
+              <span class="fact-label">{{
+                'list.history.lastPaid' | rokuT
+              }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (view.loading) {
+      <div class="content" aria-busy="true">
+        <p class="visually-hidden">{{ 'list.history.loading' | rokuT }}</p>
+        <div aria-hidden="true" class="bones">
+          <span class="bone"></span>
+          <span class="bone"></span>
+          <span class="bone"></span>
+        </div>
+      </div>
+    } @else if (view.months.length === 0) {
+      <div class="content">
+        <p class="empty">{{ 'list.history.empty' | rokuT }}</p>
+      </div>
+    } @else {
+      @for (month of view.months; track month.key) {
+        <section class="content month">
+          <h2 class="month-title">{{ month.label }}</h2>
+          <ul class="card">
+            @for (row of month.rows; track row.id) {
+              <li [class.is-reverted]="row.reverted" class="row">
+                <span class="day">{{ row.day }}</span>
+
+                <span class="what">
+                  <span
+                    [class.is-none]="row.outcome === 'NOT_AVAILABLE'"
+                    class="sentence"
+                  >
+                    @if (row.outcome === 'BOUGHT') {
+                      @if (row.mine) {
+                        {{
+                          'list.history.boughtYou'
+                            | rokuT: { count: row.quantity }
+                        }}
+                      } @else {
+                        {{
+                          'list.history.boughtBy'
+                            | rokuT
+                              : {
+                                  count: row.quantity,
+                                  who:
+                                    row.who ?? ('list.history.someone' | rokuT),
+                                }
+                        }}
+                      }
+                    } @else if (row.mine) {
+                      {{ 'list.history.noneYou' | rokuT }}
+                    } @else {
+                      {{
+                        'list.history.noneBy'
+                          | rokuT
+                            : {
+                                who:
+                                  row.who ?? ('list.history.someone' | rokuT),
+                              }
+                      }}
+                    }
+                  </span>
+
+                  @if (row.product; as product) {
+                    <span class="product">{{ product }}</span>
+                  }
+                  @if (row.listName; as list) {
+                    <span class="product">{{
+                      'list.history.onList' | rokuT: { list: list }
+                    }}</span>
+                  }
+                  @if (row.reverted) {
+                    <span class="product">{{
+                      'list.history.reverted' | rokuT
+                    }}</span>
+                  }
+                </span>
+
+                @if (row.price !== null) {
+                  <span class="price">
+                    <span aria-hidden="true">{{ row.price }}</span>
+                    <span class="visually-hidden">
+                      {{ row.price }}
+                      @if (row.unitPrice !== null) {
+                        ,
+                        {{
+                          'list.history.each'
+                            | rokuT
+                              : { count: row.quantity, price: row.unitPrice }
+                        }}
+                      }
+                    </span>
+                  </span>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (view.hasMore) {
+        <div class="content">
+          <button
+            (click)="older()"
+            [disabled]="loadingMore()"
+            class="older"
+            type="button"
+          >
+            {{ 'list.history.older' | rokuT }}
+          </button>
+        </div>
+      }
+    }
+  } @else {
+    @switch (status()) {
+      @case ('missing') {
+        <div class="content">
+          <p class="empty">{{ 'list.gone.unavailable' | rokuT }}</p>
+        </div>
+      }
+      @case ('failed') {
+        <div class="content">
+          <p class="empty">{{ 'list.page.failed' | rokuT }}</p>
+        </div>
+      }
+      @default {
+        <div class="content" aria-busy="true">
+          <p class="visually-hidden">{{ 'list.history.loading' | rokuT }}</p>
+          <div aria-hidden="true" class="bones">
+            <span class="bone"></span>
+            <span class="bone"></span>
+            <span class="bone"></span>
+          </div>
+        </div>
+      }
+    }
+  }
+</main>

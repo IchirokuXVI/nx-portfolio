@@ -206,6 +206,8 @@ function line(
     // would draw provenance headings over a fixture nothing syncs.
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     approvalStatus: 'APPROVED',
     // Nothing has ever happened to it, which is the honest default and the one that
     // draws no indicator. The helpers below are what say otherwise.

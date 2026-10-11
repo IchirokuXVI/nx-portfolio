@@ -749,6 +749,35 @@ export const AppShellRoutes: Route[] = [
            * panel over the list is a sheet and is addressed as one, so the two no
            * longer have to be told apart by a word.
            */
+          /**
+           * The two pages under a line (velista `0135`, section 11): its buy
+           * history, and where its products are changed.
+           *
+           * **Pages of their own and not children of the line page**, for the
+           * reason the line page is not a child of the list page: a child is drawn
+           * in its parent's outlet, over the parent, which is what a sheet does.
+           * Declared before the line page as the specific before the general. The
+           * line page's children all begin with `sheet`, so neither word can be
+           * taken by one of them.
+           */
+          {
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId/history',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.LineHistoryPage
+              ),
+          },
+          {
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId/products',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.LineProductsPage
+              ),
+          },
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',
             canMatch: [zoneIdGuard, listIdGuard],
@@ -758,6 +787,41 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.LinePage
               ),
             children: [
+              sheet({
+                // The three dots (velista `0135`, section 6): the rare acts on a
+                // line. It decides which rows to draw from the reader's own
+                // permissions, so it carries no guard.
+                path: 'menu',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineMenuSheet
+                  ),
+              }),
+              sheet({
+                path: 'name',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.RenameLineSheet
+                  ),
+              }),
+              sheet({
+                // Where the line is bought: one supermarket, or any (section 3.2).
+                path: 'supermarket',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineSupermarketSheet
+                  ),
+              }),
+              sheet({
+                // The same sheet the list opens, over this page. It closes onto
+                // the page it covers, which the flag tells it.
+                path: 'comments',
+                data: { overLinePage: true },
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.CommentsSheet
+                  ),
+              }),
               sheet({
                 // The one thing on either screen that discards the history, so it is
                 // confirmed here as well as from the list (section 5.3).

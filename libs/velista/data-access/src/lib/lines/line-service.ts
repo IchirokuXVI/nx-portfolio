@@ -127,6 +127,8 @@ export interface LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateResult>;

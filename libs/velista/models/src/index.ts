@@ -28,6 +28,8 @@ export * from './lib/home-view';
 export * from './lib/join-code';
 export * from './lib/limits';
 export * from './lib/line-detail-view';
+export * from './lib/line-history-view';
+export * from './lib/line-products';
 export * from './lib/list-view';
 export * from './lib/nearby-shops';
 export * from './lib/price-history';

@@ -49,6 +49,8 @@ function line(): Line {
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,

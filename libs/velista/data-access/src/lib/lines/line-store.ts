@@ -474,6 +474,8 @@ export class LineStore {
       // drawing them a beat late (backend plan 0070, section 9).
       productGroupId: null,
       groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
       position: this._nextPosition(listId),
       approvalStatus:
         approval.canDecide || approval.autoApproveLines
@@ -539,6 +541,8 @@ export class LineStore {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateOutcome> {
@@ -1535,6 +1539,8 @@ interface LineChanges {
   readonly quantity?: number;
   readonly itemIds?: readonly string[];
   readonly adoptItemIds?: readonly string[];
+  readonly favoriteItemId?: string | null;
+  readonly preferredSupermarketId?: string | null;
 }
 
 /**
@@ -1563,6 +1569,13 @@ function claimedBy(changes: LineChanges): readonly string[] {
   if (changes.adoptItemIds !== undefined) {
     fields.push('groupItemIds');
   }
+  // A set that drops the favourite clears it, so a write of the set claims it too.
+  if (changes.favoriteItemId !== undefined || changes.itemIds !== undefined) {
+    fields.push('favoriteItemId');
+  }
+  if (changes.preferredSupermarketId !== undefined) {
+    fields.push('preferredSupermarketId');
+  }
   return [...new Set(fields)];
 }
 
@@ -1586,6 +1599,10 @@ function applyLineChanges(line: Line, changes: LineChanges): Line {
     ...(changes.content === undefined ? {} : { content: changes.content }),
     ...(changes.quantity === undefined ? {} : { quantity: changes.quantity }),
     ...(changes.itemIds === undefined ? {} : { itemIds: changes.itemIds }),
+    favoriteItemId: favoriteAfter(line, changes),
+    ...(changes.preferredSupermarketId === undefined
+      ? {}
+      : { preferredSupermarketId: changes.preferredSupermarketId }),
     // Provenance moves one way and nothing here moves it back (backend plan 0070,
     // section 3). A product that left the set leaves this too: it is not on the line
     // for anybody to own.
@@ -1597,6 +1614,19 @@ function applyLineChanges(line: Line, changes: LineChanges): Line {
               !adopting.has(itemId) && (stillOn === null || stillOn.has(itemId))
           ),
   };
+}
+
+/**
+ * The favourite as the server will leave it (backend plan 0199, section 2): the
+ * one this write names, and never a product the same write takes off the line.
+ */
+function favoriteAfter(line: Line, changes: LineChanges): string | null {
+  const wanted =
+    changes.favoriteItemId === undefined
+      ? line.favoriteItemId
+      : changes.favoriteItemId;
+  const itemIds = changes.itemIds ?? line.itemIds;
+  return wanted !== null && itemIds.includes(wanted) ? wanted : null;
 }
 
 /** Whether a failure is the gateway refusing a write for lack of access. */

@@ -54,6 +54,8 @@ function line(id: string, listId: string, overrides: Partial<Line> = {}): Line {
     itemIds: ['milk'],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,

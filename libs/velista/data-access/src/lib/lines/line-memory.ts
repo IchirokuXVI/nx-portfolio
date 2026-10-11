@@ -194,6 +194,8 @@ export class LineMemory implements LineServiceI {
       // subscription no server would agree exists.
       productGroupId: null,
       groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
       // One past the highest, never `length`. Deletes leave gaps and a list whose
       // positions collide is the bug rule L4 is about.
       position: existing.reduce((top, l) => Math.max(top, l.position), 0) + 1,
@@ -240,6 +242,8 @@ export class LineMemory implements LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateResult> {
@@ -279,6 +283,15 @@ export class LineMemory implements LineServiceI {
       throw memoryFailure('validation_failed', 400);
     }
 
+    // The favourite is one of the products, as the set stands after this same
+    // update (backend plan 0199, section 2, rule 1).
+    if (
+      typeof changes.favoriteItemId === 'string' &&
+      !(changes.itemIds ?? line.itemIds).includes(changes.favoriteItemId)
+    ) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
     this._maybeFail();
 
     const other = this._collision(line, changes.content);
@@ -310,6 +323,12 @@ export class LineMemory implements LineServiceI {
       // product off the catalog's side and nothing puts it back. A product removed
       // from the set leaves that side too, because it is no longer on the line.
       groupItemIds: adopted(current, changes),
+      // A favourite that leaves the set is cleared in the same write (rule 2).
+      favoriteItemId: keptFavorite(current, changes),
+      preferredSupermarketId:
+        changes.preferredSupermarketId === undefined
+          ? current.preferredSupermarketId
+          : changes.preferredSupermarketId,
       ...(current.approvalStatus === 'REJECTED'
         ? {
             approvalStatus: 'PENDING' as LineApprovalStatus,
@@ -878,6 +897,19 @@ function order(lines: readonly Line[], by: LineOrder): readonly Line[] {
   return lines;
 }
 
+/** The favourite after a write: the one named, if the set still holds it. */
+function keptFavorite(
+  line: Line,
+  changes: { itemIds?: readonly string[]; favoriteItemId?: string | null }
+): string | null {
+  const wanted =
+    changes.favoriteItemId === undefined
+      ? line.favoriteItemId
+      : changes.favoriteItemId;
+  const itemIds = changes.itemIds ?? line.itemIds;
+  return wanted !== null && itemIds.includes(wanted) ? wanted : null;
+}
+
 /**
  * The catalog's side of a line after one edit (backend plan 0070, section 3).
  *
@@ -892,6 +924,8 @@ function adopted(
   changes: {
     itemIds?: readonly string[];
     adoptItemIds?: readonly string[];
+    favoriteItemId?: string | null;
+    preferredSupermarketId?: string | null;
   }
 ): readonly string[] {
   const adopting = new Set(changes.adoptItemIds ?? []);

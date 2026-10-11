@@ -1,0 +1,198 @@
+// The products of a line, as cards that scroll sideways (velista 0135, section 3).
+:host {
+  display: block;
+}
+
+// The row scrolls and shows no bar. The padding is the page's own gutter, so the
+// first card starts where the heading above it starts and the last can scroll clear
+// of the edge. The page gives this element the full width of the column.
+.rail {
+  display: flex;
+  gap: var(--app-space-4);
+  margin: 0;
+  padding: 0 var(--app-space-5);
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex: none;
+  inline-size: var(--app-line-product-card-width);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+// The whole card opens the product. A column from the top, so a card with fewer
+// lines than its neighbour does not centre what it has.
+.open {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  inline-size: 100%;
+  padding: var(--app-space-4);
+  border: none;
+  border-radius: var(--app-card-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.picture {
+  display: grid;
+  place-items: center;
+  block-size: var(--app-line-product-card-image);
+  overflow: hidden;
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.glyph {
+  font-size: var(--app-icon-lg);
+  color: var(--app-text-muted);
+}
+
+// Two lines at most, and room for two on every card, so the prices line up along
+// the row whatever the names are.
+.name {
+  display: -webkit-box;
+  min-block-size: calc(var(--app-text-sm) * 1.3 * 2);
+  margin-block-start: var(--app-space-4);
+  overflow: hidden;
+  font-size: var(--app-text-sm);
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.detail {
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.price {
+  margin-block-start: var(--app-space-4);
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+// No price, said in words where the price goes, and quiet: nothing is wrong.
+.no-price {
+  margin-block-start: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+  color: var(--app-text-muted);
+}
+
+.caption {
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.word {
+  margin-block-start: var(--app-space-2);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--app-status-success-fg);
+}
+
+// The star, over the corner of the picture. A full touch target, with the glyph in
+// its middle. The favourite takes the quiet action colour, which is the colour of
+// every choice a person made on this page.
+.star {
+  position: absolute;
+  inset-block-start: var(--app-space-3);
+  inset-inline-end: var(--app-space-3);
+  display: grid;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-size: var(--app-icon-md);
+  cursor: pointer;
+
+  &.is-on {
+    color: var(--app-action-quiet-fg);
+  }
+
+  &.is-mark {
+    cursor: default;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The price while it is read: a bone where the number goes.
+.bone {
+  display: block;
+  inline-size: 50%;
+  block-size: calc(var(--app-text-lg) * 1.2);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bone {
+    animation: pulse var(--app-motion-slow) var(--app-motion-ease) infinite
+      alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.55;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

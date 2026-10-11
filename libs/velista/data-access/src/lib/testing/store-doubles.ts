@@ -893,6 +893,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         // control on a subscription no server would agree exists.
         productGroupId: null,
         groupItemIds: [],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
         position: lines().length + 1,
         approvalStatus: addedApproval,
         boughtCount: 0,
@@ -924,6 +926,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         quantity?: number;
         itemIds?: readonly string[];
         adoptItemIds?: readonly string[];
+        favoriteItemId?: string | null;
+        preferredSupermarketId?: string | null;
         confirmMerge?: boolean;
       }
     ) => {
@@ -1000,6 +1004,12 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
+                  ...(patch.favoriteItemId === undefined
+                    ? {}
+                    : { favoriteItemId: patch.favoriteItemId }),
+                  ...(patch.preferredSupermarketId === undefined
+                    ? {}
+                    : { preferredSupermarketId: patch.preferredSupermarketId }),
                   // Provenance moves one way (backend plan 0070, section 3), and the
                   // double has to move it: the feedback for `Keep` is the chip
                   // changing cluster, so a double that left this alone would let a

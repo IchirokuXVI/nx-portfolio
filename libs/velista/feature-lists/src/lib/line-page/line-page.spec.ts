@@ -104,6 +104,8 @@ function line(overrides: Partial<Line> = {}): Line {
     itemIds: ['item-milk-a'],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,
@@ -643,6 +645,8 @@ describe('LinePage', () => {
         itemIds: ['item-milk-a', 'item-oat'],
         productGroupId: MILK_GROUP.id,
         groupItemIds: ['item-milk-a'],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
       });
 
     it('sends adoptItemIds alone and moves the chip to the other cluster', async () => {

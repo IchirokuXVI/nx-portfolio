@@ -398,7 +398,12 @@ export class CommentsSheet {
     }
   }
 
-  /** Cancel, Escape, the scrim, and the back button all arrive here. */
+  /**
+   * Cancel, Escape, the scrim, and the back button all arrive here.
+   *
+   * The sheet covers the list, or the line page (velista `0135`, section 2). The
+   * fallback is the page it covers, which the route says.
+   */
   async dismiss(): Promise<void> {
     await this._sheet.dismiss(
       appPath(
@@ -407,7 +412,10 @@ export class CommentsSheet {
         'zones',
         this.zoneId(),
         'lists',
-        this.listId()
+        this.listId(),
+        ...(this._route.snapshot.data['overLinePage'] === true
+          ? ['lines', this.lineId()]
+          : [])
       )
     );
   }

@@ -407,6 +407,11 @@ export function toLine(raw: unknown): Line | null {
     // this over a missing field would read as the line having been dealt with.
     claimed: raw['claimed'] === true,
     claimedByUserId: nullableStr(raw['claimedByUserId']),
+    // Both null on a server that predates backend `0199`, which is also what a
+    // line with no favourite and no supermarket carries, so the two need no
+    // distinction: the page draws no filled star and "Any".
+    favoriteItemId: nullableStr(raw['favoriteItemId']),
+    preferredSupermarketId: nullableStr(raw['preferredSupermarketId']),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather

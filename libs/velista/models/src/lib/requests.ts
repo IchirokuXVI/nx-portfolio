@@ -151,6 +151,13 @@ export interface UpdateLineRequest {
    * person and never back, so there is no field here that hands a product back.
    */
   readonly adoptItemIds?: readonly string[];
+  /**
+   * The favourite product of the line, or null to clear it (backend `0199`). It
+   * has to be one of the products the line holds after this same update.
+   */
+  readonly favoriteItemId?: string | null;
+  /** The supermarket of the line, a chain, or null for any (backend `0199`). */
+  readonly preferredSupermarketId?: string | null;
 }
 
 /**
