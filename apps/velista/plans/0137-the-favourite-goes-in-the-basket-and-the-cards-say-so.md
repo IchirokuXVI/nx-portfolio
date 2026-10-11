@@ -1,3 +1,5 @@
+> **PR:** [#692](https://github.com/IchirokuXVI/nx-portfolio/pull/692)
+
 # 0137: the favourite goes in the basket, and the cards say so
 
 > Asked for by the owner on 2026-10-11, after plan `0135` was built (PR #690): "Add an
