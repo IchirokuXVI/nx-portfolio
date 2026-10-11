@@ -79,7 +79,9 @@ Every statement below was read on `dev` at `6cced1bd`.
   (`basket.changes.entry.*`), then who, then `basket.changes.entry.inList`. `_who` in
   `changes-sheet.ts` answers "You", a name, or "Someone".
 - **An unknown kind of change is drawn** with `basket.changes.entry.unknown`.
-- **After backend `0203`**: a row and an entry can have the state `BOUGHT_ELSEWHERE`. A
+- **After backend `0203`**: a row and an entry can have the state `BOUGHT_ELSEWHERE`. The
+  note of a row is `BOUGHT_ON_ANOTHER_BASKET` for a buy through another shopping list and
+  `BOUGHT_ON_THE_LIST` for a buy on the zone list page. A
   change can have the kind `BOUGHT` or `BUY_REVERTED`, and `origin`, which is
   `{ kind: 'ANOTHER_BASKET', owner }`, `{ kind: 'LIST' }` or null. A `REMOVED` row can
   arrive with no mark.
@@ -108,9 +110,9 @@ Every statement below was read on `dev` at `6cced1bd`.
 
 ### Constraints
 
-- **Rule D4.** The new state, the two kinds and `origin` are mapped from `unknown` into
-  the models and enums of velista. A missing `origin` is null. An unknown state keeps the
-  fallback of today.
+- **Rule D4.** The new state, the new note, the two kinds and `origin` are mapped from
+  `unknown` into the models and enums of velista. A missing `origin` is null. An unknown
+  state or note keeps the fallback of today.
 - **No number is computed here that the server sent.** This plan removes a sum. It adds
   none.
 - **No clock on the client.** A row leaves when a read no longer holds it.
@@ -138,8 +140,10 @@ Every statement below was read on `dev` at `6cced1bd`.
   pass.
 - A browser walk at 390 pixels, in English and Spanish, with two accounts on one slot,
   each with the shopping list open. Put the screenshots in the pull request:
-  1. A buys a product to zero. The row of B is crossed out with the new words, the count
-     of B drops by one row, the banner counts one change, and the sheet names A.
+  1. A buys a product to zero. The row of B is crossed out with "Bought from another
+     shopping list" on one line, the count of B drops by one row, the banner counts one
+     change, and the sheet names A. Then A buys another product on the zone list page,
+     and the row of B says "Bought from the list".
   2. A buys one of three. The row of B asks for two and carries the mark of a change.
   3. A takes the buy back. The row of B asks for three again.
   4. B buys two of three and A buys the last. The row of B is done and reads "2 of 2".
@@ -152,8 +156,19 @@ Every statement below was read on `dev` at `6cced1bd`.
 A row with the state `BOUGHT_ELSEWHERE` is drawn with the template of a `REMOVED` row:
 the name with a strike, and one line of words under it.
 
-- **The words**: "Already bought" and "Ya está comprado". They replace "No longer on the
-  list" for this state only. The row does not say who or where. The changes sheet does.
+- **The words say where it was bought**, as the owner asked on 2026-10-11. They replace
+  "No longer on the list" for this state only, and they come from the note of the row:
+
+  | Note | English | Spanish |
+  | --- | --- | --- |
+  | `BOUGHT_ON_ANOTHER_BASKET` | "Bought from another shopping list" | "Comprado desde otra lista de la compra" |
+  | `BOUGHT_ON_THE_LIST` | "Bought from the list" | "Comprado desde la lista" |
+  | any other note | "Already bought" | "Ya está comprado" |
+
+  The row does not say who. The changes sheet does.
+- **The words stay on one line at 390 pixels** in both languages, beside a long product
+  name. If they do not, use "Bought from another list" and "Comprado desde otra lista",
+  and say so in the pull request.
 - **Its place** is the place of a `REMOVED` row: last, through every filter. Read
   `compose-basket-view.ts` and add the state beside every test of `'REMOVED'` there.
 - **It has no circle and no reel.** Nothing on it buys or takes back.
@@ -163,7 +178,7 @@ the name with a strike, and one line of words under it.
   is the list of "Asked for on N lists" with its quantities, and nothing else.
 - An entry with the state `BOUGHT_ELSEWHERE` inside a row that still asks for something
   (two lists ask for one product, and one of them was bought elsewhere) is drawn in the
-  sheet with a quantity of 0 and the same words.
+  sheet with a quantity of 0 and "Already bought". An entry carries no note.
 - The name of a product row comes from the product, as plan `0139` draws it. The strike
   applies to it the same way.
 
@@ -237,8 +252,8 @@ row always has a mark, and fix it.
   malformed one.
 - Models: the total does not price `boughtElsewhere`. `compose-basket-view` puts a
   `BOUGHT_ELSEWHERE` row where a `REMOVED` row goes and counts it nowhere.
-- The row: the strike and "Already bought" for the new state, no circle and no reel, no
-  caption on a row that only went down, "2 of 2" on the mixed row.
+- The row: the strike and the words of each of the three notes for the new state, no
+  circle and no reel, no caption on a row that only went down, "2 of 2" on the mixed row.
 - The sheet of a row: the quantity can be raised where `demandEditable` is true, and
   nothing buys or takes back.
 - `ChangeEntry`: each sentence, each line of `origin`, in both languages. A guest gets

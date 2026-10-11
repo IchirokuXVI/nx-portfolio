@@ -91,6 +91,9 @@ it.
   from the changes that are still marked for the viewer: unseen, or acknowledged less
   than `changeMarkWindowMs` (ten minutes) ago. `removedRows()` turns each group into a row
   with the state `REMOVED`, no entries, and no part in the progress.
+- **One note covers both kinds of outside buy.** `noteOf` answers
+  `BOUGHT_ON_ANOTHER_BASKET` for a buy through another basket and for a buy on the list
+  page alike.
 - **The changes view names a person two ways.** `actorViewOf` serves `{ participantId }`
   for a change made through the reading basket, `{ userId }` only beside a `listId` that
   the reader was served, and null otherwise. A guest is served no `listId`.
@@ -222,8 +225,14 @@ as today. The own buys of the reading basket are in it too, served with their pa
 - A row of several lines is `BOUGHT_ELSEWHERE` only when nothing is left on any of them
   and this basket bought none of them.
 - `boughtElsewhere` stays on the row and on the entry, as a number that no count uses.
-- The note `BOUGHT_ON_ANOTHER_BASKET` and its `noteAt` stay as they are. A client is free
-  to draw nothing for it.
+- **The note says which kind of outside buy it was.** The owner asked on 2026-10-11 that
+  the row says "Bought from another shopping list" when that is the cause.
+  `BOUGHT_ON_ANOTHER_BASKET` now means that the newest outside buy of the row was made
+  through a basket. A new value, `BOUGHT_ON_THE_LIST`, means that it was made on the zone
+  list page. `noteAt` is the time of that buy in both cases. `SKIPPED_EARLIER` still wins
+  over both.
+- `BASKET_ELSEWHERE_SQL` therefore answers one more column for each line: whether its
+  newest outside buy has a basket. A boolean, never the id.
 
 A `BOUGHT_ELSEWHERE` row is not a `REMOVED` row. Its lines are covered, it has its
 entries, and a change of demand on it works by the rule that exists (`demandEditable`).
@@ -318,8 +327,10 @@ specs on a real Postgres for everything below. Two `LIVE` baskets, A and B, over
    From `DONE` with own buys it becomes `PARTLY`.
 5. A second participant of B buys a line. B reads an own buy, with `touchedBy`, no mark
    and no unseen change.
-6. A buy on the list page gives B the row of test 1 and a change with `origin.kind`
-   `LIST`. The basket of the buyer is shown the change too.
+6. A buy on the list page gives B the row of test 1 with the note `BOUGHT_ON_THE_LIST`
+   and a change with `origin.kind` `LIST`. The basket of the buyer is shown the change
+   too. A later buy of the same line through A turns the note into
+   `BOUGHT_ON_ANOTHER_BASKET`.
 7. The same account owns a `LIVE` and a `GENERATED` basket over one list. A buy through
    one is a change in the other.
 8. The changes view: a member who writes the list gets `origin.owner` as `{ userId }`. A
