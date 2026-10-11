@@ -1,0 +1,136 @@
+{
+  "title": "Velista: a list line shows its name and its product",
+  "lede": "Every row of a list has two lines: the name the household gave the line, with the price, and the product with its brand and its size. A line with no name shows the name of its product. A line with no product asks for one. The catalog opens to choose one product from a row, and to choose the whole set of products from the line page. Plans <code>0144</code> to <code>0146</code>, with backend <code>0206</code> behind them. Drawn on Day. Every product and price is a sample value. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "1. The list"
+    },
+    {
+      "file": "States.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 600,
+      "h": 830,
+      "title": "2. Every state of a row"
+    },
+    {
+      "file": "NameSheet.dc.html",
+      "x": 1150,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "3. Naming a line (from the sheet of a row, or the line page)"
+    },
+    {
+      "file": "PickOne.dc.html",
+      "x": 1620,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "4. From a row: the catalog, to choose one product"
+    },
+    {
+      "file": "LineHeading.dc.html",
+      "x": 0,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "5. The line page: Add a product on the heading"
+    },
+    {
+      "file": "LineNoName.dc.html",
+      "x": 470,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "6. A line with no name"
+    },
+    {
+      "file": "LineEmpty.dc.html",
+      "x": 940,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "7. A line with no product"
+    },
+    {
+      "file": "PickMany.dc.html",
+      "x": 1410,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "8. From the line page: the catalog, its products ticked and first"
+    },
+    {
+      "file": "PickManySearch.dc.html",
+      "x": 1880,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "9. While searching: tick to add, untick to remove, then Save"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "r1",
+      "x": 0,
+      "y": -470,
+      "w": 420,
+      "text": "RULE R1: TWO LINES ON EVERY ROW. Line 1 is the name of the line, with the price of one unit at its end. Line 2 is the product: its name, its brand and its size.\nA line with no name shows the name of its product on line 1, in the regular weight, and line 2 then holds only the brand and the size. Nothing on the row asks for a name."
+    },
+    {
+      "id": "r2",
+      "x": 470,
+      "y": -470,
+      "w": 420,
+      "text": "RULE R2: ONE PRODUCT FOR EACH LINE. A line with several products shows its favourite, or else its cheapest, and \"+2\" says two more will do. The star marks a favourite.\nRULE R3: ONLY A MISSING PRODUCT ASKS. The square holds a plus and line 2 says \"Choose a product\". Both open the catalog to choose one.\nRULE R4: A STATUS WORD ENDS LINE 2. A row never grows a third line."
+    },
+    {
+      "id": "n1",
+      "x": 1150,
+      "y": -470,
+      "w": 420,
+      "text": "RULE N1: THE NAME IS TYPED ON A SHEET. One field, Save and Cancel. It opens from the sheet of a row and from the line page. An empty field saved takes the name away, and the row shows the product name again."
+    },
+    {
+      "id": "p1",
+      "x": 1620,
+      "y": -470,
+      "w": 420,
+      "text": "RULE P1: FROM A ROW, THE CATALOG CHOOSES ONE. This is the page of plan 0140: the tools and the cards of the catalog tab, a radio on each card, and a bar at the foot that names the line. \"Use this product\" gives the line its first product."
+    },
+    {
+      "id": "l1",
+      "x": 0,
+      "y": 940,
+      "w": 420,
+      "text": "RULE L1: \"CHANGE\" ON THE HEADING OPENS THE CATALOG. The products of a line are added and removed in one place. The cards stay as plan 0135 and plan 0137 draw them."
+    },
+    {
+      "id": "l2",
+      "x": 470,
+      "y": 940,
+      "w": 420,
+      "text": "RULE L2: A LINE WITH NO NAME SAYS SO ONCE. The title is the name of its product, and \"Add a name\" under the list opens the sheet of rule N1.\nRULE L3: A LINE WITH NO PRODUCT keeps its heading and one sentence. \"Choose a product\" opens the same catalog as Change."
+    },
+    {
+      "id": "p2",
+      "x": 1410,
+      "y": 940,
+      "w": 420,
+      "text": "RULE P2: FROM THE LINE PAGE, THE CATALOG HOLDS THE WHOLE SET. The products of the line arrive ticked. With an empty search they come first, under \"On this line\". A tick adds a product and a press on a ticked one removes it."
+    },
+    {
+      "id": "p3",
+      "x": 1880,
+      "y": 940,
+      "w": 420,
+      "text": "RULE P3: A SEARCH SHOWS A PRODUCT OF THE LINE ONLY WHERE IT FINDS IT, in the order of the results.\nRULE P4: SAVE IS ALWAYS THE SAME BUTTON. The bar counts \"2 products added\" and \"1 product removed\". With no change the bar names the line, and Save closes the page."
+    }
+  ]
+}
