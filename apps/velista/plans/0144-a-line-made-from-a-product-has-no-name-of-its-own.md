@@ -11,13 +11,13 @@
 > (`NameSheet.dc.html`, `LineNoName.dc.html`), published at
 > https://claude.ai/artifact/Jg7JBG2LdNNj4FFaM1w6Ve.
 >
-> **Build backend plan `0206` section 1 first.** If `LineView` has no `named` on your base
+> **Build backend plan `0207` section 1 first.** If `LineView` has no `named` on your base
 > branch, say so and stop.
 >
 > Plan `0145` draws the row of the list with the name this plan gives. Plan `0146` is the
 > catalog that chooses the products of a line.
 >
-> Prerequisite reading: backend `0206` section 1, velista `0135` sections 3 and 5 (the
+> Prerequisite reading: backend `0207` section 1, velista `0135` sections 3 and 5 (the
 > line page, its menu and its rename sheet), `0083` (the sheet of a row edits the line),
 > `0117` (one field finds and adds), `0134` section 14 (how the catalog adds), the sheet
 > rule and the back rule in `CLAUDE.md`,
@@ -60,7 +60,7 @@ Every statement below was read on `dev` at `6cced1bd`.
   merge question on `line_merge_required`.
 - **The menu of the line page** has Rename and Delete (`line-menu-sheet.ts:96`).
 - **The sheet of a row** on the list page also renames (`line-detail-sheet.ts:669`).
-- **After backend `0206`**: `LineView` has `named`. An add accepts `named`. A
+- **After backend `0207`**: `LineView` has `named`. An add accepts `named`. A
   `PATCH /v1/lines/:id` accepts `named`, and a write of `content` with no flag names the
   line. A line with no product is always named.
 
@@ -140,7 +140,7 @@ was just made holds one product.
 ## 2. A line that was named by the old app
 
 Before this plan, every line made from a product got the name of that product as its name.
-The backend marks all of them as named (backend `0206` section 1.4).
+The backend marks all of them as named (backend `0207` section 1.4).
 
 So the function of section 1 treats a named line as **not named** when its `content` is
 the name of one of its products. The comparison folds both texts (no accents, lower case,
@@ -162,7 +162,7 @@ Each of these sends `named: false` with the `content` and the `itemIds` it sends
 
 Typed text and a line the assistant makes send no flag. They are named.
 
-The in-memory line service (`line-memory.ts`) keeps the two rules of backend `0206`
+The in-memory line service (`line-memory.ts`) keeps the two rules of backend `0207`
 section 1.2, so the specs that run on it see what the server does.
 
 ## 4. The name sheet
@@ -234,4 +234,4 @@ under the field, "Add a name", and the accessible name of the menu row.
 
 - The row of the list (plan `0145`).
 - A name on the rows of the shopping list. Velista plan `0139` makes those rows products.
-- A change of `content` when the products of a line change (backend `0206` section 4).
+- A change of `content` when the products of a line change (backend `0207` section 4).

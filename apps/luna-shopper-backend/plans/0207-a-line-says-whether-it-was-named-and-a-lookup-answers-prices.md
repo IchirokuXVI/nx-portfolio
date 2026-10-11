@@ -1,4 +1,4 @@
-# 0206: a line says whether it was named, and a lookup answers prices
+# 0207: a line says whether it was named, and a lookup answers prices
 
 > Asked for by the owner on 2026-10-11, for the rows of a list in velista: "List lines will
 > show always two lines: user assigned label, [and] product name, brand, format, price."

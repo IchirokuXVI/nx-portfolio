@@ -205,7 +205,7 @@ Artboards `PickMany.dc.html` and `PickManySearch.dc.html`. Route
 - **The cap**: a tick that would pass `LINE_ITEM_SET_MAX` is refused, with the sentence
   the products page has today.
 - **An empty set is allowed.** The line then has no product, and velista `0144` and
-  backend `0206` make it a named line.
+  backend `0207` make it a named line.
 - **The favourite**: a set that no longer holds the favourite of the line sends
   `favoriteItemId: null` in the same write.
 - Loading, no result and a failed read use the states of the catalog tab.

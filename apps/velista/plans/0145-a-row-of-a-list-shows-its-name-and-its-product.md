@@ -16,7 +16,7 @@
 > (`Main.dc.html`, `States.dc.html`), published at
 > https://claude.ai/artifact/Jg7JBG2LdNNj4FFaM1w6Ve.
 >
-> **Build velista plan `0144` and backend plan `0206` section 2 first.** If `Line` has no
+> **Build velista plan `0144` and backend plan `0207` section 2 first.** If `Line` has no
 > `named`, or the lookup accepts no `prices`, on your base branch, say so and stop.
 >
 > **Four points of this plan are mine and wait for the owner**: the rows lose their card
@@ -24,7 +24,7 @@
 > (section 4), the number in the header (section 6), and the size of the target of "Choose
 > a product" (section 5).
 >
-> Prerequisite reading: velista `0144`, backend `0206` section 2, velista `0043` (the line
+> Prerequisite reading: velista `0144`, backend `0207` section 2, velista `0043` (the line
 > is a quantity: the reel and the indicators), `0082` (the filter and the search of a
 > list), `0088` and `0089` (trips and due rows), `0130` (one header), `0137` section 2 (the
 > order of the cards of a line), `0132` (what the shopping list costs), backend `0201`
@@ -72,7 +72,7 @@ Every statement below was read on `dev` at `6cced1bd`.
 - **The header of a list** says "7 of 12 pending" over a bar (`list-header.html`).
 - **The accessible name of a row** is its name, its detail and its quantity
   (`line-row.ts:275`).
-- **After backend `0206`**: the lookup accepts `prices: true` and answers the best offer
+- **After backend `0207`**: the lookup accepts `prices: true` and answers the best offer
   of each product and its price at each chain, at the scopes of the reader.
 - **After velista `0144`**: one function answers the name to draw for a line, and says
   whether a person named it.
