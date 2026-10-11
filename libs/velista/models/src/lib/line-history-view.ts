@@ -59,16 +59,33 @@ export function groupHistoryByMonth(
   return months;
 }
 
-/** "September", or "September 2025" for a month of another year. */
+/**
+ * "September", or "September 2025" for a month of another year, as a heading.
+ * Spanish writes a month in lower case, and a heading starts with a capital.
+ */
 export function monthLabel(at: Date, locale: string, now: Date): string {
+  const text = monthName(at, locale, now);
+  let first = text.charAt(0);
+  try {
+    first = first.toLocaleUpperCase(locale);
+  } catch {
+    // A tag `Intl` refuses. The fallback of `monthName` starts with a digit.
+    first = first.toUpperCase();
+  }
+  return first + text.slice(1);
+}
+
+/**
+ * The same month as the language writes it inside a sentence: "since October",
+ * "desde octubre".
+ */
+export function monthName(at: Date, locale: string, now: Date): string {
   const sameYear = at.getFullYear() === now.getFullYear();
   try {
-    const text = new Intl.DateTimeFormat(
+    return new Intl.DateTimeFormat(
       locale,
       sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' }
     ).format(at);
-    // Spanish writes a month in lower case, and a heading starts with a capital.
-    return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
   } catch {
     return at.toISOString().slice(0, 7);
   }

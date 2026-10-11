@@ -3,7 +3,7 @@ import {
   dayOfMonth,
   formatMinorMoney,
   groupHistoryByMonth,
-  monthLabel,
+  monthName,
   toSettlementRow,
   type CatalogItem,
   type HistoryScope,
@@ -143,7 +143,7 @@ function factsOf(
     // Only a history read to its end knows where it starts.
     since: input.hasMore
       ? null
-      : monthLabel(oldest.settledAt, input.locale, input.now),
+      : monthName(oldest.settledAt, input.locale, input.now),
     everyDays:
       estimate === null
         ? null

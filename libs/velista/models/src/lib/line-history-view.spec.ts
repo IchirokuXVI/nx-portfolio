@@ -2,6 +2,7 @@ import {
   dayOfMonth,
   groupHistoryByMonth,
   monthLabel,
+  monthName,
   type LineHistoryRowVm,
 } from './line-history-view';
 
@@ -68,6 +69,14 @@ describe('monthLabel', () => {
     expect(
       monthLabel(new Date(2026, 8, 5), 'not a locale', new Date(2026, 9, 1))
     ).toBe('2026-09');
+  });
+});
+
+describe('monthName', () => {
+  it('leaves a Spanish month in lower case, for the middle of a sentence', () => {
+    expect(monthName(new Date(2026, 8, 5), 'es', new Date(2026, 9, 1))).toBe(
+      'septiembre'
+    );
   });
 });
 
