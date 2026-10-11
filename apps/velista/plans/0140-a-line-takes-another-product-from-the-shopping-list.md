@@ -38,6 +38,26 @@
 > `libs/velista/data-access/src/lib/catalog/group-members.ts` and
 > `libs/velista/feature-shell/src/lib/routes.ts`.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #693 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right.
+
+1. **Section 3 makes the catalog page "a child route under the change sheet route". A
+   page cannot go there.** No page can take a `sheet` segment, and `routes.spec.ts`
+   ("gives no page a path that could be read as a sheet") fails for it. This plan requires
+   that spec to pass. Declare the page outside the marker. Velista `0146` (pull request
+   #696) describes the same page and keeps it outside, and the page that the two plans
+   share follows that plan.
+2. **The supermarket and category selectors are pages of their own**
+   (`catalog/supermarket`, `catalog/categories`, `catalog/categories/:parentSlug` in
+   `routes.ts`), and they return to `/catalog`. State how they return to the page that
+   chooses.
+3. **Section 4 draws a row "under the chosen product on this device"** for the checkbox
+   that is off with no buy yet. Core merges the rows, so the client must split a row and
+   merge it again by itself. `BasketStore.choose` (`basket-store.ts`) has `rowKey` as its
+   key, not a line. State how the store holds a choice for one line.
+
 ## Brief for the agent
 
 ### Objective

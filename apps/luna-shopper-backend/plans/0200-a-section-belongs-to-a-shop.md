@@ -24,6 +24,46 @@ chain. A shop with no selection inherits every section of the chain. This plan m
 shop the owner. A chain has no sections, a product has no pin, and a shop with no sections
 of its own has none.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #693 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right. A point marked **owner**
+needs his decision first: ask, and do not choose.
+
+1. **The `check.sh` of section 6 refuses the deploy that creates its own table.**
+   `k8s/release-tasks/run-release-tasks.sh` runs `check.sh` in the check phase and in the
+   pre phase. Both come before `helm upgrade`, which runs the migration.
+   `k8s/release-tasks/README.md` says that a failed check stops the deploy, and that a
+   check passes where there is nothing to change (no database pod, no table). A check that
+   refuses when `shop_sections` does not exist thus stops the first deploy that carries
+   the migration and the task together, on staging and on the one `PRODUCTION_RELEASE`.
+   `check.sh` must pass when the table is absent and keep the ceiling on rows. The test
+   that each selection has a copy belongs in `post.sh`. The other way is to ship the task
+   one release after the migration. **Owner:** which of the two.
+2. **A row with no copy refuses for good.** An operator can delete a section (back office
+   `0063`), or a walk can drop one, between the migration and the task. A row of
+   `location_sections` then has no copy by shop and slug. State what the task does with
+   that row.
+3. **Three places outside the stated scope break.**
+   - `apps/velista-luna-e2e/src/support/api.ts` calls `GET` and `POST` on
+     `/v1/admin/catalog/supermarkets/:id/sections`, which section 4 removes.
+     `aisles.spec.ts` seeds through them, and that suite gates the staging deploy.
+   - `catalog/src/app/catalog/category.service.ts` checks `section_categories` and maps
+     the constraint `fk_section_categories_category` to `CategoryInUseException`. After
+     the move, the delete of a category that a shop section covers meets a foreign key
+     that nothing maps. Stale rows in the old table also block a delete until task `0004`
+     runs.
+   - `SectionService.resolveWalkNames` and `matchWalkNames` (the public map read in
+     `shop-walk.service.ts`) match against `supermarket_sections`. Section 5 names only
+     `followWalk`.
+4. **Sections that a walk does not name.** Today they only leave the selection. With a
+   unique `position` they must be deleted, which loses the categories an operator gave
+   them, or moved after the named ones. **Owner:** which of the two.
+5. **A unique `(supermarketLocationId, position)` with a reorder by update** needs a
+   deferrable constraint, or a delete and an insert. Sections 1 and 3 name neither.
+6. **No error code is named** for the new `POST` or for the refusal of an id of another
+   shop.
+
 ## Brief for the agent
 
 ### Objective

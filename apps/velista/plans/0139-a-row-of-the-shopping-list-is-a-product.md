@@ -32,6 +32,18 @@
 > `libs/velista/feature-shopping-lists/src/lib/basket-page/`, `basket-row/`,
 > `settle-sheet/`, `row-entries/`.
 
+## Review of 2026-10-11: settle this before you build
+
+A review of pull request #693 checked this plan against the code on `dev`. It found one
+defect.
+
+**"Add it to another list" in section 3 fails for a list that holds the product at
+zero.** The page raises such a line with the demand route. `coveredLinesSql` in
+`core/src/app/baskets/basket-read.sql.ts` covers a line only when its quantity is above
+zero or it has a purchase in scope, and backend `0201` section 4 answers "Row not found"
+for a line that the basket does not cover. The same point is in the review section of
+backend `0201`. Do not build this flow until that plan says how such a line is raised.
+
 ## Brief for the agent
 
 ### Objective

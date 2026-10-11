@@ -34,6 +34,35 @@ A basket row is a group of lines that hold the same set of products, or the same
 they hold none. This plan makes a row the group of lines that count as the same product.
 Each line counts as one product. Every write names the lines it means.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #693 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right. A point marked **owner**
+needs his decision first: ask, and do not choose.
+
+1. **Core builds rows and progress in places that never get the picks of the gateway.**
+   Section 1 merges rows on a product that only the gateway can choose. `progressOf` in
+   `core/src/app/baskets/basket-rows.ts` counts rows, and these callers run with no
+   gateway read: `basket.service.ts` (the counts of a basket card),
+   `basket-live.service.ts` (`live/summary`), each write answer, and
+   `core/src/app/admin/admin-list.service.ts` (`openRows`, for the back office). For a
+   line at step 3 of section 1 these paths fall to step 4. They merge in another way and
+   report another total than the read. Section 5 has the same gap: "no entry in the row
+   of that product" needs picks that core does not hold. State what each path does: count
+   lines, or accept picks. **Owner:** which of the two.
+2. **A line at zero cannot be raised through the demand route.** Section 5 says the page
+   raises a line that exists, for a list that holds the product at zero.
+   `coveredLinesSql` in `core/src/app/baskets/basket-read.sql.ts` covers a line only when
+   its quantity is above zero or it has a purchase in scope. Section 4 answers "Row not
+   found" for a line that the basket does not cover. The flow "Add it to another list" of
+   velista `0139` section 3 thus fails for exactly the lists it is for.
+3. **An unknown `itemId` and a slow price read look the same.** Section 4 answers
+   `validation_failed` for an unknown item. Backend `0202` says that the price read never
+   fails a buy and gives it 750 ms. A timeout cannot tell unknown from slow, and core
+   cannot validate the id, because the item can be off the line.
+4. **Velista `0137` section 2 is cited for the price comparison.** That plan arrived with
+   pull request #692.
+
 ## Brief for the agent
 
 ### Objective

@@ -32,6 +32,34 @@ shop and the chain. Three things are missing: what the product was called, a pri
 shop is chosen and the page drew none, and a way to correct the product of the buys of a
 trip.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #693 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right.
+
+1. **"The chain is stored from the scope, also when no shop was chosen" is false, and so
+   is "This is a change".** `gateway/src/app/baskets/settle-price.service.ts` (`shopOf`,
+   `shopIn`) sets `supermarketId` only from a named shop. The constraint
+   `ck_line_settlements_location_scope` in
+   `core/src/app/db/migrations/1756003500000-SettlementChain.ts` forbids a chain with no
+   shop. A buy with no shop stores no chain today. Do not look for code that stores one.
+   The check that the context quotes is the older form with one clause. The live one has
+   two.
+2. **Section 1 copies "the name, the brand and the size".** `ItemView`
+   (`catalog.messages.ts`) has no size field. The size is `unitSize` with `defaultUnit`
+   and `packCount`, and `name` is localized. State which fields and which locale are
+   copied.
+3. **The rewrite of section 3 sets `revertedAt`.** `ck_line_settlements_revert` also
+   needs `revertedByParticipantId`. State who that participant is.
+4. **The price of section 3 is "read at the price scope of the old row" inside one core
+   transaction.** The gateway reads prices, so it needs a read of those rows first. The
+   plan does not state that read.
+5. **Section 3 names no error code** for a line that the basket does not cover or for an
+   unknown item.
+6. **`readAtShop` prices a buy at the quoted scope of a shop today**, for the settle of
+   the list page. "With no `priceScopeId` it does not ask the catalog" is true for the
+   basket path only.
+
 ## Brief for the agent
 
 ### Objective
