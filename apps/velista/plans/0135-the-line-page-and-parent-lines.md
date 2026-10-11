@@ -616,10 +616,8 @@ Open questions:
 3. **Where does a line go when it is bought and its parent is not?** This plan keeps it
    under its parent, with the bought mark that a row has today.
 
-4. **Is the supermarket of a line one for the list, or one for each person?** The
-   owner said "your preferred chain". This plan and backend `0199` keep it on the line,
-   so that everyone on the list sees it, because a line is what the household agreed to
-   buy. One for each person needs a table of its own and is a different backend plan.
+4. **Answered on 2026-10-11.** The supermarket is for the line, so that whoever shops
+   knows where to buy it. It is not one for each person.
 5. **Do the favourite and the supermarket change what the list costs?** The estimate
    of plan `0132` takes the cheapest product at the shops of the person. This plan does
    not change it. The basket does not read either field.
