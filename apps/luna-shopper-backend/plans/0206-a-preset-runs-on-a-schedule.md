@@ -16,6 +16,76 @@
 > `run-executor.service.ts`, `postal-code-discovery.store.ts` (the claim this plan copies) and
 > `postal-code-discovery.worker.ts` (the timer this plan copies).
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #695 checked this plan against the code on `dev`. The
+statements about that code hold. The defects are in the rules of sections 5 and 7. Where
+this section and a later section disagree, this section is right. A point marked
+**owner** needs his decision first: ask, and do not choose.
+
+1. **Section 5.1 says two things about which missed slot is judged.** Step 2 keeps the
+   old `nextRunAt` as the slot, which is the oldest slot that was missed. The next
+   paragraph says that several missed slots become one decision about the newest of
+   them. Take a schedule for each day at 03:00 and a pod that is down from Monday 02:00
+   to Wednesday 04:00. Step 2 judges Monday 03:00, which is 49 hours late, and writes
+   `SKIPPED_LATE`. The rule of 5.2 says that Wednesday 03:00, one hour late, runs. The
+   slot is the last slot at or before now. That needs a function that answers the
+   previous slot.
+2. **The retry of section 7 fires for a slot that was skipped.** Only a run that starts
+   writes `lastRunId` and sets `lastSlotAttempts` to 1. A skip or a refusal moves
+   `lastSlotAt` and leaves both. Slot A starts a run, a deploy stops it, and the window
+   of the retry passes. Slot B is then `SKIPPED_BUSY`. `lastSlotAt` is B, `lastRunId` is
+   the stopped run, and the attempts are 1. All three conditions of the retry hold, and
+   the next tick starts a run for slot B. A slot that does not start must set
+   `lastSlotAttempts` to 0, or the retry must compare the slot of the run with
+   `lastSlotAt`.
+3. **The retry is not claimed.** The constraint says that a second harvester process must
+   not fire the same slot. Section 5.1 claims in a transaction. Section 7 reads
+   `lastSlotAttempts = 1`, starts the run, then writes 2, and two processes can both pass
+   that read. Claim the retry with a conditional
+   `UPDATE ... WHERE "lastSlotAttempts" = 1 RETURNING` before the start. A crash then
+   costs the retry and never makes two.
+4. **A retry that cannot start repeats on each tick.** The cases of 5.3 apply to the
+   retry, and the attempts stay 1 when no run starts. A retry that meets `SKIPPED_BUSY`,
+   `REFUSED` or `SKIPPED_FAILING` is thus tried each 60 seconds until it is too late: up
+   to 12 hours for a schedule for each day. **Owner:** does a retry that is refused
+   spend the attempt.
+5. **`run-services.sh` does not start the harvester**, by its own comment, so it has no
+   place for the variable. Remove it from the scope and from the table of section 10.
+   `compose.apps.yml` leaves the harvester out for the same reason. The other places are
+   right: `app-config.ts`, `.env.example`, the ConfigMap, `_env.tpl`, the three values
+   files and `luna-slot.sh`.
+6. **`SKIPPED_BUSY` is wider than "the chain has a run in flight".**
+   `uq_harvest_run_active_store_discovery` allows one `STORE_DISCOVERY` run in the whole
+   database, for any chain, and the runs of the postal code queue count. A scheduled
+   store discovery is thus skipped each time the queue drains. Cover that case in the
+   note and in the tests.
+7. **Text that binds agents becomes false, and no file that holds it is in the scope.**
+   `CLAUDE.md` says that neither cluster fetches a storefront and that three switches
+   control the harvester. `values.production.yaml` and the README of the chart say to
+   leave the row of each chain off. Add those files to the scope, or name the follow up.
+8. **Owner: can production fetch Mercadona at all.** The context reports Mercadona runs
+   of 10 to 20 minutes on production. An earlier note of the owner's sessions says that
+   Mercadona answers 403 from the VPS. Confirm which is true today before a schedule
+   names that chain.
+
+**Smaller points.**
+
+- An abort has raised `consecutiveFailures` until now. A source can thus start at 3 or
+  more and be `SKIPPED_FAILING` from its first slot. Reset the counter in the migration,
+  or state that the first manual run clears it.
+- Section 5.3 tests "failing" before "source off". `blockedBy` in section 6 lists
+  `SOURCE_DISABLED` before `SOURCE_FAILING`. Use one order.
+- The claim uses the `now()` of the database, `nextSlot` uses the clock of the app, and
+  the tests pass a clock in. Give the claim the instant as a parameter.
+- `acknowledgedAutomaticFetch` is a consent. The pipe of the gateway has read the string
+  `"false"` as true on a boolean body before. Give the DTO a strict boolean check and a
+  spec for it.
+- The executor has two branches that finish a run, and the catch branch writes the
+  message of the error. State that the sentence of a shutdown wins in both.
+- `HarvestRunView.estimate` is computed on read. On a list page that is one more query
+  for each row unless the read batches it.
+
 ## Brief for the agent
 
 ### Objective
