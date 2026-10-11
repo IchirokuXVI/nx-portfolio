@@ -203,7 +203,9 @@ already named as the target:
   visitor is served chains and scopes and never an address.
 - A broadcast carries the least privileged view, always, because a room cannot be
   projected per socket. In this series a basket broadcast carries line ids and a kind and
-  nothing else, and an entitled client reads again.
+  nothing else, and an entitled client reads again. **Plan `0204` widens this**: a guest
+  already reads the numbers of each line, so a broadcast can carry them. It still carries
+  no list, no zone, no name and no account.
 
 ## 7. Realtime
 
@@ -328,6 +330,9 @@ and reversing one is an edit here first.
     disclosure the product owner accepts or refuses.
 12. **A purchase somebody else made is not a "change".** The banner counts changes of
     demand: a line added, asked for differently, renamed, merged, removed.
+    **Reversed in part by the owner on 2026-10-11 (plan `0203`):** a purchase made through
+    another basket, or on the zone list page, is a change in every basket it was not made
+    through. A purchase of the reading basket is still not one.
 13. **The remembered shop stays one record per device** (velista `0076`), not one per
     basket. The shop is where the person is standing, and a shop a basket does not price is
     dropped from the view and kept in storage, so neither surface can damage the other's.
