@@ -17,6 +17,11 @@
 > is not on your base branch, build stage 1, say plainly that stage 2 is left out, and
 > stop.
 >
+> **Two points were added on 2026-10-11.** One product of a line can be the favourite
+> (section 3.1), and a line can name the supermarket it is bought at (section 3.2). Both
+> are drawn in the mock (`Main.dc.html`, `Products.dc.html`, `Chain.dc.html`). Both need
+> two fields that backend plan `0199` adds. They are stage 1b.
+>
 > Prerequisite reading: velista `0043` (the line is a quantity), `0047`, `0065` and `0066`
 > (the products of a line), `0083` (the line sheet edits the line), `0101` (the suggestion
 > card), `0115` (similar products), `0117` (one field finds and adds), `0130` (one
@@ -101,15 +106,22 @@ Stage 1, with no backend change:
 3. The menu renames and deletes (section 6).
 4. The page loads on a cold arrival at its own URL (section 4).
 
+Stage 1b, after backend plan `0199`:
+
+5. One product of a line can be the favourite. The star is on each card and on each
+   row of the products page (section 3.1).
+6. A line can name one supermarket. The cards then show the prices of that supermarket
+   (section 3.2).
+
 Stage 2, after the backend plan of section 12:
 
-5. A line can be a parent. Its page shows the card of its lines, their amounts, its cost
+7. A line can be a parent. Its page shows the card of its lines, their amounts, its cost
    and its order (section 7).
-6. Lines go under a parent on the page `lines/:lineId/add` (section 8).
-7. The list draws a parent with its lines under it (section 9).
-8. A line shows its parent, the lists that hold the same line, and "Add to another list"
+8. Lines go under a parent on the page `lines/:lineId/add` (section 8).
+9. The list draws a parent with its lines under it (section 9).
+10. A line shows its parent, the lists that hold the same line, and "Add to another list"
    (section 10).
-9. Deleting a parent asks about its lines (section 6).
+11. Deleting a parent asks about its lines (section 6).
 
 ### Scope
 
@@ -127,7 +139,7 @@ Stage 2, after the backend plan of section 12:
   sheet of a parent.
 - `libs/velista/feature-shell`: the routes of section 11.
 - `libs/shared/ui`: any icon that does not exist yet (look first: the three dots, the
-  info mark, the grip).
+  info mark, the grip, the star).
 - `libs/velista/ui/assets/i18n/en.json` and `es.json`.
 
 ### Constraints
@@ -178,6 +190,8 @@ Stage 2, after the backend plan of section 12:
 | Subject | Decision |
 | --- | --- |
 | Products on the line | Cards that scroll sideways: picture, name, size and brand, lowest price, its chain, price for each kilo or litre. The cheapest is marked |
+| The favourite | One product of a line can be the favourite, and only one. Asked for on 2026-10-11 |
+| The supermarket | A line can name one supermarket (a chain). Never a shop. Asked for on 2026-10-11 |
 | Buy history | Leaves the page. One row opens a page of its own |
 | Comments | One row on the page |
 | Rename | In the three dots |
@@ -216,9 +230,11 @@ Artboard `Main.dc.html`. Top to bottom:
 3. **The parent row** (stage 2, section 10). Absent in stage 1.
 4. **"Any of these will do"**, with "Change" on the right. The link reads "Add a
    product" while the line has none. Section 3.
-5. **Two rows**: "Buy history" with the count of purchases, and "Comments" with the
-   count. The first opens the history page. The second opens the comments sheet over the
-   line page.
+5. **Three rows**: "Supermarket" with the name of the supermarket or "Any" (stage 1b,
+   section 3.2), "Buy history" with the count of purchases, and "Comments" with the
+   count. The first opens the supermarket sheet. The second opens the history page. The
+   third opens the comments sheet over the line page. A line with no products has no
+   "Supermarket" row.
 6. **"Also on"** and "Add to another list". In stage 1 this section keeps the answer and
    the heading it has today, drawn as rows and not as chips. Stage 2 changes what it
    means (section 10).
@@ -258,6 +274,65 @@ will do."), and "Add a product". It has no empty card.
 - The clusters of plan `0065` ("From {group}", "Added by you") are the two headings of
   that page. The rail does not split.
 - The counter `count/cap` is drawn only from 90 products up.
+
+### 3.1 The favourite (stage 1b)
+
+Artboards `Main.dc.html` and `Products.dc.html`.
+
+- **A line has one favourite product or none.** It is `Line.favoriteItemId`, which is
+  one of `Line.itemIds` or null.
+- **Each card has a star** in the top corner of its picture. It is a button of its own
+  beside the button that opens the product, never a button inside a button. The star of
+  the favourite is filled and takes the quiet action colour. The others are an outline.
+- **A press on an empty star makes that product the favourite**, and the star that was
+  filled empties. A press on the filled star clears the favourite. Each is one
+  `LineStore.updateLine(lineId, { favoriteItemId })`, with the id or null.
+- **The favourite is the first card.** The other cards keep their order.
+- **The star does not move the word CHEAPEST.** The two marks answer two questions:
+  which product the household wants, and which one costs least.
+- **The products page has the same star** on each row, between "Keep" and the cross.
+- **A reader who may not edit the line** sees the filled star on the favourite, as a
+  mark and not a button, and no star on the other cards.
+- **Taking the favourite off the line clears it.** The server does that in the same
+  write (backend `0199`). The app sends only the new product set.
+- The accessible name says the state and the act: "Make {name} the favourite" and
+  "{name} is the favourite. Press to clear it". The button carries `aria-pressed`.
+
+### 3.2 The supermarket of a line (stage 1b)
+
+Artboard `Chain.dc.html`. Route `sheet/supermarket`.
+
+- **A line names one supermarket or none.** It is `Line.preferredSupermarketId`, the
+  id of a chain. It is never a shop. The word in the app is "supermarket", as on the
+  catalog tab.
+- **The row "Supermarket"** is the first of the three rows under the cards. Its value
+  is the name of the supermarket, or "Any". It opens the sheet. A reader who may not
+  edit the line sees the row with its value and no chevron, and it does not open.
+- **The sheet** has a title, "Where do you buy {line}?", one sentence ("Pick a
+  supermarket and the products show its prices. Everyone on {list} sees your choice."),
+  and radio rows:
+  - "Any supermarket", with "The lowest price of each product" under it.
+  - One row for each supermarket near the person (`CatalogBrowseContext.chains`), with
+    its logo or its initial, its name, how many of the products of the line it sells
+    ("All 3 products", "2 of the 3 products", "None of these products"), and its lowest
+    price for them on the right ("from 2,15 €"). The rows are in the order of the
+    context.
+  - The supermarket of the line when it is not near the person, named from
+    `CatalogBrowseContext.chainNames`, with no count and no price.
+- **A press picks the row, writes it and closes the sheet.** It is one
+  `LineStore.updateLine(lineId, { preferredSupermarketId })`, with the id or null. A
+  refusal keeps the sheet open and says what failed under the rows.
+- **With a supermarket picked, each card shows the price at that supermarket.** The
+  caption keeps the unit price and drops the name of the chain, because the row under
+  the cards names it. A product that the supermarket does not sell says "not at
+  {supermarket}" in the place of the price. The word CHEAPEST then compares the prices
+  at that supermarket only. With "Any", the cards are as section 3 says.
+- **The counts and prices of the sheet come from the read of the cards**
+  (`ProductShopPrice` for each product). The sheet reads the products that the cards
+  did not read yet. A line with more than 20 products reads the first 20 and the sheet
+  says "of the first 20 products".
+- **The choice is on the line and not on the person.** Everyone who reads the list
+  sees it. Section 14 has the question.
 
 ## 4. Loading the page
 
@@ -447,6 +522,7 @@ All under `zones/:zoneId/lists/:listId/lines/:lineId`.
 | `products` | page | 1 |
 | `sheet/comments` | sheet | 1 |
 | `sheet/confirm/delete` | sheet, exists | 1 |
+| `sheet/supermarket` | sheet | 1b |
 | `add` | page | 2 |
 | `sheet/amounts` | sheet | 2 |
 | `sheet/copy` | sheet | 2 |
@@ -456,9 +532,17 @@ declared before the list page. `routes.spec.ts` has to keep both of its assertio
 
 ## 12. What the backend has to serve
 
-No backend plan for this exists. The next free number in
-`apps/luna-shopper-backend/plans` is `0196`. This section is the list of needs, not the
-design.
+No backend plan for stage 2 exists. This section is the list of needs, not the
+design. On 2026-10-11 the next free number in `apps/luna-shopper-backend/plans` was
+`0200`, with the plans of the open pull requests counted.
+
+**Stage 1b has its plan.** Backend `0199` adds `favoriteItemId` and
+`preferredSupermarketId` to the line, on `LineView` and on `PATCH /v1/lines/:id`.
+The app maps both from `unknown` and reads an absent field as null, so the app works
+against a server that does not have plan `0199` yet. It then draws no filled star and
+"Any", and a write is refused.
+
+The needs of stage 2:
 
 1. **The link.** A line names its parent and holds an amount of at least 1. Both are on
    `LineView`. The parent and the line are on the same list. A line with products or a
@@ -495,18 +579,20 @@ design.
 
 ## 13. Strings and tests
 
-**Strings.** New keys go under `list.page`, `list.history`, `list.parent` and `list.add`
-in both files. Spanish first for "Las cosas del baño" style names: check each sentence
+**Strings.** New keys go under `list.page`, `list.history`, `list.products`,
+`list.supermarket`, `list.parent` and `list.add` in both files. Spanish first for "Las cosas del baño" style names: check each sentence
 with a long parent name at 390 pixels. The heading "Lines under {name}" and the row
 "Take it out of {name}" wrap to two lines. They do not shrink and do not cut the name.
 
 **Tests.**
 
 - Pure functions, each with a spec: the card view (the cheapest rule, no price, one
-  product), the month grouping of the history, `parentPreview` (raise, lower to 0, a
+  product, the favourite first, the prices of one supermarket), the rows of the
+  supermarket sheet (the counts, the lowest price, a supermarket that is not near), the month grouping of the history, `parentPreview` (raise, lower to 0, a
   line with extra, a line with too few, no lines), the nesting in `composeListGroups`,
   the offers of the add page (what is refused and why).
-- Component specs for the stepper without `DECIDE`, the menu without `MANAGE`, the
+- Component specs for the star with and without the right to edit, the supermarket
+  sheet (a pick writes and closes, a refusal stays), the stepper without `DECIDE`, the menu without `MANAGE`, the
   delete sheet with the box on and off, the add page bar in both states.
 - `routes.spec.ts` for the new paths.
 - `no-unguarded-history-back.spec.ts` keeps passing.
@@ -527,6 +613,14 @@ Open questions:
    products follow today (`text:` plus the normalized name).
 3. **Where does a line go when it is bought and its parent is not?** This plan keeps it
    under its parent, with the bought mark that a row has today.
+
+4. **Is the supermarket of a line one for the list, or one for each person?** The
+   owner said "your preferred chain". This plan and backend `0199` keep it on the line,
+   so that everyone on the list sees it, because a line is what the household agreed to
+   buy. One for each person needs a table of its own and is a different backend plan.
+5. **Do the favourite and the supermarket change what the list costs?** The estimate
+   of plan `0132` takes the cheapest product at the shops of the person. This plan does
+   not change it. The basket does not read either field.
 
 Answered by the owner on 2026-10-08, and now in section 1: the number of a parent, how
 much a buy of a parent buys, what a row tap opens, and the basket.
