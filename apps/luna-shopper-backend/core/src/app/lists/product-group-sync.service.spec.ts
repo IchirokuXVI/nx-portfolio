@@ -58,6 +58,9 @@ interface LineSeed {
   /** Products of the group somebody took off. */
   removed?: string[];
   version?: number;
+  /** The favourite product and the chain of the line (plan 0199). */
+  favoriteItemId?: string | null;
+  preferredSupermarketId?: string | null;
 }
 
 function build(seeds: LineSeed[], options: { firstSeen?: boolean } = {}) {
@@ -70,6 +73,8 @@ function build(seeds: LineSeed[], options: { firstSeen?: boolean } = {}) {
         quantity: 1,
         itemSetHash: itemSetHash((seed.items ?? []).map((i) => i.itemId)),
         productGroupId: seed.productGroupId ?? null,
+        favoriteItemId: seed.favoriteItemId ?? null,
+        preferredSupermarketId: seed.preferredSupermarketId ?? null,
         position: index + 1,
         version: seed.version ?? 1,
         // The mapper stamps these onto every announcement, so a row without
@@ -418,6 +423,97 @@ describe('what a touched line reports afterwards (plan 0070, section 6.3)', () =
     // them rather than letting them appear anonymously.
     expect(w.events[0].line.groupItemIds).toEqual([SEMI, LACTOSE_FREE]);
     expect(w.events[0].line.productGroupId).toBe(MILK);
+  });
+});
+
+describe('the favourite of a line the group changes (plan 0199, section 2)', () => {
+  const CHAIN = 's-chain';
+
+  it('is cleared when the group takes that product off the line, and the chain stays', async () => {
+    const w = build([
+      {
+        id: 'subscribed',
+        productGroupId: MILK,
+        items: [{ itemId: SEMI }, { itemId: WHOLE }],
+        favoriteItemId: WHOLE,
+        preferredSupermarketId: CHAIN,
+      },
+    ]);
+
+    await w.service.handleItemGroupChanged(
+      changed({ itemId: WHOLE, from: MILK, to: null })
+    );
+
+    // In the row the sync saved, which is the same transaction as the product
+    // going (rule 2).
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0].favoriteItemId).toBeNull();
+    // The chain does not depend on the products (rule 4).
+    expect(w.saved[0].preferredSupermarketId).toBe(CHAIN);
+    // And the room hears the line as it now stands.
+    expect(w.events[0].line.favoriteItemId).toBeNull();
+    expect(w.events[0].line.preferredSupermarketId).toBe(CHAIN);
+  });
+
+  it('stays when the group takes another product off the line', async () => {
+    const w = build([
+      {
+        id: 'subscribed',
+        productGroupId: MILK,
+        items: [{ itemId: SEMI }, { itemId: WHOLE }],
+        favoriteItemId: SEMI,
+      },
+    ]);
+
+    await w.service.handleItemGroupChanged(
+      changed({ itemId: WHOLE, from: MILK, to: null })
+    );
+
+    expect(w.saved[0].favoriteItemId).toBe(SEMI);
+  });
+
+  it('stays when the group leaves a favourite that a person owns on the line', async () => {
+    // A `USER` row is not the group's to take away, so the product stays and so
+    // does the favourite. Nothing is written at all.
+    const w = build([
+      {
+        id: 'subscribed',
+        productGroupId: MILK,
+        items: [{ itemId: WHOLE, source: LineItemSource.USER }],
+        favoriteItemId: WHOLE,
+      },
+    ]);
+
+    await w.service.handleItemGroupChanged(
+      changed({ itemId: WHOLE, from: MILK, to: null })
+    );
+
+    expect(w.saved).toHaveLength(0);
+    expect(w.lines[0].favoriteItemId).toBe(WHOLE);
+  });
+
+  it('stays when a product joins, and when the group is deleted', async () => {
+    const w = build([
+      {
+        id: 'subscribed',
+        productGroupId: MILK,
+        items: [{ itemId: SEMI }],
+        favoriteItemId: SEMI,
+        preferredSupermarketId: CHAIN,
+      },
+    ]);
+
+    await w.service.handleItemGroupChanged(changed());
+    await w.service.handleProductGroupDeleted({
+      eventId: 'e2',
+      productGroupId: MILK,
+    });
+
+    expect(w.saved).toHaveLength(2);
+    for (const row of w.saved) {
+      expect(row.favoriteItemId).toBe(SEMI);
+      expect(row.preferredSupermarketId).toBe(CHAIN);
+    }
   });
 });
 

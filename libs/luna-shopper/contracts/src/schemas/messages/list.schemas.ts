@@ -172,6 +172,11 @@ const lineViewProperties: Record<string, JsonSchema> = {
   // `0065` draws a different row for each.
   productGroupId: nullableString(),
   groupItemIds: array(nonEmptyString()),
+  // The favourite product and the chain of the line (plan 0199, section 1).
+  // Both required and both null on a line that names neither, for the reason
+  // the fields around them are.
+  favoriteItemId: nullableString(),
+  preferredSupermarketId: nullableString(),
   position: integer(),
   approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
   createdByUserId: nonEmptyString(),
@@ -205,6 +210,8 @@ const lineViewRequired = [
   'itemSetHash',
   'productGroupId',
   'groupItemIds',
+  'favoriteItemId',
+  'preferredSupermarketId',
   'position',
   'approvalStatus',
   'createdByUserId',
@@ -591,6 +598,11 @@ const updateLineRequest = object(
       ...array(nonEmptyString()),
       maxItems: LINE_ITEM_SET_CEILING,
     },
+    // The favourite product and the chain (plan 0199, section 2). Null clears
+    // the field and an absent key leaves it alone, so both are nullable and
+    // neither is required.
+    favoriteItemId: nullableString(),
+    preferredSupermarketId: nullableString(),
     // Merge onto the line that already holds the new name (plan 0112, section
     // 2). Anything but `true` refuses such a rename and writes nothing.
     confirmMerge: boolean(),

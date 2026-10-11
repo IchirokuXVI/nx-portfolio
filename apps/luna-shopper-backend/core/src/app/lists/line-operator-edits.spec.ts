@@ -575,6 +575,8 @@ describe('an operator delete of a line', () => {
         values: {
           itemSetHash: null,
           productGroupId: null,
+          // The products went, so the favourite goes too (plan 0199, rule 2).
+          favoriteItemId: null,
           deletedByUserId: null,
         },
       },
