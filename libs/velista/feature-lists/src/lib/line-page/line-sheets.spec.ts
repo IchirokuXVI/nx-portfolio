@@ -29,6 +29,7 @@ import {
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { LineMenuSheet } from '../line-menu-sheet/line-menu-sheet';
+import { LineProductsInfoSheet } from '../line-products-info-sheet/line-products-info-sheet';
 import { LineSupermarketSheet } from '../line-supermarket-sheet/line-supermarket-sheet';
 import { RenameLineSheet } from '../rename-line-sheet/rename-line-sheet';
 import { LineProductPrices } from './line-product-prices';
@@ -264,6 +265,25 @@ describe('LineMenuSheet', () => {
     const { fixture, sheets } = await render(LineMenuSheet);
 
     await fixture.componentInstance.dismiss();
+
+    expect(sheets.dismiss).toHaveBeenCalledWith(LINE_URL);
+  });
+});
+
+describe('LineProductsInfoSheet', () => {
+  it('says which product a shopper gets, in four sentences that name the line', async () => {
+    const { fixture } = await render(LineProductsInfoSheet);
+
+    expect(fixture.nativeElement.querySelectorAll('.say')).toHaveLength(4);
+    expect(textOf(fixture)).toContain('list.page.about.title');
+    expect(fixture.componentInstance.lineName()).toBe('Shampoo');
+  });
+
+  it('closes onto the line page', async () => {
+    const { fixture, sheets } = await render(LineProductsInfoSheet);
+
+    buttonWith(fixture, 'list.page.about.close')?.click();
+    await drain(fixture);
 
     expect(sheets.dismiss).toHaveBeenCalledWith(LINE_URL);
   });

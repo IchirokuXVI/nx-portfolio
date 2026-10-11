@@ -326,6 +326,38 @@ describe('LinePage', () => {
       expect(textOf(fixture)).toContain('list.page.card.cheapest');
     });
 
+    it('draws the cheapest card first when the line holds the dearer one first', async () => {
+      const { fixture } = await render({
+        lines: [line({ itemIds: ['classic', 'normal'] })],
+      });
+
+      expect(
+        fixture.nativeElement.querySelector('lib-line-product-rail li')
+          ?.textContent
+      ).toContain('Shampoo for normal hair');
+    });
+
+    it('opens the sheet that says which product a shopper gets, from the info button', async () => {
+      const { fixture, router } = await render({ permissions: READER });
+      const info = fixture.nativeElement.querySelector(
+        'button.info'
+      ) as HTMLButtonElement;
+
+      expect(info.getAttribute('aria-label')).toBe('list.page.aboutLabel');
+      info.click();
+      await drain(fixture);
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        LINE_URL + '/sheet/about-products'
+      );
+    });
+
+    it('has no info button on a line with no products', async () => {
+      const { fixture } = await render({ lines: [line({ itemIds: [] })] });
+
+      expect(fixture.nativeElement.querySelector('button.info')).toBeNull();
+    });
+
     it('opens the products page from Change', async () => {
       const { fixture, router } = await render();
 
@@ -387,6 +419,19 @@ describe('LinePage', () => {
       expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
         { kind: 'update', lineId: LINE_ID, favoriteItemId: null },
       ]);
+    });
+
+    it('asks for the price of a favourite the line holds past the products it reads on opening', async () => {
+      const others = Array.from({ length: 24 }, (_, index) => `other-${index}`);
+      const { browse } = await render({
+        lines: [
+          line({ itemIds: [...others, 'classic'], favoriteItemId: 'classic' }),
+        ],
+      });
+
+      const asked = browse.scopeOffers.mock.calls.map(([itemId]) => itemId);
+      expect(asked).toContain('classic');
+      expect(asked).not.toContain('other-23');
     });
 
     it('shows a reader the favourite as a mark, and no star to press', async () => {

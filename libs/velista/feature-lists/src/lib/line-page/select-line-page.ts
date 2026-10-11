@@ -1,7 +1,7 @@
 import {
   catalogName,
-  favoriteFirst,
   lineProductPrices,
+  orderLineCards,
   type AlsoOnVm,
   type CatalogItem,
   type Line,
@@ -60,16 +60,12 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     return null;
   }
 
-  const order = favoriteFirst(line.itemIds, line.favoriteItemId);
-  const prices = lineProductPrices(
-    order,
-    input.priceOf,
-    line.preferredSupermarketId
-  );
-
-  const cards = order.map((itemId, index) =>
-    cardOf(itemId, prices[index], line, input)
-  );
+  // The favourite, then the cheapest (velista `0137`, section 2): the order the
+  // basket is meant to choose in.
+  const cards = orderLineCards(
+    lineProductPrices(line.itemIds, input.priceOf, line.preferredSupermarketId),
+    line.favoriteItemId
+  ).map((price) => cardOf(price.itemId, price, line, input));
 
   return {
     lineId: line.id,

@@ -886,6 +886,15 @@
       "productsChange": "Cambiar",
       "productsAdd": "Añadir un producto",
       "productsEmpty": "Todavía no hay productos. Vale cualquier marca.",
+      "aboutLabel": "Cuál te toca comprar",
+      "about": {
+        "title": "Cuál te toca comprar",
+        "any": "Para {{line}} vale cualquiera de estos productos. Tu lista de la compra muestra uno de ellos.",
+        "favorite": "Si marcas un favorito con la estrella, tu lista de la compra muestra siempre el favorito. Lo hace aunque otro producto cueste menos.",
+        "cheapest": "Si no hay favorito, muestra el más barato.",
+        "order": "Aquí los productos van en ese mismo orden: primero el favorito, después el más barato.",
+        "close": "Cerrar"
+      },
       "card": {
         "cheapest": "EL MÁS BARATO",
         "noPrice": "sin precio",

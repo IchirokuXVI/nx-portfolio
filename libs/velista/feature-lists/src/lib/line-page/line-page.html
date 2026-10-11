@@ -112,7 +112,25 @@
         <section class="products">
           <div class="content head">
             <h2 class="section-title">
-              {{ 'list.page.productsTitle' | rokuT }}
+              <!--
+                The words and, directly after them, the info button (plan 0137,
+                section 3). Only on a line with products: with none there is
+                nothing to choose from.
+              -->
+              <span class="title-words">
+                {{ 'list.page.productsTitle' | rokuT }}
+
+                @if (line.cards.length > 0) {
+                  <button
+                    (click)="openAbout()"
+                    [attr.aria-label]="'list.page.aboutLabel' | rokuT"
+                    class="info"
+                    type="button"
+                  >
+                    <lib-info-icon />
+                  </button>
+                }
+              </span>
 
               @if (line.canEdit && line.cards.length > 0) {
                 <button (click)="openProducts()" class="link" type="button">

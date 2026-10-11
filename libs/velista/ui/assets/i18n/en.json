@@ -886,6 +886,15 @@
       "productsChange": "Change",
       "productsAdd": "Add a product",
       "productsEmpty": "No products yet. Any brand will do.",
+      "aboutLabel": "Which one you get when you shop",
+      "about": {
+        "title": "Which one you get when you shop",
+        "any": "Any of these products will do for {{line}}. Your shopping list shows one of them.",
+        "favorite": "If you mark a favourite with the star, your shopping list always shows the favourite. It does so even when another product costs less.",
+        "cheapest": "With no favourite, it shows the cheapest one.",
+        "order": "The products here are in the same order: the favourite first, then the cheapest.",
+        "close": "Close"
+      },
       "card": {
         "cheapest": "CHEAPEST",
         "noPrice": "no price",
