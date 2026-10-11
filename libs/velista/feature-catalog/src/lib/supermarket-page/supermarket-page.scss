@@ -12,23 +12,75 @@
   @include picker.page;
 }
 
-// Near me while it works: the words say so, and the amber steps back so it no longer
-// reads as something to press. The same two values `lib-near-me-button` uses.
-.near.is-busy {
-  color: var(--app-text-muted);
-  cursor: progress;
+// ---- All supermarkets: one row with a radio, above the chains
+
+.card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
 }
 
-.near-glyph {
-  font-size: var(--app-icon-sm);
+.any {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-4);
+  cursor: pointer;
+
+  &:has(.any-radio:checked) {
+    background: var(--app-action-quiet-bg);
+  }
+
+  &:has(.any-radio:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
 }
 
-// A chain's screen opens on its logo and its count, one quiet line.
-.chain-line {
+.any-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.any-title {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.any-detail {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.any-radio {
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+}
+
+// ---- the chains while they load, and when they did not
+
+.note {
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
-  min-inline-size: 0;
+  margin: 0;
   font-size: var(--app-text-sm);
-  color: var(--app-text-secondary);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.spinner {
+  flex: none;
+  font-size: var(--app-icon-md);
 }

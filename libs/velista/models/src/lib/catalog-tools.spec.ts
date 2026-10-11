@@ -9,8 +9,6 @@ const NOTHING: CatalogToolsInput = {
   chainId: null,
   chainName: '',
   chainLogoUrl: null,
-  shopChosen: false,
-  shopPlace: '',
   category: null,
   postalCode: null,
 };
@@ -18,13 +16,13 @@ const NOTHING: CatalogToolsInput = {
 describe('catalogToolsView', () => {
   it('names nothing when nothing is chosen, so the selectors say All', () => {
     expect(catalogToolsView(NOTHING)).toEqual({
-      supermarket: { chosen: false, name: '', logoUrl: null, anyShop: false },
+      supermarket: { chosen: false, name: '', logoUrl: null },
       category: { chosen: false, name: '', root: null },
       note: null,
     });
   });
 
-  it('draws a chosen chain with its logo, as any shop of it', () => {
+  it('draws a chosen chain with its logo', () => {
     const view = catalogToolsView({
       ...NOTHING,
       chainId: 'mercadona',
@@ -36,20 +34,7 @@ describe('catalogToolsView', () => {
       chosen: true,
       name: 'Mercadona',
       logoUrl: 'https://logos.test/m.png',
-      anyShop: true,
     });
-  });
-
-  it('is not any shop once one shop of the chain is chosen', () => {
-    const view = catalogToolsView({
-      ...NOTHING,
-      chainId: 'mercadona',
-      chainName: 'Mercadona',
-      shopChosen: true,
-      shopPlace: 'Calle Mayor 3',
-    });
-
-    expect(view.supermarket.anyShop).toBe(false);
   });
 
   it('shows the leaf alone and keeps the root for the accessible name', () => {
@@ -79,43 +64,29 @@ describe('catalogToolsView', () => {
       ...NOTHING,
       chainId: 'mercadona',
       chainName: 'Mercadona',
-      shopChosen: true,
-      shopPlace: 'Calle Mayor 3',
       postalCode: '28013',
     };
 
-    it('names the shop first', () => {
+    it('names the chain first, with the postal code', () => {
       expect(catalogToolsView(all).note).toEqual({
-        kind: 'shop',
-        shop: 'Calle Mayor 3',
+        kind: 'chain',
+        chain: 'Mercadona',
+        postalCode: '28013',
       });
     });
 
-    it('names the chain when no shop is chosen, with the postal code', () => {
-      expect(
-        catalogToolsView({ ...all, shopChosen: false, shopPlace: '' }).note
-      ).toEqual({ kind: 'chain', chain: 'Mercadona', postalCode: '28013' });
-    });
-
     it('names the chain without a postal code for a person who has none', () => {
-      expect(
-        catalogToolsView({
-          ...all,
-          shopChosen: false,
-          shopPlace: '',
-          postalCode: null,
-        }).note
-      ).toEqual({ kind: 'chain', chain: 'Mercadona', postalCode: null });
+      expect(catalogToolsView({ ...all, postalCode: null }).note).toEqual({
+        kind: 'chain',
+        chain: 'Mercadona',
+        postalCode: null,
+      });
     });
 
     it('says near the postal code with no chain', () => {
       expect(
         catalogToolsView({ ...NOTHING, postalCode: '28013' }).note
       ).toEqual({ kind: 'near', postalCode: '28013' });
-    });
-
-    it('says nothing while a chosen shop has no words yet, rather than the chain', () => {
-      expect(catalogToolsView({ ...all, shopPlace: '' }).note).toBeNull();
     });
 
     it('says nothing for a chain whose name has not arrived', () => {

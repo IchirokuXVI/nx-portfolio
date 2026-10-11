@@ -17,14 +17,12 @@ const NO_SUPERMARKET: SupermarketSelectorView = {
   chosen: false,
   name: '',
   logoUrl: null,
-  anyShop: false,
 };
 
 const ANY_MERCADONA: SupermarketSelectorView = {
   chosen: true,
   name: 'Mercadona',
   logoUrl: null,
-  anyShop: true,
 };
 
 const NO_CATEGORY: CategorySelectorView = {
@@ -258,24 +256,13 @@ describe('CatalogSelectors', () => {
       );
     });
 
-    it('says any shop for a chain with no shop picked', async () => {
+    it('names a chosen chain, and nothing about a shop', async () => {
       const fixture = await render(ANY_MERCADONA);
 
       expect(body(fixture, 'supermarket').getAttribute('aria-label')).toBe(
-        'catalog.selector.supermarketAny'
+        'catalog.selector.supermarketChain'
       );
-      expect(valuesOf('catalog.selector.supermarketAny')).toEqual({
-        chain: 'Mercadona',
-      });
-    });
-
-    it('says one shop for a chain with a shop picked', async () => {
-      const fixture = await render({ ...ANY_MERCADONA, anyShop: false });
-
-      expect(body(fixture, 'supermarket').getAttribute('aria-label')).toBe(
-        'catalog.selector.supermarketShop'
-      );
-      expect(valuesOf('catalog.selector.supermarketShop')).toEqual({
+      expect(valuesOf('catalog.selector.supermarketChain')).toEqual({
         chain: 'Mercadona',
       });
     });
