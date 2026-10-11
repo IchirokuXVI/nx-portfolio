@@ -19,7 +19,6 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BoughtShopMemory,
-  GatewayError,
   ItemNames,
   LineStore,
   ListStore,
@@ -55,6 +54,11 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import {
+  mergeProductsMaxOf,
+  mergeQuestionOf,
+  type MergeQuestion,
+} from '../line-merge-question';
 import { listErrorKey } from '../list-error-copy';
 import {
   actionsFor,
@@ -70,18 +74,6 @@ import { selectLineDetail } from './select-line-detail';
  * (velista `0114`), a pane in its place rather than a sheet over it.
  */
 type Step = 'summary' | 'howMany' | 'shop';
-
-/**
- * The merge question, as the refusal stated it (velista plan 0083, section 5).
- *
- * `total` is worked out here rather than sent, from the amount the save carried and
- * the other line's, capped as the server caps the sum (backend plan 0112, section 3).
- */
-export interface MergeQuestion {
-  readonly other: string;
-  readonly otherQuantity: number;
-  readonly total: number;
-}
 
 /**
  * What the app knows about one line, and the only place a purchase is recorded
@@ -739,7 +731,7 @@ export class LineDetailSheet {
     this.saveErrorKey.set(
       listErrorKey(error, 'lines.write') ?? 'list.detail.failed'
     );
-    const max = maxOf(error);
+    const max = mergeProductsMaxOf(error);
     this.saveErrorArgs.set(max === null ? undefined : { max });
   }
 
@@ -843,50 +835,4 @@ export class LineDetailSheet {
       )
     );
   }
-}
-
-/**
- * The question a `line_merge_required` refusal asks, or null for any other failure.
- *
- * Mapped from `unknown` (rule D4): a refusal whose details this build cannot read is
- * not a question the sheet can ask, and falls through to the generic sentence.
- */
-export function mergeQuestionOf(
-  error: unknown,
-  amount: number
-): MergeQuestion | null {
-  if (
-    !(error instanceof GatewayError) ||
-    error.code !== 'line_merge_required'
-  ) {
-    return null;
-  }
-
-  const other = error.details?.['otherContent'];
-  const otherQuantity = error.details?.['otherQuantity'];
-  if (
-    typeof other !== 'string' ||
-    typeof otherQuantity !== 'number' ||
-    !Number.isFinite(otherQuantity)
-  ) {
-    return null;
-  }
-
-  return {
-    other,
-    otherQuantity,
-    total: Math.min(LINE_QUANTITY_MAX, amount + otherQuantity),
-  };
-}
-
-/** The bound a `line_merge_too_many_products` refusal names, or null. */
-function maxOf(error: unknown): number | null {
-  if (
-    !(error instanceof GatewayError) ||
-    error.code !== 'line_merge_too_many_products'
-  ) {
-    return null;
-  }
-  const max = error.details?.['max'];
-  return typeof max === 'number' && Number.isFinite(max) ? max : null;
 }

@@ -132,6 +132,8 @@ export class LineApi implements LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateResult> {
@@ -154,6 +156,17 @@ export class LineApi implements LineServiceI {
     if (changes.adoptItemIds !== undefined) {
       (request as { adoptItemIds?: readonly string[] }).adoptItemIds =
         changes.adoptItemIds;
+    }
+    // Null is **sent**, because it clears the field. Absent leaves it alone
+    // (backend plan 0199, section 1).
+    if (changes.favoriteItemId !== undefined) {
+      (request as { favoriteItemId?: string | null }).favoriteItemId =
+        changes.favoriteItemId;
+    }
+    if (changes.preferredSupermarketId !== undefined) {
+      (
+        request as { preferredSupermarketId?: string | null }
+      ).preferredSupermarketId = changes.preferredSupermarketId;
     }
     // Only ever `true` on the wire. A rename that has not been confirmed says nothing,
     // so the server refuses the collision and names the other line (plan 0112).

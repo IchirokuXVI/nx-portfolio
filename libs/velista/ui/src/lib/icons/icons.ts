@@ -1125,3 +1125,39 @@ export class SwapIcon {
       import('./swap-icon.svg?raw')
   );
 }
+
+/**
+ * A star: the favourite product of a line (velista `0135`, section 3.1).
+ *
+ * Two glyphs and not one with a class, because the icon is an inlined file and
+ * a fill set from outside would also fill the outline of every other icon that
+ * shares the stylesheet. The outline is a product that can be made the
+ * favourite, and the filled one is the favourite.
+ */
+@Component({
+  selector: 'lib-star-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StarIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./star-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-star-filled-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StarFilledIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./star-filled-icon.svg?raw')
+  );
+}

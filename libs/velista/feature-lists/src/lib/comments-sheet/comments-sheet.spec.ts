@@ -49,6 +49,8 @@ function line(): Line {
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,
@@ -249,7 +251,7 @@ function route() {
 
   return {
     paramMap: of(map),
-    snapshot: { paramMap: map, parent: null },
+    snapshot: { paramMap: map, parent: null, data: {} },
     parent: null,
   };
 }

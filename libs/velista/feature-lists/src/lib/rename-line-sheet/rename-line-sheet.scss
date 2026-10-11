@@ -1,0 +1,42 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+.title {
+  margin-block-end: var(--app-space-5);
+}
+
+.form {
+  margin: 0;
+}
+
+// The fact that the reader did not know, and then the question it raises.
+.merge-taken {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.merge-question {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

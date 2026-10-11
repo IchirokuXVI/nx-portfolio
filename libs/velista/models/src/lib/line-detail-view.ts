@@ -1,5 +1,6 @@
 import type { SettlementOutcome } from './enums';
 import type { LineIndicator } from './list-view';
+import type { LineProductPriceKind } from './line-products';
 import { formatMinorMoney } from './purchases';
 
 /**
@@ -127,53 +128,6 @@ export interface LineItemChipVm {
 
 /** Who put a product on a line (backend plan 0070, section 3). */
 export type LineProductSource = 'group' | 'user';
-
-/**
- * One product on the **line page**, with who put it there (velista plan 0065).
- *
- * A type of its own rather than two more fields on {@link LineItemChipVm},
- * because the sheet draws that one and does not draw this (section 7): its chips
- * are the settle choices, the answer to "which one did you get?", and provenance
- * answers a question nobody is asking at the shelf.
- */
-export interface LineProductChipVm extends LineItemChipVm {
-  readonly source: LineProductSource;
-  /**
-   * Whether the `Keep` control is offered on this chip (section 4).
-   *
-   * Only on a product the catalog put there, only where the reader may edit, and
-   * never while a write is in flight, which are the same three conditions
-   * {@link LineItemChipVm.removable} answers. It is **not** the same field: a
-   * product a person already owns is removable and has nothing to adopt.
-   */
-  readonly adoptable: boolean;
-}
-
-/**
- * One labelled run of chips on the line page (velista plan 0065, section 2).
- *
- * Two clusters rather than a mark on every catalog added chip, because the most
- * common case in the product is a line where **all** of them are: immediately
- * after somebody picks Milk, a mark would be on all eleven and would distinguish
- * nothing. A mark that is on everything is not a mark.
- *
- * When every product is one source there is one cluster, and its heading reads as
- * a statement about the line rather than as a distinction drawn for its own sake.
- */
-export interface LineProductClusterVm {
-  readonly source: LineProductSource;
-  /**
-   * The heading's translation key, already chosen.
-   *
-   * The named and unnamed group headings are two keys rather than one key with an
-   * empty argument: a group whose name did not resolve is owed `From a group`,
-   * never `From `, which is the rule the unnamed product chip already follows.
-   */
-  readonly headingKey: string;
-  /** What the heading interpolates. Empty for a heading that names nothing. */
-  readonly headingArgs: Readonly<Record<string, string>>;
-  readonly products: readonly LineProductChipVm[];
-}
 
 /**
  * The product count against the cap, as the section heading says it (section 3.1).
@@ -380,115 +334,80 @@ export interface AlsoOnVm {
 export type HistoryScope = 'thisList' | 'everywhere';
 
 /**
- * One history section on the line page (section 5.3).
+ * One product of a line, as a card of the rail (velista `0135`, section 3).
  *
- * `loading` is on the section rather than on the page because the two arrive
- * independently: the per line history needs only the line, and the cross list one
- * needs the products first. A page that waited for both would show nothing while
- * the half it already had sat ready.
+ * Everything on it is already a word or a formatted number, because a selector
+ * formats and a template only draws.
  */
-export interface HistorySectionVm {
-  readonly scope: HistoryScope;
-  readonly rows: readonly SettlementRowVm[];
-  readonly loading: boolean;
-  /** Whether there is more to fetch, which the section offers rather than assumes. */
-  readonly hasMore: boolean;
+export interface LineProductCardVm {
+  readonly itemId: string;
+  /** Null while the catalog has not named it, which draws "Unnamed product". */
+  readonly name: string | null;
+  /** "400 ml · Deliplus", or null when the catalog knows neither. */
+  readonly detail: string | null;
+  /** The picture, or null for the carton glyph. */
+  readonly imageUrl: string | null;
+  readonly priceKind: LineProductPriceKind;
+  /** The price, formatted. Set exactly when {@link priceKind} is `priced`. */
+  readonly price: string | null;
+  /**
+   * The line under the price: the chain and the price for each kilo or litre.
+   * With a supermarket chosen for the line, only the unit price, because the row
+   * under the cards names the supermarket. Null with neither.
+   */
+  readonly caption: string | null;
+  readonly cheapest: boolean;
+  /** The one product the household wants (section 3.1). */
+  readonly favorite: boolean;
+}
+
+/** The supermarket row under the cards (section 3.2). */
+export interface LineSupermarketVm {
+  /** The supermarket's name, or null for "Any". */
+  readonly name: string | null;
+  /** Whether the row opens the sheet. A reader who may not edit sees the value. */
+  readonly canChange: boolean;
 }
 
 /**
- * The whole line page (section 5.3).
+ * The whole line page (velista `0135`, section 2).
  *
- * Its own route, so it can be linked to and reached from a search later, which is
- * the reason it is a page and not a second sheet.
+ * Its own route, so it can be linked to. It draws no history of its own any more:
+ * the two lists that were here are on the history page.
  */
 export interface LinePageVm {
   readonly lineId: string;
   readonly content: string;
   readonly quantity: number;
-  /** "on Weekly shop, in Flat 3B", as parts, so the copy can order them. */
+  /** "On Weekly shop, in Home", as parts, so the copy can order them. */
   readonly listName: string | null;
   readonly zoneName: string | null;
   /**
-   * Every product on the line, in the order they were attached.
-   *
-   * Kept whole beside {@link clusters}, and it is what the template draws when
-   * there are no clusters to draw. The two are the same chips: a product is in
-   * exactly one cluster and appears once here.
-   */
-  readonly products: readonly LineProductChipVm[];
-  /**
-   * The products split by who put them there, or **null on a line that follows no
-   * group** (velista plan 0065, section 2).
-   *
-   * Null rather than one cluster with a heading, because that is every line
-   * `0048` ever created and a heading over the only run of chips there is would
-   * be a distinction drawn for its own sake. The headings appear exactly when
-   * there is something for them to tell apart, and nothing regresses for a line
-   * that follows nothing.
-   *
-   * Non-null it holds one or two clusters: a cluster with no products in it is
-   * omitted rather than drawn empty.
-   */
-  readonly clusters: readonly LineProductClusterVm[] | null;
-  /**
-   * The count against the cap, or null on a line with no products.
-   *
-   * **Always drawn once the line has any**, never only once it is close to full:
-   * a counter that appears at 90 teaches somebody that a limit exists at the exact
-   * moment the news is bad, which is the worst moment to introduce it.
-   */
-  readonly counter: LineProductCounterVm | null;
-  /** Whether the product names could not be read, per `LineDetailVm.namesUnavailable`. */
-  readonly namesUnavailable: boolean;
-  readonly estimate: ConsumptionEstimateVm | null;
-  readonly lastPurchase: SettlementRowVm | null;
-  readonly thisList: HistorySectionVm;
-  /**
-   * The cross list history, or **null** on a line with no products.
-   *
-   * Null is absent rather than empty, and the distinction is the section's whole
-   * meaning (section 5.3). "Everywhere you shop" is keyed on the line's products,
-   * so a free text line cannot have one; drawing it empty would say the reader has
-   * never bought this anywhere, when in fact nobody has said what "this" is. Which
-   * is the argument for the composer's suggestions.
-   */
-  readonly everywhere: HistorySectionVm | null;
-  /**
-   * The reader's other lists that still want this item, or **null when nobody has
-   * asked** (velista plan 0047, section 5).
-   *
-   * An indicator rather than a link, per section 5.3, and filtered by the server to
-   * lists the reader may actually read at request time.
-   *
-   * Null now means what it says rather than being the permanent state: it is a line
-   * with no product, which has no question to ask, or an answer that has not arrived
-   * or did not come back. Backend plan `0053` section 3 is the query behind a real
-   * one. **Drawn only when the answer is known to be complete**, and omitted rather
-   * than drawn empty when it is not.
-   *
-   * An empty {@link AlsoOnVm.places} still draws nothing, because "no other list has
-   * this" is not information anybody came here for. That is a rendering choice about a
-   * known answer, and a different absence from this one; the two must not be collapsed
-   * again.
-   */
-  readonly alsoOn: AlsoOnVm | null;
-  /**
    * Who put this line on the list, as a word to say rather than an id (velista plan
-   * 0066, section 4).
-   *
-   * A name, or the reader's own word for themselves, or the word for somebody this
-   * zone cannot name. Those last two are the same answer to two different situations:
-   * the author left the zone and their name is no longer this reader's to have, or the
-   * line predates the field and the mapper defaulted it to the empty string. Neither is
-   * worth a distinct sentence, and "somebody" is true of both.
-   *
-   * **A caption and never a control.** There is no profile screen for a member, and
-   * inventing an affordance into one is a plan of its own.
+   * 0066, section 4). A name, the reader's own word, or the word for somebody the
+   * group cannot name.
    */
   readonly addedBy: string;
-  /** Whether this caller may edit the product set and delete the line. */
+  /** Whether the number has its two buttons. `DECIDE`, as the reel. */
+  readonly canStep: boolean;
+  /** The products as cards, the favourite first. Empty on a line of free text. */
+  readonly cards: readonly LineProductCardVm[];
+  /** Whether the product names could not be read, which is not "no products". */
+  readonly namesUnavailable: boolean;
+  /** Null on a line with no products, which has no supermarket row. */
+  readonly supermarket: LineSupermarketVm | null;
+  /** How many times the line was bought, for the "Buy history" row. */
+  readonly boughtCount: number;
+  /** How many comments, or null while nobody has read them. */
+  readonly commentCount: number | null;
+  /**
+   * The reader's other lists that still want a product of this line, or **null
+   * when nobody has asked** (velista plan 0047, section 5). An empty `places` is a
+   * real answer, and the page still draws nothing for it.
+   */
+  readonly alsoOn: AlsoOnVm | null;
+  /** Whether this caller may change the products, the favourite and the supermarket. */
   readonly canEdit: boolean;
-  readonly canDelete: boolean;
 }
 
 // --- Turning a settlement into a row ---------------------------------------

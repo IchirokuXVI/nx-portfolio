@@ -210,6 +210,11 @@ $app-content-max: 480px;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;
+  // A product of a line, as one card of the rail on the line page (velista 0135,
+  // section 3). The width leaves a third card cut by the edge of a phone, which is
+  // what says the row scrolls. The picture is as tall as the mock draws it.
+  --app-line-product-card-width: 156px;
+  --app-line-product-card-image: 96px;
   // The ring that separates one stacked avatar from the one behind it. Not a
   // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
   --app-avatar-ring: 2px;

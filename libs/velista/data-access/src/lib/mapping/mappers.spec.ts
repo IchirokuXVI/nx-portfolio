@@ -306,6 +306,8 @@ describe('toLine', () => {
     // plan 0070, section 9).
     productGroupId: 'group-milk',
     groupItemIds: ['item-milk'],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 3,
     approvalStatus: 'APPROVED',
     // The two derived indicators, which replaced the trip status (backend plan 0047,
@@ -376,6 +378,8 @@ describe('toLine', () => {
       ...valid,
       productGroupId: undefined,
       groupItemIds: undefined,
+      favoriteItemId: null,
+      preferredSupermarketId: null,
     });
 
     expect(bare?.productGroupId).toBeNull();

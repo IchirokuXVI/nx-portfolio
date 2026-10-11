@@ -327,6 +327,18 @@ export interface Line {
    * with {@link claimed} to tell them apart.
    */
   readonly claimedByUserId: string | null;
+  /**
+   * The one product of the line the household wants, or null (velista `0135`,
+   * section 3.1; backend `0199`). Always one of {@link itemIds}: the server clears
+   * it in the write that takes that product off the line.
+   */
+  readonly favoriteItemId: string | null;
+  /**
+   * The supermarket the line is bought at, or null for any (velista `0135`,
+   * section 3.2). A chain and never a shop. It is on the line, so everyone who
+   * reads the list sees the same one.
+   */
+  readonly preferredSupermarketId: string | null;
   readonly createdByUserId: string;
   readonly approvedByUserId: string | null;
   readonly version: number;

@@ -7,107 +7,72 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  CATALOG_SERVICE,
-  type CatalogServiceI,
-  fakeGroupMembers,
-  type FakeGroupMembers,
-  fakeGroupNames,
-  type FakeGroupNames,
+  CATALOG_BROWSE_SERVICE,
+  type CatalogBrowseServiceI,
   fakeItemNames,
-  type FakeItemNames,
   fakeLineStore,
   type FakeLineStore,
   fakeListStore,
   fakeMemberNames,
-  fakeShoppingProfileStore,
-  type FakeShoppingProfileStore,
   fakeZoneStore,
   LINE_SERVICE,
   type LineServiceI,
-  provideFakeGroupMembers,
-  provideFakeGroupNames,
   provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakeSessionStore,
-  provideFakeShoppingProfileStore,
   provideFakeZoneStore,
 } from '@portfolio/velista/data-access';
 import {
   type AlsoOnVm,
+  type CatalogBrowseContext,
   type CatalogItem,
-  type CatalogSuggestion,
+  type CatalogScopeOffer,
   type Line,
-  LINE_ITEM_SET_MAX,
-  type LineSettlement,
   type ListPermission,
   type MyZone,
-  type ProductGroup,
   type ShoppingListSummary,
-  SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { LinePage } from './line-page';
 
 /**
- * The page, at the DOM, for what velista plan `0047` put on it.
+ * The line page, at the DOM (velista plan `0135`, sections 2 to 4).
  *
- * Three of the four are things that were drawn and inert: the add chip that was not a
- * control, the "show more" that no value could reach, and the names that came from a
- * fixture. The fourth is `alsoOn`, which is now absent rather than empty and is
- * asserted by its absence.
+ * What a selector cannot hold: that a press sends the write it says it sends, that
+ * a control a reader may not use is absent, and that the page reads what it needs
+ * when nothing read it before.
  */
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
 const LIST_ID = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
 const LINE_ID = 'ln-1';
 const ME = 'user-me';
+const LINE_URL = `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}`;
+const MERCADONA = 'chain-mercadona';
 
 const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
-
-const MILK: CatalogItem = {
-  id: 'item-milk-a',
-  name: { es: 'Leche entera', en: 'Whole milk' },
-  brand: 'Hacendado',
-  size: 1,
-  unit: 'LITER',
-  productGroupId: null,
-};
-
-const OAT: CatalogItem = {
-  id: 'item-oat',
-  name: { es: 'Bebida de avena', en: 'Oat drink' },
-  brand: 'Oatly',
-  size: 1,
-  unit: 'LITER',
-  productGroupId: null,
-};
-
-const MILK_GROUP: ProductGroup = {
-  id: 'group-milk',
-  name: { es: 'Leche', en: 'Milk' },
-};
-
-/** As many product ids as asked for, for the specs about the cap. */
-function items(count: number): string[] {
-  return Array.from({ length: count }, (_, index) => `item-${index}`);
-}
+const READER: readonly ListPermission[] = ['READ'];
 
 function line(overrides: Partial<Line> = {}): Line {
   return {
     id: LINE_ID,
     listId: LIST_ID,
-    content: 'Milk',
-    quantity: 2,
-    itemIds: ['item-milk-a'],
+    content: 'Shampoo',
+    quantity: 3,
+    itemIds: ['normal', 'classic'],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
-    boughtCount: 0,
+    boughtCount: 12,
     lastSettlementOutcome: null,
+    claimed: false,
+    claimedByUserId: null,
     createdByUserId: ME,
     approvedByUserId: ME,
     version: 1,
@@ -116,7 +81,7 @@ function line(overrides: Partial<Line> = {}): Line {
 }
 
 function list(
-  overrides: Partial<ShoppingListSummary> = {}
+  myPermissions: readonly ListPermission[] = ADMIN
 ): ShoppingListSummary {
   return {
     id: LIST_ID,
@@ -126,112 +91,96 @@ function list(
     autoApproveLines: false,
     lineCount: 1,
     wantedCount: 1,
-    myPermissions: ADMIN,
-    ...overrides,
-  };
+    myPermissions,
+  } as ShoppingListSummary;
 }
 
 function zone(): MyZone {
   return {
     id: ZONE_ID,
-    name: 'Flat 3B',
+    name: 'Home',
     role: 'OWNER',
     status: 'APPROVED',
     memberCount: 2,
     listCount: 1,
-  };
+  } as MyZone;
 }
 
-function bought(id: string): LineSettlement {
+function item(id: string, en: string): CatalogItem {
   return {
     id,
-    lineId: LINE_ID,
-    listId: LIST_ID,
-    outcome: 'BOUGHT',
-    quantity: 1,
-    itemId: null,
-    settledByUserId: ME,
-    settledAt: new Date('2026-08-30T10:00:00.000Z'),
-  };
+    name: { en, es: '' },
+    brand: 'Deliplus',
+    size: 400,
+    unit: 'MILLILITER',
+    productGroupId: null,
+    categories: [],
+    offer: null,
+    chainPrices: [],
+    imageUrl: null,
+    unitBasis: 'LITER',
+  } as unknown as CatalogItem;
 }
 
-/** A catalog that answers one fixed suggestion, so a spec can choose from the list. */
-function catalogOffering(
-  suggestions: readonly CatalogSuggestion[]
-): CatalogServiceI {
-  return {
-    suggest: jest.fn().mockResolvedValue(suggestions),
-    itemsByIds: jest.fn().mockResolvedValue([]),
-  };
-}
-
-/**
- * The `also on` read (backend plan 0053, section 3), per product.
- *
- * A stub over the one method this page calls rather than a whole `LineMemory`: the page
- * reaches `LINE_SERVICE` directly for it, and what the specs below are about is how
- * several products' answers are merged and what happens when one does not come back.
- */
-function alsoOnService(
-  answers: Readonly<Record<string, AlsoOnVm | Error>> = {}
-): Pick<LineServiceI, 'listsHoldingItem'> & {
-  readonly asked: { itemId: string; excludeListId?: string }[];
-} {
-  const asked: { itemId: string; excludeListId?: string }[] = [];
-
-  return {
-    asked,
-    listsHoldingItem: async (itemId, options) => {
-      asked.push({ itemId, excludeListId: options?.excludeListId });
-      const answer = answers[itemId];
-      if (answer instanceof Error) {
-        throw answer;
-      }
-      return answer ?? { places: [], hasMore: false };
+const CONTEXT: CatalogBrowseContext = {
+  state: 'priced',
+  postalCodes: ['28001'],
+  chains: [
+    {
+      supermarketId: MERCADONA,
+      name: { en: 'Mercadona', es: 'Mercadona' },
+      locations: 1,
+      logoUrl: null,
     },
-  };
+  ],
+  scopes: [{ priceScopeId: 'scope-m', supermarketId: MERCADONA }],
+  chainNames: new Map(),
+};
+
+function offers(price: number): readonly CatalogScopeOffer[] {
+  return [
+    {
+      available: true,
+      offer: {
+        price,
+        unitPrice: price * 2.5,
+        currency: 'EUR',
+        priceScopeId: 'scope-m',
+      } as CatalogScopeOffer['offer'],
+    },
+  ];
 }
 
 interface Options {
   readonly lines?: readonly Line[];
-  readonly list?: ShoppingListSummary;
-  readonly alsoOn?: Readonly<Record<string, AlsoOnVm | Error>>;
-  readonly itemNames?: FakeItemNames;
-  readonly groupNames?: FakeGroupNames;
-  readonly groupMembers?: FakeGroupMembers;
-  readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
-  readonly itemSettlements?: Readonly<
-    Record<string, readonly LineSettlement[]>
-  >;
-  readonly moreSettlements?: Readonly<
-    Record<string, readonly LineSettlement[]>
-  >;
-  readonly moreItemSettlements?: Readonly<
-    Record<string, readonly LineSettlement[]>
-  >;
-  readonly catalog?: CatalogServiceI;
+  readonly permissions?: readonly ListPermission[];
+  readonly linesState?: 'idle' | 'loading' | 'loaded' | 'failed';
+  readonly alsoOn?: AlsoOnVm;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<LinePage>;
   lines: FakeLineStore;
-  catalog: CatalogServiceI;
-  profiles: FakeShoppingProfileStore;
-  holding: ReturnType<typeof alsoOnService>;
+  router: { navigateByUrl: jest.Mock };
+  browse: { context: jest.Mock; scopeOffers: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
   const lines = fakeLineStore({
     lines: options.lines ?? [line()],
-    state: 'loaded',
-    settlements: options.settlements ?? { [LINE_ID]: [] },
-    itemSettlements: options.itemSettlements ?? { [LINE_ID]: [] },
-    moreSettlements: options.moreSettlements,
-    moreItemSettlements: options.moreItemSettlements,
+    state: options.linesState ?? 'loaded',
   });
-  const catalog = options.catalog ?? catalogOffering([]);
-  const holding = alsoOnService(options.alsoOn);
-  const profiles = fakeShoppingProfileStore();
+  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  const browse = {
+    context: jest.fn().mockResolvedValue(CONTEXT),
+    scopeOffers: jest.fn(async (itemId: string) =>
+      offers(itemId === 'normal' ? 2.15 : 3.45)
+    ),
+  };
+  const holding: Pick<LineServiceI, 'listsHoldingItem'> = {
+    listsHoldingItem: async () =>
+      options.alsoOn ?? { places: [], hasMore: false },
+  };
   const map = convertToParamMap({
     zoneId: ZONE_ID,
     listId: LIST_ID,
@@ -244,34 +193,34 @@ async function render(options: Options = {}): Promise<{
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
       provideFakeListStore(
-        fakeListStore({ lists: [options.list ?? list()], state: 'loaded' })
+        fakeListStore({
+          lists: [list(options.permissions ?? ADMIN)],
+          state: 'loaded',
+        })
       ),
       provideFakeZoneStore(fakeZoneStore({ zones: [zone()] })),
       provideFakeMemberNames(fakeMemberNames({})),
       provideFakeItemNames(
-        options.itemNames ?? fakeItemNames({ items: [MILK] })
+        fakeItemNames({
+          items: [
+            item('normal', 'Shampoo for normal hair'),
+            item('classic', 'Classic care shampoo'),
+          ],
+        })
       ),
-      provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
-      provideFakeGroupNames(
-        options.groupNames ?? fakeGroupNames({ groups: [MILK_GROUP] })
-      ),
-      provideFakeShoppingProfileStore(profiles),
       provideFakeSessionStore('REGISTERED'),
-      { provide: CATALOG_SERVICE, useValue: catalog },
-      { provide: LINE_SERVICE, useValue: holding },
       {
-        provide: Router,
-        useValue: {
-          navigate: jest.fn().mockResolvedValue(true),
-          navigateByUrl: jest.fn().mockResolvedValue(true),
-        },
+        provide: CATALOG_BROWSE_SERVICE,
+        useValue: browse as unknown as CatalogBrowseServiceI,
       },
+      { provide: LINE_SERVICE, useValue: holding },
+      { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
         useValue: {
           paramMap: of(map),
-          snapshot: { paramMap: map, parent: null },
+          snapshot: { paramMap: map, parent: null, data: {} },
           parent: null,
         },
       },
@@ -279,32 +228,21 @@ async function render(options: Options = {}): Promise<{
   }).compileComponents();
 
   const fixture = TestBed.createComponent(LinePage);
-  fixture.detectChanges();
-  await fixture.whenStable();
+  await drain(fixture);
 
-  // The "also on" read resolves through a `Promise.all` that `whenStable` does not
-  // wait for in a zoneless test, so the microtask queue is drained by hand. Microtasks
-  // rather than a `setTimeout`, because one spec here installs fake timers before it
-  // renders and a macrotask would never fire.
-  for (let tick = 0; tick < 5; tick += 1) {
-    await Promise.resolve();
-  }
-  fixture.detectChanges();
-
-  return { fixture, lines, catalog, profiles, holding };
+  return { fixture, lines, router, browse };
 }
 
 /**
- * Let the effects wake and their promises land, after the store has been moved.
- *
- * The same hand drained microtask queue `render` finishes with, for the same reason:
- * the "also on" read resolves through a `Promise.all` that `whenStable` does not wait
- * for in a zoneless test.
+ * Let the effects wake and their promises land. The price and "also on" reads
+ * resolve through promises that `whenStable` does not wait for in a zoneless test.
  */
 async function drain(fixture: ComponentFixture<LinePage>): Promise<void> {
-  fixture.detectChanges();
-  for (let tick = 0; tick < 5; tick += 1) {
-    await Promise.resolve();
+  for (let round = 0; round < 3; round += 1) {
+    fixture.detectChanges();
+    for (let tick = 0; tick < 8; tick += 1) {
+      await Promise.resolve();
+    }
   }
   fixture.detectChanges();
 }
@@ -312,7 +250,6 @@ async function drain(fixture: ComponentFixture<LinePage>): Promise<void> {
 const textOf = (fixture: ComponentFixture<LinePage>): string =>
   fixture.nativeElement.textContent ?? '';
 
-/** The one button whose text is the given key. Keys, because the translator emits them. */
 function buttonWith(
   fixture: ComponentFixture<LinePage>,
   key: string
@@ -325,695 +262,263 @@ function buttonWith(
   );
 }
 
+function stars(fixture: ComponentFixture<LinePage>): HTMLButtonElement[] {
+  return fixture.debugElement
+    .queryAll(By.css('button.star'))
+    .map((element) => element.nativeElement as HTMLButtonElement);
+}
+
 describe('LinePage', () => {
-  /**
-   * Velista `0130`. The whole page used to wait for the line, so a cold arrival drew
-   * nothing at all, not even a way back. The header is drawn first now, outside the
-   * scroller, under the word for the kind of page.
-   */
-  describe('the one page header (velista 0130)', () => {
-    function title(fixture: ComponentFixture<LinePage>): HTMLElement | null {
-      return (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-page-header h1'
-      );
-    }
+  it('titles the header with the line and says where it is', async () => {
+    const { fixture } = await render();
 
-    function backControl(
-      fixture: ComponentFixture<LinePage>
-    ): HTMLElement | null {
-      return (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-page-header [aria-label="list.header.back"]'
-      );
-    }
+    expect(
+      fixture.nativeElement.querySelector('h1')?.textContent?.trim()
+    ).toBe('Shampoo');
+    expect(textOf(fixture)).toContain('list.page.where');
+    expect(textOf(fixture)).toContain('list.page.addedBy');
+  });
 
-    it('is drawn before the line arrives, titled Product, with a way back', async () => {
-      const { fixture } = await render({ lines: [] });
-      const host = fixture.nativeElement as HTMLElement;
+  describe('the number', () => {
+    it('sends one more and one fewer as a delta', async () => {
+      const { fixture, lines } = await render();
+      const [fewer, more] = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement);
 
-      expect(fixture.componentInstance.page()).toBeNull();
-      expect(title(fixture)?.textContent?.trim()).toBe('line.title');
-      expect(backControl(fixture)).not.toBeNull();
-      // The content is what waits, and only the content.
-      expect(host.querySelector('main')).toBeNull();
-    });
-
-    it('takes the line’s text once it arrives, in the same h1', async () => {
-      const { fixture, lines } = await render({ lines: [] });
-      const before = title(fixture);
-
-      lines.set([line()]);
+      more.click();
+      fewer.click();
       await drain(fixture);
-      fixture.detectChanges();
 
-      expect(title(fixture)).toBe(before);
-      expect(before?.textContent?.trim()).toBe('Milk');
+      expect(
+        lines.calls.filter((call) => call.kind === 'quantity')
+      ).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: 1 },
+        { kind: 'quantity', lineId: LINE_ID, delta: -1 },
+      ]);
     });
 
-    it('is the only h1 and the only header element, before the scroller', async () => {
-      const { fixture } = await render();
-      const host = fixture.nativeElement as HTMLElement;
+    it('is a number with no buttons for a reader without DECIDE', async () => {
+      const { fixture } = await render({ permissions: READER });
 
-      expect(host.querySelectorAll('h1')).toHaveLength(1);
-      expect(host.querySelectorAll('header')).toHaveLength(1);
-      expect(host.querySelector('main lib-page-header')).toBeNull();
       expect(
-        host
-          .querySelector('lib-page-header')
-          ?.nextElementSibling?.matches('main.page')
-      ).toBe(true);
-      // No quick action on this page.
-      expect(
-        host.querySelector('lib-page-header button[libPageHeaderAction]')
+        fixture.nativeElement.querySelector('lib-quantity-stepper')
       ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('.quantity')?.textContent
+      ).toContain('3');
+    });
+  });
+
+  describe('the products', () => {
+    it('draws a card for each product, with the price it read', async () => {
+      const { fixture, browse } = await render();
+
+      const cards = fixture.nativeElement.querySelectorAll(
+        'lib-line-product-rail li'
+      );
+      expect(cards).toHaveLength(2);
+      expect(textOf(fixture)).toContain('Shampoo for normal hair');
+      expect(textOf(fixture)).toContain('2.15');
+      expect(browse.context).toHaveBeenCalledTimes(1);
+      expect(browse.scopeOffers).toHaveBeenCalledTimes(2);
+      // Two products, so one of them is the cheapest.
+      expect(textOf(fixture)).toContain('list.page.card.cheapest');
     });
 
-    it('goes back to the list, through the page', async () => {
-      const { fixture } = await render();
-      const router = TestBed.inject(Router) as unknown as {
-        navigateByUrl: jest.Mock;
-      };
+    it('opens the products page from Change', async () => {
+      const { fixture, router } = await render();
 
-      backControl(fixture)?.click();
-      await fixture.whenStable();
+      buttonWith(fixture, 'list.page.productsChange')?.click();
+      await drain(fixture);
 
       expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}`,
-        { replaceUrl: true }
-      );
-    });
-  });
-
-  describe('the product names', () => {
-    it('come from the service, as one request for the set', async () => {
-      const { fixture } = await render();
-
-      expect(fixture.componentInstance.page()?.products[0].name).toBe(
-        'Whole milk'
+        `${LINE_URL}/products`
       );
     });
 
-    it('report a failure as a failure, never as the line having none', async () => {
-      const { fixture } = await render({
-        itemNames: fakeItemNames({ items: [], failed: ['item-milk-a'] }),
-      });
-
-      const text = textOf(fixture);
-      expect(text).toContain('list.detail.namesFailed');
-      // The chip is drawn as unnamed rather than as the "no products" sentence, which
-      // is what the chip used to say about a product it was displaying.
-      expect(text).toContain('list.detail.unnamedProduct');
-      expect(fixture.componentInstance.page()?.products).toHaveLength(1);
-    });
-  });
-
-  describe('adding a product', () => {
-    it('offers a control rather than a decoration', async () => {
-      const { fixture } = await render();
-
-      const add = buttonWith(fixture, 'list.page.addProduct');
-      expect(add).not.toBeNull();
-    });
-
-    it('does not offer it to somebody who may not edit', async () => {
-      const { fixture } = await render({
-        list: list({ myPermissions: ['READ'] }),
-      });
-
-      expect(buttonWith(fixture, 'list.page.addProduct')).toBeNull();
-    });
-
-    it('searches the catalog, scoped to the active profile', async () => {
-      jest.useFakeTimers();
-      try {
-        const catalog = catalogOffering([{ kind: 'item', item: OAT }]);
-        const { fixture } = await render({ catalog });
-
-        fixture.componentInstance.startAdding();
-        fixture.detectChanges();
-
-        const field = fixture.debugElement.query(By.css('.search-field'))
-          .nativeElement as HTMLInputElement;
-        field.value = 'oat';
-        field.dispatchEvent(new Event('input'));
-        fixture.detectChanges();
-
-        jest.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
-
-        // The scope rule (section 3): the profile's id is passed, and the fake store's
-        // default profile is what resolves.
-        expect(catalog.suggest).toHaveBeenCalledWith('oat', {
-          profileId: expect.any(String),
-        });
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
-    it('offers products and never groups, because the line is already a set of them', async () => {
-      jest.useFakeTimers();
-      try {
-        const catalog = catalogOffering([
-          {
-            kind: 'group',
-            group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
-            itemIds: ['item-milk-a', 'item-oat'],
-          },
-          { kind: 'item', item: OAT },
-        ]);
-        const { fixture } = await render({ catalog });
-
-        fixture.componentInstance.startAdding();
-        fixture.detectChanges();
-
-        const field = fixture.debugElement.query(By.css('.search-field'))
-          .nativeElement as HTMLInputElement;
-        field.value = 'milk';
-        field.dispatchEvent(new Event('input'));
-        fixture.detectChanges();
-
-        jest.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
-        // The answer arrives on a microtask, which fake timers do not drive.
-        await Promise.resolve();
-        await Promise.resolve();
-
-        // The group is dropped and the order of what is left is the server's: this
-        // screen attaches one product at a time, and a group row here reads as a group
-        // being poured into a group.
-        expect(fixture.componentInstance.suggestions()).toEqual([
-          { kind: 'item', item: OAT },
-        ]);
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
-    it('attaches what was chosen, unioned onto the set the line already has', async () => {
-      const { fixture, lines } = await render();
-
-      await fixture.componentInstance.addProduct({ kind: 'item', item: OAT });
-
-      expect(lines.calls).toContainEqual({
-        kind: 'update',
-        lineId: LINE_ID,
-        itemIds: ['item-milk-a', 'item-oat'],
-      });
-      expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual([
-        'item-milk-a',
-        'item-oat',
-      ]);
-    });
-
-    // Handed one directly, which the search above no longer does. The row type is the
-    // catalog's union, so the case still has to be answered, and attaching the members
-    // is the only answer that is not a tap doing nothing.
-    it('attaches a whole group when it is given one', async () => {
-      const { fixture, lines } = await render();
-
-      await fixture.componentInstance.addProduct({
-        kind: 'group',
-        group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
-        itemIds: ['item-milk-a', 'item-oat'],
-      });
-
-      // `item-milk-a` was already there and is not duplicated: the set is a set.
-      expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual([
-        'item-milk-a',
-        'item-oat',
-      ]);
-    });
-
-    it('writes nothing when the product is already on the line', async () => {
-      const { fixture, lines } = await render();
-
-      await fixture.componentInstance.addProduct({ kind: 'item', item: MILK });
-
-      expect(lines.calls).toEqual([]);
-    });
-  });
-
-  /**
-   * The cap, refused before the request (velista plan 0065, section 3).
-   *
-   * The point of every one of these is what the client does **not** send. The server
-   * enforces the same rule and keeps its generic sentence, so reaching it now means a
-   * second client or a stale set rather than the ordinary path.
-   */
-  describe('the cap', () => {
-    it('refuses a group that does not fit whole, and sends nothing', async () => {
-      // All or nothing, and the sentence says why: a partial fill would be the server
-      // choosing which 2 of Milk's 10 land on somebody's shopping list.
-      const { fixture, lines } = await render({
-        lines: [line({ itemIds: items(98) })],
-      });
-
-      await fixture.componentInstance.addProduct({
-        kind: 'group',
-        group: MILK_GROUP,
-        itemIds: items(10).map((itemId) => `${itemId}-new`),
-        offer: null,
-      });
-
-      expect(lines.calls).toEqual([]);
-      expect(lines.linesIn(LIST_ID)[0].itemIds).toHaveLength(98);
-      // On the view model and not on rendered text: the testing translator does not
-      // interpolate, so the sentence on screen is the key alone.
-      expect(fixture.componentInstance.productsFull()).toEqual({
-        key: 'list.page.productsFull.group',
-        args: { count: 98, cap: LINE_ITEM_SET_MAX, name: 'Milk', adds: 10 },
-      });
-    });
-
-    it('refuses one product on a full line, and sends nothing', async () => {
-      const { fixture, lines } = await render({
-        lines: [line({ itemIds: items(100) })],
-      });
-
-      await fixture.componentInstance.addProduct({ kind: 'item', item: OAT });
-
-      expect(lines.calls).toEqual([]);
-      expect(fixture.componentInstance.productsFull()).toEqual({
-        key: 'list.page.productsFull.one',
-        args: { count: 100, cap: LINE_ITEM_SET_MAX },
-      });
-    });
-
-    it('still allows a removal from an over cap line', async () => {
-      // The rule is `next.length <= max(cap, current.length)`, so a line the catalog's
-      // own sync carried past 100 can be brought back under it. Written the other way
-      // it would be frozen by the rule that exists to keep it under the cap.
-      const { fixture, lines } = await render({
-        lines: [
-          line({
-            itemIds: items(104),
-            productGroupId: MILK_GROUP.id,
-            groupItemIds: items(104),
-          }),
-        ],
-      });
-
-      await fixture.componentInstance.removeProduct('item-0');
-
-      expect(lines.linesIn(LIST_ID)[0].itemIds).toHaveLength(103);
-      expect(fixture.componentInstance.productsFull()).toBeNull();
-    });
-
-    it('counts the whole set against the cap without clamping either number', async () => {
-      const { fixture } = await render({
-        lines: [line({ itemIds: items(104) })],
-      });
-
-      expect(fixture.componentInstance.page()?.counter).toEqual({
-        count: 104,
-        cap: LINE_ITEM_SET_MAX,
-        overCap: true,
-      });
-    });
-  });
-
-  /**
-   * Keeping a product the catalog put there (velista plan 0065, section 4).
-   *
-   * The gesture is one field on the wire and one chip moving on the screen, and both
-   * halves are asserted: the request carries `adoptItemIds` and nothing else, and the
-   * chip is in the other cluster afterwards.
-   */
-  describe('keeping a product', () => {
-    const subscribed = (): Line =>
-      line({
-        itemIds: ['item-milk-a', 'item-oat'],
-        productGroupId: MILK_GROUP.id,
-        groupItemIds: ['item-milk-a'],
-      });
-
-    it('sends adoptItemIds alone and moves the chip to the other cluster', async () => {
-      const { fixture, lines } = await render({ lines: [subscribed()] });
-
-      await fixture.componentInstance.adoptProduct('item-milk-a');
-      await drain(fixture);
-
-      // The field and nothing else. A set replacement that happened to keep the
-      // product would be an ordinary edit, not a statement about who owns it.
-      expect(lines.calls).toEqual([
-        { kind: 'update', lineId: LINE_ID, adoptItemIds: ['item-milk-a'] },
-      ]);
-
-      const clusters = fixture.componentInstance.page()?.clusters;
-      // One cluster left, and it is the person's: nothing is the catalog's any more.
-      expect(clusters).toHaveLength(1);
-      expect(clusters?.[0].headingKey).toBe('list.page.addedByYou');
-      expect(clusters?.[0].products.map((product) => product.itemId)).toEqual([
-        'item-milk-a',
-        'item-oat',
-      ]);
-    });
-
-    it('offers it on the catalog’s chip only, and never to a reader', async () => {
-      const { fixture } = await render({ lines: [subscribed()] });
-
-      expect(buttonWith(fixture, 'list.page.keepProduct')).not.toBeNull();
-
-      const readOnly = await render({
-        lines: [subscribed()],
-        list: list({ myPermissions: ['READ'] }),
-      });
-      expect(buttonWith(readOnly.fixture, 'list.page.keepProduct')).toBeNull();
-    });
-
-    it('draws no control at all on a line that follows no group', async () => {
-      // Every line backend `0048` created. No headings and no `Keep`: the page is
-      // exactly what it was before this plan for all of them.
-      const { fixture } = await render();
-
-      expect(fixture.componentInstance.page()?.clusters).toBeNull();
-      expect(buttonWith(fixture, 'list.page.keepProduct')).toBeNull();
-    });
-
-    it('sends nothing for a product the person already owns', async () => {
-      // A stale frame rather than a gesture. A request for it would bump the line's
-      // version to say nothing at all.
-      const { fixture, lines } = await render({ lines: [subscribed()] });
-
-      await fixture.componentInstance.adoptProduct('item-oat');
-
-      expect(lines.calls).toEqual([]);
-    });
-
-    it('names the group it follows in the heading', async () => {
-      const { fixture } = await render({ lines: [subscribed()] });
-
-      const clusters = fixture.componentInstance.page()?.clusters;
-      expect(clusters?.[0].headingKey).toBe('list.page.fromGroup');
-      expect(clusters?.[0].headingArgs).toEqual({ name: 'Milk' });
-    });
-
-    it('falls back to the unnamed heading when the group did not resolve', async () => {
-      const { fixture } = await render({
-        lines: [subscribed()],
-        groupNames: fakeGroupNames({ groups: [], failed: [MILK_GROUP.id] }),
-      });
-
-      expect(fixture.componentInstance.page()?.clusters?.[0].headingKey).toBe(
-        'list.page.fromGroupUnnamed'
-      );
-    });
-  });
-
-  describe('paging the histories', () => {
-    it('offers no further page when the store holds the whole history', async () => {
-      const { fixture } = await render({
-        settlements: { [LINE_ID]: [bought('st-1')] },
-      });
-
-      expect(buttonWith(fixture, 'list.page.more')).toBeNull();
-    });
-
-    it('appends the next page rather than replacing what is drawn', async () => {
-      // The rule that makes a history's "show more" correct rather than merely present
-      // (section 4): the recent rows are the ones somebody opened a history for.
-      const { fixture, lines } = await render({
-        settlements: { [LINE_ID]: [bought('st-1')] },
-        moreSettlements: { [LINE_ID]: [bought('st-2')] },
-      });
-
-      const more = buttonWith(fixture, 'list.page.more');
-      expect(more).not.toBeNull();
-
-      more?.click();
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      expect(lines.calls).toContainEqual({
-        kind: 'moreSettlements',
-        lineId: LINE_ID,
-      });
-      expect(fixture.componentInstance.page()?.thisList.rows).toHaveLength(2);
-      // And the control goes when the history is exhausted.
-      expect(buttonWith(fixture, 'list.page.more')).toBeNull();
-    });
-
-    it('pages the cross list history by asking again, not by slicing', async () => {
-      // Asking again is what applies the read access filter per page, which is the
-      // backend's rule and cannot be satisfied by paging a snapshot.
-      const { fixture, lines } = await render({
-        itemSettlements: { [LINE_ID]: [bought('st-a')] },
-        moreItemSettlements: { [LINE_ID]: [bought('st-b')] },
-      });
-
-      buttonWith(fixture, 'list.page.more')?.click();
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      expect(lines.calls).toContainEqual({
-        kind: 'moreItemSettlements',
-        lineId: LINE_ID,
-      });
-      expect(fixture.componentInstance.page()?.everywhere?.rows).toHaveLength(
-        2
-      );
-    });
-  });
-
-  describe('where else it is wanted', () => {
-    it('asks per product, excluding the list being asked from', async () => {
-      // Per product because the server answers for an item and refuses a group, and
-      // excluding this list because "also on" means somewhere else.
-      const { holding } = await render({
-        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
-      });
-
-      expect(holding.asked).toEqual([
-        { itemId: 'item-milk-a', excludeListId: LIST_ID },
-        { itemId: 'item-oat', excludeListId: LIST_ID },
-      ]);
-    });
-
-    it('asks nothing more for a write that leaves the products alone', async () => {
-      // The bug this replaced: the read was keyed on the `Line` object, which the store
-      // replaces on every write to it, and one edit is three writes (the optimistic
-      // patch, the server's row, the realtime echo). So a quantity nudge re-asked for
-      // every product on the line, three times over.
-      const { fixture, lines, holding } = await render({
-        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
-      });
-      expect(holding.asked).toHaveLength(2);
-
-      lines.set([line({ itemIds: ['item-milk-a', 'item-oat'], quantity: 9 })]);
-      await drain(fixture);
-
-      expect(holding.asked).toHaveLength(2);
-    });
-
-    it('asks only about the product that joined the set', async () => {
-      // Adding a product does not change the answer for the products already on the
-      // line, and this page's answer is a snapshot of the visit, so the ones it holds
-      // are reused. Adding one product is one request, not one per product.
-      const { fixture, lines, holding } = await render();
-      expect(holding.asked.map((ask) => ask.itemId)).toEqual(['item-milk-a']);
-
-      lines.set([line({ itemIds: ['item-milk-a', 'item-oat'] })]);
-      await drain(fixture);
-
-      expect(holding.asked.map((ask) => ask.itemId)).toEqual([
-        'item-milk-a',
-        'item-oat',
-      ]);
-    });
-
-    it('never asks for a line with no products', async () => {
-      // The server refuses that read rather than answering empty, because there is no
-      // question to ask. Asking anyway would turn a legitimate absence into an error.
-      const { fixture, holding } = await render({
+    it('says one sentence and offers Add a product on a line with none', async () => {
+      const { fixture, router } = await render({
         lines: [line({ itemIds: [] })],
       });
 
-      expect(holding.asked).toEqual([]);
-      expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('lib-line-product-rail')
+      ).toBeNull();
+      expect(textOf(fixture)).toContain('list.page.productsEmpty');
+      expect(textOf(fixture)).not.toContain('list.page.supermarket');
+
+      buttonWith(fixture, 'list.page.productsAdd')?.click();
+      await drain(fixture);
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `${LINE_URL}/products`
+      );
     });
+  });
 
-    it('merges the products answers, counting one list once', async () => {
-      // A list wanting two of this line's products is one place, not two.
-      const { fixture } = await render({
-        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
-        alsoOn: {
-          'item-milk-a': {
-            places: [
-              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
-            ],
-            hasMore: false,
-          },
-          'item-oat': {
-            places: [
-              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
-              { listId: 'list-3', listName: 'Office', zoneName: 'Work' },
-            ],
-            hasMore: false,
-          },
-        },
-      });
+  describe('the favourite', () => {
+    it('makes the product of the pressed star the favourite', async () => {
+      const { fixture, lines } = await render();
 
-      expect(fixture.componentInstance.page()?.alsoOn?.places).toEqual([
-        { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
-        { listId: 'list-3', listName: 'Office', zoneName: 'Work' },
+      stars(fixture)[1].click();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, favoriteItemId: 'classic' },
       ]);
-      expect(textOf(fixture)).toContain('list.page.alsoOn');
     });
 
-    it('draws nothing for an empty answer, and does not call it a failure', async () => {
-      // Asked, and nothing else wants it. The section is not drawn, but the answer is
-      // a real one: this is the case that used to be indistinguishable from not asking.
-      const { fixture } = await render({
-        alsoOn: { 'item-milk-a': { places: [], hasMore: false } },
+    it('draws the favourite first with its star pressed, and clears it on a second press', async () => {
+      const { fixture, lines } = await render({
+        lines: [line({ favoriteItemId: 'classic' })],
       });
 
-      expect(fixture.componentInstance.page()?.alsoOn).toEqual({
-        places: [],
-        hasMore: false,
+      const [first, second] = stars(fixture);
+      expect(first.getAttribute('aria-pressed')).toBe('true');
+      expect(second.getAttribute('aria-pressed')).toBe('false');
+      expect(
+        fixture.nativeElement.querySelector('lib-line-product-rail li')
+          ?.textContent
+      ).toContain('Classic care shampoo');
+
+      first.click();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, favoriteItemId: null },
+      ]);
+    });
+
+    it('shows a reader the favourite as a mark, and no star to press', async () => {
+      const { fixture } = await render({
+        permissions: READER,
+        lines: [line({ favoriteItemId: 'classic' })],
       });
+
+      expect(stars(fixture)).toHaveLength(0);
+      expect(
+        fixture.nativeElement.querySelectorAll('.star.is-mark')
+      ).toHaveLength(1);
+    });
+  });
+
+  describe('the rows', () => {
+    it('opens the supermarket sheet, the history page and the comments', async () => {
+      const { fixture, router } = await render();
+
+      buttonWith(fixture, 'list.page.supermarket')?.click();
+      buttonWith(fixture, 'list.page.history')?.click();
+      buttonWith(fixture, 'list.page.comments')?.click();
+      await drain(fixture);
+
+      expect(router.navigateByUrl.mock.calls.map(([url]) => url)).toEqual([
+        `${LINE_URL}/sheet/supermarket`,
+        `${LINE_URL}/history`,
+        `${LINE_URL}/sheet/comments`,
+      ]);
+    });
+
+    it('says Any with no supermarket, and the name with one', async () => {
+      const any = await render();
+      expect(textOf(any.fixture)).toContain('list.page.supermarketAny');
+
+      const chosen = await render({
+        lines: [line({ preferredSupermarketId: MERCADONA })],
+      });
+      expect(textOf(chosen.fixture)).toContain('Mercadona');
+      expect(textOf(chosen.fixture)).not.toContain('list.page.supermarketAny');
+    });
+
+    it('does not let a reader open the supermarket sheet', async () => {
+      const { fixture } = await render({ permissions: READER });
+
+      expect(textOf(fixture)).toContain('list.page.supermarket');
+      expect(buttonWith(fixture, 'list.page.supermarket')).toBeNull();
+    });
+  });
+
+  describe('the three dots', () => {
+    it('open the menu sheet', async () => {
+      const { fixture, router } = await render();
+
+      (
+        fixture.nativeElement.querySelector(
+          'button[libPageHeaderAction]'
+        ) as HTMLButtonElement
+      ).click();
+      await drain(fixture);
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `${LINE_URL}/sheet/menu`
+      );
+    });
+
+    it('are absent for a reader, whose menu would be empty', async () => {
+      const { fixture } = await render({ permissions: READER });
+
+      expect(
+        fixture.nativeElement.querySelector('button[libPageHeaderAction]')
+      ).toBeNull();
+    });
+  });
+
+  describe('also on', () => {
+    it('is absent when no other list wants a product', async () => {
+      const { fixture } = await render();
       expect(textOf(fixture)).not.toContain('list.page.alsoOn');
     });
 
-    it('says there are more when the server capped the answer', async () => {
+    it('lists the other lists as rows', async () => {
       const { fixture } = await render({
         alsoOn: {
-          'item-milk-a': {
-            places: [
-              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
-            ],
-            hasMore: true,
-          },
+          places: [{ listId: 'l2', listName: 'Party list', zoneName: 'Home' }],
+          hasMore: true,
         },
       });
 
+      expect(textOf(fixture)).toContain('list.page.alsoOn');
+      expect(textOf(fixture)).toContain('Party list');
       expect(textOf(fixture)).toContain('list.page.alsoOnMore');
     });
+  });
 
-    it('keeps the products that answered when one request fails', async () => {
-      // An indicator, so a partial answer beats none. It says there is more rather
-      // than presenting the half it has as the whole.
-      const { fixture } = await render({
-        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
-        alsoOn: {
-          'item-milk-a': {
-            places: [
-              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
-            ],
-            hasMore: false,
-          },
-          'item-oat': new Error('gateway down'),
-        },
+  describe('loading (section 4)', () => {
+    it('reads the lines when nothing holds them, and draws the skeleton', async () => {
+      const { fixture, lines } = await render({
+        lines: [],
+        linesState: 'idle',
       });
 
-      const alsoOn = fixture.componentInstance.page()?.alsoOn;
-      expect(alsoOn?.places).toHaveLength(1);
-      expect(alsoOn?.hasMore).toBe(true);
+      expect(lines.loadCount()).toBe(1);
+      expect(fixture.nativeElement.querySelector('.bones')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('h1')?.textContent?.trim()
+      ).toBe('line.title');
     });
 
-    it('is null when nothing came back at all', async () => {
-      // Every request failed, so as far as the reader is concerned nobody asked, and
-      // the section is omitted rather than claiming no other list wants this.
-      const { fixture } = await render({
-        alsoOn: { 'item-milk-a': new Error('gateway down') },
+    it('does not read lines the store already holds', async () => {
+      const { lines } = await render();
+      expect(lines.loadCount()).toBe(0);
+    });
+
+    it('says the line is gone on a list read to its end that does not hold it', async () => {
+      const { fixture } = await render({ lines: [] });
+
+      expect(textOf(fixture)).toContain('list.gone.unavailable');
+      expect(buttonWith(fixture, 'list.page.toList')).not.toBeNull();
+    });
+
+    it('offers to try again when the read failed', async () => {
+      const { fixture, lines } = await render({
+        lines: [],
+        linesState: 'failed',
       });
 
-      expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
-      expect(textOf(fixture)).not.toContain('list.page.alsoOn');
+      buttonWith(fixture, 'list.page.retry')?.click();
+      await drain(fixture);
+
+      expect(textOf(fixture)).toContain('list.page.failed');
+      expect(lines.loadCount()).toBe(1);
     });
-  });
-});
-
-describe('LinePage similar products', () => {
-  const GROUPED: CatalogItem = {
-    ...MILK,
-    productGroupId: MILK_GROUP.id,
-    categories: [
-      {
-        id: 'cat-milk',
-        parentId: 'cat-eggs-milk-and-butter',
-        slug: 'milk',
-        name: { en: 'Milk', es: 'Leche' },
-      },
-    ],
-    offer: null,
-    chainPrices: [],
-    imageUrl: null,
-    packCount: null,
-    unitBasis: null,
-  };
-  const PASCUAL: CatalogItem = {
-    ...GROUPED,
-    id: 'item-milk-pascual',
-    name: { es: 'Leche entera Pascual', en: 'Pascual whole milk' },
-    brand: 'Pascual',
-    productGroupId: MILK_GROUP.id,
-  };
-
-  const members = () =>
-    fakeGroupMembers({ members: { [MILK_GROUP.id]: [GROUPED, PASCUAL] } });
-
-  function similarRows(fixture: ComponentFixture<LinePage>): HTMLElement[] {
-    return [
-      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-        'lib-similar-products .row .open'
-      ),
-    ];
-  }
-
-  it("lists the other products of the line product's group, and reads the group once", async () => {
-    const groupMembers = members();
-    const { fixture } = await render({
-      itemNames: fakeItemNames({ items: [GROUPED] }),
-      groupMembers,
-    });
-
-    expect(similarRows(fixture).map((row) => row.textContent)).toEqual([
-      expect.stringContaining('Pascual whole milk'),
-    ]);
-    expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
-      [MILK_GROUP.id],
-    ]);
-  });
-
-  it('changes the line to the one pressed, in place of its own', async () => {
-    const { fixture, lines } = await render({
-      lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
-      itemNames: fakeItemNames({ items: [GROUPED, OAT] }),
-      groupMembers: members(),
-    });
-
-    similarRows(fixture)[0].click();
-    await drain(fixture);
-
-    expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual([
-      'item-milk-pascual',
-      'item-oat',
-    ]);
-    // The words stay: changing the product is not renaming the line.
-    expect(lines.linesIn(LIST_ID)[0].content).toBe('Milk');
-  });
-
-  it('opens the product instead for a reader who cannot change the line', async () => {
-    const { fixture, lines } = await render({
-      list: list({ myPermissions: ['READ'] }),
-      itemNames: fakeItemNames({ items: [GROUPED] }),
-      groupMembers: members(),
-    });
-
-    similarRows(fixture)[0].click();
-    await drain(fixture);
-
-    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
-      '/velista/en/catalog/products/item-milk-pascual'
-    );
-    expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual(['item-milk-a']);
-  });
-
-  it('draws no similar products for a product with no group', async () => {
-    const { fixture } = await render({ groupMembers: members() });
-
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-similar-products'
-      )
-    ).toBeNull();
   });
 });
