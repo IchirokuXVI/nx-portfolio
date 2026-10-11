@@ -56,6 +56,20 @@ In this plan an **outside buy** of a basket is a purchase of a covered line that
 through another basket, or on the zone list page with no basket. A buy made through the
 reading basket, by any of its people, is an **own buy**.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #694 checked this plan against the code on `dev`. It found no
+false statement about that code. Two things are absent.
+
+1. **This plan does not say what to do when backend `0204` is built first.** Backend
+   `0204` moves `stateOf`, `isSkipped`, `closeHolds` and `progressOf` out of
+   `basket-rows.ts` into `libs/luna-shopper/basket-rules`. The scope of this plan names
+   `basket-rows.ts` and not that library. If `0204` is on your base branch, make the
+   changes of this plan to those functions in the library.
+2. **This plan reverses backend `0138` sections 2 and 7, and that file has no note.**
+   Plans `0130`, `0188` and velista `0131` got one. Add the same kind of note to `0138` in
+   the pull request that builds this plan.
+
 ## Brief for the agent
 
 ### Objective

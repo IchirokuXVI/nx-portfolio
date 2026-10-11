@@ -27,6 +27,25 @@
 > `basket-line-add.service.ts` (`searchScope`), and the memory note on a realistic catalog
 > to measure on.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #694 checked this plan against the code on `dev`. The eight
+stages of `GET /v1/baskets/:id` are as the plan lists them. Where this section and a
+later section disagree, this section is right.
+
+1. **`GET /v1/baskets/live/rows` with a "participant guard" in section 3 does not match
+   the code.** The live routes are on `BasketLiveController` behind `JwtAuthGuard`, with
+   no participant (`basket.controller.ts`).
+2. **"It runs stages 1 to 4 and stops" does not describe the live route.** That route has
+   no guard hop and no `readShopOf`, and it asks `searchScope` inside `compose`. The plan
+   lists stages for `:id` only. The first basket of section 1, a `LIVE` basket read by
+   its owner, is measured on a route that the list does not describe. List the stages of
+   the live route before you measure it.
+3. **The rows route and backend `0201`.** Section 3 says that the route runs the steps of
+   backend `0201` that choose the product of a line when that plan is on the base branch.
+   Backend `0201` (pull request #693) did not name the route. Its review section now
+   does.
+
 ## Brief for the agent
 
 ### Objective

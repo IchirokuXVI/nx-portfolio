@@ -29,6 +29,32 @@
 > `realtime/src/app/consumer/jetstream.consumer.ts`, and the memory notes on guest
 > reachable routes and on framework free libraries that a browser can reach.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #694 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right.
+
+1. **"`list_lines.version` rises on every settle and revert" in section 2 is false.** In
+   `basket-settle.service.ts` the version rises only for a `BOUGHT` settle with units.
+   "They had none" moves no version, and a skip moves none.
+2. **A patch can thus arrive after a newer one and stay.** Patches are computed after the
+   commit, in parallel, one for each basket. A patch that was read before a later skip or
+   close can be published after the patch of that write. Velista `0143` applies a patch
+   with an equal version with no condition, so the other phone shows the older state
+   until another event touches the line. Give a patch an order of its own, for example
+   the database time of its read. The other way is that the client reads when the
+   version is equal and `skipped` or `closed` differs. State which.
+3. **"Neither plan waits for the other" is true in one order only.** This plan covers the
+   case that backend `0203` is on the base branch. Backend `0203` has no such clause for
+   this plan. Its review section now states it.
+4. **Section 7 says that whichever of this plan and backend `0201` is built second adds
+   `tripItemId`.** Backend `0201` (pull request #693) did not name the field. Its review
+   section now does.
+5. **"`npx nx build velista` passes, which proves the new library compiles for a
+   browser" proves nothing.** Nothing in velista imports the library before velista
+   `0143`. Use a check that does compile it, for example a type check of the library
+   with no Node types.
+
 ## Brief for the agent
 
 ### Objective

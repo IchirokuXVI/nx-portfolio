@@ -29,6 +29,22 @@
 > `libs/velista/models/src/lib/basket-view.ts` and `compose-basket-view.ts`, and the
 > memory note on framework free libraries that a browser can reach.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #694 checked this plan against the code on `dev`. The wait of
+1500 ms with no ceiling is confirmed (`REFRESH_DEBOUNCE_MS` and `_scheduleRefresh` in
+`basket-store.ts`).
+
+1. **A patch with an equal version is applied with no condition (section 2), and it can
+   be the older one.** A skip, a close and "They had none" move no version, and patches
+   can arrive out of order. The review section of backend `0204` has the detail and the
+   two ways out. Section 6 accepts a stale state only for the device that wrote. This
+   case is the other phone.
+2. **"A burst costs two reads at most" in section 5 does not hold with a ceiling of
+   3000 ms.** A burst that lasts longer than the ceiling costs more than two.
+3. **This plan reverses velista `0090` and `0060` section 4, and those files have no
+   note.** Add one to each in the pull request that builds this plan.
+
 ## Brief for the agent
 
 ### Objective
