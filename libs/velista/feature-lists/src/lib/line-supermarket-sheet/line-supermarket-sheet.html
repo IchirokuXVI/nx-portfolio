@@ -28,7 +28,7 @@
         <label [class.is-waiting]="saving() !== undefined" class="choice">
           <input
             (change)="pick(choice.supermarketId)"
-            (click)="choice.selected && pick(choice.supermarketId)"
+            (click)="pressed(choice)"
             [checked]="choice.selected"
             [disabled]="saving() !== undefined"
             class="control"

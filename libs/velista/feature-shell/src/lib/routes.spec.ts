@@ -546,14 +546,34 @@ describe('AppShellRoutes', () => {
         expect(routeAt(linePath)?.canActivate).toEqual(SIGNED_IN);
       });
 
-      it('confirms a delete over itself rather than over the list', () => {
+      it('covers itself with its own sheets, the delete confirm among them', () => {
         // Deleting is the one thing on either screen that discards a history, so it is
-        // confirmed from here too, and its URL sits under this page's own.
-        // A similar product is a page of its own since velista `0134`, so nothing
-        // else covers the line page.
+        // confirmed from here too, and its URL sits under this page's own. The menu,
+        // the name, the supermarket and the comments are velista `0135`, section 11.
         expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
-          ['sheet/confirm/delete']
+          [
+            'sheet/menu',
+            'sheet/name',
+            'sheet/supermarket',
+            'sheet/comments',
+            'sheet/confirm/delete',
+          ]
         );
+      });
+
+      it('has its history and its products as pages of their own, declared before it', () => {
+        // Pages and not children: a child is drawn over the line page, which is what
+        // a sheet does. Before the line page, as the specific before the general.
+        const paths = pages.map((route) => route.path);
+
+        for (const page of ['history', 'products']) {
+          const path = `${linePath}/${page}`;
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
       });
     });
 
@@ -1190,7 +1210,10 @@ describe('the sheets and their exit animation', () => {
     // the zone list, both baskets and the line page, because a product is a page
     // now. The sheet of lists is over the catalog and over a product's page, and
     // the sheet of what a visit added is over the catalog.
-    expect(sheets).toHaveLength(55);
+    //
+    // `0135` added four over the line page: the menu, the name, the supermarket
+    // and the comments.
+    expect(sheets).toHaveLength(59);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

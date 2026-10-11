@@ -186,7 +186,20 @@ export class LineSupermarketSheet {
     });
   }
 
-  /** A row was pressed: write it, and close on success. */
+  /**
+   * A press on the row that is already the answer, which changes no radio and so
+   * fires no `change`. It closes the sheet, as any other row does.
+   *
+   * It returns nothing on purpose: a listener that answers false cancels the
+   * click, and a cancelled click on a radio never checks it.
+   */
+  pressed(choice: SupermarketChoiceVm): void {
+    if (choice.selected) {
+      void this.pick(choice.supermarketId);
+    }
+  }
+
+  /** A row was picked: write it, and close on success. */
   async pick(supermarketId: string | null): Promise<void> {
     const line = this._line();
     if (line === undefined || this.saving() !== undefined) {

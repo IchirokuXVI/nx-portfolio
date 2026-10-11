@@ -251,7 +251,7 @@ function route() {
 
   return {
     paramMap: of(map),
-    snapshot: { paramMap: map, parent: null },
+    snapshot: { paramMap: map, parent: null, data: {} },
     parent: null,
   };
 }
