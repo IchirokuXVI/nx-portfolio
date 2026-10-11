@@ -70,11 +70,40 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--app-space-4);
+  align-items: center;
   margin: 0 0 var(--app-space-4);
   font-size: var(--app-text-base);
   font-weight: 650;
   line-height: 1.2;
   color: var(--app-text-primary);
+}
+
+// The words of the heading and the info button after them, on one line.
+.title-words {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+// The info button: a full touch target around the glyph, in the secondary text
+// colour. Pulled up and down by the same negative margin as the link beside it,
+// so the heading keeps the height of its words.
+.info {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-4) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-size: var(--app-icon-md);
+  cursor: pointer;
+
+  @include page.focus-ring;
 }
 
 // A quiet text action: "Change", "Add a product". Tall enough to press, and drawn at

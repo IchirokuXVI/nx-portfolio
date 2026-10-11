@@ -178,6 +178,16 @@ describe('selectLinePage', () => {
       expect(cards[1].cheapest).toBe(false);
     });
 
+    it('puts the cheapest first on a line with no favourite', () => {
+      // The line holds the dearer product first.
+      const cards =
+        selectLinePage(input({ line: line({ itemIds: ['classic', 'normal'] }) }))
+          ?.cards ?? [];
+
+      expect(cards.map((card) => card.itemId)).toEqual(['normal', 'classic']);
+      expect(cards.map((card) => card.cheapest)).toEqual([true, false]);
+    });
+
     it('puts the favourite first and leaves the word on the lowest price', () => {
       const cards =
         selectLinePage(input({ line: line({ favoriteItemId: 'classic' }) }))

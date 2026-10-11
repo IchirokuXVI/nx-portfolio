@@ -805,6 +805,14 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
               sheet({
+                // What the info button beside the products says (velista `0137`).
+                path: 'about-products',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineProductsInfoSheet
+                  ),
+              }),
+              sheet({
                 // Where the line is bought: one supermarket, or any (section 3.2).
                 path: 'supermarket',
                 loadComponent: () =>

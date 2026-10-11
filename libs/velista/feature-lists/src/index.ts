@@ -7,6 +7,7 @@ export * from './lib/line-menu-sheet/line-menu-sheet';
 export * from './lib/line-merge-question';
 export * from './lib/line-page/line-page';
 export * from './lib/line-page/select-line-page';
+export * from './lib/line-products-info-sheet/line-products-info-sheet';
 export * from './lib/line-products-page/line-products-page';
 export * from './lib/line-supermarket-sheet/line-supermarket-sheet';
 export * from './lib/list-error-copy';

@@ -148,6 +148,49 @@ export function favoriteFirst(
   ];
 }
 
+/**
+ * The cards of a line in the order the page draws them (velista `0137`,
+ * section 2): the favourite, then the products with a price from the cheapest
+ * up, then the ones with no price.
+ *
+ * It is the order the basket is meant to choose in, so the first card is the
+ * product a shopper will be shown. The comparison is the one that gives the word
+ * CHEAPEST, and two products at one price keep the order the line holds them in.
+ *
+ * **The cards move once.** While a price among the first
+ * {@link LINE_PRICED_PRODUCTS_MAX} is still being read, only the favourite moves
+ * and the rest keep the order of the line. Sorting as each price lands would move
+ * a card under a thumb several times in a second. Products after those keep their
+ * place at the end: nobody read all their prices, so nothing ranks them.
+ */
+export function orderLineCards(
+  prices: readonly LineProductPrice[],
+  favoriteItemId: string | null
+): readonly LineProductPrice[] {
+  const favorite =
+    favoriteItemId === null
+      ? undefined
+      : prices.find((price) => price.itemId === favoriteItemId);
+  const others = prices.filter((price) => price !== favorite);
+  const head = favorite === undefined ? [] : [favorite];
+
+  const counted = prices.slice(0, LINE_PRICED_PRODUCTS_MAX);
+  if (counted.some((price) => price.kind === 'loading')) {
+    return [...head, ...others];
+  }
+
+  const ranked = new Set(counted);
+  const inRange = others.filter((price) => ranked.has(price));
+  const priced = inRange
+    .filter((price) => price.kind === 'priced')
+    // `sort` is stable, so equal prices keep the order of the line.
+    .sort((a, b) => compareGroupOffers(a.offer, b.offer));
+  const unpriced = inRange.filter((price) => price.kind !== 'priced');
+  const beyond = others.filter((price) => !ranked.has(price));
+
+  return [...head, ...priced, ...unpriced, ...beyond];
+}
+
 /** One row of the supermarket sheet of a line (section 3.2). */
 export interface LineSupermarketRow {
   readonly supermarketId: string;

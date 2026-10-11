@@ -28,7 +28,7 @@ import {
   type AlsoOnVm,
   APP_BASE_PATH,
   catalogName,
-  favoriteFirst,
+  LINE_PRICED_PRODUCTS_MAX,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -42,6 +42,7 @@ import {
 import {
   ChevronRightIcon,
   EllipsisIcon,
+  InfoIcon,
   LineProductRail,
   PageHeader,
   PageHeaderAction,
@@ -56,11 +57,7 @@ import { linePageStatus, loadLineContext } from './line-context';
 import { LineProductPrices } from './line-product-prices';
 import { selectLinePage } from './select-line-page';
 
-/**
- * How many cards the rail has on screen when the page opens, and how many past
- * the last one on screen are read ahead (velista `0135`, section 3).
- */
-const CARDS_ON_ARRIVAL = 3;
+/** How many cards past the last one on screen are read ahead (velista `0135`, 3). */
 const CARDS_READ_AHEAD = 2;
 
 /**
@@ -93,6 +90,7 @@ const CARDS_READ_AHEAD = 2;
     PageHeaderAction,
     EllipsisIcon,
     ChevronRightIcon,
+    InfoIcon,
     QuantityStepper,
     LineProductRail,
   ],
@@ -163,13 +161,8 @@ export class LinePage {
     }
   );
 
-  /** The cards in the order they are drawn, for the prices read ahead. */
-  private readonly _cardOrder = computed(() =>
-    favoriteFirst(this._itemIds(), this._line()?.favoriteItemId ?? null)
-  );
-
   /** How many cards the rail has reached, counted from the first. */
-  private readonly _reached = signal(CARDS_ON_ARRIVAL);
+  private readonly _reached = signal(0);
 
   /** `WRITE` on a line nobody approved yet, `MANAGE` on any (backend 0036, 4.1). */
   private readonly _canEdit = computed(() => {
@@ -243,11 +236,13 @@ export class LinePage {
       untracked(() => void this._itemNames.ensure(itemIds));
     });
 
-    // The prices of the cards on screen and the next two (section 3).
+    // The prices the order of the cards compares: the first twenty products, read
+    // when the page opens (velista `0137`, section 2). Past those the cards keep the
+    // order of the line, so the rail reads them as it reaches them and two ahead.
     effect(() => {
-      const wanted = this._cardOrder().slice(
+      const wanted = this._itemIds().slice(
         0,
-        this._reached() + CARDS_READ_AHEAD
+        Math.max(LINE_PRICED_PRODUCTS_MAX, this._reached() + CARDS_READ_AHEAD)
       );
       if (wanted.length > 0) {
         untracked(() => void this._prices.ensure(wanted));
@@ -399,6 +394,13 @@ export class LinePage {
   /** The three dots: the menu, a sheet over this page. */
   async openMenu(): Promise<void> {
     await this._router.navigateByUrl(this._url(...sheetSegments('menu')));
+  }
+
+  /** The info button beside the heading of the products (velista `0137`, section 3). */
+  async openAbout(): Promise<void> {
+    await this._router.navigateByUrl(
+      this._url(...sheetSegments('about-products'))
+    );
   }
 
   async openSupermarket(): Promise<void> {

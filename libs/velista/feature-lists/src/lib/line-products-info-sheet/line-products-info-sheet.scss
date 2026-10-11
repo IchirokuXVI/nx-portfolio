@@ -1,0 +1,20 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+.title {
+  margin-block-end: var(--app-space-4);
+}
+
+// One thought for each paragraph, at the size of body text: this sheet is read,
+// not scanned.
+.say {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.secondary {
+  margin-block-start: var(--app-space-4);
+}

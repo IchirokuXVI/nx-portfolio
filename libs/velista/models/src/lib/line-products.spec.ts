@@ -2,7 +2,9 @@ import type { ProductShopPrice } from './catalog-browse';
 import type { ProductOffer } from './domain';
 import {
   favoriteFirst,
+  LINE_PRICED_PRODUCTS_MAX,
   lineProductPrices,
+  orderLineCards,
   lineSupermarketRows,
   type LineProductPriceRead,
 } from './line-products';
@@ -147,6 +149,111 @@ describe('lineProductPrices', () => {
     );
 
     expect(price.kind).toBe('noPrice');
+  });
+});
+
+describe('orderLineCards', () => {
+  const order = (
+    byItem: Record<string, LineProductPriceRead>,
+    favorite: string | null,
+    supermarketId: string | null = null
+  ): string[] =>
+    orderLineCards(
+      lineProductPrices(Object.keys(byItem), reads(byItem), supermarketId),
+      favorite
+    ).map((price) => price.itemId);
+
+  it('puts the cheapest first with no favourite, by unit price and then price', () => {
+    expect(
+      order(
+        {
+          dear: [row(MERCADONA, 'priced', 4.95, 13.75)],
+          cheap: [row(MERCADONA, 'priced', 2.15, 5.38)],
+          middle: [row(CARREFOUR, 'priced', 3.45, 8.96)],
+        },
+        null
+      )
+    ).toEqual(['cheap', 'middle', 'dear']);
+  });
+
+  it('puts the favourite first, whatever it costs, and the rest by price', () => {
+    expect(
+      order(
+        {
+          dear: [row(MERCADONA, 'priced', 4.95, 13.75)],
+          cheap: [row(MERCADONA, 'priced', 2.15, 5.38)],
+          middle: [row(CARREFOUR, 'priced', 3.45, 8.96)],
+        },
+        'dear'
+      )
+    ).toEqual(['dear', 'cheap', 'middle']);
+  });
+
+  it('keeps the order of the line for two products at one price', () => {
+    expect(
+      order(
+        {
+          first: [row(MERCADONA, 'priced', 2, 4)],
+          second: [row(CARREFOUR, 'priced', 2, 4)],
+        },
+        null
+      )
+    ).toEqual(['first', 'second']);
+  });
+
+  it('puts the products with no price last, in the order of the line', () => {
+    expect(
+      order(
+        {
+          none: [row(MERCADONA, 'unpriced')],
+          failed: null,
+          priced: [row(MERCADONA, 'priced', 3)],
+        },
+        null
+      )
+    ).toEqual(['priced', 'none', 'failed']);
+  });
+
+  it('orders by the prices of the supermarket of the line', () => {
+    expect(
+      order(
+        {
+          a: [row(MERCADONA, 'priced', 1, 2), row(CARREFOUR, 'priced', 5, 10)],
+          b: [row(MERCADONA, 'priced', 2, 4), row(CARREFOUR, 'priced', 3, 6)],
+          c: [row(MERCADONA, 'priced', 3, 6), row(CARREFOUR, 'notSold')],
+        },
+        null,
+        CARREFOUR
+      )
+    ).toEqual(['b', 'a', 'c']);
+  });
+
+  it('moves only the favourite while a price is still being read', () => {
+    expect(
+      order(
+        {
+          dear: [row(MERCADONA, 'priced', 4.95)],
+          waiting: undefined,
+          cheap: [row(MERCADONA, 'priced', 2.15)],
+        },
+        'cheap'
+      )
+    ).toEqual(['cheap', 'dear', 'waiting']);
+  });
+
+  it('leaves the products after the counted ones at the end, unranked', () => {
+    const byItem: Record<string, LineProductPriceRead> = {};
+    for (let index = 0; index < LINE_PRICED_PRODUCTS_MAX; index += 1) {
+      byItem['p' + index] = [row(MERCADONA, 'priced', 10 + index)];
+    }
+    // Cheaper than all of them, and past the twentieth, where nothing ranks it.
+    byItem['late'] = [row(MERCADONA, 'priced', 1)];
+    byItem['later'] = undefined;
+
+    const ordered = order(byItem, null);
+
+    expect(ordered[0]).toBe('p0');
+    expect(ordered.slice(-2)).toEqual(['late', 'later']);
   });
 });
 

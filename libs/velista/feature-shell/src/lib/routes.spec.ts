@@ -554,6 +554,7 @@ describe('AppShellRoutes', () => {
           [
             'sheet/menu',
             'sheet/name',
+            'sheet/about-products',
             'sheet/supermarket',
             'sheet/comments',
             'sheet/confirm/delete',
@@ -1213,7 +1214,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0135` added four over the line page: the menu, the name, the supermarket
     // and the comments.
-    expect(sheets).toHaveLength(59);
+    //
+    // `0137` added one more over the line page: what the info button says.
+    expect(sheets).toHaveLength(60);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
