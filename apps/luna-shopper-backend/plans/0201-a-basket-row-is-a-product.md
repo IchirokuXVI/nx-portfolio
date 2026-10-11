@@ -62,6 +62,14 @@ needs his decision first: ask, and do not choose.
    cannot validate the id, because the item can be off the line.
 4. **Velista `0137` section 2 is cited for the price comparison.** That plan arrived with
    pull request #692.
+5. **Backend `0204` and `0205` (pull request #694) expect two things from this plan when
+   it is built after them, and this plan names neither.** Backend `0204` section 7 says
+   that whichever plan is built second adds the field `tripItemId` to the patch of a line.
+   Backend `0205` section 3 says that its rows route runs the steps of this plan that
+   choose the product of a line. If `0204` or `0205` is on your base branch, do both: add
+   `tripItemId` to the patch, and hand the picks to the rows route. Without them a patch
+   leaves a line in the wrong row after a buy that changes its product, and the rows route
+   groups lines in another way than the full read.
 
 ## Brief for the agent
 
