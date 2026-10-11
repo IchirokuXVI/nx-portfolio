@@ -105,6 +105,14 @@
       "w": 390,
       "h": 844,
       "title": "The supermarket of a line"
+    },
+    {
+      "file": "ProductsInfo.dc.html",
+      "x": 2350,
+      "y": 1560,
+      "w": 390,
+      "h": 844,
+      "title": "Which product you get when you shop"
     }
   ],
   "annotations": [
@@ -194,14 +202,14 @@
     },
     {
       "id": "f1",
-      "x": 1880,
+      "x": 2350,
       "y": 1050,
       "w": 420,
-      "text": "RULE F1: ONE PRODUCT OF A LINE CAN BE THE FAVOURITE. Each card has a star. A press fills it and empties the one that was filled, so a line has one favourite or none. The favourite is the first card. The products page has the same star on each row.\nThe star says which product the household wants. It does not move the word CHEAPEST, which stays on the lowest price."
+      "text": "RULE F1: ONE PRODUCT OF A LINE CAN BE THE FAVOURITE, AND THE BASKET TAKES IT. Each card has a star. A press fills it and empties the one that was filled, so a line has one favourite or none. The basket shows the favourite, whatever it costs. With no favourite it shows the cheapest product.\nThe cards are in that order: the favourite first, then the others from the cheapest up. The info button beside the heading says so in four sentences (plan 0137)."
     },
     {
       "id": "s1",
-      "x": 2350,
+      "x": 1880,
       "y": 1050,
       "w": 420,
       "text": "RULE S1: A LINE CAN NAME ONE SUPERMARKET, NEVER A SHOP. The row 'Supermarket' opens a sheet with 'Any supermarket' and the supermarkets near the person. Each one says how many of the products it sells and its lowest price. A press picks it and closes the sheet.\nWith a supermarket picked, every card shows the price at that supermarket, and a product it does not sell says so in place of a price. The choice is on the line, so everyone on the list sees it."
