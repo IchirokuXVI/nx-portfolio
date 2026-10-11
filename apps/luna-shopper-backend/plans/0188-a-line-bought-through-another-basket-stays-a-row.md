@@ -2,6 +2,10 @@
 
 # 0188: a line bought through another basket stays a row
 
+> **Changed by plan `0203`** (the owner, 2026-10-11). Targets 5, 6 and 7 are reversed: such
+> a row has its own state, counts toward nothing, and the owner of the other basket is
+> named in the changes view. Targets 1 to 4 and 8 to 12 stand.
+
 > Reported by the owner on 2026-10-04, as the first thing to build. Two or more people
 > shop the same zone list, each from their own basket. One of them buys a line. The row
 > disappears from every other basket. The buyer keeps it. The owner's rule: the rows of a
