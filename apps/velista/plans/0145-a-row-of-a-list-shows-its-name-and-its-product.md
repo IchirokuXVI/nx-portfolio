@@ -35,6 +35,42 @@
 > `libs/velista/data-access/src/lib/catalog/item-names.ts` and
 > `libs/velista/ui/src/lib/styles/_semantic.scss`.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #696 checked this plan against the code on `dev` and against
+velista `0137` (pull request #692). Where this section and a later section disagree, this
+section is right. A point marked **owner** needs his decision first: ask, and do not
+choose.
+
+1. **"Its own and those of its group" in section 2 names one set, not two.**
+   `LineView.groupItemIds` is the subset of `itemIds` that the group put there. Read
+   `itemIds` only. A union counts a product two times, and the "+N" of section 3 is then
+   wrong.
+2. **"The row and the card never disagree" does not hold as written.** The line page reads
+   the prices of the first 20 products only (`LINE_PRICED_PRODUCTS_MAX` in
+   `libs/velista/models/src/lib/line-products.ts`), and a line holds up to 100.
+   `orderLineCards` of velista `0137` ranks those 20 and keeps the order of the line while
+   a price is still loading. A row that ranks all products from the lookup can thus show
+   another product than the first card. Define the product a row shows as the first of
+   `orderLineCards`, or state the cap in the rule.
+3. **"No function answers one product for a line" is false after velista `0137`.** The
+   first of `orderLineCards` is that product. This plan tells the line page to use the new
+   function, but its scope omits `line-page/`, and velista `0146` says not to change the
+   cards.
+4. **The chain of a price has no source.** Section 2 needs the prices at the chain of
+   `preferredSupermarketId`. `ItemOfferView` carries `priceScopeId` and no chain. The line
+   page gets the chain from `CatalogBrowseService.context()` with `productShopPrices`
+   (`line-product-prices.ts`). State whether the lookup of backend `0207` answers chains
+   or this plan makes that read too. The answer decides whether "no more than the requests
+   of today plus the prices" holds.
+5. **Prices never refresh.** `ItemNames.ensure` asks one time for each id in a session.
+   Section 7 does not say when a price is read again.
+6. **The line page is not the only reader of prices.** `line-supermarket-sheet.ts` reads
+   them too.
+7. **Icons.** The plan does not say where the star and the plus come from. Velista keeps
+   its own in `libs/velista/ui/src/lib/icons/icons.ts`. Reuse an icon that exists, and
+   inline no `<svg>`.
+
 ## Brief for the agent
 
 ### Objective

@@ -27,6 +27,31 @@ A line has one name, `content`, and the server reads it in many places. A line m
 product gets the name of that product as its `content`, and nothing records that no person
 typed it. This plan records it. It also lets one request ask the prices of many products.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #696 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right. The design of section 2
+still works: `GetItemsRequest` takes `priceScopeIds` and `offers: 'all'` today.
+
+1. **"The suggest read asks the same message" in section 2 is false.**
+   `catalog-suggest.service.ts` sends `ITEM_PATTERNS.search` and `searchOffers`, not
+   `getMany`.
+2. **"Its best offer and the price at each chain" for the browse read is false.**
+   `CatalogItemsController.search` sends no `offers`, so the browse read answers
+   `bestOffer` only.
+3. **The chain of a price is not in the answer.** `ItemOfferView` carries `priceScopeId`
+   and no chain, and `GetItemsResult` is `{ items }` only. Velista `0145` section 2 needs
+   the prices at the chain of a line. State whether the lookup answers the chain of each
+   scope or the client reads the browse context for it.
+4. **Section 1.2 says "no products of its own and no products of a group".**
+   `LineView.groupItemIds` is the subset of `itemIds` that the group put there. The rule
+   is one test: `itemIds` is empty.
+5. **The bound is `ITEM_LOOKUP_LIMITS.maxIds`, which is 500.** `ITEM_LOOKUP_MAX_IDS` is
+   the name in velista. The evidence measures 100 ids, while one request can carry 500.
+   Measure 500 too.
+6. **The scope lists `admin-edit.dto.ts`**, while the plan says the edit of an operator
+   sends no flag. Leave that file alone unless the build finds a reason.
+
 ## Brief for the agent
 
 ### Objective

@@ -42,6 +42,51 @@
 > `libs/velista/feature-lists/src/lib/line-page/` and
 > `libs/velista/feature-shell/src/lib/routes.ts`.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #696 checked this plan against the code on `dev`. Where this
+section and a later section disagree, this section is right. A point marked **owner**
+needs his decision first: ask, and do not choose.
+
+**Statements below that are wrong.**
+
+1. **Section 6 says "`line-products-page/` and its specs are removed". Do not delete
+   `line-pages.spec.ts` whole.** That file also holds `describe('LineHistoryPage')`, and
+   `line-history-page/` has no component spec of its own. Move that block to a spec beside
+   the history page first. The removal also touches the export in
+   `libs/velista/feature-lists/src/index.ts` and the loop over `['history', 'products']`
+   in `libs/velista/feature-shell/src/lib/routes.spec.ts`.
+2. **Section 6 says a save "writes the whole set as products of the line, which is what
+   Keep did". It is not what Keep did.** `UpdateLineRequest.adoptItemIds` in
+   `libs/luna-shopper/contracts/src/lib/messages/list.messages.ts` says that a set
+   replacement that keeps a product is not a statement about who owns it. After this plan
+   nothing adopts a group product. **Owner:** what a line that follows a group does on
+   Save.
+3. **Section 3 says "its own and those of its group". They are not two sets.**
+   `LineView.groupItemIds` is the subset of `itemIds` that the group put there. Tick the
+   products of `itemIds` only. A union counts a product two times, and the counts of
+   added and removed are then wrong.
+4. **Section 7 lists "Change" as a new string.** `list.page.productsChange` exists.
+
+**Gaps this plan does not fill.**
+
+- **The caller contract of section 1** omits the first search text, the first supermarket
+  and the fallback URL of the close control. Section 2 and velista `0140` section 3 need
+  all three. It also does not say how a route hands the kind to `CatalogPage`, which has
+  no inputs.
+- **Where the ticked set lives.** `catalog/supermarket` and `catalog/categories` are
+  routes of their own, so the set cannot live in the page component.
+- **"Leave without saving?" in section 4.** State whether it is a sheet. A sheet is a
+  `sheet()` route, and the count of sheets in `routes.spec.ts` changes. State how the back
+  button of the browser reaches it.
+- **A product that the catalog no longer holds.** The products page draws it as
+  `list.detail.unnamedProduct` with a cross. The new page has no card for it, so a person
+  cannot remove it.
+- **A line over the cap of 100 products**, which `select-line-products.ts` handles today.
+- **Velista `0140` section 3 (pull request #693) puts its catalog page under a sheet
+  route.** No page can take a `sheet` segment. This plan is right to keep both of its
+  routes outside the marker, and the page that the two plans share follows this plan.
+
 ## Brief for the agent
 
 ### Objective

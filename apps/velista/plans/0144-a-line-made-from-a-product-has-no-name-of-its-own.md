@@ -29,6 +29,26 @@
 > `libs/velista/feature-lists/src/lib/line-detail-sheet/` and
 > `libs/velista/data-access/src/lib/lines/line-memory.ts`.
 
+## Review of 2026-10-11: settle these before you build
+
+A review of pull request #696 checked this plan against the code on `dev`. It found no
+false statement about that code. The rule of section 2 for the lines of the old app
+leaves four cases open. Each one is a decision of the **owner**: ask, and do not choose.
+
+1. **A product that is renamed later.** An old line whose name was the name of its product
+   stops to match after the rename. It then reads as a line that a person named, and it
+   shows the old product name as that label. Curation renames products often.
+2. **An old line made from a group card.** Its `content` is the name of the group, which
+   matches no product. It stays named, while section 3 makes a new group line not named.
+   The same kind of line is thus drawn in two ways.
+3. **A product name that did not load.** "Save with an empty field" sends the name of the
+   shown product as `content`. No rule says what it sends when that name is absent.
+4. **An empty `en` name.** The comparison must skip it, or each line with an empty name
+   matches.
+
+One place is absent from section 5: the `about-products` sheet of velista `0137` (pull
+request #692) prints `{{line}}`, and it takes the drawn name too.
+
 ## Brief for the agent
 
 ### Objective
