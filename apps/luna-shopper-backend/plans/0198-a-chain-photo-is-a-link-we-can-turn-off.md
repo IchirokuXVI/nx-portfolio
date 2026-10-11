@@ -12,27 +12,33 @@
 > ("images are not rehosted") stands.
 >
 > The price of the reversal is the reason for the second half of the request. A photo on a
-> chain's host is not ours. It is marked as such from the adapter to the client, it is off
-> until the owner turns it on for a chain, and one request turns it off again.
+> chain's host is not ours. Each one names the chain it came from, from the adapter to the
+> client. The backend gives none of them to a client until the owner turns that chain on,
+> and one request turns it off again.
+>
+> Revised on 2026-10-11 after the owner read the first draft. Section 11 lists what the owner
+> decided: a product keeps every photo of every source row bound to it, also when it has a
+> photo of its own, and permission to show is held chain by chain.
 >
 > Prerequisite reading: backlog `0001` section 9, plan `0038` sections 5.7 and 8.1, plan
 > `0083` (a row, not a switch), plan `0086` sections 3.1 and 5 (the source's columns), plan
 > `0103` (a runner reports and the orchestrator writes), plan `0119` section 6 (the partial
-> observation), plan `0191` (settle a product at a chain), and plan `0127` section 4, which
+> observation), plan `0155` (two rows of one product), and plan `0127` section 4, which
 > this plan takes two view fields from (see section 7).
 
 No harvest path stores a photo address today. Two adapters parse one and drop it, one keeps
 it in a bag that nothing reads, and three never look. This plan gives the address a column
-on the harvester's row, a link row in catalog, a mark on the item that says whose photo it
-is, and a switch for each chain.
+on the harvester's row, a link row in catalog for each source row bound to a product, a
+mark on each photo that says which chain it came from, and a switch for each chain.
 
 ## Brief for the agent
 
 ### Objective
 
-Record the photo address that each chain states for a product, link it to the catalog item
-that the row is bound to, answer it on `ItemView` with its source named, and add the two
-switches of section 4. Regenerate `openapi.json` and the wire types.
+Record the photo address that each chain states for a product, link every such address to
+the catalog item that its row is bound to, answer on `ItemView` only the photos of the
+chains that are turned on, each with its source named, and add the two switches of section
+4. Regenerate `openapi.json` and the wire types.
 
 ### Context
 
@@ -62,9 +68,9 @@ Every statement below was read in the file it names, on `dev` at `44f6b1da`.
 - **A runner reports a `SourceObservation`** (`source-ingest.ts:77`) and never writes. A
   product whose detail a walk skipped is a `PartialSourceObservation` (138), which carries
   no identity field.
-- **Plan `0191` (PR #652) built "settle a product at a chain"**: `SourceEntrySettler.settle`
-  in `source-entry-settle.ts`. It is the one place that withdraws from a product what a row
-  of a chain no longer states.
+- **A product is built from several source rows.** `accept` binds a row to a product
+  that exists, so a product can hold a bound row of each chain that sells it, and two of one
+  chain (plan `0155`). `item.service.ts` has no operation that merges two products.
 - **A per chain decision is a row.** `supermarket_sources.enabled` and `autoImportPlaces`
   are columns written from the back office, and the entity comment says "Do not add a per
   chain environment variable".
@@ -95,10 +101,10 @@ Every acceptance criterion of section 10 holds, the commands of section 9 are gr
   `dia`, `eljamon`, `carrefour`, `lidl`. One pure function and one host list in each.
 - In the harvester: `entities/source-catalog-entry.entity.ts`, one migration,
   `source-ingest.ts`, `source-snapshot.ts`, `source-entry-write.ts`, `source-entry.service.ts`,
-  `source-entry-batch.service.ts`, `source-entry-settle.ts`, `catalog-client.service.ts`,
+  `source-entry-batch.service.ts`, the path that reverts a run, `catalog-client.service.ts`,
   the five catalog runners, `file-import.runner.ts` (it states null), `harvest.mappers.ts`
   and the entry view.
-- In catalog: one new entity, `item.entity.ts` (two columns), `supermarket.entity.ts` (one
+- In catalog: one new entity, `item.entity.ts` (one column), `supermarket.entity.ts` (one
   column), one migration, a new `item-linked-image.service.ts`, `catalog-audit.service.ts`
   (`WRITE_BOOKKEEPING` only), `catalog.mappers.ts`, `catalog.controller.ts`.
 - In the gateway: the admin routes of section 4 beside the existing admin supermarket
@@ -119,6 +125,10 @@ Every acceptance criterion of section 10 holds, the commands of section 9 are gr
 - **An address outside the chain's own host list is dropped with a warning.** The list is
   a constant of the adapter library. This is what stops a changed page from making a
   client load an arbitrary host.
+- **No response to a shopper carries an address of a chain that is off**, in any field.
+  The test is on the server. Only the admin read of section 3.2 answers one.
+- **A link is saved whatever the switch says**, and whether or not the product has a photo
+  of its own. The switch decides what is given, never what is kept.
 - **A link is never written to `items.imageUrl`.** That column means "the owner chose
   this". A link in it loses the mark, and the switch cannot find it.
 - No environment variable, no new dependency, no per chain configuration outside a row.
@@ -146,14 +156,14 @@ after the gateway routes with their HTTP spec, and after the generators.
 | `photoAddress(raw)` and `PHOTO_HOSTS`                    | each of the five adapter libraries       |
 | `SourceObservation.imageUrl`, required                   | `source-ingest.ts`, every runner         |
 | `source_catalog_entries.imageUrl`                        | harvester entity and migration           |
-| `item_linked_images`                                     | catalog entity and migration             |
-| `items.linkedImageUrl`, `linkedImageSupermarketId`       | the same migration                       |
+| `item_linked_images`, one row for each bound source row  | catalog entity and migration             |
+| `items.linkedImages`, the links that may be shown        | the same migration                       |
 | `supermarkets.linkedImagesEnabled`, default false        | the same migration                       |
-| `ITEM_LINKED_IMAGE_PATTERNS`: `linkBatch`, `unlink`, `disableAll` | contracts, `ItemLinkedImageService` |
+| `ITEM_LINKED_IMAGE_PATTERNS`: `linkBatch`, `unlink`, `disableAll`, `listByItem` | contracts, `ItemLinkedImageService` |
 | `supermarket.setLinkedImagesEnabled`                     | contracts, catalog                       |
 | `ItemImageSource`                                        | `contracts/src/lib/enums/catalog.enums.ts` |
-| `ItemView.imageSource`, `imageSupermarketId`, `ownImageUrl` | contracts, `toItemView`               |
-| Two admin routes                                         | gateway                                  |
+| `ItemView.images`, `imageSource`, `imageSupermarketId`, `ownImageUrl` | contracts, `toItemView`     |
+| Three admin routes                                       | gateway                                  |
 
 ## 2. The harvester reads the address
 
@@ -185,89 +195,126 @@ The migration copies `extra->>'image'` into the column for the rows of DIA, whic
 absolute address there already, and the DIA runner stops writing that key. The harvester's
 entry view answers `imageUrl`, so the queue can show it.
 
-## 3. Catalog holds a link, beside the owner's photo
+## 3. Catalog holds every link, beside the owner's photo
+
+**A product has as many chain photos as it has source rows that state one.** A product is
+often built from several rows: one of each chain that sells it, and sometimes two of one
+chain (plan `0155`). Each row that is bound to the product brings its own photo, and all of
+them are kept. A product with a photo of its own keeps the chain links too: what is saved
+and what is shown are two questions, and section 3.1 answers the second.
 
 `item_linked_images` in the catalog database:
 
-| Column          | Type                                      | Notes                                 |
-| --------------- | ----------------------------------------- | ------------------------------------- |
-| `itemId`        | uuid, FK `items` `ON DELETE CASCADE`      |                                       |
-| `supermarketId` | uuid, FK `supermarkets` `ON DELETE CASCADE` | whose photo it is                   |
-| `url`           | varchar(500)                              | verbatim                              |
-| `firstLinkedAt` | timestamptz                               | what the choice of section 3.1 orders on |
-| `lastSeenAt`    | timestamptz                               |                                       |
-| `runId`         | uuid null                                 | the run that last stated it           |
+| Column          | Type                                        | Notes                                   |
+| --------------- | ------------------------------------------- | --------------------------------------- |
+| `sourceEntryId` | uuid, unique                                | the harvester's row. Opaque to catalog  |
+| `itemId`        | uuid, FK `items` `ON DELETE CASCADE`        | the product the row is bound to         |
+| `supermarketId` | uuid, FK `supermarkets` `ON DELETE CASCADE` | where the photo came from               |
+| `url`           | varchar(500)                                | verbatim                                |
+| `firstLinkedAt` | timestamptz                                 | what the order of section 3.1 reads     |
+| `lastSeenAt`    | timestamptz                                 |                                         |
+| `runId`         | uuid null                                   | the run that last stated it             |
 
-Unique `(itemId, supermarketId)`. One row for each chain that states a photo for the
-product. Nothing is overwritten across chains, which is the rule prices follow (plan `0080`).
+The key is the source row and not the product and chain, and that is what makes the photos
+merge with no rule of their own. A row has one photo and is bound to one product. When a
+person accepts a third row into a product, its link is a third row here. When a row moves
+to another product, the upsert moves its link, because the key did not change. **The link
+is written whether or not the chain's switch is on**, and whether or not the product has a
+photo of its own. The switch decides what a client is given, never what is saved.
 
-**Who writes it.** The harvester, through its service actor, in three places:
+**Who writes it.** The harvester, through its service actor:
 
 - **A run.** After a chunk is written, the ingest sends `itemLinkedImage.linkBatch` with
-  `{ itemId, supermarketId, url, runId }` for every row of the chunk that is `ACTIVE` and
-  holds an address. Every run sends every such row, changed or not. That is one message for
-  each chunk, and it is what links the rows the migration filled and repairs a link that
-  was lost. Catalog upserts and answers `{ linked, unchanged }`, and the run report counts
-  them.
-- **A decision.** `accept` and `createItem`, on the one row routes and on the bulk route,
-  send the link for the row after the bind. `createItem` still creates the item with
-  `imageUrl: null`. Replace the two comments named in the context with a sentence that says
-  where the address goes now.
-- **A settle.** `SourceEntrySettler.settle` sends `itemLinkedImage.unlink
-  { itemId, supermarketId }` when no bound row of the chain that holds an address names the
-  product any more. A row that moves to another product takes its photo with it, as it
-  takes its offers.
-
-Two bound rows of one chain on one product (plan `0155`) write one link, and the later
-write wins. Both are photos of the same product from the same chain.
+  `{ sourceEntryId, itemId, supermarketId, url, runId }` for every row of the chunk that is
+  `ACTIVE` and holds an address. Every run sends every such row, changed or not. That is
+  one message for each chunk, and it is what links the rows the migration filled and
+  repairs a link that was lost. Catalog upserts on `sourceEntryId` and answers
+  `{ linked, moved, unchanged }`, and the run report counts them.
+- **A decision that binds.** `accept` and `createItem`, on the one row routes and on the
+  bulk route, send the link for the row after the bind. `createItem` still creates the item
+  with `imageUrl: null`. Replace the two comments named in the context with a sentence that
+  says where the address goes now.
+- **Anything that takes the row away from a product.** `reject` of a bound row, a full read
+  in which the source no longer prints a photo, and every path that deletes a row (a
+  revert of a run among them) send `itemLinkedImage.unlink { sourceEntryIds }`.
 
 `linkBatch` and `unlink` take `AdminCredential` and call `requireAdmin`, which admits the
 harvester's service actor. `linkBatch` refuses an address that is not `https`, with a
 rejection for that entry and not for the batch.
 
-### 3.1 The photo an item shows
+If catalog ever merges two products into one, the merge moves these rows as it moves
+`supermarket_items`. No such operation exists in `item.service.ts` today.
 
-`items` gains `linkedImageUrl` (varchar null) and `linkedImageSupermarketId` (uuid null).
-They are materialized: the link of the item whose chain has `linkedImagesEnabled`, the
-oldest `firstLinkedAt` first, the lower `supermarketId` on a tie. Null when the item has no
-link of an enabled chain. The choice is stable, so a photo does not change from one read to
-the next because a run finished.
+### 3.1 What a client is given
 
-`refreshLinkedImage(itemIds | supermarketId)` computes both columns in one statement. It
+**The backend answers an address on somebody else's host only when the chain it came from
+is configured to be shown.** The test is on the server, in the write that builds the
+answer. An address of a chain that is off is in no response to a shopper, in no field, so
+no client has to know the rule to obey it. The switch is off for every chain after the
+migration, which means that the state with no configuration is "none".
+
+`items` gains `linkedImages jsonb`, default `[]`. It is materialized: the item's links
+whose chain has `linkedImagesEnabled`, as `[{ url, supermarketId }]`, the oldest
+`firstLinkedAt` first and the lower `sourceEntryId` on a tie, with one entry for an address
+that two rows state. The order is stable, so the first photo does not change from one read
+to the next because a run finished.
+
+`refreshLinkedImages(itemIds | supermarketId)` computes the column in one statement. It
 runs inside the transaction of every write that can change the answer: `linkBatch`,
-`unlink`, both switches of section 4, and any delete of a chain. Both columns go in
-`WRITE_BOOKKEEPING`, and they are written with a plain `UPDATE`, not through `audit.write`.
+`unlink`, both switches of section 4, and any delete of a chain. The column goes in
+`WRITE_BOOKKEEPING`, and it is written with a plain `UPDATE`, not through `audit.write`.
 
 `ItemView` answers:
 
 | Field                | Value                                                              |
 | -------------------- | ------------------------------------------------------------------ |
-| `imageUrl`           | `items.imageUrl`, else `items.linkedImageUrl`                      |
-| `imageSource`        | `OWNER` when `items.imageUrl` is set, else `CHAIN` when the linked one is, else null |
-| `imageSupermarketId` | the chain of a `CHAIN` photo, else null                            |
+| `images`             | the owner's photo first when there is one, then `items.linkedImages` |
+| `imageUrl`           | the `url` of the first entry of `images`, else null                |
+| `imageSource`        | the `source` of that entry, else null                              |
+| `imageSupermarketId` | the `supermarketId` of that entry, else null                       |
 | `ownImageUrl`        | `items.imageUrl`, which is what the back office edits              |
 
-`ItemImageSource` is `OWNER` and `CHAIN`. **`imageSource` is the mark the owner asked for**:
-any value except `OWNER` is a photo that is not ours. `ownImageUrl` exists because the back
-office edits the owner's photo, and a form filled from `imageUrl` saves a chain's address as
-ours on the first save. The owner's photo always wins, so an item with its own photo never
-shows a chain's.
+An entry of `images` is `{ url, source, supermarketId }`. `ItemImageSource` is `OWNER` and
+`CHAIN`. `supermarketId` is null for `OWNER` and names the chain for `CHAIN`.
 
-A client that draws a photo whose `imageSource` is not `OWNER` sets
+**Every photo says where it came from, and "a chain" is not enough of an answer.** We may
+hold permission to show the photos of one chain and not of another, so the source of a
+photo is the chain itself: it is on the stored row, on each entry a client is given, and it
+is the unit the switch works on. `source` says the kind, which is what tells a client that
+a photo is not ours. `supermarketId` says which chain, which is what a credit line or a
+filter for one chain reads.
+
+The owner's photo is first, so `imageUrl` is the owner's whenever there is one. The chain
+photos of enabled chains follow it in `images`. A product with its own photo and three
+bound rows of enabled chains answers four entries.
+
+`ownImageUrl` exists because the back office edits the owner's photo, and a form filled
+from `imageUrl` saves a chain's address as ours on the first save.
+
+A client that draws a photo whose `source` is not `OWNER` sets
 `referrerpolicy="no-referrer"` on the element and draws its own placeholder when the load
 fails. That rule is stated here because the field is defined here. Building it is a velista
 plan.
 
-## 4. Turning it off
+### 3.2 What the back office is given
+
+`itemLinkedImage.listByItem { itemId }`, for an admin, answers every link of the product,
+enabled or not: `{ sourceEntryId, supermarketId, url, enabled, firstLinkedAt, lastSeenAt }`.
+It is the only read that answers the address of a chain that is off, and it exists so that
+a person can see what is saved before a chain is turned on. The gateway serves it on an
+admin route beside the two of section 4.
+
+## 4. Turning it on and off
 
 Two switches, both rows in catalog and both off until a person turns one on.
 
-- **One chain.** `supermarkets.linkedImagesEnabled`, default false.
+- **One chain.** `supermarkets.linkedImagesEnabled`, default false. It is the record that
+  the photos of this chain may be shown.
   `supermarket.setLinkedImagesEnabled { supermarketId, enabled }` writes it and refreshes
   every item that holds a link of that chain, in one transaction. `SupermarketView` answers
   the column.
 - **Everything.** `itemLinkedImage.disableAll` sets the column to false on every chain and
-  clears both materialized columns on every item, in one transaction. It answers
+  empties `linkedImages` on every item, in one transaction. It answers
   `{ supermarkets, items }`, the counts it changed. Turning chains back on is one request
   for each chain, on purpose: the stop is one step and the start is a decision for each
   chain.
@@ -277,17 +324,18 @@ and their path shape:
 
 - `PUT …/supermarkets/:id/linked-images` with `{ enabled }`.
 - `POST …/linked-images/disable-all`, with no body.
+- `GET …/items/:id/linked-images`, the read of section 3.2.
 
 Both writes are audited through `audit.write` on the `supermarkets` rows, so the audit log
 says who turned what off and when.
 
-**What "off" reaches, stated plainly.** After the transaction commits, every read of an
-item answers no chain photo for that chain. The link rows stay, so turning a chain on again
+**What "off" reaches, stated plainly.** After the transaction commits, no read of an item
+by a shopper answers a photo of that chain. The link rows stay, so turning a chain on again
 needs no harvest. What the switch cannot reach: a photo a browser already holds in its
 cache, and an item a client already holds in memory until it reads again. Nothing of the
-chain's is stored on a server of ours, so there is nothing else to remove. Removing the
-addresses themselves is `DELETE FROM item_linked_images WHERE "supermarketId" = …` followed
-by the refresh, and the next run writes them back, so it is not a route.
+chain's is stored on a server of ours except the address. Removing the addresses themselves
+is `DELETE FROM item_linked_images WHERE "supermarketId" = …` followed by the refresh, and
+the next run writes them back, so it is not a route.
 
 The row is in catalog and not on `supermarket_sources` because catalog answers the read.
 The harvester's `enabled` decides that a chain is fetched. This decides that its photo is
@@ -298,24 +346,23 @@ asks us to stop reading its prices.
 
 ```sql
 UPDATE supermarkets SET "linkedImagesEnabled" = false;
-UPDATE items SET "linkedImageUrl" = NULL, "linkedImageSupermarketId" = NULL
- WHERE "linkedImageUrl" IS NOT NULL;
+UPDATE items SET "linkedImages" = '[]'::jsonb WHERE "linkedImages" <> '[]'::jsonb;
 ```
 
 ## 5. What a cluster gets
 
 Neither cluster fetches a storefront (plan `0083`), so no run in a cluster writes a link.
 The addresses arrive with the catalog that is moved in (k8s plans `0011` and `0012`,
-backlog `0019`). `supermarkets.linkedImagesEnabled` travels in the same dump. See open
-decision D2.
+backlog `0019`), and the switches travel in the same dump. The owner said on 2026-10-11 to
+leave that as it is for now.
 
 ## 6. What this plan does not do
 
 - **No copy of a chain's photo, ever.** Plan `0038` section 5.7 stands on that half.
 - **No fetch of a photo by a server**, not to check that it exists and not to measure it.
-- **No second size.** One address for each chain and product. A thumbnail field waits
+- **No second size.** One address for each source row. A thumbnail field waits
   until a client asks for one.
-- **No back office screen.** The two routes exist. The button is a plan in
+- **No back office screen.** The three routes exist. The button is a plan in
   `apps/luna-shopper-admin/plans/`.
 - **No photo in velista.** That is a velista plan, with the client rule of section 3.1.
 - **No Open Food Facts.** Plans `0126` to `0129` are untouched.
@@ -325,8 +372,8 @@ decision D2.
 
 Plan `0127` section 4.2 defines `ItemView.imageSource` and `ownImageUrl`, and the enum
 `ItemImageSource` as `OWNER` plus its two databases. It is not built. This plan builds those
-two fields and the enum first, with `OWNER` and `CHAIN`. When `0127` is picked up it adds its
-values to an enum that exists and its columns to the order of section 3.1. Where an open
+two fields and the enum first, with `OWNER` and `CHAIN`, and adds `images`. When `0127` is
+picked up it adds its values to an enum that exists and its photos to the list of section 3.1. Where an open
 database photo ranks against a chain photo is a decision for that plan, and the answer that
 costs least is "the open one first", because it carries a license.
 
@@ -340,7 +387,7 @@ costs least is "the open one first", because it carries a license.
    blocks nothing below.
 2. The adapter functions and their specs against the fixtures.
 3. The harvester column, migration, ingest and the three senders.
-4. The catalog table, the materialized columns, the view and the switches.
+4. The catalog table, the materialized column, the view and the switches.
 5. The gateway routes and the generators.
 
 ## 9. Tests and verification
@@ -352,15 +399,21 @@ costs least is "the open one first", because it carries a license.
 - Harvester integration: the migration up and down and the DIA copy. A full read rewrites
   the column, a partial read with no field leaves it, and one with null clears it. A chunk
   sends one `linkBatch` with its `ACTIVE` rows only. `accept` and `createItem` send the
-  link and create the item with `imageUrl: null`. A row that moves away makes `settle` send
-  `unlink`, and a second bound row with a photo stops it.
+  link and create the item with `imageUrl: null`. `reject` of a bound row, a full read that
+  states no photo, and a revert each send `unlink` for the row.
 - Catalog integration: the migration, the unique index and both cascades. `linkBatch`
-  upserts, counts and refuses an `http` address. An item with links of two chains shows
-  nothing while both are off, the older link when both are on, and the other when the
-  first is turned off. The owner's photo wins and answers `OWNER`. `disableAll` clears
-  every item and every chain in one call and leaves the link rows. An item update by an
-  admin records neither materialized column in the audit.
-- Gateway HTTP spec: both routes, their guard, and `ItemView` with the three new fields.
+  upserts, counts and refuses an `http` address. Three rows bound to one product, two of
+  one chain, leave three links. A row that is linked again under another product moves its
+  link and refreshes both products. With every switch off, `linkedImages` is empty and
+  `listByItem` still answers all three. With one chain on, the item answers that chain's
+  photos only, in the order of section 3.1, with one entry for an address two rows share.
+  An item with an owner photo answers it first, keeps its links, and answers `OWNER` for
+  `imageSource`. `disableAll` empties every item and every chain in one call and leaves the
+  link rows. An item update by an admin does not record `linkedImages` in the audit.
+- A spec that reads every shopper route answering an `ItemView` (get, get many, search,
+  suggest) with a link of a chain that is off, and asserts that the address is nowhere in
+  the response body.
+- Gateway HTTP spec: the three routes, their guard, and `ItemView` with the new fields.
 - `openapi-document.spec.ts` and `wire-types.spec.ts` pass after regeneration.
 
 ```sh
@@ -378,31 +431,38 @@ npx nx test luna-shopper-admin/models
       states a photo holds its address, verbatim, on an allowed host.
 - [ ] No code path in the harvester, catalog or the gateway requests a photo address.
 - [ ] No harvest path writes `items.imageUrl`.
-- [ ] An `ACTIVE` row with an address has a row in `item_linked_images` after the run, and
-      a row that left its product has none there.
-- [ ] With every switch off, which is the state after the migration, no `ItemView` answers
-      a chain's address.
-- [ ] With a chain on, an item with no owner photo answers the chain's address with
-      `imageSource: CHAIN` and the chain's id, and an item with an owner photo answers
-      `OWNER`.
-- [ ] `setLinkedImagesEnabled(false)` for a chain removes its photo from every item in the
+- [ ] Every `ACTIVE` row with an address has its own row in `item_linked_images` after the
+      run, also when its chain is off and when the product has a photo of its own. A row
+      that left its product has none under that product.
+- [ ] A product with three bound rows that state a photo holds three links.
+- [ ] With every switch off, which is the state after the migration, no response to a
+      shopper contains an address of a chain, in any field.
+- [ ] With a chain on, an item answers every photo of that chain in `images`, each with
+      `source: CHAIN` and the chain's id, and no photo of a chain that is off.
+- [ ] An item with an owner photo answers it first, with `OWNER`, and the photos of enabled
+      chains after it.
+- [ ] `setLinkedImagesEnabled(false)` for a chain removes its photos from every item in the
       same transaction, and `disableAll` does so for every chain in one request.
 - [ ] Both switch writes are in the audit log.
 - [ ] No helm file, compose file, `luna-slot.sh` line or environment variable was added.
 - [ ] `openapi.json` and `wire-types.ts` are regenerated and their specs pass.
 
-## 11. Open decisions for the owner
+## 11. Decisions
 
-- **D1. `imageUrl` answers the chain's address.** Section 3.1 follows plan `0127`: one
-  field means "the picture of this product", and `imageSource` says whose it is. A client
-  that draws `imageUrl` and ignores `imageSource` then draws a chain's photo with no
-  referrer rule. The other choice keeps `imageUrl` as the owner's and answers the chain's in
-  a new `linkedImageUrl`, so no client can show one by accident. The plan is written for
-  the first. Say so before the build if the second is wanted.
-- **D2. A catalog moved into a cluster brings its switches.** A chain turned on locally
-  arrives turned on. The safer rule is that a restore ends with `disableAll`, and each
-  cluster is turned on by hand. That is one line in the restore of k8s plan `0012`, and it
-  is not written there by this plan.
-- **D3. DIA and Mercadona are unmeasured in a browser.** Stage 1 answers it. If either
-  refuses another origin, its photos can never be shown as links, and only a copy would
-  show them, which this plan rules out.
+Decided by the owner on 2026-10-11, after the first draft of this plan:
+
+- **The server is the gate.** The backend gives a client an address on another host only
+  when the chain is configured to be shown. Section 3.1 is written to that.
+- **A chain's photos are saved in every case**, as links, also for a product that has a
+  photo of its own.
+- **A product has every photo of every row bound to it.** Section 3 keys a link on the
+  source row for that reason.
+- **The source of a photo is the chain.** Permission is held chain by chain.
+- **A catalog moved into a cluster brings its switches**, and nothing is done about that
+  for now.
+
+Still open:
+
+- **DIA and Mercadona are unmeasured in a browser.** Stage 1 answers it. If either refuses
+  another origin, its photos can never be shown as links, and only a copy would show them,
+  which this plan rules out.
