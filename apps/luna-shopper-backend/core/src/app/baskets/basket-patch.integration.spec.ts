@@ -508,7 +508,17 @@ describeIntegration(
       if (!entry) {
         throw new Error(`the read serves no entry for ${lineId}`);
       }
-      const { listId: _listId, demandEditable: _editable, ...patch } = entry;
+      // What an entry says and a room may not carry: where the line is, what
+      // the reader may do with it, and the line itself (plan 0201, section 3).
+      const {
+        listId: _listId,
+        demandEditable: _editable,
+        canWrite: _canWrite,
+        content: _content,
+        itemIds: _itemIds,
+        favoriteItemId: _favorite,
+        ...patch
+      } = entry;
       return patch;
     }
 
@@ -517,6 +527,7 @@ describeIntegration(
         basketId: who.basket.id,
         participantId: who.participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity,
         from,
@@ -611,6 +622,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
         target: 'UNITS',
         units: 2,
         // What this basket bought of the row, which is what a revert starts from.
@@ -643,6 +655,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
       });
       const all = await envelopes(1);
 
@@ -671,6 +684,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
       });
       const back = await envelopes(1);
       expect(back).toHaveLength(1);
@@ -690,6 +704,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineId: milk.id,
         quantity: 5,
         from: 3,
       });
@@ -792,6 +807,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineId: milk.id,
         quantity: 0,
         from: 3,
       });

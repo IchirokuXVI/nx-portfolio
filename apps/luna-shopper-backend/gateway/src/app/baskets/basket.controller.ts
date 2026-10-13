@@ -19,8 +19,10 @@ import {
   type AddBasketLineRequest,
   type BasketChangePage,
   type BasketChangesAcknowledged,
+  type BasketLinePick,
   type BasketMarksView,
   type BasketParticipantContext,
+  type BasketProductListsView,
   type BasketResult,
   type BasketRowResult,
   type BasketSearchScope,
@@ -29,6 +31,7 @@ import {
   type BasketView,
   type CatalogSuggestResponse,
   type GetBasketMarksRequest,
+  type GetBasketProductListsRequest,
   type GetBasketRequest,
   type GetLiveBasketRequest,
   type ListBasketChangesRequest,
@@ -63,7 +66,10 @@ import {
   componentRef,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
-import { BasketCatalogService } from './basket-catalog.service';
+import {
+  BasketCatalogService,
+  type BasketReadPrices,
+} from './basket-catalog.service';
 import {
   AcknowledgeBasketChangesDto,
   AddBasketLineDto,
@@ -73,6 +79,8 @@ import {
   RevertBasketRowDto,
   SetBasketRowDemandDto,
   SettleBasketRowDto,
+  SkipBasketRowDto,
+  UnskipBasketRowQueryDto,
 } from './basket.dto';
 import { pricedItemId, SettlePriceService } from './settle-price.service';
 
@@ -112,20 +120,51 @@ export class BasketLiveController {
     @AuthUser() user: CurrentUser,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
-    // The chain of the shop the device chose, so each row says whether it is
-    // usually bought there (plan 0165). Absent when the read has no shop.
-    const supermarketId = query?.locationId
-      ? await this.catalog.chainOf(query.locationId)
-      : undefined;
-    const req: GetLiveBasketRequest = {
-      userId: user.userId,
-      ...(supermarketId ? { supermarketId } : {}),
-    };
-    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
     // The shop the device chose, which is the only way a `LIVE` basket's shop
     // reaches the server (plan 0163; velista 0091, section 7). The permanent
     // basket never has one of its own, so it is never locked.
-    return this.catalog.compose(basket, basket.me.id, query?.locationId);
+    const locationId = query?.locationId;
+    // Beside each other, because neither needs the other. The shop gives its
+    // chain, so each row says whether it is usually bought there (plan 0165).
+    // The other question creates the basket and answers the lines whose
+    // product only a price can choose (plan 0201, section 1).
+    const [shop, choices] = await Promise.all([
+      locationId ? this.catalog.shopAt(locationId, []) : null,
+      this.catalog.livePriceChoicesOf(user.userId),
+    ]);
+    // Asked here only when a line needs a price, because the scopes that
+    // count are the owner's. Otherwise the composition asks it, as it always
+    // did.
+    const searchScope =
+      choices && choices.lines.length > 0
+        ? await this.catalog.searchScopeOf(
+            choices.basketId,
+            choices.participantId
+          )
+        : undefined;
+    const prices =
+      choices && searchScope !== undefined
+        ? await this.catalog.pricesFor(
+            choices.lines,
+            searchScope,
+            locationId,
+            shop
+          )
+        : null;
+    const supermarketId = shop?.supermarket.id;
+    const req: GetLiveBasketRequest = {
+      userId: user.userId,
+      ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
+    };
+    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
+    return this.catalog.compose(
+      basket,
+      basket.me.id,
+      locationId,
+      searchScope,
+      prices
+    );
   }
 
   /**
@@ -157,6 +196,13 @@ export class BasketLiveController {
  * A row has no identity of its own because it is recomputed on every read, and a
  * row whose anchor was bought to zero a moment ago must not turn the next tap
  * into a not found.
+ *
+ * ## A write names its lines
+ *
+ * Two reads at two shops can group the same lines differently, so the key
+ * alone does not say which lines a tap meant (plan 0201, section 4). Every
+ * write on a row carries `lineIds`, core acts on those lines and no others,
+ * and `rowKey` must be one of them.
  */
 @ApiTags('baskets')
 @UseGuards(ParticipantGuard)
@@ -180,6 +226,12 @@ export class BasketController {
    * A read with a shop also says, on every row, how often its lines were
    * bought at that shop's chain (plan 0165). The chain is learned before core
    * is asked for the rows, because core counts and catalog knows chains.
+   *
+   * A row is a product (plan 0201), and a line with several products and no
+   * favourite counts as the cheapest of them. Core holds no price, so core is
+   * asked first which lines need one, the gateway prices them, and the read of
+   * the rows carries a pick for each. A basket with no such line pays one
+   * small message to core and nothing to catalog.
    */
   @Get(':id')
   @ApiComposedResponse(BASKET_SCHEMA_IDS.result)
@@ -195,22 +247,72 @@ export class BasketController {
     @UuidParam('id') id: string,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
-    const { searchScope, supermarketId } = await this.catalog.readShopOf(
-      id,
-      participant.participantId,
-      query?.locationId
+    // Beside each other, because neither needs the other. A basket started at
+    // another shop is refused by the first, before anything is priced.
+    const [{ searchScope, supermarketId, shopId, shop }, choices] =
+      await Promise.all([
+        this.catalog.readShopOf(
+          id,
+          participant.participantId,
+          query?.locationId
+        ),
+        this.catalog.priceChoicesOf(id, participant.participantId),
+      ]);
+    const prices = await this.catalog.pricesFor(
+      choices?.lines ?? [],
+      searchScope,
+      shopId,
+      shop
     );
     const req: GetBasketRequest = {
       basketId: id,
       participantId: participant.participantId,
       ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
     };
     const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
     return this.catalog.compose(
       basket,
       participant.participantId,
       query?.locationId,
-      searchScope
+      searchScope,
+      prices
+    );
+  }
+
+  /**
+   * The covered lists that can still take a product (plan 0201, section 5).
+   *
+   * Every covered list the actor may write that has no line counting as that
+   * product, each with its line that holds the product when it has one. The
+   * page raises such a line with the demand route, and adds one with
+   * `POST :id/lines` otherwise.
+   *
+   * Account participants only, and core is what refuses a guest with
+   * `forbidden`: the lists a person may write are a fact about their account.
+   * Unthrottled like the other reads on this surface.
+   */
+  @Get(':id/products/:itemId/lists')
+  @ApiContractResponse(BASKET_PATTERNS.productLists)
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    membership: true,
+    notFound: true,
+  })
+  productLists(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string,
+    @UuidParam('itemId') itemId: string
+  ): Promise<BasketProductListsView> {
+    const req: GetBasketProductListsRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      itemId,
+    };
+    return this.nats.send<BasketProductListsView>(
+      BASKET_PATTERNS.productLists,
+      req
     );
   }
 
@@ -238,20 +340,33 @@ export class BasketController {
     @Param('rowKey') rowKey: string,
     @Body() dto: SettleBasketRowDto
   ): Promise<BasketRowResult> {
+    // Beside each other, because neither needs the other and both are held to
+    // the same budget, so a settle waits for the slower of the two and not
+    // for their sum.
+    const [paid] = await Promise.all([
+      // What the screen said one of it costs, read here and never sent by the
+      // client (plan 0143). It runs **before** the write and not after it: a
+      // second message attaching a price to a settlement already written would
+      // have to find its rows again after a revert split them.
+      this.paidFor(id, participant, dto),
+      // The product can be one that is on none of the lines, so core cannot
+      // check the id and catalog is asked (plan 0201, section 4). Only a
+      // definite "catalog does not know it" refuses the buy.
+      dto.itemId === undefined
+        ? undefined
+        : this.prices.refuseUnknownItem(dto.itemId),
+    ]);
     const req: SettleBasketRowRequest = {
       basketId: id,
       participantId: participant.participantId,
       rowKey,
+      lineIds: dto.lineIds,
       outcome: dto.outcome,
       quantity: dto.quantity,
       from: dto.from,
       itemId: dto.itemId,
       allocations: dto.allocations,
-      // What the screen said one of it costs, read here and never sent by the
-      // client (plan 0143). It runs **before** the write and not after it: a
-      // second message attaching a price to a settlement already written would
-      // have to find its rows again after a revert split them.
-      paid: (await this.paidFor(id, rowKey, participant, dto)) ?? undefined,
+      paid: paid ?? undefined,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSettle, req);
   }
@@ -271,14 +386,13 @@ export class BasketController {
    * service's own budget and usually a few milliseconds, and only when the
    * client named a scope.
    *
-   * A settle that names no `itemId` also sends the `rowKey`, and core answers
-   * which product that row records (plan 0151). That is the product priced
-   * here, so the price and the settlement cannot disagree, and it costs no
-   * extra round trip.
+   * A settle that names no `itemId` also sends its `lineIds`, and core answers
+   * which product those lines record (plan 0151; plan 0201). That is the
+   * product priced here, so the price and the settlement cannot disagree, and
+   * it costs no extra round trip.
    */
   private async paidFor(
     basketId: string,
-    rowKey: string,
     participant: BasketParticipantContext,
     dto: SettleBasketRowDto
   ): Promise<SettlementPaid | null> {
@@ -291,7 +405,9 @@ export class BasketController {
     const req: BasketSearchScopeRequest = {
       basketId,
       participantId: participant.participantId,
-      ...(dto.itemId === undefined && dto.priceScopeId ? { rowKey } : {}),
+      ...(dto.itemId === undefined && dto.priceScopeId
+        ? { lineIds: dto.lineIds }
+        : {}),
     };
     let scope: BasketSearchScope;
     try {
@@ -358,6 +474,7 @@ export class BasketController {
             basketId: id,
             participantId: participant.participantId,
             rowKey,
+            lineIds: dto.lineIds,
             target: 'UNITS',
             // The DTO cannot require them on one branch alone without a `oneOf`
             // that renders badly in the published document, so the two fields
@@ -369,6 +486,7 @@ export class BasketController {
             basketId: id,
             participantId: participant.participantId,
             rowKey,
+            lineIds: dto.lineIds,
             target: 'CLOSE',
           };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowRevert, req);
@@ -409,7 +527,12 @@ export class BasketController {
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowDemand, req);
   }
 
-  /** Rename a row, and every list line it is made of (plan 0113's rule). */
+  /**
+   * Rename the named lines of a row, each on its own list (plan 0113's rule).
+   *
+   * Core refuses a line that has a product with `validation_failed`: a row
+   * with a product is named by the catalog (plan 0201, section 4).
+   */
   @Patch(':id/rows/:rowKey')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
@@ -433,6 +556,7 @@ export class BasketController {
       participantId: participant.participantId,
       userId: requireAccount(participant),
       rowKey,
+      lineIds: dto.lineIds,
       content: dto.content,
       confirmMerge: dto.confirmMerge,
     };
@@ -444,8 +568,11 @@ export class BasketController {
    *
    * A `PUT` rather than a `POST`, because it states a condition the row is to be
    * in rather than appending an act: a second call changes nothing and answers
-   * the same row. Any live participant may send it, a guest included, and
-   * neither this nor the `DELETE` takes a body.
+   * the same lines. Any live participant may send it, a guest included.
+   *
+   * The body names the lines to put off (plan 0201, section 4). The `DELETE`
+   * names them in its query, because a body on a `DELETE` is not delivered
+   * reliably.
    */
   @Put(':id/rows/:rowKey/skip')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
@@ -454,6 +581,7 @@ export class BasketController {
   @ApiProblemResponses({
     auth: true,
     participant: true,
+    body: true,
     notFound: true,
     // A row bought to zero while the sheet was open has nothing left to skip,
     // which is a plain conflict beside the finished basket's own code.
@@ -463,17 +591,23 @@ export class BasketController {
   skip(
     @Participant() participant: BasketParticipantContext,
     @UuidParam('id') id: string,
-    @Param('rowKey') rowKey: string
+    @Param('rowKey') rowKey: string,
+    @Body() dto: SkipBasketRowDto
   ): Promise<BasketRowResult> {
     const req: SkipBasketRowRequest = {
       basketId: id,
       participantId: participant.participantId,
       rowKey,
+      lineIds: dto.lineIds,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSkip, req);
   }
 
-  /** Take the skip back (plan 0137, section 5.2). Finding none is not an error. */
+  /**
+   * Take the skip back (plan 0137, section 5.2). Finding none is not an error.
+   *
+   * The lines are named in the query, comma separated (`?lineIds=a,b`).
+   */
   @Delete(':id/rows/:rowKey/skip')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
@@ -481,18 +615,21 @@ export class BasketController {
   @ApiProblemResponses({
     auth: true,
     participant: true,
+    body: true,
     notFound: true,
     finishedBasket: true,
   })
   unskip(
     @Participant() participant: BasketParticipantContext,
     @UuidParam('id') id: string,
-    @Param('rowKey') rowKey: string
+    @Param('rowKey') rowKey: string,
+    @Query() query: UnskipBasketRowQueryDto
   ): Promise<BasketRowResult> {
     const req: SkipBasketRowRequest = {
       basketId: id,
       participantId: participant.participantId,
       rowKey,
+      lineIds: query.lineIds,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowUnskip, req);
   }
@@ -653,6 +790,18 @@ export class BasketController {
       resolved: await this.catalog.describeScopes(scope),
     });
   }
+}
+
+/**
+ * The picks of a read as the request carries them, or nothing (plan 0201).
+ *
+ * Absent rather than empty when nothing was priced, so a basket with no line
+ * that needs a price sends core the request it always sent.
+ */
+function picksOn(prices: BasketReadPrices | null): {
+  picks?: BasketLinePick[];
+} {
+  return prices && prices.picks.length > 0 ? { picks: prices.picks } : {};
 }
 
 /**

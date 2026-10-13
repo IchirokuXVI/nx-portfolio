@@ -23,7 +23,6 @@ import { Repository } from 'typeorm';
 import { ListLineChange } from '../../entities';
 import { BasketReadService } from '../basket-read.service';
 import { BasketWriteContext } from '../basket-write.context';
-import { mergeKey } from '../line-dedup';
 import {
   ACKNOWLEDGE_CHANGES_SQL,
   BASKET_CHANGES_PAGE_SQL,
@@ -33,7 +32,12 @@ import {
   type ChangePageRow,
   type ViewerStartRow,
 } from './basket-changes.sql';
-import { BasketMarksReader } from './basket-marks.reader';
+import {
+  BasketMarksReader,
+  departedLinesOf,
+  foldBasketMarks,
+  type LineKeyOf,
+} from './basket-marks.reader';
 
 /**
  * What a changes cursor carries: the boundary row's id, and nothing else.
@@ -99,18 +103,26 @@ export class BasketChangesService {
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
-    // The rows a client can act on: the covered lines, grouped exactly as the
-    // basket read groups them, so a `rowKey` here names the row that read drew.
-    const covered = await this.read.coveredLinesOf(
+    // The rows a client can act on: the covered lines, keyed as core keys them
+    // with no picks (plan 0201). A change about a covered line names that line,
+    // so the picks of a read cannot move it to a row this did not name.
+    const { lines: covered, keys } = await this.read.keyedLinesOf(
       opened.basket,
       opened.coveredListIds
     );
-    const anchors = anchorsOf(covered);
     const lines = await this.linesOf(page, covered);
+    const coveredIds = new Set(covered.map((line) => line.id));
+    await this.read.keyDeparted(
+      keys,
+      [...lines.values()].filter((line) => !coveredIds.has(line.id))
+    );
+    const anchors = anchorsOf(covered, keys.keyOf);
 
     const items = page.map((row) =>
       toChangeView(row, {
         anchors,
+        coveredIds,
+        keyOf: keys.keyOf,
         lines,
         basketId: opened.basket.id,
         servedListIds: opened.servedListIds,
@@ -130,34 +142,49 @@ export class BasketChangesService {
    * already, so it is answered the one thing a room could not carry, which is
    * what **this viewer** has not seen yet.
    *
-   * It reads the coverage, the covered lines and the marked changes. No row is
-   * built, so it asks for no product set, no purchase, no walk history, no
-   * person and no list name, and the gateway asks the catalog nothing.
+   * It reads the coverage, the covered lines with their products and this
+   * basket's purchases of them, and the marked changes. No row is built, so it
+   * asks for no walk history, no person and no list name, and the gateway asks
+   * the catalog nothing.
    *
-   * A mark belongs to a merge key (plan 0138, section 7), and every covered
-   * line of that key is answered with it. So a client that folds the marks of
-   * the lines of a row gets the mark the read gives that row. **A removed row
-   * is not here**: its lines left the coverage, and a removal sends ids alone.
+   * ## What a mark belongs to (plan 0201)
+   *
+   * A mark belongs to the **key of a row**, and the key is the product the
+   * lines of the row count as, or their name when they hold none (it was the
+   * product set before). Every covered line of that key is answered with the
+   * mark. So a client that folds the marks of the lines of a row, `ADDED` over
+   * `CHANGED`, gets the mark of that row.
+   *
+   * **The keys here are the ones core builds with no picks.** For a line with
+   * several products and no favourite the full read can use another product.
+   * The difference shows in one case only: a line left the coverage and its
+   * mark was passed to the covered lines that share its product. A change of
+   * a covered line marks that line whatever its row is.
+   *
+   * **A removed row is not here**: its lines left the coverage, and a removal
+   * sends ids alone.
    */
   async marksOf(req: GetBasketMarksRequest): Promise<BasketMarksView> {
     const opened = await this.context.open(req);
     if (opened.coveredListIds.length === 0) {
       return { unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] };
     }
-    const covered = await this.read.coveredLinesOf(
+    const { lines: covered, keys } = await this.read.keyedLinesOf(
       opened.basket,
       opened.coveredListIds
     );
-    const marks = await this.marks.marksFor(
+    const changes = await this.marks.changesFor(
       opened.participant.id,
       opened.coveredListIds,
       covered
     );
+    await this.read.keyDeparted(keys, departedLinesOf(changes, covered));
+    const marks = foldBasketMarks(changes, covered, keys.keyOf);
     return {
       unseenChangeCount: marks.unseenChangeCount,
       newestUnseenChangeId: marks.newestUnseenChangeId,
       lines: covered.flatMap((line) => {
-        const mark = marks.byKey.get(mergeKey(line));
+        const mark = marks.byKey.get(keys.keyOf(line));
         return mark ? [{ lineId: line.id, mark }] : [];
       }),
     };
@@ -249,19 +276,19 @@ export function clampChangePage(requested?: number): number {
 }
 
 /**
- * The line that names each row, by the row's merge key.
+ * The oldest covered line of each key.
  *
- * The covered lines arrive ordered by `("createdAt", id)`, which is what makes the
- * first line of a group its anchor: the oldest ask for a thing names the row (plan
- * 0136). Written here rather than reusing `groupEntries`, because this needs the
- * anchor of a key and not the group behind it.
+ * The covered lines arrive ordered by `("createdAt", id)`, so the first line of
+ * a key is its oldest. Written here rather than reusing `groupEntries`, because
+ * this needs one line of a key and not the group behind it.
  */
 export function anchorsOf(
-  covered: readonly ChangeLineRow[]
+  covered: readonly ChangeLineRow[],
+  keyOf: LineKeyOf
 ): Map<string, string> {
   const anchors = new Map<string, string>();
   for (const line of covered) {
-    const key = mergeKey(line);
+    const key = keyOf(line);
     if (!anchors.has(key)) {
       anchors.set(key, line.id);
     }
@@ -271,8 +298,12 @@ export function anchorsOf(
 
 /** What a change view needs about the basket it is being read through. */
 interface ChangeViewContext {
-  /** Merge key to the line that names its row. */
+  /** The key of a row to its oldest covered line. */
   anchors: ReadonlyMap<string, string>;
+  /** The lines the basket draws now. */
+  coveredIds: ReadonlySet<string>;
+  /** The key of the row a line is in, as core keys it with no picks. */
+  keyOf: LineKeyOf;
   /** Every line this page names, deleted ones included. */
   lines: ReadonlyMap<string, ChangeLineRow>;
   /** This basket, so a change made **through it** names its participant. */
@@ -317,16 +348,18 @@ export function toChangeView(
   }
   return view;
 }
-
 /**
- * The row this change's line is in now, or null.
+ * A covered line of the row this change is about, or null (plan 0201).
+ *
+ * **The line itself when the basket draws it.** A client finds the row that
+ * holds that line among its entries. Before plan 0201 this was the anchor of
+ * the row, which a read with picks can no longer be told from here.
  *
  * A merge resolves through the **survivor**, because the absorbed line names no
- * row and the row the change is about is the one that is still there. A deleted
- * line whose name another household still asks for resolves to that household's
- * row, which is the same answer the mark gives it. A line in no covered row at
- * all, which is what a removal usually is, carries null: the disabled row the
- * basket read draws lasts as long as the mark, and this history outlives it.
+ * row. A line that left the coverage resolves to the oldest covered line that
+ * shares its key, which is the row the mark was passed to. A line in no covered
+ * row at all, which is what a removal usually is, carries null: the disabled
+ * row the basket read draws lasts six hours, and this history outlives it.
  */
 function rowKeyOf(
   row: ChangePageRow,
@@ -339,7 +372,10 @@ function rowKeyOf(
   if (!named) {
     return null;
   }
-  return context.anchors.get(mergeKey(named)) ?? null;
+  if (context.coveredIds.has(named.id)) {
+    return named.id;
+  }
+  return context.anchors.get(context.keyOf(named)) ?? null;
 }
 
 /**

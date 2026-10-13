@@ -568,6 +568,76 @@ describe('the price a settle at a shop with no scope records (velista 0114)', ()
   });
 });
 
+/**
+ * An `itemId` catalog does not know, told apart from a catalog that is slow
+ * (plan 0201, section 4, and point 3 of its review).
+ *
+ * The product of a settle can be on none of its lines, so core cannot check
+ * the id. Only one answer refuses the buy: catalog answered, and the product
+ * is not there. Everything else lets the settle through, because somebody at a
+ * shelf with a slow catalog still bought the thing.
+ */
+describe('a settle whose itemId catalog does not know (plan 0201)', () => {
+  it('lets a product catalog knows through', async () => {
+    const w = build();
+
+    await expect(w.service.refuseUnknownItem(ITEM)).resolves.toBeUndefined();
+    // Catalog alone is asked: no scopes are resolved to know a product.
+    expect(w.calls).toEqual([ITEM_PATTERNS.getMany]);
+    expect(w.describe).not.toHaveBeenCalled();
+  });
+
+  it('refuses a product catalog answered without, as a 400 on itemId', async () => {
+    const w = build({ items: [] });
+
+    const refused = w.service.refuseUnknownItem(ITEM);
+
+    await expect(refused).rejects.toBeInstanceOf(ValidationException);
+    await expect(refused).rejects.toMatchObject({
+      code: 'validation_failed',
+      messageArgs: { field: 'itemId' },
+    });
+  });
+
+  it('refuses when catalog answered other products and not this one', async () => {
+    const w = build({
+      items: [{ id: 'another-product', offers: [] } as unknown as ItemView],
+    });
+
+    await expect(w.service.refuseUnknownItem(ITEM)).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+  });
+
+  it('lets the settle through when catalog fails', async () => {
+    const w = build({ items: 'throws' });
+
+    await expect(w.service.refuseUnknownItem(ITEM)).resolves.toBeUndefined();
+  });
+
+  it('lets the settle through when catalog does not answer inside the budget', async () => {
+    jest.useFakeTimers();
+    try {
+      const w = build({ items: 'never answers' });
+
+      const pending = w.service.refuseUnknownItem(ITEM);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      // Not before the budget: a catalog that answers late is waited for.
+      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS - 1);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      jest.advanceTimersByTime(1);
+
+      await expect(pending).resolves.toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('the product a shop only settle is priced for (velista 0114)', () => {
   it('is the one the caller named', () => {
     expect(shopPricedItemId(ITEM, { pickedItemId: null, optionCount: 2 })).toBe(

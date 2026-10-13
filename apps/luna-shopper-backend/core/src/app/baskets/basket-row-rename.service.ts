@@ -9,14 +9,15 @@ import {
   type RenameBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ForbiddenException,
   BasketFinishedException,
+  ForbiddenException,
   LineMergeRequiredException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, type EntityManager } from 'typeorm';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { Zone } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { BasketSharingService } from '../baskets/basket-sharing.service';
 import {
   LineService,
   type ListRenameOutcome,
@@ -36,8 +37,15 @@ import {
  * That plan renamed a basket line and the zone lines behind it, and then had to
  * fold two **basket** lines together when the new name collided inside the
  * basket. There are no basket lines any more, so that half is gone: two rows
- * that end up sharing a name are one row on the next read, by the merge key,
- * with nothing to fold.
+ * that end up sharing a name are one row on the next read, by the key of the
+ * row, with nothing to fold.
+ *
+ * ## Only a row with no product has a name to change (plan 0201, section 4)
+ *
+ * A row with a product is named by the catalog. Renaming one of its lines
+ * would change what a household calls a thing and change nothing on the screen
+ * the gesture was made on. So a named line that holds a product is refused,
+ * with `validation_failed`, before anything is locked.
  *
  * ## The rule is plan 0113's, with "every origin" read as "every entry"
  *
@@ -78,7 +86,14 @@ export class BasketRowRenameService {
       throw new ForbiddenException('A guest cannot rename a row');
     }
 
-    const row = await opened.row(req.rowKey);
+    // The lines the request names, and no others (plan 0201, section 4).
+    const row = await opened.row(req.rowKey, req.lineIds);
+    if (row.entries.some((entry) => entry.itemIds.length > 0)) {
+      throw new ValidationException(
+        'A line that has a product is named by its product',
+        { messageArgs: { field: 'lineIds' } }
+      );
+    }
     const listIds = [
       ...new Set(row.entries.map((entry) => entry.listId)),
     ].sort();
@@ -98,7 +113,7 @@ export class BasketRowRenameService {
     // above makes one per list it renamed, naming the lines that went and the
     // lines that stayed, which is more than this site could reconstruct.
     const lineIds = row.entries.map((entry) => entry.lineId);
-    return this.answer(opened, lineIds, req.rowKey);
+    return this.answer(opened, lineIds);
   }
 
   /**
@@ -211,19 +226,18 @@ export class BasketRowRenameService {
   }
 
   /**
-   * The row under whatever key it now has.
+   * The named lines as they are now.
    *
-   * A rename can fold this row into another, because the merge key is the
-   * normalized text: renaming the flat's "Leche" to "Milk" puts it in the row
-   * the parents' "Milk" already anchors. The answer names the key that stopped
-   * existing, so the client drops one row and redraws the other without reading
-   * the basket again.
+   * A rename can fold a line into another line of its own list, and the line
+   * that was folded away is then absent from the answer. It can also put the
+   * lines in the row another name already anchors, because the key of a row
+   * with no product is its normalized text. The client sees both from the
+   * entries, and reads the basket for the row they joined.
    */
   private answer(
     opened: OpenBasketWrite,
-    lineIds: readonly string[],
-    rowKey: string
+    lineIds: readonly string[]
   ): Promise<BasketRowResult> {
-    return opened.result(lineIds, rowKey);
+    return opened.result(lineIds);
   }
 }

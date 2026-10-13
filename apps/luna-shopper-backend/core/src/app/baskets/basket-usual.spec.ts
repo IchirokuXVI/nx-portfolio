@@ -197,6 +197,7 @@ describe('withUsual (plan 0165, section 2)', () => {
     return {
       rowKey,
       content: rowKey,
+      productId: null,
       left: 1,
       bought: 0,
       asked: 1,
@@ -206,7 +207,6 @@ describe('withUsual (plan 0165, section 2)', () => {
       noteAt: null,
       mark: null,
       awaitingApproval: false,
-      optionIds: [],
       touchedBy: null,
       touchedAt: null,
       entries: lineIds.map((lineId) => ({
@@ -221,6 +221,11 @@ describe('withUsual (plan 0165, section 2)', () => {
         skipped: false,
         closed: false,
         act: null,
+        tripItemId: null,
+        content: rowKey,
+        itemIds: [],
+        favoriteItemId: null,
+        canWrite: true,
         demandEditable: true,
       })),
       usual: null,

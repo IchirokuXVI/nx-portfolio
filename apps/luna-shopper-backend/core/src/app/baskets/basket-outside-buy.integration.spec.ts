@@ -361,6 +361,7 @@ describeIntegration(
         basketId: who.basket.id,
         participantId: who.participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity,
         from,
@@ -376,6 +377,7 @@ describeIntegration(
         basketId: who.basket.id,
         participantId: who.participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units,
         from,
@@ -752,6 +754,7 @@ describeIntegration(
           owner: { userId: a.userId },
         },
         listId,
+        // The line itself, which the basket draws (plan 0201).
         rowKey: milk.id,
       });
       // The own buy of the reading basket is in the history, with its
@@ -797,6 +800,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
         from: 2,
       });

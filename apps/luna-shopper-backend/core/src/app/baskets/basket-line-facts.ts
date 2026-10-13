@@ -14,11 +14,12 @@ import {
   type CoveredLineItemRow,
   type CoveredLineRow,
 } from './basket-read.sql';
-import type {
-  BasketElsewhereFact,
-  BasketEntry,
-  BasketSettlementFact,
-  BasketSkipFact,
+import {
+  tripItemIdOf,
+  type BasketElsewhereFact,
+  type BasketEntry,
+  type BasketSettlementFact,
+  type BasketSkipFact,
 } from './basket-rows';
 
 /**
@@ -142,6 +143,7 @@ export function toEntries(
       settledAt:
         row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
       settledByParticipantId: row.settledByParticipantId,
+      itemId: row.itemId ?? null,
       // Computed by the database against its own `now()` (plan 0137, section
       // 4), and read for a `LIVE` basket's close alone.
       fresh: row.fresh,
@@ -167,20 +169,27 @@ export function toEntries(
     });
   }
 
-  return lines.map((line) => ({
-    lineId: line.id,
-    listId: line.listId,
-    content: line.content,
-    quantity: line.quantity,
-    version: line.version,
-    itemSetHash: line.itemSetHash,
-    approvalStatus: line.approvalStatus,
-    createdAt:
-      line.createdAt instanceof Date
-        ? line.createdAt
-        : new Date(line.createdAt),
-    itemIds: itemsByLine.get(line.id) ?? [],
-    settlements: settlementsByLine.get(line.id) ?? [],
-    elsewhere: elsewhereByLine.get(line.id) ?? null,
-  }));
+  return lines.map((line) => {
+    const settled = settlementsByLine.get(line.id) ?? [];
+    return {
+      lineId: line.id,
+      listId: line.listId,
+      content: line.content,
+      quantity: line.quantity,
+      version: line.version,
+      itemSetHash: line.itemSetHash,
+      favoriteItemId: line.favoriteItemId ?? null,
+      approvalStatus: line.approvalStatus,
+      createdAt:
+        line.createdAt instanceof Date
+          ? line.createdAt
+          : new Date(line.createdAt),
+      itemIds: itemsByLine.get(line.id) ?? [],
+      settlements: settled,
+      // The product of the latest buy in the trip (plan 0201, section 1). The
+      // purchases are already this basket's and in scope.
+      tripItemId: tripItemIdOf(settled),
+      elsewhere: elsewhereByLine.get(line.id) ?? null,
+    };
+  });
 }

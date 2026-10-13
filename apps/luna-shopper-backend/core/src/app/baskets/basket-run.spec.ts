@@ -334,7 +334,7 @@ describe('the generation run', () => {
   it('merges nothing, because there is no row to merge into', async () => {
     // The reversal of "merges lines carrying the same product set and sums their
     // quantities". Milk in the flat list and in the parents' list is still one
-    // line to buy once, and it is one **row** now, grouped on `mergeKey` by
+    // line to buy once, and it is one **row** now, grouped on `rowKeyOf` by
     // `baskets/line-dedup.ts` on every read. The run records that it covers both
     // lists and stops there.
     const { service, written } = build({});
@@ -356,8 +356,8 @@ describe('the generation run', () => {
   it('stores no product set and no pick, which the read composes instead', async () => {
     // The reversal of "unions the options of the lines it merged" and of "leaves
     // a free text line with no pick and no options". `basket_line_options`
-    // is dropped (plan 0136, section 9), and a row's `optionIds` are the union of
-    // its entries' `list_line_items`, read per request. Nothing the run writes
+    // is dropped (plan 0136, section 9), and a row's `productId` is worked out
+    // from its entries' `list_line_items`, read per request. Nothing the run writes
     // carries either, so the header is asserted whole.
     const { service, written } = build({});
 

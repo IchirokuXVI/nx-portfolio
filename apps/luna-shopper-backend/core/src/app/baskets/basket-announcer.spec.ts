@@ -127,6 +127,8 @@ const patch = (
   skipped: false,
   closed: false,
   act: null,
+  // No buy in this trip named a product (plan 0201, section 1).
+  tripItemId: null,
   ...over,
 });
 

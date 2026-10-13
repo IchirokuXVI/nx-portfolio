@@ -18,7 +18,7 @@ import {
   type BasketRowEntryView,
   type BasketRowView,
 } from '@portfolio/luna-shopper/contracts';
-import { mergeKey } from './line-dedup';
+import { productOf, rowKeyOf, type BasketPicks } from './line-dedup';
 
 /**
  * Every rule of a basket row that needs no database (plan 0136, section 3).
@@ -38,6 +38,8 @@ export interface BasketSettlementFact {
   quantity: number;
   settledAt: Date;
   settledByParticipantId: string | null;
+  /** The product the buy named, or null (plan 0201, section 1). */
+  itemId: string | null;
   /**
    * Inside the skip window, decided by the database (plan 0137, section 4).
    *
@@ -106,12 +108,20 @@ export interface BasketEntry {
   /** `list_lines.version`, which a patch is ordered by (plan 0204). */
   version: number;
   itemSetHash: string | null;
+  /** The favourite of the line (plan 0199), or null. */
+  favoriteItemId: string | null;
   approvalStatus: LineApprovalStatus;
   createdAt: Date;
   /** The line's product set, in attachment order. */
   itemIds: string[];
   /** This basket's standing purchases of this line, in scope, oldest first. */
   settlements: BasketSettlementFact[];
+  /**
+   * The product of the latest of those purchases that is a buy and names one,
+   * or null (plan 0201, section 1). {@link tripItemIdOf} over `settlements`,
+   * kept on the entry so that every rule reads one answer.
+   */
+  tripItemId: string | null;
   /** What somebody else bought of this line lately, or null (plan 0188). */
   elsewhere: BasketElsewhereFact | null;
 }
@@ -119,33 +129,67 @@ export interface BasketEntry {
 /** A group of entries that are one thing to buy. */
 export interface BasketGroup {
   key: string;
+  /** The product every entry counts as, or null for a group by name. */
+  productId: string | null;
   /** The earliest entry by `(createdAt, id)`. It names the row. */
   anchor: BasketEntry;
   entries: BasketEntry[];
 }
 
 /**
- * Fold the covered lines into rows (plan 0136, section 3.1, step 5).
+ * The product of the latest standing buy among these purchases, or null (plan
+ * 0201, section 1, step 1).
  *
- * The same `mergeKey` a generation run used, which is the point: a run merged
- * "Milk" on the flat's list with "leche" on the parents' when they named one
- * product, and the view has to fold exactly the same pair or a basket read would
- * disagree with every basket ever composed.
+ * The purchases are this basket's, in scope: the current session of a `LIVE`
+ * basket, or the whole life of a `GENERATED` one. A buy that was taken back is
+ * not among them, and "they had none" names no product. The newest buy that
+ * names a product decides, by `("settledAt", id)`, as everywhere.
+ */
+export function tripItemIdOf(
+  settlements: readonly BasketSettlementFact[]
+): string | null {
+  let newest: BasketSettlementFact | null = null;
+  for (const row of settlements) {
+    if (row.outcome !== SettlementOutcome.BOUGHT || row.itemId === null) {
+      continue;
+    }
+    if (
+      !newest ||
+      row.settledAt.getTime() > newest.settledAt.getTime() ||
+      (row.settledAt.getTime() === newest.settledAt.getTime() &&
+        row.id > newest.id)
+    ) {
+      newest = row;
+    }
+  }
+  return newest?.itemId ?? null;
+}
+
+/**
+ * Fold the covered lines into rows (plan 0201, section 2).
+ *
+ * Two lines are one row when they count as the same product, and failing a
+ * product, when they carry the same normalized name. `picks` is what the
+ * gateway chose by price, and it is empty for every caller that has no prices.
  *
  * **The input must already be ordered by `(createdAt, id)`**, which
  * `COVERED_LINES_SQL` does, because the anchor is the group's first entry and
- * the oldest ask for a thing is the one that names the row.
+ * the oldest ask for a thing names the row.
  */
-export function groupEntries(entries: readonly BasketEntry[]): BasketGroup[] {
+export function groupEntries(
+  entries: readonly BasketEntry[],
+  picks: BasketPicks
+): BasketGroup[] {
   const groups = new Map<string, BasketGroup>();
   for (const entry of entries) {
-    const key = mergeKey(entry);
+    const productId = productOf(entry, picks);
+    const key = rowKeyOf(entry.content, productId);
     const held = groups.get(key);
     if (held) {
       held.entries.push(entry);
       continue;
     }
-    groups.set(key, { key, anchor: entry, entries: [entry] });
+    groups.set(key, { key, productId, anchor: entry, entries: [entry] });
   }
   return [...groups.values()];
 }
@@ -396,18 +440,21 @@ function newestSkip(
 }
 
 /**
- * The union of the entries' product sets, first seen order, anchor first.
+ * Every product a group can be found under in the walk history: the product it
+ * counts as, then the product sets of its entries, first seen order.
  *
- * A union rather than the anchor's own set: two households naming the same thing
- * may each have attached a different carton, and the shopper at the shelf is
- * choosing between all of them. Deduplicated, because the common case is two
- * entries naming the same product and a picker offering it twice is a bug the
- * shopper sees.
+ * The wire no longer carries it (plan 0201 removed `optionIds`). The walk order
+ * still asks it, because a shelf somebody settled under another product of the
+ * same line is still the shelf of this row.
  */
-export function optionIdsOf(entries: readonly BasketEntry[]): string[] {
+export function walkItemIdsOf(group: BasketGroup): string[] {
   const seen = new Set<string>();
   const ids: string[] = [];
-  for (const entry of entries) {
+  if (group.productId) {
+    seen.add(group.productId);
+    ids.push(group.productId);
+  }
+  for (const entry of group.entries) {
     for (const itemId of entry.itemIds) {
       if (!seen.has(itemId)) {
         seen.add(itemId);
@@ -427,13 +474,15 @@ export interface EntryContext {
   /** What the read knows and the entries do not (plan 0137, section 4). */
   facts: BasketFacts;
   /**
-   * What changed about each row since **this viewer** last looked, by merge key
-   * (plan 0138, section 7).
+   * What changed about each row since **this viewer** last looked, by the key
+   * of the row (plan 0138, section 7).
    *
    * By key rather than by line, because a mark belongs to the row: a line deleted
-   * from one household marks the row its name is still on in another, and there is
-   * no line id both of those share. Empty for a caller with no viewer to measure,
-   * which is what the admin and history reads are.
+   * from one household marks the row its product is still on in another, and
+   * there is no line id both of those share. Since plan 0201 the key is the
+   * product the lines count as, so the marks are folded with the picks of the
+   * same read. Empty for a caller with no viewer to measure, which is what the
+   * admin and history reads are.
    */
   marks: ReadonlyMap<string, BasketRowMark>;
 }
@@ -465,6 +514,10 @@ export function toEntryPatch(
     skipped: rule.skipped,
     closed: rule.closed,
     act: actOf(entry, facts),
+    // The product the line counts as since its latest buy in this trip (plan
+    // 0201, section 1). A client holding the line in a row of another product
+    // reads the basket again (plan 0204, section 7).
+    tripItemId: entry.tripItemId,
   };
 }
 
@@ -473,14 +526,26 @@ export function toEntryView(
   entry: BasketEntry,
   context: EntryContext
 ): BasketRowEntryView {
+  // The lists a reader is served are the covered lists they write themselves
+  // (plan 0136, section 3.4), so being served the list and being allowed to
+  // edit its lines are one fact.
+  const served = context.servedListIds.has(entry.listId);
   const view: BasketRowEntryView = {
     ...toEntryPatch(entry, context.facts),
+    // The line itself (plan 0201, section 3). Its name and its products are
+    // what every reader of a row was already told, one row at a time.
+    content: entry.content,
+    itemIds: [...entry.itemIds],
+    favoriteItemId: entry.favoriteItemId,
+    canWrite: served,
     demandEditable: context.demandEditable(entry),
   };
   // Redaction by absence (plan 0130, section 6). The field is omitted rather
   // than nulled, so a reader cannot tell "a list you may not see" from "no
   // list", and nothing downstream is trusted to hide a value it was handed.
-  if (context.servedListIds.has(entry.listId)) {
+  // The names of the list and its zone are in `BasketView.lists` under this
+  // id, so an entry on a list that is not served gains none of them.
+  if (served) {
     view.listId = entry.listId;
   }
   return view;
@@ -500,7 +565,10 @@ export function toRowView(
   const note = noteOf(group.entries, state, context.facts);
   return {
     rowKey: group.anchor.lineId,
+    // The name of the anchor. A row with a product is named by the catalog,
+    // and this is what a client draws when the catalog cannot name it.
     content: group.anchor.content,
+    productId: group.productId,
     left: numbers.left,
     bought: numbers.bought,
     // Computed here and stored nowhere, which is the whole of plan 0136.
@@ -518,7 +586,6 @@ export function toRowView(
     awaitingApproval: group.entries.some(
       (entry) => entry.approvalStatus === LineApprovalStatus.PENDING
     ),
-    optionIds: optionIdsOf(group.entries),
     // Who last did something to this row, and when (plan 0137, section 4): the
     // newest of its purchases and its standing skips.
     touchedBy: numbers.act?.participantId ?? null,

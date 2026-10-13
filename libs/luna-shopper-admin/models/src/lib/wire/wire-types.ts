@@ -742,6 +742,7 @@ export type RegisterDto = {
  * `RenameBasketRowDto` in the gateway's OpenAPI document.
  */
 export type RenameBasketRowDto = {
+  lineIds: string[];
   content: string;
   confirmMerge?: boolean;
 };
@@ -789,6 +790,7 @@ export type ResolvePostalCodeDto = {
  * `RevertBasketRowDto` in the gateway's OpenAPI document.
  */
 export type RevertBasketRowDto = {
+  lineIds: string[];
   target: 'UNITS' | 'CLOSE';
   units?: number;
   from?: number;
@@ -827,7 +829,7 @@ export type SetApprovalDto = {
  * `SetBasketRowDemandDto` in the gateway's OpenAPI document.
  */
 export type SetBasketRowDemandDto = {
-  lineId?: string;
+  lineId: string;
   quantity: number;
   from: number;
 };
@@ -918,6 +920,7 @@ export type SetSupermarketLocationItemAvailabilityDto = {
  * `SettleBasketRowDto` in the gateway's OpenAPI document.
  */
 export type SettleBasketRowDto = {
+  lineIds: string[];
   outcome: SettlementOutcome;
   quantity?: number;
   from: number;
@@ -950,6 +953,13 @@ export type SettleLineDto = {
  * `SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `SkipBasketRowDto` in the gateway's OpenAPI document.
+ */
+export type SkipBasketRowDto = {
+  lineIds: string[];
+};
 
 /**
  * `SourceEntryDecisionDto` in the gateway's OpenAPI document.
@@ -2144,6 +2154,26 @@ export type BasketBasketProductAtShopView = {
 };
 
 /**
+ * `basket.BasketProductListView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketProductListView = {
+  listId: string;
+  listName: string;
+  zoneId: string;
+  zoneName: string;
+  lineId: string | null;
+  lineName: string | null;
+  quantity: number | null;
+};
+
+/**
+ * `basket.BasketProductListsView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketProductListsView = {
+  lists: BasketBasketProductListView[];
+};
+
+/**
  * `basket.BasketProductView` in the gateway's OpenAPI document.
  */
 export type BasketBasketProductView = {
@@ -2217,7 +2247,12 @@ export type BasketBasketRowEntryView = {
   skipped: boolean;
   closed: boolean;
   act: BasketBasketEntryAct | null;
+  tripItemId: string | null;
   listId?: string;
+  content: string;
+  itemIds: string[];
+  favoriteItemId: string | null;
+  canWrite: boolean;
   demandEditable: boolean;
 };
 
@@ -2225,10 +2260,9 @@ export type BasketBasketRowEntryView = {
  * `basket.BasketRowResult` in the gateway's OpenAPI document.
  */
 export type BasketBasketRowResult = {
-  row: BasketBasketRowView;
+  entries: BasketBasketRowEntryView[];
   progress: BasketBasketProgress;
   skippedCount?: number;
-  replacedRowKey?: string;
 };
 
 /**
@@ -2246,6 +2280,7 @@ export type BasketBasketRowUsualView = {
 export type BasketBasketRowView = {
   rowKey: string;
   content: string;
+  productId: string | null;
   left: number;
   bought: number;
   asked: number;
@@ -2255,7 +2290,6 @@ export type BasketBasketRowView = {
   noteAt: string | null;
   mark: EnumsBasketRowMark | null;
   awaitingApproval: boolean;
-  optionIds: string[];
   touchedBy: string | null;
   touchedAt: string | null;
   entries: BasketBasketRowEntryView[];

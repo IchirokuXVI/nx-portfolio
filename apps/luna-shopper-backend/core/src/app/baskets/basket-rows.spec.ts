@@ -16,22 +16,24 @@ import {
   allocateOldestFirst,
   boughtElsewhereOf,
   boughtOf,
-  groupEntries,
+  groupEntries as groupEntriesWith,
   newestSettlement,
   NO_BASKET_SKIPS,
   NO_ROW_MARKS,
   noteOf,
-  optionIdsOf,
   progressOf,
   stateOf,
   toEntryPatch,
   toEntryView,
   toRowView,
+  tripItemIdOf,
+  walkItemIdsOf,
   type BasketEntry,
   type BasketFacts,
   type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
+import { NO_PICKS, type BasketPicks } from './line-dedup';
 
 /**
  * The rules of a basket row, stated rather than mocked (plan 0136, section 13).
@@ -44,6 +46,17 @@ import {
 
 let seq = 0;
 
+/**
+ * The grouping as every caller with no prices asks it (plan 0201): a card, a
+ * summary, a write answer. A test about the picks of the gateway names them.
+ */
+function groupEntries(
+  entries: readonly BasketEntry[],
+  picks: BasketPicks = NO_PICKS
+) {
+  return groupEntriesWith(entries, picks);
+}
+
 function entry(over: Partial<BasketEntry> = {}): BasketEntry {
   seq += 1;
   return {
@@ -53,11 +66,14 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
     quantity: 1,
     version: 1,
     itemSetHash: null,
+    favoriteItemId: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     // Distinct and increasing, so `(createdAt, id)` has one answer.
     createdAt: new Date(2026, 0, 1, 0, 0, seq),
     itemIds: [],
     settlements: [],
+    // Nothing bought in this trip names a product (plan 0201, section 1).
+    tripItemId: null,
     // Nobody else bought it, which is every row before plan 0188.
     elsewhere: null,
     ...over,
@@ -75,6 +91,8 @@ function bought(
     quantity,
     settledAt: new Date(2026, 0, 1, 10, 0, seq),
     settledByParticipantId: 'p1',
+    // A buy that named no product, which is a buy of a line with none.
+    itemId: null,
     // The database answered it (plan 0137, section 4). These rules receive
     // booleans and never a clock, which is what lets a spec state "the window
     // ran out" without moving anybody's time.
@@ -123,21 +141,117 @@ const OPEN_CONTEXT = {
   marks: NO_ROW_MARKS,
 };
 
-describe('grouping (section 3.1, step 5)', () => {
+describe('grouping (plan 0201, section 2)', () => {
   it('folds two lists’ lines that name one product into one row', () => {
     // The point of the feature: "Milk" on the flat's list and on the parents'
-    // list is one thing to pick off one shelf. They merge on the **set**, which
-    // is an identity rather than a spelling, so "leche" and "Milk" meet here.
+    // list is one thing to pick off one shelf. They merge on the **product**,
+    // which is an identity rather than a spelling, so "leche" and "Milk" meet
+    // here.
     const groups = groupEntries([
-      entry({ listId: 'list-a', content: 'Milk', itemSetHash: 'h1' }),
-      entry({ listId: 'list-b', content: 'leche', itemSetHash: 'h1' }),
+      entry({ listId: 'list-a', content: 'Milk', itemIds: ['i1'] }),
+      entry({ listId: 'list-b', content: 'leche', itemIds: ['i1'] }),
     ]);
 
     expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i1');
+    expect(groups[0].key).toBe('item:i1');
     expect(groups[0].entries.map((row) => row.listId)).toEqual([
       'list-a',
       'list-b',
     ]);
+  });
+
+  it('folds two lines with different sets that count as the same product', () => {
+    // Before plan 0201 these were two rows, because the key was the whole set:
+    // the same carton stood in the basket twice.
+    const groups = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1'], itemSetHash: 'h1' }),
+      entry({ content: 'Milk', itemIds: ['i1', 'i2'], itemSetHash: 'h2' }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i1');
+  });
+
+  it('keeps two lines with the same set and different favourites apart', () => {
+    const groups = groupEntries([
+      entry({
+        itemIds: ['i1', 'i2'],
+        itemSetHash: 'h1',
+        favoriteItemId: 'i1',
+      }),
+      entry({
+        itemIds: ['i1', 'i2'],
+        itemSetHash: 'h1',
+        favoriteItemId: 'i2',
+      }),
+    ]);
+
+    expect(groups.map((group) => group.productId)).toEqual(['i1', 'i2']);
+  });
+
+  it('counts a line with several products as its first, with no picks', () => {
+    const [group] = groupEntries([entry({ itemIds: ['i2', 'i1'] })]);
+
+    expect(group.productId).toBe('i2');
+  });
+
+  it('moves a line to the row of the pick of the gateway', () => {
+    const fixed = entry({ itemIds: ['i2'] });
+    const priced = entry({ itemIds: ['i1', 'i2'] });
+
+    // With no prices the two are two rows. The gateway found `i2` cheapest for
+    // the second line, so the read that carries that pick draws one.
+    expect(groupEntries([fixed, priced])).toHaveLength(2);
+    const groups = groupEntries(
+      [fixed, priced],
+      new Map([[priced.lineId, 'i2']])
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i2');
+    expect(groups[0].anchor).toBe(fixed);
+  });
+
+  it('ignores a pick that is not a product of its line', () => {
+    const only = entry({ itemIds: ['i1', 'i2'] });
+
+    const [group] = groupEntries([only], new Map([[only.lineId, 'i9']]));
+    expect(group.productId).toBe('i1');
+  });
+
+  it('lets the favourite win over a pick', () => {
+    const only = entry({ itemIds: ['i1', 'i2'], favoriteItemId: 'i1' });
+
+    const [group] = groupEntries([only], new Map([[only.lineId, 'i2']]));
+    expect(group.productId).toBe('i1');
+  });
+
+  it('follows the product of the buy in this trip, also outside the line', () => {
+    // A change "for this trip only": the line holds `i1` and was bought as
+    // `i7`, so it stands in the row of `i7` until the trip ends.
+    const swapped = entry({
+      itemIds: ['i1'],
+      favoriteItemId: 'i1',
+      tripItemId: 'i7',
+    });
+    const other = entry({ itemIds: ['i7'] });
+
+    const groups = groupEntries(
+      [swapped, other],
+      new Map([[swapped.lineId, 'i1']])
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i7');
+  });
+
+  it('keeps a line with a product and a line with none apart', () => {
+    const groups = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1'] }),
+      entry({ content: 'Milk' }),
+    ]);
+
+    expect(groups.map((group) => group.key)).toEqual(['item:i1', 'text:milk']);
+    expect(groups[1].productId).toBeNull();
   });
 
   it('folds a free text pair by normalizeContent', () => {
@@ -151,15 +265,28 @@ describe('grouping (section 3.1, step 5)', () => {
     expect(groups).toHaveLength(1);
   });
 
-  it('keeps two different product sets apart', () => {
+  it('keeps two different products apart, whatever they are called', () => {
     const groups = groupEntries([
-      entry({ content: 'Milk', itemSetHash: 'h1' }),
-      entry({ content: 'Milk', itemSetHash: 'h2' }),
+      entry({ content: 'Milk', itemIds: ['i1'] }),
+      entry({ content: 'Milk', itemIds: ['i2'] }),
     ]);
 
-    // A hash never collides with typed text, which is what the `set:` and
-    // `text:` namespaces buy, and two different sets are two different things.
+    // A product id never collides with typed text, which is what the `item:`
+    // and `text:` namespaces buy, and two products are two different things.
     expect(groups).toHaveLength(2);
+  });
+
+  it('names the product on the row view, and null for a row by name', () => {
+    const [withProduct, byName] = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1', 'i2'] }),
+      entry({ content: 'Bread' }),
+    ]);
+
+    expect(toRowView(withProduct, OPEN_CONTEXT).productId).toBe('i1');
+    expect(toRowView(byName, OPEN_CONTEXT).productId).toBeNull();
+    expect(toRowView(withProduct, OPEN_CONTEXT)).not.toHaveProperty(
+      'optionIds'
+    );
   });
 
   it('anchors a row on its earliest line', () => {
@@ -290,16 +417,96 @@ describe('the arithmetic (plan 0130, section 4)', () => {
     expect(toRowView(group, OPEN_CONTEXT).awaitingApproval).toBe(true);
   });
 
-  it('unions the entries’ products, anchor first and deduplicated', () => {
-    // Two households may each have attached a different carton, and the shopper
-    // at the shelf is choosing between all of them. A picker offering the same
-    // product twice is a bug the shopper sees.
-    const rows = [
-      entry({ itemIds: ['i1', 'i2'] }),
+  it('finds a row in the walk history under its product, then its sets', () => {
+    // The wire lost `optionIds` (plan 0201). The walk order still asks under
+    // every product of the lines: a shelf somebody settled under another
+    // product of the same line is still the shelf of this row.
+    const [group] = groupEntries([
+      entry({ itemIds: ['i1', 'i2'], favoriteItemId: 'i2' }),
       entry({ itemIds: ['i2', 'i3'] }),
-    ];
+    ]);
 
-    expect(optionIdsOf(rows)).toEqual(['i1', 'i2', 'i3']);
+    expect(group.productId).toBe('i2');
+    expect(walkItemIdsOf(group)).toEqual(['i2', 'i1', 'i3']);
+  });
+
+  it('finds a row bought as a product outside its lines under that product first', () => {
+    const [group] = groupEntries([
+      entry({ itemIds: ['i1'], tripItemId: 'i7' }),
+    ]);
+
+    expect(walkItemIdsOf(group)).toEqual(['i7', 'i1']);
+  });
+
+  it('finds a row by name under no product', () => {
+    const [group] = groupEntries([entry({ content: 'Bread' })]);
+
+    expect(walkItemIdsOf(group)).toEqual([]);
+  });
+});
+
+describe('the product of the latest buy in the trip (plan 0201, section 1)', () => {
+  const early = new Date(2026, 0, 1, 9, 0, 0);
+  const late = new Date(2026, 0, 1, 10, 0, 0);
+
+  it('is null with no purchase', () => {
+    expect(tripItemIdOf([])).toBeNull();
+  });
+
+  it('is the product of the newest buy', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        bought(1, { itemId: 'i2', settledAt: late }),
+      ])
+    ).toBe('i2');
+    // The order of the input does not decide.
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i2', settledAt: late }),
+        bought(1, { itemId: 'i1', settledAt: early }),
+      ])
+    ).toBe('i2');
+  });
+
+  it('breaks a tie of one instant on the id', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { id: 'b', itemId: 'i2', settledAt: early }),
+        bought(1, { id: 'a', itemId: 'i1', settledAt: early }),
+      ])
+    ).toBe('i2');
+  });
+
+  it('names nothing for "they had none"', () => {
+    // A close carries no product that was bought, also when the row names one.
+    expect(tripItemIdOf([closed({ itemId: 'i1' })])).toBeNull();
+  });
+
+  it('keeps the product of an earlier buy under a later close', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        closed({ itemId: null, settledAt: late }),
+      ])
+    ).toBe('i1');
+  });
+
+  it('skips a newer buy that named no product', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        bought(1, { itemId: null, settledAt: late }),
+      ])
+    ).toBe('i1');
+  });
+
+  it('falls back to the older buy once the newer one was taken back', () => {
+    // A reverted buy is not in the input: the read hands over what stands.
+    const standing = [bought(1, { itemId: 'i1', settledAt: early })];
+
+    expect(tripItemIdOf(standing)).toBe('i1');
+    expect(tripItemIdOf([])).toBeNull();
   });
 });
 
@@ -922,7 +1129,22 @@ describe('what a patch and an entry both state (plan 0204)', () => {
       skipped: false,
       closed: false,
       act: null,
+      tripItemId: null,
     });
+  });
+
+  it('carries the product of the buy in this trip (plan 0201, section 1)', () => {
+    // A client that holds the line in a row of another product reads the
+    // basket again. No patch can say which row the line is in now.
+    const only = entry({
+      quantity: 0,
+      itemIds: ['i1'],
+      settlements: [bought(1, { itemId: 'i7' })],
+      tripItemId: 'i7',
+    });
+
+    expect(toEntryPatch(only, NO_FACTS).tripItemId).toBe('i7');
+    expect(toEntryView(only, OPEN_CONTEXT).tripItemId).toBe('i7');
   });
 
   it('names no list, whoever reads it', () => {
@@ -1022,16 +1244,42 @@ describe('what a patch and an entry both state (plan 0204)', () => {
     expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
   });
 
-  it('serves an entry the same numbers as its patch, and two fields more', () => {
-    const only = entry({ quantity: 1, settlements: [bought(2)], version: 3 });
+  it('serves an entry the same numbers as its patch, and the line itself', () => {
+    const only = entry({
+      quantity: 1,
+      settlements: [bought(2)],
+      version: 3,
+      content: 'Leche',
+      itemIds: ['i1', 'i2'],
+      favoriteItemId: 'i2',
+    });
     const patch = toEntryPatch(only, NO_FACTS);
     const view = toEntryView(only, OPEN_CONTEXT);
 
     expect(view).toEqual({
       ...patch,
+      // The line as its own list holds it (plan 0201, section 3).
+      content: 'Leche',
+      itemIds: ['i1', 'i2'],
+      favoriteItemId: 'i2',
+      canWrite: true,
       demandEditable: true,
       listId: only.listId,
     });
+  });
+
+  it('says a reader who was not served the list may not write the line', () => {
+    const only = entry({ listId: 'list-a', itemIds: ['i1'] });
+    const view = toEntryView(only, {
+      ...OPEN_CONTEXT,
+      servedListIds: new Set<string>(),
+    });
+
+    // A guest holds no list. They still read the name and the products of the
+    // line, which every reader of the row was already told.
+    expect(view.canWrite).toBe(false);
+    expect('listId' in view).toBe(false);
+    expect(view.itemIds).toEqual(['i1']);
   });
 
   it('gives a row the state and the act its entries add up to', () => {

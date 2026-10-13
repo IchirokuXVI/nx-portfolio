@@ -693,6 +693,7 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: bought.id,
+          lineIds: [bought.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 2,
           from: 2,
@@ -731,6 +732,7 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: olives.id,
+          lineIds: [olives.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 2,
@@ -946,6 +948,7 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 2,
@@ -954,6 +957,7 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
           target: 'UNITS',
           units: 1,
           from: 1,
@@ -995,6 +999,7 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
           from: 2,
         });
@@ -1002,17 +1007,20 @@ describeIntegration(
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
           target: 'CLOSE',
         });
         await skipService.skip({
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
         });
         await skipService.unskip({
           basketId: held.id,
           participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
         });
 
         // None of the three moves the quantity of the line, so none is a

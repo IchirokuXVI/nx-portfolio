@@ -39,6 +39,23 @@ describe('the skip routes (plan 0137, section 5)', () => {
     expect(limit).toBeDefined();
   });
 
+  // Plan 0201, section 4: both name their lines, and a body on a `DELETE` is
+  // not delivered reliably, so that one reads them from its query. Read from
+  // the parameter metadata Nest keeps: 3 is a body and 4 is a query.
+  it.each([
+    ['skip', 3],
+    ['unskip', 4],
+  ])('reads the lines of %s from the right place', (name, source) => {
+    const args = Reflect.getMetadata(
+      '__routeArguments__',
+      BasketController,
+      name
+    ) as Record<string, { index: number }>;
+    const sources = Object.keys(args).map((key) => Number(key.split(':')[0]));
+    expect(sources).toContain(source);
+    expect(sources).not.toContain(source === 3 ? 4 : 3);
+  });
+
   it('refuses a caller the participant guard does not resolve', () => {
     // The guard is on the controller, so both routes carry it without saying
     // so themselves. That is the shape the rest of the participant surface has,

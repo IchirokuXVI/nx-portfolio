@@ -6,25 +6,25 @@ import {
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ConflictException,
   BasketFinishedException,
+  ConflictException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, type EntityManager } from 'typeorm';
-import { BasketLineSkip } from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../baskets/line-claim.service';
 import type { ZoneLineClaimRef } from '../baskets/line-claim.sql';
-import { lockEntries } from './basket-row-resolver';
-import {
-  BasketWriteContext,
-  type OpenBasketWrite,
-} from './basket-write.context';
+import { BasketLineSkip } from '../entities';
+import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
   REVERT_SKIPS_SQL,
   STANDING_SKIP_LINES_SQL,
   UNREVERTED_SKIP_LINES_SQL,
   type BasketSkipLineRow,
 } from './basket-read.sql';
+import { lockEntries } from './basket-row-resolver';
+import {
+  BasketWriteContext,
+  type OpenBasketWrite,
+} from './basket-write.context';
 
 /**
  * "Not today" on a row, and taking it back (plan 0137, section 5).
@@ -79,7 +79,8 @@ export class BasketSkipService {
    */
   async skip(req: SkipBasketRowRequest): Promise<BasketRowResult> {
     const opened = await this.openOpen(req);
-    const row = await opened.row(req.rowKey);
+    // The lines the request names, and no others (plan 0201, section 4).
+    const row = await opened.row(req.rowKey, req.lineIds);
 
     // The entries this call marked, which is what decides what to announce and
     // which claims to ask about. A second call marks none.
@@ -145,7 +146,7 @@ export class BasketSkipService {
     // assumed, because another open basket may still be carrying it.
     await this.claims.announceReleased(this.refs(opened, inserted));
 
-    return opened.result(touched, req.rowKey);
+    return opened.result(touched);
   }
 
   /**
@@ -158,7 +159,7 @@ export class BasketSkipService {
    */
   async unskip(req: SkipBasketRowRequest): Promise<BasketRowResult> {
     const opened = await this.openOpen(req);
-    const row = await opened.row(req.rowKey);
+    const row = await opened.row(req.rowKey, req.lineIds);
 
     let reverted: SkippedEntry[] = [];
     let touched: string[] = [];
@@ -189,7 +190,7 @@ export class BasketSkipService {
     );
     await this.announceClaimed(opened, reverted);
 
-    return opened.result(touched, req.rowKey);
+    return opened.result(touched);
   }
 
   /**

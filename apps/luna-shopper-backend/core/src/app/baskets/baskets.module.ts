@@ -22,6 +22,7 @@ import { BasketCoverageModule } from './basket-coverage.module';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
 import { BasketLiveService } from './basket-live.service';
+import { BasketProductService } from './basket-product.service';
 import { BasketMembersService } from './basket-members.service';
 import { BasketOrderService } from './basket-order.service';
 import { BasketReadController } from './basket-read.controller';
@@ -149,6 +150,9 @@ import { LineClaimModule } from './line-claim.module';
     // basket's question about lists it covers.
     BasketMarksReader,
     BasketChangesService,
+    // Which lines need a price to know their product, and which lists can
+    // still take a product (plan 0201).
+    BasketProductService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.

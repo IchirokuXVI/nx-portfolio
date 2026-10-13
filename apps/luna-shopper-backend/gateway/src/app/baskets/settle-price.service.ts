@@ -138,9 +138,9 @@ export interface SettlePriceInput {
  * ## A price never fails a settle, and never delays one past its budget
  *
  * Every way of not knowing a price ends in nulls and a settlement that was
- * written. There is no branch here that throws, no branch that returns a
- * rejected promise, and no path that can outlast {@link
- * SETTLE_PRICE_BUDGET_MS}. A refusal is answered with **null** and never with
+ * written. No read of a price here throws or returns a rejected promise, and
+ * no path can outlast {@link SETTLE_PRICE_BUDGET_MS}. The one refusal is
+ * {@link refuseUnknownItem}, which is about the product and not its price. A refusal is answered with **null** and never with
  * an error, for one reason worth stating: the profile can have changed between
  * the read that drew the screen and the tap, and the shopper can neither see
  * that nor fix it.
@@ -201,6 +201,57 @@ export class SettlePriceService {
       );
     } finally {
       timer.stop();
+    }
+  }
+
+  /**
+   * Refuse a settle whose `itemId` catalog does not know (plan 0201, section
+   * 4, and point 3 of its review).
+   *
+   * The product of a settle can be one that is on none of its lines, so core
+   * cannot check the id, and catalog is the one service that can. This is the
+   * one method here that throws, and it throws for one answer alone:
+   * **catalog answered, and the product is not in the answer.** That is a
+   * `validation_failed` on `itemId`.
+   *
+   * A catalog that fails, or that does not answer inside {@link
+   * SETTLE_PRICE_BUDGET_MS}, refuses nothing and the settle proceeds. Unknown
+   * and slow must not look the same: somebody at a shelf with a slow catalog
+   * still bought the thing.
+   *
+   * No scopes are asked for, so catalog reads no price for it.
+   */
+  async refuseUnknownItem(itemId: string): Promise<void> {
+    const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
+    let known: boolean | null;
+    try {
+      known = await timer.race(this.knows(itemId), () => {
+        this.log.debug(
+          `Settle product check gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+        );
+        return null;
+      });
+    } finally {
+      timer.stop();
+    }
+    if (known === false) {
+      throw new ValidationException('itemId names no product', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+  }
+
+  /** Whether catalog names this product, or null when it could not say. */
+  private async knows(itemId: string): Promise<boolean | null> {
+    const req: GetItemsRequest = { ids: [itemId] };
+    try {
+      const found = await this.nats.send<GetItemsResult>(
+        ITEM_PATTERNS.getMany,
+        req
+      );
+      return found.items.some((item) => item.id === itemId);
+    } catch {
+      return null;
     }
   }
 

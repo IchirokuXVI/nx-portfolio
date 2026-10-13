@@ -12,10 +12,13 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   UnitOfMeasure,
-  type BasketView,
-  type CatalogScopeView,
+  type BasketLinePick,
   type BasketParticipantContext,
   type BasketParticipantView,
+  type BasketPriceChoice,
+  type BasketRowView,
+  type BasketView,
+  type CatalogScopeView,
   type ItemSectionsAtLocationView,
   type ItemView,
   type ShopAvailabilityView,
@@ -75,56 +78,84 @@ const me: BasketParticipantView = {
 };
 
 /**
- * The basket core answers with: one row naming three products.
+ * One row of one line, counting as one product, or as none (plan 0201).
  *
- * `optionIds` is the union of the products the row names (plan 0136, section 2),
- * which is where the deleted line's `itemId` and `options` went. The composition
- * reads exactly this array, so a row is all the fixture needs to be.
+ * `productId` is the one product a row names, which is where `optionIds` went:
+ * the composition reads exactly this field, so a row is all the fixture needs
+ * to be.
+ */
+const row = (
+  lineId: string,
+  productId: string | null,
+  itemIds: string[] = productId ? [productId] : []
+): BasketRowView => ({
+  rowKey: lineId,
+  content: 'Milk',
+  productId,
+  left: 2,
+  bought: 0,
+  asked: 2,
+  boughtElsewhere: 0,
+  state: BasketRowState.WANTED,
+  note: null,
+  noteAt: null,
+  mark: null,
+  awaitingApproval: false,
+  touchedBy: null,
+  touchedAt: null,
+  entries: [
+    {
+      lineId,
+      content: 'Milk',
+      itemIds,
+      favoriteItemId: null,
+      canWrite: false,
+      left: 2,
+      bought: 0,
+      boughtElsewhere: 0,
+      state: BasketRowState.WANTED,
+      approvalStatus: LineApprovalStatus.APPROVED,
+      version: 1,
+      skipped: false,
+      closed: false,
+      act: null,
+      tripItemId: null,
+      demandEditable: true,
+    },
+  ],
+  usual: null,
+});
+
+/**
+ * The basket core answers with: three rows, one product each.
  *
  * `servesLocations` is the flag **core** decides and the gateway obeys: it is a
  * fact about the reader that arrives on the view, not something the gateway can
  * work out from the participant it was handed.
  */
-const basketView = (servesLocations: boolean): BasketView => ({
+const basketView = (
+  servesLocations: boolean,
+  rows: BasketRowView[] = [
+    row('l1', 'i-hacendado'),
+    row('l2', 'i-pascual'),
+    row('l3', 'i-unpriced'),
+  ]
+): BasketView => ({
   id: BASKET_ID,
   kind: BasketKind.GENERATED,
   name: null,
   status: BasketStatus.OPEN,
   createdAt: '2026-09-01T08:00:00.000Z',
-  rows: [
-    {
-      rowKey: 'l1',
-      content: 'Milk',
-      left: 2,
-      bought: 0,
-      asked: 2,
-      boughtElsewhere: 0,
-      state: BasketRowState.WANTED,
-      note: null,
-      noteAt: null,
-      mark: null,
-      awaitingApproval: false,
-      optionIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
-      touchedBy: null,
-      touchedAt: null,
-      entries: [
-        {
-          lineId: 'l1',
-          left: 2,
-          bought: 0,
-          boughtElsewhere: 0,
-          state: BasketRowState.WANTED,
-          approvalStatus: LineApprovalStatus.APPROVED,
-          demandEditable: true,
-        },
-      ],
-      usual: null,
-    },
-  ],
+  rows,
   lists: [],
   participants: [],
   me,
-  progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
+  progress: {
+    done: 0,
+    unavailable: 0,
+    total: rows.length,
+    pending: rows.length,
+  },
   truncated: false,
   servesLocations,
   unseenChangeCount: 0,
@@ -244,6 +275,14 @@ interface World {
   readonly shop?: ShopAvailabilityView | 'throws';
   /** What catalog answers the sections rule with (plan 0167), or a throw. */
   readonly sections?: ItemSectionsAtLocationView | 'throws';
+  /**
+   * The lines core says need a price to know their product (plan 0201), or a
+   * throw. None by default, which is a basket whose every line has one
+   * product, a favourite or a buy in this trip.
+   */
+  readonly choices?: BasketPriceChoice[] | 'throws';
+  /** The rows core answers, given the picks it was sent. */
+  readonly rows?: (picks: BasketLinePick[]) => BasketRowView[];
 }
 
 /** Refusing nothing, which is the default every test but two runs with. */
@@ -262,8 +301,21 @@ function build(world: World = {}) {
       case BASKET_PATTERNS.get:
       case BASKET_PATTERNS.live:
         return {
-          ...basketView(world.servesLocations ?? false),
+          ...basketView(
+            world.servesLocations ?? false,
+            world.rows?.((payload as { picks?: BasketLinePick[] }).picks ?? [])
+          ),
           supermarketLocationId: world.basketShop ?? null,
+        };
+      case BASKET_PATTERNS.priceChoices:
+      case BASKET_PATTERNS.livePriceChoices:
+        if (world.choices === 'throws') {
+          throw new Error('core slow');
+        }
+        return {
+          basketId: BASKET_ID,
+          participantId: 'p-1',
+          lines: world.choices ?? [],
         };
       case BASKET_PATTERNS.searchScope:
         return {
@@ -290,11 +342,16 @@ function build(world: World = {}) {
           throw new Error('catalog unreachable');
         }
         return {
-          items: world.items ?? [
-            item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
-            item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
-            item('i-unpriced', null),
-          ],
+          // Only the products that were asked for, as catalog answers.
+          items: (
+            world.items ?? [
+              item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+              item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+              item('i-unpriced', null),
+            ]
+          ).filter((found) =>
+            (payload as { ids: string[] }).ids.includes(found.id)
+          ),
         };
       case SUPERMARKET_PATTERNS.list:
         return {
@@ -1268,5 +1325,407 @@ describe('GET /v1/baskets/:id at a shop: its sections (plan 0167)', () => {
     });
 
     expect(result.products[1].sectionIds).toEqual([PIZZAS, FROZEN]);
+  });
+});
+
+/**
+ * The cheapest product of a line, chosen before the rows are read (plan 0201,
+ * section 1).
+ *
+ * A row is a product, and a line with several products and no favourite counts
+ * as the cheapest of them. Core holds no price, so the read asks core which
+ * lines need one, prices them here and hands core a pick for each. What is
+ * proven here is the sequence and the rules around it. The choice itself is
+ * `basket-picks.spec.ts`, and the comparison is the basket rules'.
+ */
+describe('GET /v1/baskets/:id: the product of a line (plan 0201)', () => {
+  const SHOP = '5c7e9a1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d';
+  const SHOP_SCOPE = 'scope-shop';
+
+  /** A line with two products and no favourite: the dearer one comes first. */
+  const MILK: BasketPriceChoice = {
+    lineId: 'l1',
+    itemIds: ['i-pascual', 'i-hacendado'],
+  };
+
+  /** A shop on a scope of its own, which the profile does not resolve. */
+  const shop = (): ShopAvailabilityView =>
+    ({
+      location: {
+        id: SHOP,
+        supermarketId: 'lidl',
+        priceScopeId: SHOP_SCOPE,
+        priceScopeIds: [SHOP_SCOPE],
+        label: null,
+        address: 'Gran Vía 1',
+        city: 'Madrid',
+        postalCode: '28013',
+        sections: [],
+      },
+      supermarket: { id: 'lidl', name: { en: 'Lidl', es: 'Lidl' } },
+      availability: [],
+    }) as unknown as ShopAvailabilityView;
+
+  /**
+   * Hacendado is the cheaper one at home and the dearer one at the shop, and
+   * the cheapest of all has no price at the shop.
+   */
+  const priced = (): ItemView[] => [
+    {
+      ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+      offers: [
+        offer('i-hacendado', SCOPE_A, 0.95),
+        offer('i-hacendado', SHOP_SCOPE, 1.3),
+      ],
+    },
+    {
+      ...item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+      offers: [
+        offer('i-pascual', SCOPE_A, 1.15),
+        offer('i-pascual', SHOP_SCOPE, 1.05),
+      ],
+    },
+    {
+      ...item('i-bargain', offer('i-bargain', SCOPE_A, 0.2)),
+      offers: [offer('i-bargain', SCOPE_A, 0.2)],
+    },
+    { ...item('i-unpriced', null), offers: [] },
+  ];
+
+  /**
+   * Core's rows for the picks it was sent: the milk line counts as its pick,
+   * or as its first product with none, and a second line has one product.
+   */
+  const rows = (picks: BasketLinePick[]): BasketRowView[] => [
+    row(
+      'l1',
+      picks.find((pick) => pick.lineId === 'l1')?.itemId ?? MILK.itemIds[0],
+      MILK.itemIds
+    ),
+    row('l3', 'i-unpriced'),
+  ];
+
+  const coreRead = (calls: { subject: string; payload: unknown }[]) =>
+    calls.find(
+      (call) =>
+        call.subject === BASKET_PATTERNS.get ||
+        call.subject === BASKET_PATTERNS.live
+    )?.payload as { picks?: BasketLinePick[] };
+
+  it('asks core which lines need a price, prices them, and sends the picks with the read', async () => {
+    const { controller, calls } = build({
+      choices: [MILK],
+      items: priced(),
+      rows,
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(
+      calls.find((call) => call.subject === BASKET_PATTERNS.priceChoices)
+        ?.payload
+    ).toEqual({ basketId: BASKET_ID, participantId: 'p-1' });
+    expect(coreRead(calls)).toEqual({
+      basketId: BASKET_ID,
+      participantId: 'p-1',
+      picks: [{ lineId: 'l1', itemId: 'i-hacendado' }],
+    });
+    // Asked, priced, then read: core needs the picks to build the rows.
+    const subjects = calls.map((call) => call.subject);
+    expect(subjects.indexOf(BASKET_PATTERNS.priceChoices)).toBeLessThan(
+      subjects.indexOf(ITEM_PATTERNS.getMany)
+    );
+    expect(subjects.indexOf(ITEM_PATTERNS.getMany)).toBeLessThan(
+      subjects.indexOf(BASKET_PATTERNS.get)
+    );
+    // The product of every row, and nothing else: the dearer milk is a
+    // product of the line and not of any row.
+    expect(result.products.map((product) => product.id)).toEqual([
+      'i-hacendado',
+      'i-unpriced',
+    ]);
+  });
+
+  it('prices nothing and sends no picks when no line needs a price', async () => {
+    const { controller, calls, lookups } = build();
+
+    await controller.get(participant(), BASKET_ID);
+
+    expect(coreRead(calls)).toEqual({
+      basketId: BASKET_ID,
+      participantId: 'p-1',
+    });
+    // The one lookup of the composition, after the rows.
+    expect(lookups()).toHaveLength(1);
+    const subjects = calls.map((call) => call.subject);
+    expect(subjects.indexOf(BASKET_PATTERNS.get)).toBeLessThan(
+      subjects.indexOf(ITEM_PATTERNS.getMany)
+    );
+  });
+
+  it('reuses the products it priced, and asks catalog only for the others', async () => {
+    const { controller, lookups, describe, calls } = build({
+      choices: [MILK],
+      items: priced(),
+      rows,
+    });
+
+    await controller.get(participant(), BASKET_ID);
+
+    expect(lookups()).toEqual([
+      {
+        ids: ['i-pascual', 'i-hacendado'],
+        priceScopeIds: [SCOPE_A, SCOPE_B],
+        offers: 'all',
+      },
+      // The milk was read already. Only the other row's product is asked for.
+      { ids: ['i-unpriced'], priceScopeIds: [SCOPE_A, SCOPE_B], offers: 'all' },
+    ]);
+    // Nothing else is asked a second time either.
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(
+      calls.filter((call) => call.subject === BASKET_PATTERNS.searchScope)
+    ).toHaveLength(1);
+  });
+
+  it('asks catalog once when the priced lines hold every product of the rows', async () => {
+    const { controller, lookups } = build({
+      choices: [MILK],
+      items: priced(),
+      rows: (picks) => rows(picks).slice(0, 1),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(lookups()).toHaveLength(1);
+    expect(result.products.map((product) => product.id)).toEqual([
+      'i-hacendado',
+    ]);
+    expect(result.products[0].offers).toHaveLength(2);
+  });
+
+  it('counts only the prices of the shop when the read has one', async () => {
+    const { controller, calls, lookups } = build({
+      choices: [
+        { lineId: 'l1', itemIds: ['i-hacendado', 'i-bargain', 'i-pascual'] },
+      ],
+      items: priced(),
+      shop: shop(),
+      rows,
+    });
+
+    await controller.get(participant(), BASKET_ID, { locationId: SHOP });
+
+    // Hacendado is cheaper at home and the bargain is cheapest anywhere. At
+    // the shop pascual is the cheapest, and the bargain has no price there.
+    expect(coreRead(calls).picks).toEqual([
+      { lineId: 'l1', itemId: 'i-pascual' },
+    ]);
+    // Read at the scopes the composition prices at, so its products are
+    // reused.
+    expect(lookups()[0].priceScopeIds).toEqual([SCOPE_A, SCOPE_B, SHOP_SCOPE]);
+  });
+
+  it('counts the prices of the basket’s own shop, with no locationId', async () => {
+    const { controller, calls } = build({
+      choices: [MILK],
+      items: priced(),
+      basketShop: SHOP,
+      shop: shop(),
+      rows,
+    });
+
+    await controller.get(participant(), BASKET_ID);
+
+    expect(coreRead(calls).picks).toEqual([
+      { lineId: 'l1', itemId: 'i-pascual' },
+    ]);
+  });
+
+  it('sends no pick for a line no product of which has a price at the shop', async () => {
+    const { controller, calls } = build({
+      choices: [{ lineId: 'l1', itemIds: ['i-bargain', 'i-unpriced'] }],
+      items: priced(),
+      shop: shop(),
+      rows,
+    });
+
+    await controller.get(participant(), BASKET_ID, { locationId: SHOP });
+
+    // Core then counts the line as its first product.
+    expect(coreRead(calls)).not.toHaveProperty('picks');
+  });
+
+  it('sends no picks at a shop catalog cannot name, and never the prices of home', async () => {
+    const { controller, calls } = build({
+      choices: [MILK],
+      items: priced(),
+      shop: 'throws',
+      rows,
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: SHOP,
+    });
+
+    expect(coreRead(calls)).not.toHaveProperty('picks');
+    expect(result.id).toBe(BASKET_ID);
+  });
+
+  it.each([
+    ['catalog cannot answer the prices', { items: 'throws' as const }],
+    ['core cannot say which lines need one', { choices: 'throws' as const }],
+    ['the basket has no profile to price with', { profileId: null }],
+    [
+      'the profile resolves to no scopes',
+      {
+        resolves: {
+          priceScopeIds: [],
+          scopes: [],
+          coverage: [],
+          approximate: false,
+          profileId: PROFILE,
+          explicit: false,
+        },
+      },
+    ],
+  ])(
+    'sends no picks and reads the basket anyway when %s',
+    async (_n, world) => {
+      const { controller, calls } = build({
+        choices: [MILK],
+        items: priced(),
+        rows,
+        ...world,
+      });
+
+      const result = await controller.get(participant(), BASKET_ID);
+
+      expect(coreRead(calls)).not.toHaveProperty('picks');
+      // Failing to price is never failing to read.
+      expect(result.id).toBe(BASKET_ID);
+      expect(result.rows.map((found) => found.productId)).toEqual([
+        'i-pascual',
+        'i-unpriced',
+      ]);
+    }
+  );
+
+  it('sends no picks when core cannot say whose basket it is', async () => {
+    const { controller, calls, send } = build({
+      choices: [MILK],
+      items: priced(),
+      rows,
+    });
+    const inner = send.getMockImplementation();
+    send.mockImplementation(async (subject: string, payload: unknown) => {
+      if (subject === BASKET_PATTERNS.searchScope) {
+        throw new Error('core slow');
+      }
+      return inner?.(subject, payload) as never;
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(coreRead(calls)).not.toHaveProperty('picks');
+    expect(result.id).toBe(BASKET_ID);
+  });
+
+  it('asks for the prices in batches under the limit of the lookup', async () => {
+    const many = Array.from({ length: 501 }, (_, at) => `i-${at}`);
+    const { controller, lookups, calls } = build({
+      choices: [{ lineId: 'l1', itemIds: many }],
+      items: [
+        // The last product, alone in the second batch, is the cheapest.
+        {
+          ...item('i-0', offer('i-0', SCOPE_A, 2)),
+          offers: [offer('i-0', SCOPE_A, 2)],
+        },
+        {
+          ...item('i-500', offer('i-500', SCOPE_A, 1)),
+          offers: [offer('i-500', SCOPE_A, 1)],
+        },
+      ],
+      rows: (picks) => [row('l1', picks[0]?.itemId ?? 'i-0', many)],
+    });
+
+    await controller.get(participant(), BASKET_ID);
+
+    expect(lookups().map((lookup) => lookup.ids.length)).toEqual([500, 1]);
+    expect(coreRead(calls).picks).toEqual([{ lineId: 'l1', itemId: 'i-500' }]);
+  });
+
+  describe('on the permanent basket', () => {
+    it('learns the basket and the reader from core, then prices and sends the picks', async () => {
+      const { live, calls } = build({
+        choices: [MILK],
+        items: priced(),
+        rows,
+      });
+
+      const result = await live.live({ userId: OWNER } as never);
+
+      // The first question creates the basket and names it.
+      expect(calls[0]).toEqual({
+        subject: BASKET_PATTERNS.livePriceChoices,
+        payload: { userId: OWNER },
+      });
+      // The scopes are the owner's, asked for the basket core named, and
+      // asked once: the composition reuses the answer.
+      expect(
+        calls.filter((call) => call.subject === BASKET_PATTERNS.searchScope)
+      ).toEqual([
+        {
+          subject: BASKET_PATTERNS.searchScope,
+          payload: { basketId: BASKET_ID, participantId: 'p-1' },
+        },
+      ]);
+      expect(coreRead(calls)).toEqual({
+        userId: OWNER,
+        picks: [{ lineId: 'l1', itemId: 'i-hacendado' }],
+      });
+      expect(result.products.map((product) => product.id)).toEqual([
+        'i-hacendado',
+        'i-unpriced',
+      ]);
+    });
+
+    it('counts only the prices of the shop the device chose', async () => {
+      const { live, calls } = build({
+        choices: [MILK],
+        items: priced(),
+        shop: shop(),
+        rows,
+      });
+
+      await live.live({ userId: OWNER } as never, { locationId: SHOP });
+
+      expect(coreRead(calls)).toEqual({
+        userId: OWNER,
+        supermarketId: 'lidl',
+        picks: [{ lineId: 'l1', itemId: 'i-pascual' }],
+      });
+    });
+
+    it('prices nothing when no line needs a price, and still asks the scopes once', async () => {
+      const { live, calls, lookups } = build();
+
+      await live.live({ userId: OWNER } as never);
+
+      expect(coreRead(calls)).toEqual({ userId: OWNER });
+      expect(lookups()).toHaveLength(1);
+      expect(
+        calls.filter((call) => call.subject === BASKET_PATTERNS.searchScope)
+      ).toHaveLength(1);
+    });
+
+    it('reads the basket with no picks when core cannot say which lines need one', async () => {
+      const { live, calls } = build({ choices: 'throws', rows });
+
+      const result = await live.live({ userId: OWNER } as never);
+
+      expect(coreRead(calls)).toEqual({ userId: OWNER });
+      expect(result.id).toBe(BASKET_ID);
+    });
   });
 });

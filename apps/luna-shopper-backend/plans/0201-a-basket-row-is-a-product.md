@@ -71,6 +71,113 @@ needs his decision first: ask, and do not choose.
    leaves a line in the wrong row after a buy that changes its product, and the rows route
    groups lines in another way than the full read.
 
+## What the build decided
+
+The build of 2026-10-13 settled the points below. Point 1 is a decision of the owner. Each
+other point is a choice of the builder that the owner can overturn. Where this section and a
+later section disagree, this section is right.
+
+1. **The owner decided review point 1 on 2026-10-13: a basket counts products.** "Merged
+   lines are still just a single product to pick for the user." The count is exact on the
+   full read (`basket.get`, `basket.live`), which takes the picks of the gateway. Every other
+   path counts the rows that core builds alone: a basket card, `live/summary`, the answer of
+   a write and the back office. On those paths a line at step 3 of section 1 counts as its
+   first product. No path but the full read asks the catalog anything.
+   - The two counts differ in one case: a line with several products and no favourite,
+     whose cheapest product is not its first, where the cheapest or the first is also the
+     product of another line. They differ by one for each such line.
+   - **Velista `0139` must count the header itself**, with `progressOf` of
+     `@portfolio/luna-shopper/basket-rules` over the rows it holds. The `progress` of a write
+     answer is the count of core, so a header that takes it can be off by one until the next
+     read.
+   - A finished basket still counts lines. Its numbers come from `basket_trip_rows`, one row
+     for each line, which this plan may not change.
+2. **Review point 2: the demand route reaches a line at zero.** It names its line, always.
+   The line has to be on a covered list and not deleted. It does not have to be a row of the
+   basket. Every other write still answers "Row not found" for a line that the basket does
+   not draw. So "Add it to another list" raises the line of a list that holds the product at
+   zero.
+3. **Review point 3: only a definite "not found" refuses a buy.** The gateway asks the
+   catalog for the named `itemId`. When the catalog answers and the item is not in the
+   answer, the settle is `validation_failed` on `itemId`. When the catalog fails or does not
+   answer inside the budget of the price read, the settle goes on and records the id. A slow
+   catalog must not stop a person at the shelf, and an id that nobody knows is then a
+   settlement with a product that no read can name, which is what a deleted product is
+   already. Core does not check the id: it can be a product that is not on the line.
+4. **Review point 5: `tripItemId` is on `BasketEntryPatch` and on the entry view**, with the
+   meaning of plan `0204` section 7. It is the product of the latest standing buy of the line
+   through this basket in its trip. A product id is catalog data, so a room can carry it.
+   Plan `0205` is not on the base branch, so no rows route exists to hand the picks to. The
+   build of `0205` must take `picks` on that route as `basket.get` does.
+5. **A mark belongs to the key of a row, and the key is now the product.** Before, it was the
+   set of products. The full read folds the marks with its own picks, so a mark sits on the
+   row the reader sees. The marks route (`changes/marks`) has no picks. It keys each line as
+   core does alone and answers a mark for each covered line. The two differ in one case: a
+   line left the coverage, and its mark went to the covered lines that share its product. A
+   change of a covered line marks that line on both paths.
+6. **A change names a line, not a row.** `rowKey` of the changes view was the anchor of the
+   row. It is now the covered line the change is about, or the line that survived a merge. A
+   client finds the row that holds that line among its entries.
+7. **The three rules of plans `0203` and `0204` hold for a row merged on a product.**
+   - `BOUGHT_ELSEWHERE` is decided from the entries of the row, whatever grouped them. A row
+     of two lists is `BOUGHT_ELSEWHERE` when nothing is left on either line and this basket
+     bought neither.
+   - A buy and a taken back buy write their change row for each line, as before. The change
+     is about a line, so the merge does not touch it.
+   - `BasketAnnouncer.linesMoved` still takes the basket the write was made through. A patch
+     is about lines and names no row.
+8. **An entry gains five fields, not eight.** `content`, `itemIds`, `favoriteItemId`,
+   `canWrite` and `tripItemId`. `BasketView.lists` already carries the name, the zone and the
+   zone name of each served list, so the entry repeats none of them (section 3 says to add
+   only what is missing). `canWrite` is true exactly when the entry has a `listId`: the lists
+   a reader is served are the covered lists they write.
+9. **`content` of a row is still the name of its anchor**, also for a row with a product. A
+   client draws it when the catalog cannot name the product.
+10. **"On a list served to the actor" in section 4 is read as "on a covered list".** A guest
+    is served no list. With the other reading a guest could settle nothing, and the plan says
+    that who may settle does not change.
+11. **Who may change a demand did not move.** A reader who writes the list names any line of
+    it. A reader who does not, a guest for one, names a line only when it is the whole of its
+    row as core groups the basket. That is the rule "single entry rows only" of plan `0130`
+    section 5, asked of the new grouping.
+12. **A settle with no `itemId` records the product the named lines agree on**, and none when
+    they do not agree. `basket.searchScope` takes `lineIds` where it took `rowKey`, and
+    answers that same product, so the price and the settlement still name one product.
+13. **A line that left the coverage counts as its favourite or its first product.** Its
+    purchases are not read for this. The key decides only which covered row inherits its
+    mark, and whether it makes a removed row.
+14. **The lists that can take a product are decided with no picks**, like every path but the
+    full read. A list whose line counts as the product only by its price is answered with that
+    line. The page holds the row and leaves out a list it already draws.
+15. **The walk order finds a row under its product and under every product of its lines.**
+    The wire lost `optionIds`. The order still needs them, because a shelf that somebody
+    settled under another product of the same line is the shelf of this row.
+16. **A rename is refused for a line that holds any product**, not only for a line whose row
+    has one. The two are the same thing: a line with a product is in a row with a product.
+17. **The live read asks with an account.** `basket.live.priceChoices` takes a `userId`, makes
+    the basket if it is missing, and answers the basket and the participant beside the lines.
+    The gateway needs both to ask what the basket is priced at.
+18. **The old resolver is gone.** `mergeKey`, the `SET` and `TEXT` narrowings of the covered
+    lines statement and `optionIdsOf` are removed. Nothing rebuilds a row from a key.
+19. **`DELETE .../skip` takes `lineIds` in the query string**, comma separated or repeated.
+    A body on a `DELETE` is not delivered reliably by every client and proxy. `PUT .../skip`
+    takes them in a body, like the other writes.
+20. **The gateway prices a line in one call to `cheapestOf`.** Every offer that counts goes in
+    one list for each line: the products in the order of the line, then the offers of each
+    product. The gateway compares no price itself. `basket-picks.ts` is that function.
+21. **A read that cannot price sends no picks, and still reads.** That is a failed catalog
+    call, a profile with no scopes, or a shop that the catalog cannot name. With a shop that
+    cannot be named the gateway does not fall back to the scopes of the profile, because they
+    are not the prices of that shop. Core then counts each such line as its first product.
+    One failed batch drops every pick: a line priced on half of its products can pick wrong.
+22. **The read prices and composes with one set of products.** Step 3 asks `item.getMany`
+    with the scopes and `offers: 'all'` that the composition uses, and the composition takes
+    from that answer the products it needs. It asks the catalog only for the rest. The
+    lines to price are read beside the shop of the read, so the sequence adds no round trip
+    in a row for a basket where no line needs a price.
+23. **The check of an unknown `itemId` runs beside the price read**, under the same budget of
+    750 ms, whenever a settle body names a product.
+
 ## Brief for the agent
 
 ### Objective

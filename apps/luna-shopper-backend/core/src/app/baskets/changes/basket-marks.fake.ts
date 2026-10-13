@@ -1,4 +1,7 @@
-import { NO_BASKET_MARKS, type BasketMarksReader } from './basket-marks.reader';
+import {
+  NO_BASKET_CHANGES,
+  type BasketMarksReader,
+} from './basket-marks.reader';
 
 /**
  * A marks reader that answers "nothing has changed" (plan 0138).
@@ -11,7 +14,9 @@ import { NO_BASKET_MARKS, type BasketMarksReader } from './basket-marks.reader';
  */
 export function fakeBasketMarks(): BasketMarksReader {
   return {
-    marksFor: async () => NO_BASKET_MARKS,
+    // The read folds what this answers with its own keys (plan 0201), and
+    // nothing folds to no mark.
+    changesFor: async () => NO_BASKET_CHANGES,
     countFor: async () => 0,
     markWindow: 10 * 60 * 1000,
     retention: 30 * 24 * 60 * 60 * 1000,
