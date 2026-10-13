@@ -55,6 +55,53 @@ section and a later section disagree, this section is right.
    `0143`. Use a check that does compile it, for example a type check of the library
    with no Node types.
 
+## What the build decided
+
+The build of 2026-10-13 settled the points below. Each one is a choice of the builder that the
+owner can overturn. Where this section and a later section disagree, this section is right.
+
+1. **The order of two patches (review point 2): the client rule.** A client that holds an
+   entry of the same `version` whose `skipped` or `closed` differs from the patch reads the
+   basket again and does not apply the patch. The payload has no order of its own. The other
+   way adds a field that section 2 does not list, and the action boundaries say to stop and
+   ask before that. Velista `0143` must build this rule. `BasketEntryPatch` in the contracts
+   states it.
+2. **An announcement is not awaited.** The settle and the revert awaited one coverage read
+   before they answered. A patch is up to five reads for each covering basket, so the writes
+   now start the announcement and answer. A test that reads the event must wait for it.
+3. **A change of demand from a basket sends one envelope for each basket, not two.**
+   `LineService.addQuantity` announces the patch with `marksMoved`. The second announcement
+   of `BasketDemandService` is removed, because it computed the same patch again.
+4. **`rowStateOf` takes the entries alone.** Section 4 writes `rowStateOf(entries, facts)`.
+   `skipped` and `closed` on an entry already hold what the facts said, so the library needs
+   no second argument and no clock.
+5. **`act.participantId` can be null.** `line_settlements.settledByParticipantId` is
+   nullable, and `touchedBy` on a row was nullable before this plan.
+6. **One read changes for one rare case.** A `GENERATED` basket closes a row ("they had
+   none"), then skips it, and the skip runs out after its window. That row read
+   `NOT_AVAILABLE` before. It reads `WANTED` with the note `SKIPPED_EARLIER` now. The entry
+   states one newest act, the skip is that act, and plan `0137` section 3.2 says that a skip
+   ends a close that came before it. Every other case reads as it did, and the 584
+   integration tests of core pass with no change to a state they assert.
+7. **Only a basket socket can apply entries.** Each envelope also reaches the `user:` room of
+   the owner of its basket, and nothing in a payload names the basket. A person who owns two
+   baskets over one list hears both envelopes in that room. Velista `0143` must apply entries
+   only on the socket that joined one basket room, which is what `BasketSocket` is today.
+8. **The event has a JSON Schema of its own** (`event/BasketLinesChangedEvent`). The envelope
+   schema still declares `payload` as anything, which is the open defect of plan `0149`. The
+   build did not change that.
+
+The measurement that "Progress evidence" asks for, on a list of 100 lines with two `LIVE`
+baskets and one `GENERATED` basket, 200 rounds each:
+
+| | Median | 95th percentile | Maximum | Queries | Envelopes |
+| --- | --- | --- | --- | --- | --- |
+| Before (ids alone) | 1.18 ms | 1.47 ms | 1.74 ms | 1 | 1 |
+| After (entries) | 4.37 ms | 5.19 ms | 8.13 ms | 14 | 3 |
+
+The patch adds 13 queries over the three baskets: five for a `LIVE` basket with a session, and
+four for each of the other two. It adds about 3.2 ms, which is below the limit of 50 ms.
+
 ## Brief for the agent
 
 ### Objective

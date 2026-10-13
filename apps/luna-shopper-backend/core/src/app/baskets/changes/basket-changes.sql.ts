@@ -225,6 +225,7 @@ export const CHANGE_LINES_SQL = `
          ll."listId" AS "listId",
          ll.content AS "content",
          ll.quantity AS "quantity",
+         ll.version AS "version",
          ll."itemSetHash" AS "itemSetHash",
          ll."approvalStatus" AS "approvalStatus",
          ll."createdAt" AS "createdAt"

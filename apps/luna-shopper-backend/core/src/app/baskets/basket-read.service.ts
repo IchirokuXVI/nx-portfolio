@@ -4,10 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_LIMITS,
   BASKET_USUAL_WINDOW,
-  BasketKind,
   isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
-  SettlementOutcome,
   type BasketListRef,
   type BasketProgress,
   type BasketRowView,
@@ -19,43 +17,37 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import type { CoreConfig } from '../config/app-config';
 import { Basket, BasketParticipant } from '../entities';
-import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
 import { BasketCoverageService } from './basket-coverage.service';
+import { basketScopeOf, standingSkipsOf, toEntries } from './basket-line-facts';
 import { BasketOrderService, type OrderableRow } from './basket-order.service';
+import {
+  BASKET_ELSEWHERE_SQL,
+  BASKET_LIST_REFS_SQL,
+  BASKET_SETTLEMENTS_SQL,
+  COVERED_LINE_ITEMS_SQL,
+  COVERED_LINES_SQL,
+  type BasketElsewhereRow,
+  type BasketListRefRow,
+  type BasketSettlementRow,
+  type CoveredLineItemRow,
+  type CoveredLineRow,
+} from './basket-read.sql';
 import { BasketRedaction } from './basket-redaction';
 import {
   groupEntries,
   progressOf,
   toRowView,
-  type BasketElsewhereFact,
   type BasketEntry,
   type BasketGroup,
-  type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
 import { usualLineIdsOf, withUsual } from './basket-usual';
 import { USUAL_WINDOWS_SQL, type UsualWindowRow } from './basket-usual.sql';
-import {
-  BASKET_ELSEWHERE_SQL,
-  BASKET_LIST_REFS_SQL,
-  BASKET_SESSION_LOOKBACK_MS,
-  BASKET_SESSION_SQL,
-  BASKET_SETTLEMENTS_SQL,
-  COVERED_LINE_ITEMS_SQL,
-  COVERED_LINES_SQL,
-  STANDING_SKIPS_SQL,
-  type BasketElsewhereRow,
-  type BasketLineSkipRow,
-  type BasketListRefRow,
-  type BasketSessionRow,
-  type BasketSettlementRow,
-  type CoveredLineItemRow,
-  type CoveredLineRow,
-} from './basket-read.sql';
 import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
 import {
   BasketMarksReader,
@@ -64,6 +56,11 @@ import {
   type RemovedGroup,
 } from './changes/basket-marks.reader';
 import { removedRows } from './changes/basket-removed-rows';
+
+// Where every caller of the read already imports it from. It moved beside the
+// other facts so the patch of an event can stitch rows without importing this
+// service (plan 0204).
+export { toEntries };
 
 /**
  * The basket, read from the lists it covers (plan 0136, section 3).
@@ -448,31 +445,11 @@ export class BasketReadService {
    * **A finished basket reads none.** Its rows come from `basket_trip_rows`,
    * and a skip is an intention about a trip that is over.
    */
-  private async skipsOf(
-    basket: Basket
-  ): Promise<Map<string, BasketSkipFact>> {
+  private async skipsOf(basket: Basket): Promise<Map<string, BasketSkipFact>> {
     if (!isOpenBasket(basket.status)) {
       return new Map();
     }
-    const rows = await this.baskets.query<BasketLineSkipRow[]>(
-      STANDING_SKIPS_SQL,
-      [basket.id, this.skipWindowMs]
-    );
-    return new Map(
-      rows.map((row) => [
-        row.lineId,
-        {
-          // `pg` hands a `timestamptz` back as a `Date`, but a driver that
-          // handed back a string would otherwise reach `getTime` and throw.
-          skippedAt:
-            row.skippedAt instanceof Date
-              ? row.skippedAt
-              : new Date(row.skippedAt),
-          skippedByParticipantId: row.skippedByParticipantId,
-          fresh: row.fresh,
-        },
-      ])
-    );
+    return standingSkipsOf(this.baskets, basket.id, this.skipWindowMs);
   }
 
   /**
@@ -486,16 +463,7 @@ export class BasketReadService {
   private async scopeOf(
     basket: Basket
   ): Promise<{ startedAt: Date | null; enabled: boolean }> {
-    if (basket.kind !== BasketKind.LIVE) {
-      return { startedAt: null, enabled: true };
-    }
-    const [session] = await this.baskets.query<BasketSessionRow[]>(
-      BASKET_SESSION_SQL,
-      [basket.id, BASKET_SESSION_LOOKBACK_MS, PURCHASE_SESSION_GAP_MS]
-    );
-    return session
-      ? { startedAt: session.startedAt, enabled: true }
-      : { startedAt: null, enabled: false };
+    return basketScopeOf(this.baskets, basket);
   }
 
   /** The names behind the lists this reader was served. */
@@ -576,83 +544,4 @@ function orderableOf(
     row,
     group,
   };
-}
-
-/**
- * Stitch the four row reads into the shape the pure rules take.
- *
- * A free function rather than a method for the reason the rest of `basket-rows`
- * is: it is the join the database did not do, and a spec can state it.
- */
-export function toEntries(
-  lines: readonly CoveredLineRow[],
-  items: readonly CoveredLineItemRow[],
-  settlements: readonly BasketSettlementRow[],
-  /**
-   * What other baskets bought lately, one row per line (plan 0188). Empty for a
-   * caller that writes on a row rather than drawing it: the row resolver hands a
-   * write this basket's own purchases, and no write acts on anybody else's.
-   */
-  elsewhere: readonly BasketElsewhereRow[] = []
-): BasketEntry[] {
-  const itemsByLine = new Map<string, string[]>();
-  for (const row of items) {
-    const held = itemsByLine.get(row.lineId);
-    if (held) {
-      held.push(row.itemId);
-    } else {
-      itemsByLine.set(row.lineId, [row.itemId]);
-    }
-  }
-
-  const settlementsByLine = new Map<string, BasketSettlementFact[]>();
-  for (const row of settlements) {
-    const fact: BasketSettlementFact = {
-      id: row.id,
-      outcome: row.outcome as SettlementOutcome,
-      quantity: row.quantity,
-      // `pg` hands a `timestamptz` back as a `Date`, but a driver that hands
-      // back a string would otherwise reach `toISOString` and throw.
-      settledAt:
-        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
-      settledByParticipantId: row.settledByParticipantId,
-      // Computed by the database against its own `now()` (plan 0137, section
-      // 4), and read for a `LIVE` basket's close alone.
-      fresh: row.fresh,
-    };
-    const held = settlementsByLine.get(row.lineId);
-    if (held) {
-      held.push(fact);
-    } else {
-      settlementsByLine.set(row.lineId, [fact]);
-    }
-  }
-
-  const elsewhereByLine = new Map<string, BasketElsewhereFact>();
-  for (const row of elsewhere) {
-    elsewhereByLine.set(row.lineId, {
-      // `SUM` over an integer column is a bigint to Postgres, and `pg` hands a
-      // bigint back as a string. The statement casts it, and this does not
-      // trust the cast to survive an edit.
-      quantity: Number(row.quantity),
-      settledAt:
-        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
-    });
-  }
-
-  return lines.map((line) => ({
-    lineId: line.id,
-    listId: line.listId,
-    content: line.content,
-    quantity: line.quantity,
-    itemSetHash: line.itemSetHash,
-    approvalStatus: line.approvalStatus,
-    createdAt:
-      line.createdAt instanceof Date
-        ? line.createdAt
-        : new Date(line.createdAt),
-    itemIds: itemsByLine.get(line.id) ?? [],
-    settlements: settlementsByLine.get(line.id) ?? [],
-    elsewhere: elsewhereByLine.get(line.id) ?? null,
-  }));
 }

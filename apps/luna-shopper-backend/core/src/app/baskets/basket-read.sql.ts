@@ -160,13 +160,16 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
       ? 'AND ll."itemSetHash" = $6'
       : narrow === 'TEXT'
         ? 'AND ll."itemSetHash" IS NULL'
-        : '';
+        : narrow === 'LINES'
+          ? 'AND ll.id = ANY($6::uuid[])'
+          : '';
   return `
   SELECT
     ll.id AS "id",
     ll."listId" AS "listId",
     ll.content AS "content",
     ll.quantity AS "quantity",
+    ll.version AS "version",
     ll."itemSetHash" AS "itemSetHash",
     ll."approvalStatus" AS "approvalStatus",
     ll."createdAt" AS "createdAt"
@@ -212,11 +215,18 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
  * which is the reasoning `WALK_HISTORY_SQL` gives for stopping one step short
  * of the key, so `TEXT` narrows to the lines that have no hash and the caller
  * folds them.
+ *
+ * `LINES` is the patch of plan 0204: the lines a write named, by id, as `$6`.
+ * A line of those that the statement does not answer is not a row of the
+ * basket, by the same four predicates the read applies.
  */
-export type CoveredLineNarrowing = 'ALL' | 'SET' | 'TEXT';
+export type CoveredLineNarrowing = 'ALL' | 'SET' | 'TEXT' | 'LINES';
 
 /** Every covered line of the basket. `$1` to `$5` as above. */
 export const COVERED_LINES_SQL = coveredLinesSql('ALL');
+
+/** The lines a write named, of those the basket shows. `$6` is their ids. */
+export const COVERED_LINES_BY_ID_SQL = coveredLinesSql('LINES');
 
 /** One row of {@link COVERED_LINES_SQL}: one covered list line. */
 export interface CoveredLineRow {
@@ -224,6 +234,8 @@ export interface CoveredLineRow {
   listId: string;
   content: string;
   quantity: number;
+  /** `list_lines.version`, which orders two patches of one line (plan 0204). */
+  version: number;
   itemSetHash: string | null;
   approvalStatus: LineApprovalStatus;
   createdAt: Date;

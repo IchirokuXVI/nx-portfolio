@@ -1,6 +1,7 @@
 import { LineChangeKind } from '../../lib/messages/basket-changes.messages';
 import { BASKET_PATTERNS } from '../../lib/messages/basket.messages';
 import {
+  array,
   boolean,
   enumOf,
   integer,
@@ -13,6 +14,7 @@ import {
   schemaId,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
+import { BASKET_SCHEMA_IDS } from './basket.schemas';
 
 /**
  * What changed on a basket's lists, as a language neutral contract (plan 0138).
@@ -30,6 +32,9 @@ export const BASKET_CHANGE_SCHEMA_IDS = {
   changeView: schemaId('basket/BasketChangeView'),
   changePage: schemaId('basket/BasketChangePage'),
   acknowledged: schemaId('basket/BasketChangesAcknowledged'),
+  lineMark: schemaId('basket/BasketLineMark'),
+  marksView: schemaId('basket/BasketMarksView'),
+  marksRequest: schemaId('msg/basket.changes.marks/request'),
   listRequest: schemaId('msg/basket.changes.list/request'),
   acknowledgeRequest: schemaId('msg/basket.changes.acknowledge/request'),
 } as const;
@@ -119,6 +124,35 @@ const acknowledged = object(
   ['unseenChangeCount', 'marksLapseInMs']
 );
 
+/** The mark of one covered line, before a client folds it into a row (0204). */
+const lineMark = object(
+  BASKET_CHANGE_SCHEMA_IDS.lineMark,
+  {
+    lineId: nonEmptyString(),
+    mark: ref(BASKET_SCHEMA_IDS.rowMark),
+  },
+  ['lineId', 'mark']
+);
+
+const marksView = object(
+  BASKET_CHANGE_SCHEMA_IDS.marksView,
+  {
+    unseenChangeCount: integer({ minimum: 0 }),
+    newestUnseenChangeId: nullableString(),
+    lines: array(ref(BASKET_CHANGE_SCHEMA_IDS.lineMark)),
+  },
+  ['unseenChangeCount', 'newestUnseenChangeId', 'lines']
+);
+
+const marksRequest = object(
+  BASKET_CHANGE_SCHEMA_IDS.marksRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+  },
+  ['basketId', 'participantId']
+);
+
 const listRequest = object(
   BASKET_CHANGE_SCHEMA_IDS.listRequest,
   {
@@ -146,6 +180,9 @@ export const basketChangeSchemas: JsonSchema[] = [
   changeView,
   changePage,
   acknowledged,
+  lineMark,
+  marksView,
+  marksRequest,
   listRequest,
   acknowledgeRequest,
 ];
@@ -157,6 +194,10 @@ export const basketChangeMessageContracts: Record<
   [BASKET_PATTERNS.changesList]: {
     request: BASKET_CHANGE_SCHEMA_IDS.listRequest,
     response: BASKET_CHANGE_SCHEMA_IDS.changePage,
+  },
+  [BASKET_PATTERNS.changesMarks]: {
+    request: BASKET_CHANGE_SCHEMA_IDS.marksRequest,
+    response: BASKET_CHANGE_SCHEMA_IDS.marksView,
   },
   [BASKET_PATTERNS.changesAcknowledge]: {
     request: BASKET_CHANGE_SCHEMA_IDS.acknowledgeRequest,

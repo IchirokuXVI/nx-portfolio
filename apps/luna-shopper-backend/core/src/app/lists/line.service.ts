@@ -239,6 +239,25 @@ interface LineWriter {
   ): Promise<T>;
 }
 
+/**
+ * Whether an edit names the quantity of a line and nothing else about it (plan
+ * 0204, section 3).
+ *
+ * An edit that also names the text, the products, the favourite or the chain
+ * is not one, even when it leaves them as they were: the question is what the
+ * request may have moved, and the answer has to be safe without a comparison.
+ */
+function movesQuantityAlone(req: LineEdit): boolean {
+  return (
+    req.quantity !== undefined &&
+    req.content === undefined &&
+    req.itemIds === undefined &&
+    (req.adoptItemIds ?? []).length === 0 &&
+    req.favoriteItemId === undefined &&
+    req.preferredSupermarketId === undefined
+  );
+}
+
 /** What a write inside a transaction leaves in the trail, or nothing. */
 type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
 
@@ -250,8 +269,13 @@ type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
  * `'caller'` is the two writes whose announcement cannot be built from one line
  * — a batch, which is one event for the whole write, and a merge, whose event
  * names the line that went as well as the one that stayed.
+ *
+ * `'moved'` is a write that changed the quantity of one line and nothing else
+ * about it (plan 0204, section 3). The helper announces it with what the line
+ * reads now in each covering basket, so none of them reads again, and says that
+ * the marks moved, because such a write records a change.
  */
-type Announcer = 'here' | 'caller';
+type Announcer = 'here' | 'caller' | 'moved';
 
 @Injectable()
 export class LineService {
@@ -753,6 +777,8 @@ export class LineService {
     );
     if (announces === 'here') {
       void this.baskets.linesChanged(line.listId, [line.id]);
+    } else if (announces === 'moved') {
+      void this.baskets.linesMoved(line.listId, [line.id], true);
     }
   }
 
@@ -1659,7 +1685,12 @@ export class LineService {
           actor
         );
         return written;
-      })
+      }),
+      // The quantity alone moved, so the baskets are sent the numbers and do
+      // not read again (plan 0204, section 3). A name, a product set, a
+      // favourite or a chain is something a room must not carry or core does
+      // not hold, and those edits send the ids as before.
+      movesQuantityAlone(req) ? 'moved' : 'here'
     );
   }
 
@@ -2413,7 +2444,8 @@ export class LineService {
       return written;
     });
 
-    return this.announce(list, written);
+    // A delta moves the quantity and nothing else (plan 0204, section 3).
+    return this.announce(list, written, 'moved');
   }
 
   /**

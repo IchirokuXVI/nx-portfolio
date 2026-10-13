@@ -4,6 +4,7 @@ import { BasketSource, Basket } from '../entities';
 import { CoreEventsModule } from '../events/core-events.module';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { BasketCoverageService } from './basket-coverage.service';
+import { BasketPatchReader } from './basket-patch.reader';
 
 /**
  * What a basket covers, in a module of its own (plan 0133, section 5).
@@ -21,6 +22,11 @@ import { BasketCoverageService } from './basket-coverage.service';
  * basket that a write reached it is the same question read one step further on:
  * it needs the coverage and the event publisher and nothing else.
  *
+ * Plan 0204 adds {@link BasketPatchReader}, which the announcer asks what each
+ * covering basket reads of the lines that moved. It is here and not in
+ * `BasketsModule` for the reason the announcer is: the list writes announce
+ * too, and they cannot reach a provider of the module that imports theirs.
+ *
  * The publisher comes from `CoreEventsModule` rather than from `ZonesModule`,
  * which is where it used to live. `ZonesModule` imports **this** module now, so
  * reaching back for the publisher would make the two need each other.
@@ -30,7 +36,7 @@ import { BasketCoverageService } from './basket-coverage.service';
     TypeOrmModule.forFeature([Basket, BasketSource]),
     CoreEventsModule,
   ],
-  providers: [BasketCoverageService, BasketAnnouncer],
+  providers: [BasketCoverageService, BasketPatchReader, BasketAnnouncer],
   exports: [BasketCoverageService, BasketAnnouncer],
 })
 export class BasketCoverageModule {}

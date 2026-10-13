@@ -10176,6 +10176,76 @@
         ]
       }
     },
+    "/v1/baskets/{id}/changes/marks": {
+      "get": {
+        "operationId": "BasketController_marks_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.changes.marks` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketMarksView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}/changes/seen": {
       "post": {
         "operationId": "BasketController_acknowledgeChanges_v1",
@@ -33527,6 +33597,30 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketEntryAct": {
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.BasketEntryActOutcome"
+          }
+        },
+        "required": [
+          "participantId",
+          "at",
+          "outcome"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketHeaderView": {
         "type": "object",
         "properties": {
@@ -33632,6 +33726,23 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketLineMark": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mark": {
+            "$ref": "#/components/schemas/enums.BasketRowMark"
+          }
+        },
+        "required": [
+          "lineId",
+          "mark"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketListRef": {
         "type": "object",
         "properties": {
@@ -33655,6 +33766,33 @@
           "name",
           "zoneId",
           "zoneName"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketMarksView": {
+        "type": "object",
+        "properties": {
+          "unseenChangeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "newestUnseenChangeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketLineMark"
+            }
+          }
+        },
+        "required": [
+          "unseenChangeCount",
+          "newestUnseenChangeId",
+          "lines"
         ],
         "additionalProperties": false
       },
@@ -34073,9 +34211,9 @@
             "type": "string",
             "minLength": 1
           },
-          "listId": {
-            "type": "string",
-            "minLength": 1
+          "version": {
+            "type": "integer",
+            "minimum": 0
           },
           "left": {
             "type": "integer",
@@ -34095,17 +34233,41 @@
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           },
+          "skipped": {
+            "type": "boolean"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "act": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketEntryAct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
           "demandEditable": {
             "type": "boolean"
           }
         },
         "required": [
           "lineId",
+          "version",
           "left",
           "bought",
           "boughtElsewhere",
           "state",
           "approvalStatus",
+          "skipped",
+          "closed",
+          "act",
           "demandEditable"
         ],
         "additionalProperties": false
@@ -38531,6 +38693,14 @@
         "enum": [
           "GOOGLE",
           "EMAIL"
+        ]
+      },
+      "enums.BasketEntryActOutcome": {
+        "type": "string",
+        "enum": [
+          "BOUGHT",
+          "NOT_AVAILABLE",
+          "SKIPPED"
         ]
       },
       "enums.BasketKind": {

@@ -1,4 +1,9 @@
 import {
+  BASKET_RULE_ACT_SKIPPED,
+  BASKET_RULE_STATES,
+} from '@portfolio/luna-shopper/basket-rules';
+import {
+  BASKET_ACT_SKIPPED,
   BasketKind,
   BasketRowNote,
   BasketRowState,
@@ -19,6 +24,8 @@ import {
   optionIdsOf,
   progressOf,
   stateOf,
+  toEntryPatch,
+  toEntryView,
   toRowView,
   type BasketEntry,
   type BasketFacts,
@@ -44,6 +51,7 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
     listId: 'list-a',
     content: 'Milk',
     quantity: 1,
+    version: 1,
     itemSetHash: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     // Distinct and increasing, so `(createdAt, id)` has one answer.
@@ -168,36 +176,39 @@ describe('grouping (section 3.1, step 5)', () => {
 
 describe('the states of a row (plan 0130, section 4)', () => {
   it('is WANTED with nothing bought', () => {
-    expect(stateOf([entry({ quantity: 2 })], 2, 0, null, NO_FACTS)).toBe(
+    expect(stateOf([entry({ quantity: 2 })], NO_FACTS)).toBe(
       BasketRowState.WANTED
     );
   });
 
   it('is PARTLY with both above zero', () => {
-    expect(stateOf([entry({ quantity: 1 })], 1, 1, bought(1), NO_FACTS)).toBe(
-      BasketRowState.PARTLY
-    );
+    expect(
+      stateOf([entry({ quantity: 1, settlements: [bought(1)] })], NO_FACTS)
+    ).toBe(BasketRowState.PARTLY);
   });
 
   it('is DONE at zero left with something bought', () => {
-    expect(stateOf([entry({ quantity: 0 })], 0, 2, bought(2), NO_FACTS)).toBe(
-      BasketRowState.DONE
-    );
+    expect(
+      stateOf([entry({ quantity: 0, settlements: [bought(2)] })], NO_FACTS)
+    ).toBe(BasketRowState.DONE);
   });
 
   it('is NOT_AVAILABLE when the newest act says so and units remain', () => {
-    expect(stateOf([entry({ quantity: 2 })], 2, 0, closed(), NO_FACTS)).toBe(
-      BasketRowState.NOT_AVAILABLE
-    );
+    expect(
+      stateOf([entry({ quantity: 2, settlements: [closed()] })], NO_FACTS)
+    ).toBe(BasketRowState.NOT_AVAILABLE);
   });
 
   it('is DONE rather than NOT_AVAILABLE once nothing is left', () => {
     // The guard plan 0136 section 3.1 step 7 adds to the table's order. A
     // demand taken to zero after a close would otherwise leave the row claiming
     // the shop had none of something nobody is asking for.
-    expect(stateOf([entry({ quantity: 0 })], 0, 1, closed(), NO_FACTS)).toBe(
-      BasketRowState.DONE
-    );
+    expect(
+      stateOf(
+        [entry({ quantity: 0, settlements: [bought(1), closed()] })],
+        NO_FACTS
+      )
+    ).toBe(BasketRowState.DONE);
   });
 
   it('breaks a tie between two settlements of one act on the id', () => {
@@ -498,10 +509,13 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
       bought = 0
     ) =>
       stateOf(
-        [{ ...only, quantity: 2 - bought }],
-        2 - bought,
-        bought,
-        newest,
+        [
+          {
+            ...only,
+            quantity: 2 - bought,
+            settlements: newest ? [newest] : [],
+          },
+        ],
         facts(standing ? { [only.lineId]: standing } : {})
       );
 
@@ -532,19 +546,19 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
   // --- 5. the close runs out on a LIVE basket alone ------------------------
 
   it('lets a LIVE basket close run out, and holds a GENERATED one', () => {
-    const only = entry({ quantity: 2 });
-    const stale = closed({ fresh: false });
+    const only = entry({
+      quantity: 2,
+      settlements: [closed({ fresh: false })],
+    });
 
     expect(
-      stateOf([only], 2, 0, stale, {
+      stateOf([only], {
         skips: NO_BASKET_SKIPS,
         kind: BasketKind.LIVE,
       })
     ).toBe(BasketRowState.WANTED);
     // A trip's close holds until the trip is finished (plan 0130, section 4).
-    expect(stateOf([only], 2, 0, stale, NO_FACTS)).toBe(
-      BasketRowState.NOT_AVAILABLE
-    );
+    expect(stateOf([only], NO_FACTS)).toBe(BasketRowState.NOT_AVAILABLE);
   });
 
   it('leaves a run out LIVE close with no note', () => {
@@ -785,8 +799,162 @@ describe('bought through another basket (plan 0188)', () => {
     expect(view.boughtElsewhere).toBe(0);
     expect(view.entries[0].boughtElsewhere).toBe(0);
     expect(view.note).toBeNull();
-    expect(stateOf([entry({ quantity: 0 })], 0, 0, null, NO_FACTS)).toBe(
+    expect(stateOf([entry({ quantity: 0 })], NO_FACTS)).toBe(
       BasketRowState.WANTED
     );
+  });
+});
+
+describe('what a patch and an entry both state (plan 0204)', () => {
+  it('holds the states of the shared rules and no other', () => {
+    // The one cast in `basket-rows.ts` turns the library's plain string into
+    // the contract's enum, and it is honest only while the two sets are equal.
+    expect(Object.values(BASKET_RULE_STATES).sort()).toEqual(
+      Object.values(BasketRowState).sort()
+    );
+    expect(BASKET_RULE_ACT_SKIPPED).toBe(BASKET_ACT_SKIPPED);
+  });
+
+  it('carries the version, and no act for a line nobody touched', () => {
+    const only = entry({ quantity: 2, version: 7 });
+
+    expect(toEntryPatch(only, NO_FACTS)).toEqual({
+      lineId: only.lineId,
+      version: 7,
+      left: 2,
+      bought: 0,
+      boughtElsewhere: 0,
+      state: BasketRowState.WANTED,
+      approvalStatus: LineApprovalStatus.APPROVED,
+      skipped: false,
+      closed: false,
+      act: null,
+    });
+  });
+
+  it('names no list, whoever reads it', () => {
+    // A room holds guests, and a guest is never told where a line is.
+    const patch = toEntryPatch(entry({ listId: 'list-a' }), NO_FACTS);
+
+    expect(Object.keys(patch)).not.toContain('listId');
+    expect(JSON.stringify(patch)).not.toContain('list-a');
+  });
+
+  it('states a purchase as its act', () => {
+    const settled = bought(1);
+    const only = entry({ quantity: 1, settlements: [settled] });
+
+    expect(toEntryPatch(only, NO_FACTS)).toMatchObject({
+      bought: 1,
+      state: BasketRowState.PARTLY,
+      skipped: false,
+      closed: false,
+      act: {
+        participantId: 'p1',
+        at: settled.settledAt.toISOString(),
+        outcome: SettlementOutcome.BOUGHT,
+      },
+    });
+  });
+
+  it('states a fresh skip as skipped, with the skip as its act', () => {
+    const only = entry({ quantity: 2 });
+    const standing = skip();
+
+    expect(
+      toEntryPatch(only, facts({ [only.lineId]: standing }))
+    ).toMatchObject({
+      state: BasketRowState.SKIPPED,
+      skipped: true,
+      closed: false,
+      act: {
+        participantId: 'p2',
+        at: standing.skippedAt.toISOString(),
+        outcome: BASKET_ACT_SKIPPED,
+      },
+    });
+  });
+
+  it('keeps the act of a skip that ran out, and says it is not skipped', () => {
+    const only = entry({ quantity: 2 });
+    const patch = toEntryPatch(
+      only,
+      facts({ [only.lineId]: skip({ fresh: false }) })
+    );
+
+    expect(patch.skipped).toBe(false);
+    expect(patch.state).toBe(BasketRowState.WANTED);
+    expect(patch.act?.outcome).toBe(BASKET_ACT_SKIPPED);
+  });
+
+  it('states a close that holds as closed', () => {
+    const only = entry({ quantity: 2, settlements: [closed()] });
+
+    expect(toEntryPatch(only, NO_FACTS)).toMatchObject({
+      state: BasketRowState.NOT_AVAILABLE,
+      closed: true,
+      act: { outcome: SettlementOutcome.NOT_AVAILABLE },
+    });
+  });
+
+  it('does not call a LIVE close that ran out closed', () => {
+    const only = entry({
+      quantity: 2,
+      settlements: [closed({ fresh: false })],
+    });
+
+    expect(
+      toEntryPatch(only, { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE })
+        .closed
+    ).toBe(false);
+  });
+
+  it('lets a later skip end a close, also after the skip ran out', () => {
+    // Only the newer of a skip and a close is ever standing (plan 0137,
+    // section 3.2). The skip came later, so the close says nothing any more,
+    // and the row reads as wanted with a note that it was skipped earlier.
+    const only = entry({ quantity: 2, settlements: [closed()] });
+    const stale = facts({ [only.lineId]: skip({ fresh: false }) });
+
+    expect(toEntryPatch(only, stale)).toMatchObject({
+      state: BasketRowState.WANTED,
+      skipped: false,
+      closed: false,
+    });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: stale,
+    });
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
+  });
+
+  it('serves an entry the same numbers as its patch, and two fields more', () => {
+    const only = entry({ quantity: 1, settlements: [bought(2)], version: 3 });
+    const patch = toEntryPatch(only, NO_FACTS);
+    const view = toEntryView(only, OPEN_CONTEXT);
+
+    expect(view).toEqual({
+      ...patch,
+      demandEditable: true,
+      listId: only.listId,
+    });
+  });
+
+  it('gives a row the state and the act its entries add up to', () => {
+    const first = bought(1);
+    const last = closed();
+    const group = groupEntries([
+      entry({ quantity: 1, settlements: [first] }),
+      entry({ quantity: 2, settlements: [last] }),
+    ])[0];
+    const view = toRowView(group, OPEN_CONTEXT);
+
+    // The newest purchase or close over the row is the close.
+    expect(view.state).toBe(BasketRowState.NOT_AVAILABLE);
+    expect(view.left).toBe(3);
+    expect(view.bought).toBe(1);
+    expect(view.asked).toBe(4);
+    expect(view.touchedAt).toBe(last.settledAt.toISOString());
   });
 });

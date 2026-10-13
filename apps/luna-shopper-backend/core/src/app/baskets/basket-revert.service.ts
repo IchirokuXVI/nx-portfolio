@@ -287,7 +287,7 @@ export class BasketRevertService {
     skippedCount: number
   ): Promise<BasketRowResult> {
     const lineIds = announcements.map((entry) => entry.line.id);
-    await opened.announceLinesChanged(
+    opened.announceLinesMoved(
       announcements.map((entry) => ({
         listId: entry.listId,
         lineId: entry.line.id,

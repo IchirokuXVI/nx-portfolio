@@ -7,7 +7,12 @@ export interface AnnouncedLines {
   lineIds: readonly string[];
 }
 
-/** One recorded call of {@link BasketAnnouncer.basketChanged}. */
+/** One recorded call of {@link BasketAnnouncer.linesMoved}. */
+export interface AnnouncedMove extends AnnouncedLines {
+  marksMoved: boolean;
+}
+
+/** One recorded call of {@link BasketAnnouncer.basketMoved}. */
 export interface AnnouncedBasket {
   basketId: string;
   lineIds: readonly string[];
@@ -30,7 +35,9 @@ export interface FakeBasketAnnouncer extends BasketAnnouncer {
   /** Everything it was told, in the order it was told, per method. */
   calls: {
     linesChanged: AnnouncedLines[];
-    basketChanged: AnnouncedBasket[];
+    /** The writes that only moved numbers, one entry per list (plan 0204). */
+    linesMoved: AnnouncedMove[];
+    basketMoved: AnnouncedBasket[];
     coverageMoved: string[];
     openBaskets: string[];
     coverageMovedTo: (readonly CoveringBasket[])[];
@@ -43,7 +50,8 @@ export interface FakeBasketAnnouncer extends BasketAnnouncer {
 export function fakeBasketAnnouncer(): FakeBasketAnnouncer {
   const calls: FakeBasketAnnouncer['calls'] = {
     linesChanged: [],
-    basketChanged: [],
+    linesMoved: [],
+    basketMoved: [],
     coverageMoved: [],
     openBaskets: [],
     coverageMovedTo: [],
@@ -62,26 +70,33 @@ export function fakeBasketAnnouncer(): FakeBasketAnnouncer {
     async linesChangedAcross(
       entries: readonly { listId: string; lineId: string }[]
     ) {
-      // Grouped exactly as the real one groups, so a spec that asserts "once
-      // per list" is asserting the same arithmetic.
-      const byList = new Map<string, string[]>();
-      for (const entry of entries) {
-        const lines = byList.get(entry.listId);
-        if (lines) {
-          lines.push(entry.lineId);
-        } else {
-          byList.set(entry.listId, [entry.lineId]);
-        }
-      }
-      for (const [listId, lineIds] of byList) {
+      for (const [listId, lineIds] of byList(entries)) {
         calls.linesChanged.push({ listId, lineIds });
       }
     },
-    basketChanged(
-      basket: { id: string; ownerUserId: string },
-      lineIds: readonly string[]
+    async linesMoved(
+      listId: string,
+      lineIds: readonly string[],
+      marksMoved = false
     ) {
-      calls.basketChanged.push({ basketId: basket.id, lineIds: [...lineIds] });
+      calls.linesMoved.push({ listId, lineIds: [...lineIds], marksMoved });
+    },
+    async linesMovedAcross(
+      entries: readonly { listId: string; lineId: string }[],
+      marksMoved = false
+    ) {
+      for (const [listId, lineIds] of byList(entries)) {
+        calls.linesMoved.push({ listId, lineIds, marksMoved });
+      }
+    },
+    basketMoved(
+      basket: { id: string; ownerUserId: string },
+      entries: readonly { listId: string; lineId: string }[]
+    ) {
+      calls.basketMoved.push({
+        basketId: basket.id,
+        lineIds: entries.map((entry) => entry.lineId),
+      });
     },
     async coverageMoved(zoneId: string) {
       calls.coverageMoved.push(zoneId);
@@ -96,4 +111,23 @@ export function fakeBasketAnnouncer(): FakeBasketAnnouncer {
   };
 
   return fake as unknown as FakeBasketAnnouncer;
+}
+
+/**
+ * Grouped exactly as the real one groups, so a spec that asserts "once per
+ * list" is asserting the same arithmetic.
+ */
+function byList(
+  entries: readonly { listId: string; lineId: string }[]
+): Map<string, string[]> {
+  const lists = new Map<string, string[]>();
+  for (const entry of entries) {
+    const lines = lists.get(entry.listId);
+    if (lines) {
+      lines.push(entry.lineId);
+    } else {
+      lists.set(entry.listId, [entry.lineId]);
+    }
+  }
+  return lists;
 }

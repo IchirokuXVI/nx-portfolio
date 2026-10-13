@@ -7,6 +7,8 @@ import {
   type BasketChangePage,
   type BasketChangesAcknowledged,
   type BasketChangeView,
+  type BasketMarksView,
+  type GetBasketMarksRequest,
   type ListBasketChangesRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -111,6 +113,46 @@ export class BasketChangesService {
     return {
       items,
       nextCursor: hasMore && last ? encodeCursor({ id: last.id }) : null,
+    };
+  }
+
+  /**
+   * The marks and the count alone (plan 0204, section 6).
+   *
+   * What a client reads after an event said `marksMoved`: it holds the rows
+   * already, so it is answered the one thing a room could not carry, which is
+   * what **this viewer** has not seen yet.
+   *
+   * It reads the coverage, the covered lines and the marked changes. No row is
+   * built, so it asks for no product set, no purchase, no walk history, no
+   * person and no list name, and the gateway asks the catalog nothing.
+   *
+   * A mark belongs to a merge key (plan 0138, section 7), and every covered
+   * line of that key is answered with it. So a client that folds the marks of
+   * the lines of a row gets the mark the read gives that row. **A removed row
+   * is not here**: its lines left the coverage, and a removal sends ids alone.
+   */
+  async marksOf(req: GetBasketMarksRequest): Promise<BasketMarksView> {
+    const opened = await this.context.open(req);
+    if (opened.coveredListIds.length === 0) {
+      return { unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] };
+    }
+    const covered = await this.read.coveredLinesOf(
+      opened.basket,
+      opened.coveredListIds
+    );
+    const marks = await this.marks.marksFor(
+      opened.participant.id,
+      opened.coveredListIds,
+      covered
+    );
+    return {
+      unseenChangeCount: marks.unseenChangeCount,
+      newestUnseenChangeId: marks.newestUnseenChangeId,
+      lines: covered.flatMap((line) => {
+        const mark = marks.byKey.get(mergeKey(line));
+        return mark ? [{ lineId: line.id, mark }] : [];
+      }),
     };
   }
 

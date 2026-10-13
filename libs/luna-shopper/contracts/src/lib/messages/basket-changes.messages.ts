@@ -1,3 +1,4 @@
+import type { BasketRowMark } from '../enums/basket.enums';
 import type { LineApprovalStatus } from '../enums/list.enums';
 
 /**
@@ -133,6 +134,38 @@ export interface ListBasketChangesRequest {
   participantId: string;
   cursor?: string;
   limit?: number;
+}
+
+/** Read the marks of a basket alone (plan 0204, section 6). */
+export interface GetBasketMarksRequest {
+  basketId: string;
+  participantId: string;
+}
+
+/**
+ * What changed since this viewer last looked, with no rows (plan 0204, section
+ * 6).
+ *
+ * The two numbers are the ones `BasketView` carries, and `lines` is the `mark`
+ * of each row before it is folded: a client folds the marks of the lines of a
+ * row with the rule of the read, which is that `ADDED` wins over `CHANGED`.
+ *
+ * **A line that was removed is not here.** A removal sends a
+ * `basket.linesChanged` with ids alone, and a client reads the basket for it.
+ */
+export interface BasketMarksView {
+  /** Capped at {@link BASKET_CHANGE_LIMITS.countCap}. */
+  unseenChangeCount: number;
+  /** What an acknowledgement sends as `through`. */
+  newestUnseenChangeId: string | null;
+  /** One for each covered line that carries a mark for this viewer. */
+  lines: BasketLineMark[];
+}
+
+/** The mark of one covered line. */
+export interface BasketLineMark {
+  lineId: string;
+  mark: BasketRowMark;
 }
 
 /**
