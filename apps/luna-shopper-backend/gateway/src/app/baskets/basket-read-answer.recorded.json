@@ -1,0 +1,2391 @@
+{
+  ":id: owner, no shop": {
+    "answer": {
+      "id": "b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33",
+      "kind": "GENERATED",
+      "name": "Saturday",
+      "status": "OPEN",
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "rows": [
+        {
+          "rowKey": "l-milk",
+          "content": "Milk",
+          "productId": "i-milk",
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-milk",
+              "listId": "list-a",
+              "content": "Milk",
+              "itemIds": ["i-milk"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": null
+        },
+        {
+          "rowKey": "l-two",
+          "content": "Oat drink",
+          "productId": "i-soy",
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-two",
+              "listId": "list-a",
+              "content": "Oat drink",
+              "itemIds": ["i-oat", "i-soy"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": null
+        },
+        {
+          "rowKey": "l-text",
+          "content": "Something for dinner",
+          "productId": null,
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-text",
+              "listId": "list-b",
+              "content": "Something for dinner",
+              "itemIds": [],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": null
+        },
+        {
+          "rowKey": "l-bread-a",
+          "content": "Bread",
+          "productId": "i-bread",
+          "left": 2,
+          "bought": 0,
+          "asked": 2,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-bread-a",
+              "listId": "list-a",
+              "content": "Bread",
+              "itemIds": ["i-bread"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            },
+            {
+              "lineId": "l-bread-b",
+              "listId": "list-b",
+              "content": "Bread",
+              "itemIds": ["i-bread"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": null
+        }
+      ],
+      "lists": [
+        {
+          "id": "list-a",
+          "name": "Weekly",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        },
+        {
+          "id": "list-b",
+          "name": "Party",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        }
+      ],
+      "participants": [
+        {
+          "id": "p-owner",
+          "kind": "OWNER",
+          "displayName": null,
+          "username": "Calm Harbour",
+          "guestNumber": null,
+          "userId": "u-owner",
+          "shareLinkId": null
+        },
+        {
+          "id": "p-member",
+          "kind": "REGISTERED",
+          "displayName": null,
+          "username": "Lucky Otter",
+          "guestNumber": null,
+          "userId": "u-member",
+          "shareLinkId": "link-1"
+        },
+        {
+          "id": "p-guest",
+          "kind": "GUEST",
+          "displayName": "Guest",
+          "username": null,
+          "guestNumber": 1,
+          "userId": null,
+          "shareLinkId": "link-1"
+        }
+      ],
+      "me": {
+        "id": "p-owner",
+        "kind": "OWNER",
+        "displayName": null,
+        "username": "Calm Harbour",
+        "guestNumber": null,
+        "userId": "u-owner",
+        "shareLinkId": null
+      },
+      "progress": {
+        "done": 0,
+        "unavailable": 0,
+        "total": 4,
+        "pending": 4
+      },
+      "truncated": false,
+      "servesLocations": true,
+      "unseenChangeCount": 2,
+      "newestUnseenChangeId": "change-9",
+      "supermarketLocationId": null,
+      "products": [
+        {
+          "id": "i-milk",
+          "name": {
+            "en": "i-milk",
+            "es": "i-milk"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-milk",
+            "priceScopeId": "scope-mercadona",
+            "price": 0.95,
+            "currency": "EUR",
+            "unitPrice": 0.95,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-milk",
+              "priceScopeId": "scope-mercadona",
+              "price": 0.95,
+              "currency": "EUR",
+              "unitPrice": 0.95,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            },
+            {
+              "itemId": "i-milk",
+              "priceScopeId": "scope-carrefour",
+              "price": 1.05,
+              "currency": "EUR",
+              "unitPrice": 1.05,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": null
+        },
+        {
+          "id": "i-soy",
+          "name": {
+            "en": "i-soy",
+            "es": "i-soy"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-soy",
+            "priceScopeId": "scope-mercadona",
+            "price": 1.2,
+            "currency": "EUR",
+            "unitPrice": 1.2,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-soy",
+              "priceScopeId": "scope-mercadona",
+              "price": 1.2,
+              "currency": "EUR",
+              "unitPrice": 1.2,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": null
+        },
+        {
+          "id": "i-bread",
+          "name": {
+            "en": "i-bread",
+            "es": "i-bread"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-bread",
+            "priceScopeId": "scope-carrefour",
+            "price": 0.8,
+            "currency": "EUR",
+            "unitPrice": 0.8,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-bread",
+              "priceScopeId": "scope-carrefour",
+              "price": 0.8,
+              "currency": "EUR",
+              "unitPrice": 0.8,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": null
+        }
+      ],
+      "shop": null,
+      "scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-carrefour",
+          "supermarketId": "carrefour",
+          "supermarketName": {
+            "en": "Carrefour",
+            "es": "Carrefour"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-carrefour-1",
+              "label": null,
+              "address": "loc-carrefour-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    },
+    "asked": [
+      "basket.searchScope",
+      "basket.priceChoices",
+      "item.getMany",
+      "basket.get",
+      "item.getMany",
+      "supermarket.list",
+      "supermarketLocation.list",
+      "supermarketLocation.list"
+    ]
+  },
+  ":id: owner, at a shop": {
+    "answer": {
+      "id": "b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33",
+      "kind": "GENERATED",
+      "name": "Saturday",
+      "status": "OPEN",
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "rows": [
+        {
+          "rowKey": "l-milk",
+          "content": "Milk",
+          "productId": "i-milk",
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-milk",
+              "listId": "list-a",
+              "content": "Milk",
+              "itemIds": ["i-milk"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": {
+            "bought": 2,
+            "of": 3
+          }
+        },
+        {
+          "rowKey": "l-two",
+          "content": "Oat drink",
+          "productId": "i-oat",
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-two",
+              "listId": "list-a",
+              "content": "Oat drink",
+              "itemIds": ["i-oat", "i-soy"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": {
+            "bought": 2,
+            "of": 3
+          }
+        },
+        {
+          "rowKey": "l-text",
+          "content": "Something for dinner",
+          "productId": null,
+          "left": 1,
+          "bought": 0,
+          "asked": 1,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-text",
+              "listId": "list-b",
+              "content": "Something for dinner",
+              "itemIds": [],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": {
+            "bought": 2,
+            "of": 3
+          }
+        },
+        {
+          "rowKey": "l-bread-a",
+          "content": "Bread",
+          "productId": "i-bread",
+          "left": 2,
+          "bought": 0,
+          "asked": 2,
+          "boughtElsewhere": 0,
+          "state": "WANTED",
+          "note": null,
+          "noteAt": null,
+          "mark": null,
+          "awaitingApproval": false,
+          "touchedBy": null,
+          "touchedAt": null,
+          "entries": [
+            {
+              "lineId": "l-bread-a",
+              "listId": "list-a",
+              "content": "Bread",
+              "itemIds": ["i-bread"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            },
+            {
+              "lineId": "l-bread-b",
+              "listId": "list-b",
+              "content": "Bread",
+              "itemIds": ["i-bread"],
+              "favoriteItemId": null,
+              "canWrite": true,
+              "left": 1,
+              "bought": 0,
+              "boughtElsewhere": 0,
+              "state": "WANTED",
+              "approvalStatus": "APPROVED",
+              "version": 1,
+              "skipped": false,
+              "closed": false,
+              "act": null,
+              "tripItemId": null,
+              "demandEditable": true
+            }
+          ],
+          "usual": {
+            "bought": 2,
+            "of": 3
+          }
+        }
+      ],
+      "lists": [
+        {
+          "id": "list-a",
+          "name": "Weekly",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        },
+        {
+          "id": "list-b",
+          "name": "Party",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        }
+      ],
+      "participants": [
+        {
+          "id": "p-owner",
+          "kind": "OWNER",
+          "displayName": null,
+          "username": "Calm Harbour",
+          "guestNumber": null,
+          "userId": "u-owner",
+          "shareLinkId": null
+        },
+        {
+          "id": "p-member",
+          "kind": "REGISTERED",
+          "displayName": null,
+          "username": "Lucky Otter",
+          "guestNumber": null,
+          "userId": "u-member",
+          "shareLinkId": "link-1"
+        },
+        {
+          "id": "p-guest",
+          "kind": "GUEST",
+          "displayName": "Guest",
+          "username": null,
+          "guestNumber": 1,
+          "userId": null,
+          "shareLinkId": "link-1"
+        }
+      ],
+      "me": {
+        "id": "p-owner",
+        "kind": "OWNER",
+        "displayName": null,
+        "username": "Calm Harbour",
+        "guestNumber": null,
+        "userId": "u-owner",
+        "shareLinkId": null
+      },
+      "progress": {
+        "done": 0,
+        "unavailable": 0,
+        "total": 4,
+        "pending": 4
+      },
+      "truncated": false,
+      "servesLocations": true,
+      "unseenChangeCount": 2,
+      "newestUnseenChangeId": "change-9",
+      "supermarketLocationId": null,
+      "products": [
+        {
+          "id": "i-milk",
+          "name": {
+            "en": "i-milk",
+            "es": "i-milk"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-milk",
+            "priceScopeId": "scope-mercadona",
+            "price": 0.95,
+            "currency": "EUR",
+            "unitPrice": 0.95,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-milk",
+              "priceScopeId": "scope-mercadona",
+              "price": 0.95,
+              "currency": "EUR",
+              "unitPrice": 0.95,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            },
+            {
+              "itemId": "i-milk",
+              "priceScopeId": "scope-carrefour",
+              "price": 1.05,
+              "currency": "EUR",
+              "unitPrice": 1.05,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": {
+            "priceScopeId": null,
+            "price": null,
+            "currency": null,
+            "available": true
+          },
+          "sectionIds": ["section-dairy"]
+        },
+        {
+          "id": "i-oat",
+          "name": {
+            "en": "i-oat",
+            "es": "i-oat"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-oat",
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "unitPrice": 1.4,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-mercadona",
+              "price": 1.6,
+              "currency": "EUR",
+              "unitPrice": 1.6,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            },
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-shop",
+              "price": 1.4,
+              "currency": "EUR",
+              "unitPrice": 1.4,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": {
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "available": true
+          },
+          "sectionIds": []
+        },
+        {
+          "id": "i-bread",
+          "name": {
+            "en": "i-bread",
+            "es": "i-bread"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-bread",
+            "priceScopeId": "scope-carrefour",
+            "price": 0.8,
+            "currency": "EUR",
+            "unitPrice": 0.8,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-bread",
+              "priceScopeId": "scope-carrefour",
+              "price": 0.8,
+              "currency": "EUR",
+              "unitPrice": 0.8,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": {
+            "priceScopeId": null,
+            "price": null,
+            "currency": null,
+            "available": false
+          },
+          "sectionIds": []
+        }
+      ],
+      "shop": null,
+      "scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            },
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-carrefour",
+          "supermarketId": "carrefour",
+          "supermarketName": {
+            "en": "Carrefour",
+            "es": "Carrefour"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-carrefour-1",
+              "label": null,
+              "address": "loc-carrefour-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    },
+    "asked": [
+      "basket.searchScope",
+      "basket.priceChoices",
+      "supermarketLocation.shopAvailability",
+      "item.getMany",
+      "basket.get",
+      "supermarketLocation.shopAvailability",
+      "section.itemsAtLocation",
+      "item.getMany",
+      "supermarket.list",
+      "supermarketLocation.list",
+      "supermarketLocation.list"
+    ]
+  },
+  ":id: member, no shop": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.rows[2].entries[0].listId": "(absent)",
+      "answer.rows[2].entries[0].canWrite": false,
+      "answer.rows[3].entries[1].listId": "(absent)",
+      "answer.rows[3].entries[1].canWrite": false,
+      "answer.lists": [
+        {
+          "id": "list-a",
+          "name": "Weekly",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        }
+      ],
+      "answer.me.id": "p-member",
+      "answer.me.kind": "REGISTERED",
+      "answer.me.username": "Lucky Otter",
+      "answer.me.userId": "u-member",
+      "answer.me.shareLinkId": "link-1"
+    }
+  },
+  ":id: member, at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.rows[2].entries[0].listId": "(absent)",
+      "answer.rows[2].entries[0].canWrite": false,
+      "answer.rows[3].entries[1].listId": "(absent)",
+      "answer.rows[3].entries[1].canWrite": false,
+      "answer.lists": [
+        {
+          "id": "list-a",
+          "name": "Weekly",
+          "zoneId": "zone-1",
+          "zoneName": "Home"
+        }
+      ],
+      "answer.me.id": "p-member",
+      "answer.me.kind": "REGISTERED",
+      "answer.me.username": "Lucky Otter",
+      "answer.me.userId": "u-member",
+      "answer.me.shareLinkId": "link-1"
+    }
+  },
+  ":id: guest, no shop": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.rows[0].entries[0].listId": "(absent)",
+      "answer.rows[0].entries[0].canWrite": false,
+      "answer.rows[1].entries[0].listId": "(absent)",
+      "answer.rows[1].entries[0].canWrite": false,
+      "answer.rows[2].entries[0].listId": "(absent)",
+      "answer.rows[2].entries[0].canWrite": false,
+      "answer.rows[3].entries[0].listId": "(absent)",
+      "answer.rows[3].entries[0].canWrite": false,
+      "answer.rows[3].entries[1].listId": "(absent)",
+      "answer.rows[3].entries[1].canWrite": false,
+      "answer.lists": [],
+      "answer.me.id": "p-guest",
+      "answer.me.kind": "GUEST",
+      "answer.me.displayName": "Guest",
+      "answer.me.username": null,
+      "answer.me.guestNumber": 1,
+      "answer.me.userId": null,
+      "answer.me.shareLinkId": "link-1"
+    }
+  },
+  ":id: guest, at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.rows[0].entries[0].listId": "(absent)",
+      "answer.rows[0].entries[0].canWrite": false,
+      "answer.rows[1].entries[0].listId": "(absent)",
+      "answer.rows[1].entries[0].canWrite": false,
+      "answer.rows[2].entries[0].listId": "(absent)",
+      "answer.rows[2].entries[0].canWrite": false,
+      "answer.rows[3].entries[0].listId": "(absent)",
+      "answer.rows[3].entries[0].canWrite": false,
+      "answer.rows[3].entries[1].listId": "(absent)",
+      "answer.rows[3].entries[1].canWrite": false,
+      "answer.lists": [],
+      "answer.me.id": "p-guest",
+      "answer.me.kind": "GUEST",
+      "answer.me.displayName": "Guest",
+      "answer.me.username": null,
+      "answer.me.guestNumber": 1,
+      "answer.me.userId": null,
+      "answer.me.shareLinkId": "link-1"
+    }
+  },
+  ":id: owner, a basket started at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.supermarketLocationId": "loc-own",
+      "answer.shop": {
+        "id": "loc-own",
+        "supermarketId": "mercadona",
+        "supermarketName": {
+          "en": "Mercadona",
+          "es": "Mercadona"
+        },
+        "label": null,
+        "address": "Avenida de Manolete",
+        "city": "Córdoba",
+        "postalCode": "14005",
+        "inProfile": false,
+        "sections": []
+      },
+      "answer.scopes[0].locations[1].supermarketLocationId": "loc-own",
+      "answer.scopes[2].locations[0].supermarketLocationId": "loc-own"
+    }
+  },
+  ":id: owner, a basket started at a shop, asked at that shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.supermarketLocationId": "loc-own",
+      "answer.shop": {
+        "id": "loc-own",
+        "supermarketId": "mercadona",
+        "supermarketName": {
+          "en": "Mercadona",
+          "es": "Mercadona"
+        },
+        "label": null,
+        "address": "Avenida de Manolete",
+        "city": "Córdoba",
+        "postalCode": "14005",
+        "inProfile": false,
+        "sections": []
+      },
+      "answer.scopes[0].locations[1].supermarketLocationId": "loc-own",
+      "answer.scopes[2].locations[0].supermarketLocationId": "loc-own"
+    }
+  },
+  ":id: owner, a basket started at a shop, asked at another": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer": "(absent)",
+      "asked": ["basket.searchScope", "basket.priceChoices"],
+      "refused": {
+        "name": "BasketShopLockedException",
+        "message": "This basket was started at another shop"
+      }
+    }
+  },
+  ":id: guest, a basket started at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.rows[0].entries[0].listId": "(absent)",
+      "answer.rows[0].entries[0].canWrite": false,
+      "answer.rows[1].entries[0].listId": "(absent)",
+      "answer.rows[1].entries[0].canWrite": false,
+      "answer.rows[2].entries[0].listId": "(absent)",
+      "answer.rows[2].entries[0].canWrite": false,
+      "answer.rows[3].entries[0].listId": "(absent)",
+      "answer.rows[3].entries[0].canWrite": false,
+      "answer.rows[3].entries[1].listId": "(absent)",
+      "answer.rows[3].entries[1].canWrite": false,
+      "answer.lists": [],
+      "answer.me.id": "p-guest",
+      "answer.me.kind": "GUEST",
+      "answer.me.displayName": "Guest",
+      "answer.me.username": null,
+      "answer.me.guestNumber": 1,
+      "answer.me.userId": null,
+      "answer.me.shareLinkId": "link-1",
+      "answer.supermarketLocationId": "loc-own",
+      "answer.shop": {
+        "id": "loc-own",
+        "supermarketId": "mercadona",
+        "supermarketName": {
+          "en": "Mercadona",
+          "es": "Mercadona"
+        },
+        "label": null,
+        "address": "Avenida de Manolete",
+        "city": "Córdoba",
+        "postalCode": "14005",
+        "inProfile": false,
+        "sections": []
+      },
+      "answer.scopes[0].locations[1].supermarketLocationId": "loc-own",
+      "answer.scopes[2].locations[0].supermarketLocationId": "loc-own"
+    }
+  },
+  ":id: owner, a basket with no profile": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": "(absent)",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer": null,
+      "answer.products[1].offers": "(absent)",
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": "(absent)",
+      "answer.scopes": [],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "basket.get",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: owner, a basket with no profile, at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": [],
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-shop",
+          "price": 1.4,
+          "currency": "EUR",
+          "unitPrice": 1.4,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": [],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "item.getMany",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: owner, a profile that was deleted": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": "(absent)",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer": null,
+      "answer.products[1].offers": "(absent)",
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": "(absent)",
+      "answer.scopes": [],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "basket.get",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: guest, removed between the guard and the read": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer": "(absent)",
+      "asked": ["basket.searchScope", "basket.priceChoices", "basket.get"],
+      "refused": {
+        "name": "NotAParticipantException",
+        "message": "Not a participant of this basket"
+      }
+    }
+  },
+  ":id: owner, at a shop, core: searchScope fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": [],
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-shop",
+          "price": 1.4,
+          "currency": "EUR",
+          "unitPrice": 1.4,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": [],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "item.getMany",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: guest, no shop, core: searchScope fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": "(absent)",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer": null,
+      "answer.products[1].offers": "(absent)",
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": "(absent)",
+      "answer.scopes": [],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "basket.get",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: owner, at a shop, core: priceChoices fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  ":id: guest, no shop, core: priceChoices fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer.itemId": "i-oat",
+      "answer.products[1].bestOffer.price": 1.6,
+      "answer.products[1].bestOffer.unitPrice": 1.6,
+      "answer.products[1].offers[0].itemId": "i-oat",
+      "answer.products[1].offers[0].price": 1.6,
+      "answer.products[1].offers[0].unitPrice": 1.6,
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "basket.get",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  ":id: owner, at a shop, core: the selection of the profile fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.scopes[0].locations": [
+        {
+          "supermarketLocationId": "loc-mercadona-1",
+          "label": null,
+          "address": "loc-mercadona-1 street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        },
+        {
+          "supermarketLocationId": "loc-mercadona-refused",
+          "label": null,
+          "address": "loc-mercadona-refused street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        },
+        {
+          "supermarketLocationId": "loc-read",
+          "label": null,
+          "address": "Avenida de Manolete",
+          "city": "Córdoba",
+          "postalCode": "14005",
+          "sections": []
+        }
+      ]
+    }
+  },
+  ":id: guest, no shop, core: the selection of the profile fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.scopes[0].locations": [
+        {
+          "supermarketLocationId": "loc-mercadona-1",
+          "label": null,
+          "address": "loc-mercadona-1 street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        },
+        {
+          "supermarketLocationId": "loc-mercadona-refused",
+          "label": null,
+          "address": "loc-mercadona-refused street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        }
+      ]
+    }
+  },
+  ":id: owner, at a shop, core: the scopes of the profile fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": [],
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-shop",
+          "price": 1.4,
+          "currency": "EUR",
+          "unitPrice": 1.4,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": [],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "item.getMany",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: guest, no shop, core: the scopes of the profile fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": "(absent)",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer": null,
+      "answer.products[1].offers": "(absent)",
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": "(absent)",
+      "answer.scopes": [],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "basket.get",
+        "item.getMany"
+      ]
+    }
+  },
+  ":id: owner, at a shop, catalog: the shop, before the rows fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.rows[0].usual": null,
+      "answer.rows[1].usual": null,
+      "answer.rows[2].usual": null,
+      "answer.rows[3].usual": null,
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  ":id: guest, no shop, catalog: the shop, before the rows fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {}
+  },
+  ":id: owner, at a shop, catalog: the shop, with the products fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products[0].atShop": null,
+      "answer.products[1].bestOffer.priceScopeId": "scope-mercadona",
+      "answer.products[1].bestOffer.price": 1.6,
+      "answer.products[1].bestOffer.unitPrice": 1.6,
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-mercadona",
+          "price": 1.6,
+          "currency": "EUR",
+          "unitPrice": 1.6,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[1].atShop": null,
+      "answer.products[2].atShop": null,
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-carrefour",
+          "supermarketId": "carrefour",
+          "supermarketName": {
+            "en": "Carrefour",
+            "es": "Carrefour"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-carrefour-1",
+              "label": null,
+              "address": "loc-carrefour-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  ":id: guest, no shop, catalog: the shop, with the products fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {}
+  },
+  ":id: owner, at a shop, catalog: the sections fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products[0].sectionIds": "(absent)",
+      "answer.products[1].sectionIds": "(absent)",
+      "answer.products[2].sectionIds": "(absent)"
+    }
+  },
+  ":id: guest, no shop, catalog: the sections fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {}
+  },
+  ":id: owner, at a shop, catalog: the products, for the picks fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {}
+  },
+  ":id: guest, no shop, catalog: the products, for the picks fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer.itemId": "i-oat",
+      "answer.products[1].bestOffer.price": 1.6,
+      "answer.products[1].bestOffer.unitPrice": 1.6,
+      "answer.products[1].offers[0].itemId": "i-oat",
+      "answer.products[1].offers[0].price": 1.6,
+      "answer.products[1].offers[0].unitPrice": 1.6
+    }
+  },
+  ":id: owner, at a shop, catalog: the products, for the rows fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.products": [
+        {
+          "id": "i-oat",
+          "name": {
+            "en": "i-oat",
+            "es": "i-oat"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-oat",
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "unitPrice": 1.4,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-mercadona",
+              "price": 1.6,
+              "currency": "EUR",
+              "unitPrice": 1.6,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            },
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-shop",
+              "price": 1.4,
+              "currency": "EUR",
+              "unitPrice": 1.4,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": {
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "available": true
+          },
+          "sectionIds": []
+        }
+      ],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            },
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "item.getMany",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  ":id: guest, no shop, catalog: the products, for the rows fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.products": [
+        {
+          "id": "i-soy",
+          "name": {
+            "en": "i-soy",
+            "es": "i-soy"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-soy",
+            "priceScopeId": "scope-mercadona",
+            "price": 1.2,
+            "currency": "EUR",
+            "unitPrice": 1.2,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-soy",
+              "priceScopeId": "scope-mercadona",
+              "price": 1.2,
+              "currency": "EUR",
+              "unitPrice": 1.2,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": null
+        }
+      ],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "item.getMany",
+        "basket.get",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  ":id: owner, at a shop, catalog: the chains fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "supermarketLocation.shopAvailability",
+        "item.getMany",
+        "basket.get",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list"
+      ]
+    }
+  },
+  ":id: guest, no shop, catalog: the chains fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.scopes": [],
+      "asked": [
+        "basket.searchScope",
+        "basket.priceChoices",
+        "item.getMany",
+        "basket.get",
+        "item.getMany",
+        "supermarket.list"
+      ]
+    }
+  },
+  ":id: owner, at a shop, catalog: the shops of a chain fails": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  ":id: guest, no shop, catalog: the shops of a chain fails": {
+    "differsFrom": ":id: guest, no shop",
+    "at": {
+      "answer.scopes": []
+    }
+  },
+  "live: owner, no shop": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.kind": "LIVE",
+      "answer.name": null,
+      "asked[0]": "basket.live.priceChoices",
+      "asked[1]": "basket.searchScope",
+      "asked[3]": "basket.live"
+    }
+  },
+  "live: owner, at a shop": {
+    "differsFrom": ":id: owner, at a shop",
+    "at": {
+      "answer.kind": "LIVE",
+      "answer.name": null,
+      "asked[0]": "supermarketLocation.shopAvailability",
+      "asked[1]": "basket.live.priceChoices",
+      "asked[2]": "basket.searchScope",
+      "asked[4]": "basket.live"
+    }
+  },
+  "live: owner, no profile": {
+    "differsFrom": ":id: owner, no shop",
+    "at": {
+      "answer.kind": "LIVE",
+      "answer.name": null,
+      "answer.rows[1].productId": "i-oat",
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": "(absent)",
+      "answer.products[1].id": "i-oat",
+      "answer.products[1].name.en": "i-oat",
+      "answer.products[1].name.es": "i-oat",
+      "answer.products[1].bestOffer": null,
+      "answer.products[1].offers": "(absent)",
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": "(absent)",
+      "answer.scopes": [],
+      "asked": [
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "basket.live",
+        "item.getMany"
+      ]
+    }
+  },
+  "live: owner, at a shop, core: searchScope fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": [],
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-shop",
+          "price": 1.4,
+          "currency": "EUR",
+          "unitPrice": 1.4,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": [],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "item.getMany",
+        "basket.live",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany"
+      ]
+    }
+  },
+  "live: owner, at a shop, core: priceChoices fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.live",
+        "basket.searchScope",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  "live: owner, at a shop, core: the selection of the profile fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.scopes[0].locations": [
+        {
+          "supermarketLocationId": "loc-mercadona-1",
+          "label": null,
+          "address": "loc-mercadona-1 street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        },
+        {
+          "supermarketLocationId": "loc-mercadona-refused",
+          "label": null,
+          "address": "loc-mercadona-refused street",
+          "city": "Córdoba",
+          "postalCode": "14008",
+          "sections": []
+        },
+        {
+          "supermarketLocationId": "loc-read",
+          "label": null,
+          "address": "Avenida de Manolete",
+          "city": "Córdoba",
+          "postalCode": "14005",
+          "sections": []
+        }
+      ]
+    }
+  },
+  "live: owner, at a shop, core: the scopes of the profile fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.products[0].bestOffer": null,
+      "answer.products[0].offers": [],
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-shop",
+          "price": 1.4,
+          "currency": "EUR",
+          "unitPrice": 1.4,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[2].bestOffer": null,
+      "answer.products[2].offers": [],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "item.getMany",
+        "basket.live",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany"
+      ]
+    }
+  },
+  "live: owner, at a shop, catalog: the shop, before the rows fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.rows[0].usual": null,
+      "answer.rows[1].usual": null,
+      "answer.rows[2].usual": null,
+      "answer.rows[3].usual": null,
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "basket.live",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  "live: owner, at a shop, catalog: the shop, with the products fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.products[0].atShop": null,
+      "answer.products[1].bestOffer.priceScopeId": "scope-mercadona",
+      "answer.products[1].bestOffer.price": 1.6,
+      "answer.products[1].bestOffer.unitPrice": 1.6,
+      "answer.products[1].offers": [
+        {
+          "itemId": "i-oat",
+          "priceScopeId": "scope-mercadona",
+          "price": 1.6,
+          "currency": "EUR",
+          "unitPrice": 1.6,
+          "unitPriceLabel": "EUR/L",
+          "observedAt": "2026-09-01T06:00:00.000Z",
+          "sourceKind": "OFFICIAL_WEB",
+          "stale": false
+        }
+      ],
+      "answer.products[1].atShop": null,
+      "answer.products[2].atShop": null,
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-carrefour",
+          "supermarketId": "carrefour",
+          "supermarketName": {
+            "en": "Carrefour",
+            "es": "Carrefour"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-carrefour-1",
+              "label": null,
+              "address": "loc-carrefour-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "live: owner, at a shop, catalog: the sections fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.products[0].sectionIds": "(absent)",
+      "answer.products[1].sectionIds": "(absent)",
+      "answer.products[2].sectionIds": "(absent)"
+    }
+  },
+  "live: owner, at a shop, catalog: the products, for the picks fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {}
+  },
+  "live: owner, at a shop, catalog: the products, for the rows fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.products": [
+        {
+          "id": "i-oat",
+          "name": {
+            "en": "i-oat",
+            "es": "i-oat"
+          },
+          "brand": null,
+          "imageUrl": null,
+          "imageSource": null,
+          "imageSupermarketId": null,
+          "ownImageUrl": null,
+          "images": [],
+          "sku": null,
+          "ean": null,
+          "eans": [],
+          "unitSize": 1,
+          "packCount": null,
+          "categories": [],
+          "defaultUnit": "LITER",
+          "productGroupId": null,
+          "bestOffer": {
+            "itemId": "i-oat",
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "unitPrice": 1.4,
+            "unitPriceLabel": "EUR/L",
+            "observedAt": "2026-09-01T06:00:00.000Z",
+            "sourceKind": "OFFICIAL_WEB",
+            "stale": false
+          },
+          "offers": [
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-mercadona",
+              "price": 1.6,
+              "currency": "EUR",
+              "unitPrice": 1.6,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            },
+            {
+              "itemId": "i-oat",
+              "priceScopeId": "scope-shop",
+              "price": 1.4,
+              "currency": "EUR",
+              "unitPrice": 1.4,
+              "unitPriceLabel": "EUR/L",
+              "observedAt": "2026-09-01T06:00:00.000Z",
+              "sourceKind": "OFFICIAL_WEB",
+              "stale": false
+            }
+          ],
+          "atShop": {
+            "priceScopeId": "scope-shop",
+            "price": 1.4,
+            "currency": "EUR",
+            "available": true
+          },
+          "sectionIds": []
+        }
+      ],
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-mercadona",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-mercadona-1",
+              "label": null,
+              "address": "loc-mercadona-1 street",
+              "city": "Córdoba",
+              "postalCode": "14008",
+              "sections": []
+            },
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        },
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "item.getMany",
+        "basket.live",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list",
+        "supermarketLocation.list"
+      ]
+    }
+  },
+  "live: owner, at a shop, catalog: the chains fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ],
+      "asked": [
+        "supermarketLocation.shopAvailability",
+        "basket.live.priceChoices",
+        "basket.searchScope",
+        "item.getMany",
+        "basket.live",
+        "supermarketLocation.shopAvailability",
+        "section.itemsAtLocation",
+        "item.getMany",
+        "supermarket.list"
+      ]
+    }
+  },
+  "live: owner, at a shop, catalog: the shops of a chain fails": {
+    "differsFrom": "live: owner, at a shop",
+    "at": {
+      "answer.scopes": [
+        {
+          "priceScopeId": "scope-shop",
+          "supermarketId": "mercadona",
+          "supermarketName": {
+            "en": "Mercadona",
+            "es": "Mercadona"
+          },
+          "locations": [
+            {
+              "supermarketLocationId": "loc-read",
+              "label": null,
+              "address": "Avenida de Manolete",
+              "city": "Córdoba",
+              "postalCode": "14005",
+              "sections": []
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
