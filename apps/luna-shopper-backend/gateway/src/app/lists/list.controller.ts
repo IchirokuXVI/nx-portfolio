@@ -435,6 +435,7 @@ export class ListsController {
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       productGroupId: dto.productGroupId,
+      named: dto.named,
     });
   }
 
@@ -524,6 +525,7 @@ export class LinesController {
       // `undefined` here and is dropped on the way to core.
       favoriteItemId: dto.favoriteItemId,
       preferredSupermarketId: dto.preferredSupermarketId,
+      named: dto.named,
       confirmMerge: dto.confirmMerge,
     });
   }

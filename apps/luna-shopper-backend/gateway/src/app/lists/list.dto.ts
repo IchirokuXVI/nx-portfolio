@@ -10,7 +10,7 @@ import {
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -164,6 +164,19 @@ export class AddLinesItemDto {
   @ArrayMaxSize(LINE_ITEM_SET_MAX)
   @IsUUID(undefined, { each: true })
   itemIds?: string[];
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is.',
+  })
+  // The value as the body spelled it. The pipe converts implicitly, and that
+  // conversion reads the string "false" as true, which here would name a line
+  // nobody named. Only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
 }
 
 /**
@@ -299,6 +312,16 @@ export class UpdateLineDto {
   @IsOptional()
   @IsUUID()
   preferredSupermarketId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether a person typed the name of the line (plan 0207). Absent beside a content, the line becomes named. Absent with no content, the flag stays as it is. False beside a content takes the name away, and the content is then the name of a product; a content that another line of the list holds still answers 409 line_merge_required. False alone changes the flag and leaves the name. A line that the update leaves with no product is named, whatever this says.',
+  })
+  // As on the add: only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
 
   @ApiPropertyOptional({
     description:

@@ -331,6 +331,18 @@ export interface LineView {
    */
   preferredSupermarketId: string | null;
   /**
+   * Whether a person typed the name of this line (plan 0207, section 1).
+   *
+   * False means that {@link content} is the name a product had when the line
+   * was made, and no person chose it. `content` is present and is read as
+   * before in both cases: this is a fact beside the name and not a second name.
+   *
+   * **A line with no product is always named**, so a reader that draws the
+   * product in place of the name of a line that is not named always has one.
+   * Every line that existed before this plan says true.
+   */
+  named: boolean;
+  /**
    * A digest of the sorted distinct {@link itemIds}, or null while the set is
    * empty (plan 0048, section 1.1).
    *
@@ -664,6 +676,8 @@ export interface AddLineRequest {
    * composer.
    */
   productGroupId?: string;
+  /** The same flag {@link AddLinesItem} carries. */
+  named?: boolean;
 }
 
 /**
@@ -691,6 +705,15 @@ export interface AddLinesItem {
   quantity?: number;
   /** The same product set {@link AddLineRequest} carries. */
   itemIds?: string[];
+  /**
+   * Whether a person typed {@link content} (plan 0207, section 1.3). Absent
+   * means true, which is what every caller written before the flag sends.
+   *
+   * False is kept only when the line holds a product: a line with no product
+   * is always named. An add that raises a line that is already there leaves the
+   * flag of that line as it is.
+   */
+  named?: boolean;
 }
 
 /**
@@ -771,6 +794,21 @@ export interface UpdateLineRequest {
    * else.
    */
   preferredSupermarketId?: string | null;
+  /**
+   * Whether a person typed the name of the line (plan 0207, section 1.3).
+   *
+   * - **Absent with `content`**: the line becomes named. A write of a name
+   *   that says nothing else means a person typed it.
+   * - **Absent with no `content`**: the flag stays as it is.
+   * - **False with `content`**: the name is taken away, and `content` is the
+   *   name of a product. A new name that another line holds still collides as
+   *   every rename does.
+   * - **False alone**: the flag changes and the name stays.
+   *
+   * A line that this update leaves with no product is named, whatever this
+   * says.
+   */
+  named?: boolean;
   /**
    * Merge this line with the line the new name already belongs to (plan 0112,
    * section 2).

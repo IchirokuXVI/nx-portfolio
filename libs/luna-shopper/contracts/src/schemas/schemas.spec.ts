@@ -369,6 +369,8 @@ describe('contract schemas', () => {
             // A new line names no favourite and no chain (plan 0199, rule 7).
             favoriteItemId: null,
             preferredSupermarketId: null,
+            // A line with no product is always named (plan 0207, rule 1).
+            named: true,
             position: 1,
             approvalStatus: 'PENDING',
             createdByUserId: 'u',
@@ -412,6 +414,8 @@ describe('contract schemas', () => {
             // (plan 0199, section 1).
             favoriteItemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
             preferredSupermarketId: '5d0e7a91-3c44-4b1e-9f27-000000000001',
+            // Made from that product, and nobody typed its name (plan 0207).
+            named: false,
             position: 1,
             approvalStatus: 'APPROVED',
             createdByUserId: 'u',
@@ -1429,6 +1433,7 @@ describe('contract schemas', () => {
         groupItemIds: [],
         favoriteItemId: null,
         preferredSupermarketId: null,
+        named: true,
         position: 1,
         approvalStatus: 'PENDING',
         createdByUserId: 'u',
@@ -1442,12 +1447,58 @@ describe('contract schemas', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
       expect(validateMessageResponse('line.update', line).valid).toBe(true);
-      for (const field of ['favoriteItemId', 'preferredSupermarketId']) {
+      // `named` since plan 0207: required for the reason the other two are.
+      for (const field of [
+        'favoriteItemId',
+        'preferredSupermarketId',
+        'named',
+      ]) {
         const { [field]: _dropped, ...without } = line as Record<
           string,
           unknown
         >;
         expect(validateMessageResponse('line.update', without).valid).toBe(
+          false
+        );
+      }
+      // A boolean and nothing else: null would read as "not named" on a client.
+      expect(
+        validateMessageResponse('line.update', { ...line, named: null }).valid
+      ).toBe(false);
+    });
+
+    it('every write of a line takes an optional boolean `named` (plan 0207)', () => {
+      const add = { userId: 'u', listId: 'li', content: 'Oat drink' };
+      const requests: [string, Record<string, unknown>][] = [
+        ['line.add', add],
+        ['line.addMany', { userId: 'u', listId: 'li', items: [] }],
+        ['line.update', { userId: 'u', lineId: 'l' }],
+        [
+          'basket.line.add',
+          {
+            basketId: 'b',
+            participantId: 'p',
+            userId: 'u',
+            targetListId: 'li',
+            content: 'Oat drink',
+          },
+        ],
+      ];
+      for (const [pattern, base] of requests) {
+        const withFlag = (named: unknown) =>
+          pattern === 'line.addMany'
+            ? { ...base, items: [{ content: 'Oat drink', named }] }
+            : { ...base, named };
+        const without =
+          pattern === 'line.addMany'
+            ? { ...base, items: [{ content: 'Oat drink' }] }
+            : base;
+
+        expect(validateMessageRequest(pattern, without).valid).toBe(true);
+        expect(validateMessageRequest(pattern, withFlag(false)).valid).toBe(
+          true
+        );
+        expect(validateMessageRequest(pattern, withFlag('no')).valid).toBe(
           false
         );
       }

@@ -771,6 +771,7 @@ const addLineRequest = object(
     content: nonEmptyString(),
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
     itemIds: array(nonEmptyString()),
+    named: boolean(),
   },
   ['basketId', 'participantId', 'userId', 'targetListId', 'content']
 );

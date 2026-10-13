@@ -867,6 +867,11 @@ export interface AddBasketLineRequest {
   content: string;
   quantity?: number;
   itemIds?: string[];
+  /**
+   * Whether a person typed {@link content} (plan 0207, section 1.3). Handed to
+   * the add of a list line as it arrived, and absent means true.
+   */
+  named?: boolean;
 }
 
 /**

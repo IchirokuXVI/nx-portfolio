@@ -87,6 +87,7 @@ import {
   LineMergeService,
   mergedItemIds,
 } from './line-merge.service';
+import { namedAfterEdit, namedOnAdd } from './line-named';
 import { ListAccessService } from './list-access.service';
 import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
@@ -206,6 +207,12 @@ interface LineEdit {
   favoriteItemId?: string | null;
   preferredSupermarketId?: string | null;
   /**
+   * Whether a person typed the name (plan 0207, section 1.3). Absent beside a
+   * `content` names the line, and absent alone leaves the flag as it is. The
+   * operator path never names it, so the edit of an operator is the first case.
+   */
+  named?: boolean;
+  /**
    * Whether a rename that collides may merge (plan 0112, section 2). Only a
    * member's edit can say so: the operator path names no such field, so an
    * operator's colliding rename is refused rather than merged or duplicated.
@@ -244,9 +251,10 @@ interface LineWriter {
  * Whether an edit names the quantity of a line and nothing else about it (plan
  * 0204, section 3).
  *
- * An edit that also names the text, the products, the favourite or the chain
- * is not one, even when it leaves them as they were: the question is what the
- * request may have moved, and the answer has to be safe without a comparison.
+ * An edit that also names the text, the products, the favourite, the chain or
+ * the flag of plan 0207 is not one, even when it leaves them as they were: the
+ * question is what the request may have moved, and the answer has to be safe
+ * without a comparison.
  */
 function movesQuantityAlone(req: LineEdit): boolean {
   return (
@@ -255,7 +263,8 @@ function movesQuantityAlone(req: LineEdit): boolean {
     req.itemIds === undefined &&
     (req.adoptItemIds ?? []).length === 0 &&
     req.favoriteItemId === undefined &&
-    req.preferredSupermarketId === undefined
+    req.preferredSupermarketId === undefined &&
+    req.named === undefined
   );
 }
 
@@ -1181,6 +1190,11 @@ export class LineService {
    * approval question differently from a single add. The two flags are resolved
    * once per request by the caller, because they are properties of the adder and
    * of the list rather than of the item.
+   *
+   * It also decides the flag of plan 0207 for both: `named: false` is kept only
+   * on a line that holds a product. A batch item that folds into a line this
+   * batch creates contributes its quantity alone, so the flag of the created
+   * line is the flag of the first item that named it.
    */
   private newLine(
     item: AddLinesItem,
@@ -1194,6 +1208,7 @@ export class LineService {
       listId,
       productGroupId,
       content: item.content,
+      named: namedOnAdd(item.named, (item.itemIds ?? []).length > 0),
       quantity: this.validateQuantity(item.quantity ?? 1),
       // The digest is a property of the set alone, so it can be stamped on the
       // row before the join rows exist (plan 0048, section 1.1).
@@ -1378,6 +1393,9 @@ export class LineService {
    * somebody asking for more of it has not changed what they agreed to.
    *
    * ## What it leaves alone
+   *
+   * The flag of plan 0207: an add that raises a line leaves `named` as that
+   * line has it (section 1.3), whatever the request said about the name.
    *
    * The line's products and its group. An add only reaches here for a line
    * that already means what the request means ({@link lineIdentities}), so there
@@ -1704,6 +1722,10 @@ export class LineService {
     }
     // The favourite and the chain (plan 0199). Neither is part of the hash.
     await this.applyLineChoices(line, req, nextItemIds, manager);
+    // Whether a person typed the name (plan 0207, section 1.2). The hash is
+    // null exactly while the line holds no product, and it already says what
+    // this edit leaves.
+    line.named = namedAfterEdit(line.named, req, line.itemSetHash !== null);
     this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
@@ -1905,6 +1927,12 @@ export class LineService {
           if (nextItemIds !== undefined) {
             line.itemSetHash = itemSetHash(nextItemIds);
           }
+          // After the hash, which then says what this edit leaves (plan 0207).
+          line.named = namedAfterEdit(
+            line.named,
+            req,
+            line.itemSetHash !== null
+          );
           this.reopenAfterEdit(line, locked, permissions);
           line.version += 1;
           const written = await this.writeEdit(
@@ -1965,6 +1993,11 @@ export class LineService {
         if (quantity !== undefined) {
           line.quantity = quantity;
         }
+        // The rule of this write, on the renamed line (plan 0207, section 1.3).
+        // The merge then names the survivor when either line is named: a rename
+        // with no flag leaves it named, and `named: false` leaves it with the
+        // flag of the line the name already belonged to.
+        line.named = namedAfterEdit(line.named, req, lineItemIds.length > 0);
         const [survivor, absorbed] = isEarlierLine(line, target)
           ? [line, target]
           : [target, line];
@@ -2341,6 +2374,9 @@ export class LineService {
         const line = await load(step.lineId);
         const before = snapshotOf(line);
         line.content = plan.content;
+        // A basket row rename sends a name and no flag, so a person typed it
+        // (plan 0207, section 1.2, rule 2).
+        line.named = true;
         this.reopenAfterEdit(line, plan.list, plan.permissions);
         line.version += 1;
         const saved = await repo.save(line);
@@ -2363,8 +2399,10 @@ export class LineService {
       const absorbedBefore = snapshotOf(absorbed);
       // The renamed line carries the new spelling into the merge, which keeps it
       // only when the renamed line is the survivor (plan 0112, section 3).
-      (survivor.id === step.renamedId ? survivor : absorbed).content =
-        plan.content;
+      const renamed = survivor.id === step.renamedId ? survivor : absorbed;
+      renamed.content = plan.content;
+      // Rule 2 of plan 0207, as in the step above. The merge reads it.
+      renamed.named = true;
       // The merge records its own step, as it does for a single line's rename.
       await this.merges.merge(manager, survivor, absorbed, {
         list: listRef,
@@ -2774,7 +2812,10 @@ export class LineService {
       // Guarded as `itemIds` is (plan 0199, section 2, rule 5): a request that
       // names either one drops through to the write check.
       req.favoriteItemId === undefined &&
-      req.preferredSupermarketId === undefined
+      req.preferredSupermarketId === undefined &&
+      // The flag of plan 0207 is about the name, so it is guarded as the
+      // content is.
+      req.named === undefined
     ) {
       return;
     }
@@ -3082,6 +3123,8 @@ export class LineService {
         // A line with no products has no favourite (plan 0199, section 2, rule
         // 2). The chain stays, because only an update clears it.
         favoriteItemId: null,
+        // And it is named (plan 0207, section 1.2, rule 1).
+        named: true,
         deletedByUserId,
       }
     );

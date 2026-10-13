@@ -30,6 +30,7 @@ export type AddBasketLineDto = {
   content: string;
   quantity?: number;
   itemIds?: string[];
+  named?: boolean;
 };
 
 /**
@@ -83,6 +84,7 @@ export type AddLineDto = {
   content: string;
   quantity?: number;
   itemIds?: string[];
+  named?: boolean;
   productGroupId?: string;
 };
 
@@ -107,6 +109,7 @@ export type AddLinesItemDto = {
   content: string;
   quantity?: number;
   itemIds?: string[];
+  named?: boolean;
 };
 
 /**
@@ -538,6 +541,7 @@ export type LoginDto = {
  */
 export type LookupItemsDto = {
   ids: string[];
+  prices?: boolean;
 };
 
 /**
@@ -1164,6 +1168,7 @@ export type UpdateLineDto = {
   adoptItemIds?: string[];
   favoriteItemId?: string | null;
   preferredSupermarketId?: string | null;
+  named?: boolean;
   confirmMerge?: boolean;
 };
 
@@ -2641,6 +2646,14 @@ export type CatalogItemLinkedImageView = {
  */
 export type CatalogItemLinkedImagesView = {
   images: CatalogItemLinkedImageView[];
+};
+
+/**
+ * `catalog.ItemLookupResponse` in the gateway's OpenAPI document.
+ */
+export type CatalogItemLookupResponse = {
+  items: CatalogItemView[];
+  scopes?: CatalogPriceScopeChainView[];
 };
 
 /**
@@ -5029,6 +5042,7 @@ export type ListLineView = {
   groupItemIds: string[];
   favoriteItemId: string | null;
   preferredSupermarketId: string | null;
+  named: boolean;
   position: number;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;
@@ -5175,6 +5189,7 @@ export type ListUpdateLineResult = {
   groupItemIds: string[];
   favoriteItemId: string | null;
   preferredSupermarketId: string | null;
+  named: boolean;
   position: number;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;
@@ -5255,13 +5270,6 @@ export type MsgBrandRegisterManyResponse = {
  * `msg.item.createMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemCreateManyResponse = {
-  items: CatalogItemView[];
-};
-
-/**
- * `msg.item.getMany.response` in the gateway's OpenAPI document.
- */
-export type MsgItemGetManyResponse = {
   items: CatalogItemView[];
 };
 

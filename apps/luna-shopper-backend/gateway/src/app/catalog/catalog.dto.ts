@@ -74,6 +74,23 @@ export class LookupItemsDto {
   @ArrayMaxSize(ITEM_LOOKUP_LIMITS.maxIds)
   @IsUUID('all', { each: true })
   ids!: string[];
+
+  /**
+   * It takes no scope, no postal code and no profile (plan 0207, section 2). A
+   * reader sees the prices of the profile they shop with, which is what the
+   * catalog tab shows them.
+   */
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Answer prices with the products (plan 0207). With true, every item carries bestOffer and offers, read at the price scopes of your default profile, and the answer names the chain of each of those scopes in scopes. An item with no price there is still in the answer, with a null bestOffer. With no scope at all, every item comes back with no offer. Neither case is an error. Absent or false, the answer is the products alone.',
+  })
+  // The value as the body spelled it, so only a JSON true or false passes. The
+  // pipe would otherwise read the string "false" as true.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['prices'])
+  @IsOptional()
+  @IsBoolean()
+  prices?: boolean;
 }
 
 const LOCALIZED_TEXT_MAX_LENGTH = 200;

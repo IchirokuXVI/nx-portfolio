@@ -122,6 +122,9 @@ export function toLineView(
     // was built by hand and not read from the table, which has no such property.
     favoriteItemId: line.favoriteItemId ?? null,
     preferredSupermarketId: line.preferredSupermarketId ?? null,
+    // True and never absent (plan 0207, section 1.5), which is what the column
+    // defaults to. The `??` is for a line that was built by hand.
+    named: line.named ?? true,
     position: line.position,
     approvalStatus: line.approvalStatus,
     createdByUserId: line.createdByUserId,

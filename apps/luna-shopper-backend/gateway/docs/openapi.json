@@ -15022,102 +15022,6 @@
         ]
       }
     },
-    "/v1/catalog/items/lookup": {
-      "post": {
-        "operationId": "CatalogItemsController_lookup_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LookupItemsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `item.getMany` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.item.getMany.response"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "catalog"
-        ]
-      }
-    },
     "/v1/catalog/items/{id}": {
       "get": {
         "operationId": "CatalogItemsController_get_v1",
@@ -15407,6 +15311,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemPriceHistoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/items/lookup": {
+      "post": {
+        "operationId": "CatalogItemLookupController_lookup_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The products that exist, in no promised order. An id that names nothing is absent. With prices true, every item carries bestOffer and offers, and scopes names the chain of each scope those offers quote.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemLookupResponse"
                 }
               }
             }
@@ -29159,6 +29159,11 @@
               "format": "uuid"
             }
           },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is."
+          },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
@@ -29189,6 +29194,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is."
           }
         },
         "required": [
@@ -29267,6 +29277,10 @@
             "format": "uuid",
             "nullable": true,
             "description": "The supermarket chain the line is bought at (plan 0199). A chain and never a shop. Null clears it, and an absent field leaves it alone. It does not depend on the products of the line."
+          },
+          "named": {
+            "type": "boolean",
+            "description": "Whether a person typed the name of the line (plan 0207). Absent beside a content, the line becomes named. Absent with no content, the flag stays as it is. False beside a content takes the name away, and the content is then the name of a product; a content that another line of the list holds still answers 409 line_merge_required. False alone changes the flag and leaves the name. A line that the update leaves with no product is named, whatever this says."
           },
           "confirmMerge": {
             "type": "boolean",
@@ -29690,6 +29704,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product."
           }
         },
         "required": [
@@ -29900,6 +29919,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "prices": {
+            "type": "boolean",
+            "default": false,
+            "description": "Answer prices with the products (plan 0207). With true, every item carries bestOffer and offers, read at the price scopes of your default profile, and the answer names the chain of each of those scopes in scopes. An item with no price there is still in the answer, with a null bestOffer. With no scope at all, every item comes back with no offer. Neither case is an error. Absent or false, the answer is the products alone."
           }
         },
         "required": [
@@ -36617,6 +36641,27 @@
           "enabled",
           "firstLinkedAt",
           "lastSeenAt"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLookupResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PriceScopeChainView"
+            }
+          }
+        },
+        "required": [
+          "items"
         ],
         "additionalProperties": false
       },
@@ -43697,6 +43742,9 @@
               "null"
             ]
           },
+          "named": {
+            "type": "boolean"
+          },
           "position": {
             "type": "integer"
           },
@@ -43759,6 +43807,7 @@
           "groupItemIds",
           "favoriteItemId",
           "preferredSupermarketId",
+          "named",
           "position",
           "approvalStatus",
           "createdByUserId",
@@ -44188,6 +44237,9 @@
               "null"
             ]
           },
+          "named": {
+            "type": "boolean"
+          },
           "position": {
             "type": "integer"
           },
@@ -44254,6 +44306,7 @@
           "groupItemIds",
           "favoriteItemId",
           "preferredSupermarketId",
+          "named",
           "position",
           "approvalStatus",
           "createdByUserId",
@@ -44425,21 +44478,6 @@
         "additionalProperties": false
       },
       "msg.item.createMany.response": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/catalog.ItemView"
-            }
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "additionalProperties": false
-      },
-      "msg.item.getMany.response": {
         "type": "object",
         "properties": {
           "items": {

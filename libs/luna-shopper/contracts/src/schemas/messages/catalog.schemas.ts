@@ -125,6 +125,7 @@ export const CATALOG_SCHEMA_IDS = {
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   priceScopeChainView: schemaId('catalog/PriceScopeChainView'),
+  itemLookupResponse: schemaId('catalog/ItemLookupResponse'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
   updateProductGroupRequest: schemaId('msg/productGroup.update/request'),
   productGroupIdRequest: schemaId('msg/productGroup.id/request'),
@@ -2033,6 +2034,20 @@ const getItemsResult = object(
   ['items']
 );
 
+/**
+ * What the lookup route answers (plan 0207, section 2): the items, and the
+ * chain behind every scope their offers name when the request asked for
+ * prices. `scopes` is absent on a request that asked for none.
+ */
+const itemLookupResponse = object(
+  CATALOG_SCHEMA_IDS.itemLookupResponse,
+  {
+    items: array(ref(CATALOG_SCHEMA_IDS.itemView)),
+    scopes: array(ref(CATALOG_SCHEMA_IDS.priceScopeChainView)),
+  },
+  ['items']
+);
+
 const searchItemsRequest = object(
   CATALOG_SCHEMA_IDS.searchItemsRequest,
   {
@@ -3473,6 +3488,7 @@ export const catalogSchemas: JsonSchema[] = [
   applyGroupAssignmentsResult,
   getItemsRequest,
   getItemsResult,
+  itemLookupResponse,
   searchItemsRequest,
   searchOffersRequest,
   createProductGroupRequest,

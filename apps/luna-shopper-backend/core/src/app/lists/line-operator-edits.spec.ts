@@ -96,6 +96,9 @@ function build(
     id: 'li1',
     listId: LIST_ID,
     content: 'Tinned tomatoes',
+    // What the column says for a line a person typed (plan 0207). Stated, or
+    // the trail would record the flag as a field that an edit moved.
+    named: true,
     quantity: 3,
     itemSetHash: null,
     productGroupId: null,
@@ -577,6 +580,8 @@ describe('an operator delete of a line', () => {
           productGroupId: null,
           // The products went, so the favourite goes too (plan 0199, rule 2).
           favoriteItemId: null,
+          // And a line with no product is named (plan 0207, rule 1).
+          named: true,
           deletedByUserId: null,
         },
       },
