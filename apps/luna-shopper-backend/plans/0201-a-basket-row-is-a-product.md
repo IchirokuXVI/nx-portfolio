@@ -1,3 +1,5 @@
+> **PR:** [#702](https://github.com/IchirokuXVI/nx-portfolio/pull/702)
+
 # 0201: a basket row is a product
 
 > Asked for by the owner on 2026-10-11: "The basket currently merges all lines with the same
