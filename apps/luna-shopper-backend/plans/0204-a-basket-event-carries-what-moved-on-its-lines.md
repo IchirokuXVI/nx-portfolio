@@ -1,3 +1,5 @@
+> **PR:** [#699](https://github.com/IchirokuXVI/nx-portfolio/pull/699)
+
 # 0204: a basket event carries what moved on its lines
 
 > Reported by the owner on 2026-10-11: "The sync time between two devices is about 2 to 3
