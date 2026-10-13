@@ -1,3 +1,5 @@
+> **PR:** [#700](https://github.com/IchirokuXVI/nx-portfolio/pull/700)
+
 # 0194: an operator opens the app as a user
 
 > Asked for by the owner on 2026-10-07. A person reports a bug that happens only with the
