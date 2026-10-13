@@ -121,6 +121,8 @@ interface World {
   fails?: Failure;
   /** The participant was removed after the guard resolved them. */
   removed?: boolean;
+  /** No line needs a price: each has one product, a favourite or a buy. */
+  nothingToPrice?: boolean;
 }
 
 const PEOPLE: Record<Reader, BasketParticipantView> = {
@@ -459,7 +461,9 @@ function build(world: World) {
         return {
           basketId: BASKET_ID,
           participantId: PEOPLE[world.reader].id,
-          lines: [{ lineId: 'l-two', itemIds: ['i-oat', 'i-soy'] }],
+          lines: world.nothingToPrice
+            ? []
+            : [{ lineId: 'l-two', itemIds: ['i-oat', 'i-soy'] }],
         };
       case BASKET_PATTERNS.searchScope:
         refuseRemoved();
@@ -867,5 +871,165 @@ describe('the basket reads answer what they answered (plan 0205, section 4)', ()
         expect((await answerOf(name)).rows).toHaveLength(4);
       }
     });
+  });
+});
+
+/**
+ * The rows alone (plan 0205, section 3).
+ *
+ * `GET /v1/baskets/:id/rows` and `GET /v1/baskets/live/rows` answer what core
+ * computes and stop. Each test makes the full read and the rows read over the
+ * same world and compares them, so the two cannot drift apart.
+ */
+describe('the rows alone (plan 0205, section 3)', () => {
+  /** What catalog is asked only to compose, which a rows read never asks. */
+  const COMPOSITION: string[] = [
+    SECTION_PATTERNS.itemsAtLocation,
+    SUPERMARKET_PATTERNS.list,
+    SUPERMARKET_LOCATION_PATTERNS.list,
+  ];
+
+  /** The full answer with the catalog half taken off. */
+  const coreHalfOf = (full: BasketResult): BasketView => {
+    const { products: _products, shop: _shop, scopes: _scopes, ...rest } = full;
+    return rest;
+  };
+
+  const queryOf = (locationId: string | undefined) =>
+    locationId ? { locationId } : undefined;
+
+  describe.each([
+    ['with no shop', undefined],
+    ['at a shop', SHOP],
+  ] as const)('%s', (_title, locationId) => {
+    it.each(['owner', 'member', 'guest'] as const)(
+      ':id/rows answers a %s the rows, the lists, the people, the progress and the marks of the full read',
+      async (reader) => {
+        const full = await build({ reader }).controller.get(
+          participantOf(reader),
+          BASKET_ID,
+          queryOf(locationId)
+        );
+        const { controller, subjects } = build({ reader });
+        const rows = await controller.rows(
+          participantOf(reader),
+          BASKET_ID,
+          queryOf(locationId)
+        );
+
+        expect(wire(rows)).toEqual(wire(coreHalfOf(full)));
+        // The fields a client reads after an event, named so that a view
+        // that loses one fails here by its name.
+        expect(rows.rows).toHaveLength(4);
+        expect(rows.participants).toHaveLength(3);
+        expect(rows.progress).toEqual(full.progress);
+        expect(rows.unseenChangeCount).toBe(2);
+        expect(rows.newestUnseenChangeId).toBe('change-9');
+        expect(rows).not.toHaveProperty('products');
+        expect(rows).not.toHaveProperty('scopes');
+        expect(rows).not.toHaveProperty('shop');
+        // It stops at the rows.
+        expect(subjects[subjects.length - 1]).toBe(BASKET_PATTERNS.get);
+        expect(subjects.filter((one) => COMPOSITION.includes(one))).toEqual([]);
+      }
+    );
+
+    it('live/rows answers the owner the same half of the live read', async () => {
+      const user = { userId: OWNER, kind: 'REGISTERED' } as never;
+      const full = await build({ reader: 'owner' }).live.live(
+        user,
+        queryOf(locationId)
+      );
+      const { live, subjects } = build({ reader: 'owner' });
+      const rows = await live.liveRows(user, queryOf(locationId));
+
+      expect(wire(rows)).toEqual(wire(coreHalfOf(full)));
+      expect(subjects[subjects.length - 1]).toBe(BASKET_PATTERNS.live);
+      expect(subjects.filter((one) => COMPOSITION.includes(one))).toEqual([]);
+    });
+  });
+
+  it('counts a line of two products as the cheapest, as the full read does', async () => {
+    const none = await build({ reader: 'owner' }).controller.rows(
+      participantOf('owner'),
+      BASKET_ID
+    );
+    const shop = await build({ reader: 'owner' }).controller.rows(
+      participantOf('owner'),
+      BASKET_ID,
+      { locationId: SHOP }
+    );
+
+    expect(none.rows[1].productId).toBe('i-soy');
+    expect(shop.rows[1].productId).toBe('i-oat');
+    // `usual` is counted at the chain of the shop, so it needs the shop.
+    expect(none.rows[0].usual).toBeNull();
+    expect(shop.rows[0].usual).not.toBeNull();
+  });
+
+  it('asks core three questions and catalog none when no line needs a price', async () => {
+    const { controller, subjects } = build({
+      reader: 'guest',
+      nothingToPrice: true,
+    });
+
+    await controller.rows(participantOf('guest'), BASKET_ID);
+
+    expect([...subjects].sort()).toEqual(
+      [
+        BASKET_PATTERNS.searchScope,
+        BASKET_PATTERNS.priceChoices,
+        BASKET_PATTERNS.get,
+      ].sort()
+    );
+  });
+
+  it('asks core two questions for the live rows when no line needs a price', async () => {
+    const { live, subjects } = build({ reader: 'owner', nothingToPrice: true });
+
+    await live.liveRows({ userId: OWNER, kind: 'REGISTERED' } as never);
+
+    expect(subjects).toEqual([
+      BASKET_PATTERNS.livePriceChoices,
+      BASKET_PATTERNS.live,
+    ]);
+  });
+
+  it('refuses another shop on a basket that was started at one', async () => {
+    const { controller } = build({ reader: 'owner', basketShop: OWN_SHOP });
+
+    await expect(
+      controller.rows(participantOf('owner'), BASKET_ID, { locationId: SHOP })
+    ).rejects.toThrow('This basket was started at another shop');
+  });
+
+  it('still refuses another shop when core could not say where the basket was started', async () => {
+    const { controller } = build({
+      reader: 'owner',
+      basketShop: OWN_SHOP,
+      fails: 'core: searchScope',
+    });
+
+    await expect(
+      controller.rows(participantOf('owner'), BASKET_ID, { locationId: SHOP })
+    ).rejects.toThrow('This basket was started at another shop');
+  });
+
+  it('refuses a participant who was removed after the guard', async () => {
+    const { controller } = build({ reader: 'guest', removed: true });
+
+    await expect(
+      controller.rows(participantOf('guest'), BASKET_ID)
+    ).rejects.toBeInstanceOf(NotAParticipantException);
+  });
+
+  it.each(FAILURES)('keeps its four rows when %s fails', async (fails) => {
+    const rows = await build({ reader: 'owner', fails }).controller.rows(
+      participantOf('owner'),
+      BASKET_ID,
+      { locationId: SHOP }
+    );
+
+    expect(rows.rows).toHaveLength(4);
   });
 });

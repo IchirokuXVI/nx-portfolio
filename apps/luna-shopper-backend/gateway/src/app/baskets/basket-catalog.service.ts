@@ -16,8 +16,10 @@ import {
   type CatalogScopeView,
   type CatalogSuggestResponse,
   type GetBasketPriceChoicesRequest,
+  type GetBasketRequest,
   type GetItemsRequest,
   type GetItemsResult,
+  type GetLiveBasketRequest,
   type ItemSectionsAtLocationRequest,
   type ItemSectionsAtLocationView,
   type ItemView,
@@ -77,6 +79,24 @@ export interface BasketReadPrices {
   priceScopeIds: string[];
   /** Every product of the priced lines, with the offer of every scope. */
   items: ItemView[];
+}
+
+/**
+ * The rows of a basket as core answered them, and what the gateway learned to
+ * ask for them (plan 0205, section 3).
+ *
+ * The rows read answers `basket` and stops. The full read hands the other two
+ * to {@link BasketCatalogService.compose}, so nothing is asked a second time.
+ */
+export interface BasketRowsRead {
+  basket: BasketView;
+  /**
+   * What core answered `basket.searchScope` with: null when that failed, and
+   * undefined when the read did not need to ask.
+   */
+  searchScope: BasketSearchScope | null | undefined;
+  /** What was priced before the rows, or null when nothing was. */
+  prices: BasketReadPrices | null;
 }
 
 /**
@@ -229,6 +249,95 @@ export class BasketCatalogService {
         ? withShopInScopes(described, shop, basket.servesLocations)
         : described,
     };
+  }
+
+  /**
+   * The rows of a basket as one participant reads them, and what was learned
+   * on the way (plan 0201, section 1; plan 0205, section 3).
+   *
+   * The first half of the full read, and the whole of the rows read. In order:
+   * the shop of the read beside the lines that need a price, then the prices
+   * of those lines, then core's read of the rows with a pick for each.
+   *
+   * A basket started at another shop refuses `locationId` with
+   * `basket_shop_locked`, before anything is priced.
+   */
+  async rowsOf(
+    basketId: string,
+    participantId: string,
+    locationId: string | undefined
+  ): Promise<BasketRowsRead> {
+    // Beside each other, because neither needs the other. A basket started at
+    // another shop is refused by the first, before anything is priced.
+    const [{ searchScope, supermarketId, shopId, shop }, choices] =
+      await Promise.all([
+        this.readShopOf(basketId, participantId, locationId),
+        this.priceChoicesOf(basketId, participantId),
+      ]);
+    const prices = await this.pricesFor(
+      choices?.lines ?? [],
+      searchScope,
+      shopId,
+      shop
+    );
+    const req: GetBasketRequest = {
+      basketId,
+      participantId,
+      ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
+    };
+    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
+    // Asked of core's own view too, so the lock holds when the question about
+    // the shop above failed. The composition asks it the same way, and the
+    // rows read has no composition to ask it.
+    const own = basket.supermarketLocationId ?? null;
+    if (own && locationId && locationId !== own) {
+      throw new BasketShopLockedException(
+        'This basket was started at another shop'
+      );
+    }
+    return { basket, searchScope, prices };
+  }
+
+  /**
+   * The same for the permanent basket of an account, which core creates the
+   * first time it is asked (plan 0136, section 4).
+   *
+   * `locationId` is the shop the device chose, which is the only way the shop
+   * of a `LIVE` basket reaches the server (plan 0163; velista 0091, section
+   * 7). The permanent basket never has one of its own, so it is never locked.
+   */
+  async liveRowsOf(
+    userId: string,
+    locationId: string | undefined
+  ): Promise<BasketRowsRead> {
+    // Beside each other, because neither needs the other. The shop gives its
+    // chain, so each row says whether it is usually bought there (plan 0165).
+    // The other question creates the basket and answers the lines whose
+    // product only a price can choose (plan 0201, section 1).
+    const [shop, choices] = await Promise.all([
+      locationId ? this.shopAt(locationId, []) : null,
+      this.livePriceChoicesOf(userId),
+    ]);
+    // Asked here only when a line needs a price, because the scopes that
+    // count are the owner's. Otherwise the composition asks it, as it always
+    // did, and the rows read does not ask it at all.
+    const searchScope =
+      choices && choices.lines.length > 0
+        ? await this.searchScopeOf(choices.basketId, choices.participantId)
+        : undefined;
+    const prices =
+      choices && searchScope !== undefined
+        ? await this.pricesFor(choices.lines, searchScope, locationId, shop)
+        : null;
+    const supermarketId = shop?.supermarket.id;
+    const req: GetLiveBasketRequest = {
+      userId,
+      ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
+    };
+    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
+    return { basket, searchScope, prices };
   }
 
   /**
@@ -747,6 +856,18 @@ export class BasketCatalogService {
       return null;
     }
   }
+}
+
+/**
+ * The picks a read of the rows carries, when the pricing chose any.
+ *
+ * Absent rather than empty when nothing was priced, so a basket with no line
+ * that needs a price sends core the request it always sent.
+ */
+function picksOn(prices: BasketReadPrices | null): {
+  picks?: BasketLinePick[];
+} {
+  return prices && prices.picks.length > 0 ? { picks: prices.picks } : {};
 }
 
 /**
