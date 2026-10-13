@@ -1,3 +1,4 @@
+import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import {
   BasketKind,
   BasketRowState,
@@ -186,13 +187,15 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       baskets,
       context,
       claims as never,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
     revertService = new BasketRevertService(
       dataSource,
       context,
       claims as never,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
 
     const zones = dataSource.getRepository(Zone);

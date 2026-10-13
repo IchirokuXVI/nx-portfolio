@@ -1,3 +1,4 @@
+import { LineChangeRecorder } from '../../lists/changes/line-change.recorder';
 import {
   BASKET_CHANGE_LIMITS,
   BasketKind,
@@ -184,13 +185,15 @@ describeIntegration(
         baskets,
         context,
         claims,
-        events
+        events,
+        new LineChangeRecorder()
       );
       revertService = new BasketRevertService(
         dataSource,
         context,
         claims,
-        events
+        events,
+        new LineChangeRecorder()
       );
       skipService = new BasketSkipService(dataSource, context, claims, events);
 
@@ -933,8 +936,8 @@ describeIntegration(
 
     // --- what a purchase, a revert and a skip record ------------------------
 
-    describe('a purchase records no change', () => {
-      it('writes none for a settle, a revert or a skip', async () => {
+    describe('what a purchase records (plan 0203, section 1)', () => {
+      it('writes one change for a buy and one for a buy taken back, and marks nothing in their own basket', async () => {
         const listId = await list('Shopping');
         const milk = await line(listId, 'Milk', 2);
         const { basket: held, participantId } = await basket([listId]);
@@ -955,6 +958,52 @@ describeIntegration(
           units: 1,
           from: 1,
         });
+
+        const recorded = await dataSource
+          .getRepository(ListLineChange)
+          .find({ where: { listId }, order: { createdAt: 'ASC', id: 'ASC' } });
+        expect(recorded.map((row) => row.kind)).toEqual([
+          LineChangeKind.BOUGHT,
+          LineChangeKind.BUY_REVERTED,
+        ]);
+        expect(recorded[0]).toMatchObject({
+          quantityBefore: 2,
+          quantityAfter: 1,
+          actorParticipantId: participantId,
+          basketId: held.id,
+        });
+        expect(recorded[1]).toMatchObject({
+          quantityBefore: 1,
+          quantityAfter: 2,
+          actorParticipantId: participantId,
+          basketId: held.id,
+        });
+
+        // An own buy is not marked: a buy is shown to every basket but the one
+        // it was made through.
+        const drawn = await view(held, participantId);
+        expect(drawn.rows[0].mark).toBeNull();
+        expect(drawn.unseenChangeCount).toBe(0);
+      });
+
+      it('writes none for "they had none", a close taken back or a skip (test 9)', async () => {
+        const listId = await list('Shopping');
+        const milk = await line(listId, 'Milk', 2);
+        const { basket: held, participantId } = await basket([listId]);
+
+        await settleService.settle({
+          basketId: held.id,
+          participantId,
+          rowKey: milk.id,
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          from: 2,
+        });
+        await revertService.revert({
+          basketId: held.id,
+          participantId,
+          rowKey: milk.id,
+          target: 'CLOSE',
+        });
         await skipService.skip({
           basketId: held.id,
           participantId,
@@ -966,8 +1015,8 @@ describeIntegration(
           rowKey: milk.id,
         });
 
-        // A shopper buying a thing, taking that back, and putting it off is not
-        // the household changing what it asked for (plan 0130, section 11).
+        // None of the three moves the quantity of the line, so none is a
+        // change (plan 0203, section 1).
         expect(
           await dataSource
             .getRepository(ListLineChange)

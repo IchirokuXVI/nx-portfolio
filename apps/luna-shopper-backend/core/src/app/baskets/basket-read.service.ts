@@ -304,8 +304,16 @@ export class BasketReadService {
     // Before the settlements, because a removed row shows what this basket bought
     // of a line the coverage no longer holds, and those purchases have to be in
     // the same read (plan 0138, section 7).
+    // A removed row lives for the window an outside buy does, and only while
+    // the basket is open (plan 0203, section 6): one clock for both kinds of
+    // crossed out row.
     const marks = participantId
-      ? await this.marks.marksFor(participantId, coveredListIds, lines)
+      ? await this.marks.marksFor(
+          participantId,
+          coveredListIds,
+          lines,
+          elsewhereGapMs
+        )
       : NO_BASKET_MARKS;
     const removedLineIds = marks.removed.flatMap((group) => group.lineIds);
 
@@ -364,8 +372,8 @@ export class BasketReadService {
     // its products like any other row's, so it stands where it stood instead of
     // jumping to the end under the thumb that was about to tap it. It carries no
     // products, so it falls back to the text key, which for a row that matched
-    // by product can move it: accepted for a disabled row that lives for
-    // minutes (plan 0141, section 4).
+    // by product can move it: accepted for a disabled row (plan 0141, section
+    // 4). It lives for six hours since plan 0203, where it lived for minutes.
     const orderable = [
       ...groups.map((group) => orderableOf(toRowView(group, context), group)),
       ...removedRows(marks.removed, settlements).map((row) =>
@@ -505,7 +513,8 @@ export class BasketReadService {
 
 /**
  * The window in which another basket's purchase keeps a line a row (plan 0188),
- * or null when this basket does not ask.
+ * or null when this basket does not ask. A removed row lives for the same
+ * window (plan 0203, section 6).
  *
  * `$5` of `COVERED_LINES_SQL`, and one definition for the read and for the row
  * resolver, so a write can find every row the read drew.

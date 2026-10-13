@@ -163,6 +163,7 @@ export function toEntries(
       quantity: Number(row.quantity),
       settledAt:
         row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
+      throughBasket: row.throughBasket === true,
     });
   }
 

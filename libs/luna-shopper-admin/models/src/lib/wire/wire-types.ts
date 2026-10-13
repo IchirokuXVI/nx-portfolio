@@ -1990,6 +1990,18 @@ export type BasketBasketChangeActorView =
     };
 
 /**
+ * `basket.BasketChangeOrigin` in the gateway's OpenAPI document.
+ */
+export type BasketBasketChangeOrigin =
+  | {
+      kind: 'ANOTHER_BASKET';
+      owner: BasketBasketChangeActorView | null;
+    }
+  | {
+      kind: 'LIST';
+    };
+
+/**
  * `basket.BasketChangePage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2016,6 +2028,7 @@ export type BasketBasketChangeView = {
   approvalAfter: EnumsLineApprovalStatus | null;
   listId?: string;
   actor: BasketBasketChangeActorView | null;
+  origin: BasketBasketChangeOrigin | null;
 };
 
 /**
@@ -3585,7 +3598,10 @@ export type EnumsBasketRowMark = 'ADDED' | 'CHANGED' | 'REMOVED';
 /**
  * `enums.BasketRowNote` in the gateway's OpenAPI document.
  */
-export type EnumsBasketRowNote = 'SKIPPED_EARLIER' | 'BOUGHT_ON_ANOTHER_BASKET';
+export type EnumsBasketRowNote =
+  | 'SKIPPED_EARLIER'
+  | 'BOUGHT_ON_ANOTHER_BASKET'
+  | 'BOUGHT_ON_THE_LIST';
 
 /**
  * `enums.BasketRowState` in the gateway's OpenAPI document.
@@ -3594,6 +3610,7 @@ export type EnumsBasketRowState =
   | 'WANTED'
   | 'PARTLY'
   | 'DONE'
+  | 'BOUGHT_ELSEWHERE'
   | 'NOT_AVAILABLE'
   | 'SKIPPED'
   | 'REMOVED';
@@ -3739,7 +3756,9 @@ export type EnumsLineChangeKind =
   | 'RENAMED'
   | 'MERGED'
   | 'DELETED'
-  | 'APPROVAL_CHANGED';
+  | 'APPROVAL_CHANGED'
+  | 'BOUGHT'
+  | 'BUY_REVERTED';
 
 /**
  * `enums.LineSuggestionReason` in the gateway's OpenAPI document.

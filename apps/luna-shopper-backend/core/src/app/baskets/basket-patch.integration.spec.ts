@@ -224,13 +224,15 @@ describeIntegration(
         baskets,
         context,
         claims as never,
-        events as never
+        events as never,
+        new LineChangeRecorder()
       );
       revertService = new BasketRevertService(
         dataSource,
         context,
         claims as never,
-        events as never
+        events as never,
+        new LineChangeRecorder()
       );
       skipService = new BasketSkipService(
         dataSource,
@@ -264,7 +266,8 @@ describeIntegration(
         listAccess,
         fakeLineClaims().service,
         events as never,
-        announcer
+        announcer,
+        new LineChangeRecorder()
       );
       changes = new BasketChangesService(
         dataSource.getRepository(ListLineChange),
@@ -565,8 +568,12 @@ describeIntegration(
       expect(to(all, c).userIds).toEqual([c.userId]);
       for (const entry of all) {
         expect(entry.basketIds).toHaveLength(1);
-        expect(entry.payload.marksMoved).toBeUndefined();
       }
+      // The buy recorded a change (plan 0203). It is shown to every basket but
+      // the one it was made through, so that one is not told to read its marks.
+      expect(to(all, a).payload.marksMoved).toBeUndefined();
+      expect(to(all, b).payload.marksMoved).toBe(true);
+      expect(to(all, c).payload.marksMoved).toBe(true);
     });
 
     it('sends the state a read of that basket gives, for a line bought to zero (test 2)', async () => {
@@ -584,8 +591,9 @@ describeIntegration(
         );
       }
       expect(patchOf(all, a, milk.id)?.state).toBe(BasketRowState.DONE);
+      // Plan 0203: a line that only outside buys closed has a state of its own.
       expect(patchOf(all, b, milk.id)).toMatchObject({
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
         left: 0,
         bought: 0,
         boughtElsewhere: 3,

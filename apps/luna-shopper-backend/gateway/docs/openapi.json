@@ -33854,6 +33854,51 @@
           }
         ]
       },
+      "basket.BasketChangeOrigin": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ANOTHER_BASKET"
+                ]
+              },
+              "owner": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/basket.BasketChangeActorView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "owner"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "LIST"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "basket.BasketChangePage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -33975,6 +34020,16 @@
                 "type": "null"
               }
             ]
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketChangeOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -33989,7 +34044,8 @@
           "quantityAfter",
           "approvalBefore",
           "approvalAfter",
-          "actor"
+          "actor",
+          "origin"
         ],
         "additionalProperties": false
       },
@@ -39150,7 +39206,8 @@
         "type": "string",
         "enum": [
           "SKIPPED_EARLIER",
-          "BOUGHT_ON_ANOTHER_BASKET"
+          "BOUGHT_ON_ANOTHER_BASKET",
+          "BOUGHT_ON_THE_LIST"
         ]
       },
       "enums.BasketRowState": {
@@ -39159,6 +39216,7 @@
           "WANTED",
           "PARTLY",
           "DONE",
+          "BOUGHT_ELSEWHERE",
           "NOT_AVAILABLE",
           "SKIPPED",
           "REMOVED"
@@ -39327,7 +39385,9 @@
           "RENAMED",
           "MERGED",
           "DELETED",
-          "APPROVAL_CHANGED"
+          "APPROVAL_CHANGED",
+          "BOUGHT",
+          "BUY_REVERTED"
         ]
       },
       "enums.LineSuggestionReason": {

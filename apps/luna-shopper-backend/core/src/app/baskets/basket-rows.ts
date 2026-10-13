@@ -51,15 +51,20 @@ export interface BasketSettlementFact {
 /**
  * What other baskets bought of one line lately (plan 0188).
  *
- * A count and a time. **It names nobody**, and it cannot: the read never loads
- * who made these purchases, so no rule here could put a person on a row by
- * accident.
+ * A count, a time and one boolean. **It names nobody**, and it cannot: the read
+ * never loads who made these purchases, so no rule here could put a person on a
+ * row by accident.
  */
 export interface BasketElsewhereFact {
   /** Units bought through another basket, or through none, inside the window. */
   quantity: number;
   /** The newest of those purchases. */
   settledAt: Date;
+  /**
+   * That newest purchase was made through a basket, and not on the zone list
+   * page (plan 0203, section 3). Never the basket itself.
+   */
+  throughBasket: boolean;
 }
 
 /** One line's newest standing skip, as the read hands it to these rules. */
@@ -166,13 +171,30 @@ export function boughtElsewhereOf(entries: readonly BasketEntry[]): number {
   );
 }
 
-/** The newest purchase another basket made of these entries, or null. */
-function newestElsewhere(entries: readonly BasketEntry[]): Date | null {
-  let newest: Date | null = null;
+/**
+ * The newest purchase somebody else made of these entries, or null.
+ *
+ * At the same instant a purchase through a basket wins over one on the list
+ * page, so two entries of one row bought in one settle of another basket agree.
+ */
+function newestElsewhere(
+  entries: readonly BasketEntry[]
+): BasketElsewhereFact | null {
+  let newest: BasketElsewhereFact | null = null;
   for (const entry of entries) {
-    const at = entry.elsewhere?.settledAt;
-    if (at && (!newest || at.getTime() > newest.getTime())) {
-      newest = at;
+    const fact = entry.elsewhere;
+    if (!fact) {
+      continue;
+    }
+    const at = fact.settledAt.getTime();
+    if (
+      !newest ||
+      at > newest.settledAt.getTime() ||
+      (at === newest.settledAt.getTime() &&
+        fact.throughBasket &&
+        !newest.throughBasket)
+    ) {
+      newest = fact;
     }
   }
   return newest;
@@ -305,15 +327,21 @@ export function stateOf(
  * clears when the skip stops standing, which is when the row is bought, closed
  * or unskipped.
  *
- * `DONE` and `REMOVED` carry none because there is nothing left to decide about
- * the row, and `SKIPPED` carries none because the state already says it.
+ * `DONE`, `BOUGHT_ELSEWHERE` and `REMOVED` carry none because there is nothing
+ * left to decide about the row, and `SKIPPED` carries none because the state
+ * already says it.
  *
- * ## `BOUGHT_ON_ANOTHER_BASKET`
+ * ## `BOUGHT_ON_ANOTHER_BASKET` and `BOUGHT_ON_THE_LIST`
  *
  * Somebody bought some of this row lately through another basket, or through
  * none. It is said in **every** state but `REMOVED`, `DONE` included, because
  * it is the only thing on the row that explains a number this shopper did not
  * move: the row went to zero, or lost a unit, and nobody here touched it.
+ *
+ * **Which of the two** is decided by the newest of those purchases (plan 0203,
+ * section 3): `BOUGHT_ON_ANOTHER_BASKET` when it was made through a basket, and
+ * `BOUGHT_ON_THE_LIST` when it was made on the zone list page. `noteAt` is the
+ * time of that purchase in both cases.
  *
  * A row carries one note, and **the skip wins** when both apply: it is this
  * basket's own decision, and the count beside the row still says what was
@@ -327,16 +355,26 @@ export function noteOf(
   if (state === BasketRowState.REMOVED) {
     return null;
   }
-  if (state !== BasketRowState.SKIPPED && state !== BasketRowState.DONE) {
+  if (
+    state !== BasketRowState.SKIPPED &&
+    state !== BasketRowState.DONE &&
+    state !== BasketRowState.BOUGHT_ELSEWHERE
+  ) {
     const newest = newestSkip(entries, facts);
     if (newest) {
       return { note: BasketRowNote.SKIPPED_EARLIER, noteAt: newest.skippedAt };
     }
   }
-  const elsewhereAt = newestElsewhere(entries);
-  return elsewhereAt
-    ? { note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET, noteAt: elsewhereAt }
-    : null;
+  const elsewhere = newestElsewhere(entries);
+  if (!elsewhere) {
+    return null;
+  }
+  return {
+    note: elsewhere.throughBasket
+      ? BasketRowNote.BOUGHT_ON_ANOTHER_BASKET
+      : BasketRowNote.BOUGHT_ON_THE_LIST,
+    noteAt: elsewhere.settledAt,
+  };
 }
 
 /** The newest standing skip over these entries, fresh or not. */
@@ -494,9 +532,9 @@ export function toRowView(
 /**
  * The three numbers a basket card draws (plan 0130, section 4).
  *
- * The rule is the shared library's (plan 0204, section 4). A row somebody else
- * bought to zero is `DONE` (plan 0188), so a shopper's progress does not fall
- * because somebody else did the buying, and a `SKIPPED` row is pending.
+ * The rule is the shared library's (plan 0204, section 4). A row that only
+ * outside buys closed is `BOUGHT_ELSEWHERE` and counts toward no number (plan
+ * 0203, section 4, which reversed plan 0188), and a `SKIPPED` row is pending.
  */
 export function progressOf(rows: readonly BasketRowView[]): BasketProgress {
   return ruleProgressOf(rows);

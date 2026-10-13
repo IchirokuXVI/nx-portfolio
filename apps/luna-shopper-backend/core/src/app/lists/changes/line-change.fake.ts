@@ -67,17 +67,62 @@ export function fakeLineChanges(): {
     ) => {
       recorded.push({ kind: 'deleted', list, lineId: line.id, actor });
     },
+    bought: async (
+      _manager: EntityManager,
+      list: ListRef,
+      lineId: string,
+      quantityBefore: number,
+      quantityAfter: number,
+      actor: LineChangeActor
+    ) => {
+      if (quantityBefore === quantityAfter) {
+        return false;
+      }
+      recorded.push({
+        kind: 'bought',
+        list,
+        lineId,
+        quantityBefore,
+        quantityAfter,
+        actor,
+      });
+      return true;
+    },
+    buyReverted: async (
+      _manager: EntityManager,
+      list: ListRef,
+      lineId: string,
+      quantityBefore: number,
+      quantityAfter: number,
+      actor: LineChangeActor
+    ) => {
+      if (quantityBefore === quantityAfter) {
+        return false;
+      }
+      recorded.push({
+        kind: 'buyReverted',
+        list,
+        lineId,
+        quantityBefore,
+        quantityAfter,
+        actor,
+      });
+      return true;
+    },
   } as unknown as LineChangeRecorder;
   return { recorder, recorded };
 }
 
 /** One call the fake recorder took. */
 export interface RecordedChange {
-  kind: 'added' | 'edited' | 'merged' | 'deleted';
+  kind: 'added' | 'edited' | 'merged' | 'deleted' | 'bought' | 'buyReverted';
   list: ListRef;
   lineId: string;
   mergedIntoLineId?: string;
   before?: LineSnapshot;
   after?: LineSnapshot;
+  /** The quantity pair of a buy and of a taken back buy (plan 0203). */
+  quantityBefore?: number;
+  quantityAfter?: number;
   actor: LineChangeActor;
 }

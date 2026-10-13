@@ -32,6 +32,7 @@ import { UserAppState1756003300000 } from './1756003300000-UserAppState';
 import { BasketShop1756003400000 } from './1756003400000-BasketShop';
 import { SettlementChain1756003500000 } from './1756003500000-SettlementChain';
 import { LineFavoriteAndSupermarket1756003600000 } from './1756003600000-LineFavoriteAndSupermarket';
+import { LineChangeBuyKinds1756003700000 } from './1756003700000-LineChangeBuyKinds';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -174,4 +175,8 @@ export const CORE_MIGRATIONS = [
   // writes no row, so it follows every migration that touched that table and
   // nothing else (plan 0199, section 1).
   LineFavoriteAndSupermarket1756003600000,
+  // One check constraint on `list_line_changes`, which plan 0138's migration
+  // created, replaced by one that allows two more kinds. It reads and writes no
+  // row, so it follows that migration and nothing else (plan 0203, section 1).
+  LineChangeBuyKinds1756003700000,
 ];
