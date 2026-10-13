@@ -35,18 +35,25 @@ export enum BasketKind {
  * **never stored**: a column holding this would be the copy plan 0136 exists to
  * remove.
  *
- * All six values are declared now although this plan produces four of them. The
- * other two arrive with the plans named beside them, and declaring the union
- * whole means those plans change which value a row carries rather than changing
- * the wire shape, so a client written against this today keeps parsing.
+ * Six values were declared by plan 0136 although it produced four of them. The
+ * other two arrived with the plans named beside them, and declaring the union
+ * whole meant those plans changed which value a row carries rather than the
+ * wire shape. `BOUGHT_ELSEWHERE` is the seventh (plan 0203), and a client that
+ * does not know it must fall back to a state that hides nothing.
  */
 export enum BasketRowState {
   /** Something is still left to buy, and nothing has been said about it. */
   WANTED = 'WANTED',
   /** Some units were bought and some are still left. */
   PARTLY = 'PARTLY',
-  /** Nothing is left: every unit was bought. */
+  /** Nothing is left, and this basket bought some of it. */
   DONE = 'DONE',
+  /**
+   * Nothing is left, this basket bought none of it, and somebody bought it
+   * lately through another basket or on the list page (plan 0203). It counts
+   * toward no number of the basket.
+   */
+  BOUGHT_ELSEWHERE = 'BOUGHT_ELSEWHERE',
   /** The newest act on this row said the shop did not have it, and units remain. */
   NOT_AVAILABLE = 'NOT_AVAILABLE',
   /** Put off for this trip. Never produced before plan 0137. */
@@ -61,19 +68,25 @@ export enum BasketRowState {
  * A union rather than a boolean for the same reason {@link BasketRowState} is
  * declared whole: the shape did not move when the second value arrived.
  *
- * A row carries one note. When both apply, `SKIPPED_EARLIER` wins (plan 0188).
+ * A row carries one note. `SKIPPED_EARLIER` wins over the other two (plan 0188).
  */
 export enum BasketRowNote {
   /** This row was skipped earlier on this trip. Never produced before plan 0137. */
   SKIPPED_EARLIER = 'SKIPPED_EARLIER',
   /**
-   * Somebody bought some of this row lately through another basket, or through
-   * no basket at all (plan 0188). `noteAt` is the newest such purchase.
+   * Somebody bought some of this row lately, and the newest of those purchases
+   * was made through another basket (plans 0188 and 0203). `noteAt` is the
+   * time of that purchase.
    *
    * Not `ELSEWHERE`: `BasketRowUsualState.ELSEWHERE` is about another chain,
    * and this is about another basket.
    */
   BOUGHT_ON_ANOTHER_BASKET = 'BOUGHT_ON_ANOTHER_BASKET',
+  /**
+   * The same, when the newest of those purchases was made on the zone list
+   * page, through no basket (plan 0203). `noteAt` is the time of that purchase.
+   */
+  BOUGHT_ON_THE_LIST = 'BOUGHT_ON_THE_LIST',
 }
 
 /**

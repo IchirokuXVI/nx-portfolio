@@ -57,6 +57,11 @@ import { fakeLineClaims } from './line-claims.fake';
 /**
  * A line bought through another basket stays a row (plan 0188).
  *
+ * Plan 0203 reversed targets 5, 6 and 7 of that plan: such a row is
+ * `BOUGHT_ELSEWHERE`, and it counts toward nothing. The assertions below state
+ * the rules as they are now. What a reader is told about the buy as a change
+ * is `basket-outside-buy.integration.spec.ts`.
+ *
  * Against Postgres, because the rule is an `EXISTS` over `line_settlements`
  * compared with the database's `now()`, and the writes that produce the
  * purchase are the real settle and the real revert. A mocked repository has
@@ -169,13 +174,15 @@ describeIntegration(
         baskets,
         context,
         claims as never,
-        events as never
+        events as never,
+        new LineChangeRecorder()
       );
       revertService = new BasketRevertService(
         dataSource,
         context,
         claims as never,
-        events as never
+        events as never,
+        new LineChangeRecorder()
       );
       const lines = new LineService(
         dataSource,
@@ -388,7 +395,7 @@ describeIntegration(
 
     // --- 1. the row stays ---------------------------------------------------
 
-    it('keeps the row in the other basket as DONE, and names nobody (test 1)', async () => {
+    it('keeps the row in the other basket as BOUGHT_ELSEWHERE, and names nobody (test 1)', async () => {
       const { listId, a, b } = await world();
       const milk = await line(listId, a.userId, 'Milk', 2);
 
@@ -416,7 +423,7 @@ describeIntegration(
         bought: 0,
         asked: 0,
         boughtElsewhere: 2,
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
         note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET,
         noteAt: purchase.settledAt.toISOString(),
         // About this basket's own acts, and it made none.
@@ -429,13 +436,14 @@ describeIntegration(
         left: 0,
         bought: 0,
         boughtElsewhere: 2,
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
       });
-      // The reader's progress does not fall because somebody else bought.
+      // The row counts toward nothing (plan 0203, section 4). Plan 0188
+      // counted it in `total` and in `done`.
       expect(after.progress).toEqual({
-        done: 1,
+        done: 0,
         unavailable: 0,
-        total: 1,
+        total: 0,
         pending: 0,
       });
 
@@ -545,8 +553,9 @@ describeIntegration(
           left: 0,
           bought: 0,
           boughtElsewhere: 3,
-          state: BasketRowState.DONE,
-          note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET,
+          state: BasketRowState.BOUGHT_ELSEWHERE,
+          // The buy named no basket, so it came from the list (plan 0203).
+          note: BasketRowNote.BOUGHT_ON_THE_LIST,
         });
         expect(JSON.stringify(row)).not.toContain(a.userId);
       }
@@ -631,7 +640,7 @@ describeIntegration(
       });
       expect(answer.row).toMatchObject({
         boughtElsewhere: 2,
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
       });
 
       const standing = await standingOf(milk.id);
@@ -701,7 +710,7 @@ describeIntegration(
       ]);
       expect(open.rows.find((row) => row.rowKey === milk.id)).toMatchObject({
         boughtElsewhere: 2,
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
       });
 
       // The freeze of plan 0135 writes this basket's own rows: the bread it
@@ -784,7 +793,7 @@ describeIntegration(
 
       expect(asGuest).toMatchObject({
         boughtElsewhere: 2,
-        state: BasketRowState.DONE,
+        state: BasketRowState.BOUGHT_ELSEWHERE,
         note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET,
       });
       const wire = JSON.stringify(asGuest);

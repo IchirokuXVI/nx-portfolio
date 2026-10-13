@@ -313,6 +313,40 @@ describe('BasketAnnouncer.linesMoved (plan 0204, section 3)', () => {
     expect(h.emitted[1].payload.marksMoved).toBe(true);
   });
 
+  it('does not tell the basket a buy was made through (plan 0203, section 2)', async () => {
+    const h = build({
+      covering: [basket('b1', 'u-ana'), basket('b2', 'u-luis')],
+      patches: { b1: [patch('li-1')], b2: [patch('li-1')] },
+    });
+
+    await h.announcer.linesMoved('l1', ['li-1'], true, 'b1');
+
+    const byBasket = new Map(
+      h.emitted.map((sent) => [sent.basketIds[0], sent.payload])
+    );
+    // The acting basket still hears its entries. It is shown no change, so it
+    // is not told to read its marks.
+    expect(Object.keys(byBasket.get('b1') ?? {})).toEqual([
+      'lineIds',
+      'entries',
+    ]);
+    expect(byBasket.get('b2')?.marksMoved).toBe(true);
+  });
+
+  it('tells every basket about a buy on the list page, which has no basket', async () => {
+    const h = build({
+      covering: [basket('b1', 'u-ana'), basket('b2', 'u-luis')],
+      patches: { b1: [patch('li-1')], b2: [patch('li-1')] },
+    });
+
+    await h.announcer.linesMoved('l1', ['li-1'], true);
+
+    expect(h.emitted.map((sent) => sent.payload.marksMoved)).toEqual([
+      true,
+      true,
+    ]);
+  });
+
   it('sends the ids alone to a basket whose patch failed, and entries to the others', async () => {
     const h = build({
       covering: [
@@ -429,6 +463,31 @@ describe('BasketAnnouncer.linesMovedAcross', () => {
       ['li-1', 'li-3'],
       ['li-2'],
     ]);
+  });
+
+  it('says the marks moved for the lists that recorded a change, to the other baskets', async () => {
+    const h = build({
+      covering: [basket('b1', 'u-ana'), basket('b2', 'u-luis')],
+      patches: {
+        b1: [patch('li-1'), patch('li-2')],
+        b2: [patch('li-1'), patch('li-2')],
+      },
+    });
+
+    await h.announcer.linesMovedAcross(
+      [
+        { listId: 'l1', lineId: 'li-1', recorded: true },
+        // "They had none" on the other list moved no quantity.
+        { listId: 'l2', lineId: 'li-2' },
+      ],
+      'b1'
+    );
+
+    const told = h.emitted
+      .filter((sent) => sent.payload.marksMoved)
+      .map((sent) => [sent.basketIds[0], sent.payload.lineIds]);
+    expect(told).toEqual([['b2', ['li-1']]]);
+    expect(h.emitted).toHaveLength(4);
   });
 });
 

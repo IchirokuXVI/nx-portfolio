@@ -1,3 +1,4 @@
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import {
   ListPermission,
   MembershipStatus,
@@ -155,7 +156,8 @@ describeIntegration('the settlement history (real Postgres)', () => {
       listAccess,
       fakeLineClaims().service,
       { emit: jest.fn() } as never,
-      announcer
+      announcer,
+      new LineChangeRecorder()
     );
 
     const home = await seedZone('Home', ids.shopper, 'Milk');

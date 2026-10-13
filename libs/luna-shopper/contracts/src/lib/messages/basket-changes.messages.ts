@@ -34,9 +34,10 @@ import type { LineApprovalStatus } from '../enums/list.enums';
  * moved, so an edit that renames a line, sets its quantity and sends it back to
  * `PENDING` is one `RENAMED` change with all six values filled.
  *
- * A purchase, a revert, a skip and a reorder are **not** changes here (plan
- * 0130, section 11, decision 12): a shopper buying a thing is not the household
- * changing what it asked for.
+ * A purchase that lowers the quantity of a line, and a revert that raises it,
+ * are changes since plan 0203, which reversed decision 12 of plan 0130. Each is
+ * shown to every basket but the one it was made through. A skip, "they had
+ * none" and a reorder move no quantity and are **not** changes.
  */
 export enum LineChangeKind {
   /** A line the list did not hold before. Only the `after` values are filled. */
@@ -51,7 +52,45 @@ export enum LineChangeKind {
   DELETED = 'DELETED',
   /** Approved, rejected or put back to pending. */
   APPROVAL_CHANGED = 'APPROVAL_CHANGED',
+  /** A buy lowered how many are left (plan 0203). Only the quantity pair is filled. */
+  BOUGHT = 'BOUGHT',
+  /** A buy was taken back, so more are left again (plan 0203). */
+  BUY_REVERTED = 'BUY_REVERTED',
 }
+
+/**
+ * The two kinds that a buy writes (plan 0203, section 1).
+ *
+ * They share one rule that the other six do not have: a basket is shown the
+ * change exactly when it was not made through that basket.
+ */
+export const BUY_CHANGE_KINDS: readonly LineChangeKind[] = [
+  LineChangeKind.BOUGHT,
+  LineChangeKind.BUY_REVERTED,
+];
+
+/** Where a buy that was not made through the reading basket came from. */
+export enum BasketChangeOriginKind {
+  /** Through another basket. Its id and its name are never served. */
+  ANOTHER_BASKET = 'ANOTHER_BASKET',
+  /** On the zone list page, through no basket. */
+  LIST = 'LIST',
+}
+
+/**
+ * Where an outside buy came from (plan 0203, section 5).
+ *
+ * `owner` is the owner of the other basket, served as `{ userId }` beside a
+ * served `listId` alone. That is the rule an account follows everywhere in this
+ * view. It is null for a guest, for a reader who cannot write the list, and
+ * for a basket that was deleted since. A client then says "Someone".
+ */
+export type BasketChangeOrigin =
+  | {
+      kind: BasketChangeOriginKind.ANOTHER_BASKET;
+      owner: BasketChangeActorView | null;
+    }
+  | { kind: BasketChangeOriginKind.LIST };
 
 /**
  * The bounds the change reads hold themselves to.
@@ -115,6 +154,11 @@ export interface BasketChangeView {
    * person. Otherwise null. Core serves no name, as everywhere else.
    */
   actor: BasketChangeActorView | null;
+  /**
+   * Set for a `BOUGHT` and a `BUY_REVERTED` that was not made through this
+   * basket, and null for every other change (plan 0203, section 5).
+   */
+  origin: BasketChangeOrigin | null;
 }
 
 /** Whoever made a change, named the one way this reader is allowed to see them. */

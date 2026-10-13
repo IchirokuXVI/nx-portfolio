@@ -26,6 +26,7 @@ import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../baskets/line-claim.service';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
 import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';
@@ -71,7 +72,10 @@ export class SettlementService {
     // Every basket covering the list hears that this line moved (plan 0139,
     // section 3). Buying from the list page is the case this fixes: it changes
     // what is left on a row somebody else is standing in a shop looking at.
-    private readonly baskets: BasketAnnouncer
+    private readonly baskets: BasketAnnouncer,
+    // A buy that lowers the line is a change of it (plan 0203, section 1).
+    // Last, so no positional construction in a spec has to shift an argument.
+    private readonly changes: LineChangeRecorder
   ) {}
 
   /**
@@ -159,6 +163,8 @@ export class SettlementService {
 
     const found = await this.listAccess.getLine(req.lineId);
     const list = await this.listAccess.requireSettle(found.listId, req.userId);
+    // Whether the buy lowered the line, and so recorded a change (plan 0203).
+    let recorded = false;
 
     const result = await this.dataSource.transaction(async (manager) => {
       const lines = manager.getRepository(ListLine);
@@ -188,9 +194,22 @@ export class SettlementService {
           : line.quantity;
 
       if (remaining !== line.quantity) {
+        const before = line.quantity;
         line.quantity = remaining;
         line.version += 1;
         await lines.save(line);
+        // A buy on the list page is a change in every basket that covers the
+        // list, the buyer's own basket too (plan 0203, section 2): it names an
+        // account and no basket. No route takes such a buy back, so nothing
+        // here writes `BUY_REVERTED`.
+        recorded = await this.changes.bought(
+          manager,
+          { id: list.id, zoneId: list.zoneId },
+          line.id,
+          before,
+          remaining,
+          { userId: req.userId, participantId: null, basketId: null }
+        );
       }
 
       const repo = manager.getRepository(LineSettlement);
@@ -264,8 +283,10 @@ export class SettlementService {
     // phone in the shop and a phone at home agree without a refetch (section 8).
     this.events.emit(RealtimeEvent.LineSettled, list.zoneId, result, list.id);
     // A buy only moves numbers, so each covering basket is sent what the line
-    // reads now and need not read again (plan 0204, section 3).
-    void this.baskets.linesMoved(list.id, [req.lineId]);
+    // reads now and need not read again (plan 0204, section 3). It was made
+    // through no basket, so every basket is shown the change and reads its
+    // marks (plan 0203, section 2).
+    void this.baskets.linesMoved(list.id, [req.lineId], recorded);
     return result;
   }
 

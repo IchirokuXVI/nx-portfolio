@@ -1,3 +1,4 @@
+import { fakeLineChanges } from '../lists/changes/line-change.fake';
 import {
   BasketKind,
   BasketStatus,
@@ -211,13 +212,15 @@ function build(status: BasketStatus): Harness {
     baskets as never,
     context,
     claims.service,
-    publisher
+    publisher,
+    fakeLineChanges().recorder
   );
   const revert = new BasketRevertService(
     dataSource,
     context,
     claims.service,
-    publisher
+    publisher,
+    fakeLineChanges().recorder
   );
   const demand = new BasketDemandService(
     context,

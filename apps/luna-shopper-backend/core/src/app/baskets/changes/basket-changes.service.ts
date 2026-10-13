@@ -2,8 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_CHANGE_LIMITS,
+  BasketChangeOriginKind,
+  BUY_CHANGE_KINDS,
   type AcknowledgeBasketChangesRequest,
   type BasketChangeActorView,
+  type BasketChangeOrigin,
   type BasketChangePage,
   type BasketChangesAcknowledged,
   type BasketChangeView,
@@ -87,6 +90,10 @@ export class BasketChangesService {
         this.marks.retention,
         cursor?.id ?? null,
         limit + 1,
+        // The lists this reader was served, which is what lets the statement
+        // load the owner of another basket for them and for nobody else (plan
+        // 0203, section 5). Empty for a guest.
+        [...opened.servedListIds],
       ]
     );
 
@@ -301,6 +308,7 @@ export function toChangeView(
     approvalBefore: row.approvalBefore,
     approvalAfter: row.approvalAfter,
     actor: actorViewOf(row, context),
+    origin: originOf(row, context),
   };
   // Redaction by absence (plan 0130, section 6). The field is omitted rather than
   // nulled, so a reader cannot tell "a list you may not see" from "no list".
@@ -332,6 +340,39 @@ function rowKeyOf(
     return null;
   }
   return context.anchors.get(mergeKey(named)) ?? null;
+}
+
+/**
+ * Where a buy came from, when it was not made through this basket (plan 0203,
+ * section 5).
+ *
+ * - `LIST`: the buy names no basket, so it was made on the zone list page.
+ * - `ANOTHER_BASKET`: it names a basket that is not this one. `owner` is the
+ *   owner of that basket, and the statement loaded it only beside a served
+ *   list, so it is null for a guest and for a basket that was deleted since.
+ * - null for a buy of this basket, which has its participant in `actor`, and
+ *   for every change that is not a buy.
+ *
+ * **No basket id leaves here.** The row holds one, and this reads it to compare
+ * and for nothing else.
+ */
+function originOf(
+  row: ChangePageRow,
+  context: ChangeViewContext
+): BasketChangeOrigin | null {
+  if (!BUY_CHANGE_KINDS.includes(row.kind)) {
+    return null;
+  }
+  if (row.basketId === context.basketId) {
+    return null;
+  }
+  if (row.basketId === null) {
+    return { kind: BasketChangeOriginKind.LIST };
+  }
+  return {
+    kind: BasketChangeOriginKind.ANOTHER_BASKET,
+    owner: row.originOwnerUserId ? { userId: row.originOwnerUserId } : null,
+  };
 }
 
 /**

@@ -192,13 +192,15 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       baskets,
       context,
       claims,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
     revertService = new BasketRevertService(
       dataSource,
       context,
       claims,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
     merges = new LineMergeService(new LineChangeRecorder());
 

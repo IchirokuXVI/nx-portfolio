@@ -12,11 +12,14 @@ import type { RemovedGroup } from './basket-marks.reader';
  *
  * The redesign asks that a removed line stays visible, disabled, for a while,
  * rather than vanishing under a thumb that was about to tap it. This is that row.
+ * "A while" is six hours from the change that removed it (plan 0203, section
+ * 6), where it was the life of its mark before.
  *
- * ## It is not a thing to buy, and says so in four ways
+ * ## It is not a thing to buy, and says so in three ways
  *
- * `left` is zero, it holds **no entries**, its state and its mark are both
- * `REMOVED`, and `progressOf` counts neither it nor its absence. Every write
+ * `left` is zero, it holds **no entries**, its state is `REMOVED`, and
+ * `progressOf` counts neither it nor its absence. Its mark is `REMOVED` while
+ * the removal is still marked for the viewer, and null after that. Every write
  * addressed to it is refused by the resolver of plan 0136 as it stands, because
  * its anchor is outside the coverage: the row is a fact about the past, and the
  * client draws it disabled.
@@ -77,7 +80,10 @@ export function removedRows(
       state: BasketRowState.REMOVED,
       note: null,
       noteAt: null,
-      mark: BasketRowMark.REMOVED,
+      // The row stays for six hours, and the mark for as long as the removal is
+      // marked for this viewer (plan 0203, section 6). The state says it left
+      // either way.
+      mark: group.marked ? BasketRowMark.REMOVED : null,
       awaitingApproval: false,
       optionIds: [],
       touchedBy: newest?.settledByParticipantId ?? null,

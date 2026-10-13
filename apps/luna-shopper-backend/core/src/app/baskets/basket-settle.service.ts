@@ -27,6 +27,10 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../baskets/line-claim.service';
+import {
+  actorOf,
+  LineChangeRecorder,
+} from '../lists/changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { paidColumns } from '../lists/settlement-paid';
@@ -73,7 +77,10 @@ export class BasketSettleService {
     private readonly baskets: Repository<Basket>,
     private readonly context: BasketWriteContext,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // A buy that lowers a line is a change of it (plan 0203, section 1). Last,
+    // so no positional construction in a spec has to shift an argument.
+    private readonly changes: LineChangeRecorder
   ) {}
 
   async settle(req: SettleBasketRowRequest): Promise<BasketRowResult> {
@@ -100,6 +107,9 @@ export class BasketSettleService {
     // The entries this call took to zero or closed, which is what decides
     // between a claim that moved and one that ended (plan 0052, section 3.3).
     const released: BasketEntry[] = [];
+    // The lines this buy lowered, each of which got a change row (plan 0203).
+    const recorded = new Set<string>();
+    const actor = actorOf({ via: opened.via() });
 
     await this.dataSource.transaction(async (manager) => {
       const zoneLines = manager.getRepository(ListLine);
@@ -157,9 +167,27 @@ export class BasketSettleService {
         if (req.outcome === SettlementOutcome.BOUGHT && allocated > 0) {
           // Floored at zero, and the settlement keeps what was actually bought
           // (plan 0047, section 4.2).
-          zoneLine.quantity = Math.max(0, zoneLine.quantity - allocated);
+          const before = zoneLine.quantity;
+          zoneLine.quantity = Math.max(0, before - allocated);
           zoneLine.version += 1;
           await zoneLines.save(zoneLine);
+          // One change row for each line the buy lowered, in this transaction
+          // (plan 0203, section 1). A line that was already at zero moved
+          // nothing, and the recorder writes nothing for it.
+          const wrote = await this.changes.bought(
+            manager,
+            {
+              id: zoneLine.listId,
+              zoneId: opened.zoneOf(zoneLine.listId),
+            },
+            zoneLine.id,
+            before,
+            zoneLine.quantity,
+            actor
+          );
+          if (wrote) {
+            recorded.add(zoneLine.id);
+          }
         }
 
         const settlement = await settlements.save(
@@ -261,6 +289,7 @@ export class BasketSettleService {
       announcements.map((entry) => ({
         listId: entry.listId,
         lineId: entry.line.id,
+        recorded: recorded.has(entry.line.id),
       }))
     );
 

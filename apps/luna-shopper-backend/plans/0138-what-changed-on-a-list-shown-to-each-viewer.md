@@ -2,6 +2,13 @@
 
 # 0138: what changed on a list, kept and shown to each viewer
 
+> **Changed by plan `0203`** (the owner, 2026-10-11). Two rules are reversed. Section 2: a
+> settle that lowers a line and a revert that raises it each write one change row, of the
+> kinds `BOUGHT` and `BUY_REVERTED`, shown to every basket but the one it was made through.
+> Section 7: a removed row is served for six hours from the change that removed it, and no
+> longer leaves with its mark. Everything else stands, the rule of section 5 for the six
+> older kinds too.
+
 > Client half: `apps/velista/plans/0093`. Series record: `0130`, which is the contract for
 > every name used here.
 >

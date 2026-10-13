@@ -164,9 +164,13 @@ export class OpenBasketWrite {
    *
    * The entries carry their list because the coverage is per list: a row can
    * span two households' lists, and two lists have two coverages.
+   *
+   * An entry says whether the write recorded a change row for its line (plan
+   * 0203). Every other basket is then told that its marks moved. This basket
+   * is not: a buy is shown to every basket but the one it was made through.
    */
   announceLinesMoved(entries: readonly ChangedLine[]): void {
-    void this.announcer.linesMovedAcross(entries);
+    void this.announcer.linesMovedAcross(entries, this.basket.id);
   }
 
   /**

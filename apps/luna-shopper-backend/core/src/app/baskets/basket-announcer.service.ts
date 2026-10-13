@@ -15,6 +15,11 @@ import { BasketPatchReader } from './basket-patch.reader';
 export interface ChangedLine {
   listId: string;
   lineId: string;
+  /**
+   * The write recorded a `list_line_changes` row for this line (plan 0203). A
+   * buy that lowered the line did, and "they had none" did not.
+   */
+  recorded?: boolean;
 }
 
 /**
@@ -124,15 +129,24 @@ export class BasketAnnouncer {
    *   their entries. A client that gets ids reads the basket, so a failure costs
    *   one read and never a wrong number.
    *
-   * `marksMoved` is whether the write recorded a change that these baskets are
-   * shown (plan 0138). It is the same answer for every basket of one write
-   * today: a change of quantity made through a basket is shown to the other
-   * people of that basket too.
+   * ## `marksMoved` is decided for each basket
+   *
+   * `marksMoved` is whether the write recorded a change row. A basket is told
+   * so only when it is shown that row (plan 0204, section 3):
+   *
+   * - **A buy and a taken back buy** are shown to every basket but the one they
+   *   were made through (plan 0203, section 2). The caller names that basket as
+   *   `throughBasketId`, and its envelope carries no `marksMoved`. A buy on the
+   *   list page has no such basket, so every basket is told.
+   * - **A change of quantity made through a basket** names no basket here. It
+   *   is shown to the other people of that basket too (plan 0138, section 5),
+   *   so that basket is told as well.
    */
   async linesMoved(
     listId: string,
     lineIds: readonly string[],
-    marksMoved = false
+    marksMoved = false,
+    throughBasketId: string | null = null
   ): Promise<void> {
     const ids = [...new Set(lineIds)];
     if (ids.length === 0) {
@@ -146,7 +160,12 @@ export class BasketAnnouncer {
       }
       await Promise.all(
         covering.map((basket) =>
-          this.patchTo(basket, [listId], ids, marksMoved)
+          this.patchTo(
+            basket,
+            [listId],
+            ids,
+            marksMoved && basket.basketId !== throughBasketId
+          )
         )
       );
     });
@@ -159,14 +178,21 @@ export class BasketAnnouncer {
    * can span two lists all report what they touched the same way and none of
    * them should own the arithmetic. The lists are announced in parallel: two
    * lists have two coverages, and neither waits for the other.
+   *
+   * Its callers are the basket settle and the basket revert, so the write was
+   * made through `throughBasketId`. The marks of a list moved when the write
+   * recorded a change row for one of its lines ({@link ChangedLine.recorded}).
    */
   async linesMovedAcross(
     entries: readonly ChangedLine[],
-    marksMoved = false
+    throughBasketId: string | null = null
   ): Promise<void> {
+    const recorded = new Set(
+      entries.filter((entry) => entry.recorded).map((entry) => entry.listId)
+    );
     await Promise.all(
       [...byList(entries)].map(([listId, lineIds]) =>
-        this.linesMoved(listId, lineIds, marksMoved)
+        this.linesMoved(listId, lineIds, recorded.has(listId), throughBasketId)
       )
     );
   }

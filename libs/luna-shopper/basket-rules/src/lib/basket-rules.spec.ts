@@ -89,10 +89,10 @@ describe('rowStateOf, the state table of plan 0130 section 4', () => {
       );
     });
 
-    it('is nothing left and something bought elsewhere (plan 0188)', () => {
-      expect(rowStateOf([entry({ left: 0, boughtElsewhere: 2 })])).toBe(
-        BASKET_RULE_STATES.DONE
-      );
+    it('is nothing left, some bought here and the rest elsewhere', () => {
+      expect(
+        rowStateOf([entry({ left: 0, bought: 2, boughtElsewhere: 1 })])
+      ).toBe(BASKET_RULE_STATES.DONE);
     });
 
     it('wins over a close when nothing is left', () => {
@@ -101,6 +101,53 @@ describe('rowStateOf, the state table of plan 0130 section 4', () => {
           entry({ left: 0, bought: 1, closed: true, act: closed(T2) }),
         ])
       ).toBe(BASKET_RULE_STATES.DONE);
+    });
+  });
+
+  describe('BOUGHT_ELSEWHERE (plan 0203, section 3)', () => {
+    it('is nothing left, none bought here and some bought elsewhere', () => {
+      expect(rowStateOf([entry({ left: 0, boughtElsewhere: 2 })])).toBe(
+        BASKET_RULE_STATES.BOUGHT_ELSEWHERE
+      );
+    });
+
+    it('needs nothing left on any entry', () => {
+      expect(
+        rowStateOf([entry({ left: 0, boughtElsewhere: 1 }), entry({ left: 1 })])
+      ).toBe(BASKET_RULE_STATES.WANTED);
+    });
+
+    it('needs this basket to have bought none of any entry', () => {
+      expect(
+        rowStateOf([
+          entry({ left: 0, boughtElsewhere: 1 }),
+          entry({ left: 0, bought: 1, act: bought() }),
+        ])
+      ).toBe(BASKET_RULE_STATES.DONE);
+    });
+
+    it('is not met by a skip or a close, which need something left', () => {
+      expect(
+        rowStateOf([
+          entry({
+            left: 0,
+            boughtElsewhere: 1,
+            skipped: true,
+            act: skipped(),
+          }),
+        ])
+      ).toBe(BASKET_RULE_STATES.BOUGHT_ELSEWHERE);
+      expect(
+        rowStateOf([
+          entry({ left: 0, boughtElsewhere: 1, closed: true, act: closed() }),
+        ])
+      ).toBe(BASKET_RULE_STATES.BOUGHT_ELSEWHERE);
+    });
+
+    it('becomes WANTED when a line is raised above zero', () => {
+      expect(rowStateOf([entry({ left: 1, boughtElsewhere: 1 })])).toBe(
+        BASKET_RULE_STATES.WANTED
+      );
     });
   });
 
@@ -273,6 +320,12 @@ describe('progressOf', () => {
       total: 2,
       pending: 1,
     });
+  });
+
+  it('counts a row bought elsewhere for nothing (plan 0203, section 4)', () => {
+    expect(
+      progressOf(rows('BOUGHT_ELSEWHERE', 'DONE', 'WANTED', 'NOT_AVAILABLE'))
+    ).toEqual({ done: 1, unavailable: 1, total: 3, pending: 1 });
   });
 
   it('answers zeros for no rows', () => {

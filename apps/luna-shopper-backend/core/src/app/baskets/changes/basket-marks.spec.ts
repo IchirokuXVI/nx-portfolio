@@ -1,6 +1,7 @@
 import {
   BasketRowMark,
   BasketRowState,
+  BUY_CHANGE_KINDS,
   LineApprovalStatus,
   LineChangeKind,
   SettlementOutcome,
@@ -8,16 +9,17 @@ import {
 import type { BasketSettlementRow } from '../basket-read.sql';
 import { mergeKey } from '../line-dedup';
 import type { ChangeLineRow, ChangeRow } from './basket-changes.sql';
-import { foldMarks } from './basket-marks.reader';
+import { foldMarks, foldRemoved } from './basket-marks.reader';
 import { removedRows } from './basket-removed-rows';
 
 /**
  * How changes become a mark per row, and a row per removal (plan 0138, section
- * 7).
+ * 7; plan 0203, sections 6 and 7).
  *
- * The fold is pure, so the table of section 7 is stated here as a table. What it
- * needs a database for is which changes are still **marked** for one viewer, which
- * is a comparison of four database times and is proven against Postgres.
+ * The two folds are pure, so the table of section 7 is stated here as a table.
+ * What needs a database is which changes are still **marked** for one viewer,
+ * and which change removed a line inside the window. Both are comparisons of
+ * database times and are proven against Postgres.
  */
 
 let seq = 0;
@@ -57,14 +59,31 @@ function change(
   };
 }
 
-/** The fold takes the marked changes newest first, as the read answers them. */
+/**
+ * Both folds over one set of changes, newest first, as the reads answer them.
+ *
+ * The removals are the changes that the statement would select: not a merge and
+ * not a buy. Each is marked when it is unseen, which is the case of a viewer
+ * who acknowledged nothing.
+ */
 function fold(
   marked: ChangeRow[],
   covered: ChangeLineRow[],
   extra: ChangeLineRow[] = []
 ) {
   const lines = new Map([...covered, ...extra].map((row) => [row.id, row]));
-  return foldMarks([...marked].reverse(), covered, lines);
+  const newestFirst = [...marked].reverse();
+  const removing = newestFirst
+    .filter(
+      (row) =>
+        row.kind !== LineChangeKind.MERGED &&
+        !BUY_CHANGE_KINDS.includes(row.kind)
+    )
+    .map(({ unseen, ...row }) => ({ ...row, marked: unseen }));
+  return {
+    byKey: foldMarks(newestFirst, covered, lines).byKey,
+    removed: foldRemoved(removing, covered, lines),
+  };
 }
 
 describe('a line that is still in the basket', () => {
@@ -178,6 +197,95 @@ describe('a line that is still in the basket', () => {
   });
 });
 
+describe('a buy and a taken back buy (plan 0203, section 7)', () => {
+  it('is CHANGED on the row that holds the line', () => {
+    const milk = line({ quantity: 0 });
+
+    const { byKey, removed } = fold(
+      [
+        change({
+          lineId: milk.id,
+          kind: LineChangeKind.BOUGHT,
+          quantityBefore: 2,
+          quantityAfter: 0,
+        }),
+      ],
+      [milk]
+    );
+
+    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.CHANGED);
+    expect(removed).toEqual([]);
+  });
+
+  it('is CHANGED when the units came back off zero, and not ADDED', () => {
+    // A quantity raised off zero by an edit is a new thing to buy. A buy taken
+    // back is the same row with its units again.
+    const milk = line();
+
+    const { byKey } = fold(
+      [
+        change({
+          lineId: milk.id,
+          kind: LineChangeKind.BUY_REVERTED,
+          quantityBefore: 0,
+          quantityAfter: 2,
+        }),
+      ],
+      [milk]
+    );
+
+    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.CHANGED);
+  });
+
+  it('leaves ADDED on a row that was added and then bought', () => {
+    const milk = line();
+
+    const { byKey } = fold(
+      [
+        change({
+          lineId: milk.id,
+          kind: LineChangeKind.BOUGHT,
+          quantityBefore: 2,
+          quantityAfter: 1,
+        }),
+        change({ lineId: milk.id, kind: LineChangeKind.ADDED }),
+      ],
+      [milk]
+    );
+
+    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+  });
+
+  it('says nothing about a line that is no row any more', () => {
+    // The outside buy left its window, so the line is not covered. A buy never
+    // removes a row, and it marks no neighbour either.
+    const flat = line({ listId: 'list-a', content: 'Milk' });
+    const parents = line({
+      id: 'll-bought',
+      listId: 'list-b',
+      content: 'Milk',
+      quantity: 0,
+    });
+
+    const { byKey, removed } = fold(
+      [
+        change({
+          lineId: parents.id,
+          listId: 'list-b',
+          kind: LineChangeKind.BOUGHT,
+          quantityBefore: 1,
+          quantityAfter: 0,
+        }),
+      ],
+      [flat],
+      [parents]
+    );
+
+    expect(byKey.size).toBe(0);
+    expect(removed).toEqual([]);
+  });
+});
+
 describe('a merge', () => {
   it('marks the survivor and never draws the absorbed line', () => {
     const survivor = line({ content: 'Milk' });
@@ -248,9 +356,51 @@ describe('a line that left the basket', () => {
         rowKey: gone.id,
         content: 'Olives',
         lineIds: [gone.id],
+        marked: true,
       },
     ]);
     expect(byKey.size).toBe(0);
+  });
+
+  it('is still a row after its mark is gone', () => {
+    // Six hours from the change, whatever the viewer acknowledged (plan 0203,
+    // section 6). The fold is handed a removal that is no longer marked.
+    const gone = line({ id: 'll-gone', content: 'Olives' });
+
+    const { removed } = fold(
+      [
+        change({
+          lineId: gone.id,
+          kind: LineChangeKind.DELETED,
+          contentBefore: 'Olives',
+          unseen: false,
+        }),
+      ],
+      [],
+      [gone]
+    );
+
+    expect(removed).toHaveLength(1);
+    expect(removed[0].marked).toBe(false);
+  });
+
+  it('is no removed row when the line is covered again', () => {
+    // Taken to zero and raised since: an ordinary row.
+    const back = line({ content: 'Olives', quantity: 1 });
+
+    const { removed } = fold(
+      [
+        change({
+          lineId: back.id,
+          kind: LineChangeKind.QUANTITY_CHANGED,
+          quantityBefore: 2,
+          quantityAfter: 0,
+        }),
+      ],
+      [back]
+    );
+
+    expect(removed).toEqual([]);
   });
 
   it('marks the covered row instead when one shares its name', () => {
@@ -353,6 +503,7 @@ describe('the disabled row itself', () => {
       rowKey: 'll-1',
       content: 'Olives',
       lineIds: ['ll-1'],
+      marked: true,
     },
   ];
 
@@ -385,6 +536,13 @@ describe('the disabled row itself', () => {
       entries: [],
       optionIds: [],
     });
+  });
+
+  it('keeps its state and loses its mark when the removal is not marked', () => {
+    const [row] = removedRows([{ ...removed[0], marked: false }], []);
+
+    expect(row.state).toBe(BasketRowState.REMOVED);
+    expect(row.mark).toBeNull();
   });
 
   it('keeps what the basket bought of the line that went', () => {

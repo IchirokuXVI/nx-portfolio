@@ -10,6 +10,8 @@ export interface AnnouncedLines {
 /** One recorded call of {@link BasketAnnouncer.linesMoved}. */
 export interface AnnouncedMove extends AnnouncedLines {
   marksMoved: boolean;
+  /** The basket the write was made through, which is not told (plan 0203). */
+  throughBasketId: string | null;
 }
 
 /** One recorded call of {@link BasketAnnouncer.basketMoved}. */
@@ -77,16 +79,34 @@ export function fakeBasketAnnouncer(): FakeBasketAnnouncer {
     async linesMoved(
       listId: string,
       lineIds: readonly string[],
-      marksMoved = false
+      marksMoved = false,
+      throughBasketId: string | null = null
     ) {
-      calls.linesMoved.push({ listId, lineIds: [...lineIds], marksMoved });
+      calls.linesMoved.push({
+        listId,
+        lineIds: [...lineIds],
+        marksMoved,
+        throughBasketId,
+      });
     },
     async linesMovedAcross(
-      entries: readonly { listId: string; lineId: string }[],
-      marksMoved = false
+      entries: readonly {
+        listId: string;
+        lineId: string;
+        recorded?: boolean;
+      }[],
+      throughBasketId: string | null = null
     ) {
+      const recorded = new Set(
+        entries.filter((entry) => entry.recorded).map((entry) => entry.listId)
+      );
       for (const [listId, lineIds] of byList(entries)) {
-        calls.linesMoved.push({ listId, lineIds, marksMoved });
+        calls.linesMoved.push({
+          listId,
+          lineIds,
+          marksMoved: recorded.has(listId),
+          throughBasketId,
+        });
       }
     },
     basketMoved(

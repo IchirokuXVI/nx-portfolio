@@ -233,7 +233,8 @@ describeIntegration(
         listAccess,
         fakeLineClaims().service,
         { emit } as never,
-        announcer
+        announcer,
+        new LineChangeRecorder()
       );
       merges = new MergeService(
         dataSource,

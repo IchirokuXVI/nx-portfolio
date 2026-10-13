@@ -319,11 +319,17 @@ export interface BasketSettlementRow {
  * 0188). `$1` is the reading basket, `$2` the line ids, `$3` the window in
  * milliseconds.
  *
- * It answers a **count and a time and nothing else**, which is the redaction:
- * the row a reader is served must not name who bought, so the participant, the
- * account and the basket of the purchase are never selected. A column this
- * statement does not load cannot leak through a mapper that forgot to drop it
- * (plan 0130, section 6).
+ * It answers a **count, a time and one boolean, and nothing else**, which is
+ * the redaction: the row a reader is served must not name who bought, so the
+ * participant, the account and the basket of the purchase are never selected. A
+ * column this statement does not load cannot leak through a mapper that forgot
+ * to drop it (plan 0130, section 6).
+ *
+ * `throughBasket` is whether the **newest** of those purchases was made through
+ * a basket (plan 0203, section 3). It decides between the two notes of a row,
+ * "bought from another shopping list" and "bought from the list". A boolean,
+ * never the id of that basket. The order is `("settledAt", id)`, as everywhere,
+ * so two purchases of one instant still have one newest.
  *
  * Summed here rather than in TypeScript because nothing downstream wants the
  * purchases apart: the row says how many and when the newest was.
@@ -334,7 +340,11 @@ export interface BasketSettlementRow {
 export const BASKET_ELSEWHERE_SQL = `
   SELECT s."lineId" AS "lineId",
          SUM(s.quantity)::int AS "quantity",
-         MAX(s."settledAt") AS "settledAt"
+         MAX(s."settledAt") AS "settledAt",
+         (array_agg(
+            (s."basketId" IS NOT NULL)
+            ORDER BY s."settledAt" DESC, s.id DESC
+          ))[1] AS "throughBasket"
   FROM "line_settlements" s
   WHERE s."lineId" = ANY($2::uuid[])
     AND ${boughtElsewhere('s', '$1', '$3')}
@@ -348,6 +358,8 @@ export interface BasketElsewhereRow {
   quantity: number;
   /** The newest of those purchases. */
   settledAt: Date;
+  /** That newest purchase was made through a basket, and not on the list page. */
+  throughBasket: boolean;
 }
 
 /**

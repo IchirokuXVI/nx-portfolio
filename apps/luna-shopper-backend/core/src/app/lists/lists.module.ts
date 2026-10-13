@@ -113,6 +113,8 @@ import { TripsService } from './trips/trips.service';
   // these two classes, so an operator's change to a household's list is the write
   // that household's own admin makes. Exporting them is what stops the admin
   // module reaching for the repositories and reimplementing the effect.
-  exports: [ListAccessService, ListService, LineService],
+  // The recorder is exported since plan 0203: a basket settle and a basket
+  // revert write a change row in their own transaction.
+  exports: [ListAccessService, ListService, LineService, LineChangeRecorder],
 })
 export class ListsModule {}

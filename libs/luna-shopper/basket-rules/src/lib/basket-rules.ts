@@ -20,11 +20,15 @@
  * nothing with the present, so two readers with two clocks agree.
  */
 
-/** The states of a row or of an entry, by the table of plan 0130, section 4. */
+/**
+ * The states of a row or of an entry, by the table of plan 0130, section 4,
+ * and `BOUGHT_ELSEWHERE` of plan 0203, section 3.
+ */
 export const BASKET_RULE_STATES = {
   WANTED: 'WANTED',
   PARTLY: 'PARTLY',
   DONE: 'DONE',
+  BOUGHT_ELSEWHERE: 'BOUGHT_ELSEWHERE',
   NOT_AVAILABLE: 'NOT_AVAILABLE',
   SKIPPED: 'SKIPPED',
   REMOVED: 'REMOVED',
@@ -97,10 +101,15 @@ export interface BasketRuleProgress {
  *    over the row is a close that still holds. Tested before `DONE` and guarded
  *    on `left`, so a demand taken to zero after a close does not leave a row
  *    that says the shop had none of a thing nobody asks for.
- * 3. **`DONE`**: nothing is left, and something was bought, here or elsewhere. A
- *    row that somebody else finished is done (plan 0188).
- * 4. **`PARTLY`**: something is left and this basket bought some.
- * 5. **`WANTED`** otherwise.
+ * 3. **`DONE`**: nothing is left, and this basket bought some of it. Another
+ *    basket can have bought the rest: a row that asked for 3 and bought 2 here
+ *    is done, and it reads "2 of 2" because `asked` is `bought + left`.
+ * 4. **`BOUGHT_ELSEWHERE`**: nothing is left, this basket bought none of it,
+ *    and somebody else bought some lately (plan 0203, which reversed plan
+ *    0188). A row of several lines has it only when nothing is left on any of
+ *    them and this basket bought none of them, which is what the sums say.
+ * 5. **`PARTLY`**: something is left and this basket bought some.
+ * 6. **`WANTED`** otherwise.
  *
  * `REMOVED` is never an answer here. A removed row has no entries.
  */
@@ -120,8 +129,11 @@ export function rowStateOf(
     return bought > 0 ? BASKET_RULE_STATES.PARTLY : BASKET_RULE_STATES.WANTED;
   }
 
-  return bought > 0 || boughtElsewhere > 0
-    ? BASKET_RULE_STATES.DONE
+  if (bought > 0) {
+    return BASKET_RULE_STATES.DONE;
+  }
+  return boughtElsewhere > 0
+    ? BASKET_RULE_STATES.BOUGHT_ELSEWHERE
     : BASKET_RULE_STATES.WANTED;
 }
 
@@ -129,7 +141,8 @@ export function rowStateOf(
  * The numbers of a row as sums, and the newest act over its entries.
  *
  * `boughtElsewhere` is in neither `bought` nor `asked`: those units were never
- * this basket's to buy (plan 0188).
+ * this basket's to buy (plan 0188). It is a number that no count uses (plan
+ * 0203, section 3).
  */
 export function rowNumbersOf(
   entries: readonly BasketRuleEntry[]
@@ -147,14 +160,18 @@ export function rowNumbersOf(
 /**
  * The progress of a basket from the states of its rows.
  *
- * A `REMOVED` row counts for nothing. A `SKIPPED` row is pending: it is neither
- * done nor unavailable, and somebody still has to decide about it.
+ * A `REMOVED` row counts for nothing, and neither does a `BOUGHT_ELSEWHERE`
+ * row: a buy made outside a basket counts toward no number of it (plan 0203,
+ * section 4). A `SKIPPED` row is pending: it is neither done nor unavailable,
+ * and somebody still has to decide about it.
  */
 export function progressOf(
   rows: readonly { state: string }[]
 ): BasketRuleProgress {
   const counted = rows.filter(
-    (row) => row.state !== BASKET_RULE_STATES.REMOVED
+    (row) =>
+      row.state !== BASKET_RULE_STATES.REMOVED &&
+      row.state !== BASKET_RULE_STATES.BOUGHT_ELSEWHERE
   );
   const done = counted.filter(
     (row) => row.state === BASKET_RULE_STATES.DONE

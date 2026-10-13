@@ -1,4 +1,7 @@
-import { LineChangeKind } from '../../lib/messages/basket-changes.messages';
+import {
+  BasketChangeOriginKind,
+  LineChangeKind,
+} from '../../lib/messages/basket-changes.messages';
 import { BASKET_PATTERNS } from '../../lib/messages/basket.messages';
 import {
   array,
@@ -12,6 +15,7 @@ import {
   paginated,
   ref,
   schemaId,
+  string,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
 import { BASKET_SCHEMA_IDS } from './basket.schemas';
@@ -29,6 +33,7 @@ import { BASKET_SCHEMA_IDS } from './basket.schemas';
 export const BASKET_CHANGE_SCHEMA_IDS = {
   kind: schemaId('enums/LineChangeKind'),
   actorView: schemaId('basket/BasketChangeActorView'),
+  origin: schemaId('basket/BasketChangeOrigin'),
   changeView: schemaId('basket/BasketChangeView'),
   changePage: schemaId('basket/BasketChangePage'),
   acknowledged: schemaId('basket/BasketChangesAcknowledged'),
@@ -70,6 +75,39 @@ const actorView: JsonSchema = {
   ],
 };
 
+/**
+ * Where an outside buy came from (plan 0203, section 5).
+ *
+ * Two members and no basket id in either. The owner of the other basket is an
+ * actor view or null, so a reader who is told no account here is told none.
+ *
+ * `kind` is a string enum of one value, and not a `const`: the generator of the
+ * admin wire types reads an enum as a literal type, and reads a nested `const`
+ * as `unknown`.
+ */
+const origin: JsonSchema = {
+  $id: BASKET_CHANGE_SCHEMA_IDS.origin,
+  anyOf: [
+    {
+      type: 'object',
+      properties: {
+        kind: string({ enum: [BasketChangeOriginKind.ANOTHER_BASKET] }),
+        owner: {
+          anyOf: [ref(BASKET_CHANGE_SCHEMA_IDS.actorView), { type: 'null' }],
+        },
+      },
+      required: ['kind', 'owner'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: { kind: string({ enum: [BasketChangeOriginKind.LIST] }) },
+      required: ['kind'],
+      additionalProperties: false,
+    },
+  ],
+};
+
 const changeView = object(
   BASKET_CHANGE_SCHEMA_IDS.changeView,
   {
@@ -93,6 +131,9 @@ const changeView = object(
     actor: {
       anyOf: [ref(BASKET_CHANGE_SCHEMA_IDS.actorView), { type: 'null' }],
     },
+    origin: {
+      anyOf: [ref(BASKET_CHANGE_SCHEMA_IDS.origin), { type: 'null' }],
+    },
   },
   [
     'id',
@@ -107,6 +148,7 @@ const changeView = object(
     'approvalBefore',
     'approvalAfter',
     'actor',
+    'origin',
   ]
 );
 
@@ -177,6 +219,7 @@ const acknowledgeRequest = object(
 export const basketChangeSchemas: JsonSchema[] = [
   kind,
   actorView,
+  origin,
   changeView,
   changePage,
   acknowledged,

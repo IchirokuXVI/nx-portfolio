@@ -1,3 +1,5 @@
+> **PR:** [#701](https://github.com/IchirokuXVI/nx-portfolio/pull/701)
+
 # 0203: a buy made outside a basket is a change, and counts for nothing in it
 
 > Asked for by the owner on 2026-10-11: "If someone is buying things from a different list,
@@ -69,6 +71,69 @@ false statement about that code. Two things are absent.
 2. **This plan reverses backend `0138` sections 2 and 7, and that file has no note.**
    Plans `0130`, `0188` and velista `0131` got one. Add the same kind of note to `0138` in
    the pull request that builds this plan.
+
+## What the build decided
+
+The build of 2026-10-13 settled the points below. Each one is a choice of the builder that
+the owner can overturn. Where this section and a later section disagree, this section is
+right.
+
+1. **Backend `0204` was on the base branch.** The state `BOUGHT_ELSEWHERE` and its rule for
+   the progress are in `libs/luna-shopper/basket-rules` (`rowStateOf`, `progressOf`), as
+   review point 1 says. `basket-rows.ts` holds only the note.
+2. **The basket is not one more parameter.** Section 2 says that the basket id is a new
+   parameter of the three statements. A participant row belongs to one basket, so the
+   statements read the basket off the participant they are already given. No caller can
+   hand a basket that is not the participant's.
+3. **Which change removes a line (section 6).** The new read selects a delete, a quantity
+   taken to zero and a rejection, by the columns of the change. An add at zero, a merge and
+   a buy are not removals. The newest removal of a line decides, and the rule of the viewer
+   is applied after that. One case reads differently: somebody renamed a line and the
+   viewer then deleted it. The rename was marked, so the old fold drew a removed row for
+   the viewer's own delete. It is not drawn now.
+4. **A buy never makes a removed row.** A `BOUGHT` change can outlive its window: the line
+   is at zero, the outside buy is older than six hours and the change is still unseen. It
+   still counts in `unseenChangeCount`, and it draws no row and no mark.
+5. **A `BOUGHT_ELSEWHERE` row has no note `SKIPPED_EARLIER`.** Nothing is left to decide
+   about the row, so a skip that still stands says nothing, as on a `DONE` row. The row
+   carries the note of the outside buy. Section 3 says that `SKIPPED_EARLIER` wins over
+   both notes, and that holds for every state that had it before.
+6. **A member is told two people for a buy through another basket.** `origin.owner` is the
+   owner of that basket. `actor` keeps its rule, so it is the account of the buyer beside a
+   served list. A guest is told neither.
+7. **The owner of the other basket is redacted in the statement.** It is loaded only for a
+   buy through another basket on a list the reader was served. The mapper has nothing to
+   drop.
+8. **`marksMoved` is decided for each basket**, as plan `0204` section 3 says.
+   `BasketAnnouncer.linesMoved` takes the basket the write was made through, and that
+   basket is not told. A write names the lines it recorded a change for, so "they had
+   none" tells nobody. A buy on the list page names no basket, so every basket is told.
+9. **A buy of a line that is already at zero writes no change row.** The quantities are
+   equal, so section 1 says nothing is written. The other baskets still receive the patch
+   of plan `0204`, with `boughtElsewhere` raised, and no mark.
+10. **No route takes back a buy made on the list page.** `basket-revert.service.ts` is the
+    only writer of `revertedAt`, and it loads the settlements of its own basket. So nothing
+    writes `BUY_REVERTED` for a list page buy.
+11. **The migration replaces a check, and extends no type.** `kind` is a `varchar`.
+
+**Velista reads the new values through its fallbacks until velista `0142` is built.** A
+state it does not know reads as `WANTED`, a note it does not know draws nothing, and a
+change kind it does not know reads as "something changed". So with this plan alone a row
+that another basket bought is drawn as a row still to buy with nothing left.
+`apps/velista-luna-e2e/src/member.spec.ts` step 4 asserts the row of plan `0188` (`DONE`,
+"Bought on another basket"). That suite gates the staging deploy and does not run on a pull
+request. It fails after this plan and before velista `0142`, which must rewrite that step.
+
+The measurement that "Progress evidence" asks for, on a slot with one covered list of 300
+lines, 35,000 changes on it over 29 days (30,000 of them buys and taken back buys), 100,000
+changes on 20 other lists and 20 lines deleted in the last five hours. The viewer
+acknowledged a day ago. `EXPLAIN (ANALYZE, BUFFERS)`:
+
+| Statement | Execution | Shared buffers | How it reads the changes |
+| --- | --- | --- | --- |
+| The marked changes | 0.29 ms | 223 | backward on `ix_list_line_changes_created`, stops at the cap |
+| The unseen count | 0.14 ms | 12 | stops at the cap |
+| The removed rows | 0.20 ms | 60 | a range of six hours on `ix_list_line_changes_list` |
 
 ## Brief for the agent
 

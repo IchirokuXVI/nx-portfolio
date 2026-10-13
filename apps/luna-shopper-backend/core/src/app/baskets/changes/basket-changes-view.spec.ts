@@ -1,5 +1,6 @@
 import {
   BASKET_CHANGE_LIMITS,
+  BasketChangeOriginKind,
   LineApprovalStatus,
   LineChangeKind,
 } from '@portfolio/luna-shopper/contracts';
@@ -56,6 +57,7 @@ function row(
     actorUserId: null,
     actorParticipantId: null,
     basketId: null,
+    originOwnerUserId: null,
     unseen: true,
     ...over,
   };
@@ -181,6 +183,100 @@ describe('who made a change', () => {
     // That participant is on another basket, so this reader does not know them,
     // and the change carries no account of its own to fall back to.
     expect(drawn.actor).toBeNull();
+  });
+});
+
+describe('where a buy came from (plan 0203, section 5)', () => {
+  const buy = (over: Partial<ChangePageRow> & Pick<ChangePageRow, 'lineId'>) =>
+    row({
+      kind: LineChangeKind.BOUGHT,
+      quantityBefore: 2,
+      quantityAfter: 0,
+      ...over,
+    });
+
+  it('is null for a change that is not a buy', () => {
+    const only = line();
+
+    expect(
+      view(row({ lineId: only.id, basketId: 'b-other' }), [only]).origin
+    ).toBeNull();
+    expect(view(row({ lineId: only.id }), [only]).origin).toBeNull();
+  });
+
+  it('is null for a buy of this basket, which names its participant', () => {
+    const only = line();
+    const drawn = view(
+      buy({ lineId: only.id, basketId: BASKET, actorParticipantId: 'p-1' }),
+      [only]
+    );
+
+    expect(drawn.origin).toBeNull();
+    expect(drawn.actor).toEqual({ participantId: 'p-1' });
+  });
+
+  it('is LIST for a buy with no basket, with the buyer as the actor', () => {
+    const only = line();
+    const drawn = view(buy({ lineId: only.id, actorUserId: 'u-buyer' }), [
+      only,
+    ]);
+
+    expect(drawn.origin).toEqual({ kind: BasketChangeOriginKind.LIST });
+    expect(drawn.actor).toEqual({ userId: 'u-buyer' });
+  });
+
+  it('is ANOTHER_BASKET with the owner the statement loaded', () => {
+    const only = line();
+    const drawn = view(
+      buy({
+        lineId: only.id,
+        basketId: 'b-other',
+        actorParticipantId: 'p-9',
+        actorUserId: 'u-buyer',
+        originOwnerUserId: 'u-owner',
+      }),
+      [only]
+    );
+
+    expect(drawn.origin).toEqual({
+      kind: BasketChangeOriginKind.ANOTHER_BASKET,
+      owner: { userId: 'u-owner' },
+    });
+    // The buyer is somebody on that basket. The owner is whose basket it is.
+    expect(drawn.actor).toEqual({ userId: 'u-buyer' });
+  });
+
+  it('names nobody when the statement loaded no owner', () => {
+    // A guest, a reader who cannot write the list, or a basket deleted since.
+    const only = line();
+    const drawn = view(
+      buy({ lineId: only.id, basketId: 'b-other', actorParticipantId: 'p-9' }),
+      [only],
+      []
+    );
+
+    expect(drawn.origin).toEqual({
+      kind: BasketChangeOriginKind.ANOTHER_BASKET,
+      owner: null,
+    });
+    expect(drawn.actor).toBeNull();
+    expect(Object.keys(drawn)).not.toContain('listId');
+  });
+
+  it('serves no basket id, in any field', () => {
+    const only = line();
+    const drawn = view(
+      buy({
+        lineId: only.id,
+        kind: LineChangeKind.BUY_REVERTED,
+        basketId: 'b-other',
+        originOwnerUserId: 'u-owner',
+      }),
+      [only]
+    );
+
+    expect(JSON.stringify(drawn)).not.toContain('b-other');
+    expect(Object.keys(drawn)).not.toContain('basketId');
   });
 });
 
