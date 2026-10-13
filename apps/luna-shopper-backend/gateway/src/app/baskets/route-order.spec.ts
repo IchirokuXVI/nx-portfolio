@@ -59,6 +59,9 @@ describe('the basket routes register in an order that is a rule', () => {
   it.each([
     ['GET', 'baskets/live', 'baskets/:id'],
     ['GET', 'baskets/live/summary', 'baskets/:id'],
+    // Plan 0205: `:id/rows` would read the permanent basket as a basket
+    // called `live`, behind the participant guard.
+    ['GET', 'baskets/live/rows', 'baskets/:id/rows'],
     ['GET', 'baskets/shared', 'baskets/:id'],
     // Only the delete pair competes: there is no `GET :id/participants/:id`,
     // so the owner's read of one participant cannot swallow `mine`.

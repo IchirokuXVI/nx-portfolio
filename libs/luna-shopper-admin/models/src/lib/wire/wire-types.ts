@@ -2359,6 +2359,27 @@ export type BasketBasketSummaryView = {
 };
 
 /**
+ * `basket.BasketView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketView = {
+  id: string;
+  kind: EnumsBasketKind;
+  name: string | null;
+  status: EnumsBasketStatus;
+  createdAt: string;
+  rows: BasketBasketRowView[];
+  lists: BasketBasketListRef[];
+  participants: BasketSharingParticipantView[];
+  me: BasketSharingParticipantView;
+  progress: BasketBasketProgress;
+  truncated: boolean;
+  servesLocations: boolean;
+  unseenChangeCount: number;
+  newestUnseenChangeId: string | null;
+  supermarketLocationId: string | null;
+};
+
+/**
  * `basket.SharedBasketPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.

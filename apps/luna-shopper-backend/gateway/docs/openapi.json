@@ -9121,6 +9121,83 @@
         ]
       }
     },
+    "/v1/baskets/live/rows": {
+      "get": {
+        "operationId": "BasketLiveController_liveRows_v1",
+        "parameters": [
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows, the lists, the people, the progress and the marks of the basket, with no products, no price scopes and no shop. For a client that already holds those from the full read and reads again after an event. The prices such a client draws are as old as its last full read: it makes a full read when the page opens, when the app comes back and when the socket reconnects, and a price changes when a harvest runs. When a row names a product the client does not hold, it makes the full read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/live/summary": {
       "get": {
         "operationId": "BasketLiveController_summary_v1",
@@ -9628,6 +9705,106 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/rows": {
+      "get": {
+        "operationId": "BasketController_rows_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows, the lists, the people, the progress and the marks of the basket, with no products, no price scopes and no shop. For a client that already holds those from the full read and reads again after an event. The prices such a client draws are as old as its last full read: it makes a full read when the page opens, when the app comes back and when the socket reconnects, and a price changes when a harvest runs. When a row names a product the client does not hold, it makes the full read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketView"
                 }
               }
             }
@@ -35489,6 +35666,95 @@
           "id",
           "kind",
           "progress"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.BasketStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketRowView"
+            }
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketListRef"
+            }
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+            }
+          },
+          "me": {
+            "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/basket.BasketProgress"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "servesLocations": {
+            "type": "boolean"
+          },
+          "unseenChangeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "newestUnseenChangeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "createdAt",
+          "rows",
+          "lists",
+          "participants",
+          "me",
+          "progress",
+          "truncated",
+          "servesLocations",
+          "unseenChangeCount",
+          "newestUnseenChangeId",
+          "supermarketLocationId"
         ],
         "additionalProperties": false
       },

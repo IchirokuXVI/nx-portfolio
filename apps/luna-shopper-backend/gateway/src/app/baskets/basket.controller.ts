@@ -19,7 +19,6 @@ import {
   type AddBasketLineRequest,
   type BasketChangePage,
   type BasketChangesAcknowledged,
-  type BasketLinePick,
   type BasketMarksView,
   type BasketParticipantContext,
   type BasketProductListsView,
@@ -33,7 +32,6 @@ import {
   type ChangeBasketLinesProductRequest,
   type GetBasketMarksRequest,
   type GetBasketProductListsRequest,
-  type GetBasketRequest,
   type GetLiveBasketRequest,
   type ListBasketChangesRequest,
   type RenameBasketRowRequest,
@@ -66,10 +64,7 @@ import {
   componentRef,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
-import {
-  BasketCatalogService,
-  type BasketReadPrices,
-} from './basket-catalog.service';
+import { BasketCatalogService } from './basket-catalog.service';
 import {
   AcknowledgeBasketChangesDto,
   AddBasketLineDto,
@@ -89,6 +84,15 @@ import {
   type RewriteChoice,
   type SettleChoice,
 } from './settle-price.service';
+
+/**
+ * What the two rows routes say about their answer (plan 0205, section 3).
+ *
+ * The prices are the reason it is written down: a client that reads the rows
+ * alone goes on drawing the prices of its last full read.
+ */
+const ROWS_ALONE =
+  'The rows, the lists, the people, the progress and the marks of the basket, with no products, no price scopes and no shop. For a client that already holds those from the full read and reads again after an event. The prices such a client draws are as old as its last full read: it makes a full read when the page opens, when the app comes back and when the socket reconnects, and a price changes when a harvest runs. When a row names a product the client does not hold, it makes the full read.';
 
 /** Core could not be asked, so the settle records no price and no name. */
 const NOTHING_CHOSEN: SettleChoice = { paid: null, itemSnapshot: null };
@@ -129,44 +133,11 @@ export class BasketLiveController {
     @AuthUser() user: CurrentUser,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
-    // The shop the device chose, which is the only way a `LIVE` basket's shop
-    // reaches the server (plan 0163; velista 0091, section 7). The permanent
-    // basket never has one of its own, so it is never locked.
     const locationId = query?.locationId;
-    // Beside each other, because neither needs the other. The shop gives its
-    // chain, so each row says whether it is usually bought there (plan 0165).
-    // The other question creates the basket and answers the lines whose
-    // product only a price can choose (plan 0201, section 1).
-    const [shop, choices] = await Promise.all([
-      locationId ? this.catalog.shopAt(locationId, []) : null,
-      this.catalog.livePriceChoicesOf(user.userId),
-    ]);
-    // Asked here only when a line needs a price, because the scopes that
-    // count are the owner's. Otherwise the composition asks it, as it always
-    // did.
-    const searchScope =
-      choices && choices.lines.length > 0
-        ? await this.catalog.searchScopeOf(
-            choices.basketId,
-            choices.participantId
-          )
-        : undefined;
-    const prices =
-      choices && searchScope !== undefined
-        ? await this.catalog.pricesFor(
-            choices.lines,
-            searchScope,
-            locationId,
-            shop
-          )
-        : null;
-    const supermarketId = shop?.supermarket.id;
-    const req: GetLiveBasketRequest = {
-      userId: user.userId,
-      ...(supermarketId ? { supermarketId } : {}),
-      ...picksOn(prices),
-    };
-    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
+    const { basket, searchScope, prices } = await this.catalog.liveRowsOf(
+      user.userId,
+      locationId
+    );
     return this.catalog.compose(
       basket,
       basket.me.id,
@@ -174,6 +145,33 @@ export class BasketLiveController {
       searchScope,
       prices
     );
+  }
+
+  /**
+   * The rows of the caller's permanent basket, with no catalog half (plan
+   * 0205, section 3).
+   *
+   * The read of a client that already holds the products, the scopes and the
+   * shop from a full read, and needs the rows again after an event. It asks
+   * what {@link live} asks up to the rows and stops there: no products, no
+   * scopes, no shop. Like {@link live} it creates the basket the first time.
+   *
+   * It takes the `locationId` of the full read, because `usual` depends on
+   * the chain of that shop and the product of a line can depend on its
+   * prices.
+   */
+  @Get('live/rows')
+  @ApiContractResponse(BASKET_PATTERNS.live, { description: ROWS_ALONE })
+  @ApiProblemResponses({ auth: true, body: true })
+  async liveRows(
+    @AuthUser() user: CurrentUser,
+    @Query() query?: BasketReadQueryDto
+  ): Promise<BasketView> {
+    const { basket } = await this.catalog.liveRowsOf(
+      user.userId,
+      query?.locationId
+    );
+    return basket;
   }
 
   /**
@@ -256,30 +254,11 @@ export class BasketController {
     @UuidParam('id') id: string,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
-    // Beside each other, because neither needs the other. A basket started at
-    // another shop is refused by the first, before anything is priced.
-    const [{ searchScope, supermarketId, shopId, shop }, choices] =
-      await Promise.all([
-        this.catalog.readShopOf(
-          id,
-          participant.participantId,
-          query?.locationId
-        ),
-        this.catalog.priceChoicesOf(id, participant.participantId),
-      ]);
-    const prices = await this.catalog.pricesFor(
-      choices?.lines ?? [],
-      searchScope,
-      shopId,
-      shop
+    const { basket, searchScope, prices } = await this.catalog.rowsOf(
+      id,
+      participant.participantId,
+      query?.locationId
     );
-    const req: GetBasketRequest = {
-      basketId: id,
-      participantId: participant.participantId,
-      ...(supermarketId ? { supermarketId } : {}),
-      ...picksOn(prices),
-    };
-    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
     return this.catalog.compose(
       basket,
       participant.participantId,
@@ -287,6 +266,44 @@ export class BasketController {
       searchScope,
       prices
     );
+  }
+
+  /**
+   * The rows, the lists, the people, the progress and the marks, as core
+   * computes them, with no catalog half (plan 0205, section 3).
+   *
+   * The read of a client that already holds the products, the scopes and the
+   * shop from a full read, and needs the rows again after an event (velista
+   * plan 0143). It asks what {@link get} asks up to the rows and stops there.
+   * The full read is the read of a page that opens.
+   *
+   * It takes the `locationId` of the full read, because `usual` depends on
+   * the chain of that shop and the product of a line can depend on its
+   * prices. A basket started at a shop refuses another with the same 409.
+   *
+   * A row can name a product the client does not hold, for one a line that
+   * somebody added since. The client then makes the full read.
+   */
+  @Get(':id/rows')
+  @ApiContractResponse(BASKET_PATTERNS.get, { description: ROWS_ALONE })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    body: true,
+    shopLocked: true,
+  })
+  async rows(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string,
+    @Query() query?: BasketReadQueryDto
+  ): Promise<BasketView> {
+    const { basket } = await this.catalog.rowsOf(
+      id,
+      participant.participantId,
+      query?.locationId
+    );
+    return basket;
   }
 
   /**
@@ -895,18 +912,6 @@ export class BasketController {
       resolved: await this.catalog.describeScopes(scope),
     });
   }
-}
-
-/**
- * The picks of a read as the request carries them, or nothing (plan 0201).
- *
- * Absent rather than empty when nothing was priced, so a basket with no line
- * that needs a price sends core the request it always sent.
- */
-function picksOn(prices: BasketReadPrices | null): {
-  picks?: BasketLinePick[];
-} {
-  return prices && prices.picks.length > 0 ? { picks: prices.picks } : {};
 }
 
 /**
