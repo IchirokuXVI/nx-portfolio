@@ -705,6 +705,14 @@ function requireEntryShape(req: AppendShopWalkEntryRequest): void {
       { messageArgs: { field: 'events' } }
     );
   }
+  // A compass that flickers must not grow an entry without end (plan 0197).
+  const guards = req.events.filter((event) => event.type === 'guard').length;
+  if (guards > SHOP_WALK_LIMITS.guardEventsMax) {
+    throw new ValidationException(
+      `an entry holds at most ${SHOP_WALK_LIMITS.guardEventsMax} guard events`,
+      { messageArgs: { field: 'events' } }
+    );
+  }
   if (!isUuid(req.id)) {
     throw new ValidationException('id must be a uuid', {
       messageArgs: { field: 'id' },

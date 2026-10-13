@@ -401,6 +401,97 @@ describeIntegration('shop walks (real Postgres)', () => {
     expect(fromRewind.entries[0].seq).toBe(firstRewind + 1);
   });
 
+  it('keeps the guard events of an entry in the log and nowhere in the map (plan 0197)', async () => {
+    const guardShop = await shop(chainId, 'guard');
+    const walk = await walks.create({
+      userId: MAPPER,
+      supermarketLocationId: guardShop,
+      name: 'Thursday',
+    });
+    const guards: ShopWalkEntryView['events'] = [
+      { type: 'guard', logMs: 400, what: 'compass-disturbed', degrees: 41.5 },
+      { type: 'guard', logMs: 900, what: 'turned', degrees: 158.2 },
+      { type: 'guard', logMs: 950, what: 'jump', metres: 3.4 },
+      { type: 'guard', logMs: 1000, what: 'lost' },
+    ];
+    const events: ShopWalkEntryView['events'] = [
+      {
+        type: 'path',
+        points: [
+          [0, 0, 0],
+          [500, 1, 0],
+        ],
+      },
+      guards[0],
+      {
+        type: 'mark-put',
+        mark: {
+          id: 'n1',
+          kind: 'note',
+          x: 1,
+          y: 0,
+          heading: 0,
+          text: 'door',
+          logMs: 500,
+        },
+      },
+      ...guards.slice(1),
+    ];
+    const stopped = {
+      id: 'bb000000-0000-4000-8000-000000000197',
+      kind: 'stopped' as const,
+      at: '2026-10-08T11:00:00.000Z',
+      logFrom: 0,
+      logTo: 1000,
+      reason: 'frame-moved' as const,
+    };
+    await append(walk.id, 0, { ...stopped, events });
+
+    const { entries } = await walks.log({ userId: MAPPER, walkId: walk.id });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].events).toEqual(events);
+
+    // The document is the one the entry folds to with no guard event in it.
+    const plain = await walks.create({
+      userId: MAPPER,
+      supermarketLocationId: guardShop,
+      name: 'Friday',
+    });
+    await append(plain.id, 0, {
+      ...stopped,
+      id: 'bb000000-0000-4000-8000-000000000198',
+      events: events.filter((event) => event.type !== 'guard'),
+    });
+    const read = await walks.get({ userId: MAPPER, walkId: walk.id });
+    expect(read.document).toEqual(
+      (await walks.get({ userId: MAPPER, walkId: plain.id })).document
+    );
+    expect(read.document.marks.map((mark) => mark.id)).toEqual(['n1']);
+    expect(JSON.stringify(read)).not.toContain('guard');
+
+    await walks.update({ userId: MAPPER, walkId: walk.id, shown: true });
+    const { map } = await walks.mapForLocation({
+      supermarketLocationId: guardShop,
+    });
+    expect(map?.view).toEqual(shopperView(read.document));
+    expect(JSON.stringify(map)).not.toContain('guard');
+
+    // One over the cap is refused whole, and the walk stays where it was.
+    const error = await refusal(
+      append(walk.id, 1, {
+        ...stopped,
+        id: 'bb000000-0000-4000-8000-000000000199',
+        logFrom: 1000,
+        logTo: 2000,
+        events: Array.from({ length: 51 }, () => guards[0]),
+      })
+    );
+    expect(error).toBeInstanceOf(ValidationException);
+    expect(
+      (await walks.get({ userId: MAPPER, walkId: walk.id })).walk.lastSeq
+    ).toBe(1);
+  });
+
   it('writes the shop’s section list in walk order once the walk is shown', async () => {
     const shown = await walks.update({ userId: MAPPER, walkId, shown: true });
     expect(shown.shown).toBe(true);

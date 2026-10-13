@@ -228,6 +228,22 @@ describe('shop walks over HTTP (plan 0168)', () => {
     ]);
   });
 
+  it('forwards a guard event untouched (plan 0197)', async () => {
+    const events = [
+      { type: 'path', points: [[0, 0, 0]] },
+      { type: 'guard', logMs: 400, what: 'turned', degrees: 158.4 },
+      { type: 'guard', logMs: 900, what: 'jump', metres: 3.25 },
+      { type: 'guard', logMs: 1000, what: 'lost' },
+    ];
+    const res = await call('POST', `/v1/catalog/walks/${WALK}/entries`, {
+      bearer: token('mapper-2', ['shopMap.record']),
+      body: { ...entry(), kind: 'stopped', reason: 'frame-moved', events },
+    });
+    expect(res.status).toBe(201);
+    expect(app.sent).toHaveLength(1);
+    expect(app.sent[0].payload['events']).toEqual(events);
+  });
+
   it.each([
     ['an id that is not a uuid', { ...entry(), id: 'e1' }],
     ['an unknown kind', { ...entry(), kind: 'paused' }],

@@ -4,6 +4,7 @@ import {
   SHOP_MAP_MARK_KINDS,
   SHOP_MAP_PROBLEM_CODES,
   SHOP_WALK_ENTRY_KINDS,
+  SHOP_WALK_GUARD_KINDS,
   SHOP_WALK_LIMITS,
   SHOP_WALK_PATTERNS,
   SHOP_WALK_STOP_REASONS,
@@ -29,6 +30,7 @@ import { COMMON_IDS } from '../common.schemas';
 export const SHOP_WALK_SCHEMA_IDS = {
   shopWalkEntryKind: schemaId('enums/ShopWalkEntryKind'),
   shopWalkStopReason: schemaId('enums/ShopWalkStopReason'),
+  shopWalkGuardKind: schemaId('enums/ShopWalkGuardKind'),
   shopMapAreaKind: schemaId('enums/ShopMapAreaKind'),
   shopMapAreaOrigin: schemaId('enums/ShopMapAreaOrigin'),
   shopMapMarkKind: schemaId('enums/ShopMapMarkKind'),
@@ -45,6 +47,7 @@ export const SHOP_WALK_SCHEMA_IDS = {
   shopWalkAreaPutEvent: schemaId('catalog/ShopWalkAreaPutEvent'),
   shopWalkAreaRemovedEvent: schemaId('catalog/ShopWalkAreaRemovedEvent'),
   shopWalkSectionLeftEvent: schemaId('catalog/ShopWalkSectionLeftEvent'),
+  shopWalkGuardEvent: schemaId('catalog/ShopWalkGuardEvent'),
   shopWalkEvent: schemaId('catalog/ShopWalkEvent'),
   shopWalkEntryView: schemaId('catalog/ShopWalkEntryView'),
   shopWalkTimelineEntry: schemaId('catalog/ShopWalkTimelineEntry'),
@@ -200,6 +203,17 @@ const sectionLeftEvent = object(
   { type: literal('section-left'), logMs: num() },
   ['type', 'logMs']
 );
+const guardEvent = object(
+  IDS.shopWalkGuardEvent,
+  {
+    type: literal('guard'),
+    logMs: num(),
+    what: ref(IDS.shopWalkGuardKind),
+    degrees: num(),
+    metres: num(),
+  },
+  ['type', 'logMs', 'what']
+);
 
 const shopWalkEvent: JsonSchema = {
   $id: IDS.shopWalkEvent,
@@ -211,6 +225,7 @@ const shopWalkEvent: JsonSchema = {
     ref(IDS.shopWalkAreaPutEvent),
     ref(IDS.shopWalkAreaRemovedEvent),
     ref(IDS.shopWalkSectionLeftEvent),
+    ref(IDS.shopWalkGuardEvent),
   ],
 };
 
@@ -467,6 +482,7 @@ const appendShopWalkEntryRequest = object(
 export const shopWalkSchemas: JsonSchema[] = [
   enumOf(IDS.shopWalkEntryKind, SHOP_WALK_ENTRY_KINDS),
   enumOf(IDS.shopWalkStopReason, SHOP_WALK_STOP_REASONS),
+  enumOf(IDS.shopWalkGuardKind, SHOP_WALK_GUARD_KINDS),
   enumOf(IDS.shopMapAreaKind, SHOP_MAP_AREA_KINDS),
   enumOf(IDS.shopMapAreaOrigin, SHOP_MAP_AREA_ORIGINS),
   enumOf(IDS.shopMapMarkKind, SHOP_MAP_MARK_KINDS),
@@ -483,6 +499,7 @@ export const shopWalkSchemas: JsonSchema[] = [
   areaPutEvent,
   areaRemovedEvent,
   sectionLeftEvent,
+  guardEvent,
   shopWalkEvent,
   shopWalkEntryView,
   shopWalkTimelineEntry,

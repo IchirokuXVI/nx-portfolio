@@ -3146,7 +3146,19 @@ export type CatalogShopWalkEvent =
   | CatalogShopWalkMarkRemovedEvent
   | CatalogShopWalkAreaPutEvent
   | CatalogShopWalkAreaRemovedEvent
-  | CatalogShopWalkSectionLeftEvent;
+  | CatalogShopWalkSectionLeftEvent
+  | CatalogShopWalkGuardEvent;
+
+/**
+ * `catalog.ShopWalkGuardEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkGuardEvent = {
+  type: 'guard';
+  logMs: number;
+  what: EnumsShopWalkGuardKind;
+  degrees?: number;
+  metres?: number;
+};
 
 /**
  * `catalog.ShopWalkListView` in the gateway's OpenAPI document.
@@ -3856,6 +3868,17 @@ export type EnumsShopWalkEntryKind =
   | 'rewound'
   | 'confirmed'
   | 'discarded';
+
+/**
+ * `enums.ShopWalkGuardKind` in the gateway's OpenAPI document.
+ */
+export type EnumsShopWalkGuardKind =
+  | 'lost'
+  | 'jump'
+  | 'turned'
+  | 'heading'
+  | 'compass-disturbed'
+  | 'compass-settled';
 
 /**
  * `enums.ShopWalkStopReason` in the gateway's OpenAPI document.
