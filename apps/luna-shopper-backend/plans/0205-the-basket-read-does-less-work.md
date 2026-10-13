@@ -1,3 +1,5 @@
+> **PR:** [#704](https://github.com/IchirokuXVI/nx-portfolio/pull/704)
+
 # 0205: the basket read does less work
 
 > Asked for by the owner on 2026-10-11, with the slow sync of the shopping list: "Also
