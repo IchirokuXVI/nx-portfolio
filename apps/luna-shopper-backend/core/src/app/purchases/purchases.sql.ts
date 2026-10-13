@@ -1,3 +1,4 @@
+import type { ItemSnapshot } from '@portfolio/luna-shopper/contracts';
 import { GENERATED_BASKET } from '../baskets/open-basket.sql';
 import { READABLE_LIST } from '../zones/zone-summary.sql';
 
@@ -355,6 +356,10 @@ function foldedRows(readerParam: string, cursorParam: string): string {
   "folded" AS (
     SELECT e."lineId", e."itemId", e."pricePaidCents", e."pricePaidCurrency",
            (ARRAY_AGG(e.id ORDER BY e."settledAt", e.id))[1] AS "id",
+           -- What the product was called (plan 0202, section 4). The group is
+           -- one product, so the newest copy that exists answers for it.
+           (ARRAY_AGG(e."itemSnapshot" ORDER BY e."settledAt" DESC, e.id DESC)
+             FILTER (WHERE e."itemSnapshot" IS NOT NULL))[1] AS "itemSnapshot",
            MIN(e."settledAt") AS "settledAt",
            COALESCE(SUM(e."quantity") FILTER (WHERE e."outcome" = 'BOUGHT'), 0)::int
              AS "quantity",
@@ -405,6 +410,7 @@ function foldedRows(readerParam: string, cursorParam: string): string {
   )
   SELECT k."id",
          k."itemId",
+         k."itemSnapshot",
          CASE WHEN k."anyBought" THEN 'BOUGHT' ELSE 'NOT_AVAILABLE' END AS "outcome",
          k."quantity",
          k."pricePaidCents",
@@ -444,7 +450,7 @@ export const PURCHASE_BASKET_ROWS_SQL = `
   WITH "entry" AS (
     SELECT s.id, s."lineId", s."itemId", s."outcome", s."quantity",
            s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
-           s."priceScopeId", s."supermarketLocationId"
+           s."priceScopeId", s."supermarketLocationId", s."itemSnapshot"
     FROM "line_settlements" s
     JOIN "baskets" gl ON gl.id = s."basketId"
     WHERE s."basketId" = $2::uuid
@@ -472,8 +478,12 @@ export const PURCHASE_SESSION_ROWS_SQL = `
   "entry" AS (
     SELECT x.id, x."lineId", x."itemId", x."outcome", x."quantity",
            x."settledAt", x."pricePaidCents", x."pricePaidCurrency",
-           x."priceScopeId", x."supermarketLocationId"
+           x."priceScopeId", x."supermarketLocationId", n."itemSnapshot"
     FROM "sessioned" x
+    -- Joined back by id for the one column the window does not carry (plan
+    -- 0202): the three arms of "mine" are a UNION, and a document in it would
+    -- be compared on every row of a person's history to serve one session.
+    JOIN "line_settlements" n ON n.id = x.id
     WHERE x."entryId" = $3::uuid
   ),
   ${foldedRows('$1', '$4')} $5
@@ -505,6 +515,8 @@ export interface PurchaseEntryRow {
 export interface PurchaseLineRow {
   id: string;
   itemId: string | null;
+  /** The newest copy among the folded purchases, or null (plan 0202). */
+  itemSnapshot: ItemSnapshot | null;
   outcome: string;
   quantity: number;
   pricePaidCents: number | null;

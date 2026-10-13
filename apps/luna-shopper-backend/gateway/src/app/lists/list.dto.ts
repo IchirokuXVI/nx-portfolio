@@ -347,7 +347,7 @@ export class SettleLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`.",
+      "Which of the line's products was bought. Recorded on the settlement as it was at the time, with its name, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. A line with several products and none named records no product and no price.",
   })
   @IsOptional()
   @IsUUID()
@@ -355,8 +355,9 @@ export class SettleLineDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
+    deprecated: true,
     description:
-      'The price scope the price on your screen was read at. There is no field for an amount, and there will not be: the gateway reads the price itself, at your own shops.',
+      'No longer read (plan 0202). The gateway chooses the price itself: at the shop you name, or the cheapest across your own areas when you name none. The field is accepted for one release, so a client that still sends it is not refused.',
   })
   @IsOptional()
   @IsUUID()
@@ -365,7 +366,7 @@ export class SettleLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      "The shop it was bought at. With `priceScopeId`, it is recorded when that scope is one of the shop's. Without one, the gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds.",
+      'The shop it was bought at. The gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, its chain, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds. Left out, the purchase records the cheapest price across your own areas, with no shop and no chain.',
   })
   @IsOptional()
   @IsUUID()

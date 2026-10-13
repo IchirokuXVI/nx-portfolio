@@ -6,6 +6,26 @@ import {
 import { READABLE_LIST } from '../zones/zone-summary.sql';
 
 /**
+ * "No row stands in for this one", for a `line_settlements` row under the
+ * alias `s` (plan 0202, section 4).
+ *
+ * A change of product from the basket marks a buy reverted and writes another
+ * row beside it that names it in `replacesSettlementId`. A history serves a
+ * reverted row marked, because a buy somebody took back is a truer history
+ * than a gap. A replaced row was not taken back, so the two histories that
+ * serve reverted rows leave it out with this clause.
+ *
+ * It rides `ux_settlements_replaces`, which holds the corrections alone. A read
+ * that already asks for `"revertedAt" IS NULL` needs no such clause: a replaced
+ * row is always marked reverted.
+ */
+export const NOT_REPLACED = `NOT EXISTS (
+      SELECT 1
+      FROM "line_settlements" r
+      WHERE r."replacesSettlementId" = s."id"
+    )`;
+
+/**
  * One product's settlements, across every list the caller may read **at request
  * time** (plan 0047, section 6.2).
  *
@@ -34,6 +54,11 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
  * The columns are the served shape of `LineSettlementView`, which since plan
  * 0151 section 5 includes who settled on a basket and the shop.
  *
+ * A row that a change of product replaced is the one exception to "reverted
+ * rows are not filtered out" (plan 0202, section 4): {@link NOT_REPLACED}. It
+ * named another product, so without that clause this read would show the old
+ * product as bought and given back.
+ *
  * `$1` is the item, `$2` the caller, `$3` the cursor row's id or null, `$4` the
  * limit.
  */
@@ -42,6 +67,7 @@ export const ITEM_SETTLEMENTS_SQL = `
          s."lineId",
          s."listId",
          s."itemId",
+         s."itemSnapshot",
          s."outcome",
          s."quantity",
          s."settledByUserId",
@@ -54,6 +80,7 @@ export const ITEM_SETTLEMENTS_SQL = `
          s."supermarketLocationId"
   FROM "line_settlements" s
   WHERE s."itemId" = $1
+    AND ${NOT_REPLACED}
     AND EXISTS (
       SELECT 1
       FROM "shopping_lists" sl

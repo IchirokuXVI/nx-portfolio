@@ -9894,6 +9894,116 @@
         ]
       }
     },
+    "/v1/baskets/{id}/lines/product": {
+      "post": {
+        "operationId": "BasketController_changeProduct_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeBasketLinesProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.lines.product` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}/rows/{rowKey}/revert": {
       "post": {
         "operationId": "BasketController_revert_v1",
@@ -29036,17 +29146,18 @@
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`."
+            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, with its name, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. A line with several products and none named records no product and no price."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The price scope the price on your screen was read at. There is no field for an amount, and there will not be: the gateway reads the price itself, at your own shops."
+            "deprecated": true,
+            "description": "No longer read (plan 0202). The gateway chooses the price itself: at the shop you name, or the cheapest across your own areas when you name none. The field is accepted for one release, so a client that still sends it is not refused."
           },
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The shop it was bought at. With `priceScopeId`, it is recorded when that scope is one of the shop's. Without one, the gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds."
+            "description": "The shop it was bought at. The gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, its chain, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds. Left out, the purchase records the cheapest price across your own areas, with no shop and no chain."
           }
         },
         "required": [
@@ -29212,12 +29323,13 @@
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The price scope the row’s price was read at on your screen: the scope of the shop you picked, or of the offer the screen showed. There is no field for an amount, and there will not be: the gateway reads the price itself, as the basket’s owner."
+            "deprecated": true,
+            "description": "No longer read (plan 0202). The gateway chooses the price itself, as the basket’s owner: at the shop of the settle, or the cheapest across the owner’s areas when the settle has no shop. The field is accepted for one release, so a client that still sends it is not refused."
           },
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in \"any shop\" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`."
+            "description": "The one shop you are standing in, when you chose one. The buy is priced at that shop, also when it is outside the basket owner’s areas, and records the shop with its chain. A shop that has no price for the product records no price and no shop. Leave it out in \"any shop\" mode: the buy then records the cheapest price across the owner’s areas, with no shop and no chain. On a basket started at a shop, that shop is the shop of every settle, and a different one answers 409 `basket_shop_locked`."
           },
           "allocations": {
             "description": "Which household got what. Derived oldest first when absent. Every `lineId` must be one of `lineIds`.",
@@ -29231,6 +29343,36 @@
           "lineIds",
           "outcome",
           "from"
+        ]
+      },
+      "ChangeBasketLinesProductDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines whose product changes: the entries of the row as you drew it. A line the basket does not cover answers 404 for the whole request, and nothing is written.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The product the lines change to. It does not have to be a product of any of them. An id the catalog does not know answers 400 `validation_failed` on `itemId`."
+          },
+          "keep": {
+            "type": "boolean",
+            "description": "True keeps the change: the product joins the products of each line and becomes its favourite, which needs the right to edit each line, and one line that fails that answers 403 with nothing written. False holds it for this trip only: the buys of this trip are rewritten and no line is. With false and no buy in this trip nothing is written, and the answer is the lines as they are."
+          }
+        },
+        "required": [
+          "lineIds",
+          "itemId",
+          "keep"
         ]
       },
       "RevertBasketRowDto": {
@@ -36904,6 +37046,45 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ItemSnapshot": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "defaultUnit": {
+            "$ref": "#/components/schemas/enums.UnitOfMeasure"
+          }
+        },
+        "required": [
+          "name",
+          "brand",
+          "unitSize",
+          "packCount",
+          "defaultUnit"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemView": {
         "type": "object",
         "properties": {
@@ -42894,6 +43075,110 @@
           }
         }
       },
+      "list.LineSettlementHistoryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "settledByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revertedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pricePaidCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "pricePaidCurrency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 3
+          },
+          "priceScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemSnapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "lineId",
+          "listId",
+          "itemId",
+          "outcome",
+          "quantity",
+          "settledByUserId",
+          "settledByParticipantId",
+          "settledAt",
+          "revertedAt",
+          "pricePaidCents",
+          "pricePaidCurrency",
+          "priceScopeId",
+          "supermarketLocationId",
+          "itemSnapshot"
+        ],
+        "additionalProperties": false
+      },
       "list.LineSettlementPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -42906,7 +43191,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/list.LineSettlementView"
+              "$ref": "#/components/schemas/list.LineSettlementHistoryView"
             }
           },
           "nextCursor": {
@@ -44593,6 +44878,16 @@
               "null"
             ]
           },
+          "itemSnapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "outcome": {
             "$ref": "#/components/schemas/enums.SettlementOutcome"
           },
@@ -44660,6 +44955,7 @@
         "required": [
           "id",
           "itemId",
+          "itemSnapshot",
           "outcome",
           "quantity",
           "pricePaid",

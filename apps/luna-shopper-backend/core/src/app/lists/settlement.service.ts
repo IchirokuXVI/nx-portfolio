@@ -6,7 +6,7 @@ import {
   SettlementOutcome,
   type LineSettlementPage,
   type LineSettlementResult,
-  type LineSettlementView,
+  type LineSettlementHistoryView,
   type ListItemSettlementsRequest,
   type LineSettlePickRequest,
   type ListLineSettlementsRequest,
@@ -29,9 +29,13 @@ import { LineClaimService } from '../baskets/line-claim.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
 import { ListAccessService } from './list-access.service';
-import { toLineSettlementView, toLineView } from './list.mappers';
-import { paidColumns } from './settlement-paid';
-import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
+import {
+  toLineSettlementHistoryView,
+  toLineSettlementView,
+  toLineView,
+} from './list.mappers';
+import { itemSnapshotColumn, paidColumns } from './settlement-paid';
+import { ITEM_SETTLEMENTS_SQL, NOT_REPLACED } from './settlement.sql';
 
 /**
  * What a settlement cursor carries: the boundary row's id, and nothing else.
@@ -160,6 +164,7 @@ export class SettlementService {
     // Before the transaction, beside the other two shape checks: a malformed
     // message must be refused without a row locked (plan 0143, section 4.3).
     const paid = paidColumns(req.paid, req.outcome);
+    const itemSnapshot = itemSnapshotColumn(req.itemSnapshot);
 
     const found = await this.listAccess.getLine(req.lineId);
     const list = await this.listAccess.requireSettle(found.listId, req.userId);
@@ -238,6 +243,10 @@ export class SettlementService {
           // read it (plan 0143). Core stores it and never reads a price: it has
           // no catalog client and this plan does not give it one.
           ...paid,
+          // What the product was called, as the gateway read it (plan 0202).
+          // Stored only beside a product.
+          itemSnapshot: itemId === null ? null : itemSnapshot,
+          replacesSettlementId: null,
         })
       );
 
@@ -311,6 +320,10 @@ export class SettlementService {
     const qb = this.settlements
       .createQueryBuilder('s')
       .where('s."lineId" = :lineId', { lineId: req.lineId })
+      // A row that a change of product replaced is left out (plan 0202,
+      // section 4). It was not given back: the row that replaced it stands at
+      // the same moment with the product that was really bought.
+      .andWhere(NOT_REPLACED)
       .orderBy('s.settledAt', 'DESC')
       .addOrderBy('s.id', 'DESC')
       .take(limit + 1);
@@ -381,7 +394,7 @@ export class SettlementService {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toLineSettlementView),
+      items: page.map(toLineSettlementHistoryView),
       nextCursor: hasMore && last ? encodeCursor({ id: last.id }) : null,
     };
   }
@@ -477,6 +490,6 @@ export class SettlementService {
 }
 
 /** One raw row of {@link ITEM_SETTLEMENTS_SQL}, before its date is serialized. */
-interface SettlementRow extends Omit<LineSettlementView, 'settledAt'> {
+interface SettlementRow extends Omit<LineSettlementHistoryView, 'settledAt'> {
   settledAt: string | Date;
 }

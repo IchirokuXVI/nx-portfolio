@@ -8,6 +8,7 @@ import type {
   TripRowOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { ItemSnapshot } from './catalog.messages';
 
 /**
  * Shopping list, line, and comment message contracts (plan 0007). The gateway
@@ -910,9 +911,10 @@ export interface SettlePick {
   /** The product a settle with no `itemId` records, or null. */
   pickedItemId: string | null;
   /**
-   * How many products the row or line offers. Several and no `itemId` is
-   * refused when the caller named a scope (section 2), because a price cannot
-   * be read for a product nobody named.
+   * How many products the row or line offers. With several and no `itemId`
+   * the settle records no product, so the gateway reads no price and no name
+   * for it. Until plan 0202 that case was refused when the caller named a
+   * scope. No caller's scope is read any more, so nothing is refused.
    */
   optionCount: number;
 }
@@ -948,6 +950,16 @@ export interface SettleLineRequest {
    * showed no price.
    */
   paid?: SettlementPaid;
+  /**
+   * What the product was called when it was bought (plan 0202, section 1).
+   *
+   * Written by the **gateway**, which read the product for its price, and never
+   * by a client. Beside {@link paid} and not inside it, because a product with
+   * no price anywhere still has a name, and `paid` cannot be sent without a
+   * scope. Absent when catalog did not answer in time. Core stores it only on a
+   * settlement that records a product.
+   */
+  itemSnapshot?: ItemSnapshot | null;
   /**
    * The units bought. Required for `BOUGHT`, and refused for `NOT_AVAILABLE`,
    * whose settlement is always zero.
@@ -1056,6 +1068,27 @@ export interface LineSettlementView {
    * section 4.4), and null on every row written before that plan.
    */
   supermarketLocationId: string | null;
+}
+
+/**
+ * A settlement as a history serves it (plan 0202, section 4).
+ *
+ * {@link LineSettlementView} with what the product was called when it was
+ * bought. It is its own view because `LineSettlementView` is also half of the
+ * payload of {@link RealtimeEvent.LineSettled}, and plan 0202 changes no event.
+ *
+ * **A history never serves a row that a correction replaced.** Changing the
+ * product of a buy from the basket marks the old row reverted and writes a new
+ * one beside it. The old row was not given back, so it is left out, and the new
+ * row stands at the same `settledAt`. A plain revert is served marked, as
+ * before.
+ */
+export interface LineSettlementHistoryView extends LineSettlementView {
+  /**
+   * Null on a free text buy, on a buy from before plan 0202, and when catalog
+   * did not answer in time.
+   */
+  itemSnapshot: ItemSnapshot | null;
 }
 
 /**
@@ -1501,7 +1534,7 @@ export interface ListSuggestionsRequest {
 }
 
 export type ListPage = Paginated<ListView>;
-export type LineSettlementPage = Paginated<LineSettlementView>;
+export type LineSettlementPage = Paginated<LineSettlementHistoryView>;
 export type LinePage = Paginated<LineView>;
 export type CommentPage = Paginated<CommentView>;
 

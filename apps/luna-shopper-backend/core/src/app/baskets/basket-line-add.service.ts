@@ -14,6 +14,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ProfileService } from '../profiles/profile.service';
+import { BasketProductChangeService } from './basket-product-change.service';
 import { servesLocations } from './basket-redaction';
 import { resolvePick } from './basket-settle.service';
 import { BasketWriteContext } from './basket-write.context';
@@ -55,7 +56,11 @@ export class BasketLineAddService {
     private readonly context: BasketWriteContext,
     private readonly lines: LineService,
     private readonly profiles: ProfileService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Where the buys of a trip were priced, which the gateway asks before a
+    // change of product (plan 0202, section 3). Last, so no positional
+    // construction in a spec has to shift an argument.
+    private readonly productChange: BasketProductChangeService
   ) {}
 
   async add(req: AddBasketLineRequest): Promise<BasketRowResult> {
@@ -162,6 +167,12 @@ export class BasketLineAddService {
               optionCount: picked === null ? 0 : 1,
             },
           }),
+      // Where the buys a change of product will rewrite were priced (plan
+      // 0202, section 3). The gateway reads a price at each of those scopes
+      // before it asks for the change, because core reads none.
+      ...(row !== null && req.tripBuys === true
+        ? { tripBuys: await this.productChange.tripBuysOf(opened, row) }
+        : {}),
     };
   }
 }

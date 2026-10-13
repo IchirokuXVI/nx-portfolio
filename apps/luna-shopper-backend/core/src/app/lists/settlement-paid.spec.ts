@@ -1,6 +1,6 @@
 import { SettlementOutcome } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
-import { paidColumns } from './settlement-paid';
+import { itemSnapshotColumn, paidColumns } from './settlement-paid';
 
 /**
  * The chain a settle records beside its shop (plan 0163, section 5).
@@ -88,5 +88,52 @@ describe('paidColumns: the shop and its chain (plan 0163)', () => {
       pricePaidCents: null,
       pricePaidCurrency: null,
     });
+  });
+});
+
+describe('itemSnapshotColumn: what a product was called (plan 0202)', () => {
+  const snapshot = {
+    name: { en: 'Whole milk', es: 'Leche entera' },
+    brand: 'Hacendado',
+    unitSize: 1,
+    packCount: 6,
+    defaultUnit: 'LITER' as never,
+  };
+
+  it('copies the five fields, and nothing else of the product', () => {
+    expect(
+      itemSnapshotColumn({ ...snapshot, sku: 'smuggled' } as never)
+    ).toEqual(snapshot);
+  });
+
+  it('copies the name and does not keep the object it was given', () => {
+    const copied = itemSnapshotColumn(snapshot);
+    expect(copied?.name).toEqual(snapshot.name);
+    expect(copied?.name).not.toBe(snapshot.name);
+  });
+
+  it('keeps the nulls of a product with no brand and no size', () => {
+    const bare = { ...snapshot, brand: null, unitSize: null, packCount: null };
+    expect(itemSnapshotColumn(bare)).toEqual(bare);
+  });
+
+  it('answers null when the gateway sent none', () => {
+    expect(itemSnapshotColumn(undefined)).toBeNull();
+    expect(itemSnapshotColumn(null)).toBeNull();
+  });
+
+  it.each([
+    ['a name that is a string', { ...snapshot, name: 'Milk' }],
+    ['a name with a value that is not text', { ...snapshot, name: { en: 1 } }],
+    ['no name', { ...snapshot, name: null }],
+    ['a brand that is a number', { ...snapshot, brand: 7 }],
+    ['a size that is text', { ...snapshot, unitSize: '1' }],
+    ['a pack count that is not whole', { ...snapshot, packCount: 1.5 }],
+    ['no unit', { ...snapshot, defaultUnit: undefined }],
+    ['an array', [snapshot]],
+  ])('refuses %s', (_what, malformed) => {
+    expect(() => itemSnapshotColumn(malformed as never)).toThrow(
+      ValidationException
+    );
   });
 });

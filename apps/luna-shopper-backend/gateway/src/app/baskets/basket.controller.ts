@@ -30,6 +30,7 @@ import {
   type BasketSummaryView,
   type BasketView,
   type CatalogSuggestResponse,
+  type ChangeBasketLinesProductRequest,
   type GetBasketMarksRequest,
   type GetBasketProductListsRequest,
   type GetBasketRequest,
@@ -39,7 +40,6 @@ import {
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
   type SettleBasketRowRequest,
-  type SettlementPaid,
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -75,6 +75,7 @@ import {
   AddBasketLineDto,
   BasketChangesQueryDto,
   BasketReadQueryDto,
+  ChangeBasketLinesProductDto,
   RenameBasketRowDto,
   RevertBasketRowDto,
   SetBasketRowDemandDto,
@@ -82,7 +83,15 @@ import {
   SkipBasketRowDto,
   UnskipBasketRowQueryDto,
 } from './basket.dto';
-import { pricedItemId, SettlePriceService } from './settle-price.service';
+import {
+  pricedItemId,
+  SettlePriceService,
+  type RewriteChoice,
+  type SettleChoice,
+} from './settle-price.service';
+
+/** Core could not be asked, so the settle records no price and no name. */
+const NOTHING_CHOSEN: SettleChoice = { paid: null, itemSnapshot: null };
 
 /**
  * The basket that is always there (plan 0136, section 4).
@@ -343,12 +352,13 @@ export class BasketController {
     // Beside each other, because neither needs the other and both are held to
     // the same budget, so a settle waits for the slower of the two and not
     // for their sum.
-    const [paid] = await Promise.all([
-      // What the screen said one of it costs, read here and never sent by the
-      // client (plan 0143). It runs **before** the write and not after it: a
-      // second message attaching a price to a settlement already written would
-      // have to find its rows again after a revert split them.
-      this.paidFor(id, participant, dto),
+    const [chosen] = await Promise.all([
+      // What one of it costs and what it is called, read here and never sent
+      // by the client (plan 0143; plan 0202). It runs **before** the write and
+      // not after it: a second message attaching a price to a settlement
+      // already written would have to find its rows again after a revert
+      // split them.
+      this.chosenFor(id, participant, dto),
       // The product can be one that is on none of the lines, so core cannot
       // check the id and catalog is asked (plan 0201, section 4). Only a
       // definite "catalog does not know it" refuses the buy.
@@ -366,48 +376,46 @@ export class BasketController {
       from: dto.from,
       itemId: dto.itemId,
       allocations: dto.allocations,
-      paid: paid ?? undefined,
+      paid: chosen.paid ?? undefined,
+      ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSettle, req);
   }
 
   /**
-   * The price a settle records, read as the basket's **owner** (plan 0143,
-   * section 4.2).
+   * The price and the name a settle records, read as the basket's **owner**
+   * (plan 0143, section 4.2; plan 0202, sections 1 and 2).
    *
    * The owner and the profile come from `basket.searchScope`, which is the
    * question the basket read already asks to price the screen, and the same
-   * message now carries whether this actor is served shops. So an actor who is
-   * a registered participant with a profile of their own, or a guest with none,
-   * still records the owner's price at the owner's scopes: the owner delegated
-   * shopping, not pricing.
+   * message carries whether this actor is served shops and the shop the basket
+   * was started at. So an actor who is a registered participant with a profile
+   * of their own, or a guest with none, still records the owner's price at the
+   * owner's scopes: the owner delegated shopping, not pricing.
    *
-   * It costs one catalog round trip more than a settle used to, at most the
-   * service's own budget and usually a few milliseconds, and only when the
-   * client named a scope.
+   * **`dto.priceScopeId` is not read** (plan 0202, section 2). The gateway
+   * chooses the price: at the shop of the settle, or the cheapest across the
+   * owner's scopes when the settle has no shop. So every settle asks core this
+   * one question, also a settle that names no shop and no scope, which asked
+   * nothing before that plan. A settle of lines with no product then stops
+   * here and asks catalog nothing.
    *
-   * A settle that names no `itemId` also sends its `lineIds`, and core answers
-   * which product those lines record (plan 0151; plan 0201). That is the
-   * product priced here, so the price and the settlement cannot disagree, and
-   * it costs no extra round trip.
+   * A settle that names no `itemId` sends its `lineIds`, and core answers which
+   * product those lines record (plan 0151; plan 0201). That is the product
+   * priced and named here, so the price, the name and the settlement cannot
+   * disagree, and it costs no extra round trip. Since plan 0201 the lines agree
+   * on one product or record none, so that answer is a product or nothing and
+   * never a choice between several.
    */
-  private async paidFor(
+  private async chosenFor(
     basketId: string,
     participant: BasketParticipantContext,
     dto: SettleBasketRowDto
-  ): Promise<SettlementPaid | null> {
-    // A shop with no scope is still asked about, so that a basket started at
-    // another shop refuses it (plan 0163, section 5). Neither is nothing to
-    // record, and costs no round trip.
-    if (!dto.priceScopeId && !dto.supermarketLocationId) {
-      return null;
-    }
+  ): Promise<SettleChoice> {
     const req: BasketSearchScopeRequest = {
       basketId,
       participantId: participant.participantId,
-      ...(dto.itemId === undefined && dto.priceScopeId
-        ? { lineIds: dto.lineIds }
-        : {}),
+      ...(dto.itemId === undefined ? { lineIds: dto.lineIds } : {}),
     };
     let scope: BasketSearchScope;
     try {
@@ -419,7 +427,7 @@ export class BasketController {
       // Core could not say whose basket this is, so there is no owner to price
       // as. The settle itself is about to ask core the same question and will
       // fail or succeed on its own terms.
-      return null;
+      return NOTHING_CHOSEN;
     }
     // The settle's shop: the basket's own if it has one, else the one the
     // client named, else none (plan 0163, section 5). A basket started at a
@@ -430,18 +438,115 @@ export class BasketController {
         'This basket was started at another shop'
       );
     }
-    if (!dto.priceScopeId) {
-      // A place with no scope is not recorded: the shop is never stored
-      // without the scope it was priced at.
-      return null;
-    }
-    return this.prices.read({
+    return this.prices.choose({
       userId: scope.ownerUserId,
       profileId: scope.profileId ?? undefined,
       itemId: pricedItemId(dto.itemId, scope.pick),
-      priceScopeId: dto.priceScopeId,
       supermarketLocationId: own ?? dto.supermarketLocationId,
       servedLocations: scope.servesLocations,
+    });
+  }
+
+  /**
+   * Change the product of basket lines (plan 0202, section 3).
+   *
+   * What the page sends when somebody takes another product than the row
+   * shows. Core rewrites the buys of this trip, so the lines count as the new
+   * product, and with `keep` it also adds the product to each line and makes
+   * it the favourite.
+   *
+   * **Account participants only.** A guest is refused here, before catalog or
+   * core is asked: they settle what the row shows and hold no list.
+   *
+   * The gateway reads what the new product costs and what it is called, as it
+   * does for a settle, and core reads neither. So core is asked first where
+   * the buys of the trip were priced, the product is priced at those scopes,
+   * and the answers ride the write.
+   *
+   * An `itemId` catalog does not know is `validation_failed`, by the rule of a
+   * settle: only a definite "not found" refuses, and a slow catalog does not.
+   * A line the basket does not cover answers 404 for the whole request.
+   */
+  @Post(':id/lines/product')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.linesProduct, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    membership: true,
+    notFound: true,
+    finishedBasket: true,
+  })
+  async changeProduct(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string,
+    @Body() dto: ChangeBasketLinesProductDto
+  ): Promise<BasketRowResult> {
+    const userId = requireAccount(participant);
+    // Beside each other and under one budget each, as on a settle.
+    const [chosen] = await Promise.all([
+      this.rewriteChosenFor(id, participant, dto),
+      this.prices.refuseUnknownItem(dto.itemId),
+    ]);
+    const req: ChangeBasketLinesProductRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      userId,
+      lineIds: dto.lineIds,
+      itemId: dto.itemId,
+      keep: dto.keep,
+      ...(chosen.itemSnapshot ? { itemSnapshot: chosen.itemSnapshot } : {}),
+      ...(chosen.prices.length > 0 ? { prices: chosen.prices } : {}),
+      ...(chosen.paid ? { paid: chosen.paid } : {}),
+    };
+    return this.nats.send<BasketRowResult>(BASKET_PATTERNS.linesProduct, req);
+  }
+
+  /**
+   * What a change of product records on the buys it rewrites (plan 0202,
+   * section 3), read as the basket's owner.
+   *
+   * `basket.searchScope` answers where the standing buys of the named lines in
+   * this trip were priced. With none of them there is nothing to rewrite, and
+   * catalog is not asked.
+   */
+  private async rewriteChosenFor(
+    basketId: string,
+    participant: BasketParticipantContext,
+    dto: ChangeBasketLinesProductDto
+  ): Promise<RewriteChoice> {
+    const req: BasketSearchScopeRequest = {
+      basketId,
+      participantId: participant.participantId,
+      lineIds: dto.lineIds,
+      tripBuys: true,
+    };
+    let scope: BasketSearchScope;
+    try {
+      scope = await this.nats.send<BasketSearchScope>(
+        BASKET_PATTERNS.searchScope,
+        req
+      );
+    } catch {
+      // The write is about to ask core about the same lines, and it answers
+      // the real refusal: a line that is not covered, or a basket that is
+      // gone.
+      return { paid: null, itemSnapshot: null, prices: [] };
+    }
+    return this.prices.chooseForRewrite({
+      userId: scope.ownerUserId,
+      profileId: scope.profileId ?? undefined,
+      itemId: dto.itemId,
+      // A buy that recorded no scope is priced as a settle is: at the basket's
+      // own shop when it has one, else at the cheapest.
+      supermarketLocationId: scope.supermarketLocationId ?? undefined,
+      servedLocations: scope.servesLocations,
+      priceScopeIds: scope.tripBuys?.priceScopeIds ?? [],
+      unscoped: scope.tripBuys?.unscoped ?? false,
     });
   }
 

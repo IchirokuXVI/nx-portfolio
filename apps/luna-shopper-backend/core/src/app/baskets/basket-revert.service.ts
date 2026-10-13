@@ -198,6 +198,13 @@ export class BasketRevertService {
                 supermarketLocationId: candidate.supermarketLocationId,
                 // The chain goes with the shop it names (plan 0163).
                 supermarketId: candidate.supermarketId,
+                // What the product was called is copied with the product
+                // (plan 0202): the units that still stand were bought under
+                // that name.
+                itemSnapshot: candidate.itemSnapshot,
+                // Not a correction. The row above was given back in part, so
+                // a history shows it marked, and this is what still stands.
+                replacesSettlementId: null,
               })
             );
           }

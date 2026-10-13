@@ -23,6 +23,7 @@ import {
 } from '../builders';
 import { COMMON_IDS } from '../common.schemas';
 import { ENUM_IDS } from '../enums.schemas';
+import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 
 export const LIST_SCHEMA_IDS = {
   listView: schemaId('list/ListView'),
@@ -38,6 +39,9 @@ export const LIST_SCHEMA_IDS = {
   settlementPaid: schemaId('list/SettlementPaid'),
   settlePick: schemaId('list/SettlePick'),
   lineSettlementView: schemaId('list/LineSettlementView'),
+  // A settlement as a history serves it, with the name of its product (plan
+  // 0202, section 4).
+  lineSettlementHistoryView: schemaId('list/LineSettlementHistoryView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
   commentView: schemaId('list/CommentView'),
@@ -285,52 +289,67 @@ const settlePick = object(
 // (section 3.1). `settledByParticipantId` and `supermarketLocationId` are served
 // since plan 0151 section 5, which reverses plan 0051 section 6 and plan 0143
 // section 6 for these two fields: the view has to say who settled and where.
+const lineSettlementProperties: Record<string, JsonSchema> = {
+  id: nonEmptyString(),
+  lineId: nonEmptyString(),
+  listId: nonEmptyString(),
+  itemId: nullableString(),
+  outcome: ref(ENUM_IDS.settlementOutcome),
+  // Zero for `NOT_AVAILABLE`, and unbounded above by the line's own demand:
+  // buying more than was asked for is recorded as it happened (section 4.2).
+  quantity: integer({ minimum: 0 }),
+  settledByUserId: nonEmptyString(),
+  // Exactly one of this and `settledByUserId` is set: a basket settle names
+  // the participant, the list page names the account.
+  settledByParticipantId: nullableString(),
+  settledAt: string({ format: 'date-time' }),
+  // Null while the settlement stands, and set once somebody took it back
+  // (plan 0054, section 3.3). The row is kept and served either way: a
+  // reverted settlement is excluded from every total and still appears in the
+  // history, marked.
+  revertedAt: nullableString(),
+  // What one unit cost, and where the price was read: a chain's catchment and
+  // never a shop (plan 0143, section 6). Null together, and null on every row
+  // written before that plan.
+  pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+  pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+  priceScopeId: nullableString(),
+  // The one shop, set only by a settler who was served shops.
+  supermarketLocationId: nullableString(),
+};
+const lineSettlementRequired = [
+  'id',
+  'lineId',
+  'listId',
+  'itemId',
+  'outcome',
+  'quantity',
+  'settledByUserId',
+  'settledByParticipantId',
+  'settledAt',
+  'revertedAt',
+  'pricePaidCents',
+  'pricePaidCurrency',
+  'priceScopeId',
+  'supermarketLocationId',
+];
 const lineSettlementView = object(
   LIST_SCHEMA_IDS.lineSettlementView,
+  lineSettlementProperties,
+  lineSettlementRequired
+);
+
+// The same row as a history serves it (plan 0202, section 4). The settle answer
+// and the `line.settled` event keep the view above, so no event changed.
+const lineSettlementHistoryView = object(
+  LIST_SCHEMA_IDS.lineSettlementHistoryView,
   {
-    id: nonEmptyString(),
-    lineId: nonEmptyString(),
-    listId: nonEmptyString(),
-    itemId: nullableString(),
-    outcome: ref(ENUM_IDS.settlementOutcome),
-    // Zero for `NOT_AVAILABLE`, and unbounded above by the line's own demand:
-    // buying more than was asked for is recorded as it happened (section 4.2).
-    quantity: integer({ minimum: 0 }),
-    settledByUserId: nonEmptyString(),
-    // Exactly one of this and `settledByUserId` is set: a basket settle names
-    // the participant, the list page names the account.
-    settledByParticipantId: nullableString(),
-    settledAt: string({ format: 'date-time' }),
-    // Null while the settlement stands, and set once somebody took it back
-    // (plan 0054, section 3.3). The row is kept and served either way: a
-    // reverted settlement is excluded from every total and still appears in the
-    // history, marked.
-    revertedAt: nullableString(),
-    // What one unit cost, and where the price was read: a chain's catchment and
-    // never a shop (plan 0143, section 6). Null together, and null on every row
-    // written before that plan.
-    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
-    pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
-    priceScopeId: nullableString(),
-    // The one shop, set only by a settler who was served shops.
-    supermarketLocationId: nullableString(),
+    ...lineSettlementProperties,
+    itemSnapshot: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemSnapshot), { type: 'null' }],
+    },
   },
-  [
-    'id',
-    'lineId',
-    'listId',
-    'itemId',
-    'outcome',
-    'quantity',
-    'settledByUserId',
-    'settledByParticipantId',
-    'settledAt',
-    'revertedAt',
-    'pricePaidCents',
-    'pricePaidCurrency',
-    'priceScopeId',
-    'supermarketLocationId',
-  ]
+  [...lineSettlementRequired, 'itemSnapshot']
 );
 
 // Both halves of what a settle did, because neither is derivable from the other
@@ -452,7 +471,7 @@ const addLineResultList: JsonSchema = {
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
 const lineSettlementPage = paginated(
   LIST_SCHEMA_IDS.lineSettlementPage,
-  LIST_SCHEMA_IDS.lineSettlementView
+  LIST_SCHEMA_IDS.lineSettlementHistoryView
 );
 const linePage = paginated(LIST_SCHEMA_IDS.linePage, LIST_SCHEMA_IDS.lineView);
 const commentPage = paginated(
@@ -633,6 +652,10 @@ const settleLineRequest = object(
     itemId: nonEmptyString(),
     // Written by the gateway (plan 0143). A client body has no field for it.
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
+    // Written by the gateway too: what the product is called (plan 0202).
+    itemSnapshot: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemSnapshot), { type: 'null' }],
+    },
   },
   ['userId', 'lineId', 'outcome']
 );
@@ -984,6 +1007,7 @@ export const listSchemas: JsonSchema[] = [
   settlementPaid,
   settlePick,
   lineSettlementView,
+  lineSettlementHistoryView,
   lineSettlementResult,
   commentRecording,
   commentView,

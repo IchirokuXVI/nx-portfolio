@@ -6,6 +6,7 @@ import {
   type BasketRowResult,
   type BasketSearchScope,
   type BasketSearchScopeRequest,
+  type ChangeBasketLinesProductRequest,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
@@ -14,6 +15,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
+import { BasketProductChangeService } from './basket-product-change.service';
 import { BasketRevertService } from './basket-revert.service';
 import { BasketRowRenameService } from './basket-row-rename.service';
 import { BasketSettleService } from './basket-settle.service';
@@ -38,7 +40,8 @@ export class BasketWriteController {
     private readonly demandService: BasketDemandService,
     private readonly addService: BasketLineAddService,
     private readonly renameService: BasketRowRenameService,
-    private readonly skipService: BasketSkipService
+    private readonly skipService: BasketSkipService,
+    private readonly productChangeService: BasketProductChangeService
   ) {}
 
   @MessagePattern(BASKET_PATTERNS.rowSettle)
@@ -75,6 +78,14 @@ export class BasketWriteController {
   @MessagePattern(BASKET_PATTERNS.lineAdd)
   add(@Payload() req: AddBasketLineRequest): Promise<BasketRowResult> {
     return this.addService.add(req);
+  }
+
+  /** Change the product of basket lines (plan 0202, section 3). */
+  @MessagePattern(BASKET_PATTERNS.linesProduct)
+  linesProduct(
+    @Payload() req: ChangeBasketLinesProductRequest
+  ): Promise<BasketRowResult> {
+    return this.productChangeService.change(req);
   }
 
   /** Where a search inside this basket is priced (section 5.4). */

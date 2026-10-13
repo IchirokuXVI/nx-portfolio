@@ -22,6 +22,7 @@ import { BasketCoverageModule } from './basket-coverage.module';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
 import { BasketLiveService } from './basket-live.service';
+import { BasketProductChangeService } from './basket-product-change.service';
 import { BasketProductService } from './basket-product.service';
 import { BasketMembersService } from './basket-members.service';
 import { BasketOrderService } from './basket-order.service';
@@ -140,6 +141,10 @@ import { LineClaimModule } from './line-claim.module';
     BasketDemandService,
     BasketLineAddService,
     BasketRowRenameService,
+    // The product of basket lines, changed from the basket (plan 0202). It
+    // rewrites the buys of the trip, and writes the line when the change is
+    // kept.
+    BasketProductChangeService,
     // "Not today" on a row, and taking it back (plan 0137). A provider of its
     // own like the others, and the one that writes no settlement: a purchase
     // through this basket ends a skip through a `WHERE` rather than a write.

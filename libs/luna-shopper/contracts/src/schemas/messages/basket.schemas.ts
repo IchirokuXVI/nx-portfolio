@@ -97,6 +97,11 @@ export const BASKET_SCHEMA_IDS = {
   renameRequest: schemaId('msg/basket.row.rename/request'),
   skipRequest: schemaId('msg/basket.row.skip/request'),
   addLineRequest: schemaId('msg/basket.line.add/request'),
+  // A change of the product of basket lines, and what the gateway reads before
+  // it (plan 0202, section 3).
+  tripBuys: schemaId('basket/BasketTripBuys'),
+  scopePrice: schemaId('basket/BasketScopePrice'),
+  linesProductRequest: schemaId('msg/basket.lines.product/request'),
   basketKind: schemaId('enums/BasketKind'),
   basketStatus: schemaId('enums/BasketStatus'),
   basketSourceView: schemaId('basket/BasketSourceView'),
@@ -587,8 +592,53 @@ const searchScope = object(
     // The basket's own shop, which a settle records and may not contradict
     // (plan 0163, section 5).
     supermarketLocationId: nullableString(),
+    // Only when the request asked: where the buys a change of product will
+    // rewrite were priced (plan 0202, section 3).
+    tripBuys: ref(BASKET_SCHEMA_IDS.tripBuys),
   },
   ['ownerUserId', 'profileId', 'servesLocations', 'supermarketLocationId']
+);
+
+const tripBuys = object(
+  BASKET_SCHEMA_IDS.tripBuys,
+  {
+    priceScopeIds: array(nonEmptyString()),
+    unscoped: boolean(),
+  },
+  ['priceScopeIds', 'unscoped']
+);
+
+// What one unit of a product costs at one scope. Written by the gateway.
+const scopePrice = object(
+  BASKET_SCHEMA_IDS.scopePrice,
+  {
+    priceScopeId: nonEmptyString(),
+    pricePaidCents: integer({ minimum: 0 }),
+    pricePaidCurrency: nonEmptyString({ maxLength: 3 }),
+  },
+  ['priceScopeId', 'pricePaidCents', 'pricePaidCurrency']
+);
+
+const nullableItemSnapshot = (): JsonSchema => ({
+  anyOf: [ref(CATALOG_SCHEMA_IDS.itemSnapshot), { type: 'null' }],
+});
+
+// `itemSnapshot`, `prices` and `paid` are written by the gateway. The body of
+// the route has no field for any of them.
+const linesProductRequest = object(
+  BASKET_SCHEMA_IDS.linesProductRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    userId: nonEmptyString(),
+    lineIds: writeLineIds,
+    itemId: nonEmptyString(),
+    keep: boolean(),
+    itemSnapshot: nullableItemSnapshot(),
+    prices: array(ref(BASKET_SCHEMA_IDS.scopePrice)),
+    paid: ref(LIST_SCHEMA_IDS.settlementPaid),
+  },
+  ['basketId', 'participantId', 'userId', 'lineIds', 'itemId', 'keep']
 );
 
 const getRequest = object(
@@ -610,6 +660,7 @@ const searchScopeRequest = object(
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
     lineIds: writeLineIds,
+    tripBuys: boolean(),
   },
   ['basketId', 'participantId']
 );
@@ -638,6 +689,8 @@ const settleRequest = object(
     allocations: array(ref(BASKET_SCHEMA_IDS.allocationEntry)),
     // Written by the gateway (plan 0143). A client body has no field for it.
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
+    // Written by the gateway too: what the product is called (plan 0202).
+    itemSnapshot: nullableItemSnapshot(),
   },
   ['basketId', 'participantId', 'rowKey', 'lineIds', 'outcome', 'from']
 );
@@ -968,6 +1021,9 @@ export const basketSchemas: JsonSchema[] = [
   // nothing could check a skip. It now names its lines, which is worth checking.
   skipRequest,
   addLineRequest,
+  tripBuys,
+  scopePrice,
+  linesProductRequest,
   enumOf(BASKET_SCHEMA_IDS.basketKind, Object.values(BasketKind)),
   enumOf(BASKET_SCHEMA_IDS.basketStatus, Object.values(BasketStatus)),
   basketSourceView,
@@ -1042,6 +1098,10 @@ export const basketMessageContracts: Record<
   },
   [BASKET_PATTERNS.lineAdd]: {
     request: BASKET_SCHEMA_IDS.addLineRequest,
+    response: BASKET_SCHEMA_IDS.rowResult,
+  },
+  [BASKET_PATTERNS.linesProduct]: {
+    request: BASKET_SCHEMA_IDS.linesProductRequest,
     response: BASKET_SCHEMA_IDS.rowResult,
   },
   [BASKET_PATTERNS.searchScope]: {

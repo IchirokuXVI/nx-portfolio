@@ -70,6 +70,7 @@ import {
   operatorActor,
   snapshotOf,
   type LineChangeActor,
+  type LineSnapshot,
   type ListRef,
 } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
@@ -260,6 +261,14 @@ function movesQuantityAlone(req: LineEdit): boolean {
 
 /** What a write inside a transaction leaves in the trail, or nothing. */
 type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
+
+/** An edit applied to the line object and not written yet. */
+interface PreparedEdit {
+  /** The line as it stood, for the change row. */
+  before: LineSnapshot;
+  /** The product set to write, or nothing when the edit leaves the set alone. */
+  set: { next?: string[]; adopt: string[] } | undefined;
+}
 
 /**
  * Who tells the baskets, for one call of the private line event helper (plan
@@ -1621,8 +1630,45 @@ export class LineService {
       );
     }
 
+    const prepared = await this.prepareEdit(line, list, req, permissions);
+
+    // **One transaction for both shapes of edit, since plan 0138.** The set and
+    // the line have to move together, or a stored hash outlives the rows it
+    // summarises; the change and the line have to move together for the reason
+    // the recorder gives about itself. The second applies to a quantity only
+    // edit as much as to a product one, so the path that used to save the row on
+    // its own is gone.
+    return this.announce(
+      list,
+      await writer.transaction((manager, record) =>
+        this.writePreparedEdit(manager, line, list, prepared, actor, record)
+      ),
+      // The quantity alone moved, so the baskets are sent the numbers and do
+      // not read again (plan 0204, section 3). A name, a product set, a
+      // favourite or a chain is something a room must not carry or core does
+      // not hold, and those edits send the ids as before.
+      movesQuantityAlone(req) ? 'moved' : 'here'
+    );
+  }
+
+  /**
+   * Apply an edit that does not rename to the line object, and say what the
+   * write has to do. It writes nothing.
+   *
+   * `manager` is the transaction of a caller that already holds one, which is
+   * {@link keepProductWithin}. Every read here then goes through it, because a
+   * read through this service's own repositories would take a second
+   * connection while the caller holds the first.
+   */
+  private async prepareEdit(
+    line: ListLine,
+    list: ShoppingList,
+    req: LineEdit,
+    permissions: ReadonlySet<ListPermission>,
+    manager?: EntityManager
+  ): Promise<PreparedEdit> {
     // Read before any of the three fields below is written, which is the move
-    // `updateAsOperator` already makes for the audit trail one line above it.
+    // `updateAsOperator` already makes for the audit trail.
     const before = snapshotOf(line);
 
     if (req.content !== undefined) {
@@ -1640,6 +1686,9 @@ export class LineService {
     // allowed, and at 104 an update to 105 is not.
     const adoptItemIds = req.adoptItemIds ?? [];
     const touchesSet = req.itemIds !== undefined || adoptItemIds.length > 0;
+    const lineItems = manager
+      ? manager.getRepository(ListLineItem)
+      : this.lineItems;
     const nextItemIds =
       req.itemIds === undefined
         ? undefined
@@ -1647,51 +1696,110 @@ export class LineService {
             req.itemIds,
             Math.max(
               LINE_ITEM_SET_MAX,
-              await this.lineItems.count({ where: { lineId: line.id } })
+              await lineItems.count({ where: { lineId: line.id } })
             )
           );
     if (nextItemIds !== undefined) {
       line.itemSetHash = itemSetHash(nextItemIds);
     }
     // The favourite and the chain (plan 0199). Neither is part of the hash.
-    await this.applyLineChoices(line, req, nextItemIds);
+    await this.applyLineChoices(line, req, nextItemIds, manager);
     this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
-    // **One transaction for both shapes of edit, since plan 0138.** The set and
-    // the line have to move together, or a stored hash outlives the rows it
-    // summarises; the change and the line have to move together for the reason
-    // the recorder gives about itself. The second applies to a quantity only
-    // edit as much as to a product one, so the path that used to save the row on
-    // its own is gone.
-    //
-    // An adoption alone takes the set branch too (plan 0070, section 9): it
-    // writes no product and moves no hash, but it does rewrite rows.
-    return this.announce(
-      list,
-      await writer.transaction(async (manager, record) => {
-        const written = await this.writeEdit(
-          manager,
-          line,
-          touchesSet ? { next: nextItemIds, adopt: adoptItemIds } : undefined,
-          record
-        );
-        await this.changes.edited(
-          manager,
-          this.listRef(list),
-          line.id,
-          before,
-          snapshotOf(written.line),
-          actor
-        );
-        return written;
-      }),
-      // The quantity alone moved, so the baskets are sent the numbers and do
-      // not read again (plan 0204, section 3). A name, a product set, a
-      // favourite or a chain is something a room must not carry or core does
-      // not hold, and those edits send the ids as before.
-      movesQuantityAlone(req) ? 'moved' : 'here'
+    return {
+      before,
+      // An adoption alone takes the set branch too (plan 0070, section 9): it
+      // writes no product and moves no hash, but it does rewrite rows.
+      set: touchesSet ? { next: nextItemIds, adopt: adoptItemIds } : undefined,
+    };
+  }
+
+  /** Write a prepared edit and its change row, through the caller's manager. */
+  private async writePreparedEdit(
+    manager: EntityManager,
+    line: ListLine,
+    list: ShoppingList,
+    prepared: PreparedEdit,
+    actor: LineChangeActor,
+    record?: RecordLine
+  ): Promise<WrittenLine> {
+    const written = await this.writeEdit(manager, line, prepared.set, record);
+    await this.changes.edited(
+      manager,
+      this.listRef(list),
+      line.id,
+      prepared.before,
+      snapshotOf(written.line),
+      actor
     );
+    return written;
+  }
+
+  /**
+   * Keep a product on a line: add it to the products of the line when it is not
+   * one of them, and make it the favourite (plan 0202, section 3).
+   *
+   * **It is {@link update} without its transaction and without its
+   * announcement.** A change of product from the basket rewrites the buys of
+   * the trip and writes the line, and the two must commit together or not at
+   * all. So this runs inside the transaction of that write, on the line object
+   * that write locked, and the caller announces with {@link announceKept} after
+   * its commit.
+   *
+   * Everything else is the edit a person makes on the line page:
+   *
+   * - **The permissions** are {@link authorizeEdit}'s, asked of the actor. A
+   *   caller who may not edit the products of the line is refused with
+   *   `forbidden`, and the refusal rolls back whatever the caller's transaction
+   *   wrote before it.
+   * - **The approval** moves as {@link reopenAfterEdit} says. A writer who adds
+   *   a product to an approved line puts it back in front of whoever approves
+   *   it.
+   * - **The change row** is the recorder's own.
+   * - **The bound on the products of a line** is `validateItemIds`'s.
+   *
+   * It answers null when the line already holds the product as its favourite:
+   * nothing is written, and no version moves. The permission is asked first, so
+   * an actor who may not edit the line is refused even then.
+   */
+  async keepProductWithin(
+    manager: EntityManager,
+    line: ListLine,
+    list: ShoppingList,
+    itemId: string,
+    permissions: ReadonlySet<ListPermission>,
+    actor: LineChangeActor
+  ): Promise<WrittenLine | null> {
+    const held = (await this.itemSetOf(line.id, manager)).itemIds;
+    const holds = held.includes(itemId);
+    const edit: LineEdit = {
+      favoriteItemId: itemId,
+      ...(holds ? {} : { itemIds: [...held, itemId] }),
+    };
+    this.authorizeEdit(edit, line, permissions);
+    if (holds && line.favoriteItemId === itemId) {
+      return null;
+    }
+    const prepared = await this.prepareEdit(
+      line,
+      list,
+      edit,
+      permissions,
+      manager
+    );
+    return this.writePreparedEdit(manager, line, list, prepared, actor);
+  }
+
+  /**
+   * Announce what {@link keepProductWithin} wrote, after the caller's commit.
+   *
+   * The ordinary `line.updated` to the zone, and the ids to every basket that
+   * covers the list: a product set and a favourite are things a room does not
+   * carry, so each basket reads again (plan 0204, section 3).
+   */
+  announceKept(list: ShoppingList, written: WrittenLine): LineView {
+    return this.announce(list, written, 'here');
   }
 
   /**
