@@ -1,3 +1,5 @@
+> **PR:** [#701](https://github.com/IchirokuXVI/nx-portfolio/pull/701)
+
 # 0203: a buy made outside a basket is a change, and counts for nothing in it
 
 > Asked for by the owner on 2026-10-11: "If someone is buying things from a different list,
