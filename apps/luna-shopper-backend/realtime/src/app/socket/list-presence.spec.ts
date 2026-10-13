@@ -86,7 +86,9 @@ function gatewayWith(core: ReturnType<typeof access>): RealtimeGateway {
     presence,
     { stream$: { subscribe: jest.fn() } } as never,
     { bind: jest.fn() } as never,
-    { debug: jest.fn() } as never
+    { debug: jest.fn() } as never,
+    // Plan 0194: no socket here belongs to a support session.
+    { ended$: { subscribe: jest.fn() }, isLive: jest.fn() } as never
   );
 }
 

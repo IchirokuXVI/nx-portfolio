@@ -67,6 +67,11 @@ import {
   harvestMessageContracts,
   harvestSchemas,
 } from './messages/harvest.schemas';
+import {
+  impersonationEventContracts,
+  impersonationMessageContracts,
+  impersonationSchemas,
+} from './messages/impersonation.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
@@ -98,6 +103,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...authMessageContracts,
   ...adminAuthMessageContracts,
   ...adminUsersMessageContracts,
+  ...impersonationMessageContracts,
   ...adminCoreMessageContracts,
   ...adminDashboardMessageContracts,
   ...accountMessageContracts,
@@ -121,6 +127,7 @@ export const messageContracts: Record<string, MessageContract> = {
 /** event name -> payload schema id for every published event. */
 export const eventContracts: Record<string, string> = {
   ...identityEventContracts,
+  ...impersonationEventContracts,
   ...domainEventContracts,
   ...postalCodeEventContracts,
   ...catalogEventContracts,
@@ -133,6 +140,7 @@ export const allSchemas: JsonSchema[] = [
   ...authSchemas,
   ...adminAuthSchemas,
   ...adminUsersSchemas,
+  ...impersonationSchemas,
   ...adminCoreSchemas,
   ...adminDashboardSchemas,
   ...accountSchemas,

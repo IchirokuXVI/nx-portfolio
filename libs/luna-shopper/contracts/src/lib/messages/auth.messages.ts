@@ -93,6 +93,16 @@ export interface MintParticipantTokenResult {
   socketTokenExpiresAt: string;
 }
 
+/** Who acts behind the `sub` of a support session token (plan 0194). */
+export interface ImpersonationActorClaim {
+  /** An `admin_users.id`. */
+  sub: string;
+  /** An `impersonation_sessions.id`. */
+  sid: string;
+  /** The deadline of the session, in seconds since the epoch. */
+  until: number;
+}
+
 /** The claims carried inside the signed access token. */
 export interface AccessTokenClaims {
   /** userId. */
@@ -107,6 +117,12 @@ export interface AccessTokenClaims {
    * fail. Every token signed since carries it, empty or not.
    */
   perms?: Permission[];
+  /**
+   * Present only on a token of a support session (plan 0194): the operator who
+   * opened the app as this user. It is the actor claim of RFC 8693, so `sub`
+   * stays the user. A reader treats its absence as "not a support session".
+   */
+  act?: ImpersonationActorClaim;
   iat?: number;
   exp?: number;
 }

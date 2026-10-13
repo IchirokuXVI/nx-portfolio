@@ -3,6 +3,7 @@ import { AdminUser } from './admin-user.entity';
 import { AuthAudit } from './auth-audit.entity';
 import { Credential } from './credential.entity';
 import { EmailVerification } from './email-verification.entity';
+import { ImpersonationSession } from './impersonation-session.entity';
 import { OAuthIdentity } from './oauth-identity.entity';
 import { OAuthState } from './oauth-state.entity';
 import { PasswordReset } from './password-reset.entity';
@@ -19,6 +20,7 @@ export {
 export { BaseEntity } from './base.entity';
 export { Credential } from './credential.entity';
 export { EmailVerification } from './email-verification.entity';
+export { ImpersonationSession } from './impersonation-session.entity';
 export { OAuthIdentity } from './oauth-identity.entity';
 export { OAuthState } from './oauth-state.entity';
 export { PasswordReset } from './password-reset.entity';
@@ -33,6 +35,9 @@ export const AUTH_ENTITIES = [
   EmailVerification,
   PasswordReset,
   OAuthState,
+  // A support session (plan 0194), before the refresh tokens that may name
+  // one.
+  ImpersonationSession,
   RefreshToken,
   // The operator identity (plan 0071). Last, and separate: it references nothing
   // above it and nothing above it references it.

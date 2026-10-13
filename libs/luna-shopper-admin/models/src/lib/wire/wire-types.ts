@@ -397,6 +397,13 @@ export type CreateZoneDto = {
 };
 
 /**
+ * `ExchangeImpersonationDto` in the gateway's OpenAPI document.
+ */
+export type ExchangeImpersonationDto = {
+  code: string;
+};
+
+/**
  * `ForgotPasswordDto` in the gateway's OpenAPI document.
  */
 export type ForgotPasswordDto = {
@@ -609,6 +616,11 @@ export type ProblemDetails = {
     | 'walk_changed'
     | 'shop_map_invalid'
     | 'shop_map_too_large'
+    | 'impersonation_disabled'
+    | 'impersonation_code_invalid'
+    | 'impersonation_ended'
+    | 'impersonation_not_allowed'
+    | 'not_impersonating'
     | 'internal';
   detail?: string;
   message: string;
@@ -977,6 +989,15 @@ export type SpawnHarvestRunDto = {
   scopeCopies?: ScopeCopyDto[];
   writes?: 'PRICES_AND_AVAILABILITY' | 'PRICES' | 'AVAILABILITY';
   details?: 'NEW' | 'ALL';
+};
+
+/**
+ * `StartImpersonationDto` in the gateway's OpenAPI document.
+ */
+export type StartImpersonationDto = {
+  reason: 'BUG_REPORT' | 'SUPPORT_REQUEST' | 'TESTING' | 'OTHER';
+  note?: string;
+  locale?: string;
 };
 
 /**
@@ -4740,6 +4761,23 @@ export type HarvestSupermarketSourceView = {
 };
 
 /**
+ * `impersonation.ImpersonationStatusView` in the gateway's OpenAPI document.
+ */
+export type ImpersonationImpersonationStatusView = {
+  enabled: boolean;
+};
+
+/**
+ * `impersonation.StartImpersonationView` in the gateway's OpenAPI document.
+ */
+export type ImpersonationStartImpersonationView = {
+  sessionId: string;
+  codeExpiresAt: string;
+  expiresAt: string;
+  url: string;
+};
+
+/**
  * `list.AddLineResult` in the gateway's OpenAPI document.
  */
 export type ListAddLineResult = {
@@ -5068,6 +5106,13 @@ export type MsgAssistantTurnResponse = {
   choices: AssistantAssistantChoice[];
   listResolution?: EnumsListResolutionBranch;
   heard?: string;
+};
+
+/**
+ * `msg.auth.impersonation.end.response` in the gateway's OpenAPI document.
+ */
+export type MsgAuthImpersonationEndResponse = {
+  ended: boolean;
 };
 
 /**

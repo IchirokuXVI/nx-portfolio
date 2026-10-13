@@ -35,6 +35,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { RefuseImpersonation } from '../auth/refuse-impersonation.decorator';
 import { asRejectedCredentials } from '../auth/remote-problem';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import {
@@ -208,8 +209,10 @@ export class AccountController {
   }
 
   @Delete()
+  // A support session cannot delete the account it is looking at (plan 0194).
+  @RefuseImpersonation()
   @ApiContractResponse(AUTH_PATTERNS.deleteAccount)
-  @ApiProblemResponses({ auth: true })
+  @ApiProblemResponses({ auth: true, impersonation: 'refused' })
   remove(@AuthUser() user: CurrentUser): Promise<DeleteAccountResult> {
     return this.aboutTheCaller<DeleteAccountResult>(
       AUTH_PATTERNS.deleteAccount,

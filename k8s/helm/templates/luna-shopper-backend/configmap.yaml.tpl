@@ -38,6 +38,12 @@ data:
   # else: a build time constant is exactly what is wrong when the failure being
   # guarded against is believing you are in staging when you are in production.
   ENVIRONMENT_NAME: {{ $cfg.environmentName | quote }}
+  # Support sessions (plan 0194): an operator opens the app as a user. Auth
+  # reads it and no other service does, so the gateway cannot disagree with
+  # it. False unless the values file of the environment says true. Staging
+  # says true. Production does not name it, and stays off until the owner
+  # turns it on, after the privacy policy names support access.
+  IMPERSONATION_ENABLED: {{ $cfg.impersonationEnabled | default false | quote }}
 {{- /*
 The development autologin is deliberately ABSENT from this ConfigMap, in every
 environment. It signs an operator in with no password; auth refuses to boot with

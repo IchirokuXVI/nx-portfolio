@@ -24,6 +24,10 @@ import {
 import { Logger } from 'nestjs-pino';
 import { Server, Socket } from 'socket.io';
 import { TokenVerifierService } from '../auth/token-verifier.service';
+import {
+  impersonationRoom,
+  ImpersonationSessionsService,
+} from '../impersonation/impersonation-sessions.service';
 import { CoreAccessClient } from '../messaging/core-access.client';
 import { PresenceService } from '../presence/presence.service';
 import { EventRelayService } from '../relay/event-relay.service';
@@ -81,13 +85,22 @@ export class RealtimeGateway
 {
   @WebSocketServer() private server!: Server;
 
+  /**
+   * The deadline timer of each socket of a support session, by socket id
+   * (plan 0194). Held here and not on `client.data`: the Redis adapter sends
+   * that bag to other pods, and a timer is not a value that travels.
+   */
+  private readonly impersonationDeadlines = new Map<string, NodeJS.Timeout>();
+
   constructor(
     private readonly tokenVerifier: TokenVerifierService,
     private readonly coreAccess: CoreAccessClient,
     private readonly presence: PresenceService,
     private readonly relay: EventRelayService,
     private readonly roomSync: RoomSyncService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    // Last, so that no positional caller moves (plan 0194).
+    private readonly impersonation: ImpersonationSessionsService
   ) {}
 
   /**
@@ -115,6 +128,15 @@ export class RealtimeGateway
     // Only a gateway is handed the socket server, and only something holding it
     // can take a room away from a socket (plan 0031).
     this.roomSync.bind(this.server);
+
+    // A support session ended (plan 0194): drop its sockets, on this pod.
+    // `local`, because every pod receives the event on its own subscription
+    // and each one closes the sockets it holds itself.
+    this.impersonation.ended$.subscribe((sessionId) => {
+      this.server.local
+        .in(impersonationRoom(sessionId))
+        .disconnectSockets(true);
+    });
 
     this.relay.stream$.subscribe((message) => {
       this.server.local.to(message.rooms).emit(message.event, message.payload);
@@ -189,6 +211,29 @@ export class RealtimeGateway
         return;
       }
 
+      // A socket of a support session (plan 0194). Three things, all before
+      // it joins any room: auth is asked whether the session is live, the
+      // socket is put in the room of the session so that an end can find it,
+      // and a timer closes it at the deadline. Without the timer the socket
+      // would live after its token expires, because a socket is verified one
+      // time, as it connects.
+      if (identity.impersonation) {
+        const { sessionId, until } = identity.impersonation;
+        const remainingMs = until * 1000 - Date.now();
+        if (
+          remainingMs <= 0 ||
+          !(await this.impersonation.isLive(sessionId))
+        ) {
+          client.disconnect(true);
+          return;
+        }
+        this.impersonationDeadlines.set(
+          client.id,
+          setTimeout(() => client.disconnect(true), remainingMs)
+        );
+        await client.join(impersonationRoom(sessionId));
+      }
+
       client.data.userId = identity.userId;
       await client.join(userRoom(identity.userId));
       this.presence.register(client.id, identity.userId);
@@ -199,6 +244,10 @@ export class RealtimeGateway
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
+    // The deadline timer of a support session (plan 0194) has nothing left to
+    // close, so it does not keep the socket object alive for up to two hours.
+    clearTimeout(this.impersonationDeadlines.get(client.id));
+    this.impersonationDeadlines.delete(client.id);
     await this.presence.disconnect(client.id);
   }
 

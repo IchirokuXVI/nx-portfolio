@@ -272,10 +272,16 @@ describeIntegration('roles on an account (real Postgres)', () => {
   });
 
   it('runs the migration down and up again', async () => {
-    const last = AUTH_MIGRATIONS[AUTH_MIGRATIONS.length - 1];
-    expect(last.name).toBe('UserRoles1772600000000');
-
-    await dataSource.undoLastMigration();
+    // Down through this migration, whatever was added after it. The test used
+    // to undo one step and assert that this migration was the last one, which
+    // the next migration made false (plan 0194).
+    const index = AUTH_MIGRATIONS.findIndex(
+      (migration) => migration.name === 'UserRoles1772600000000'
+    );
+    expect(index).toBeGreaterThanOrEqual(0);
+    for (let step = AUTH_MIGRATIONS.length; step > index; step -= 1) {
+      await dataSource.undoLastMigration();
+    }
     const gone = await dataSource.query(
       `SELECT 1 FROM information_schema.columns
         WHERE table_schema = $1 AND table_name = 'users' AND column_name = 'roles'`,

@@ -4,13 +4,21 @@ import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   permissionsOf,
+  type AccessTokenClaims,
   type AuthTokens,
 } from '@portfolio/luna-shopper/contracts';
-import { UnauthorizedException } from '@portfolio/luna-shopper/platform';
+import {
+  ImpersonationEndedException,
+  UnauthorizedException,
+} from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
 import { IsNull, Repository, type EntityManager } from 'typeorm';
 import type { AuthConfig } from '../config/app-config';
-import { RefreshToken, type User } from '../entities';
+import {
+  RefreshToken,
+  type ImpersonationSession,
+  type User,
+} from '../entities';
 import { parseDurationMs } from './duration';
 
 /**
@@ -114,20 +122,101 @@ export class TokenService {
     return createHash('sha256').update(raw).digest('hex');
   }
 
-  /** Mints and persists a fresh refresh token, returning the raw value once. */
-  private async issueRefreshToken(userId: string): Promise<string> {
+  /**
+   * Mints and persists a fresh refresh token, returning the raw value once.
+   *
+   * `session` is given only for a support session (plan 0194). The row then
+   * names the session and dies at its deadline. Without it the row has the
+   * configured life, 30 days, exactly as before.
+   */
+  private async issueRefreshToken(
+    userId: string,
+    session?: Pick<ImpersonationSession, 'id' | 'expiresAt'>
+  ): Promise<string> {
     const raw = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(
-      Date.now() + parseDurationMs(this.config.jwt.refreshTokenTtl)
-    );
+    const expiresAt =
+      session?.expiresAt ??
+      new Date(Date.now() + parseDurationMs(this.config.jwt.refreshTokenTtl));
     await this.refreshTokens.save(
       this.refreshTokens.create({
         userId,
         tokenHash: this.hash(raw),
         expiresAt,
+        impersonationSessionId: session?.id ?? null,
       })
     );
     return raw;
+  }
+
+  /**
+   * Issues the token pair of a support session (plan 0194), for the exchange
+   * and for a refresh alike.
+   *
+   * Three things differ from {@link issueTokens}, and each one is the session
+   * row cutting a token to its deadline:
+   *
+   * - The access token carries `act`: the operator, the session, the deadline.
+   * - Its `exp` is the earlier of now plus `ACCESS_TOKEN_TTL` and the deadline,
+   *   so no token of a session outlives the session.
+   * - The refresh row expires at the deadline and names the session.
+   *
+   * The caller has already decided that the session is live. This method
+   * refuses a deadline in the past anyway, because a token that expires before
+   * it is signed is a mistake whoever calls.
+   */
+  async issueTokensForSession(
+    user: Pick<User, 'id' | 'kind' | 'username' | 'roles'>,
+    session: Pick<ImpersonationSession, 'id' | 'adminId' | 'expiresAt'>
+  ): Promise<AuthTokens> {
+    const now = Math.floor(Date.now() / 1000);
+    const until = Math.floor(session.expiresAt.getTime() / 1000);
+    if (until <= now) {
+      throw new ImpersonationEndedException('The support session is over');
+    }
+    const ttl = Math.floor(
+      parseDurationMs(this.config.jwt.accessTokenTtl) / 1000
+    );
+    const claims: AccessTokenClaims = {
+      sub: user.id,
+      kind: user.kind,
+      perms: permissionsOf(user.roles ?? []),
+      act: { sub: session.adminId, sid: session.id, until },
+      // Stated as a claim and not as `expiresIn`, because the value is a moment
+      // and not a duration: the earlier of the two ends.
+      exp: Math.min(now + ttl, until),
+    };
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(claims, {
+        privateKey: this.config.jwt.privateKey,
+        algorithm: 'RS256',
+        keyid: this.config.jwt.kid,
+      }),
+      this.issueRefreshToken(user.id, session),
+    ]);
+    return {
+      userId: user.id,
+      kind: user.kind,
+      username: user.username,
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  /**
+   * Revokes every live refresh row of one support session (plan 0194), and no
+   * other row. The sessions the person holds are not touched.
+   */
+  async revokeAllForSession(
+    sessionId: string,
+    manager?: EntityManager
+  ): Promise<void> {
+    const repository = manager
+      ? manager.getRepository(RefreshToken)
+      : this.refreshTokens;
+    await repository.update(
+      { impersonationSessionId: sessionId, revokedAt: IsNull() },
+      { revokedAt: new Date() }
+    );
   }
 
   /**
@@ -185,8 +274,14 @@ export class TokenService {
    * Validates and rotates a refresh token: the presented token is revoked and
    * the caller's user id returned so a fresh pair can be issued. An unknown,
    * revoked or expired token is rejected.
+   *
+   * The support session of the row comes back beside the user (plan 0194),
+   * null for an ordinary row, so the caller issues the next pair for the same
+   * session and under the same deadline.
    */
-  async rotate(rawToken: string): Promise<string> {
+  async rotate(
+    rawToken: string
+  ): Promise<{ userId: string; impersonationSessionId: string | null }> {
     const record = await this.refreshTokens.findOne({
       where: { tokenHash: this.hash(rawToken) },
     });
@@ -199,6 +294,9 @@ export class TokenService {
     }
     record.revokedAt = new Date();
     await this.refreshTokens.save(record);
-    return record.userId;
+    return {
+      userId: record.userId,
+      impersonationSessionId: record.impersonationSessionId ?? null,
+    };
   }
 }

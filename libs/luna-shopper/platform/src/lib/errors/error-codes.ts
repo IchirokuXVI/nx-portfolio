@@ -420,6 +420,39 @@ export const ERROR_CODES = {
    * (`entry` or `document`) and `details.maxBytes` the cap.
    */
   SHOP_MAP_TOO_LARGE: 'shop_map_too_large',
+  /**
+   * Support sessions are switched off in this deployment (plan 0194), so an
+   * operator cannot start one. A 403: the operator is known, and the
+   * deployment does not allow the action.
+   */
+  IMPERSONATION_DISABLED: 'impersonation_disabled',
+  /**
+   * The handoff code of a support session was not accepted (plan 0194). One
+   * answer for a missing, used, old or ended code, so that the answer says
+   * nothing about which.
+   */
+  IMPERSONATION_CODE_INVALID: 'impersonation_code_invalid',
+  /**
+   * The token belongs to a support session that is over (plan 0194): ended by
+   * the operator, past its deadline, or held by an operator who is disabled.
+   *
+   * A 401, and a code of its own. The token is dead and no refresh revives
+   * it, so the client ends the session. It tells the operator that the
+   * support session ended, which `unauthorized` cannot say.
+   */
+  IMPERSONATION_ENDED: 'impersonation_ended',
+  /**
+   * A support session called a route that only the person may use (plan
+   * 0194): deleting the account, upgrading it, linking Google, giving a
+   * household away, or sending mail to the address of the person. A 403, so
+   * the session stays.
+   */
+  IMPERSONATION_NOT_ALLOWED: 'impersonation_not_allowed',
+  /**
+   * The caller asked to end a support session with a token that belongs to
+   * none (plan 0194).
+   */
+  NOT_IMPERSONATING: 'not_impersonating',
   INTERNAL: 'internal',
 } as const;
 
@@ -571,5 +604,16 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.WALK_CHANGED]: HttpStatus.CONFLICT,
   [ERROR_CODES.SHOP_MAP_INVALID]: HttpStatus.UNPROCESSABLE_ENTITY,
   [ERROR_CODES.SHOP_MAP_TOO_LARGE]: HttpStatus.UNPROCESSABLE_ENTITY,
+  // Plan 0194. Both 403 for the reason `permission_required` is: the caller is
+  // known and the action is refused, and a 401 would end the session.
+  [ERROR_CODES.IMPERSONATION_DISABLED]: HttpStatus.FORBIDDEN,
+  [ERROR_CODES.IMPERSONATION_NOT_ALLOWED]: HttpStatus.FORBIDDEN,
+  // 400, the status every other single use token answers a bad value with.
+  [ERROR_CODES.IMPERSONATION_CODE_INVALID]: HttpStatus.BAD_REQUEST,
+  // 401 on purpose: the credential is dead, and the client must drop it.
+  [ERROR_CODES.IMPERSONATION_ENDED]: HttpStatus.UNAUTHORIZED,
+  // 409: the request is well formed, and what refuses it is the kind of
+  // session the token belongs to.
+  [ERROR_CODES.NOT_IMPERSONATING]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

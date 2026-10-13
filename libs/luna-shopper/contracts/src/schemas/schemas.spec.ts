@@ -38,6 +38,10 @@ import {
   LINE_PATTERNS,
   LIST_PATTERNS,
 } from '../lib/messages/list.messages';
+import {
+  IMPERSONATION_EVENTS,
+  IMPERSONATION_PATTERNS,
+} from '../lib/messages/impersonation.messages';
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
@@ -48,6 +52,7 @@ import {
   ZONE_PATTERNS,
 } from '../lib/messages/zone.messages';
 import {
+  AUTH_SCHEMA_IDS,
   createContractsAjv,
   eventContracts,
   messageContracts,
@@ -80,6 +85,8 @@ describe('contract schemas', () => {
       ...Object.values(ADMIN_AUTH_PATTERNS),
       // The back office's own reads and named actions (plan 0074).
       ...Object.values(ADMIN_USER_PATTERNS),
+      // Support sessions (plan 0194).
+      ...Object.values(IMPERSONATION_PATTERNS),
       ...Object.values(ADMIN_ZONE_PATTERNS),
       ...Object.values(ADMIN_MEMBERSHIP_PATTERNS),
       ...Object.values(ADMIN_LIST_PATTERNS),
@@ -129,6 +136,7 @@ describe('contract schemas', () => {
 
     const allEventNames = [
       ...Object.values(IDENTITY_EVENTS),
+      ...Object.values(IMPERSONATION_EVENTS),
       ...Object.values(RealtimeEvent),
       ...Object.values(POSTAL_CODE_EVENTS),
     ];
@@ -154,6 +162,50 @@ describe('contract schemas', () => {
           accessToken: 'a',
           refreshToken: 'r',
         }).valid
+      ).toBe(true);
+    });
+
+    it('a support session: the start, the exchange and the act claim (plan 0194)', () => {
+      const ajv = createContractsAjv();
+      const claims = ajv.getSchema(AUTH_SCHEMA_IDS.accessTokenClaims);
+      const act = { sub: 'admin', sid: 'session', until: 1_800_000_000 };
+
+      // An ordinary token has no `act`, and a token of a session has all three.
+      expect(claims?.({ sub: 'u', kind: 'REGISTERED' })).toBe(true);
+      expect(claims?.({ sub: 'u', kind: 'REGISTERED', act })).toBe(true);
+      expect(
+        claims?.({ sub: 'u', kind: 'REGISTERED', act: { sub: 'admin' } })
+      ).toBe(false);
+
+      expect(
+        validateMessageRequest('auth.impersonation.start', {
+          userId: 'admin',
+          adminToken: 't',
+          targetUserId: 'u',
+          reason: 'OTHER',
+          note: 'reproducing a report',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('auth.impersonation.start', {
+          userId: 'admin',
+          targetUserId: 'u',
+          reason: 'CURIOSITY',
+        }).valid
+      ).toBe(false);
+      // The exchange answers the pair every other flow answers.
+      expect(
+        validateMessageResponse('auth.impersonation.exchange', {
+          userId: 'u',
+          kind: 'REGISTERED',
+          username: 'Quiet Lantern',
+          accessToken: 'a',
+          refreshToken: 'r',
+        }).valid
+      ).toBe(true);
+      // The end may name no session: an ordinary token carries none.
+      expect(
+        validateMessageRequest('auth.impersonation.end', { userId: 'u' }).valid
       ).toBe(true);
     });
 

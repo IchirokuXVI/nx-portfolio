@@ -75,6 +75,17 @@ const accessTokenClaims = object(
     kind: ref(ENUM_IDS.userKind),
     // Optional: a token signed before plan 0175 carries none (see the type).
     perms: array(ref(ENUM_IDS.permission)),
+    // Optional: only a token of a support session carries it (plan 0194).
+    act: {
+      type: 'object',
+      properties: {
+        sub: nonEmptyString(),
+        sid: nonEmptyString(),
+        until: integer(),
+      },
+      required: ['sub', 'sid', 'until'],
+      additionalProperties: false,
+    },
     iat: integer(),
     exp: integer(),
   },

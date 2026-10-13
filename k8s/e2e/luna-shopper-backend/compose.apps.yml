@@ -206,6 +206,10 @@ services:
       ADMIN_LOGIN_LOCKOUT_WINDOW: 15m
       ADMIN_DEV_AUTOLOGIN: 'false'
       ADMIN_DEV_AUTOLOGIN_USERNAME: dev-admin
+      # Support sessions (plan 0194). On here, so the e2e gate can walk one.
+      # Auth alone reads it. It defaults to false, and this tier states its
+      # environment by hand, so it is named here.
+      IMPERSONATION_ENABLED: 'true'
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_USER: ''

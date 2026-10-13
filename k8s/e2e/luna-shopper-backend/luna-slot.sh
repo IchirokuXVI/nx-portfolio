@@ -1326,6 +1326,10 @@ ADMIN_LOGIN_LOCKOUT_WINDOW=15m
 # safe to state here rather than something each developer has to opt into.
 ADMIN_DEV_AUTOLOGIN=true
 ADMIN_DEV_AUTOLOGIN_USERNAME=dev-admin
+# Support sessions (plan 0194): an operator opens the app as a user. On in a
+# slot, so a developer can use it. Auth alone reads it, and it is the same on
+# every slot, so it is not a derived key: a false set by hand is kept.
+IMPERSONATION_ENABLED=true
 SMTP_HOST=localhost
 SMTP_PORT=${SMTP_PORT}
 SMTP_USER=

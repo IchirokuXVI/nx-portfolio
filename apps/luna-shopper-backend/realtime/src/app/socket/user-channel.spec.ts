@@ -132,7 +132,9 @@ async function build(userId = 'u1', verifies = true) {
     // Plan 0031 gave the gateway the room sync service, which this suite never
     // exercises: nothing here loses access to anything.
     { bind: jest.fn() } as never,
-    { debug: jest.fn() } as never
+    { debug: jest.fn() } as never,
+    // Plan 0194: no socket here belongs to a support session.
+    { ended$: { subscribe: jest.fn() }, isLive: jest.fn() } as never
   );
   (gateway as unknown as { server: unknown }).server = io.server;
   gateway.onModuleInit();

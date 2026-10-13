@@ -303,6 +303,12 @@ lunaShopperBackend:
     # production data has been warned about the wrong thing in the harmless
     # direction only if the colour is alarming, so both clusters state their own.
     environmentName: development
+    # Support sessions (plan 0194): an operator opens the app as a user, for
+    # two hours at most. Off here, so a cluster allows it only when its own
+    # values file says so. values.staging.yaml does. values.production.yaml
+    # does not name it: production waits for the privacy policy to name
+    # support access, and the owner turns it on after that.
+    impersonationEnabled: false
     # Google sign in is optional (plan 0026): with an empty client id every
     # service still boots, and the two interactive Google routes answer 501
     # `not_configured` instead of failing. Set all three to turn it on.

@@ -56,6 +56,7 @@ import {
   User,
 } from '../entities';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
+import { ImpersonationService } from '../impersonation/impersonation.service';
 import { MailService } from '../mail/mail.service';
 import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
@@ -135,7 +136,10 @@ export class IdentityService {
     // reach it: a person changing their own name is not an operator write, and
     // recording one would fill the trail with the ordinary use of the product.
     private readonly audit: AuthAuditService,
-    configService: ConfigService
+    configService: ConfigService,
+    // Last, so that no positional caller moves (plan 0194). Only `refresh`
+    // reaches it, and only for the row of a support session.
+    private readonly impersonation: ImpersonationService
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
@@ -633,12 +637,18 @@ export class IdentityService {
 
   /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */
   async refresh(rawRefreshToken: string): Promise<AuthTokens> {
-    const userId = await this.tokens.rotate(rawRefreshToken);
+    const { userId, impersonationSessionId } =
+      await this.tokens.rotate(rawRefreshToken);
     const user = await this.dataSource
       .getRepository(User)
       .findOne({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    // The row of a support session renews under that session's deadline (plan
+    // 0194). Every other row takes the line below, exactly as before.
+    if (impersonationSessionId) {
+      return this.impersonation.refresh(impersonationSessionId, user);
     }
     return this.tokens.issueTokens(user);
   }

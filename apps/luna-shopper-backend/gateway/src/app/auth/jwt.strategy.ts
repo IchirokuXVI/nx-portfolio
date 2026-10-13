@@ -10,6 +10,11 @@ import {
 import { setRequestContext } from '@portfolio/luna-shopper/platform';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { GatewayConfig } from '../config/app-config';
+import {
+  ImpersonationGate,
+  impersonationFromClaim,
+  type CurrentImpersonation,
+} from './impersonation-gate';
 
 /** The authenticated caller attached to the request. */
 export interface CurrentUser {
@@ -21,6 +26,13 @@ export interface CurrentUser {
    * Empty for a token signed before the claim existed, and for a guest.
    */
   permissions: readonly Permission[];
+  /**
+   * Present only when the token belongs to a support session (plan 0194): an
+   * operator is in the app as this user. Read from the `act` claim. Absent on
+   * every ordinary token, and every reader treats absent as "not a support
+   * session". `@RefuseImpersonation` checks it.
+   */
+  impersonation?: CurrentImpersonation;
 }
 
 /**
@@ -29,10 +41,22 @@ export interface CurrentUser {
  * alone, never calling auth per request. On success the resolved user id is
  * pinned into the request context so every log line for the request is tagged
  * with it.
+ *
+ * **One kind of token does call auth, on each request** (plan 0194): a token
+ * of a support session, which carries `act`. The session can end before the
+ * token expires, so the strategy asks auth whether it is live and refuses with
+ * 401 `impersonation_ended` unless it is. The check is here and not in a guard
+ * of its own, because every guard that accepts a user token goes through this
+ * method: `JwtAuthGuard`, the optional one and `@RequirePermission` alike. A
+ * route cannot take the token and skip the check. A token with no `act` takes
+ * no hop at all.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly impersonation: ImpersonationGate
+  ) {
     const config = configService.getOrThrow<GatewayConfig>('gateway');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -42,13 +66,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: AccessTokenClaims): CurrentUser {
+  async validate(payload: AccessTokenClaims): Promise<CurrentUser> {
     setRequestContext({ userId: payload.sub });
-    return {
+    const user: CurrentUser = {
       userId: payload.sub,
       kind: payload.kind,
       permissions: permissionsFromClaim(payload.perms),
     };
+    const impersonation = impersonationFromClaim(payload.act);
+    if (!impersonation) {
+      return user;
+    }
+    // Throws unless auth says the session is live. Passport hands the error to
+    // the guard, which rethrows it, so the client reads the code.
+    await this.impersonation.assertLive(impersonation.sessionId);
+    return { ...user, impersonation };
   }
 }
 

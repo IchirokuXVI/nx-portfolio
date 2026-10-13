@@ -12,6 +12,7 @@ import { describeIntegration } from '@portfolio/luna-shopper/test-fixtures/jest'
 import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { ImpersonationGate } from './impersonation-gate';
 import { JwtStrategy } from './jwt.strategy';
 import { RequirePermission } from './require-permission.decorator';
 
@@ -52,6 +53,16 @@ async function boot(publicKey: string) {
       controllers: [ProbeController],
       providers: [
         JwtStrategy,
+        // What the strategy asks auth through for a token of a support session
+        // (plan 0194). No token here is one, so a call is a failure.
+        {
+          provide: ImpersonationGate,
+          useValue: {
+            assertLive: async () => {
+              throw new Error('no token here belongs to a support session');
+            },
+          },
+        },
         {
           provide: ConfigService,
           useValue: { getOrThrow: () => ({ authJwtPublicKey: publicKey }) },
