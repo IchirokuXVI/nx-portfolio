@@ -13,6 +13,7 @@ import {
   string,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
+import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 
 /**
  * What one person bought, as a language neutral contract (plan 0142).
@@ -123,6 +124,10 @@ const rowView = object(
   {
     id: nonEmptyString(),
     itemId: nullableString(),
+    // What the product was called when it was bought (plan 0202, section 4).
+    itemSnapshot: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemSnapshot), { type: 'null' }],
+    },
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 0 }),
     pricePaid: nullableMoney(),
@@ -140,6 +145,7 @@ const rowView = object(
   [
     'id',
     'itemId',
+    'itemSnapshot',
     'outcome',
     'quantity',
     'pricePaid',

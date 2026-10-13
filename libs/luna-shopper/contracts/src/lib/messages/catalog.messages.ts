@@ -1506,6 +1506,24 @@ export interface ItemView {
 }
 
 /**
+ * What a product was called when it was bought (plan 0202, section 1).
+ *
+ * Five fields of {@link ItemView}, copied onto a buy by the gateway, under the
+ * names the view uses. `name` is the whole {@link LocalizedText}, every locale
+ * catalog held: a buy has no reader yet, and whoever reads the history later
+ * chooses the locale as they do for a product. `ItemView` has no size field.
+ * The size of a product is `unitSize` with `defaultUnit`, and `packCount`
+ * tells a six pack of litre cartons from a six litre jug.
+ *
+ * It is a copy and it does not move. A product that catalog renames, merges or
+ * removes afterwards leaves this as it was.
+ */
+export type ItemSnapshot = Pick<
+  ItemView,
+  'name' | 'brand' | 'unitSize' | 'packCount' | 'defaultUnit'
+>;
+
+/**
  * A group and the cheapest way to buy it (plan 0048, section 3).
  *
  * `cheapestItem` and `offer` are **both null** when no member is priced at the

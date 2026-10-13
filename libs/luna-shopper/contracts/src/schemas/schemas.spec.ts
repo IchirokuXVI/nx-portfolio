@@ -479,9 +479,138 @@ describe('contract schemas', () => {
               pricePaidCurrency: null,
               priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
               supermarketLocationId: null,
+              // A free text line names no product, so it has no name of one
+              // to copy (plan 0202, section 4).
+              itemSnapshot: null,
             },
           ],
           nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    // Plan 0202, section 4: a history serves what the product was called when
+    // it was bought, beside its id.
+    const settlementRow = (itemSnapshot: unknown) => ({
+      id: 's',
+      lineId: 'l',
+      listId: 'li',
+      itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+      outcome: 'BOUGHT',
+      quantity: 2,
+      settledByUserId: 'u',
+      settledByParticipantId: null,
+      settledAt: '2026-01-01T00:00:00.000Z',
+      revertedAt: null,
+      pricePaidCents: 95,
+      pricePaidCurrency: 'EUR',
+      priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+      supermarketLocationId: null,
+      itemSnapshot,
+    });
+
+    it('line.settlements response with the name of the product (plan 0202)', () => {
+      expect(
+        validateMessageResponse('line.settlements', {
+          items: [
+            settlementRow({
+              name: { en: 'Whole milk', es: 'Leche entera' },
+              brand: 'Hacendado',
+              unitSize: 1,
+              packCount: 6,
+              defaultUnit: 'LITER',
+            }),
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('refuses a snapshot that carries a field the copy does not have', () => {
+      expect(
+        validateMessageResponse('line.settlements', {
+          items: [
+            settlementRow({
+              name: { en: 'Whole milk' },
+              brand: null,
+              unitSize: null,
+              packCount: null,
+              defaultUnit: 'UNIT',
+              sku: 'not copied',
+            }),
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('basket.lines.product request, as the gateway builds it', () => {
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: ['l1', 'l2'],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: false,
+          itemSnapshot: {
+            name: { es: 'Leche entera' },
+            brand: null,
+            unitSize: 1,
+            packCount: null,
+            defaultUnit: 'LITER',
+          },
+          prices: [
+            {
+              priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+              pricePaidCents: 95,
+              pricePaidCurrency: 'EUR',
+            },
+          ],
+          paid: {
+            priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+            supermarketLocationId: null,
+            pricePaidCents: 95,
+            pricePaidCurrency: 'EUR',
+          },
+        }).valid
+      ).toBe(true);
+      // The three the gateway writes are optional: a change with no buy to
+      // rewrite sends none of them.
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: ['l1'],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: true,
+        }).valid
+      ).toBe(true);
+      // No line named is no write.
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: [],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: true,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('basket.searchScope response with the buys of the trip (plan 0202)', () => {
+      expect(
+        validateMessageResponse('basket.searchScope', {
+          ownerUserId: 'u',
+          profileId: null,
+          servesLocations: true,
+          supermarketLocationId: null,
+          tripBuys: {
+            priceScopeIds: ['b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73'],
+            unscoped: true,
+          },
         }).valid
       ).toBe(true);
     });

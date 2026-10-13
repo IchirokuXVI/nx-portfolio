@@ -1,6 +1,7 @@
 import type { SettlementOutcome, TripKind } from '../enums/list.enums';
 import type { Paginated } from '../pagination';
 import type { BasketShopView } from './basket.messages';
+import type { ItemSnapshot } from './catalog.messages';
 
 /**
  * What one person bought, with or without a basket (plan 0142).
@@ -144,6 +145,13 @@ export interface PurchaseRowView {
   id: string;
   /** The product bought, or null for a free text line. */
   itemId: string | null;
+  /**
+   * What that product was called when it was bought (plan 0202, section 4):
+   * the newest copy among the purchases folded into the row. Null for a free
+   * text line, for purchases from before that plan, and when catalog did not
+   * answer at the shelf.
+   */
+  itemSnapshot: ItemSnapshot | null;
   /** `NOT_AVAILABLE` only when the line had nothing bought in this entry. */
   outcome: SettlementOutcome;
   /** Standing `BOUGHT` units. Zero for `NOT_AVAILABLE`. */

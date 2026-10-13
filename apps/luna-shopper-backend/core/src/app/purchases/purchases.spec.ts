@@ -109,6 +109,7 @@ describe('one row of an entry (section 4)', () => {
   const row = (extra: Record<string, unknown> = {}) => ({
     id: ROW,
     itemId: 'item-1',
+    itemSnapshot: null,
     outcome: 'BOUGHT',
     quantity: '3' as never,
     pricePaidCents: 120,
@@ -128,6 +129,8 @@ describe('one row of an entry (section 4)', () => {
     expect(toPurchaseRowView(row())).toEqual({
       id: ROW,
       itemId: 'item-1',
+      // A purchase from before plan 0202 copied no name.
+      itemSnapshot: null,
       outcome: SettlementOutcome.BOUGHT,
       quantity: 3,
       pricePaid: { cents: 120, currency: 'EUR' },
@@ -140,6 +143,20 @@ describe('one row of an entry (section 4)', () => {
       zoneId: 'zone-1',
       content: 'Milk',
     });
+  });
+
+  // Plan 0202, section 4: what the product was called when it was bought.
+  it('serves the copied name of the product as the statement folded it', () => {
+    const itemSnapshot = {
+      name: { es: 'Leche entera' },
+      brand: 'Hacendado',
+      unitSize: 1,
+      packCount: 6,
+      defaultUnit: 'LITER',
+    };
+    expect(toPurchaseRowView(row({ itemSnapshot })).itemSnapshot).toEqual(
+      itemSnapshot
+    );
   });
 
   // An amount with no currency is a number, so the two travel together or

@@ -226,6 +226,15 @@ export type BasketSourceDto = {
 };
 
 /**
+ * `ChangeBasketLinesProductDto` in the gateway's OpenAPI document.
+ */
+export type ChangeBasketLinesProductDto = {
+  lineIds: string[];
+  itemId: string;
+  keep: boolean;
+};
+
+/**
  * `CreateBasketDto` in the gateway's OpenAPI document.
  */
 export type CreateBasketDto = {
@@ -2803,6 +2812,17 @@ export type CatalogItemSectionsAtLocationView = {
 };
 
 /**
+ * `catalog.ItemSnapshot` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSnapshot = {
+  name: CatalogLocalizedText;
+  brand: string | null;
+  unitSize: number | null;
+  packCount: number | null;
+  defaultUnit: EnumsUnitOfMeasure;
+};
+
+/**
  * `catalog.ItemView` in the gateway's OpenAPI document.
  */
 export type CatalogItemView = {
@@ -4896,12 +4916,33 @@ export type ListLinePage = {
 };
 
 /**
+ * `list.LineSettlementHistoryView` in the gateway's OpenAPI document.
+ */
+export type ListLineSettlementHistoryView = {
+  id: string;
+  lineId: string;
+  listId: string;
+  itemId: string | null;
+  outcome: EnumsSettlementOutcome;
+  quantity: number;
+  settledByUserId: string;
+  settledByParticipantId: string | null;
+  settledAt: string;
+  revertedAt: string | null;
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
+  itemSnapshot: CatalogItemSnapshot | null;
+};
+
+/**
  * `list.LineSettlementPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
  */
 export type ListLineSettlementPage = {
-  items: ListLineSettlementView[];
+  items: ListLineSettlementHistoryView[];
   nextCursor: string | null;
 };
 
@@ -5383,6 +5424,7 @@ export type PurchasePurchaseRowPage = {
 export type PurchasePurchaseRowView = {
   id: string;
   itemId: string | null;
+  itemSnapshot: CatalogItemSnapshot | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
   pricePaid: PurchaseMoneyView | null;

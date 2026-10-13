@@ -14,6 +14,7 @@ import type { Paginated } from '../pagination';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
 import type {
+  ItemSnapshot,
   ItemView,
   LocalizedText,
   LocationSectionNameView,
@@ -718,13 +719,78 @@ export interface SettleBasketRowRequest {
   /** Which entry got what, over the named lines. Derived oldest first when absent. */
   allocations?: BasketAllocationEntry[];
   /**
-   * What the screen said one of it costs, and where (plan 0143).
+   * What one of it costs, and where (plan 0143; plan 0202, section 2).
    *
-   * Written by the **gateway**, which reads the price as the basket's owner at
-   * the basket's scopes, and never by a client: the actor at the shelf can be a
-   * guest. The same four values are written on every row this settle writes.
+   * Written by the **gateway**, which chooses the price as the basket's owner,
+   * and never by a client: the actor at the shelf can be a guest. At the shop
+   * of the settle when it has one, else the cheapest across the owner's scopes
+   * with no shop and no chain. The same values are written on every row this
+   * settle writes.
    */
   paid?: SettlementPaid;
+  /**
+   * What the product was called when it was bought (plan 0202, section 1). As
+   * `SettleLineRequest.itemSnapshot`: written by the gateway, and absent when
+   * catalog did not answer in time.
+   */
+  itemSnapshot?: ItemSnapshot | null;
+}
+
+/**
+ * Change the product of basket lines (plan 0202, section 3).
+ *
+ * Two writes in one transaction, for each named line:
+ *
+ * 1. **The buys of the trip are rewritten.** Every standing buy of the line
+ *    through this basket in its trip that names another product is marked
+ *    reverted, and a new settlement is written beside it with the same line,
+ *    quantity, person and `settledAt`, the new product, its name and its price.
+ *    The quantity of the line does not move, so no change row is written.
+ * 2. **When {@link keep} is true the line is written.** The product joins the
+ *    products of the line when it is not one of them, and it becomes the
+ *    favourite. That is an ordinary edit of the line, with its permissions,
+ *    its change row and its events.
+ *
+ * With `keep` false and no buy in the trip nothing is written, and the answer
+ * is the lines as they are.
+ *
+ * Account participants only. Every named line must be a row of the basket, or
+ * the whole write answers "Row not found".
+ */
+export interface ChangeBasketLinesProductRequest {
+  basketId: string;
+  participantId: string;
+  /** The actor's own account. A guest reaches the route and is refused. */
+  userId: string;
+  /** 1 to {@link BASKET_LIMITS.maxWriteLines} lines, each a row of the basket. */
+  lineIds: string[];
+  /** The product the lines change to. The gateway refuses one catalog does not know. */
+  itemId: string;
+  /** Whether the change is kept on the line, or holds for this trip only. */
+  keep: boolean;
+  /** What the product is called now. Written by the gateway, never by a client. */
+  itemSnapshot?: ItemSnapshot | null;
+  /**
+   * What one unit of the product costs at each scope a rewritten buy was
+   * priced at. Written by the gateway, which learned those scopes from
+   * {@link BasketSearchScope.tripBuys}. A buy whose scope is not in this list
+   * keeps its scope and its shop and gets no price.
+   */
+  prices?: BasketScopePrice[];
+  /**
+   * The price for a rewritten buy that recorded no scope, chosen as a settle
+   * chooses one (plan 0202, section 2). Written by the gateway.
+   */
+  paid?: SettlementPaid;
+}
+
+/** What one unit of a product costs at one scope, as the gateway read it. */
+export interface BasketScopePrice {
+  priceScopeId: string;
+  /** One unit, in the minor unit of {@link pricePaidCurrency}. */
+  pricePaidCents: number;
+  /** ISO 4217. */
+  pricePaidCurrency: string;
 }
 
 /** One line's share of a settle, when the caller allocates by hand. */
@@ -849,10 +915,33 @@ export interface RenameBasketRowRequest {
  */
 export interface BasketSearchScopeRequest extends GetBasketRequest {
   /**
-   * The lines a settle is about to write on. Sent only by a settle that named a
-   * scope and no `itemId`, and answered in {@link BasketSearchScope.pick}.
+   * The lines a write is about to act on. Sent by a settle that named no
+   * `itemId`, and answered in {@link BasketSearchScope.pick}. Sent also by a
+   * change of product that asks for {@link tripBuys}.
    */
   lineIds?: string[];
+  /**
+   * Ask where the standing buys of {@link lineIds} in this trip were priced
+   * (plan 0202, section 3). Answered in {@link BasketSearchScope.tripBuys}.
+   */
+  tripBuys?: boolean;
+}
+
+/**
+ * Where the buys a change of product will rewrite were priced (plan 0202,
+ * section 3).
+ *
+ * The gateway reads a price and core never does. So before core rewrites the
+ * buys of a trip, the gateway asks where they were priced, reads what the new
+ * product costs at each of those scopes, and hands core the answers. The buys
+ * are the standing `BOUGHT` settlements of the named lines through this basket
+ * in its trip.
+ */
+export interface BasketTripBuys {
+  /** The distinct price scopes those buys recorded. */
+  priceScopeIds: string[];
+  /** At least one of those buys recorded no scope. */
+  unscoped: boolean;
 }
 
 /** Where a search inside this basket is priced. */
@@ -891,6 +980,8 @@ export interface BasketSearchScope {
    * core, which is the one service that writes the answer.
    */
   pick?: SettlePick;
+  /** Present exactly when the request asked for it and named `lineIds`. */
+  tripBuys?: BasketTripBuys;
 }
 
 // --- Results ----------------------------------------------------------------
@@ -941,6 +1032,8 @@ export const BASKET_PATTERNS = {
   rowSkip: 'basket.row.skip',
   rowUnskip: 'basket.row.unskip',
   lineAdd: 'basket.line.add',
+  /** Change the product of basket lines (plan 0202, section 3). */
+  linesProduct: 'basket.lines.product',
   searchScope: 'basket.searchScope',
   /** What changed on the covered lists, and saying it was drawn (plan 0138). */
   changesList: 'basket.changes.list',

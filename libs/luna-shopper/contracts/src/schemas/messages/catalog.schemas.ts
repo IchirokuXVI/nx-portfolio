@@ -134,6 +134,8 @@ export const CATALOG_SCHEMA_IDS = {
   supermarketLocationView: schemaId('catalog/SupermarketLocationView'),
   priceScopeView: schemaId('catalog/PriceScopeView'),
   itemView: schemaId('catalog/ItemView'),
+  // What a product was called when it was bought (plan 0202, section 1).
+  itemSnapshot: schemaId('catalog/ItemSnapshot'),
   supermarketItemView: schemaId('catalog/SupermarketItemView'),
   adminSupermarketItemView: schemaId('catalog/AdminSupermarketItemView'),
   supermarketLocationItemView: schemaId('catalog/SupermarketLocationItemView'),
@@ -748,6 +750,20 @@ const itemView = object(
   CATALOG_SCHEMA_IDS.itemView,
   itemViewProperties,
   itemViewRequired
+);
+
+// Five fields of `ItemView`, copied onto a buy (plan 0202, section 1). Spelled
+// with the properties of the view, so the copy cannot state another shape.
+const itemSnapshot = object(
+  CATALOG_SCHEMA_IDS.itemSnapshot,
+  {
+    name: itemViewProperties.name,
+    brand: itemViewProperties.brand,
+    unitSize: itemViewProperties.unitSize,
+    packCount: itemViewProperties.packCount,
+    defaultUnit: itemViewProperties.defaultUnit,
+  },
+  ['name', 'brand', 'unitSize', 'packCount', 'defaultUnit']
 );
 
 const productGroupOfferView = object(
@@ -3363,6 +3379,7 @@ export const catalogSchemas: JsonSchema[] = [
   itemSectionsAtLocationEntry,
   itemSectionsAtLocationView,
   itemView,
+  itemSnapshot,
   productGroupOfferView,
   catalogSuggestion,
   catalogSuggestResponse,

@@ -124,8 +124,9 @@ export class SettleBasketRowDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
+    deprecated: true,
     description:
-      'The price scope the row’s price was read at on your screen: the scope of the shop you picked, or of the offer the screen showed. There is no field for an amount, and there will not be: the gateway reads the price itself, as the basket’s owner.',
+      'No longer read (plan 0202). The gateway chooses the price itself, as the basket’s owner: at the shop of the settle, or the cheapest across the owner’s areas when the settle has no shop. The field is accepted for one release, so a client that still sends it is not refused.',
   })
   @IsOptional()
   @IsUUID()
@@ -134,7 +135,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in "any shop" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`.',
+      'The one shop you are standing in, when you chose one. The buy is priced at that shop, also when it is outside the basket owner’s areas, and records the shop with its chain. A shop that has no price for the product records no price and no shop. Leave it out in "any shop" mode: the buy then records the cheapest price across the owner’s areas, with no shop and no chain. On a basket started at a shop, that shop is the shop of every settle, and a different one answers 409 `basket_shop_locked`.',
   })
   @IsOptional()
   @IsUUID()
@@ -264,6 +265,34 @@ export class AddBasketLineDto {
   @ArrayMaxSize(BASKET_LIMITS.maxOptions)
   @IsUUID('4', { each: true })
   itemIds?: string[];
+}
+
+/**
+ * Change the product of basket lines (plan 0202, section 3).
+ *
+ * The body has no field for a price or a name. The gateway reads both, as it
+ * does for a settle.
+ */
+export class ChangeBasketLinesProductDto {
+  @LineIds(
+    'The list lines whose product changes: the entries of the row as you drew it. A line the basket does not cover answers 404 for the whole request, and nothing is written.'
+  )
+  lineIds!: string[];
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The product the lines change to. It does not have to be a product of any of them. An id the catalog does not know answers 400 `validation_failed` on `itemId`.',
+  })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty({
+    description:
+      'True keeps the change: the product joins the products of each line and becomes its favourite, which needs the right to edit each line, and one line that fails that answers 403 with nothing written. False holds it for this trip only: the buys of this trip are rewritten and no line is. With false and no buy in this trip nothing is written, and the answer is the lines as they are.',
+  })
+  @IsBoolean()
+  keep!: boolean;
 }
 
 /**

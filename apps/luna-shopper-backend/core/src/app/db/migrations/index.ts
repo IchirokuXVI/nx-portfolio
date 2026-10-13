@@ -33,6 +33,7 @@ import { BasketShop1756003400000 } from './1756003400000-BasketShop';
 import { SettlementChain1756003500000 } from './1756003500000-SettlementChain';
 import { LineFavoriteAndSupermarket1756003600000 } from './1756003600000-LineFavoriteAndSupermarket';
 import { LineChangeBuyKinds1756003700000 } from './1756003700000-LineChangeBuyKinds';
+import { SettlementSnapshotAndReplacement1756003800000 } from './1756003800000-SettlementSnapshotAndReplacement';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -179,4 +180,9 @@ export const CORE_MIGRATIONS = [
   // created, replaced by one that allows two more kinds. It reads and writes no
   // row, so it follows that migration and nothing else (plan 0203, section 1).
   LineChangeBuyKinds1756003700000,
+  // Two nullable columns and one index on `line_settlements`, which plan 0163's
+  // migration last reshaped. Every row is null in both, no check changes, and
+  // it reads and writes no row, so it follows every migration that touched that
+  // table and nothing else (plan 0202, sections 1 and 3).
+  SettlementSnapshotAndReplacement1756003800000,
 ];

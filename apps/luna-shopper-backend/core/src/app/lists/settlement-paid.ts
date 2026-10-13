@@ -1,5 +1,6 @@
 import {
   SettlementOutcome,
+  type ItemSnapshot,
   type SettlementPaid,
 } from '@portfolio/luna-shopper/contracts';
 import { isUuid, ValidationException } from '@portfolio/luna-shopper/platform';
@@ -128,4 +129,48 @@ export function paidColumns(
     supermarketLocationId: paid.supermarketLocationId,
     supermarketId,
   };
+}
+
+/**
+ * What a settlement stores in `itemSnapshot` (plan 0202, section 1).
+ *
+ * The gateway read the product and sends what it was called. **Core checks the
+ * shape and copies the five fields it knows**, as {@link paidColumns} does for
+ * the price: it has no catalog client, so it cannot say whether the name is
+ * right, and a field it does not know is not written into a household's
+ * history.
+ *
+ * **The caller writes it only on a settlement that records a product.** A name
+ * with no product would be a name of nothing.
+ *
+ * A message whose snapshot has the wrong shape is refused and not dropped, for
+ * the reason a malformed price is: it is a bug in whoever built the message.
+ */
+export function itemSnapshotColumn(
+  snapshot: ItemSnapshot | null | undefined
+): ItemSnapshot | null {
+  if (snapshot === undefined || snapshot === null) {
+    return null;
+  }
+  const malformed = (): ValidationException =>
+    new ValidationException('itemSnapshot must be a product snapshot', {
+      messageArgs: { field: 'itemSnapshot' },
+    });
+  if (typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw malformed();
+  }
+  const { name, brand, unitSize, packCount, defaultUnit } = snapshot;
+  if (
+    typeof name !== 'object' ||
+    name === null ||
+    Array.isArray(name) ||
+    Object.values(name).some((text) => typeof text !== 'string') ||
+    (brand !== null && typeof brand !== 'string') ||
+    (unitSize !== null && typeof unitSize !== 'number') ||
+    (packCount !== null && !Number.isInteger(packCount)) ||
+    typeof defaultUnit !== 'string'
+  ) {
+    throw malformed();
+  }
+  return { name: { ...name }, brand, unitSize, packCount, defaultUnit };
 }

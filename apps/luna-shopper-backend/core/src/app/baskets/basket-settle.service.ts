@@ -28,7 +28,7 @@ import {
 } from '../lists/changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
-import { paidColumns } from '../lists/settlement-paid';
+import { itemSnapshotColumn, paidColumns } from '../lists/settlement-paid';
 import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
 import { allocateOldestFirst, type BasketEntry } from './basket-rows';
 import { BasketWriteContext } from './basket-write.context';
@@ -96,6 +96,10 @@ export class BasketSettleService {
     // (plan 0143, section 4.3). Checked here, before the transaction opens,
     // because a malformed message must be refused with nothing locked.
     const paid = paidColumns(req.paid, req.outcome);
+    // What the product was called, as the gateway read it (plan 0202). Stored
+    // only beside a product, and the same copy on every row of this settle.
+    const snapshot = itemSnapshotColumn(req.itemSnapshot);
+    const itemSnapshot = itemId === null ? null : snapshot;
 
     const announcements: ZoneAnnouncement[] = [];
     // The entries this call took to zero or closed, which is what decides
@@ -209,6 +213,9 @@ export class BasketSettleService {
             // entry of the row gets the same four values: it is a price per
             // unit, so it needs no dividing between the households.
             ...paid,
+            itemSnapshot,
+            // A settle replaces nothing. Only a change of product does.
+            replacesSettlementId: null,
           })
         );
 
