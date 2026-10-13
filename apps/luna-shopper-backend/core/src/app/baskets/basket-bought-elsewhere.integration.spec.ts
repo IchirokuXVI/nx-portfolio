@@ -42,6 +42,7 @@ import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
+import { BasketPatchReader } from './basket-patch.reader';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
@@ -106,7 +107,8 @@ describeIntegration(
       const coverage = new BasketCoverageService(baskets);
       const announcer = new BasketAnnouncer(
         coverage,
-        events as unknown as CoreEventsPublisher
+        events as unknown as CoreEventsPublisher,
+        new BasketPatchReader(baskets, fakeCoreConfig())
       );
       resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 

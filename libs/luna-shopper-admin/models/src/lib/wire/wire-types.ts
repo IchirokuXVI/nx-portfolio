@@ -2006,6 +2006,15 @@ export type BasketBasketChangesAcknowledged = {
 };
 
 /**
+ * `basket.BasketEntryAct` in the gateway's OpenAPI document.
+ */
+export type BasketBasketEntryAct = {
+  participantId: string | null;
+  at: string;
+  outcome: EnumsBasketEntryActOutcome;
+};
+
+/**
  * `basket.BasketHeaderView` in the gateway's OpenAPI document.
  */
 export type BasketBasketHeaderView = {
@@ -2035,6 +2044,14 @@ export type BasketBasketHistoryView = {
 };
 
 /**
+ * `basket.BasketLineMark` in the gateway's OpenAPI document.
+ */
+export type BasketBasketLineMark = {
+  lineId: string;
+  mark: EnumsBasketRowMark;
+};
+
+/**
  * `basket.BasketListRef` in the gateway's OpenAPI document.
  */
 export type BasketBasketListRef = {
@@ -2042,6 +2059,15 @@ export type BasketBasketListRef = {
   name: string;
   zoneId: string;
   zoneName: string;
+};
+
+/**
+ * `basket.BasketMarksView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketMarksView = {
+  unseenChangeCount: number;
+  newestUnseenChangeId: string | null;
+  lines: BasketBasketLineMark[];
 };
 
 /**
@@ -2148,12 +2174,16 @@ export type BasketBasketResult = {
  */
 export type BasketBasketRowEntryView = {
   lineId: string;
-  listId?: string;
+  version: number;
   left: number;
   bought: number;
   boughtElsewhere: number;
   state: EnumsBasketRowState;
   approvalStatus: EnumsLineApprovalStatus;
+  skipped: boolean;
+  closed: boolean;
+  act: BasketBasketEntryAct | null;
+  listId?: string;
   demandEditable: boolean;
 };
 
@@ -3515,6 +3545,11 @@ export type EnumsAdapterKey =
  * `enums.AuthProvider` in the gateway's OpenAPI document.
  */
 export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
+
+/**
+ * `enums.BasketEntryActOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketEntryActOutcome = 'BOUGHT' | 'NOT_AVAILABLE' | 'SKIPPED';
 
 /**
  * `enums.BasketKind` in the gateway's OpenAPI document.

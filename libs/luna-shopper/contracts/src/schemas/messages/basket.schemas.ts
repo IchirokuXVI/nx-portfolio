@@ -6,8 +6,10 @@ import {
   BasketRowUsualState,
   BasketStatus,
 } from '../../lib/enums/basket.enums';
+import { SettlementOutcome } from '../../lib/enums/list.enums';
 import { BASKET_SHARING_LIMITS } from '../../lib/messages/basket-sharing.messages';
 import {
+  BASKET_ACT_SKIPPED,
   BASKET_LIMITS,
   BASKET_PATTERNS,
   BASKET_USUAL_WINDOW,
@@ -51,6 +53,12 @@ export const BASKET_SCHEMA_IDS = {
   rowMark: schemaId('enums/BasketRowMark'),
   listRef: schemaId('basket/BasketListRef'),
   rowEntryView: schemaId('basket/BasketRowEntryView'),
+  // What `basket.linesChanged` carries since plan 0204, and the act both it and
+  // the entry view name.
+  entryActOutcome: schemaId('enums/BasketEntryActOutcome'),
+  entryAct: schemaId('basket/BasketEntryAct'),
+  entryPatch: schemaId('basket/BasketEntryPatch'),
+  linesChangedEvent: schemaId('event/BasketLinesChangedEvent'),
   rowView: schemaId('basket/BasketRowView'),
   // Where a row is usually bought, at the read's chain (plan 0165).
   rowUsualState: schemaId('enums/BasketRowUsualState'),
@@ -135,32 +143,89 @@ const listRef = object(
   ['listId', 'name', 'zoneId', 'zoneName']
 );
 
+const entryActOutcome = enumOf(BASKET_SCHEMA_IDS.entryActOutcome, [
+  ...Object.values(SettlementOutcome),
+  BASKET_ACT_SKIPPED,
+]);
+
+const entryAct = object(
+  BASKET_SCHEMA_IDS.entryAct,
+  {
+    participantId: nullableString(),
+    at: nonEmptyString(),
+    outcome: ref(BASKET_SCHEMA_IDS.entryActOutcome),
+  },
+  ['participantId', 'at', 'outcome']
+);
+
+/**
+ * What an entry and a patch of it both state (plan 0204, sections 2 and 5).
+ *
+ * One object for the two, so a field a patch gains is a field a client already
+ * holds on the entry it applies the patch over.
+ */
+const entryNumbers = {
+  lineId: nonEmptyString(),
+  version: integer({ minimum: 0 }),
+  left: integer({ minimum: 0 }),
+  bought: integer({ minimum: 0 }),
+  // Bought lately through another basket or through none (plan 0188). A
+  // count alone: the row never names who bought.
+  boughtElsewhere: integer({ minimum: 0 }),
+  state: ref(BASKET_SCHEMA_IDS.rowState),
+  approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
+  skipped: boolean(),
+  closed: boolean(),
+  act: { anyOf: [ref(BASKET_SCHEMA_IDS.entryAct), { type: 'null' }] },
+};
+
+const entryNumbersRequired = [
+  'lineId',
+  'version',
+  'left',
+  'bought',
+  'boughtElsewhere',
+  'state',
+  'approvalStatus',
+  'skipped',
+  'closed',
+  'act',
+];
+
 const rowEntryView = object(
   BASKET_SCHEMA_IDS.rowEntryView,
   {
-    lineId: nonEmptyString(),
+    ...entryNumbers,
     // Optional and never null: a list the reader does not write is absent
     // rather than nulled (plan 0130, section 6). Redaction by absence is the
     // rule, so the schema must not make the field mandatory.
     listId: nonEmptyString(),
-    left: integer({ minimum: 0 }),
-    bought: integer({ minimum: 0 }),
-    // Bought lately through another basket or through none (plan 0188). A
-    // count alone: the row never names who bought.
-    boughtElsewhere: integer({ minimum: 0 }),
-    state: ref(BASKET_SCHEMA_IDS.rowState),
-    approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
     demandEditable: boolean(),
   },
-  [
-    'lineId',
-    'left',
-    'bought',
-    'boughtElsewhere',
-    'state',
-    'approvalStatus',
-    'demandEditable',
-  ]
+  [...entryNumbersRequired, 'demandEditable']
+);
+
+/** No `listId` and no `demandEditable`: a room holds guests (plan 0204). */
+const entryPatch = object(
+  BASKET_SCHEMA_IDS.entryPatch,
+  entryNumbers,
+  entryNumbersRequired
+);
+
+/**
+ * The payload of `basket.linesChanged` (plan 0204, section 2).
+ *
+ * The two fields after `lineIds` are optional: an envelope written before that
+ * plan has neither, and a client reads the basket again for it.
+ */
+const linesChangedEvent = object(
+  BASKET_SCHEMA_IDS.linesChangedEvent,
+  {
+    lineIds: array(nonEmptyString()),
+    entries: array(ref(BASKET_SCHEMA_IDS.entryPatch)),
+    marksMoved: boolean(),
+  },
+  ['lineIds']
 );
 
 const rowView = object(
@@ -541,10 +606,6 @@ const addLineRequest = object(
   ['basketId', 'participantId', 'userId', 'targetListId', 'content']
 );
 
-
-
-
-
 // --- Schemas for the header, the history and the run (plan 0050) -------------
 
 // What an owner's line edit answers: the surviving line, and the basket line a
@@ -754,7 +815,11 @@ export const basketSchemas: JsonSchema[] = [
   rowUsualState,
   rowUsualView,
   listRef,
+  entryActOutcome,
+  entryAct,
   rowEntryView,
+  entryPatch,
+  linesChangedEvent,
   rowView,
   progress,
   view,

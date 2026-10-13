@@ -257,7 +257,7 @@ export class BasketSettleService {
       );
     }
 
-    await opened.announceLinesChanged(
+    opened.announceLinesMoved(
       announcements.map((entry) => ({
         listId: entry.listId,
         lineId: entry.line.id,

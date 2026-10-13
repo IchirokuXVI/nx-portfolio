@@ -3,6 +3,8 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   BASKET_PATTERNS,
   type AcknowledgeBasketChangesRequest,
+  type BasketMarksView,
+  type GetBasketMarksRequest,
   type BasketChangePage,
   type BasketChangesAcknowledged,
   type BasketSummaryView,
@@ -67,6 +69,12 @@ export class BasketReadController {
     @Payload() req: ListBasketChangesRequest
   ): Promise<BasketChangePage> {
     return this.changes.list(req);
+  }
+
+  /** The marks and the count alone, with no rows (plan 0204, section 6). */
+  @MessagePattern(BASKET_PATTERNS.changesMarks)
+  marks(@Payload() req: GetBasketMarksRequest): Promise<BasketMarksView> {
+    return this.changes.marksOf(req);
   }
 
   /**

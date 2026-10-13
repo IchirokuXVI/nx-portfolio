@@ -106,9 +106,11 @@ export class BasketDemandService {
       via: opened.via(),
     });
 
-    await opened.announceLinesChanged([
-      { listId: entry.listId, lineId: entry.lineId },
-    ]);
+    // No announcement of its own (plan 0204, section 3). `addQuantity` tells
+    // every basket that covers the list what the line reads now, this one
+    // included, and says that the marks moved: the other people of this basket
+    // are shown the change (plan 0138, section 5). A second announcement here
+    // would be the same patch computed twice.
     return opened.result([entry.lineId], req.rowKey);
   }
 

@@ -55,7 +55,9 @@ import {
   validateMessageRequest,
   validateMessageResponse,
 } from './index';
+import { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
+import { validateSchema } from './validator';
 
 /** A product's leaf as every item view carries it (plan 0166, section 3). */
 const MILK_CATEGORY = {
@@ -536,11 +538,15 @@ describe('contract schemas', () => {
         }).valid;
       const entry = {
         lineId: 'l-1',
+        version: 4,
         left: 0,
         bought: 0,
         boughtElsewhere: 2,
         state: 'DONE',
         approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: null,
         demandEditable: true,
       };
       expect(
@@ -564,6 +570,111 @@ describe('contract schemas', () => {
       expect(
         answer({ state: 'HERE', bought: 1, of: 1, supermarketId: 's-1' })
       ).toBe(false);
+    });
+
+    it('a basket event states what moved on its lines, and an entry what a patch needs (plan 0204)', () => {
+      const patch = {
+        lineId: 'l-1',
+        version: 4,
+        left: 2,
+        bought: 1,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: {
+          participantId: 'p-1',
+          at: '2026-10-13T10:00:00.000Z',
+          outcome: 'BOUGHT',
+        },
+      };
+      const event = (payload: unknown) =>
+        validateSchema(BASKET_SCHEMA_IDS.linesChangedEvent, payload).valid;
+
+      // An envelope written before the plan has the ids alone, and still reads.
+      expect(event({ lineIds: ['l-1'] })).toBe(true);
+      expect(event({ lineIds: [] })).toBe(true);
+      expect(event({ lineIds: ['l-1'], entries: [patch] })).toBe(true);
+      expect(
+        event({ lineIds: ['l-1', 'l-2'], entries: [patch], marksMoved: true })
+      ).toBe(true);
+      // A skip is an act that is no settlement, and nobody may be its actor.
+      expect(
+        event({
+          lineIds: ['l-1'],
+          entries: [
+            {
+              ...patch,
+              skipped: true,
+              state: 'SKIPPED',
+              act: { ...patch.act, participantId: null, outcome: 'SKIPPED' },
+            },
+          ],
+        })
+      ).toBe(true);
+      expect(
+        event({ lineIds: ['l-1'], entries: [{ ...patch, act: null }] })
+      ).toBe(true);
+
+      // A room holds guests: a patch names no list, no basket and no account,
+      // and it says nothing that only one reader may be told.
+      for (const leaked of [
+        { listId: 'list-1' },
+        { zoneId: 'z-1' },
+        { basketId: 'b-1' },
+        { userId: 'u-1' },
+        { demandEditable: true },
+        { content: 'Milk' },
+      ]) {
+        expect(
+          event({ lineIds: ['l-1'], entries: [{ ...patch, ...leaked }] })
+        ).toBe(false);
+      }
+      expect(event({ lineIds: ['l-1'], basketId: 'b-1' })).toBe(false);
+      // Every value of a patch is stated: a patch with a field left out could
+      // not be applied without guessing.
+      for (const field of Object.keys(patch)) {
+        expect(
+          event({
+            lineIds: ['l-1'],
+            entries: [{ ...patch, [field]: undefined }],
+          })
+        ).toBe(false);
+      }
+      expect(
+        event({
+          lineIds: ['l-1'],
+          entries: [{ ...patch, act: { ...patch.act, outcome: 'RETURNED' } }],
+        })
+      ).toBe(false);
+
+      // The marks alone: the two numbers of a read, and a mark for each line.
+      expect(
+        validateMessageRequest('basket.changes.marks', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(true);
+      const marks = (over: Record<string, unknown>) =>
+        validateMessageResponse('basket.changes.marks', {
+          unseenChangeCount: 2,
+          newestUnseenChangeId: 'c-9',
+          lines: [
+            { lineId: 'l-1', mark: 'ADDED' },
+            { lineId: 'l-2', mark: 'CHANGED' },
+          ],
+          ...over,
+        }).valid;
+      expect(marks({})).toBe(true);
+      expect(
+        marks({ unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] })
+      ).toBe(true);
+      expect(marks({ lines: [{ lineId: 'l-1', mark: 'NEW' }] })).toBe(false);
+      expect(
+        marks({ lines: [{ lineId: 'l-1', mark: 'ADDED', listId: 'x' }] })
+      ).toBe(false);
+      expect(marks({ rows: [] })).toBe(false);
     });
 
     it('supermarketLocation.shopAvailability answers a shop and its three availability states (plan 0163)', () => {

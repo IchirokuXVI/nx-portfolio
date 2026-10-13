@@ -29,6 +29,7 @@ function line(over: Partial<ChangeLineRow> = {}): ChangeLineRow {
     listId: 'list-a',
     content: 'Milk',
     quantity: 2,
+    version: 1,
     itemSetHash: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     createdAt: new Date(2026, 0, seq),

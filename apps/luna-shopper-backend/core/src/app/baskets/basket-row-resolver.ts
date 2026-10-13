@@ -1,28 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  BasketKind,
-  PURCHASE_SESSION_GAP_MS,
-  SettlementOutcome,
-} from '@portfolio/luna-shopper/contracts';
+import { SettlementOutcome } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
 import { Basket, ListLine } from '../entities';
+import { basketScopeOf, type BasketScope } from './basket-line-facts';
 import { elsewhereGapOf, toEntries } from './basket-read.service';
-import { type BasketEntry } from './basket-rows';
 import {
-  BASKET_SESSION_LOOKBACK_MS,
-  BASKET_SESSION_SQL,
   BASKET_SETTLEMENTS_SQL,
   COVERED_LINE_ITEMS_SQL,
   coveredLinesSql,
-  type BasketSessionRow,
   type BasketSettlementRow,
   type CoveredLineItemRow,
   type CoveredLineRow,
 } from './basket-read.sql';
+import { type BasketEntry } from './basket-rows';
 import { mergeKey, normalizeContent } from './line-dedup';
 
 /**
@@ -149,24 +143,11 @@ export class BasketRowResolver {
 
   /** Which of this basket's purchases count. {@link BasketReadService.scopeOf}'s twin. */
   private async scopeOf(basket: Basket): Promise<BasketScope> {
-    if (basket.kind !== BasketKind.LIVE) {
-      return { startedAt: null, enabled: true };
-    }
-    const [session] = await this.baskets.query<BasketSessionRow[]>(
-      BASKET_SESSION_SQL,
-      [basket.id, BASKET_SESSION_LOOKBACK_MS, PURCHASE_SESSION_GAP_MS]
-    );
-    return session
-      ? { startedAt: session.startedAt, enabled: true }
-      : { startedAt: null, enabled: false };
+    return basketScopeOf(this.baskets, basket);
   }
 }
 
-/** Which purchases of a basket a read or a write counts. */
-export interface BasketScope {
-  startedAt: Date | null;
-  enabled: boolean;
-}
+export type { BasketScope };
 
 /** One row, resolved back to the list lines behind it. */
 export interface BasketRow {

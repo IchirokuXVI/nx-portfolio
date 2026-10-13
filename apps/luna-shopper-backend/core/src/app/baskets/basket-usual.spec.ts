@@ -211,12 +211,16 @@ describe('withUsual (plan 0165, section 2)', () => {
       touchedAt: null,
       entries: lineIds.map((lineId) => ({
         lineId,
+        version: 1,
         left: 1,
         bought: 0,
         boughtElsewhere: 0,
         state: BasketRowState.WANTED,
         approvalStatus:
           'APPROVED' as BasketRowView['entries'][number]['approvalStatus'],
+        skipped: false,
+        closed: false,
+        act: null,
         demandEditable: true,
       })),
       usual: null,

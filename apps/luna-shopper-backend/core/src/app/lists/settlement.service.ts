@@ -263,7 +263,9 @@ export class SettlementService {
     // After the commit, as everywhere else in core. It carries both halves so a
     // phone in the shop and a phone at home agree without a refetch (section 8).
     this.events.emit(RealtimeEvent.LineSettled, list.zoneId, result, list.id);
-    void this.baskets.linesChanged(list.id, [req.lineId]);
+    // A buy only moves numbers, so each covering basket is sent what the line
+    // reads now and need not read again (plan 0204, section 3).
+    void this.baskets.linesMoved(list.id, [req.lineId]);
     return result;
   }
 

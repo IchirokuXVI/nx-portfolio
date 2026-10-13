@@ -19,6 +19,8 @@ import {
   type AddBasketLineRequest,
   type BasketChangePage,
   type BasketChangesAcknowledged,
+  type BasketMarksView,
+  type BasketParticipantContext,
   type BasketResult,
   type BasketRowResult,
   type BasketSearchScope,
@@ -26,7 +28,7 @@ import {
   type BasketSummaryView,
   type BasketView,
   type CatalogSuggestResponse,
-  type BasketParticipantContext,
+  type GetBasketMarksRequest,
   type GetBasketRequest,
   type GetLiveBasketRequest,
   type ListBasketChangesRequest,
@@ -46,6 +48,13 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { BasketSuggestQueryDto } from '../baskets/basket-sharing.dto';
+import {
+  PARTICIPANT_THROTTLE_LIMITS,
+  ParticipantThrottle,
+  ParticipantThrottlerGuard,
+} from '../baskets/participant-throttler.guard';
+import { Participant, ParticipantGuard } from '../baskets/participant.guard';
 import { SUGGEST_SCHEMA } from '../catalog/catalog.controller';
 import {
   ApiComposedResponse,
@@ -53,16 +62,6 @@ import {
   ApiProblemResponses,
   componentRef,
 } from '../docs';
-import { BasketSuggestQueryDto } from '../baskets/basket-sharing.dto';
-import {
-  PARTICIPANT_THROTTLE_LIMITS,
-  ParticipantThrottle,
-  ParticipantThrottlerGuard,
-} from '../baskets/participant-throttler.guard';
-import {
-  Participant,
-  ParticipantGuard,
-} from '../baskets/participant.guard';
 import { NatsClient } from '../messaging/nats-client';
 import { BasketCatalogService } from './basket-catalog.service';
 import {
@@ -559,6 +558,30 @@ export class BasketController {
       limit: query.limit,
     };
     return this.nats.send<BasketChangePage>(BASKET_PATTERNS.changesList, req);
+  }
+
+  /**
+   * The marks and the count alone (plan 0204, section 6).
+   *
+   * What a client reads after a `basket.linesChanged` said `marksMoved`. It
+   * holds the rows already, and a room cannot carry a mark, because a mark
+   * depends on what each viewer acknowledged. So this answers the marks of the
+   * caller and nothing else: no rows, no people, and no catalog read.
+   *
+   * Unthrottled like the other reads on this surface.
+   */
+  @Get(':id/changes/marks')
+  @ApiContractResponse(BASKET_PATTERNS.changesMarks)
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
+  marks(
+    @Participant() participant: BasketParticipantContext,
+    @UuidParam('id') id: string
+  ): Promise<BasketMarksView> {
+    const req: GetBasketMarksRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<BasketMarksView>(BASKET_PATTERNS.changesMarks, req);
   }
 
   /**

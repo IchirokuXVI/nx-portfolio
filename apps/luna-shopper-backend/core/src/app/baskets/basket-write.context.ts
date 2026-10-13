@@ -11,8 +11,8 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
-import { Basket, BasketParticipant } from '../entities';
 import { BasketSharingService } from '../baskets/basket-sharing.service';
+import { Basket, BasketParticipant } from '../entities';
 import { BasketAnnouncer, type ChangedLine } from './basket-announcer.service';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
@@ -146,35 +146,41 @@ export class OpenBasketWrite {
   }
 
   /**
-   * Tell every basket that covers these lines that they moved (plan 0136,
-   * section 8; plan 0139, section 3).
+   * Tell every basket that covers these lines what they read now (plan 0136,
+   * section 8; plan 0139, section 3; plan 0204, section 3).
    *
-   * **Not just the basket that made the write.** Until plan 0139 this addressed
-   * one room, which was right while a basket was the only thing that could be
-   * looking at its own rows. A basket row is a list line now, so a settle here
-   * is a row moving in every other open basket that covers the same list, and
-   * the one in this shop is only the loudest of them.
+   * **Not just the basket that made the write.** A basket row is a list line,
+   * so a settle here is a row moving in every other open basket that covers the
+   * same list, and the one in this shop is only the loudest of them.
+   *
+   * For the writes that only move numbers: a settle and a revert. Each covering
+   * basket is sent the entries as **it** reads them, because what this basket
+   * bought is what another reads as bought elsewhere.
+   *
+   * **Not awaited, and it returns nothing to await.** The write has committed,
+   * and a patch is several reads for each covering basket. An answer that
+   * waited for them would be a slower write on the phone that made it, for the
+   * benefit of every other phone.
    *
    * The entries carry their list because the coverage is per list: a row can
-   * span two households' lists, and two lists have two coverages and therefore
-   * two events.
+   * span two households' lists, and two lists have two coverages.
    */
-  announceLinesChanged(entries: readonly ChangedLine[]): Promise<void> {
-    return this.announcer.linesChangedAcross(entries);
+  announceLinesMoved(entries: readonly ChangedLine[]): void {
+    void this.announcer.linesMovedAcross(entries);
   }
 
   /**
-   * Tell **this** basket alone that some of its rows moved (plan 0139, section
-   * 3).
+   * Tell **this** basket alone what some of its lines read now (plan 0139,
+   * section 3; plan 0204, section 3).
    *
    * For a write that belongs to one basket and to no list, which is a skip and
    * taking one back. The line did not move, so no other basket's rows changed.
    */
-  announceBasketChanged(lineIds: readonly string[]): void {
-    if (lineIds.length === 0) {
+  announceBasketMoved(entries: readonly ChangedLine[]): void {
+    if (entries.length === 0) {
       return;
     }
-    this.announcer.basketChanged(this.basket, lineIds);
+    this.announcer.basketMoved(this.basket, entries);
   }
 
   /**

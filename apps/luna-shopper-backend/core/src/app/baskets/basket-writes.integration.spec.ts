@@ -31,6 +31,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
+import { BasketPatchReader } from './basket-patch.reader';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
 import { BasketRowResolver } from './basket-row-resolver';
@@ -105,7 +106,8 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
     const coverage = new BasketCoverageService(baskets);
     announcer = new BasketAnnouncer(
       coverage,
-      events as unknown as CoreEventsPublisher
+      events as unknown as CoreEventsPublisher,
+      new BasketPatchReader(baskets, fakeCoreConfig())
     );
     const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 
@@ -980,7 +982,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
   // --- the event both writes emit ------------------------------------------
 
   describe('what a write announces (section 8)', () => {
-    it('emits the list’s own line.settled and basket.linesChanged with ids alone', async () => {
+    it('emits the list’s own line.settled and basket.linesChanged with what the line reads now', async () => {
       const listId = await list('Announced');
       const { basket: held, participantId } = await basket(listId);
       const row = await line(listId, 'Milk', 1);
@@ -995,12 +997,29 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       });
 
       expect(emitted.map((entry) => entry.event)).toContain('line.settled');
-      const changed = emitted.find(
-        (entry) => entry.event === 'basket.linesChanged'
-      );
-      // Ids only, which is the least privileged view of plan 0130 section 6: a
-      // basket room holds guests and a broadcast cannot be projected per socket.
-      expect(changed?.payload).toEqual({ lineIds: [row.id] });
+      // The basket's own event is not awaited by the write it follows (plan
+      // 0204, section 3), so it lands a moment after the answer.
+      const found = () =>
+        emitted.find((entry) => entry.event === 'basket.linesChanged');
+      for (let waited = 0; !found() && waited < 5000; waited += 20) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      // The ids and the numbers of each line, which is the least privileged
+      // view of a basket (plan 0130, section 6; plan 0204, section 1): a guest
+      // reads both on every read, and is never told where a line is.
+      expect(found()?.payload).toEqual({
+        lineIds: [row.id],
+        entries: [
+          expect.objectContaining({
+            lineId: row.id,
+            left: 0,
+            bought: 1,
+            boughtElsewhere: 0,
+            state: BasketRowState.DONE,
+          }),
+        ],
+      });
+      expect(JSON.stringify(found()?.payload)).not.toContain(listId);
     });
   });
 });

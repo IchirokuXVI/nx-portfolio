@@ -57,6 +57,12 @@ import type { SettlePick, SettlementPaid } from './list.messages';
 export const BASKET_LIMITS = {
   /** Rows one read answers. Past it the read says `truncated` (section 3.6). */
   maxRows: 1000,
+  /**
+   * Lines one `basket.linesChanged` event states the entries of (plan 0204,
+   * section 3). A write that names more sends the ids alone, and a client reads
+   * the basket again, as it did for every write before that plan.
+   */
+  patchMaxLines: 25,
   maxSources: 100,
   nameMaxLength: 120,
   contentMaxLength: 500,
@@ -121,6 +127,24 @@ export interface BasketRowEntryView {
   /** `APPROVED` or `PENDING`. A `REJECTED` line is not covered, so never a row. */
   approvalStatus: LineApprovalStatus;
   /**
+   * `list_lines.version` as this read found it (plan 0204, section 5).
+   *
+   * A client keeps it to drop a {@link BasketEntryPatch} that is older than the
+   * entry it holds. It does not rise on every write: a skip and "they had none"
+   * move no line, so two states of one entry can carry one version.
+   */
+  version: number;
+  /** A standing skip of this basket on the line, inside its window (0137). */
+  skipped: boolean;
+  /**
+   * The newest standing act of this basket on the line is "they had none", and
+   * it still holds: until the trip is finished for a `GENERATED` basket, inside
+   * the skip window for a `LIVE` one (plan 0137, section 4).
+   */
+  closed: boolean;
+  /** The newest standing act of this basket on the line, or null. */
+  act: BasketEntryAct | null;
+  /**
    * Whether a change of demand on this entry is allowed, by the rule of `0131`
    * asked of the basket's **OWNER**.
    *
@@ -128,6 +152,56 @@ export interface BasketRowEntryView {
    * permissions, and a guest has none of their own to ask about.
    */
   demandEditable: boolean;
+}
+
+/** What {@link BasketEntryAct.outcome} says for a skip, which is no settlement. */
+export const BASKET_ACT_SKIPPED = 'SKIPPED';
+
+/**
+ * The newest thing a basket did to one line: a purchase, "they had none", or a
+ * skip (plan 0204, section 2).
+ *
+ * `at` orders two acts and is drawn beside a row. **A client never compares it
+ * with its own clock**: whether a skip or a close still holds is `skipped` and
+ * `closed`, which the database decided.
+ */
+export interface BasketEntryAct {
+  participantId: string | null;
+  at: string;
+  outcome: SettlementOutcome | typeof BASKET_ACT_SKIPPED;
+}
+
+/**
+ * The state of one line as one basket reads it, on `basket.linesChanged` (plan
+ * 0204, section 2).
+ *
+ * **Every value is absolute**, so applying a patch twice gives what applying it
+ * once gives. It holds nothing that a guest of the basket does not already read
+ * on {@link BasketRowEntryView}: no list, no zone, no name, no account and no
+ * basket. It says nothing about a row either, because a row is a group and the
+ * client rebuilds its own with `@portfolio/luna-shopper/basket-rules`.
+ *
+ * ## The order of two patches of one line
+ *
+ * `version` orders them when it differs. When it is equal, the two states
+ * differ only in `skipped`, `closed` and `act`, and a patch is computed after
+ * the commit of its write, so one read before a later skip can be published
+ * after the patch of that skip. **A client that holds an entry of the same
+ * version whose `skipped` or `closed` differs from the patch reads the basket
+ * again** and does not apply it. The payload carries no order of its own.
+ */
+export interface BasketEntryPatch {
+  lineId: string;
+  /** `list_lines.version` after the write. */
+  version: number;
+  left: number;
+  bought: number;
+  boughtElsewhere: number;
+  state: BasketRowState;
+  approvalStatus: LineApprovalStatus;
+  skipped: boolean;
+  closed: boolean;
+  act: BasketEntryAct | null;
 }
 
 /** One thing to buy, however many households asked for it. */
@@ -701,6 +775,8 @@ export const BASKET_PATTERNS = {
   /** What changed on the covered lists, and saying it was drawn (plan 0138). */
   changesList: 'basket.changes.list',
   changesAcknowledge: 'basket.changes.acknowledge',
+  /** The marks and the count alone, with no rows (plan 0204, section 6). */
+  changesMarks: 'basket.changes.marks',
   /** Compose a basket from the caller's chosen sources (plan 0050, section 4). */
   create: 'basket.create',
   /** The caller's baskets, newest first, cursor paginated (plan 0050, section 7). */
