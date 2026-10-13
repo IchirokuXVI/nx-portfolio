@@ -549,6 +549,7 @@ describe('contract schemas', () => {
       const row = {
         rowKey: 'l-1',
         content: 'Milk',
+        productId: null,
         left: 1,
         bought: 0,
         asked: 1,
@@ -558,35 +559,31 @@ describe('contract schemas', () => {
         noteAt: null,
         mark: null,
         awaitingApproval: false,
-        optionIds: [],
         touchedBy: null,
         touchedAt: null,
         entries: [],
       };
-      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      // Asked of the row itself. The answer of a write carried a row before
+      // plan 0201, and it carries the entries of its lines now.
       const answer = (usual: unknown) =>
-        validateMessageResponse('basket.row.settle', {
-          row: { ...row, usual },
-          progress,
-        }).valid;
+        validateSchema(BASKET_SCHEMA_IDS.rowView, { ...row, usual }).valid;
 
       expect(answer(null)).toBe(true);
       expect(answer({ state: 'HERE', bought: 2, of: 6 })).toBe(true);
       expect(answer({ state: 'NEVER_BOUGHT', bought: 0, of: 0 })).toBe(true);
       expect(answer({ state: 'NO_SHOP_KNOWN', bought: 0, of: 3 })).toBe(true);
       // Required and nullable, so "no shop" is never mistaken for "not told".
-      expect(
-        validateMessageResponse('basket.row.settle', { row, progress }).valid
-      ).toBe(false);
+      expect(validateSchema(BASKET_SCHEMA_IDS.rowView, row).valid).toBe(false);
       // Counts only: seven is past the window, and nothing else may ride along.
       expect(answer({ state: 'HERE', bought: 7, of: 7 })).toBe(false);
 
       // What another basket bought is required on a row and on each entry, and
       // the note that says so is one of the two a row may carry (plan 0188).
       const elsewhere = (over: Record<string, unknown>) =>
-        validateMessageResponse('basket.row.settle', {
-          row: { ...row, usual: null, ...over },
-          progress,
+        validateSchema(BASKET_SCHEMA_IDS.rowView, {
+          ...row,
+          usual: null,
+          ...over,
         }).valid;
       const entry = {
         lineId: 'l-1',
@@ -599,6 +596,11 @@ describe('contract schemas', () => {
         skipped: false,
         closed: false,
         act: null,
+        tripItemId: null,
+        content: 'Milk',
+        itemIds: [],
+        favoriteItemId: null,
+        canWrite: true,
         demandEditable: true,
       };
       expect(
@@ -624,6 +626,250 @@ describe('contract schemas', () => {
       ).toBe(false);
     });
 
+    it('a basket row is a product, and a write names its lines (plan 0201)', () => {
+      const entry = {
+        lineId: 'l-1',
+        version: 4,
+        left: 1,
+        bought: 1,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: null,
+        tripItemId: 'i-9',
+        content: 'Milk',
+        itemIds: ['i-1', 'i-2'],
+        favoriteItemId: null,
+        canWrite: false,
+        demandEditable: true,
+      };
+      const row = {
+        rowKey: 'l-1',
+        content: 'Milk',
+        productId: 'i-9',
+        left: 1,
+        bought: 1,
+        asked: 2,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        note: null,
+        noteAt: null,
+        mark: null,
+        awaitingApproval: false,
+        touchedBy: null,
+        touchedAt: null,
+        entries: [entry],
+        usual: null,
+      };
+      const rowValid = (over: Record<string, unknown>) =>
+        validateSchema(BASKET_SCHEMA_IDS.rowView, { ...row, ...over }).valid;
+
+      expect(rowValid({})).toBe(true);
+      expect(rowValid({ productId: null })).toBe(true);
+      // Required and nullable: a row by name says so.
+      expect(rowValid({ productId: undefined })).toBe(false);
+      // The union of the product sets left the wire.
+      expect(rowValid({ optionIds: ['i-1'] })).toBe(false);
+      for (const field of [
+        'content',
+        'itemIds',
+        'favoriteItemId',
+        'canWrite',
+        'tripItemId',
+      ]) {
+        expect(rowValid({ entries: [{ ...entry, [field]: undefined }] })).toBe(
+          false
+        );
+      }
+      // Redaction by absence: only an entry on a served list names it.
+      expect(rowValid({ entries: [{ ...entry, listId: 'list-1' }] })).toBe(
+        true
+      );
+
+      // What a write answers: the lines, the progress, and no row.
+      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      const result = (payload: unknown) =>
+        validateMessageResponse('basket.row.settle', payload).valid;
+      expect(result({ entries: [entry], progress })).toBe(true);
+      // A line that left the basket is absent, so no entry is an answer.
+      expect(result({ entries: [], progress })).toBe(true);
+      expect(result({ entries: [entry], progress, skippedCount: 1 })).toBe(
+        true
+      );
+      expect(result({ progress })).toBe(false);
+      expect(result({ entries: [entry], progress, row })).toBe(false);
+      expect(
+        result({ entries: [entry], progress, replacedRowKey: 'l-2' })
+      ).toBe(false);
+
+      // Every write names its lines, one at least and each one time.
+      const settle = (over: Record<string, unknown>) =>
+        validateMessageRequest('basket.row.settle', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          rowKey: 'l-1',
+          lineIds: ['l-1', 'l-2'],
+          outcome: 'BOUGHT',
+          quantity: 1,
+          from: 2,
+          ...over,
+        }).valid;
+      expect(settle({})).toBe(true);
+      expect(settle({ itemId: 'i-9' })).toBe(true);
+      expect(settle({ lineIds: undefined })).toBe(false);
+      expect(settle({ lineIds: [] })).toBe(false);
+      expect(settle({ lineIds: ['l-1', 'l-1'] })).toBe(false);
+      expect(
+        settle({ lineIds: Array.from({ length: 100 }, (_, i) => `l-${i}`) })
+      ).toBe(true);
+      expect(
+        settle({ lineIds: Array.from({ length: 101 }, (_, i) => `l-${i}`) })
+      ).toBe(false);
+
+      const named = { basketId: 'b-1', participantId: 'p-1', rowKey: 'l-1' };
+      expect(
+        validateMessageRequest('basket.row.revert', {
+          ...named,
+          target: 'CLOSE',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.revert', {
+          ...named,
+          lineIds: ['l-1'],
+          target: 'CLOSE',
+        }).valid
+      ).toBe(true);
+      // Both directions of a skip share one schema, which plan 0201
+      // registered: it was declared before and left out of the list.
+      for (const pattern of ['basket.row.skip', 'basket.row.unskip']) {
+        expect(
+          validateMessageRequest(pattern, { ...named, lineIds: ['l-1'] }).valid
+        ).toBe(true);
+        expect(validateMessageRequest(pattern, { ...named }).valid).toBe(false);
+      }
+      expect(
+        validateMessageRequest('basket.row.rename', {
+          ...named,
+          userId: 'u-1',
+          content: 'Oat milk',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.rename', {
+          ...named,
+          userId: 'u-1',
+          lineIds: ['l-1'],
+          content: 'Oat milk',
+        }).valid
+      ).toBe(true);
+      // A change of demand names its one line, always.
+      expect(
+        validateMessageRequest('basket.row.demand', {
+          ...named,
+          quantity: 2,
+          from: 0,
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.demand', {
+          ...named,
+          lineId: 'l-1',
+          quantity: 2,
+          from: 0,
+        }).valid
+      ).toBe(true);
+
+      // The read carries the picks of the gateway.
+      const picks = [{ lineId: 'l-1', itemId: 'i-2' }];
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          picks,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live', { userId: 'u-1', picks }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          picks: [{ lineId: 'l-1' }],
+        }).valid
+      ).toBe(false);
+
+      // The lines that need a price.
+      expect(
+        validateMessageRequest('basket.priceChoices', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live.priceChoices', { userId: 'u-1' })
+          .valid
+      ).toBe(true);
+      const choices = {
+        basketId: 'b-1',
+        participantId: 'p-1',
+        lines: [{ lineId: 'l-1', itemIds: ['i-1', 'i-2'] }],
+      };
+      for (const pattern of [
+        'basket.priceChoices',
+        'basket.live.priceChoices',
+      ]) {
+        expect(validateMessageResponse(pattern, choices).valid).toBe(true);
+        expect(
+          validateMessageResponse(pattern, { ...choices, lines: [] }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse(pattern, { lines: choices.lines }).valid
+        ).toBe(false);
+      }
+
+      // The lists that can still take a product.
+      expect(
+        validateMessageRequest('basket.productLists', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          itemId: 'i-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.productLists', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(false);
+      const list = {
+        listId: 'list-1',
+        listName: 'Weekly',
+        zoneId: 'z-1',
+        zoneName: 'Flat',
+        lineId: 'l-1',
+        lineName: 'Milk',
+        quantity: 0,
+      };
+      const lists = (over: Record<string, unknown>) =>
+        validateMessageResponse('basket.productLists', {
+          lists: [{ ...list, ...over }],
+        }).valid;
+      expect(lists({})).toBe(true);
+      // A list that holds no line with the product.
+      expect(lists({ lineId: null, lineName: null, quantity: null })).toBe(
+        true
+      );
+      expect(lists({ quantity: -1 })).toBe(false);
+      expect(lists({ zoneName: undefined })).toBe(false);
+      expect(
+        validateMessageResponse('basket.productLists', { lists: [] }).valid
+      ).toBe(true);
+    });
+
     it('a basket event states what moved on its lines, and an entry what a patch needs (plan 0204)', () => {
       const patch = {
         lineId: 'l-1',
@@ -640,6 +886,9 @@ describe('contract schemas', () => {
           at: '2026-10-13T10:00:00.000Z',
           outcome: 'BOUGHT',
         },
+        // The product of the buy, which can move the line to another row (plan
+        // 0201, section 1). Required, and null when no buy named one.
+        tripItemId: 'i-1',
       };
       const event = (payload: unknown) =>
         validateSchema(BASKET_SCHEMA_IDS.linesChangedEvent, payload).valid;
@@ -668,6 +917,9 @@ describe('contract schemas', () => {
       expect(
         event({ lineIds: ['l-1'], entries: [{ ...patch, act: null }] })
       ).toBe(true);
+      expect(
+        event({ lineIds: ['l-1'], entries: [{ ...patch, tripItemId: null }] })
+      ).toBe(true);
 
       // A room holds guests: a patch names no list, no basket and no account,
       // and it says nothing that only one reader may be told.
@@ -678,6 +930,10 @@ describe('contract schemas', () => {
         { userId: 'u-1' },
         { demandEditable: true },
         { content: 'Milk' },
+        // What an entry gained with plan 0201 and a room may not carry.
+        { canWrite: true },
+        { itemIds: ['i-1'] },
+        { favoriteItemId: 'i-1' },
       ]) {
         expect(
           event({ lineIds: ['l-1'], entries: [{ ...patch, ...leaked }] })

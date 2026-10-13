@@ -360,6 +360,7 @@ describeIntegration(
         basketId: who.basket.id,
         participantId: who.participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity,
         from,
@@ -498,6 +499,7 @@ describeIntegration(
         basketId: a.basket.id,
         participantId: a.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
         target: 'UNITS',
         units: 2,
         from: 2,
@@ -622,6 +624,7 @@ describeIntegration(
           basketId: b.basket.id,
           participantId: b.participantId,
           rowKey: milk.id,
+          lineIds: [milk.id],
           target: 'UNITS',
           units: 2,
           from: 2,
@@ -634,11 +637,15 @@ describeIntegration(
         basketId: b.basket.id,
         participantId: b.participantId,
         rowKey: milk.id,
+        lineIds: [milk.id],
         target: 'UNITS',
         units: 1,
         from: 0,
       });
-      expect(answer.row).toMatchObject({
+      // The answer is the named line as this basket reads it (plan 0201).
+      expect(answer.entries).toHaveLength(1);
+      expect(answer.entries[0]).toMatchObject({
+        lineId: milk.id,
         boughtElsewhere: 2,
         state: BasketRowState.BOUGHT_ELSEWHERE,
       });
@@ -656,37 +663,56 @@ describeIntegration(
     // --- 8. demand raised again ---------------------------------------------
 
     it.each([
-      ['a free text row', {}],
-      // The `SET` narrowing of the row resolver, which carries the hash as its
-      // last parameter and so moved when the window was added.
-      ['a row that names a product set', { itemSetHash: 'plan-0188-set' }],
+      ['a free text row', [] as string[]],
+      // The resolver loads a line by its id since plan 0201, whatever it holds.
+      // Before, a row with products was found through its own narrowing.
+      ['a row that names a product', [randomUUID()]],
     ])(
       'makes %s WANTED again when the other basket raises the demand (test 8)',
-      async (_name, over) => {
+      async (_name, itemIds) => {
         const { listId, a, b } = await world();
-        const milk = await line(listId, a.userId, 'Milk', 2, over);
+        const milk = await line(listId, a.userId, 'Milk', 2);
+        const items = dataSource.getRepository(ListLineItem);
+        for (const [index, itemId] of itemIds.entries()) {
+          await items.save(
+            items.create({ lineId: milk.id, itemId, position: index })
+          );
+        }
         await buy(a, milk, 2, 2);
 
         // The resolver finds the row the read drew. Without the same predicate
         // it answered "Row not found" here.
-        const resolved = await resolver.resolve(b.basket, [listId], milk.id);
+        const resolved = await resolver.resolve(b.basket, [listId], milk.id, [
+          milk.id,
+        ]);
         expect(resolved.entries.map((entry) => entry.lineId)).toEqual([
           milk.id,
         ]);
+        expect(resolved.entries[0].itemIds).toEqual(itemIds);
 
         const answer = await demandService.setDemand({
           basketId: b.basket.id,
           participantId: b.participantId,
           rowKey: milk.id,
+          lineId: milk.id,
           quantity: 1,
           from: 0,
         });
 
-        expect(answer.row).toMatchObject({
+        expect(answer.entries).toHaveLength(1);
+        expect(answer.entries[0]).toMatchObject({
+          lineId: milk.id,
           left: 1,
           bought: 0,
           state: BasketRowState.WANTED,
-          // The purchase is still recent, so the row still says so.
+          boughtElsewhere: 2,
+        });
+        // The purchase is still recent, so the row still says so. A note is a
+        // fact about a row, so it is on the read and not on the answer.
+        expect((await viewOf(b)).rows[0]).toMatchObject({
+          productId: itemIds[0] ?? null,
+          left: 1,
+          state: BasketRowState.WANTED,
           boughtElsewhere: 2,
           note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET,
         });
@@ -786,9 +812,17 @@ describeIntegration(
       // not told which list an entry is on (plan 0130, section 6).
       expect(asMember.entries[0].listId).toBe(listId);
       expect('listId' in asGuest.entries[0]).toBe(false);
+      // And a guest holds no list, so they may write none of its lines (plan
+      // 0201, section 3).
+      expect(asMember.entries[0].canWrite).toBe(true);
+      expect(asGuest.entries[0].canWrite).toBe(false);
       expect({
         ...asGuest,
-        entries: asGuest.entries.map((entry) => ({ ...entry, listId })),
+        entries: asGuest.entries.map((entry) => ({
+          ...entry,
+          listId,
+          canWrite: true,
+        })),
       }).toEqual(asMember);
 
       expect(asGuest).toMatchObject({

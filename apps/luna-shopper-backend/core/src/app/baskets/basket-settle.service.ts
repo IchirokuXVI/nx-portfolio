@@ -13,20 +13,15 @@ import {
   type SettleBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ConflictException,
   BasketFinishedException,
+  ConflictException,
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, IsNull, Repository, type EntityManager } from 'typeorm';
-import {
-  Basket,
-  LineSettlement,
-  ListLine,
-  ListLineItem,
-} from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../baskets/line-claim.service';
+import { Basket, LineSettlement, ListLine, ListLineItem } from '../entities';
+import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
   actorOf,
   LineChangeRecorder,
@@ -35,12 +30,9 @@ import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { paidColumns } from '../lists/settlement-paid';
 import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
-import {
-  allocateOldestFirst,
-  optionIdsOf,
-  type BasketEntry,
-} from './basket-rows';
+import { allocateOldestFirst, type BasketEntry } from './basket-rows';
 import { BasketWriteContext } from './basket-write.context';
+import { NO_PICKS, productOf } from './line-dedup';
 
 /**
  * Recording what happened to a row at the shelf (plan 0136, section 5.1).
@@ -95,7 +87,9 @@ export class BasketSettleService {
       );
     }
 
-    const row = await opened.row(req.rowKey);
+    // The lines the request names, and no others (plan 0201, section 4). A
+    // settle never rebuilds a row from a key.
+    const row = await opened.row(req.rowKey, req.lineIds);
     const itemId = resolvePick(row, req.itemId);
     const units = this.resolveUnits(req, row);
     // The same four values on every row this settle writes, one per entry
@@ -305,10 +299,9 @@ export class BasketSettleService {
       }))
     );
 
-    return opened.result(
-      announcements.map((entry) => entry.line.id),
-      req.rowKey
-    );
+    // Every named line, and not only the ones this settle wrote on: a buy of
+    // one unit over two lines writes on one of them, and the client holds both.
+    return opened.result(row.entries.map((entry) => entry.lineId));
   }
 
   /**
@@ -409,31 +402,41 @@ export class BasketSettleService {
 }
 
 /**
- * The product this settle records (plan 0047, section 3.2).
+ * The product this settle records (plan 0047, section 3.2; plan 0201, section
+ * 4).
  *
- * A swap is only allowed to one of the row's own options, which is what keeps it
- * a gesture at the shelf rather than a way to write an arbitrary catalog id into
- * a household's purchase history.
+ * ## A named product is taken as named
  *
- * With no `itemId` given, a row offering exactly one product records that one
- * and any other row records null: a row with two options has no pick to guess,
- * and guessing one would put a product in somebody's history that nobody chose.
+ * `itemId` is the product of the row as the client drew it. It can be a product
+ * that is on none of the named lines, which is a change "for this trip only":
+ * the line then counts as that product until the trip ends (plan 0201, section
+ * 1, step 1). Before plan 0201 a swap was only allowed to one of the row's own
+ * options. Core cannot hold that line any more, and it cannot ask the catalog
+ * whether an id names a product, so **the gateway refuses an id the catalog
+ * does not know** before this is called.
+ *
+ * ## With none named
+ *
+ * The settle records the product the named lines count as when they agree on
+ * one, and null otherwise. Core decides "count as" alone, with no picks, so a
+ * line with several products and no favourite records its first. A client that
+ * drew a product sends it. Lines with no product record none.
  */
 export function resolvePick(
   row: BasketRow,
   itemId: string | undefined
 ): string | null {
-  const options = optionIdsOf(row.entries);
-  if (itemId === undefined) {
-    return options.length === 1 ? options[0] : null;
+  if (itemId !== undefined) {
+    return itemId;
   }
-  if (!options.includes(itemId)) {
-    throw new ValidationException(
-      'That product is not one of this row’s options',
-      { messageArgs: { field: 'itemId' } }
-    );
+  const products = new Set(
+    row.entries.map((entry) => productOf(entry, NO_PICKS))
+  );
+  if (products.size !== 1) {
+    return null;
   }
-  return itemId;
+  const [only] = products;
+  return only;
 }
 
 /** A zone line's product set, in attachment order (plan 0048, section 1.1). */

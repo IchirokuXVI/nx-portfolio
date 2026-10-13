@@ -155,14 +155,7 @@ export function boughtElsewhere(
  * its anchor: the oldest ask for a thing names the row.
  */
 export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
-  const extra =
-    narrow === 'SET'
-      ? 'AND ll."itemSetHash" = $6'
-      : narrow === 'TEXT'
-        ? 'AND ll."itemSetHash" IS NULL'
-        : narrow === 'LINES'
-          ? 'AND ll.id = ANY($6::uuid[])'
-          : '';
+  const extra = narrow === 'LINES' ? 'AND ll.id = ANY($6::uuid[])' : '';
   return `
   SELECT
     ll.id AS "id",
@@ -171,6 +164,7 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
     ll.quantity AS "quantity",
     ll.version AS "version",
     ll."itemSetHash" AS "itemSetHash",
+    ll."favoriteItemId" AS "favoriteItemId",
     ll."approvalStatus" AS "approvalStatus",
     ll."createdAt" AS "createdAt"
   FROM "list_lines" ll
@@ -208,19 +202,14 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
 /**
  * Which slice of the coverage a read wants.
  *
- * `ALL` is the basket read. The other two are the row resolver, which wants the
- * entries of **one** row: a `set:` merge key is a hash the database can compare,
- * and a `text:` key is `normalizeContent`, a fold that lives in TypeScript. A
- * second definition of that fold in SQL would be free to drift from the first,
- * which is the reasoning `WALK_HISTORY_SQL` gives for stopping one step short
- * of the key, so `TEXT` narrows to the lines that have no hash and the caller
- * folds them.
+ * `ALL` is the basket read.
  *
- * `LINES` is the patch of plan 0204: the lines a write named, by id, as `$6`.
- * A line of those that the statement does not answer is not a row of the
- * basket, by the same four predicates the read applies.
+ * `LINES` is the lines somebody named, by id, as `$6`: the patch of plan 0204,
+ * and every write on a row since plan 0201, which names its lines and never
+ * rebuilds a row from a key. A line of those that the statement does not answer
+ * is not a row of the basket, by the same four predicates the read applies.
  */
-export type CoveredLineNarrowing = 'ALL' | 'SET' | 'TEXT' | 'LINES';
+export type CoveredLineNarrowing = 'ALL' | 'LINES';
 
 /** Every covered line of the basket. `$1` to `$5` as above. */
 export const COVERED_LINES_SQL = coveredLinesSql('ALL');
@@ -237,6 +226,8 @@ export interface CoveredLineRow {
   /** `list_lines.version`, which orders two patches of one line (plan 0204). */
   version: number;
   itemSetHash: string | null;
+  /** The favourite of the line (plan 0199), which a basket row follows (0201). */
+  favoriteItemId: string | null;
   approvalStatus: LineApprovalStatus;
   createdAt: Date;
 }
@@ -292,6 +283,7 @@ export const BASKET_SETTLEMENTS_SQL = `
     s.quantity AS "quantity",
     s."settledAt" AS "settledAt",
     s."settledByParticipantId" AS "settledByParticipantId",
+    s."itemId" AS "itemId",
     (s."settledAt" > now() - ($4::double precision * interval '1 millisecond'))
       AS "fresh"
   FROM "line_settlements" s
@@ -310,6 +302,11 @@ export interface BasketSettlementRow {
   quantity: number;
   settledAt: Date;
   settledByParticipantId: string | null;
+  /**
+   * The product the buy named, or null. The latest of them in the trip is what
+   * the line counts as (plan 0201, section 1).
+   */
+  itemId: string | null;
   /** Inside the skip window, by the database's clock. Read for `LIVE` alone. */
   fresh: boolean;
 }
@@ -615,6 +612,43 @@ export const BASKET_LIST_REFS_SQL = `
   WHERE sl.id = ANY($1::uuid[])
   ORDER BY z.name, sl.name, sl.id
 `;
+
+/**
+ * The lines of these lists that hold one product among their products (plan
+ * 0201, section 5). `$1` is the list ids, `$2` the product.
+ *
+ * A line at zero is answered too, which is the point: a list that asked for a
+ * product before holds its line at zero, and the page raises that line instead
+ * of making a second one. A deleted line and a rejected one are not answered,
+ * for the reasons {@link coveredLinesSql} gives.
+ *
+ * Oldest first for each list, so the caller takes the first.
+ */
+export const LINES_HOLDING_ITEM_SQL = `
+  SELECT ll.id AS "lineId",
+         ll."listId" AS "listId",
+         ll.content AS "content",
+         ll.quantity AS "quantity"
+  FROM "list_lines" ll
+  WHERE ll."listId" = ANY($1::uuid[])
+    AND ll."deletedAt" IS NULL
+    AND ll."approvalStatus" IN ('APPROVED', 'PENDING')
+    AND EXISTS (
+      SELECT 1
+      FROM "list_line_items" lli
+      WHERE lli."lineId" = ll.id
+        AND lli."itemId" = $2::uuid
+    )
+  ORDER BY ll."listId", ll."createdAt", ll.id
+`;
+
+/** One row of {@link LINES_HOLDING_ITEM_SQL}. */
+export interface LineHoldingItemRow {
+  lineId: string;
+  listId: string;
+  content: string;
+  quantity: number;
+}
 
 /** One row of {@link BASKET_LIST_REFS_SQL}. */
 export interface BasketListRefRow {

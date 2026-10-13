@@ -77,6 +77,17 @@ export const BASKET_SCHEMA_IDS = {
   allocationEntry: schemaId('basket/BasketAllocationEntry'),
   rowResult: schemaId('basket/BasketRowResult'),
   searchScope: schemaId('basket/BasketSearchScope'),
+  // The product of a line, and the read that asks which lines need a price
+  // (plan 0201, section 1).
+  linePick: schemaId('basket/BasketLinePick'),
+  priceChoice: schemaId('basket/BasketPriceChoice'),
+  priceChoicesView: schemaId('basket/BasketPriceChoicesView'),
+  priceChoicesRequest: schemaId('msg/basket.priceChoices/request'),
+  livePriceChoicesRequest: schemaId('msg/basket.live.priceChoices/request'),
+  // The covered lists that can still take a product (plan 0201, section 5).
+  productListView: schemaId('basket/BasketProductListView'),
+  productListsView: schemaId('basket/BasketProductListsView'),
+  productListsRequest: schemaId('msg/basket.productLists/request'),
   getRequest: schemaId('msg/basket.get/request'),
   searchScopeRequest: schemaId('msg/basket.searchScope/request'),
   liveRequest: schemaId('msg/basket.live/request'),
@@ -177,6 +188,9 @@ const entryNumbers = {
   skipped: boolean(),
   closed: boolean(),
   act: { anyOf: [ref(BASKET_SCHEMA_IDS.entryAct), { type: 'null' }] },
+  // The product of the latest buy of the line in this trip (plan 0201, section
+  // 1; plan 0204, section 7). A product id is catalog data, so a room carries it.
+  tripItemId: nullableString(),
 };
 
 const entryNumbersRequired = [
@@ -190,7 +204,20 @@ const entryNumbersRequired = [
   'skipped',
   'closed',
   'act',
+  'tripItemId',
 ];
+
+/**
+ * The lines a write on a row names (plan 0201, section 4).
+ *
+ * At least one, so a write that names nothing is refused before it is routed.
+ */
+const writeLineIds = {
+  ...array(nonEmptyString()),
+  minItems: 1,
+  maxItems: BASKET_LIMITS.maxWriteLines,
+  uniqueItems: true,
+};
 
 const rowEntryView = object(
   BASKET_SCHEMA_IDS.rowEntryView,
@@ -200,9 +227,22 @@ const rowEntryView = object(
     // rather than nulled (plan 0130, section 6). Redaction by absence is the
     // rule, so the schema must not make the field mandatory.
     listId: nonEmptyString(),
+    // The line itself (plan 0201, section 3): its name, its products in order
+    // and its favourite. The names of its list and zone are in `lists`.
+    content: string(),
+    itemIds: array(nonEmptyString()),
+    favoriteItemId: nullableString(),
+    canWrite: boolean(),
     demandEditable: boolean(),
   },
-  [...entryNumbersRequired, 'demandEditable']
+  [
+    ...entryNumbersRequired,
+    'content',
+    'itemIds',
+    'favoriteItemId',
+    'canWrite',
+    'demandEditable',
+  ]
 );
 
 /** No `listId` and no `demandEditable`: a room holds guests (plan 0204). */
@@ -233,6 +273,8 @@ const rowView = object(
   {
     rowKey: nonEmptyString(),
     content: string(),
+    // The product every entry counts as, or null (plan 0201, section 2).
+    productId: nullableString(),
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
     asked: integer({ minimum: 0 }),
@@ -242,7 +284,6 @@ const rowView = object(
     noteAt: nullableString(),
     mark: { anyOf: [ref(BASKET_SCHEMA_IDS.rowMark), { type: 'null' }] },
     awaitingApproval: boolean(),
-    optionIds: array(nonEmptyString()),
     touchedBy: nullableString(),
     touchedAt: nullableString(),
     entries: array(ref(BASKET_SCHEMA_IDS.rowEntryView)),
@@ -252,6 +293,7 @@ const rowView = object(
   [
     'rowKey',
     'content',
+    'productId',
     'left',
     'bought',
     'asked',
@@ -261,7 +303,6 @@ const rowView = object(
     'noteAt',
     'mark',
     'awaitingApproval',
-    'optionIds',
     'touchedBy',
     'touchedAt',
     'entries',
@@ -456,12 +497,78 @@ const allocationEntry = object(
 const rowResult = object(
   BASKET_SCHEMA_IDS.rowResult,
   {
-    row: ref(BASKET_SCHEMA_IDS.rowView),
+    // The lines of the write as they are now, and no row (plan 0201, section
+    // 4). A line that is absent left the basket.
+    entries: array(ref(BASKET_SCHEMA_IDS.rowEntryView)),
     progress: ref(BASKET_SCHEMA_IDS.progress),
     skippedCount: integer({ minimum: 0 }),
-    replacedRowKey: nonEmptyString(),
   },
-  ['row', 'progress']
+  ['entries', 'progress']
+);
+
+const linePick = object(
+  BASKET_SCHEMA_IDS.linePick,
+  { lineId: nonEmptyString(), itemId: nonEmptyString() },
+  ['lineId', 'itemId']
+);
+
+const priceChoice = object(
+  BASKET_SCHEMA_IDS.priceChoice,
+  { lineId: nonEmptyString(), itemIds: array(nonEmptyString()) },
+  ['lineId', 'itemIds']
+);
+
+const priceChoicesView = object(
+  BASKET_SCHEMA_IDS.priceChoicesView,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    lines: array(ref(BASKET_SCHEMA_IDS.priceChoice)),
+  },
+  ['basketId', 'participantId', 'lines']
+);
+
+const priceChoicesRequest = object(
+  BASKET_SCHEMA_IDS.priceChoicesRequest,
+  { basketId: nonEmptyString(), participantId: nonEmptyString() },
+  ['basketId', 'participantId']
+);
+
+const livePriceChoicesRequest = object(
+  BASKET_SCHEMA_IDS.livePriceChoicesRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+
+const productListView = object(
+  BASKET_SCHEMA_IDS.productListView,
+  {
+    listId: nonEmptyString(),
+    listName: string(),
+    zoneId: nonEmptyString(),
+    zoneName: string(),
+    // The three are null together: the list holds no line with the product.
+    lineId: nullableString(),
+    lineName: nullableString(),
+    quantity: { type: ['integer', 'null'], minimum: 0 },
+  },
+  ['listId', 'listName', 'zoneId', 'zoneName', 'lineId', 'lineName', 'quantity']
+);
+
+const productListsView = object(
+  BASKET_SCHEMA_IDS.productListsView,
+  { lists: array(ref(BASKET_SCHEMA_IDS.productListView)) },
+  ['lists']
+);
+
+const productListsRequest = object(
+  BASKET_SCHEMA_IDS.productListsRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    itemId: nonEmptyString(),
+  },
+  ['basketId', 'participantId', 'itemId']
 );
 
 const searchScope = object(
@@ -491,6 +598,8 @@ const getRequest = object(
     participantId: nonEmptyString(),
     // The read's chain, sent when the read has a shop (plan 0165).
     supermarketId: nonEmptyString(),
+    // The cheapest product of each line that needs a price (plan 0201).
+    picks: array(ref(BASKET_SCHEMA_IDS.linePick)),
   },
   ['basketId', 'participantId']
 );
@@ -500,14 +609,18 @@ const searchScopeRequest = object(
   {
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
-    rowKey: nonEmptyString(),
+    lineIds: writeLineIds,
   },
   ['basketId', 'participantId']
 );
 
 const liveRequest = object(
   BASKET_SCHEMA_IDS.liveRequest,
-  { userId: nonEmptyString(), supermarketId: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    picks: array(ref(BASKET_SCHEMA_IDS.linePick)),
+  },
   ['userId']
 );
 
@@ -517,6 +630,7 @@ const settleRequest = object(
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
     rowKey: nonEmptyString(),
+    lineIds: writeLineIds,
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     from: integer({ minimum: 0 }),
@@ -525,7 +639,7 @@ const settleRequest = object(
     // Written by the gateway (plan 0143). A client body has no field for it.
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
   },
-  ['basketId', 'participantId', 'rowKey', 'outcome', 'from']
+  ['basketId', 'participantId', 'rowKey', 'lineIds', 'outcome', 'from']
 );
 
 /**
@@ -542,11 +656,12 @@ const revertRequest = object(
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
     rowKey: nonEmptyString(),
+    lineIds: writeLineIds,
     target: { type: 'string', enum: ['UNITS', 'CLOSE'] },
     units: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     from: integer({ minimum: 0 }),
   },
-  ['basketId', 'participantId', 'rowKey', 'target']
+  ['basketId', 'participantId', 'rowKey', 'lineIds', 'target']
 );
 
 const demandRequest = object(
@@ -559,7 +674,7 @@ const demandRequest = object(
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
     from: integer({ minimum: 0 }),
   },
-  ['basketId', 'participantId', 'rowKey', 'quantity', 'from']
+  ['basketId', 'participantId', 'rowKey', 'lineId', 'quantity', 'from']
 );
 
 const renameRequest = object(
@@ -569,18 +684,18 @@ const renameRequest = object(
     participantId: nonEmptyString(),
     userId: nonEmptyString(),
     rowKey: nonEmptyString(),
+    lineIds: writeLineIds,
     content: nonEmptyString(),
     confirmMerge: boolean(),
   },
-  ['basketId', 'participantId', 'userId', 'rowKey', 'content']
+  ['basketId', 'participantId', 'userId', 'rowKey', 'lineIds', 'content']
 );
 
 /**
  * One shape for both directions of a skip (plan 0137, section 5).
  *
- * The `PUT` and the `DELETE` take the same three fields, all of them from the
- * path and the guard, so one schema serves both patterns and neither takes a
- * body.
+ * The `PUT` and the `DELETE` take the same fields, so one schema serves both
+ * patterns. Both name their lines in a body since plan 0201.
  */
 const skipRequest = object(
   BASKET_SCHEMA_IDS.skipRequest,
@@ -588,8 +703,9 @@ const skipRequest = object(
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
     rowKey: nonEmptyString(),
+    lineIds: writeLineIds,
   },
-  ['basketId', 'participantId', 'rowKey']
+  ['basketId', 'participantId', 'rowKey', 'lineIds']
 );
 
 const addLineRequest = object(
@@ -832,6 +948,14 @@ export const basketSchemas: JsonSchema[] = [
   result,
   allocationEntry,
   rowResult,
+  linePick,
+  priceChoice,
+  priceChoicesView,
+  priceChoicesRequest,
+  livePriceChoicesRequest,
+  productListView,
+  productListsView,
+  productListsRequest,
   searchScope,
   getRequest,
   searchScopeRequest,
@@ -840,6 +964,9 @@ export const basketSchemas: JsonSchema[] = [
   revertRequest,
   demandRequest,
   renameRequest,
+  // Registered since plan 0201. It was declared and left out of this list, so
+  // nothing could check a skip. It now names its lines, which is worth checking.
+  skipRequest,
   addLineRequest,
   enumOf(BASKET_SCHEMA_IDS.basketKind, Object.values(BasketKind)),
   enumOf(BASKET_SCHEMA_IDS.basketStatus, Object.values(BasketStatus)),
@@ -876,6 +1003,18 @@ export const basketMessageContracts: Record<
   [BASKET_PATTERNS.get]: {
     request: BASKET_SCHEMA_IDS.getRequest,
     response: BASKET_SCHEMA_IDS.view,
+  },
+  [BASKET_PATTERNS.priceChoices]: {
+    request: BASKET_SCHEMA_IDS.priceChoicesRequest,
+    response: BASKET_SCHEMA_IDS.priceChoicesView,
+  },
+  [BASKET_PATTERNS.livePriceChoices]: {
+    request: BASKET_SCHEMA_IDS.livePriceChoicesRequest,
+    response: BASKET_SCHEMA_IDS.priceChoicesView,
+  },
+  [BASKET_PATTERNS.productLists]: {
+    request: BASKET_SCHEMA_IDS.productListsRequest,
+    response: BASKET_SCHEMA_IDS.productListsView,
   },
   [BASKET_PATTERNS.rowSettle]: {
     request: BASKET_SCHEMA_IDS.settleRequest,

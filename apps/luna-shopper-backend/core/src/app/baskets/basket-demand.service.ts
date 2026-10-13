@@ -5,16 +5,19 @@ import {
   type SetBasketRowDemandRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ForbiddenException,
   BasketFinishedException,
+  ForbiddenException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
+import type { ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
-import { type BasketEntry } from './basket-rows';
-import { BasketWriteContext } from './basket-write.context';
+import {
+  BasketWriteContext,
+  type OpenBasketWrite,
+} from './basket-write.context';
 
 /**
  * Changing what one household asks for, from the basket (plan 0136, section
@@ -47,6 +50,14 @@ import { BasketWriteContext } from './basket-write.context';
  * overwrite the decrement. `addQuantity` reads under `pessimistic_write`, and
  * plan 0136 adds `expect` to it so the `from` bargain is checked against that
  * same locked read.
+ *
+ * ## It names its line, and the line can be at zero (plan 0201)
+ *
+ * `lineId` is always required. The line has to be on a covered list, and it
+ * does **not** have to be a row of the basket: a list that held a product
+ * before holds its line at zero, and raising that line is how the list asks
+ * for the product again. Every other write refuses a line the basket does not
+ * draw.
  */
 @Injectable()
 export class BasketDemandService {
@@ -71,8 +82,7 @@ export class BasketDemandService {
       });
     }
 
-    const row = await opened.row(req.rowKey);
-    const entry = this.pick(row.entries, req, opened.servedListIds);
+    const entry = await this.pick(opened, req);
 
     // Plan 0131's rule, asked of the owner. The read serves the same answer as
     // `demandEditable`, and this is the enforcement behind it.
@@ -87,7 +97,7 @@ export class BasketDemandService {
       // A delta of zero writes nothing and answers the row. `addQuantity`
       // refuses one as a client bug, and from here it is an ordinary no-op: a
       // reel let go where it started.
-      return opened.result([entry.lineId], req.rowKey);
+      return opened.result([entry.id]);
     }
 
     // As the **owner**, which is what makes this a delegated write rather than
@@ -96,7 +106,7 @@ export class BasketDemandService {
     // rather than overwriting it.
     await this.lines.addQuantity({
       userId: opened.basket.ownerUserId,
-      lineId: entry.lineId,
+      lineId: entry.id,
       delta,
       expect: req.from,
       // The change record names the person who moved it and the basket they
@@ -111,41 +121,39 @@ export class BasketDemandService {
     // included, and says that the marks moved: the other people of this basket
     // are shown the change (plan 0138, section 5). A second announcement here
     // would be the same patch computed twice.
-    return opened.result([entry.lineId], req.rowKey);
+    return opened.result([entry.id]);
   }
 
   /**
-   * Which entry this request moves.
+   * The line this request moves.
    *
-   * `lineId` is required when the row holds more than one entry, because a row
-   * of two households asks two different questions and a client that named
-   * neither has not asked one. A reader with no list refs, a guest for one, can
-   * therefore change demand on single entry rows only (plan 0130, section 5).
+   * **Who may name a line did not change with plan 0201.** An actor who was
+   * served the list, which is a reader who writes it themselves, names any
+   * line of it. An actor who was not, a guest for one, names a line only when
+   * it is the whole of its row, which is the rule plan 0130 section 5 gave as
+   * "a guest can change demand on single entry rows only". The refusal is the
+   * one of before, so the route cannot be used to learn which households the
+   * redaction withheld.
    */
-  private pick(
-    entries: readonly BasketEntry[],
-    req: SetBasketRowDemandRequest,
-    servedListIds: ReadonlySet<string>
-  ): BasketEntry {
-    if (req.lineId === undefined) {
-      if (entries.length !== 1) {
-        throw new ValidationException(
-          'this row comes from more than one list, so say which',
-          { messageArgs: { field: 'lineId' } }
-        );
-      }
-      return entries[0];
+  private async pick(
+    opened: OpenBasketWrite,
+    req: SetBasketRowDemandRequest
+  ): Promise<ListLine> {
+    if (typeof req.lineId !== 'string' || req.lineId.length === 0) {
+      throw new ValidationException('lineId is required', {
+        messageArgs: { field: 'lineId' },
+      });
     }
-    const entry = entries.find((candidate) => candidate.lineId === req.lineId);
-    if (!entry || !servedListIds.has(entry.listId)) {
-      // The same refusal for "not in this row" and "you were not told this list
-      // is in this row", so the route cannot be used to learn which households
-      // the redaction withheld.
+    const line = await opened.line(req.rowKey, req.lineId);
+    if (
+      !opened.servedListIds.has(line.listId) &&
+      !(await opened.aloneInItsRow(line.id))
+    ) {
       throw new ValidationException('that line is not part of this row', {
         messageArgs: { field: 'lineId' },
       });
     }
-    return entry;
+    return line;
   }
 
   /**
@@ -157,7 +165,7 @@ export class BasketDemandService {
    */
   private async ownerMayChange(
     ownerUserId: string,
-    entry: BasketEntry
+    entry: Pick<ListLine, 'listId' | 'approvalStatus'>
   ): Promise<boolean> {
     const permissions = await this.listAccess.permissionsAmong(ownerUserId, [
       entry.listId,

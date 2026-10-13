@@ -71,6 +71,9 @@ export function removedRows(
     return {
       rowKey: group.rowKey,
       content: group.content,
+      // A removed row holds no entries, so it counts as no product (plan
+      // 0201). It is drawn under the name it had.
+      productId: null,
       left: 0,
       bought,
       asked: bought,
@@ -85,7 +88,6 @@ export function removedRows(
       // either way.
       mark: group.marked ? BasketRowMark.REMOVED : null,
       awaitingApproval: false,
-      optionIds: [],
       touchedBy: newest?.settledByParticipantId ?? null,
       touchedAt: newest ? new Date(newest.settledAt).toISOString() : null,
       entries: [],

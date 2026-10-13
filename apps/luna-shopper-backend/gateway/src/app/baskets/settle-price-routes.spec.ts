@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
 import {
+  BASKET_LIMITS,
   BASKET_PATTERNS,
   ITEM_PATTERNS,
   LINE_PATTERNS,
@@ -17,7 +18,14 @@ import {
 import { LinesController } from '../lists/list.controller';
 import { SettleLineDto } from '../lists/list.dto';
 import { BasketController } from './basket.controller';
-import { SettleBasketRowDto } from './basket.dto';
+import {
+  RenameBasketRowDto,
+  RevertBasketRowDto,
+  SetBasketRowDemandDto,
+  SettleBasketRowDto,
+  SkipBasketRowDto,
+  UnskipBasketRowQueryDto,
+} from './basket.dto';
 import {
   SettlePriceService,
   type SettlePriceInput,
@@ -41,6 +49,9 @@ const ACTOR = 'u-actor';
 const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
 const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
 const ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
+/** The one line the settles below name, which is also the row key. */
+const LINE = '6a8c133f-1a0c-4e2b-9d4a-6f8c910d2e4b';
+const OTHER_LINE = '0d2e4b6a-8c13-4f1a-8c5e-2b7d4a6f8c91';
 
 const PAID = {
   priceScopeId: SCOPE,
@@ -61,7 +72,7 @@ function buildBasket(options: { servesLocations?: boolean } = {}) {
         servesLocations: options.servesLocations ?? false,
       };
     }
-    return { row: {}, progress: {} };
+    return { entries: [], progress: {} };
   });
 
   const asked: SettlePriceInput[] = [];
@@ -70,6 +81,8 @@ function buildBasket(options: { servesLocations?: boolean } = {}) {
       asked.push(input);
       return PAID;
     }),
+    // Catalog knows the product, which `settle-price.spec.ts` proves apart.
+    refuseUnknownItem: jest.fn(async () => undefined),
   };
 
   return {
@@ -96,6 +109,7 @@ const actor = (
 
 const body = (extra: Partial<SettleBasketRowDto> = {}): SettleBasketRowDto =>
   ({
+    lineIds: [LINE],
     outcome: SettlementOutcome.BOUGHT,
     quantity: 1,
     from: 1,
@@ -114,7 +128,7 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
     await w.controller.settle(
       actor(user ? ParticipantKind.REGISTERED : ParticipantKind.GUEST, user),
       BASKET,
-      'row-1',
+      LINE,
       body()
     );
 
@@ -137,7 +151,7 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
     await w.controller.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ supermarketLocationId: SHOP })
     );
 
@@ -157,7 +171,7 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
     await w.controller.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ supermarketLocationId: SHOP })
     );
 
@@ -173,7 +187,7 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
     await w.controller.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: undefined })
     );
 
@@ -190,9 +204,9 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
       if (subject === BASKET_PATTERNS.searchScope) {
         throw new Error('core slow');
       }
-      return { row: {}, progress: {} };
+      return { entries: [], progress: {} };
     });
-    const prices = { read: jest.fn() };
+    const prices = { read: jest.fn(), refuseUnknownItem: jest.fn() };
     const controller = new BasketController(
       { send } as never,
       {} as never,
@@ -203,7 +217,7 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
       controller.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body()
       )
     ).resolves.toBeDefined();
@@ -373,7 +387,7 @@ describe('a settle with no itemId (plan 0151)', () => {
             ownerUserId: OWNER,
             profileId: OWNER_PROFILE,
             servesLocations: false,
-            ...((payload as BasketSearchScopeRequest).rowKey === undefined
+            ...((payload as BasketSearchScopeRequest).lineIds === undefined
               ? {}
               : { pick }),
           };
@@ -396,7 +410,7 @@ describe('a settle with no itemId (plan 0151)', () => {
             ],
           };
         case BASKET_PATTERNS.rowSettle:
-          return { row: {}, progress: {} };
+          return { entries: [], progress: {} };
         default:
           return { line: {}, settlement: {} };
       }
@@ -425,46 +439,46 @@ describe('a settle with no itemId (plan 0151)', () => {
       await w.basket.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body({ itemId: undefined })
       );
 
-      // The row went with the scope question, so core answered the pick on
-      // the round trip the settle already made.
+      // The lines went with the scope question, so core answered the pick on
+      // the round trip the settle already made (plan 0201: the lines, where
+      // it used to be the row key).
       expect(
         w.payloadOf<BasketSearchScopeRequest>(BASKET_PATTERNS.searchScope)
-      ).toEqual({ basketId: BASKET, participantId: 'p-1', rowKey: 'row-1' });
+      ).toEqual({ basketId: BASKET, participantId: 'p-1', lineIds: [LINE] });
       expect(
         w.payloadOf<SettleBasketRowRequest>(BASKET_PATTERNS.rowSettle).paid
       ).toEqual(PAID);
     });
 
-    it('no itemId, several options, refuses with a 400 on itemId and writes nothing', async () => {
-      const w = wire(TWO_OPTIONS);
+    it('sends every line the settle names with the scope question', async () => {
+      const w = wire(ONE_OPTION);
 
-      await expect(
-        w.basket.settle(
-          actor(ParticipantKind.OWNER, OWNER),
-          BASKET,
-          'row-1',
-          body({ itemId: undefined })
-        )
-      ).rejects.toMatchObject({
-        code: 'validation_failed',
-        messageArgs: { field: 'itemId' },
-      });
-      expect(w.sent.map((call) => call.subject)).not.toContain(
-        BASKET_PATTERNS.rowSettle
+      await w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        LINE,
+        body({ itemId: undefined, lineIds: [LINE, OTHER_LINE] })
       );
+
+      expect(
+        w.payloadOf<BasketSearchScopeRequest>(BASKET_PATTERNS.searchScope)
+          .lineIds
+      ).toEqual([LINE, OTHER_LINE]);
     });
 
-    it('no itemId on a free text row keeps the scope and records no price', async () => {
+    // Core answers a count of 1 or 0 for the lines of a basket since plan
+    // 0201, so the refusal of several products is the list page's alone.
+    it('no itemId on lines that hold no product, or agree on none, keeps the scope and records no price', async () => {
       const w = wire(FREE_TEXT);
 
       await w.basket.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body({ itemId: undefined })
       );
 
@@ -473,19 +487,19 @@ describe('a settle with no itemId (plan 0151)', () => {
       ).toEqual({ ...PAID, pricePaidCents: null, pricePaidCurrency: null });
     });
 
-    it('does not send the row when the caller named the product', async () => {
+    it('does not send the lines when the caller named the product', async () => {
       const w = wire(TWO_OPTIONS);
 
       await w.basket.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body()
       );
 
       expect(
         w.payloadOf<BasketSearchScopeRequest>(BASKET_PATTERNS.searchScope)
-      ).not.toHaveProperty('rowKey');
+      ).not.toHaveProperty('lineIds');
       expect(
         w.payloadOf<SettleBasketRowRequest>(BASKET_PATTERNS.rowSettle).paid
       ).toEqual(PAID);
@@ -654,7 +668,7 @@ describe('a settle at a shop (plan 0163)', () => {
             ],
           };
         case BASKET_PATTERNS.rowSettle:
-          return { row: {}, progress: {} };
+          return { entries: [], progress: {} };
         default:
           return { line: {}, settlement: {} };
       }
@@ -680,7 +694,7 @@ describe('a settle at a shop (plan 0163)', () => {
     await w.basket.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: FAR_STORE_SCOPE, supermarketLocationId: FAR_SHOP })
     );
 
@@ -699,7 +713,7 @@ describe('a settle at a shop (plan 0163)', () => {
     await w.basket.settle(
       actor(ParticipantKind.GUEST, null),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: FAR_STORE_SCOPE, supermarketLocationId: FAR_SHOP })
     );
 
@@ -716,7 +730,7 @@ describe('a settle at a shop (plan 0163)', () => {
     await w.basket.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: SCOPE })
     );
 
@@ -738,7 +752,7 @@ describe('a settle at a shop (plan 0163)', () => {
     await w.basket.settle(
       actor(ParticipantKind.REGISTERED, ACTOR),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: FAR_STORE_SCOPE })
     );
 
@@ -757,7 +771,7 @@ describe('a settle at a shop (plan 0163)', () => {
       w.basket.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body({ priceScopeId: SCOPE, supermarketLocationId: OTHER_SHOP })
       )
     ).rejects.toMatchObject({ code: 'basket_shop_locked' });
@@ -773,7 +787,7 @@ describe('a settle at a shop (plan 0163)', () => {
       w.basket.settle(
         actor(ParticipantKind.OWNER, OWNER),
         BASKET,
-        'row-1',
+        LINE,
         body({ priceScopeId: undefined, supermarketLocationId: OTHER_SHOP })
       )
     ).rejects.toMatchObject({ code: 'basket_shop_locked' });
@@ -785,11 +799,421 @@ describe('a settle at a shop (plan 0163)', () => {
     await w.basket.settle(
       actor(ParticipantKind.OWNER, OWNER),
       BASKET,
-      'row-1',
+      LINE,
       body({ priceScopeId: SCOPE, supermarketLocationId: FAR_SHOP })
     );
 
     expect(w.paid()).toEqual({ ...PAID });
+  });
+});
+
+/**
+ * A settle names its lines and its product (plan 0201, section 4).
+ *
+ * The product can be one that is on none of the lines, so core cannot check
+ * the id and the gateway asks catalog. The real {@link SettlePriceService}
+ * runs here: what it decides is `settle-price.spec.ts`, and what is proven
+ * here is that the route asks, refuses before core is told anything, and does
+ * not hold the price read up to do it.
+ */
+describe('a settle that names its lines and its product (plan 0201)', () => {
+  const resolution = {
+    priceScopeIds: [SCOPE],
+    scopes: [],
+    coverage: [],
+    approximate: false,
+    profileId: OWNER_PROFILE,
+    explicit: false,
+  };
+
+  function wire(catalog: 'knows' | 'does not know' | 'throws') {
+    const sent: { subject: string; payload: unknown }[] = [];
+    const send = jest.fn(async (subject: string, payload: unknown) => {
+      sent.push({ subject, payload });
+      switch (subject) {
+        case BASKET_PATTERNS.searchScope:
+          return {
+            ownerUserId: OWNER,
+            profileId: OWNER_PROFILE,
+            servesLocations: false,
+            supermarketLocationId: null,
+          };
+        case ITEM_PATTERNS.getMany:
+          if (catalog === 'throws') {
+            throw new Error('catalog unreachable');
+          }
+          return {
+            items:
+              catalog === 'knows'
+                ? [
+                    {
+                      id: ITEM,
+                      offers: [
+                        {
+                          itemId: ITEM,
+                          priceScopeId: SCOPE,
+                          price: 0.95,
+                          currency: 'EUR',
+                        },
+                      ],
+                    },
+                  ]
+                : [],
+          };
+        default:
+          return { entries: [], progress: {} };
+      }
+    });
+    const nats = { send } as never;
+    const prices = new SettlePriceService(nats, {
+      describe: jest.fn(async () => resolution),
+    } as never);
+    return {
+      basket: new BasketController(nats, {} as never, prices),
+      sent,
+      settle: () =>
+        sent.find((call) => call.subject === BASKET_PATTERNS.rowSettle)
+          ?.payload as SettleBasketRowRequest | undefined,
+    };
+  }
+
+  it('sends core the lines the body names, beside the row key', async () => {
+    const w = wire('knows');
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      LINE,
+      body({ lineIds: [LINE, OTHER_LINE] })
+    );
+
+    expect(w.settle()).toMatchObject({
+      basketId: BASKET,
+      participantId: 'p-1',
+      rowKey: LINE,
+      lineIds: [LINE, OTHER_LINE],
+      itemId: ITEM,
+      paid: PAID,
+    });
+  });
+
+  it('asks catalog for the product alone, with no scopes, beside the price read', async () => {
+    const w = wire('knows');
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      LINE,
+      body()
+    );
+
+    const lookups = w.sent
+      .filter((call) => call.subject === ITEM_PATTERNS.getMany)
+      .map((call) => call.payload);
+    expect(lookups).toContainEqual({ ids: [ITEM] });
+    // Beside each other and not one after the other. The price read asks
+    // core first, so the check reaches catalog before the price does.
+    expect(lookups[0]).toEqual({ ids: [ITEM] });
+  });
+
+  it('refuses an itemId catalog does not know with a 400 on itemId, and writes nothing', async () => {
+    const w = wire('does not know');
+
+    await expect(
+      w.basket.settle(actor(ParticipantKind.OWNER, OWNER), BASKET, LINE, body())
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      messageArgs: { field: 'itemId' },
+    });
+    expect(w.settle()).toBeUndefined();
+  });
+
+  it('refuses it with no scope named too, where no price is read at all', async () => {
+    const w = wire('does not know');
+
+    await expect(
+      w.basket.settle(
+        actor(ParticipantKind.GUEST, null),
+        BASKET,
+        LINE,
+        body({ priceScopeId: undefined })
+      )
+    ).rejects.toMatchObject({ code: 'validation_failed' });
+    expect(w.settle()).toBeUndefined();
+  });
+
+  // Only a definite "not found" refuses a buy.
+  it('settles when catalog cannot say whether it knows the product', async () => {
+    const w = wire('throws');
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      LINE,
+      body()
+    );
+
+    expect(w.settle()).toMatchObject({ lineIds: [LINE], itemId: ITEM });
+  });
+
+  it('asks catalog nothing about a product when the settle names none', async () => {
+    const w = wire('does not know');
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      LINE,
+      body({ itemId: undefined, priceScopeId: undefined })
+    );
+
+    expect(w.sent.map((call) => call.subject)).toEqual([
+      BASKET_PATTERNS.rowSettle,
+    ]);
+  });
+});
+
+/**
+ * The other writes on a row name their lines too (plan 0201, section 4).
+ *
+ * Wiring only: each route puts the `lineIds` it was given on the message, and
+ * core is what loads those lines and refuses the ones it should.
+ */
+describe('the writes on a row name their lines (plan 0201)', () => {
+  function wire() {
+    const sent: { subject: string; payload: unknown }[] = [];
+    const send = jest.fn(async (subject: string, payload: unknown) => {
+      sent.push({ subject, payload });
+      return { entries: [], progress: {} };
+    });
+    return {
+      controller: new BasketController(
+        { send } as never,
+        {} as never,
+        {} as never
+      ),
+      sent,
+    };
+  }
+  const owner = actor(ParticipantKind.OWNER, OWNER);
+  const lineIds = [LINE, OTHER_LINE];
+
+  it('revert of units', async () => {
+    const w = wire();
+
+    await w.controller.revert(owner, BASKET, LINE, {
+      lineIds,
+      target: 'UNITS',
+      units: 1,
+      from: 2,
+    });
+
+    expect(w.sent).toEqual([
+      {
+        subject: BASKET_PATTERNS.rowRevert,
+        payload: {
+          basketId: BASKET,
+          participantId: 'p-1',
+          rowKey: LINE,
+          lineIds,
+          target: 'UNITS',
+          units: 1,
+          from: 2,
+        },
+      },
+    ]);
+  });
+
+  it('revert of a close', async () => {
+    const w = wire();
+
+    await w.controller.revert(owner, BASKET, LINE, {
+      lineIds,
+      target: 'CLOSE',
+    });
+
+    expect(w.sent[0].payload).toEqual({
+      basketId: BASKET,
+      participantId: 'p-1',
+      rowKey: LINE,
+      lineIds,
+      target: 'CLOSE',
+    });
+  });
+
+  it('demand, whose line is always named', async () => {
+    const w = wire();
+
+    await w.controller.demand(owner, BASKET, LINE, {
+      lineId: LINE,
+      quantity: 0,
+      from: 2,
+    });
+
+    expect(w.sent[0]).toEqual({
+      subject: BASKET_PATTERNS.rowDemand,
+      payload: {
+        basketId: BASKET,
+        participantId: 'p-1',
+        rowKey: LINE,
+        lineId: LINE,
+        quantity: 0,
+        from: 2,
+      },
+    });
+  });
+
+  it('rename', async () => {
+    const w = wire();
+
+    await w.controller.rename(owner, BASKET, LINE, {
+      lineIds,
+      content: 'Oat milk',
+    });
+
+    expect(w.sent[0]).toEqual({
+      subject: BASKET_PATTERNS.rowRename,
+      payload: {
+        basketId: BASKET,
+        participantId: 'p-1',
+        userId: OWNER,
+        rowKey: LINE,
+        lineIds,
+        content: 'Oat milk',
+        confirmMerge: undefined,
+      },
+    });
+  });
+
+  it('skip, from its body', async () => {
+    const w = wire();
+
+    await w.controller.skip(owner, BASKET, LINE, { lineIds });
+
+    expect(w.sent[0]).toEqual({
+      subject: BASKET_PATTERNS.rowSkip,
+      payload: {
+        basketId: BASKET,
+        participantId: 'p-1',
+        rowKey: LINE,
+        lineIds,
+      },
+    });
+  });
+
+  it('unskip, from its query', async () => {
+    const w = wire();
+
+    await w.controller.unskip(owner, BASKET, LINE, { lineIds });
+
+    expect(w.sent[0]).toEqual({
+      subject: BASKET_PATTERNS.rowUnskip,
+      payload: {
+        basketId: BASKET,
+        participantId: 'p-1',
+        rowKey: LINE,
+        lineIds,
+      },
+    });
+  });
+
+  it('asks core for the lists that can still take a product', async () => {
+    const w = wire();
+
+    await w.controller.productLists(
+      actor(ParticipantKind.REGISTERED, ACTOR),
+      BASKET,
+      ITEM
+    );
+
+    expect(w.sent).toEqual([
+      {
+        subject: BASKET_PATTERNS.productLists,
+        payload: { basketId: BASKET, participantId: 'p-1', itemId: ITEM },
+      },
+    ]);
+  });
+});
+
+/**
+ * The bounds of `lineIds`, on every body and on the one query that carry it
+ * (plan 0201, section 4): 1 to 100 uuids, none twice.
+ */
+describe.each([
+  ['the settle body', SettleBasketRowDto, { outcome: 'BOUGHT', from: 1 }],
+  ['the revert body', RevertBasketRowDto, { target: 'CLOSE' }],
+  ['the rename body', RenameBasketRowDto, { content: 'Oat milk' }],
+  ['the skip body', SkipBasketRowDto, {}],
+  ['the unskip query', UnskipBasketRowQueryDto, {}],
+])('lineIds on %s', (_name, Dto, required) => {
+  const errorsOf = async (lineIds: unknown) =>
+    (
+      await validate(
+        plainToInstance(Dto as never, { ...required, lineIds }) as object,
+        { whitelist: true, forbidNonWhitelisted: true }
+      )
+    ).map((error) => error.property);
+
+  /** `count` distinct uuids. */
+  const uuids = (count: number) =>
+    Array.from(
+      { length: count },
+      (_, at) => `6a8c133f-1a0c-4e2b-9d4a-${String(at).padStart(12, '0')}`
+    );
+
+  it('accepts one line, and a hundred', async () => {
+    expect(await errorsOf([LINE])).toEqual([]);
+    expect(await errorsOf(uuids(BASKET_LIMITS.maxWriteLines))).toEqual([]);
+  });
+
+  it.each([
+    ['is absent', undefined],
+    ['is empty', []],
+    ['names more than a hundred lines', 'too many'],
+    ['names a line twice', [LINE, LINE]],
+    ['names something that is not a uuid', [LINE, 'line-1']],
+  ])('refuses a request whose lineIds %s', async (_case, lineIds) => {
+    expect(
+      await errorsOf(
+        lineIds === 'too many'
+          ? uuids(BASKET_LIMITS.maxWriteLines + 1)
+          : lineIds
+      )
+    ).toEqual(['lineIds']);
+  });
+});
+
+describe('the unskip query (plan 0201, section 4)', () => {
+  const parse = (query: Record<string, unknown>) =>
+    plainToInstance(UnskipBasketRowQueryDto, query);
+
+  it('reads the lines from one comma separated parameter', async () => {
+    const dto = parse({ lineIds: `${LINE},${OTHER_LINE}` });
+
+    expect(dto.lineIds).toEqual([LINE, OTHER_LINE]);
+    expect(await validate(dto)).toEqual([]);
+  });
+
+  it('reads the parameter repeated the same way', () => {
+    expect(parse({ lineIds: [LINE, OTHER_LINE] }).lineIds).toEqual([
+      LINE,
+      OTHER_LINE,
+    ]);
+  });
+
+  it('refuses an empty parameter', async () => {
+    const errors = await validate(parse({ lineIds: '' }));
+
+    expect(errors.map((error) => error.property)).toEqual(['lineIds']);
+  });
+});
+
+describe('the demand body (plan 0201, section 4)', () => {
+  it('requires the line', async () => {
+    const errors = await validate(
+      plainToInstance(SetBasketRowDemandDto, { quantity: 1, from: 0 })
+    );
+
+    expect(errors.map((error) => error.property)).toEqual(['lineId']);
   });
 });
 
@@ -802,7 +1226,7 @@ describe('a settle at a shop (plan 0163)', () => {
  * writing money into a household's history.
  */
 describe.each([
-  ['the row settle body', SettleBasketRowDto, { from: 1 }],
+  ['the row settle body', SettleBasketRowDto, { from: 1, lineIds: [LINE] }],
   ['the list settle body', SettleLineDto, {}],
 ])('%s', (_name, Dto, required) => {
   const check = (body: Record<string, unknown>) =>

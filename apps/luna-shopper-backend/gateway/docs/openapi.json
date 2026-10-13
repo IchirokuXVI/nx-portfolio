@@ -9698,6 +9698,94 @@
         ]
       }
     },
+    "/v1/baskets/{id}/products/{itemId}/lists": {
+      "get": {
+        "operationId": "BasketController_productLists_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.productLists` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketProductListsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}/rows/{rowKey}/settle": {
       "post": {
         "operationId": "BasketController_settle_v1",
@@ -10171,6 +10259,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipBasketRowDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The `basket.row.skip` contract response.",
@@ -10178,6 +10276,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -10255,6 +10363,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "lineIds",
+            "required": true,
+            "in": "query",
+            "description": "The list lines to take the skip back from, comma separated. The `rowKey` of the path must be one of them.",
+            "schema": {
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
           }
         ],
         "responses": {
@@ -10264,6 +10388,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -29040,6 +29174,17 @@
       "SettleBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines this settle acts on: the entries of the row as you drew it. The `rowKey` of the path must be one of them. A line the basket does not cover, or on a list you were not served, answers 404.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "outcome": {
             "allOf": [
               {
@@ -29057,12 +29202,12 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "The row’s `left` as you drew it. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap."
+            "description": "The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap."
           },
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`. Left out, a row with one option records that option, and its price is read for it. Required with `priceScopeId` on a row with several options: without it the settle answers 400 `validation_failed` on `itemId`."
+            "description": "The product of the row as you drew it: its `productId`, or another product chosen for this trip only, which does not have to be a product of any of the lines. An id the catalog does not know answers 400 `validation_failed` on `itemId`. Left out, the settle records the product the named lines count as when they agree on one, and none otherwise. Leave it out for lines that hold no product."
           },
           "priceScopeId": {
             "type": "string",
@@ -29075,7 +29220,7 @@
             "description": "The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in \"any shop\" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`."
           },
           "allocations": {
-            "description": "Which household got what. Derived oldest first when absent. Every `lineId` must belong to a list you were served a ref for.",
+            "description": "Which household got what. Derived oldest first when absent. Every `lineId` must be one of `lineIds`.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BasketAllocationDto"
@@ -29083,6 +29228,7 @@
           }
         },
         "required": [
+          "lineIds",
           "outcome",
           "from"
         ]
@@ -29090,6 +29236,17 @@
       "RevertBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines this revert acts on. The `rowKey` of the path must be one of them.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "target": {
             "type": "string",
             "enum": [
@@ -29107,10 +29264,11 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "The row’s `bought` as you drew it. Required for UNITS."
+            "description": "The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS."
           }
         },
         "required": [
+          "lineIds",
           "target"
         ]
       },
@@ -29120,7 +29278,7 @@
           "lineId": {
             "type": "string",
             "format": "uuid",
-            "description": "Which household’s ask to move. Required when the row holds more than one entry, since a row of two households asks two different questions."
+            "description": "The list line whose ask to move, always. It is the `rowKey` of the path. It can be a line at zero on a covered list, which is how a list that holds a product at zero asks for it again."
           },
           "quantity": {
             "type": "number",
@@ -29135,6 +29293,7 @@
           }
         },
         "required": [
+          "lineId",
           "quantity",
           "from"
         ]
@@ -29142,6 +29301,17 @@
       "RenameBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines to rename, each on its own list. The `rowKey` of the path must be one of them. A line that has a product answers 400 `validation_failed`: a row with a product is named by the catalog.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "content": {
             "type": "string",
             "minLength": 1,
@@ -29153,7 +29323,27 @@
           }
         },
         "required": [
+          "lineIds",
           "content"
+        ]
+      },
+      "SkipBasketRowDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines to put off. The `rowKey` of the path must be one of them.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "lineIds"
         ]
       },
       "AddBasketLineDto": {
@@ -34360,6 +34550,69 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketProductListsView": {
+        "type": "object",
+        "properties": {
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketProductListView"
+            }
+          }
+        },
+        "required": [
+          "lists"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketProductListView": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": "string"
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "lineId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lineName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "listId",
+          "listName",
+          "zoneId",
+          "zoneName",
+          "lineId",
+          "lineName",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketProductView": {
         "type": "object",
         "properties": {
@@ -34701,9 +34954,34 @@
               }
             ]
           },
+          "tripItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "listId": {
             "type": "string",
             "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canWrite": {
+            "type": "boolean"
           },
           "demandEditable": {
             "type": "boolean"
@@ -34720,6 +34998,11 @@
           "skipped",
           "closed",
           "act",
+          "tripItemId",
+          "content",
+          "itemIds",
+          "favoriteItemId",
+          "canWrite",
           "demandEditable"
         ],
         "additionalProperties": false
@@ -34727,8 +35010,11 @@
       "basket.BasketRowResult": {
         "type": "object",
         "properties": {
-          "row": {
-            "$ref": "#/components/schemas/basket.BasketRowView"
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketRowEntryView"
+            }
           },
           "progress": {
             "$ref": "#/components/schemas/basket.BasketProgress"
@@ -34736,14 +35022,10 @@
           "skippedCount": {
             "type": "integer",
             "minimum": 0
-          },
-          "replacedRowKey": {
-            "type": "string",
-            "minLength": 1
           }
         },
         "required": [
-          "row",
+          "entries",
           "progress"
         ],
         "additionalProperties": false
@@ -34781,6 +35063,12 @@
           },
           "content": {
             "type": "string"
+          },
+          "productId": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "left": {
             "type": "integer",
@@ -34830,13 +35118,6 @@
           "awaitingApproval": {
             "type": "boolean"
           },
-          "optionIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
           "touchedBy": {
             "type": [
               "string",
@@ -34869,6 +35150,7 @@
         "required": [
           "rowKey",
           "content",
+          "productId",
           "left",
           "bought",
           "asked",
@@ -34878,7 +35160,6 @@
           "noteAt",
           "mark",
           "awaitingApproval",
-          "optionIds",
           "touchedBy",
           "touchedAt",
           "entries",

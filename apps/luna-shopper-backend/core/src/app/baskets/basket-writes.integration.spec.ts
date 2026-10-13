@@ -67,6 +67,10 @@ const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
  * `LineService.addQuantity`, which has its own integration spec, and the add and
  * the rename go through `LineService.add` and `planListRename`, which have
  * theirs.
+ *
+ * Every write names its lines since plan 0201, and answers those lines and no
+ * row. The cases about rows that merge on a product are in
+ * `basket-product-rows.integration.spec.ts`.
  */
 describeIntegration('writing on a basket row (real Postgres)', () => {
   let dataSource: DataSource;
@@ -330,6 +334,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
         from: 2,
@@ -346,9 +351,23 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       // for either to be null on.
       expect(written.lineId).toBe(row.id);
       expect(written.listId).toBe(listId);
-      // The purchase is in scope, so the row stays and reads DONE.
-      expect(result.row.state).toBe(BasketRowState.DONE);
-      expect(result.row.bought).toBe(2);
+      // The purchase is in scope, so the line stays in the basket and reads
+      // DONE. The answer is the named line as it is now, and no row (plan 0201,
+      // section 4).
+      expect(result).not.toHaveProperty('row');
+      expect(result.entries).toHaveLength(1);
+      expect(result.entries[0]).toMatchObject({
+        lineId: row.id,
+        state: BasketRowState.DONE,
+        bought: 2,
+        left: 0,
+      });
+      expect(result.progress).toEqual({
+        done: 1,
+        unavailable: 0,
+        total: 1,
+        pending: 0,
+      });
     });
 
     it('refuses a settle whose `from` no longer matches', async () => {
@@ -364,6 +383,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: row.id,
+          lineIds: [row.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 3,
@@ -381,6 +401,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
         from: 2,
@@ -404,6 +425,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 3,
         from: 2,
@@ -421,12 +443,13 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       const parents = await list('Parents');
       const { basket: held, participantId } = await basket(flat, parents);
       const first = await line(flat, 'Yeast', 1);
-      await line(parents, 'yeast', 1);
+      const second = await line(parents, 'yeast', 1);
 
       await settleService.settle({
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
         from: 2,
       });
@@ -453,6 +476,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 1,
@@ -465,30 +489,38 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: row.id,
+          lineIds: [row.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
           from: 0,
         })
       ).rejects.toMatchObject({ code: 'conflict' });
     });
 
-    it('refuses an itemId that is not one of the row’s options', async () => {
+    it('records an itemId that is on none of the named lines', async () => {
       const listId = await list('Swap');
       const { basket: held, participantId } = await basket(listId);
       const row = await line(listId, 'Milk', 1);
+      const swapped = randomUUID();
 
-      // A swap is a gesture at the shelf rather than a way to write an
-      // arbitrary catalog id into a household's purchase history.
-      await expect(
-        settleService.settle({
-          basketId: held.id,
-          participantId,
-          rowKey: row.id,
-          outcome: SettlementOutcome.BOUGHT,
-          quantity: 1,
-          from: 1,
-          itemId: randomUUID(),
-        })
-      ).rejects.toMatchObject({ code: 'validation_failed' });
+      // Before plan 0201 this was refused: a swap was only allowed to one of
+      // the row's own options. It is a change "for this trip only" now, and
+      // the gateway refuses an id the catalog does not know before core is
+      // asked.
+      const result = await settleService.settle({
+        basketId: held.id,
+        participantId,
+        rowKey: row.id,
+        lineIds: [row.id],
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+        from: 1,
+        itemId: swapped,
+      });
+
+      const [written] = await standingOf(row.id);
+      expect(written.itemId).toBe(swapped);
+      // The line counts as that product until the trip ends.
+      expect(result.entries[0].tripItemId).toBe(swapped);
     });
 
     it('allocates oldest first across two households', async () => {
@@ -498,10 +530,13 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       const older = await line(flat, 'Milk', 2);
       const newer = await line(parents, 'milk', 1);
 
-      await settleService.settle({
+      const result = await settleService.settle({
         basketId: held.id,
         participantId,
         rowKey: older.id,
+        // Newest first on purpose: the order is the age of the lines and not
+        // the order the request named them in.
+        lineIds: [newer.id, older.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
         from: 3,
@@ -513,6 +548,14 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       expect(await quantityOf(newer.id)).toBe(1);
       // A `BOUGHT` with a zero allocation writes nothing at all.
       expect(await standingOf(newer.id)).toHaveLength(0);
+      // Every named line is answered, also the one this settle wrote nothing
+      // on: the client holds both.
+      expect(
+        result.entries.map((entry) => [entry.lineId, entry.left, entry.bought])
+      ).toEqual([
+        [older.id, 0, 2],
+        [newer.id, 1, 0],
+      ]);
     });
 
     /**
@@ -541,6 +584,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: older.id,
+          lineIds: [older.id, newer.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 4,
           from: 4,
@@ -565,6 +609,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: row.id,
+          lineIds: [row.id],
           outcome: SettlementOutcome.NOT_AVAILABLE,
           from: 1,
           paid: PAID,
@@ -647,6 +692,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: atShop.id,
+          lineIds: [atShop.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 1,
@@ -656,6 +702,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: anyShop.id,
+          lineIds: [anyShop.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 1,
@@ -739,6 +786,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: first.id,
+          lineIds: [first.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 1,
@@ -747,14 +795,15 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: second.id,
+          lineIds: [second.id],
           outcome: SettlementOutcome.BOUGHT,
           quantity: 1,
           from: 1,
         }),
       ]);
 
-      expect(a.row.bought).toBe(1);
-      expect(b.row.bought).toBe(1);
+      expect(a.entries.map((entry) => entry.bought)).toEqual([1]);
+      expect(b.entries.map((entry) => entry.bought)).toEqual([1]);
       expect(await quantityOf(first.id)).toBe(0);
       expect(await quantityOf(second.id)).toBe(0);
     });
@@ -772,6 +821,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 4,
@@ -780,6 +830,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
         from: 3,
@@ -790,6 +841,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units: 2,
         from: 3,
@@ -798,7 +850,8 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       // The units this basket took off are the units it puts back, added to
       // whatever the line says now rather than restored to a remembered number.
       expect(await quantityOf(row.id)).toBe(3);
-      expect(result.row.bought).toBe(1);
+      expect(result.entries).toHaveLength(1);
+      expect(result.entries[0]).toMatchObject({ bought: 1, left: 3 });
       // The older purchase still stands: the walk runs newest first.
       const standing = await standingOf(row.id);
       expect(standing.map((entry) => entry.quantity)).toEqual([1]);
@@ -813,6 +866,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 6,
         from: 6,
@@ -823,6 +877,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units: 2,
         from: 6,
@@ -860,6 +915,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 6,
         from: 6,
@@ -869,6 +925,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units: 2,
         from: 6,
@@ -894,6 +951,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
         from: 2,
       });
@@ -901,6 +959,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
         target: 'CLOSE',
       });
 
@@ -910,7 +969,10 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       expect(await standingOf(second.id)).toHaveLength(0);
       // A close moved no units, so taking it back moves none either.
       expect(await quantityOf(first.id)).toBe(1);
-      expect(result.row.state).toBe(BasketRowState.WANTED);
+      expect(result.entries.map((entry) => entry.state)).toEqual([
+        BasketRowState.WANTED,
+        BasketRowState.WANTED,
+      ]);
     });
 
     it('refuses a revert whose `from` no longer matches', async () => {
@@ -921,6 +983,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 2,
@@ -931,6 +994,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
           basketId: held.id,
           participantId,
           rowKey: row.id,
+          lineIds: [row.id],
           target: 'UNITS',
           units: 1,
           // The client believed two had been bought; one has.
@@ -950,6 +1014,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 2,
         from: 2,
@@ -962,20 +1027,36 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         .update(second.id, { deletedAt: new Date() });
       expect(await standingOf(second.id)).toHaveLength(1);
 
-      // The row is now one entry, so the revert acts on that one and the
-      // deleted line is not in it to be skipped: an entry outside the coverage
-      // is not part of the row at all, which is the difference between plan
-      // 0136's model and the origins it replaced.
+      // A client that still draws both lines names both, and the whole write
+      // is refused: a deleted line is not a row of the basket (plan 0201,
+      // section 4). Nothing is applied to the line that was found.
+      await expect(
+        revertService.revert({
+          basketId: held.id,
+          participantId,
+          rowKey: first.id,
+          lineIds: [first.id, second.id],
+          target: 'UNITS',
+          units: 1,
+          from: 2,
+        })
+      ).rejects.toMatchObject({ code: 'not_found', message: 'Row not found' });
+      expect(await quantityOf(first.id)).toBe(0);
+
+      // After its next read the client names the one line that is left, and
+      // the revert acts on that one.
       const result = await revertService.revert({
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id],
         target: 'UNITS',
         units: 1,
         from: 1,
       });
 
-      expect(result.row.bought).toBe(0);
+      expect(result.entries).toHaveLength(1);
+      expect(result.entries[0].bought).toBe(0);
       expect(await quantityOf(first.id)).toBe(1);
       // Untouched: nothing may write to a list the basket no longer covers.
       expect(await standingOf(second.id)).toHaveLength(1);
@@ -994,6 +1075,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 1,
@@ -1019,6 +1101,8 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
             bought: 1,
             boughtElsewhere: 0,
             state: BasketRowState.DONE,
+            // The buy named no product, so the line counts as what it did.
+            tripItemId: null,
           }),
         ],
       });

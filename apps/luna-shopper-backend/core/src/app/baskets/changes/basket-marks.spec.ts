@@ -6,10 +6,10 @@ import {
   LineChangeKind,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
+import { BasketLineKeys } from '../basket-line-keys';
 import type { BasketSettlementRow } from '../basket-read.sql';
-import { mergeKey } from '../line-dedup';
 import type { ChangeLineRow, ChangeRow } from './basket-changes.sql';
-import { foldMarks, foldRemoved } from './basket-marks.reader';
+import { foldMarks, foldRemoved, type LineKeyOf } from './basket-marks.reader';
 import { removedRows } from './basket-removed-rows';
 
 /**
@@ -33,10 +33,34 @@ function line(over: Partial<ChangeLineRow> = {}): ChangeLineRow {
     quantity: 2,
     version: 1,
     itemSetHash: null,
+    favoriteItemId: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     createdAt: new Date(2026, 0, seq),
     ...over,
   };
+}
+
+/**
+ * The key of a line that holds no product, which is its normalized name.
+ *
+ * A caller hands the folds its own keys since plan 0201, because the key is
+ * the product a line counts as and only the caller read the products. A line
+ * these keys were never handed falls to its text, which is every line of the
+ * cases that are not about a product.
+ */
+const textKey: LineKeyOf = new BasketLineKeys().keyOf;
+
+/** The keys of lines that hold products, as a read with no picks keys them. */
+function keysWith(products: Record<string, string[]>, lines: ChangeLineRow[]) {
+  return new BasketLineKeys().add(
+    lines.map((row) => ({
+      lineId: row.id,
+      content: row.content,
+      itemIds: products[row.id] ?? [],
+      favoriteItemId: row.favoriteItemId,
+      tripItemId: null,
+    }))
+  ).keyOf;
 }
 
 function change(
@@ -69,7 +93,8 @@ function change(
 function fold(
   marked: ChangeRow[],
   covered: ChangeLineRow[],
-  extra: ChangeLineRow[] = []
+  extra: ChangeLineRow[] = [],
+  keyOf: LineKeyOf = textKey
 ) {
   const lines = new Map([...covered, ...extra].map((row) => [row.id, row]));
   const newestFirst = [...marked].reverse();
@@ -81,8 +106,8 @@ function fold(
     )
     .map(({ unseen, ...row }) => ({ ...row, marked: unseen }));
   return {
-    byKey: foldMarks(newestFirst, covered, lines).byKey,
-    removed: foldRemoved(removing, covered, lines),
+    byKey: foldMarks(newestFirst, covered, lines, keyOf).byKey,
+    removed: foldRemoved(removing, covered, lines, keyOf),
   };
 }
 
@@ -102,7 +127,7 @@ describe('a line that is still in the basket', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.CHANGED);
   });
 
   it('is ADDED when it was put on the list', () => {
@@ -113,7 +138,7 @@ describe('a line that is still in the basket', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.ADDED);
   });
 
   it('is ADDED when a quantity came back off zero', () => {
@@ -133,7 +158,7 @@ describe('a line that is still in the basket', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.ADDED);
   });
 
   it('is ADDED when a rejection was lifted', () => {
@@ -151,7 +176,7 @@ describe('a line that is still in the basket', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.ADDED);
   });
 
   it('keeps ADDED when the line was added and then raised', () => {
@@ -171,7 +196,7 @@ describe('a line that is still in the basket', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.ADDED);
   });
 
   it('marks the row of a line another household shares the name with', () => {
@@ -192,7 +217,7 @@ describe('a line that is still in the basket', () => {
       [flat, parents]
     );
 
-    expect(byKey.get(mergeKey(flat))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(flat))).toBe(BasketRowMark.CHANGED);
     expect(byKey.size).toBe(1);
   });
 });
@@ -213,7 +238,7 @@ describe('a buy and a taken back buy (plan 0203, section 7)', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.CHANGED);
     expect(removed).toEqual([]);
   });
 
@@ -234,7 +259,7 @@ describe('a buy and a taken back buy (plan 0203, section 7)', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.CHANGED);
   });
 
   it('leaves ADDED on a row that was added and then bought', () => {
@@ -253,7 +278,7 @@ describe('a buy and a taken back buy (plan 0203, section 7)', () => {
       [milk]
     );
 
-    expect(byKey.get(mergeKey(milk))).toBe(BasketRowMark.ADDED);
+    expect(byKey.get(textKey(milk))).toBe(BasketRowMark.ADDED);
   });
 
   it('says nothing about a line that is no row any more', () => {
@@ -305,7 +330,7 @@ describe('a merge', () => {
       [gone]
     );
 
-    expect(byKey.get(mergeKey(survivor))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(survivor))).toBe(BasketRowMark.CHANGED);
     // Its `lineId` names no row, so nothing says a thing left the basket.
     expect(removed).toEqual([]);
   });
@@ -352,7 +377,7 @@ describe('a line that left the basket', () => {
 
     expect(removed).toEqual([
       {
-        key: mergeKey(gone),
+        key: textKey(gone),
         rowKey: gone.id,
         content: 'Olives',
         lineIds: [gone.id],
@@ -423,7 +448,7 @@ describe('a line that left the basket', () => {
     );
 
     expect(removed).toEqual([]);
-    expect(byKey.get(mergeKey(flat))).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get(textKey(flat))).toBe(BasketRowMark.CHANGED);
   });
 
   it('folds two households leaving one thing into one row, the earliest named', () => {
@@ -496,6 +521,117 @@ describe('a line that left the basket', () => {
   });
 });
 
+describe('a mark belongs to the product a line counts as (plan 0201)', () => {
+  it('marks the one row of two lines that count as one product', () => {
+    // Two households, two names and two sets, one carton. A change to either
+    // marks the one row.
+    const flat = line({ listId: 'list-a', content: 'Milk' });
+    const parents = line({ listId: 'list-b', content: 'Leche' });
+    const keyOf = keysWith({ [flat.id]: ['i1'], [parents.id]: ['i1', 'i2'] }, [
+      flat,
+      parents,
+    ]);
+
+    const { byKey } = fold(
+      [
+        change({
+          lineId: parents.id,
+          listId: 'list-b',
+          kind: LineChangeKind.QUANTITY_CHANGED,
+          quantityBefore: 1,
+          quantityAfter: 2,
+        }),
+      ],
+      [flat, parents],
+      [],
+      keyOf
+    );
+
+    expect([...byKey]).toEqual([['item:i1', BasketRowMark.CHANGED]]);
+  });
+
+  it('does not mark a row of the same name that counts as another product', () => {
+    const pascual = line({ listId: 'list-a', content: 'Milk' });
+    const puleva = line({ listId: 'list-b', content: 'Milk' });
+    const keyOf = keysWith({ [pascual.id]: ['i1'], [puleva.id]: ['i2'] }, [
+      pascual,
+      puleva,
+    ]);
+
+    const { byKey } = fold(
+      [change({ lineId: puleva.id, kind: LineChangeKind.ADDED })],
+      [pascual, puleva],
+      [],
+      keyOf
+    );
+
+    expect([...byKey]).toEqual([['item:i2', BasketRowMark.ADDED]]);
+  });
+
+  it('passes the mark of a line that left to the row its product is still on', () => {
+    // The names differ, so before plan 0201 this was a disabled row.
+    const flat = line({ listId: 'list-a', content: 'Milk' });
+    const gone = line({ id: 'll-gone', listId: 'list-b', content: 'Leche' });
+    const keyOf = keysWith({ [flat.id]: ['i1'], [gone.id]: ['i1'] }, [
+      flat,
+      gone,
+    ]);
+
+    const { byKey, removed } = fold(
+      [
+        change({
+          lineId: gone.id,
+          listId: 'list-b',
+          kind: LineChangeKind.DELETED,
+          contentBefore: 'Leche',
+        }),
+      ],
+      [flat],
+      [gone],
+      keyOf
+    );
+
+    expect(removed).toEqual([]);
+    expect(byKey.get('item:i1')).toBe(BasketRowMark.CHANGED);
+  });
+
+  it('draws a disabled row for a line that left when only its name is still covered', () => {
+    // The covered "Milk" counts as another product, so the thing that went is
+    // no longer in the basket.
+    const flat = line({ listId: 'list-a', content: 'Milk' });
+    const gone = line({ id: 'll-gone', listId: 'list-b', content: 'Milk' });
+    const keyOf = keysWith({ [flat.id]: ['i1'], [gone.id]: ['i2'] }, [
+      flat,
+      gone,
+    ]);
+
+    const { byKey, removed } = fold(
+      [
+        change({
+          lineId: gone.id,
+          listId: 'list-b',
+          kind: LineChangeKind.DELETED,
+          contentBefore: 'Milk',
+        }),
+      ],
+      [flat],
+      [gone],
+      keyOf
+    );
+
+    expect(byKey.size).toBe(0);
+    expect(removed).toEqual([
+      {
+        key: 'item:i2',
+        rowKey: gone.id,
+        content: 'Milk',
+        lineIds: [gone.id],
+        marked: true,
+      },
+    ]);
+  });
+});
+
 describe('the disabled row itself', () => {
   const removed = [
     {
@@ -515,6 +651,7 @@ describe('the disabled row itself', () => {
       quantity: 1,
       settledAt: new Date(2026, 0, 1, 10),
       settledByParticipantId: 'p-1',
+      itemId: null,
       fresh: true,
       ...over,
     };
@@ -534,8 +671,10 @@ describe('the disabled row itself', () => {
       awaitingApproval: false,
       note: null,
       entries: [],
-      optionIds: [],
+      // A removed row holds no entries, so it counts as no product.
+      productId: null,
     });
+    expect(row).not.toHaveProperty('optionIds');
   });
 
   it('keeps its state and loses its mark when the removal is not marked', () => {

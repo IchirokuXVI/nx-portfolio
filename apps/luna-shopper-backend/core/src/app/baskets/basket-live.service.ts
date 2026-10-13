@@ -8,8 +8,9 @@ import {
   type GetLiveBasketRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { DataSource, Repository } from 'typeorm';
-import { Basket } from '../entities';
 import { BasketSharingService } from '../baskets/basket-sharing.service';
+import { Basket, type BasketParticipant } from '../entities';
+import { picksOf } from './basket-line-keys';
 import { BasketReadService } from './basket-read.service';
 
 /**
@@ -48,10 +49,30 @@ export class BasketLiveService {
 
   /** The caller's permanent basket, read as themselves. */
   async live(req: GetLiveBasketRequest): Promise<BasketView> {
-    const basket = await this.ensure(req.userId);
+    const { basket, participant } = await this.open(req.userId);
+    // The chain of the shop the device chose, when it chose one (plan 0165),
+    // and the products the gateway chose by price (plan 0201, section 1).
+    return this.read.view(
+      basket,
+      participant,
+      req.supermarketId,
+      picksOf(req.picks)
+    );
+  }
+
+  /**
+   * The basket and its owner as a participant, both made if they are missing.
+   *
+   * What {@link live} starts from, and what the read of the lines that need a
+   * price starts from too (plan 0201): the gateway asks that before the basket
+   * itself, so it has to be able to be the first sight of the basket.
+   */
+  async open(
+    userId: string
+  ): Promise<{ basket: Basket; participant: BasketParticipant }> {
+    const basket = await this.ensure(userId);
     const participant = await this.sharing.ensureOwnerParticipant(basket);
-    // The chain of the shop the device chose, when it chose one (plan 0165).
-    return this.read.view(basket, participant, req.supermarketId);
+    return { basket, participant };
   }
 
   /**

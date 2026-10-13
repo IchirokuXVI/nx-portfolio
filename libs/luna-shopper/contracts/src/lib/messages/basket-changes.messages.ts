@@ -125,11 +125,17 @@ export interface BasketChangeView {
   /** This viewer has not acknowledged it. */
   unseen: boolean;
   /**
-   * The anchor of the basket row this line is in now, or null when it is gone.
+   * A covered line of the basket row this change is about, or null when the
+   * line is in no row now.
+   *
+   * **A client finds the row that holds this line among its entries.** Before
+   * plan 0201 this was the anchor of the row. A row is now the lines that
+   * count as one product, which the picks of a read can regroup, so the
+   * history names the line itself and never a row.
    *
    * A merge resolves through the surviving line, because that is the row the
-   * change is about now. A deleted line whose name a covered row still carries
-   * resolves to that row.
+   * change is about now. A deleted line whose product, or whose name when it
+   * holds none, a covered line still carries resolves to that line.
    */
   rowKey: string | null;
   contentBefore: string | null;

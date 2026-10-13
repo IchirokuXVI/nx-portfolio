@@ -187,6 +187,112 @@ export function progressOf(
   };
 }
 
+/** What the product of a line is decided from (plan 0201, section 1). */
+export interface BasketRuleLine {
+  /** The products of the line, in the order the line holds them. */
+  itemIds: readonly string[];
+  /** The favourite of the line, or null. */
+  favoriteItemId: string | null;
+  /**
+   * The product of the latest standing buy of the line through this basket in
+   * its trip, or null. It does not have to be a product of the line.
+   */
+  tripItemId: string | null;
+}
+
+/**
+ * The one product a line counts as in a basket, or null (plan 0201, section
+ * 1). The first of these that applies:
+ *
+ * 1. **The product of its latest buy in this trip.** A change "for this trip
+ *    only" holds from the first buy until the trip ends, so this product can
+ *    be one the line does not hold.
+ * 2. **Its favourite**, when the favourite is one of its products. The
+ *    favourite wins also when the shop of the read does not sell it.
+ * 3. **`pick`**, the cheapest of its products, which only a caller that reads
+ *    prices can name. A pick that is not a product of the line is ignored.
+ * 4. **Its first product.**
+ * 5. **Nothing**, for a line with no products.
+ *
+ * A caller with no prices passes no pick, and the line falls to step 4.
+ */
+export function lineProductOf(
+  line: BasketRuleLine,
+  pick?: string | null
+): string | null {
+  if (line.tripItemId) {
+    return line.tripItemId;
+  }
+  if (line.favoriteItemId && line.itemIds.includes(line.favoriteItemId)) {
+    return line.favoriteItemId;
+  }
+  if (pick && line.itemIds.includes(pick)) {
+    return pick;
+  }
+  return line.itemIds[0] ?? null;
+}
+
+/**
+ * Whether a line reaches step 3 of {@link lineProductOf}, so that its product
+ * depends on a price: two or more products, no favourite among them, and no
+ * buy in this trip.
+ */
+export function needsPriceChoice(line: BasketRuleLine): boolean {
+  if (line.tripItemId || line.itemIds.length < 2) {
+    return false;
+  }
+  return !(line.favoriteItemId && line.itemIds.includes(line.favoriteItemId));
+}
+
+/** One product with its price at the scopes that count, for {@link cheapestOf}. */
+export interface BasketRulePrice {
+  itemId: string;
+  /** The price of one, or null when the scopes that count have none. */
+  price: number | null;
+  /** The price for each kilo or litre, or null. */
+  unitPrice: number | null;
+}
+
+/**
+ * The cheapest of these products, or null when none has a price (plan 0201,
+ * section 1, step 3).
+ *
+ * **One comparison of prices.** It is the comparison that gives a card of a
+ * line the word CHEAPEST (velista plan 0137, section 2): the price for each
+ * kilo or litre first, then the price. A product with no unit price comes
+ * after every product that has one. A tie keeps the order of the input, which
+ * is the order the line holds its products in.
+ *
+ * A product with no price is not a candidate. The caller decides which prices
+ * count: with a shop, only the prices of that shop.
+ */
+export function cheapestOf(prices: readonly BasketRulePrice[]): string | null {
+  let best: BasketRulePrice | null = null;
+  for (const candidate of prices) {
+    if (candidate.price === null) {
+      continue;
+    }
+    if (best === null || isCheaper(candidate, best)) {
+      best = candidate;
+    }
+  }
+  return best?.itemId ?? null;
+}
+
+/** Strictly cheaper, so an equal price keeps the product that came first. */
+function isCheaper(a: BasketRulePrice, b: BasketRulePrice): boolean {
+  if (a.unitPrice !== b.unitPrice) {
+    if (a.unitPrice === null) {
+      return false;
+    }
+    if (b.unitPrice === null) {
+      return true;
+    }
+    return a.unitPrice < b.unitPrice;
+  }
+  return (a.price as number) < (b.price as number);
+}
+
 function sumsOf(entries: readonly BasketRuleEntry[]): {
   left: number;
   bought: number;

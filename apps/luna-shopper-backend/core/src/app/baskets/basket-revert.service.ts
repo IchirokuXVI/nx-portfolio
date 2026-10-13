@@ -13,9 +13,9 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, IsNull, MoreThanOrEqual } from 'typeorm';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../baskets/line-claim.service';
 import {
   actorOf,
   LineChangeRecorder,
@@ -77,7 +77,8 @@ export class BasketRevertService {
       );
     }
 
-    const row = await opened.row(req.rowKey);
+    // The lines the request names, and no others (plan 0201, section 4).
+    const row = await opened.row(req.rowKey, req.lineIds);
     if (req.target === 'UNITS') {
       if (!Number.isInteger(req.units) || req.units <= 0) {
         throw new ValidationException('units must be a positive whole number', {
@@ -299,7 +300,7 @@ export class BasketRevertService {
 
     return this.answer(
       opened,
-      req.rowKey,
+      row.entries.map((entry) => entry.lineId),
       announcements,
       skippedCount,
       recorded
@@ -316,12 +317,12 @@ export class BasketRevertService {
    */
   private async answer(
     opened: OpenBasketWrite,
-    rowKey: string,
+    /** Every line the request named, which is what the answer states. */
+    lineIds: readonly string[],
     announcements: readonly ZoneAnnouncement[],
     skippedCount: number,
     recorded: ReadonlySet<string>
   ): Promise<BasketRowResult> {
-    const lineIds = announcements.map((entry) => entry.line.id);
     opened.announceLinesMoved(
       announcements.map((entry) => ({
         listId: entry.listId,
@@ -336,7 +337,7 @@ export class BasketRevertService {
         lineId: entry.line.id,
       }))
     );
-    const result = await opened.result(lineIds, rowKey);
+    const result = await opened.result(lineIds);
     return skippedCount > 0 ? { ...result, skippedCount } : result;
   }
 }

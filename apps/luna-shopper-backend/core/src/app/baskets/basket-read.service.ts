@@ -24,6 +24,7 @@ import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
 import { BasketCoverageService } from './basket-coverage.service';
 import { basketScopeOf, standingSkipsOf, toEntries } from './basket-line-facts';
+import { BasketLineKeys, picksOf } from './basket-line-keys';
 import { BasketOrderService, type OrderableRow } from './basket-order.service';
 import {
   BASKET_ELSEWHERE_SQL,
@@ -42,19 +43,27 @@ import {
   groupEntries,
   progressOf,
   toRowView,
+  walkItemIdsOf,
   type BasketEntry,
   type BasketGroup,
   type BasketSkipFact,
 } from './basket-rows';
 import { usualLineIdsOf, withUsual } from './basket-usual';
 import { USUAL_WINDOWS_SQL, type UsualWindowRow } from './basket-usual.sql';
-import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
+import {
+  CHANGE_LINES_SQL,
+  type ChangeLineRow,
+} from './changes/basket-changes.sql';
 import {
   BasketMarksReader,
+  departedLinesOf,
+  foldBasketMarks,
+  NO_BASKET_CHANGES,
   NO_BASKET_MARKS,
   type BasketMarks,
   type RemovedGroup,
 } from './changes/basket-marks.reader';
+import { NO_PICKS, type BasketPicks } from './line-dedup';
 import { removedRows } from './changes/basket-removed-rows';
 
 // Where every caller of the read already imports it from. It moved beside the
@@ -81,7 +90,8 @@ export { toEntries };
  * Seven queries for the rows, none of them per line: the session, the covered
  * lines, their product sets, the settlements in scope, what other baskets bought
  * lately (plan 0188), the standing skips (plan 0137) and the owner's walk
- * history (plan 0141). The settlements read rides `ix_settlements_basket_live`
+ * history (plan 0141). Plan 0201 added none: the favourite rides the covered
+ * lines, and the product of a buy rides the settlements. The settlements read rides `ix_settlements_basket_live`
  * from plan 0134, the purchases elsewhere ride `ix_settlements_line`, the skips
  * read rides `ix_basket_line_skips_standing` and the history rides both. A read
  * at a shop
@@ -118,7 +128,88 @@ export class BasketReadService {
   /** The basket as one participant reads it. */
   async read(req: GetBasketRequest): Promise<BasketView> {
     const { basket, participant } = await this.resolve(req);
-    return this.view(basket, participant, req.supermarketId);
+    return this.view(
+      basket,
+      participant,
+      req.supermarketId,
+      picksOf(req.picks)
+    );
+  }
+
+  /**
+   * The covered lines as entries, each with its key, and no row (plan 0201).
+   *
+   * For a caller that has to know which row a line is in and draws none: the
+   * marks alone, the changes view, the lines that need a price, the lists that
+   * can take a product. The session, the lines, their products and this
+   * basket's purchases, which is four queries, and three for a `LIVE` basket
+   * with no session.
+   */
+  async keyedLinesOf(
+    basket: Basket,
+    coveredListIds: readonly string[],
+    picks: BasketPicks = NO_PICKS
+  ): Promise<{
+    lines: CoveredLineRow[];
+    entries: BasketEntry[];
+    keys: BasketLineKeys;
+  }> {
+    const keys = new BasketLineKeys(picks);
+    if (coveredListIds.length === 0) {
+      return { lines: [], entries: [], keys };
+    }
+    const scope = await this.scopeOf(basket);
+    const lines = await this.baskets.query<CoveredLineRow[]>(
+      COVERED_LINES_SQL,
+      [
+        [...coveredListIds],
+        basket.id,
+        scope.startedAt,
+        scope.enabled,
+        elsewhereGapOf(basket),
+      ]
+    );
+    if (lines.length === 0) {
+      return { lines, entries: [], keys };
+    }
+    const lineIds = lines.map((line) => line.id);
+    const [items, settlements] = await Promise.all([
+      this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
+        lineIds,
+      ]),
+      scope.enabled
+        ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
+            basket.id,
+            lineIds,
+            scope.startedAt,
+            this.skipWindowMs,
+          ])
+        : Promise.resolve([]),
+    ]);
+    const entries = toEntries(lines, items, settlements);
+    keys.add(entries);
+    return { lines, entries, keys };
+  }
+
+  /**
+   * Key lines that left the coverage, so a change about one can be placed on
+   * the row its product is still on (plan 0138, section 7; plan 0201).
+   *
+   * One query for their product sets. Their purchases are not read: a line
+   * that left counts as its favourite or its first product.
+   */
+  async keyDeparted(
+    keys: BasketLineKeys,
+    departed: readonly ChangeLineRow[]
+  ): Promise<void> {
+    if (departed.length === 0) {
+      return;
+    }
+    const items = await this.baskets.query<CoveredLineItemRow[]>(
+      COVERED_LINE_ITEMS_SQL,
+      [departed.map((line) => line.id)]
+    );
+    keys.add(toEntries(departed, items, []));
   }
 
   /**
@@ -177,7 +268,13 @@ export class BasketReadService {
      * The read's chain (plan 0165). With it every row carries `usual`; without
      * it, which is every write's own answer, every row carries null.
      */
-    supermarketId?: string
+    supermarketId?: string,
+    /**
+     * What the gateway chose by price (plan 0201, section 1). Only the full
+     * read carries any. A write's own answer carries none, so its rows and its
+     * progress are the ones core builds alone.
+     */
+    picks: BasketPicks = NO_PICKS
   ): Promise<BasketView> {
     const covered = await this.coverage.listsOf(basket);
     const coveredListIds = covered.map((row) => row.listId);
@@ -196,7 +293,7 @@ export class BasketReadService {
         // The marks are read for **this** viewer, which is why they are asked for
         // here and not by the callers that have no reader to measure (plan 0138,
         // section 7).
-        this.rowsOf(basket, coveredListIds, redaction, participant.id),
+        this.rowsOf(basket, coveredListIds, redaction, participant.id, picks),
         this.sharing.listParticipants({
           basketId: basket.id,
           asParticipantId: participant.id,
@@ -243,6 +340,11 @@ export class BasketReadService {
    * The counts read for an **open** basket, and the admin detail's rows. A page
    * holds at most a few open baskets, because the sweep finishes them, so one
    * read each is acceptable.
+   *
+   * **It counts products with no picks** (plan 0201, decided by the owner on
+   * 2026-10-13). A card, the home summary and the back office pay for no
+   * catalog read, so a line with several products and no favourite counts as
+   * its first product here. The full read can group that one line differently.
    */
   async progressOf(basket: Basket): Promise<BasketProgress> {
     return progressOf(await this.openRows(basket));
@@ -275,7 +377,9 @@ export class BasketReadService {
      * is not a reader: the history counts, the admin detail and the finish read
      * the rows to count or freeze them, and a mark belongs to somebody looking.
      */
-    participantId?: string
+    participantId?: string,
+    /** What the gateway chose by price. Empty for every caller but the read. */
+    picks: BasketPicks = NO_PICKS
   ): Promise<{
     rows: BasketRowView[];
     groups: BasketGroup[];
@@ -307,25 +411,51 @@ export class BasketReadService {
     // A removed row lives for the window an outside buy does, and only while
     // the basket is open (plan 0203, section 6): one clock for both kinds of
     // crossed out row.
-    const marks = participantId
-      ? await this.marks.marksFor(
+    //
+    // Read here and folded further down (plan 0201): a mark belongs to the key
+    // of a row, and the key is the product a line counts as, which is known
+    // only after the products and the purchases are read.
+    const changes = participantId
+      ? await this.marks.changesFor(
           participantId,
           coveredListIds,
           lines,
           elsewhereGapMs
         )
-      : NO_BASKET_MARKS;
-    const removedLineIds = marks.removed.flatMap((group) => group.lineIds);
+      : NO_BASKET_CHANGES;
+    const departed = departedLinesOf(changes, lines);
+    const coveredIds = new Set(lines.map((line) => line.id));
+    // Every line a removal names that is not covered now. A superset of the
+    // lines of the removed rows, which is harmless: the purchases of a line
+    // that makes no row are read and then not drawn.
+    const removedLineIds = [
+      ...new Set(
+        changes.removing
+          .map((change) => change.lineId)
+          .filter((lineId) => !coveredIds.has(lineId))
+      ),
+    ];
 
-    if (lines.length === 0 && marks.removed.length === 0) {
-      return { rows: [], groups: [], truncated: false, marks };
+    if (lines.length === 0 && removedLineIds.length === 0) {
+      return {
+        rows: [],
+        groups: [],
+        truncated: false,
+        marks: {
+          ...NO_BASKET_MARKS,
+          unseenChangeCount: changes.unseenChangeCount,
+          newestUnseenChangeId: changes.newestUnseenChangeId,
+        },
+      };
     }
 
     const lineIds = lines.map((line) => line.id);
     const [items, settlements, elsewhere, skips, permissions] =
       await Promise.all([
+        // The product sets of the covered lines and of the lines that left, in
+        // one statement: both are keyed below.
         this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
-          lineIds,
+          [...lineIds, ...departed.map((line) => line.id)],
         ]),
         scope.enabled
           ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
@@ -352,7 +482,13 @@ export class BasketReadService {
       ]);
 
     const entries = toEntries(lines, items, settlements, elsewhere);
-    const groups = groupEntries(entries);
+    // The product and the key of every line, worked out once (plan 0201). A
+    // line that left is keyed with no purchases.
+    const keys = new BasketLineKeys(picks)
+      .add(entries)
+      .add(toEntries(departed, items, []));
+    const marks = foldBasketMarks(changes, lines, keys.keyOf);
+    const groups = groupEntries(entries, picks);
 
     const context = {
       servedListIds: redaction.servedListIds,
@@ -362,8 +498,8 @@ export class BasketReadService {
           entry.approvalStatus
         ),
       facts: { skips, kind: basket.kind },
-      // What changed about each row since this viewer last looked, by the row's
-      // merge key (plan 0138, section 7). Empty for a caller with no viewer.
+      // What changed about each row since this viewer last looked, by the key
+      // of the row (plan 0138, section 7). Empty for a caller with no viewer.
       marks: marks.byKey,
     };
 
@@ -549,7 +685,9 @@ function orderableOf(
   return {
     key: row.rowKey,
     content: row.content,
-    optionIds: row.optionIds,
+    // Every product the row can be found under in the history (plan 0201).
+    // A removed row has none and falls back to its text.
+    optionIds: group ? walkItemIdsOf(group) : [],
     row,
     group,
   };
