@@ -1,3 +1,5 @@
+> **PR:** [#698](https://github.com/IchirokuXVI/nx-portfolio/pull/698)
+
 # 0197: a walk log keeps what the guard saw
 
 > A small addition to the walk log of `0168`. Needed by velista `0136`, which writes the

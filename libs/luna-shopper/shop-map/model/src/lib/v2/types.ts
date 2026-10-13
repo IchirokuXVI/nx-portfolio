@@ -121,7 +121,27 @@ export type WalkEvent =
   | { type: 'mark-removed'; id: string }
   | { type: 'area-put'; area: MapArea }
   | { type: 'area-removed'; id: string }
-  | { type: 'section-left'; logMs: number };
+  | { type: 'section-left'; logMs: number }
+  /**
+   * What the tracking guard decided and the number behind it (backend plan
+   * 0197). It is for the person who debugs a walk: the fold, the rewind and
+   * the timeline ignore it.
+   */
+  | {
+      type: 'guard';
+      logMs: number;
+      what:
+        | 'lost'
+        | 'jump'
+        | 'turned'
+        | 'heading'
+        | 'compass-disturbed'
+        | 'compass-settled';
+      /** `turned`, `heading`, `compass-disturbed`. */
+      degrees?: number;
+      /** `jump`. */
+      metres?: number;
+    };
 
 /** One marker of the rewind slider, per entry. */
 export interface WalkTimelineMarker {

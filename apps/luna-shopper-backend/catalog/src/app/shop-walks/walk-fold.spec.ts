@@ -107,6 +107,39 @@ describe('the walk fold (plan 0168, section 2)', () => {
     );
   });
 
+  it('folds a log with guard events to the same map as the log without them (plan 0197)', async () => {
+    const plain = new MemoryWalk();
+    const guarded = new MemoryWalk();
+    for (const e of elJamon) {
+      await plain.append(e);
+      await guarded.append({
+        ...e,
+        events: [
+          {
+            type: 'guard',
+            logMs: e.logTo,
+            what: 'compass-disturbed',
+            degrees: 40,
+          },
+          ...e.events.flatMap((event) => [
+            event,
+            {
+              type: 'guard' as const,
+              logMs: e.logTo,
+              what: 'jump' as const,
+              metres: 3,
+            },
+          ]),
+          { type: 'guard', logMs: e.logTo, what: 'lost' },
+        ],
+      });
+      // After every entry, a fold onto the document and a replayed one alike.
+      expect(guarded.document).toEqual(plain.document);
+    }
+    expect(guarded.document).toEqual(expectedMap);
+    expect(guarded.snapshots).toEqual(plain.snapshots);
+  });
+
   it('stores a snapshot every twentieth entry and on every rewind', () => {
     expect(needsSnapshot(19, 'continued')).toBe(false);
     expect(needsSnapshot(20, 'continued')).toBe(true);

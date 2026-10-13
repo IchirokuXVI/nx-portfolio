@@ -479,6 +479,67 @@ describe('continued saves', () => {
   });
 });
 
+describe('guard events (backend plan 0197)', () => {
+  /**
+   * The log with a guard event before, between and after the events of every
+   * entry. Each one carries the entry's `logTo`, the latest time an event of
+   * the entry may have, so a fold that took a time from it would move every
+   * event with no time of its own behind it.
+   */
+  const withGuards = (log: readonly WalkEntry[]): WalkEntry[] =>
+    log.map((e) => {
+      const guard = (what: 'lost' | 'jump' | 'turned'): WalkEvent => ({
+        type: 'guard',
+        logMs: e.logTo,
+        what,
+        ...(what === 'jump' ? { metres: 4.2 } : {}),
+        ...(what === 'turned' ? { degrees: 158 } : {}),
+      });
+      return {
+        ...e,
+        events: [
+          guard('lost'),
+          ...e.events.flatMap((event) => [event, guard('jump')]),
+          guard('turned'),
+        ],
+      };
+    });
+
+  const guarded = withGuards(elJamonLog);
+
+  it('fold to the same document as the walk without them', () => {
+    expect(foldWalk(guarded)).toEqual(elJamonDocument);
+    for (const k of [1, 2, 6, 8]) {
+      const head = foldWalk(guarded.slice(0, k));
+      expect(head).toEqual(foldWalk(elJamonLog.slice(0, k)));
+      expect(foldWalk(guarded.slice(k), head)).toEqual(elJamonDocument);
+    }
+  });
+
+  it('answer the same state at every point of the log', () => {
+    const end = elJamonLog[elJamonLog.length - 1].logTo;
+    for (let t = 0; t <= end; t += 5000) {
+      expect(stateAt(guarded, t)).toEqual(stateAt(elJamonLog, t));
+    }
+    expect(stateAt(guarded, end)).toEqual(stateAt(elJamonLog, end));
+  });
+
+  it('give no log time to the event after them', () => {
+    const log = withGuards([
+      entry(1, 'started', 0, 3000, [
+        path([0, 0, 0], [1000, 1, 0]),
+        { type: 'area-put', area: area('a1') },
+      ]),
+    ]);
+    expect(stateAt(log, 999).areas).toEqual([]);
+    expect(stateAt(log, 1000).areas.map((a) => a.id)).toEqual(['a1']);
+  });
+
+  it('are no marker of the timeline', () => {
+    expect(walkTimeline(guarded)).toEqual(walkTimeline(elJamonLog));
+  });
+});
+
 describe('walkTimeline', () => {
   it('answers one marker per entry in seq order', () => {
     const markers = walkTimeline(elJamonLog);

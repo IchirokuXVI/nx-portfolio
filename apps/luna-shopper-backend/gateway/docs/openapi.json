@@ -37528,8 +37528,40 @@
           },
           {
             "$ref": "#/components/schemas/catalog.ShopWalkSectionLeftEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkGuardEvent"
           }
         ]
+      },
+      "catalog.ShopWalkGuardEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "guard"
+            ]
+          },
+          "logMs": {
+            "type": "number"
+          },
+          "what": {
+            "$ref": "#/components/schemas/enums.ShopWalkGuardKind"
+          },
+          "degrees": {
+            "type": "number"
+          },
+          "metres": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "type",
+          "logMs",
+          "what"
+        ],
+        "additionalProperties": false
       },
       "catalog.ShopWalkListView": {
         "type": "object",
@@ -38942,6 +38974,17 @@
           "rewound",
           "confirmed",
           "discarded"
+        ]
+      },
+      "enums.ShopWalkGuardKind": {
+        "type": "string",
+        "enum": [
+          "lost",
+          "jump",
+          "turned",
+          "heading",
+          "compass-disturbed",
+          "compass-settled"
         ]
       },
       "enums.ShopWalkStopReason": {
