@@ -177,6 +177,56 @@ later section disagree, this section is right.
     in a row for a basket where no line needs a price.
 23. **The check of an unknown `itemId` runs beside the price read**, under the same budget of
     750 ms, whenever a settle body names a product.
+24. **The demand route refuses a rejected line.** It reaches a line at zero, and it asks
+    everything else that the read asks of a covered line. A first version asked less, and a
+    spec on a real Postgres caught it.
+25. **The request schema of a skip is registered.** It was declared and left out of the list,
+    so nothing could check a skip. It names its lines now.
+
+**Velista between this plan and velista `0139`.** Read from the code of velista, not run.
+
+- A basket still opens. Every row is drawn as a row with no product: the name of its anchor,
+  no product caption, no price and no pick sheet. "Group by category" puts every row under
+  "No category".
+- Settle, revert, skip, the skip taken back and rename answer 422, because the app sends no
+  `lineIds`. The settle sheet then says "Somebody already finished this line", which is the
+  wrong sentence. The status mark of a row fails with no message.
+- A change of demand and an added line are accepted, and the app cannot read the answer,
+  because it has no `row`. The write stands and the app says "That did not save. Try again".
+  A second press of Add adds a second time.
+- The changes sheet looks a change up by the key of a row. A change of a line that is not the
+  anchor of its row loses its name, and a change of quantity or of approval on such a line
+  is dropped.
+- `apps/velista-luna-e2e` gates the staging deploy and does not run on a pull request. Four of
+  its five files fail after this plan: `member.spec.ts` at step 3 (before the failure of plan
+  `0203` in step 4), `guest.spec.ts` at step 3, `shop.spec.ts` at step 3 and
+  `aisles.spec.ts` at the headings. `catalog.spec.ts` passes.
+- **One thing velista `0139` must settle in that suite.** The demo Milk line holds Milk and
+  Bread with no favourite, and Bread is cheaper in the seed. With the picks that line counts
+  as Bread and joins the row of the Bread line, so `shop.spec.ts` step 1 reads three rows
+  where it expects four. The fixture needs a favourite, or the step needs the new count.
+
+The measurement that "Progress evidence" asks for. `GET /v1/baskets/live` on an ephemeral
+slot, as the owner of 103 covered lines: 100 lines with two products each, and the three of
+the demo world. Development builds, 60 reads each, the same data before and after.
+
+| Read | Before | After, every line needs a price | After, no line needs a price |
+| --- | --- | --- | --- |
+| No shop, median | 329 ms | 440 ms | 380 ms |
+| No shop, 95th percentile | 350 ms | 471 ms | 400 ms |
+| At a shop, median | 380 ms | 488 ms | 379 ms |
+| At a shop, 95th percentile | 410 ms | 521 ms | 400 ms |
+| Size of the answer, no shop | 258 kB | 176 kB | 179 kB |
+
+- "No line needs a price" is the same 100 lines with a favourite on each.
+- The read of the lines to price is one more round trip to core, about 50 ms here. At a shop
+  it runs beside the read of the shop, so it adds nothing.
+- Pricing 100 lines adds about 60 ms more. The answer is smaller, because it holds one
+  product for each row and not every product of every line.
+- **The catalog of that slot held 202 products, not a real one.** The demo seed has two, and
+  200 were added with a price each. `item.getMany` reads by id, so the size of the catalog
+  matters less than the number of ids, which is real here. Plan `0205` is the plan that makes
+  this read cheaper, and it should measure again on its own data.
 
 ## Brief for the agent
 
