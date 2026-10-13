@@ -629,6 +629,34 @@ export class ShopMapTooLargeException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** Support sessions are switched off in this deployment (plan 0194). */
+export class ImpersonationDisabledException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_DISABLED;
+}
+
+/**
+ * The handoff code of a support session was not accepted (plan 0194). Thrown
+ * for every reason alike. See `ERROR_CODES.IMPERSONATION_CODE_INVALID`.
+ */
+export class ImpersonationCodeInvalidException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_CODE_INVALID;
+}
+
+/** The token belongs to a support session that is over (plan 0194). */
+export class ImpersonationEndedException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_ENDED;
+}
+
+/** A support session called a route that only the person may use (plan 0194). */
+export class ImpersonationNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_NOT_ALLOWED;
+}
+
+/** The token that asked to end a support session belongs to none (plan 0194). */
+export class NotImpersonatingException extends DomainException {
+  readonly code = ERROR_CODES.NOT_IMPERSONATING;
+}
+
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
 export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
 

@@ -40,6 +40,8 @@ const WRITE_BOOKKEEPING: ReadonlySet<string> = new Set([
   'updatedAt',
   'tokenHash',
   'passwordHash',
+  // The stored half of the handoff code of a support session (plan 0194).
+  'codeHash',
 ]);
 
 /**

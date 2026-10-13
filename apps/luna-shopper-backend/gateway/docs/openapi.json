@@ -249,6 +249,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
             "content": {
@@ -518,6 +528,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
             "content": {
@@ -576,6 +596,16 @@
           },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -698,6 +728,133 @@
             }
           }
         },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/impersonation/exchange": {
+      "post": {
+        "operationId": "ImpersonationController_exchange_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeImpersonationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.impersonation.exchange` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.AuthTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`impersonation_code_invalid` — That support link is no longer valid. Start the session again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/impersonation/end": {
+      "post": {
+        "operationId": "ImpersonationController_end_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `auth.impersonation.end` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.auth.impersonation.end.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`impersonation_ended` — This support session has ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`not_impersonating` — This is not a support session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
         "tags": [
           "auth"
         ]
@@ -1624,6 +1781,197 @@
           },
           "500": {
             "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/impersonation": {
+      "get": {
+        "operationId": "AdminImpersonationController_status_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `auth.impersonation.status` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/impersonation.ImpersonationStatusView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/impersonation": {
+      "post": {
+        "operationId": "AdminImpersonationController_start_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartImpersonationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session, and the URL that hands it to the app. The code in the fragment of `url` is good for sixty seconds and for one use.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/impersonation.StartImpersonationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.\n\n`impersonation_disabled` — Support sessions are switched off on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5525,7 +5873,7 @@
             }
           },
           "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
+            "description": "`forbidden` — You do not have permission to do that.\n\n`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22461,6 +22809,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -27948,6 +28306,18 @@
           "password"
         ]
       },
+      "ExchangeImpersonationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
       "AdminLoginDto": {
         "type": "object",
         "properties": {
@@ -28016,6 +28386,32 @@
         },
         "required": [
           "roles"
+        ]
+      },
+      "StartImpersonationDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "BUG_REPORT",
+              "SUPPORT_REQUEST",
+              "TESTING",
+              "OTHER"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Required for the reason `OTHER`, and refused for every other reason."
+          },
+          "locale": {
+            "type": "string",
+            "description": "The locale of the page the URL opens; defaults to the request locale."
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "UpdateAdminZoneDto": {
@@ -41731,6 +42127,46 @@
         ],
         "additionalProperties": false
       },
+      "impersonation.ImpersonationStatusView": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
+      "impersonation.StartImpersonationView": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "codeExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId",
+          "url",
+          "codeExpiresAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
       "list.AddLineResult": {
         "type": "object",
         "properties": {
@@ -42830,6 +43266,18 @@
         ],
         "additionalProperties": false
       },
+      "msg.auth.impersonation.end.response": {
+        "type": "object",
+        "properties": {
+          "ended": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ended"
+        ],
+        "additionalProperties": false
+      },
       "msg.basket.participant.revoke.response": {
         "type": "object",
         "properties": {
@@ -43163,6 +43611,11 @@
               "walk_changed",
               "shop_map_invalid",
               "shop_map_too_large",
+              "impersonation_disabled",
+              "impersonation_code_invalid",
+              "impersonation_ended",
+              "impersonation_not_allowed",
+              "not_impersonating",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

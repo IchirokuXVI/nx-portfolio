@@ -18,6 +18,7 @@ import {
   AdminUsersController,
 } from './admin-directory.controller';
 import { AdminEnvironmentController } from './admin-environment.controller';
+import { AdminImpersonationController } from './admin-impersonation.controller';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 import { AdminUserNamesService } from './admin-user-names.service';
 
@@ -50,6 +51,8 @@ import { AdminUserNamesService } from './admin-user-names.service';
     AdminEnvironmentController,
     AdminDashboardController,
     AdminUsersController,
+    // The operator's half of a support session (plan 0194).
+    AdminImpersonationController,
     AdminAdminsController,
     AdminZonesController,
     AdminMembershipsController,

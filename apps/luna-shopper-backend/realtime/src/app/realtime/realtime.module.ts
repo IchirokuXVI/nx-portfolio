@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TokenVerifierService } from '../auth/token-verifier.service';
 import type { RealtimeConfig } from '../config/app-config';
 import { JetStreamConsumer } from '../consumer/jetstream.consumer';
+import { ImpersonationSessionsService } from '../impersonation/impersonation-sessions.service';
 import {
   CORE_ACCESS_CLIENT,
   CoreAccessClient,
@@ -54,6 +55,9 @@ import { SseController } from '../sse/sse.controller';
     PresenceService,
     TokenVerifierService,
     CoreAccessClient,
+    // Asks auth whether a support session is live, and hears it end (plan
+    // 0194). Before the gateway, which subscribes to it as it starts.
+    ImpersonationSessionsService,
     RealtimeGateway,
     RoomSyncService,
   ],

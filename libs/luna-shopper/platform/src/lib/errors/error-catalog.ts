@@ -261,6 +261,28 @@ export const ERROR_CATALOG: Record<
     en: 'That save is too large to store.',
     es: 'Ese guardado es demasiado grande para almacenarlo.',
   },
+  // Support sessions (plan 0194). An operator reads the first and the last
+  // two. The person never sees any of them.
+  [ERROR_CODES.IMPERSONATION_DISABLED]: {
+    en: 'Support sessions are switched off on this server.',
+    es: 'Las sesiones de soporte están desactivadas en este servidor.',
+  },
+  [ERROR_CODES.IMPERSONATION_CODE_INVALID]: {
+    en: 'That support link is no longer valid. Start the session again.',
+    es: 'Ese enlace de soporte ya no es válido. Inicia la sesión de nuevo.',
+  },
+  [ERROR_CODES.IMPERSONATION_ENDED]: {
+    en: 'This support session has ended.',
+    es: 'Esta sesión de soporte ha terminado.',
+  },
+  [ERROR_CODES.IMPERSONATION_NOT_ALLOWED]: {
+    en: 'A support session cannot do that. Only the owner of the account can.',
+    es: 'Una sesión de soporte no puede hacer eso. Solo puede la persona dueña de la cuenta.',
+  },
+  [ERROR_CODES.NOT_IMPERSONATING]: {
+    en: 'This is not a support session.',
+    es: 'Esta no es una sesión de soporte.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

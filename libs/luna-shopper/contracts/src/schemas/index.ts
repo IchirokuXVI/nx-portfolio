@@ -20,6 +20,7 @@ export { BASKET_SHARING_SCHEMA_IDS } from './messages/basket-sharing.schemas';
 export { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
 export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
+export { IMPERSONATION_SCHEMA_IDS } from './messages/impersonation.schemas';
 export { LIST_SCHEMA_IDS } from './messages/list.schemas';
 export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
 export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';

@@ -89,4 +89,39 @@ describe('verifying a socket token', () => {
       kind: 'user',
     });
   });
+
+  describe('a token of a support session (plan 0194)', () => {
+    it('reads the session and its deadline off the act claim, and stays the user', async () => {
+      const service = verifier({
+        sub: 'u-1',
+        kind: 'REGISTERED',
+        act: { sub: 'a-1', sid: 's-1', until: 1_800_000_000 },
+      });
+      await expect(service.verifyIdentity('t')).resolves.toEqual({
+        kind: 'user',
+        userId: 'u-1',
+        impersonation: { sessionId: 's-1', until: 1_800_000_000 },
+      });
+    });
+
+    it('reads no session off a token with no act claim', async () => {
+      const service = verifier({ sub: 'u-1', kind: 'REGISTERED' });
+      const identity = await service.verifyIdentity('t');
+      expect(identity).not.toHaveProperty('impersonation');
+    });
+
+    it.each([
+      ['no session id', { sub: 'a-1', until: 1_800_000_000 }],
+      ['no deadline', { sub: 'a-1', sid: 's-1' }],
+      ['a deadline that is not a number', { sid: 's-1', until: 'soon' }],
+      ['not an object', 'a-1'],
+    ])('refuses a malformed act claim: %s', async (_name, act) => {
+      // Read as absent, it would give a socket with no deadline to a token
+      // that has one.
+      const service = verifier({ sub: 'u-1', kind: 'REGISTERED', act });
+      await expect(service.verifyIdentity('t')).rejects.toBeInstanceOf(
+        UnauthorizedException
+      );
+    });
+  });
 });

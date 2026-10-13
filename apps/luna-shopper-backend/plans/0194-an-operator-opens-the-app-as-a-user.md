@@ -263,3 +263,51 @@ rely on a line of it.
   `impersonation.ended`.
 - **The switch.** Off: start is refused and exchange is refused.
 - **The separation.** `admin-token-separation.spec.ts` still passes with no edit.
+
+## 5. As built
+
+The build follows the text above. It differs in the points below. Velista `0133` and
+admin `0062` read this section as the contract where it differs from the target state.
+
+- **`POST /v1/auth/impersonation/end` answers 201 with `{ ended }`, not 204.** The
+  gateway has a rule that its document spec asserts: each `POST` answers 201 with a body
+  that a contract schema describes. No route answers 204. `ended` is `true` for the call
+  that ended the session. A client reads any 2xx as success.
+- **A second `end` with a token of the session answers 401 `impersonation_ended`.** The
+  first call ended the session, so the token is dead at the gateway before the route
+  runs. Auth itself answers `{ ended: false }` to a repeat, and changes nothing.
+- **The check of target state 7 is in `JwtStrategy`, not in a guard of its own.** Three
+  guards accept a user token: `JwtAuthGuard`, the optional one and `@RequirePermission`.
+  All three go through the strategy. A check there cannot be left off a route. It asks
+  auth through `ImpersonationGate`.
+- **A token whose `act` is present and malformed is refused**, at the gateway with 401
+  `impersonation_ended` and at realtime as an invalid token. Read as absent, it becomes
+  an ordinary token with no deadline.
+- **The statuses of the five codes.** `impersonation_disabled` 403,
+  `impersonation_not_allowed` 403, `impersonation_ended` 401,
+  `impersonation_code_invalid` 400, `not_impersonating` 409. The text above fixes the
+  first three. The last two are a choice of the builder.
+- **The start answers 501 `not_configured` with no `APP_BASE_URL`.** No session starts
+  that no URL can hand over. Both clusters set the variable.
+- **`locale` of the start body stays in the gateway.** It only selects the language
+  segment of `url`. A value that is not a supported locale falls back to the locale of
+  the request.
+- **The switch also stops a live session.** With `IMPERSONATION_ENABLED` false, the
+  check answers "not live" and a refresh of a session is refused. So to turn the switch
+  off ends each session at its next request.
+- **A session that ends because its operator is disabled has no audit record for that
+  end.** No operator made the change, and each row of `auth_audit` names an operator.
+  The start has its record. An end from the app or from a new start has one too.
+- **Realtime.** Auth publishes `impersonation.ended` as a plain NATS event. Each
+  realtime pod has its own subscription, and closes the sockets it holds. The event
+  does not go through the JetStream consumer. An SSE stream also asks auth as it opens,
+  and closes on the event as well as at `until`.
+- **Five subjects, not four.** `auth.impersonation.status`, `.start`, `.exchange`,
+  `.end`, and `.check`, which has no route.
+
+Two things for the plans that follow:
+
+- A client that sees 401 `impersonation_ended` must drop the pair. A refresh does not
+  revive it.
+- The five codes are not yet in `libs/velista/models/src/lib/problem.ts` or in the
+  `gatewayErrorKey` of the admin app. Each app adds them in its own plan.

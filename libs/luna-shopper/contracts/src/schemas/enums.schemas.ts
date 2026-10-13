@@ -5,6 +5,7 @@ import {
 } from '../lib/enums/assistant.enums';
 import {
   AuthProvider,
+  ImpersonationReason,
   UserKind,
   UsernamePropagation,
 } from '../lib/enums/auth.enums';
@@ -44,6 +45,8 @@ export const ENUM_IDS = {
   permission: schemaId('enums/Permission'),
   authProvider: schemaId('enums/AuthProvider'),
   usernamePropagation: schemaId('enums/UsernamePropagation'),
+  /** Why an operator opened the app as a user (plan 0194). */
+  impersonationReason: schemaId('enums/ImpersonationReason'),
   zoneStatus: schemaId('enums/ZoneStatus'),
   zoneRole: schemaId('enums/ZoneRole'),
   membershipStatus: schemaId('enums/MembershipStatus'),
@@ -73,6 +76,7 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.permission, PERMISSIONS),
   enumOf(ENUM_IDS.authProvider, Object.values(AuthProvider)),
   enumOf(ENUM_IDS.usernamePropagation, Object.values(UsernamePropagation)),
+  enumOf(ENUM_IDS.impersonationReason, Object.values(ImpersonationReason)),
   enumOf(ENUM_IDS.zoneStatus, Object.values(ZoneStatus)),
   enumOf(ENUM_IDS.zoneRole, Object.values(ZoneRole)),
   enumOf(ENUM_IDS.membershipStatus, Object.values(MembershipStatus)),

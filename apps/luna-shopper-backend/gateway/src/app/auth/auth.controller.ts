@@ -25,6 +25,7 @@ import {
 import { AuthUser } from './current-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import type { CurrentUser } from './jwt.strategy';
+import { RefuseImpersonation } from './refuse-impersonation.decorator';
 
 /**
  * The public auth surface (plan 0005). Each route proxies to the auth service
@@ -76,13 +77,16 @@ export class AuthController {
    * server gave it rather than a hardcoded sixty.
    */
   @Post('resend-verification')
+  // A support session cannot press this (plan 0194, section 2): it sends mail
+  // to the real address of the person, from a press the person did not make.
+  @RefuseImpersonation()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Throttle(THROTTLE_LIMITS.verifyResend)
   @ApiContractResponse(AUTH_PATTERNS.resendVerification, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, conflict: true })
+  @ApiProblemResponses({ auth: true, conflict: true, impersonation: 'refused' })
   resendVerification(
     @AuthUser() user: CurrentUser
   ): Promise<ResendVerificationResult> {
@@ -136,10 +140,18 @@ export class AuthController {
   }
 
   @Post('upgrade')
+  // A support session cannot turn a guest into an account (plan 0194): the
+  // address and the password would be the operator's.
+  @RefuseImpersonation()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiContractResponse(AUTH_PATTERNS.upgrade, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, auth: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    auth: true,
+    conflict: true,
+    impersonation: 'refused',
+  })
   upgrade(
     @AuthUser() user: CurrentUser,
     @Body() dto: UpgradeDto

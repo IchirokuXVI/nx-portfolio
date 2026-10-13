@@ -20,6 +20,23 @@ export enum AuthProvider {
 }
 
 /**
+ * Why an operator opened the app as a user (plan 0194).
+ *
+ * Stored on the session row and in the audit trail. `OTHER` needs a note, and
+ * the three named reasons refuse one, so the column never holds free text
+ * beside a reason that already says it.
+ */
+export enum ImpersonationReason {
+  BUG_REPORT = 'BUG_REPORT',
+  SUPPORT_REQUEST = 'SUPPORT_REQUEST',
+  TESTING = 'TESTING',
+  OTHER = 'OTHER',
+}
+
+/** The longest note an `OTHER` reason may carry (plan 0194). */
+export const IMPERSONATION_NOTE_MAX = 500;
+
+/**
  * How far a change to the global username travels (plan 0018, section 4.1).
  *
  * A user's per zone names are copies, not derivations, so a global rename has to

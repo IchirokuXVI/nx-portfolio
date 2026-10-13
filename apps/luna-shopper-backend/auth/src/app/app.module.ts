@@ -29,6 +29,8 @@ import {
 import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
 import { StatsService } from './identity/stats.service';
+import { ImpersonationController } from './impersonation/impersonation.controller';
+import { ImpersonationService } from './impersonation/impersonation.service';
 import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
@@ -107,7 +109,13 @@ import { UsernameController } from './username/username.controller';
       },
     }),
   ],
-  controllers: [IdentityController, AdminController, UsernameController],
+  controllers: [
+    IdentityController,
+    AdminController,
+    UsernameController,
+    // Support sessions (plan 0194).
+    ImpersonationController,
+  ],
   providers: [
     IdentityService,
     StatsService,
@@ -126,6 +134,9 @@ import { UsernameController } from './username/username.controller';
     AdminDirectoryService,
     // The dashboard's identity block (plan 0088), behind the same gate.
     AuthDashboardService,
+    // Support sessions (plan 0194): an operator opens the app as a user.
+    // `IdentityService.refresh` reaches it for the row of a session.
+    ImpersonationService,
     PasswordService,
     IdentityEventsPublisher,
     UsernameGenerator,

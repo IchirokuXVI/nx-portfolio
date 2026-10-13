@@ -71,6 +71,18 @@ export class ResetPasswordDto {
   password!: string;
 }
 
+/**
+ * Trade the handoff code of a support session for its token pair (plan 0194).
+ * The app reads the code from the fragment of the URL it was opened with.
+ */
+export class ExchangeImpersonationDto {
+  @ApiProperty({ maxLength: 200 })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  code!: string;
+}
+
 /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */
 export class RefreshDto {
   @ApiProperty()

@@ -102,6 +102,19 @@ export interface ProblemResponseOptions {
    * holds it.
    */
   locationRefTaken?: boolean;
+  /**
+   * The route has a part in a support session (plan 0194), and each part
+   * answers with a code of its own:
+   *
+   * - `refused`: the route carries `@RefuseImpersonation`, so a support
+   *   session gets a 403. Passed here and not documented by that decorator,
+   *   because Swagger keeps one response per status and the route may
+   *   document another 403 of its own.
+   * - `start`: support sessions can be switched off in the deployment.
+   * - `exchange`: the handoff code can be refused.
+   * - `end`: the token can belong to no session, or to one that is over.
+   */
+  impersonation?: 'refused' | 'start' | 'exchange' | 'end';
 }
 
 const problemName = hoistProblemDetails();
@@ -207,6 +220,21 @@ export function ApiProblemResponses(
   }
   if (options.locationRefTaken) {
     codes.push(ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN);
+  }
+  if (options.impersonation === 'refused') {
+    codes.push(ERROR_CODES.IMPERSONATION_NOT_ALLOWED);
+  }
+  if (options.impersonation === 'start') {
+    codes.push(ERROR_CODES.IMPERSONATION_DISABLED);
+  }
+  if (options.impersonation === 'exchange') {
+    codes.push(ERROR_CODES.IMPERSONATION_CODE_INVALID);
+  }
+  if (options.impersonation === 'end') {
+    codes.push(
+      ERROR_CODES.IMPERSONATION_ENDED,
+      ERROR_CODES.NOT_IMPERSONATING
+    );
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

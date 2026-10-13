@@ -17,6 +17,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import { ImpersonationGate } from '../auth/impersonation-gate';
 import { JwtStrategy } from '../auth/jwt.strategy';
 import { bodyParserProblems, jsonBodyParsers } from '../harvest/import-body';
 import { NatsClient } from '../messaging/nats-client';
@@ -64,6 +65,9 @@ async function boot(publicKey: string) {
     ],
     providers: [
       JwtStrategy,
+      // What the strategy asks auth through for a token of a support session
+      // (plan 0194). No token here is one, so it is never called.
+      ImpersonationGate,
       {
         provide: ConfigService,
         useValue: { getOrThrow: () => ({ authJwtPublicKey: publicKey }) },

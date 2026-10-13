@@ -68,6 +68,9 @@ lunaShopperBackend:
     # database they are about to write to. ADMIN_DEV_AUTOLOGIN is absent here for
     # the same reason it is absent from production.
     environmentName: staging
+    # Support sessions (plan 0194). On in staging, where the people are the
+    # owner's own test accounts. Production does not set this.
+    impersonationEnabled: true
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.
