@@ -181,13 +181,13 @@
       ],
       "lists": [
         {
-          "id": "list-a",
+          "listId": "list-a",
           "name": "Weekly",
           "zoneId": "zone-1",
           "zoneName": "Home"
         },
         {
-          "id": "list-b",
+          "listId": "list-b",
           "name": "Party",
           "zoneId": "zone-1",
           "zoneName": "Home"
@@ -201,7 +201,8 @@
           "username": "Calm Harbour",
           "guestNumber": null,
           "userId": "u-owner",
-          "shareLinkId": null
+          "shareLinkId": null,
+          "expiresAt": null
         },
         {
           "id": "p-member",
@@ -210,7 +211,8 @@
           "username": "Lucky Otter",
           "guestNumber": null,
           "userId": "u-member",
-          "shareLinkId": "link-1"
+          "shareLinkId": "link-1",
+          "expiresAt": "2026-09-01T20:00:00.000Z"
         },
         {
           "id": "p-guest",
@@ -219,7 +221,8 @@
           "username": null,
           "guestNumber": 1,
           "userId": null,
-          "shareLinkId": "link-1"
+          "shareLinkId": "link-1",
+          "expiresAt": "2026-09-01T20:00:00.000Z"
         }
       ],
       "me": {
@@ -229,7 +232,8 @@
         "username": "Calm Harbour",
         "guestNumber": null,
         "userId": "u-owner",
-        "shareLinkId": null
+        "shareLinkId": null,
+        "expiresAt": null
       },
       "progress": {
         "done": 0,
@@ -489,6 +493,7 @@
             }
           ],
           "usual": {
+            "state": "HERE",
             "bought": 2,
             "of": 3
           }
@@ -530,6 +535,7 @@
             }
           ],
           "usual": {
+            "state": "HERE",
             "bought": 2,
             "of": 3
           }
@@ -571,6 +577,7 @@
             }
           ],
           "usual": {
+            "state": "HERE",
             "bought": 2,
             "of": 3
           }
@@ -631,6 +638,7 @@
             }
           ],
           "usual": {
+            "state": "HERE",
             "bought": 2,
             "of": 3
           }
@@ -638,13 +646,13 @@
       ],
       "lists": [
         {
-          "id": "list-a",
+          "listId": "list-a",
           "name": "Weekly",
           "zoneId": "zone-1",
           "zoneName": "Home"
         },
         {
-          "id": "list-b",
+          "listId": "list-b",
           "name": "Party",
           "zoneId": "zone-1",
           "zoneName": "Home"
@@ -658,7 +666,8 @@
           "username": "Calm Harbour",
           "guestNumber": null,
           "userId": "u-owner",
-          "shareLinkId": null
+          "shareLinkId": null,
+          "expiresAt": null
         },
         {
           "id": "p-member",
@@ -667,7 +676,8 @@
           "username": "Lucky Otter",
           "guestNumber": null,
           "userId": "u-member",
-          "shareLinkId": "link-1"
+          "shareLinkId": "link-1",
+          "expiresAt": "2026-09-01T20:00:00.000Z"
         },
         {
           "id": "p-guest",
@@ -676,7 +686,8 @@
           "username": null,
           "guestNumber": 1,
           "userId": null,
-          "shareLinkId": "link-1"
+          "shareLinkId": "link-1",
+          "expiresAt": "2026-09-01T20:00:00.000Z"
         }
       ],
       "me": {
@@ -686,7 +697,8 @@
         "username": "Calm Harbour",
         "guestNumber": null,
         "userId": "u-owner",
-        "shareLinkId": null
+        "shareLinkId": null,
+        "expiresAt": null
       },
       "progress": {
         "done": 0,
@@ -968,7 +980,7 @@
       "answer.rows[3].entries[1].canWrite": false,
       "answer.lists": [
         {
-          "id": "list-a",
+          "listId": "list-a",
           "name": "Weekly",
           "zoneId": "zone-1",
           "zoneName": "Home"
@@ -978,7 +990,8 @@
       "answer.me.kind": "REGISTERED",
       "answer.me.username": "Lucky Otter",
       "answer.me.userId": "u-member",
-      "answer.me.shareLinkId": "link-1"
+      "answer.me.shareLinkId": "link-1",
+      "answer.me.expiresAt": "2026-09-01T20:00:00.000Z"
     }
   },
   ":id: member, at a shop": {
@@ -990,7 +1003,7 @@
       "answer.rows[3].entries[1].canWrite": false,
       "answer.lists": [
         {
-          "id": "list-a",
+          "listId": "list-a",
           "name": "Weekly",
           "zoneId": "zone-1",
           "zoneName": "Home"
@@ -1000,7 +1013,8 @@
       "answer.me.kind": "REGISTERED",
       "answer.me.username": "Lucky Otter",
       "answer.me.userId": "u-member",
-      "answer.me.shareLinkId": "link-1"
+      "answer.me.shareLinkId": "link-1",
+      "answer.me.expiresAt": "2026-09-01T20:00:00.000Z"
     }
   },
   ":id: guest, no shop": {
@@ -1023,7 +1037,8 @@
       "answer.me.username": null,
       "answer.me.guestNumber": 1,
       "answer.me.userId": null,
-      "answer.me.shareLinkId": "link-1"
+      "answer.me.shareLinkId": "link-1",
+      "answer.me.expiresAt": "2026-09-01T20:00:00.000Z"
     }
   },
   ":id: guest, at a shop": {
@@ -1046,7 +1061,8 @@
       "answer.me.username": null,
       "answer.me.guestNumber": 1,
       "answer.me.userId": null,
-      "answer.me.shareLinkId": "link-1"
+      "answer.me.shareLinkId": "link-1",
+      "answer.me.expiresAt": "2026-09-01T20:00:00.000Z"
     }
   },
   ":id: owner, a basket started at a shop": {
@@ -1125,6 +1141,7 @@
       "answer.me.guestNumber": 1,
       "answer.me.userId": null,
       "answer.me.shareLinkId": "link-1",
+      "answer.me.expiresAt": "2026-09-01T20:00:00.000Z",
       "answer.supermarketLocationId": "loc-own",
       "answer.shop": {
         "id": "loc-own",

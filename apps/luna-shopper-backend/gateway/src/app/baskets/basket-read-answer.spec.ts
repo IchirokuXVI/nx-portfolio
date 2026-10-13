@@ -134,6 +134,7 @@ const PEOPLE: Record<Reader, BasketParticipantView> = {
     guestNumber: null,
     userId: OWNER,
     shareLinkId: null,
+    expiresAt: null,
   },
   member: {
     id: 'p-member',
@@ -143,6 +144,7 @@ const PEOPLE: Record<Reader, BasketParticipantView> = {
     guestNumber: null,
     userId: 'u-member',
     shareLinkId: 'link-1',
+    expiresAt: '2026-09-01T20:00:00.000Z',
   },
   guest: {
     id: 'p-guest',
@@ -152,6 +154,7 @@ const PEOPLE: Record<Reader, BasketParticipantView> = {
     guestNumber: 1,
     userId: null,
     shareLinkId: 'link-1',
+    expiresAt: '2026-09-01T20:00:00.000Z',
   },
 };
 
@@ -217,9 +220,7 @@ function rowOf(
         demandEditable: true,
       };
     }),
-    usual: usual
-      ? { state: BasketRowUsualState.USUAL, bought: 2, of: 3 }
-      : null,
+    usual: usual ? { state: BasketRowUsualState.HERE, bought: 2, of: 3 } : null,
   };
 }
 
@@ -261,9 +262,9 @@ function viewOf(
     createdAt: '2026-09-01T08:00:00.000Z',
     rows,
     lists: [
-      { id: LIST_A, name: 'Weekly', zoneId: 'zone-1', zoneName: 'Home' },
-      { id: LIST_B, name: 'Party', zoneId: 'zone-1', zoneName: 'Home' },
-    ].filter((list) => WRITES[reader].includes(list.id)),
+      { listId: LIST_A, name: 'Weekly', zoneId: 'zone-1', zoneName: 'Home' },
+      { listId: LIST_B, name: 'Party', zoneId: 'zone-1', zoneName: 'Home' },
+    ].filter((list) => WRITES[reader].includes(list.listId)),
     participants: [PEOPLE.owner, PEOPLE.member, PEOPLE.guest],
     me: PEOPLE[reader],
     progress: { done: 0, unavailable: 0, total: rows.length, pending: 4 },
@@ -272,7 +273,7 @@ function viewOf(
     unseenChangeCount: 2,
     newestUnseenChangeId: 'change-9',
     supermarketLocationId: world.basketShop ?? null,
-  } as BasketView;
+  };
 }
 
 const offer = (itemId: string, priceScopeId: string, price: number) => ({
@@ -390,6 +391,10 @@ const resolution = (): CatalogScopeView => ({
       postalCode: '14008',
       origin: 'POSTAL_CODE',
       approximate: false,
+      supermarketLocationId: null,
+      priority: 0,
+      quoted: true,
+      priced: true,
     },
     {
       priceScopeId: SCOPE_CARREFOUR,
@@ -397,6 +402,10 @@ const resolution = (): CatalogScopeView => ({
       postalCode: '14008',
       origin: 'POSTAL_CODE',
       approximate: false,
+      supermarketLocationId: null,
+      priority: 0,
+      quoted: true,
+      priced: true,
     },
   ],
   coverage: [],
