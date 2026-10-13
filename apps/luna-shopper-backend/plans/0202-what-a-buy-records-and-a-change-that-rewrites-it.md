@@ -1,3 +1,5 @@
+> **PR:** [#703](https://github.com/IchirokuXVI/nx-portfolio/pull/703)
+
 # 0202: what a buy records, and a change that rewrites it
 
 > Asked for by the owner on 2026-10-11, with the redesign of the shopping list:
