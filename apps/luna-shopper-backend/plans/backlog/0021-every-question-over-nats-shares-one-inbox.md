@@ -1,4 +1,117 @@
-# 0209: every question over NATS shares one inbox
+# 0021 (backlog) Every question over NATS shares one inbox
+
+> **Status: discarded on 2026-10-13. Kept as information. Do not build it.**
+> The owner read this plan and decided against it the same day. It was written as plan
+> `0209` and never built. It stays here because its analysis of the wait is correct and
+> useful: sections 1 and 2 say what the wait is and what sends over NATS. Nothing below is
+> part of the build order. The "Brief for the agent" and sections 4 to 7 describe a change
+> that nobody will make as written.
+
+## Why this plan was discarded
+
+The owner's words on 2026-10-13: "Seems like it is changing the very base of nats
+communication in nest, which isn't a standard change." And: "Discard the plan, move it to a
+backlog, purely as information and stating why it was discarded."
+
+### 1. It only improves development
+
+The wait of about 45 ms exists in one arrangement only: a process on the host that talks to
+a NATS inside Docker Desktop, through the port proxy of Docker Desktop. That is how
+`luna-slot.sh` runs a slot on a development machine. Section 1 has the measurement.
+
+- **A cluster does not have that arrangement.** There every service and NATS are containers
+  on one network, with no port proxy between them. Plan `0205` measured one hop at about
+  2 ms on production and about 12 ms on staging, with the work inside it.
+- **The e2e gates do not have it either.** `compose.apps.yml` runs the services as
+  containers beside NATS.
+- So no person who uses the app gets a faster answer, and no gate runs faster. The only
+  gain is a slot that answers sooner: a basket read of about 450 ms becomes about 200 ms.
+
+### 2. It changes critical internal code of a library
+
+The design of section 4 extends `ClientNats` of `@nestjs/microservices` and overrides its
+`publish` method.
+
+- `publish` is not a documented point of extension. It is the inside of the client, and
+  Nest can rename it, change its arguments or change what calls it in any release.
+- The override also leans on `createSubscriptionHandler` and on `EmptyResponseException`,
+  which the package does not export from its index.
+- **Every question of every service passes through that method**, in production too. The
+  gateway asks every backend service through it. A mistake there is not a slow page. It is
+  an API that does not answer.
+- A Nest upgrade that moves this code does not fail at compile time. It fails when a
+  request is made.
+
+### 3. It writes again what Nest already does well, and stops following Nest
+
+With its own `publish` the project owns work that Nest does today:
+
+- the life of the subscription that waits for an answer,
+- the answer when no service listens (the status 503 that Nest turns into
+  `EmptyResponseException`, which section 5 has to map back by hand),
+- the packet id that matches an answer to its question,
+- the end of the observable after the answer.
+
+Each of these works today with no code of ours. After this plan each one is ours to keep
+right. **A later release of Nest that improves or repairs that path does not reach us**,
+because our override replaces it. We do not get the fix, and we do not learn that there
+was one.
+
+### 4. It does not remove the wait
+
+Section 1.4 says so itself. The wait stays in these cases, and the client that asks can
+remove none of them:
+
+- two questions that leave in two writes,
+- a service that writes two answers in a row,
+- an event flushed just before a question,
+- some message sizes (32 kB and 220 kB wait).
+
+So a time measured on a slot is still not the time of a cluster. Whoever measures a route
+on a slot still has to count the hops and correct for the wait, as plan `0205` describes.
+The plan buys a faster slot. It does not buy a slot that can be trusted for timing.
+
+### 5. Nothing tests that path before `main`
+
+No spec in the repository asks a question through the NATS client of Nest on a real
+broker. The gateway specs replace `NatsClient` with a fake, and the integration specs of
+the services replace `ClientProxy`. Only the e2e suites cross the real client, and the
+`e2e-luna` gate runs after a merge to `main`. A defect in the new class would thus show for
+the first time on the way to staging. Section 6 adds specs, but they would be new and
+unproven on the most used path of the backend.
+
+### 6. It forces a decision that the code does not have today
+
+`request()` of the `nats` library needs a timeout, and its default is one second. No
+question over NATS has a deadline today. The plan passes the largest timer value, about 24
+days, to keep that behaviour. That is a workaround for a library that expects a deadline.
+A real deadline is a product decision (what a person sees when a service is slow), and it
+does not belong in a change made for the speed of a slot.
+
+### What already covers the need
+
+- Plan `0205`, section "What the build decided", point 3, records the wait and how to
+  correct a slot measurement for it.
+- A read that asks fewer questions pays the wait fewer times. The rows read of plan `0205`
+  is one example.
+
+### If the question comes back
+
+Two forms are worth a new plan, and this one is not:
+
+- **The same class behind a switch that only a slot turns on.** A cluster and the e2e
+  gates keep the client of Nest untouched, so reasons 2, 3 and 5 no longer apply to
+  production. Reasons 1 and 4 remain.
+- **The services of a slot inside the compose network.** Section 3 calls this the only
+  option known to remove the whole wait. It costs watch mode in containers, the slot
+  scripts and memory.
+
+---
+
+**The plan as it was written follows, unchanged.** It names itself plan `0209`, the number
+it had in `plans/`. That number is free again.
+
+**0209: every question over NATS shares one inbox**
 
 > Asked for by the owner on 2026-10-13, after the measurement of plan `0205`: "The 45 ms
 > wait. Create its own plan for this."
