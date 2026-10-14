@@ -263,6 +263,30 @@ describe('SignInPage', () => {
     });
   });
 
+  describe('a forgotten password (velista 0148)', () => {
+    it('carries the typed address to the forgot password page', async () => {
+      // Somebody who just failed to sign in types nothing again.
+      const { fixture, router } = await render();
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      fill(fixture, '  marta@example.com ', '');
+      (query(fixture, '.quiet-row button') as HTMLButtonElement).click();
+
+      expect(navigate).toHaveBeenCalledWith(['/en/auth/forgot-password'], {
+        queryParams: { email: 'marta@example.com' },
+      });
+    });
+
+    it('sends no address when none is typed', async () => {
+      const { fixture, router } = await render();
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      (query(fixture, '.quiet-row button') as HTMLButtonElement).click();
+
+      expect(navigate).toHaveBeenCalledWith(['/en/auth/forgot-password'], {});
+    });
+  });
+
   describe('Google', () => {
     it('records rather than navigating, until the gateway redirects', async () => {
       const { fixture, router } = await render();

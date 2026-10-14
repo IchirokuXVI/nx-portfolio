@@ -628,7 +628,19 @@ export const AppShellRoutes: Route[] = [
             // offered by the third tab and by the history, which are the two screens
             // that now have a control for it. A sheet nothing can open is a URL that
             // draws a form over the wrong page.
-            children: [...entrySheetRoutes('home')],
+            children: [
+              ...entrySheetRoutes('home'),
+              // A sign in link opened while another account is on this phone
+              // (velista `0148`). The reset page comes here with the token held in
+              // memory, never in this URL, and the sheet asks before anything is sent.
+              sheet({
+                path: 'recovery-link',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-auth').then(
+                    (m) => m.RecoveryLinkSheet
+                  ),
+              }),
+            ],
           },
           // The setup a new account walks through (velista `0098`). `setupGuard`, on
           // every signed in page, sends a fresh account here once per document.
@@ -697,6 +709,30 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.VerifyEmailPage
+              ),
+          },
+          {
+            // Asking for a reset link (velista `0148`). The guard `auth/login` carries,
+            // because this is the way out of that page: somebody signed in changes
+            // their password from the account page, which asks with their own address.
+            path: 'auth/forgot-password',
+            canActivate: [anonymousOnlyGuard],
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ForgotPasswordPage
+              ),
+          },
+          {
+            // Public, as `auth/verify` is: the link in a reset mail is opened wherever
+            // the mail app is. Both links of the mail open it (backend `0210`), and the
+            // page decides who may do what from the server's answer, not a guard
+            // (velista `0148`).
+            path: 'auth/reset-password',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ResetPasswordPage
               ),
           },
           {

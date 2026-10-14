@@ -74,7 +74,63 @@ export interface AuthServiceI {
    * it is pressed.
    */
   forgotPassword(email: string): Promise<ResendOutcome>;
+
+  /**
+   * Spend a reset link on a new password (`POST /v1/auth/reset-password`).
+   *
+   * Anonymous: the route takes no bearer. It signs every other device out and answers
+   * a fresh pair, which this call stores as `login` does, so the app is signed in as
+   * the owner of the link afterwards. That replaces whatever session this phone held,
+   * which is why the reset page asks first when one is held (velista `0148`).
+   */
+  resetPassword(token: string, password: string): Promise<ResetPasswordOutcome>;
+
+  /**
+   * Spend a reset link on a sign in, and keep the password
+   * (`POST /v1/auth/recovery-sign-in`, backend `0210`).
+   *
+   * **Optionally authenticated.** The bearer of this phone goes with it when there is
+   * one, because it decides the answer: the owner of the link is told they are already
+   * signed in, and anybody else is refused with `other-account` until they agree to
+   * leave, which is `switchAccount`. A sign in signs nobody else out.
+   */
+  recoverySignIn(
+    token: string,
+    options?: { readonly switchAccount?: boolean }
+  ): Promise<RecoveryOutcome>;
 }
+
+/**
+ * How spending a reset link ended (velista `0148`).
+ *
+ * Every refusal the page has a screen for is a state rather than a thrown error, for
+ * the reason `ResendOutcome` gives: each is an ordinary answer with its own copy.
+ *
+ * - `signed-in`: the pair is already in `TokenStore`.
+ * - `already-signed-in`: the owner of the link is the account on this phone. Nothing
+ *   changed here, and the page goes home with no error (backend `0210`).
+ * - `other-account`: another account is on this phone and the link is still good.
+ *   Nothing was spent.
+ * - `link-dead`: used, expired or unknown, which the server answers alike.
+ * - `refused-in-support`: a support session asked (backend `0194`). The page shows it
+ *   as the dead link screen, with no copy of its own (the owner's pick 6).
+ * - `password-rejected`: the new password failed the rule. A reset only.
+ * - `failed`: anything else, with the error for its sentence.
+ */
+export type RecoveryOutcome =
+  | { readonly state: 'signed-in'; readonly tokens: SessionTokens }
+  | { readonly state: 'already-signed-in' }
+  | { readonly state: 'other-account' }
+  | { readonly state: 'link-dead' }
+  | { readonly state: 'refused-in-support' }
+  | { readonly state: 'password-rejected' }
+  | { readonly state: 'failed'; readonly error: unknown };
+
+/** The answers a reset can give. It takes no bearer, so it never meets an account. */
+export type ResetPasswordOutcome = Extract<
+  RecoveryOutcome,
+  { readonly state: 'signed-in' | 'link-dead' | 'password-rejected' | 'failed' }
+>;
 
 /** What `POST /v1/auth/verify-email` answers. Deliberately not the token pair. */
 export interface VerifiedEmail {
