@@ -48,6 +48,64 @@
 > `libs/velista/feature-shopping-lists/src/lib/basket-row/`, `row-entries/`,
 > `settle-sheet/`, `changes-sheet/`, and `libs/velista/ui/src/lib/basket/change-entry.ts`.
 
+## What the build decided
+
+The build of 2026-10-14 made the choices below. Each is a choice of the builder that the
+owner can overturn. Where this section and a later section disagree, this section is right.
+
+1. **The base had backend `0203` and velista `0139`.** The stop gap of `0139` is removed, not
+   kept beside the new look: `basketElsewhere()`, `BasketElsewhere`, `basketDrawnDone()`,
+   `elsewhereCaption()`, the `elsewhere` input of the row, `BasketViewRow.elsewhere` and the
+   key `basket.elsewhere.caption`. The files and functions this plan names are where `0139`
+   left them, except that `0139` added `basketDrawnDone()`, which went with the rest.
+2. **One predicate decides what is crossed out.** `isCrossedOutRow` in `basket-view.ts`
+   answers true for `REMOVED` and `BOUGHT_ELSEWHERE`. `countableBasketRows`, the sink, the
+   search, the list filter, the usual filter and `basketRowsProgress` all ask it. So the
+   tools bar, "all done" and the total leave such a row out, as section 3 asks.
+3. **The total prices `bought` and `left`.** A row nothing is left of that this shopping list
+   bought none of is also out of `lines`, because `countableBasketRows` leaves it out.
+4. **The reads of `boughtElsewhere` that stay.** The row mapper and the entry mapper read it
+   off the wire. `basket-row-fold.ts` sums it over the entries when it rebuilds a row from a
+   write answer, so the rebuilt row carries the number the server would send. The memory
+   twin computes it because it stands in for the server. No count and no sum reads it.
+5. **A crossed out row draws no "Changed" tag.** It is the template of a `REMOVED` row, which
+   draws none. Its mark still makes the row a seen target, so the reader's look at it is
+   what acknowledges the change.
+6. **Under a list heading, an entry bought elsewhere is crossed out** even when its row still
+   asks for something on another list. The entry carries no note, so it reads "Already
+   bought".
+7. **The sheet of a `BOUGHT_ELSEWHERE` row is the title and the lists, and nothing else.**
+   The price line, the rename field, the history link and "Add it to another list" are not
+   drawn either. This is the plain reading of "and nothing else" in section 1.
+8. **An entry bought elsewhere leads its caption with "Already bought"**, as in "Already
+   bought · Weekly shop · Rope". The caption is cut at its end, and the browser walk showed
+   a long line name cutting the words off when they came last.
+9. **Every person in the changes sheet is named the same way:** from the participants of the
+   basket, then from the zone members (`MemberNames`) of the list the change is on. Section
+   4 says the owner "is resolved like an actor". Actors were named from participants alone,
+   so Alice read "alice" on her buy and "Someone" on the line she added just before it. The
+   sheet asks `MemberNames.ensure` once for each zone it needs, when it opens. A guest is
+   served no list, so a guest asks nothing and is told "someone". This replaces the
+   deferral that velista `0093` wrote in `basket-change-store.ts`.
+10. **The reader is "you" by either key**: the participant id, or the account id. A buy on the
+    list page names the account, never the participant.
+11. **The changes sheet loads once the basket is known** (found in the walk). On a cold load
+    of `…/sheet/changes` the page had not read the basket yet, `load()` returned with
+    nothing, and the sheet drew its skeleton for good. This was on `dev` before this plan.
+12. **The Spanish sentences quote a name with «»**, as every other sentence in `es.json`
+    does, and not with the quotes of the table in section 4.
+13. **The words fit on one line at 390 pixels** in both languages, so the long forms stay.
+    Measured in the walk: "Bought from another shopping list" is 183 px wide and "Comprado
+    desde otra lista de la compra" 213 px, each one line of 16 px.
+14. **The memory twin seeds no new change.** Several specs count its change log. Its knob
+    `buyElsewhere(lineId, quantity, origin)` writes the `BOUGHT` change and the note of the
+    origin, and `revertElsewhere` writes `BUY_REVERTED`. A buy that moves no quantity writes
+    no change, as backend `0203` point 9 says.
+15. **`member.spec.ts` step 4 watches the banner from inside the page.** The page
+    acknowledges a marked row after it has been on screen for 1.5 s, so "1 change" stands
+    only for that long. The step waits for the earlier additions to be acknowledged, then
+    polls the banner every frame from before the buy.
+
 ## Brief for the agent
 
 ### Objective
