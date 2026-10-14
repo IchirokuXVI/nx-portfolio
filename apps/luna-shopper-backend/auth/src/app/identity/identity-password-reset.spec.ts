@@ -1,5 +1,12 @@
-import { UserKind } from '@portfolio/luna-shopper/contracts';
 import {
+  RecoverySignInOutcome,
+  UserKind,
+} from '@portfolio/luna-shopper/contracts';
+import {
+  ImpersonationNotAllowedException,
+  RecoveryNeedsEmailException,
+  RecoveryNeedsPasswordException,
+  RecoveryOtherAccountException,
   THROTTLE_LIMITS,
   ValidationException,
   throttleWaitSeconds,
@@ -10,16 +17,23 @@ import {
   EmailVerification,
   OAuthIdentity,
   PasswordReset,
+  PasswordResetChannel,
+  PasswordResetSpentAs,
   RefreshToken,
   User,
 } from '../entities';
-import { TokenGrantService } from '../tokens/token-grant.service';
+import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
 
 /**
  * Password reset (plan 0022): asking for a link without telling the asker
- * anything, and spending one.
+ * anything, and spending one. And the same grant spent as a sign in, mailed or
+ * handed to an operator (plan 0210).
+ *
+ * The spend here is the in memory one of `token-grant.testing.ts`. What makes
+ * a grant end at most one time under two requests at the same instant is the
+ * statement of the real service, proven in `token-grant.integration.spec.ts`.
  */
 
 type Row = Record<string, unknown>;
@@ -47,6 +61,8 @@ function makeRepo(store: Row[]) {
     }),
     findOne: async ({ where }: { where: Row }) =>
       store.find((row) => matches(row, where)) ?? null,
+    find: async ({ where }: { where: Row }) =>
+      store.filter((row) => matches(row, where)),
     update: async (where: Row, patch: Row) => {
       const rows = store.filter((candidate) => matches(candidate, where));
       rows.forEach((row) => Object.assign(row, patch));
@@ -128,6 +144,7 @@ function build(users: Row[] = [], credentials: Row[] = []) {
     sendVerificationEmail: jest.fn(),
     sendPasswordResetEmail: jest.fn(),
     sendGoogleAccountEmail: jest.fn(),
+    sendRecoveryLinksNotice: jest.fn(),
   };
   const passwords = {
     hash: jest.fn(async (raw: string) => `hashed:${raw}`),
@@ -135,15 +152,32 @@ function build(users: Row[] = [], credentials: Row[] = []) {
       async (hash: string, raw: string) => hash === `hashed:${raw}`
     ),
   };
+  // The operator routes of plan 0210 write through the trail. Bound to the
+  // same doubles the rest of the spec reads, so a grant an operator made is
+  // in `stores.resets` like any other.
+  const audit = fakeAudit([
+    [User, { name: 'users', repository: repos.get(User) as never }],
+    [
+      Credential,
+      { name: 'credentials', repository: repos.get(Credential) as never },
+    ],
+    [
+      PasswordReset,
+      {
+        name: 'password_resets',
+        repository: repos.get(PasswordReset) as never,
+      },
+    ],
+  ]);
   const service = new IdentityService(
     dataSource as never,
     tokens as never,
-    new TokenGrantService(),
+    new InMemoryTokenGrantService(),
     passwords,
     mail as never,
     events as never,
     new UsernameGenerator(),
-    fakeAudit([]).service,
+    audit.service,
     {
       getOrThrow: () => ({
         smtp: {
@@ -155,7 +189,15 @@ function build(users: Row[] = [], credentials: Row[] = []) {
       }),
     } as never
   );
-  return { service, stores, events, mail, tokens, passwords };
+  return {
+    service,
+    stores,
+    events,
+    mail,
+    tokens,
+    passwords,
+    recorded: audit.recorded,
+  };
 }
 
 /** The raw token the reset mail was handed. Only issue ever reveals it. */
@@ -374,4 +416,391 @@ describe('IdentityService.resetPassword (section 3)', () => {
       stores.refreshTokens.find((row) => row['id'] === 'rt-x')?.['revokedAt']
     ).toBeNull();
   });
+});
+
+/** A grant for `password`, through the page anybody can use. */
+async function selfServiceGrant(context: ReturnType<typeof build>) {
+  context.mail.sendPasswordResetEmail.mockClear();
+  await context.service.forgotPassword({ email: 'a@b.com' });
+  return resetToken(context.mail);
+}
+
+/** The stored row of a raw token, read back by its hash. */
+function rowOf(context: ReturnType<typeof build>, raw: string): Row {
+  const hash = new InMemoryTokenGrantService().hash(raw);
+  const row = context.stores.resets.find((r) => r['tokenHash'] === hash);
+  if (!row) {
+    throw new Error('no grant for that token');
+  }
+  return row;
+}
+
+describe('ending the other grants of the account (plan 0210, target state 3)', () => {
+  it('ends every other live grant when one is spent, as SUPERSEDED', async () => {
+    const context = build([{ ...password }], [credentialFor('u1')]);
+    const first = await selfServiceGrant(context);
+    const second = await selfServiceGrant(context);
+
+    await context.service.resetPassword({ token: second, password: 'new-one' });
+
+    expect(rowOf(context, second)['spentAs']).toBe(PasswordResetSpentAs.RESET);
+    expect(rowOf(context, first)['spentAs']).toBe(
+      PasswordResetSpentAs.SUPERSEDED
+    );
+    expect(rowOf(context, first)['consumedAt']).toBeInstanceOf(Date);
+    // The first mail, read late, is no longer a key.
+    await expect(
+      context.service.recoverySignIn({ token: first })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('leaves the older grants alone when another is issued (decision D5)', async () => {
+    const context = build([{ ...password }], [credentialFor('u1')]);
+    const first = await selfServiceGrant(context);
+    await selfServiceGrant(context);
+
+    expect(rowOf(context, first)['consumedAt'] ?? null).toBeNull();
+    await expect(
+      context.service.recoverySignIn({ token: first })
+    ).resolves.toMatchObject({ outcome: RecoverySignInOutcome.SIGNED_IN });
+  });
+
+  it('leaves the grants of other accounts alone', async () => {
+    const other = { ...password, id: 'u3', email: 'c@b.com' };
+    const context = build(
+      [{ ...password }, other],
+      [credentialFor('u1'), credentialFor('u3')]
+    );
+    const mine = await selfServiceGrant(context);
+    context.mail.sendPasswordResetEmail.mockClear();
+    await context.service.forgotPassword({ email: 'c@b.com' });
+    const theirs = resetToken(context.mail);
+
+    await context.service.recoverySignIn({ token: mine });
+
+    expect(rowOf(context, theirs)['consumedAt'] ?? null).toBeNull();
+  });
+});
+
+describe('IdentityService.recoverySignIn (plan 0210, target state 5)', () => {
+  async function granted(account: Row = { ...password }) {
+    const context = build([account], [credentialFor('u1')]);
+    const token = await selfServiceGrant(context);
+    return { ...context, token };
+  }
+
+  it('refuses a support session, whatever the grant, and writes nothing', async () => {
+    const { service, stores, token, tokens } = await granted();
+
+    await expect(
+      service.recoverySignIn({
+        token,
+        callerUserId: 'u1',
+        supportSession: true,
+      })
+    ).rejects.toBeInstanceOf(ImpersonationNotAllowedException);
+    expect(stores.resets[0]['consumedAt'] ?? null).toBeNull();
+    expect(tokens.issueTokens).not.toHaveBeenCalled();
+  });
+
+  it('tells the owner of a live grant they are signed in, and spends it', async () => {
+    const context = await granted();
+    const older = context.token;
+    const token = await selfServiceGrant(context);
+
+    const answer = await context.service.recoverySignIn({
+      token,
+      callerUserId: 'u1',
+    });
+
+    expect(answer).toEqual({
+      outcome: RecoverySignInOutcome.ALREADY_SIGNED_IN,
+    });
+    expect(context.tokens.issueTokens).not.toHaveBeenCalled();
+    expect(rowOf(context, token)['spentAs']).toBe(
+      PasswordResetSpentAs.ALREADY_SIGNED_IN
+    );
+    // The visit ends the other grants too, as any spend does.
+    expect(rowOf(context, older)['spentAs']).toBe(
+      PasswordResetSpentAs.SUPERSEDED
+    );
+    // And the reset link of the same mail is refused afterwards.
+    await expect(
+      context.service.resetPassword({ token, password: 'new-one' })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('tells the owner of a spent grant they are signed in, and writes nothing', async () => {
+    const context = await granted();
+    await context.service.resetPassword({
+      token: context.token,
+      password: 'new-one',
+    });
+    const before = { ...rowOf(context, context.token) };
+
+    const answer = await context.service.recoverySignIn({
+      token: context.token,
+      callerUserId: 'u1',
+    });
+
+    expect(answer).toEqual({
+      outcome: RecoverySignInOutcome.ALREADY_SIGNED_IN,
+    });
+    expect(rowOf(context, context.token)).toEqual(before);
+  });
+
+  it('tells the owner of an expired grant they are signed in, and writes nothing', async () => {
+    const context = await granted();
+    rowOf(context, context.token)['expiresAt'] = new Date(Date.now() - 1000);
+
+    await expect(
+      context.service.recoverySignIn({
+        token: context.token,
+        callerUserId: 'u1',
+      })
+    ).resolves.toEqual({ outcome: RecoverySignInOutcome.ALREADY_SIGNED_IN });
+    expect(rowOf(context, context.token)['consumedAt'] ?? null).toBeNull();
+  });
+
+  it('refuses another signed in account with 409 and spends nothing', async () => {
+    const context = await granted();
+
+    await expect(
+      context.service.recoverySignIn({
+        token: context.token,
+        callerUserId: 'u9',
+      })
+    ).rejects.toBeInstanceOf(RecoveryOtherAccountException);
+    // `false` is no agreement either.
+    await expect(
+      context.service.recoverySignIn({
+        token: context.token,
+        callerUserId: 'u9',
+        switchAccount: false,
+      })
+    ).rejects.toBeInstanceOf(RecoveryOtherAccountException);
+    expect(rowOf(context, context.token)['consumedAt'] ?? null).toBeNull();
+    expect(context.tokens.issueTokens).not.toHaveBeenCalled();
+  });
+
+  it('refuses a token nobody issued, with the one refusal', async () => {
+    const context = await granted();
+
+    await expect(
+      context.service.recoverySignIn({ token: 'invented' })
+    ).rejects.toBeInstanceOf(ValidationException);
+    await expect(
+      context.service.recoverySignIn({ token: 'invented', callerUserId: 'u1' })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('refuses a spent or expired grant to anybody but its owner', async () => {
+    const context = await granted();
+    const expired = await selfServiceGrant(context);
+    rowOf(context, expired)['expiresAt'] = new Date(Date.now() - 1000);
+    await context.service.recoverySignIn({ token: context.token });
+
+    for (const token of [context.token, expired]) {
+      await expect(
+        context.service.recoverySignIn({ token })
+      ).rejects.toBeInstanceOf(ValidationException);
+      await expect(
+        context.service.recoverySignIn({
+          token,
+          callerUserId: 'u9',
+          switchAccount: true,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+    }
+  });
+
+  it('signs in a caller with no session, and spends the grant as SIGN_IN', async () => {
+    const context = await granted({ ...password, emailVerifiedAt: null });
+
+    const answer = await context.service.recoverySignIn({
+      token: context.token,
+    });
+
+    expect(answer).toMatchObject({
+      outcome: RecoverySignInOutcome.SIGNED_IN,
+      tokens: { userId: 'u1' },
+    });
+    expect(rowOf(context, context.token)['spentAs']).toBe(
+      PasswordResetSpentAs.SIGN_IN
+    );
+    // The same proof a reset accepts (decision D4), announced once.
+    expect(context.stores.users[0]['emailVerifiedAt']).toBeInstanceOf(Date);
+    expect(context.events.userEmailVerified).toHaveBeenCalledTimes(1);
+    // The password stays as it was.
+    expect(context.stores.credentials[0]['passwordHash']).toBe(
+      'hashed:old-password'
+    );
+    // And the reset link of the same mail is refused afterwards.
+    await expect(
+      context.service.resetPassword({
+        token: context.token,
+        password: 'new-one',
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('signs in another account that agreed to switch', async () => {
+    const context = await granted();
+
+    await expect(
+      context.service.recoverySignIn({
+        token: context.token,
+        callerUserId: 'u9',
+        switchAccount: true,
+      })
+    ).resolves.toMatchObject({
+      outcome: RecoverySignInOutcome.SIGNED_IN,
+      tokens: { userId: 'u1' },
+    });
+  });
+
+  it('revokes no session (decision D4)', async () => {
+    const context = await granted();
+    context.stores.refreshTokens.push({
+      id: 'rt-a',
+      userId: 'u1',
+      revokedAt: null,
+    });
+
+    await context.service.recoverySignIn({ token: context.token });
+
+    expect(context.tokens.revokeAllForUser).not.toHaveBeenCalled();
+    expect(
+      context.stores.refreshTokens.find((row) => row['id'] === 'rt-a')?.[
+        'revokedAt'
+      ]
+    ).toBeNull();
+  });
+});
+
+describe('the operator routes (plan 0210, target states 7 and 8)', () => {
+  const HOUR = 60 * 60 * 1000;
+  const ACTOR = '44444444-4444-4444-8444-444444444444';
+  const guest = {
+    id: 'u4',
+    kind: UserKind.TEMPORARY,
+    username: 'Quiet Lantern',
+    email: null,
+    emailVerifiedAt: null,
+    displayName: null,
+  };
+
+  it('mails the grant as OPERATOR_EMAIL, for an hour, and records it without its hash', async () => {
+    const context = build([{ ...password }], [credentialFor('u1')]);
+    const before = Date.now();
+
+    const answer = await context.service.sendPasswordResetAsOperator(
+      'u1',
+      ACTOR,
+      'es'
+    );
+
+    expect(context.stores.resets).toHaveLength(1);
+    const grant = context.stores.resets[0];
+    expect(grant['channel']).toBe(PasswordResetChannel.OPERATOR_EMAIL);
+    expect(grant['issuedByAdminId']).toBe(ACTOR);
+    const expiresAt = Date.parse(answer.expiresAt);
+    expect(expiresAt).toBeGreaterThanOrEqual(before + HOUR);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + HOUR);
+    expect(context.mail.sendPasswordResetEmail).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.any(String),
+      'https://x/reset',
+      'es'
+    );
+
+    expect(context.recorded).toEqual([
+      expect.objectContaining({
+        actorId: ACTOR,
+        action: 'CREATE',
+        entity: 'password_resets',
+      }),
+    ]);
+    expect(context.recorded[0].after).not.toHaveProperty('tokenHash');
+    expect(JSON.stringify(context.recorded)).not.toContain(
+      resetToken(context.mail)
+    );
+  });
+
+  it('creates the two links of one grant, for a day, and mails only a notice', async () => {
+    const context = build([{ ...password }], [credentialFor('u1')]);
+    const before = Date.now();
+
+    const answer = await context.service.createRecoveryLinksAsOperator(
+      'u1',
+      ACTOR
+    );
+
+    const token = new URL(answer.resetUrl).searchParams.get('token') ?? '';
+    expect(answer.resetUrl).toBe(
+      `https://x/reset?token=${encodeURIComponent(token)}`
+    );
+    expect(answer.signInUrl).toBe(`${answer.resetUrl}&mode=sign-in`);
+    const expiresAt = Date.parse(answer.expiresAt);
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 24 * HOUR);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + 24 * HOUR);
+
+    const grant = rowOf(context, token);
+    expect(grant['channel']).toBe(PasswordResetChannel.OPERATOR_LINK);
+    expect(grant['issuedByAdminId']).toBe(ACTOR);
+
+    // Decision D2: the person hears of it, and the mail holds no link.
+    expect(context.mail.sendRecoveryLinksNotice).toHaveBeenCalledWith(
+      'a@b.com',
+      grant['createdAt'],
+      undefined
+    );
+    expect(context.mail.sendPasswordResetEmail).not.toHaveBeenCalled();
+
+    expect(context.recorded).toHaveLength(1);
+    expect(context.recorded[0]).toMatchObject({
+      actorId: ACTOR,
+      action: 'CREATE',
+      entity: 'password_resets',
+    });
+    expect(JSON.stringify(context.recorded)).not.toContain(token);
+  });
+
+  it('hands out a sign in link that works one time', async () => {
+    const context = build([{ ...password }], [credentialFor('u1')]);
+    const { signInUrl } = await context.service.createRecoveryLinksAsOperator(
+      'u1',
+      ACTOR
+    );
+    const token = new URL(signInUrl).searchParams.get('token') ?? '';
+
+    await expect(
+      context.service.recoverySignIn({ token })
+    ).resolves.toMatchObject({ outcome: RecoverySignInOutcome.SIGNED_IN });
+    await expect(
+      context.service.recoverySignIn({ token })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it.each([
+    ['sendPasswordResetAsOperator' as const],
+    ['createRecoveryLinksAsOperator' as const],
+  ])(
+    '%s refuses a guest and a Google only account, and writes nothing',
+    async (method) => {
+      const context = build([{ ...guest }, { ...google }], []);
+
+      await expect(context.service[method]('u4', ACTOR)).rejects.toBeInstanceOf(
+        RecoveryNeedsEmailException
+      );
+      await expect(context.service[method]('u2', ACTOR)).rejects.toBeInstanceOf(
+        RecoveryNeedsPasswordException
+      );
+
+      expect(context.stores.resets).toHaveLength(0);
+      expect(context.recorded).toHaveLength(0);
+      expect(context.mail.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(context.mail.sendRecoveryLinksNotice).not.toHaveBeenCalled();
+    }
+  );
 });

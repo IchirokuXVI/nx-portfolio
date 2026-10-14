@@ -37,10 +37,7 @@
       addresses are registered (section 5.4).
     -->
     @if (error(); as rejection) {
-      <lib-form-error
-        [message]="rejection.key | rokuT"
-        [messageId]="errorId"
-      />
+      <lib-form-error [message]="rejection.key | rokuT" [messageId]="errorId" />
     }
 
     <!-- Keeps its accessible name and gains `aria-busy` rather than swapping its
@@ -58,6 +55,15 @@
       {{ 'auth.signIn.submit' | rokuT }}
     </button>
   </form>
+
+  <!-- The way back for a forgotten password (velista 0148), right under the button a
+       failed sign in leaves the person looking at. It carries the typed address, so
+       nobody types it twice. -->
+  <div class="quiet-row">
+    <button (click)="forgotPassword()" class="footer-link" type="button">
+      {{ 'auth.signIn.forgot' | rokuT }}
+    </button>
+  </div>
 
   @if (googleOffered()) {
     <lib-google-option (continueWithGoogle)="continueWithGoogle()" />

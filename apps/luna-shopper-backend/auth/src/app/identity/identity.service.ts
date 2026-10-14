@@ -4,11 +4,13 @@ import {
   ACCOUNT_ROLES,
   AUTH_USERNAMES_MAX,
   AuthProvider,
+  RecoverySignInOutcome,
   UserKind,
   UsernamePropagation,
   type AccountRole,
   type AuthTokens,
   type ConsumeOAuthStateRequest,
+  type CreateAdminRecoveryLinksResult,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type ForgotPasswordRequest,
@@ -19,11 +21,14 @@ import {
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
   type OAuthStatePayload,
+  type RecoverySignInRequest,
+  type RecoverySignInResult,
   type RegisterRequest,
   type ResendVerificationRequest,
   type ResendVerificationResult,
   type ResetPasswordRequest,
   type RetryAfterResult,
+  type SendAdminPasswordResetResult,
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
@@ -32,8 +37,12 @@ import {
 import {
   ConflictException,
   GuestHasNoRolesException,
+  ImpersonationNotAllowedException,
   NotConfiguredException,
   NotFoundException,
+  RecoveryNeedsEmailException,
+  RecoveryNeedsPasswordException,
+  RecoveryOtherAccountException,
   THROTTLE_LIMITS,
   throttleWaitSeconds,
   UnauthorizedException,
@@ -53,11 +62,13 @@ import {
   OAuthIdentity,
   OAuthState,
   PasswordReset,
+  PasswordResetChannel,
+  PasswordResetSpentAs,
   User,
 } from '../entities';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
 import { ImpersonationService } from '../impersonation/impersonation.service';
-import { MailService } from '../mail/mail.service';
+import { MailService, recoveryLinks } from '../mail/mail.service';
 import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService } from '../tokens/token.service';
@@ -81,6 +92,14 @@ const RESET_TTL_MS = 60 * 60 * 1000;
  * them apart would tell an attacker which of their guesses was once real.
  */
 const INVALID_RESET = 'Invalid or expired password reset link';
+
+/**
+ * How long the links an operator creates by hand live (plan 0210, decision
+ * D1). A day rather than an hour: an operator who shares a link in a chat
+ * often waits for the person to read it, and an hour would run out first. A
+ * mailed grant keeps the hour of {@link RESET_TTL_MS}, whoever asked for it.
+ */
+const OPERATOR_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How long an OAuth state lives (plan 0023, section 4.1). Ten minutes: a consent
@@ -108,13 +127,13 @@ const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
  *
  * ## The `AsOperator` methods
  *
- * Four methods end in `AsOperator`, and the suffix is the contract rather than
- * decoration (plan 0077, section 2). Each one is the write its user facing twin
- * makes, with the caller's own identity check replaced by an operator gate the
- * caller has already passed, and each one records what it did in the audit trail
- * inside the same transaction. Reading the method names is how somebody sees
- * which writes here can be made against a stranger's account, and a future author
- * cannot add a fifth without saying so in its name.
+ * Several methods end in `AsOperator`, and the suffix is the contract rather
+ * than decoration (plan 0077, section 2). Each one is the write its user facing
+ * twin makes, with the caller's own identity check replaced by an operator gate
+ * the caller has already passed, and each one records what it did in the audit
+ * trail inside the same transaction. Reading the method names is how somebody
+ * sees which writes here can be made against a stranger's account, and a future
+ * author cannot add another without saying so in its name.
  */
 @Injectable()
 export class IdentityService {
@@ -573,6 +592,10 @@ export class IdentityService {
    * leaves no half reset account. The new pair is issued after the transaction
    * commits, which is also after the revoke, so the person resetting keeps the
    * session this call gives them and whoever else held one does not.
+   *
+   * The grant ends as `RESET`, and every other live grant of the account ends
+   * with it (plan 0210, target state 3): a reset is meant to close every way
+   * in, and an older mail with a sign in link on it is one.
    */
   async resetPassword(req: ResetPasswordRequest): Promise<AuthTokens> {
     const passwordHash = await this.passwords.hash(req.password ?? '');
@@ -583,8 +606,10 @@ export class IdentityService {
           manager,
           PasswordReset,
           req.token ?? '',
-          INVALID_RESET
+          INVALID_RESET,
+          { spentAs: PasswordResetSpentAs.RESET }
         );
+        await this.endOtherGrants(manager, record);
         const user = await manager
           .getRepository(User)
           .findOne({ where: { id: record.userId } });
@@ -609,17 +634,7 @@ export class IdentityService {
                 .create({ userId: user.id, passwordHash })
         );
 
-        // Following a link sent to the address is the same evidence the
-        // confirmation flow accepts, and a strictly stronger action than
-        // clicking a confirmation link. Leaving it unverified would leave a nudge
-        // on screen asking for proof already given.
-        const confirmed = !user.emailVerifiedAt;
-        if (confirmed) {
-          user.emailVerifiedAt = new Date();
-          await manager
-            .getRepository(User)
-            .update({ id: user.id }, { emailVerifiedAt: user.emailVerifiedAt });
-        }
+        const confirmed = await this.confirmAddress(manager, user);
 
         await this.tokens.revokeAllForUser(user.id, manager);
         return { user, confirmed };
@@ -633,6 +648,300 @@ export class IdentityService {
       this.events.userEmailVerified({ userId: user.id });
     }
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Sign in with a reset grant and keep the password (plan 0210, target state
+   * 5).
+   *
+   * The same grant as {@link resetPassword}, spent another way. Which way is
+   * the choice of whoever holds the token, so the row never records the link
+   * that was sent, only how the grant ended. The order of the checks below is
+   * the decision table of the plan, row by row:
+   *
+   * 1. **A support session is refused**, whatever the grant. The gateway
+   *    refuses it first (the route carries `@RefuseImpersonation`); this holds
+   *    the rule if the list there ever drifts.
+   * 2. **The owner of the grant, already signed in**, is told so and keeps the
+   *    session. A live grant is spent as `ALREADY_SIGNED_IN` all the same: the
+   *    person has shown which link they meant, and a link left live in an inbox
+   *    is a key. A spent or expired one writes nothing and still answers the
+   *    same, because the person is where the link would have taken them.
+   * 3. **A grant that cannot be spent** is the one refusal of `0022`, for
+   *    anybody who is not its owner: unknown, spent and expired stay one
+   *    answer.
+   * 4. **Somebody else, signed in**, is refused with `recovery_other_account`
+   *    and nothing is spent, until they agree to leave with `switchAccount`.
+   * 5. **Everybody else is signed in**, and the grant ends as `SIGN_IN`.
+   *
+   * **The owner is read before the spend, and the spend decides.** The row is
+   * read by hash whatever its state, because rule 2 needs to know whose it is
+   * even when it is spent. The read never spends: the conditional statement of
+   * {@link TokenGrantService.spend} does, so two requests at the same instant
+   * cannot both pass. A request that loses that race answers as the row reads
+   * after it: the owner is still told they are signed in, and anybody else gets
+   * the refusal of rule 3.
+   *
+   * **No session is revoked** (decision D4). Only a reset does that, and the
+   * mail says which link to press when the password is the worry. The address
+   * is marked verified, as a reset marks it: following a link sent to it is the
+   * same proof.
+   */
+  async recoverySignIn(
+    req: RecoverySignInRequest
+  ): Promise<RecoverySignInResult> {
+    if (req.supportSession === true) {
+      throw new ImpersonationNotAllowedException(
+        'A support session cannot use this route'
+      );
+    }
+
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      const grant = await this.grants.find(
+        manager,
+        PasswordReset,
+        req.token ?? ''
+      );
+      if (!grant) {
+        throw new ValidationException(INVALID_RESET);
+      }
+
+      if (req.callerUserId !== undefined && grant.userId === req.callerUserId) {
+        if (this.grants.isLive(grant)) {
+          const spent = await this.grants.spend(
+            manager,
+            PasswordReset,
+            grant.tokenHash,
+            { spentAs: PasswordResetSpentAs.ALREADY_SIGNED_IN }
+          );
+          // Null only when another request spent it first, which ended the
+          // other grants too. The answer is the same either way.
+          if (spent) {
+            await this.endOtherGrants(manager, spent);
+          }
+        }
+        return { signedIn: null };
+      }
+
+      if (!this.grants.isLive(grant)) {
+        throw new ValidationException(INVALID_RESET);
+      }
+      if (req.callerUserId !== undefined && req.switchAccount !== true) {
+        throw new RecoveryOtherAccountException(
+          'This link belongs to another account than the one signed in'
+        );
+      }
+
+      const spent = await this.grants.spend(
+        manager,
+        PasswordReset,
+        grant.tokenHash,
+        { spentAs: PasswordResetSpentAs.SIGN_IN }
+      );
+      if (!spent) {
+        throw new ValidationException(INVALID_RESET);
+      }
+      await this.endOtherGrants(manager, spent);
+
+      const user = await manager
+        .getRepository(User)
+        .findOne({ where: { id: spent.userId } });
+      if (!user) {
+        // Unreachable for the reason `resetPassword` gives: the cascade takes
+        // the grants with the account.
+        throw new ValidationException(INVALID_RESET);
+      }
+      const confirmed = await this.confirmAddress(manager, user);
+      return { signedIn: { user, confirmed } };
+    });
+
+    if (!outcome.signedIn) {
+      return { outcome: RecoverySignInOutcome.ALREADY_SIGNED_IN };
+    }
+    const { user, confirmed } = outcome.signedIn;
+    if (confirmed) {
+      this.events.userEmailVerified({ userId: user.id });
+    }
+    return {
+      outcome: RecoverySignInOutcome.SIGNED_IN,
+      tokens: await this.tokens.issueTokens(user),
+    };
+  }
+
+  /**
+   * Mark the address of an account verified, if it was not, and say whether
+   * this call did it.
+   *
+   * Following a link sent to the address is the same evidence the confirmation
+   * flow accepts, and a strictly stronger action than clicking a confirmation
+   * link. Leaving it unverified would leave a nudge on screen asking for proof
+   * already given. A reset and a sign in with the same grant both reach here.
+   */
+  private async confirmAddress(
+    manager: EntityManager,
+    user: User
+  ): Promise<boolean> {
+    if (user.emailVerifiedAt) {
+      return false;
+    }
+    user.emailVerifiedAt = new Date();
+    await manager
+      .getRepository(User)
+      .update({ id: user.id }, { emailVerifiedAt: user.emailVerifiedAt });
+    return true;
+  }
+
+  /**
+   * End every other live reset grant of the account that just spent one (plan
+   * 0210, target state 3), in the same transaction.
+   */
+  private async endOtherGrants(
+    manager: EntityManager,
+    spent: PasswordReset
+  ): Promise<void> {
+    await this.grants.endOthers(manager, PasswordReset, spent, {
+      spentAs: PasswordResetSpentAs.SUPERSEDED,
+    });
+  }
+
+  /**
+   * Mail somebody the reset grant, on their behalf (plan 0210, target state
+   * 7).
+   *
+   * The grant {@link forgotPassword} mints and the mail it sends, with both
+   * links and the same hour, issued as `OPERATOR_EMAIL` with the operator on
+   * the row and recorded in the audit trail in the same transaction. The trail
+   * drops `tokenHash` on the way in, as it does for a confirmation grant.
+   *
+   * Refused for an account with no address and for one with no password (see
+   * {@link issueOperatorGrant}). Unlike `forgotPassword` it says so: the caller
+   * is an operator looking at the account, not somebody testing addresses.
+   */
+  async sendPasswordResetAsOperator(
+    targetUserId: string,
+    actorId: string,
+    locale?: string
+  ): Promise<SendAdminPasswordResetResult> {
+    this.requireMail();
+    const { email, raw, grant } = await this.audit.write(
+      actorId,
+      async (tx) => {
+        const issued = await this.issueOperatorGrant(
+          tx.manager,
+          targetUserId,
+          actorId,
+          PasswordResetChannel.OPERATOR_EMAIL,
+          RESET_TTL_MS
+        );
+        await tx.recordCreate(PasswordReset, issued.grant);
+        return issued;
+      }
+    );
+
+    this.dispatchMail('the password reset email', () =>
+      this.mail.sendPasswordResetEmail(
+        email,
+        raw,
+        this.config.smtp.resetBaseUrl,
+        locale
+      )
+    );
+    return { expiresAt: grant.expiresAt.toISOString() };
+  }
+
+  /**
+   * Create the two links of a reset grant and hand them to the operator, with
+   * no mail of the links (plan 0210, target state 8).
+   *
+   * **The answer is the only place the raw token goes.** Not a log line, not
+   * the audit row (which drops `tokenHash` and never sees the raw value), not
+   * an event. The grant lives a day (decision D1) and ends on first use like
+   * any other.
+   *
+   * **The person is told** (decision D2). A sign in link from an operator is a
+   * full session as the person, with none of the limits of a support session,
+   * so a short notice goes to the address, with the date and no link. It is
+   * dispatched outside the transaction like every other mail here, and SMTP is
+   * required up front for the same reason registration requires it: a key made
+   * without the notice is the thing D2 exists to prevent.
+   */
+  async createRecoveryLinksAsOperator(
+    targetUserId: string,
+    actorId: string,
+    locale?: string
+  ): Promise<CreateAdminRecoveryLinksResult> {
+    this.requireMail();
+    const { email, raw, grant } = await this.audit.write(
+      actorId,
+      async (tx) => {
+        const issued = await this.issueOperatorGrant(
+          tx.manager,
+          targetUserId,
+          actorId,
+          PasswordResetChannel.OPERATOR_LINK,
+          OPERATOR_LINK_TTL_MS
+        );
+        await tx.recordCreate(PasswordReset, issued.grant);
+        return issued;
+      }
+    );
+
+    this.dispatchMail('the recovery link notice', () =>
+      this.mail.sendRecoveryLinksNotice(email, grant.createdAt, locale)
+    );
+    return {
+      ...recoveryLinks(this.config.smtp.resetBaseUrl, raw),
+      expiresAt: grant.expiresAt.toISOString(),
+    };
+  }
+
+  /**
+   * The refusals and the grant both operator routes share (plan 0210, target
+   * states 7 and 8).
+   *
+   * **A guest is refused**, because it has no address to mail and no password
+   * to reset, and a link that moved a guest to a new device would be a feature
+   * of its own (section 1). **A Google only account is refused** (decision
+   * D3): the reset half would give it a first password, through the branch of
+   * `resetPassword` that nothing reaches today, and the sign in half would be
+   * a passwordless way in it has never had. Both refusals carry codes of their
+   * own, so the back office can say which.
+   *
+   * Issuing ends no other grant (decision D5). The person may still be holding
+   * a mail they asked for, and it keeps working until one of the two is used.
+   */
+  private async issueOperatorGrant(
+    manager: EntityManager,
+    targetUserId: string,
+    actorId: string,
+    channel: PasswordResetChannel,
+    ttlMs: number
+  ): Promise<{ email: string; raw: string; grant: PasswordReset }> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { id: targetUserId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.email) {
+      throw new RecoveryNeedsEmailException(
+        'This account has no email address'
+      );
+    }
+    const credential = await manager
+      .getRepository(Credential)
+      .findOne({ where: { userId: user.id } });
+    if (!credential) {
+      throw new RecoveryNeedsPasswordException('This account has no password');
+    }
+
+    const { raw, record } = await this.grants.issueRecord(
+      manager,
+      PasswordReset,
+      { userId: user.id, channel, issuedByAdminId: actorId },
+      ttlMs
+    );
+    return { email: user.email, raw, grant: record };
   }
 
   /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */

@@ -42,6 +42,8 @@ const SOURCES = readdirSync(LIB).filter(
 const WRITES: Readonly<Record<string, string>> = {
   deleteUser: 'users.ts',
   resendVerification: 'users.ts',
+  sendPasswordReset: 'users.ts',
+  createRecoveryLinks: 'users.ts',
   deleteZone: 'zones.ts',
   regenerateJoinCode: 'zones.ts',
   setZoneDeletionMark: 'zones.ts',

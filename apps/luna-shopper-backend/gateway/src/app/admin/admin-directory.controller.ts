@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpStatus,
   Patch,
   Post,
@@ -18,8 +19,10 @@ import {
   type AdminIdentityListView,
   type AdminUserDetailView,
   type AdminUserPage,
+  type CreateAdminRecoveryLinksResult,
   type DeleteAdminUserResult,
   type ResendAdminVerificationResult,
+  type SendAdminPasswordResetResult,
   type SetAdminUserRolesResult,
   type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
@@ -28,6 +31,7 @@ import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { adminCredential } from './admin-credential';
 import {
+  AdminRecoveryDto,
   ListAdminUsersQueryDto,
   ResendAdminVerificationDto,
   SetAdminUserRolesDto,
@@ -167,6 +171,59 @@ export class AdminUsersController {
   ): Promise<ResendAdminVerificationResult> {
     return this.nats.send<ResendAdminVerificationResult>(
       ADMIN_USER_PATTERNS.resendVerification,
+      { ...adminCredential(admin), targetUserId: id, locale: dto.locale }
+    );
+  }
+
+  /**
+   * Mail somebody the password reset grant (plan 0210, target state 7): the
+   * mail "Forgot password" sends, with both links and an hour of life, made by
+   * the operator and recorded in the audit trail.
+   *
+   * No throttle, as `resend-verification` has none for an operator. A guest
+   * and a Google only account are refused, each with a code of its own; the
+   * back office hides the action for both, so the refusals are a backstop.
+   */
+  @Post(':id/send-password-reset')
+  @SkipThrottle()
+  @ApiContractResponse(ADMIN_USER_PATTERNS.sendPasswordReset, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, recovery: 'operator' })
+  sendPasswordReset(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AdminRecoveryDto
+  ): Promise<SendAdminPasswordResetResult> {
+    return this.nats.send<SendAdminPasswordResetResult>(
+      ADMIN_USER_PATTERNS.sendPasswordReset,
+      { ...adminCredential(admin), targetUserId: id, locale: dto.locale }
+    );
+  }
+
+  /**
+   * Create the two links of a reset grant, for the operator to share by hand
+   * (plan 0210, target state 8). Nothing is mailed but a notice that says the
+   * links exist (decision D2), and they live 24 hours (decision D1).
+   *
+   * **`Cache-Control: no-store`**, because the body is a key to the account.
+   * It is the one place the raw token exists: the gateway logs no body, the
+   * audit row in auth has no token, and nothing publishes it.
+   */
+  @Post(':id/recovery-links')
+  @SkipThrottle()
+  @Header('Cache-Control', 'no-store')
+  @ApiContractResponse(ADMIN_USER_PATTERNS.createRecoveryLinks, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, recovery: 'operator' })
+  createRecoveryLinks(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AdminRecoveryDto
+  ): Promise<CreateAdminRecoveryLinksResult> {
+    return this.nats.send<CreateAdminRecoveryLinksResult>(
+      ADMIN_USER_PATTERNS.createRecoveryLinks,
       { ...adminCredential(admin), targetUserId: id, locale: dto.locale }
     );
   }

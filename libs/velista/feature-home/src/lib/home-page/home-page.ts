@@ -386,6 +386,15 @@ export class HomePage {
     return notice?.kind === 'upgraded' ? notice.email : null;
   });
 
+  /**
+   * Whether a reset link just set a new password (velista `0148`), which this page says
+   * once, in the line the upgrade uses: the password changed, and every other device is
+   * signed out, which is what a reset does on the server.
+   */
+  readonly passwordChanged = computed(
+    () => this.accountNotice()?.kind === 'passwordChanged'
+  );
+
   /** Whether the nudge offers another send. See `VERIFY_RESEND_AVAILABLE`. */
   readonly resendOffered = VERIFY_RESEND_AVAILABLE;
 

@@ -43,7 +43,9 @@ import { AccountNotice } from '../auth/account-notice';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
+  type RecoveryOutcome,
   type ResendOutcome,
+  type ResetPasswordOutcome,
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
@@ -435,7 +437,17 @@ export type AuthCall =
   | { readonly method: 'upgrade'; readonly email: string }
   | { readonly method: 'verifyEmail'; readonly token: string }
   | { readonly method: 'resendVerification' }
-  | { readonly method: 'forgotPassword'; readonly email: string };
+  | { readonly method: 'forgotPassword'; readonly email: string }
+  | {
+      readonly method: 'resetPassword';
+      readonly token: string;
+      readonly password: string;
+    }
+  | {
+      readonly method: 'recoverySignIn';
+      readonly token: string;
+      readonly switchAccount: boolean;
+    };
 
 /** What a faked auth service does when asked. */
 export interface FakeAuthOptions {
@@ -456,6 +468,15 @@ export interface FakeAuthOptions {
 
   /** What a password reset ask answers. The default is a send with a wait. */
   readonly forgotPassword?: ResendOutcome;
+
+  /** What spending a reset link on a new password answers. The default signs in. */
+  readonly resetPassword?: ResetPasswordOutcome;
+
+  /**
+   * What spending a reset link on a sign in answers, given whether the person agreed
+   * to leave the account on this phone. The default signs in.
+   */
+  readonly recoverySignIn?: (switchAccount: boolean) => RecoveryOutcome;
 }
 
 /**
@@ -509,6 +530,33 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
       // shared default would hide the difference rule A4 is about: the reset is one
       // per minute and the rename is five per hour.
       return options.forgotPassword ?? { state: 'sent', waitSeconds: 60 };
+    },
+
+    resetPassword: async (
+      token: string,
+      password: string
+    ): Promise<ResetPasswordOutcome> => {
+      calls.push({ method: 'resetPassword', token, password });
+      return (
+        options.resetPassword ?? {
+          state: 'signed-in',
+          tokens: tokensFor(userId, 'REGISTERED'),
+        }
+      );
+    },
+
+    recoverySignIn: async (
+      token: string,
+      recovery: { readonly switchAccount?: boolean } = {}
+    ): Promise<RecoveryOutcome> => {
+      const switchAccount = recovery.switchAccount === true;
+      calls.push({ method: 'recoverySignIn', token, switchAccount });
+      return (
+        options.recoverySignIn?.(switchAccount) ?? {
+          state: 'signed-in',
+          tokens: tokensFor(userId, 'REGISTERED'),
+        }
+      );
     },
   };
 

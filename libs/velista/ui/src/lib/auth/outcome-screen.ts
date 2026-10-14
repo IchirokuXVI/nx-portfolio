@@ -10,7 +10,7 @@ import {
 import { BrandWordmark } from '../brand/brand-wordmark';
 import { CheckIcon, ClockIcon } from '../icons/icons';
 
-/** Which of the two things happened to the confirmation link. */
+/** Which of the two things happened to the link. */
 export type OutcomeTone = 'confirmed' | 'expired';
 
 /**
@@ -46,7 +46,10 @@ export class OutcomeScreen {
   readonly title = input.required<string>();
   readonly body = input.required<string>();
 
-  /** The one action, which is always into the app. */
+  /**
+   * The one action. Into the app on a confirmation link; on a dead reset link it asks
+   * for a new one (velista `0148`), with a quieter way on projected as `outcomeFooter`.
+   */
   readonly actionLabel = input.required<string>();
 
   readonly action = output<void>();

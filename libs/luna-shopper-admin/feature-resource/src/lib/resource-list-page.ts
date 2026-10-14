@@ -555,9 +555,13 @@ export class ResourceListPage {
    * computed body runs whenever something it read has changed, long after the
    * constructor. The set of actions never changes anyway; only whether a given
    * row is allowed one does, and that is `available` on each of them.
+   *
+   * Less the ones only the page of a record offers (backend plan 0210): an
+   * action that answers with a panel has nowhere to put it here.
    */
-  readonly namedActions: readonly NamedAction<ResourceRow>[] =
-    this.descriptor.actions?.named?.() ?? [];
+  readonly namedActions: readonly NamedAction<ResourceRow>[] = (
+    this.descriptor.actions?.named?.() ?? []
+  ).filter((action: NamedAction<ResourceRow>) => action.recordOnly !== true);
 
   /**
    * What this resource has to say about itself right now.

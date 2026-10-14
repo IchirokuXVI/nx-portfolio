@@ -71,6 +71,24 @@ export const ADMIN_USER_PATTERNS = {
    */
   resendVerification: 'adminUser.resendVerification',
   /**
+   * Mail somebody the password reset grant (plan 0210, target state 7).
+   *
+   * The mail a person gets from "Forgot password", with both links, issued by
+   * an operator and recorded in the audit trail. Refused for an account with
+   * no address and for one with no password (`recovery_needs_email`,
+   * `recovery_needs_password`).
+   */
+  sendPasswordReset: 'adminUser.sendPasswordReset',
+  /**
+   * Create the two links of a reset grant and hand them to the operator,
+   * without a mail (plan 0210, target state 8).
+   *
+   * The answer is the one place the raw token exists. The grant lives 24 hours
+   * (decision D1), is single use like every other, and the person gets a short
+   * notice mail with no link in it (decision D2).
+   */
+  createRecoveryLinks: 'adminUser.createRecoveryLinks',
+  /**
    * Change somebody's username or display name (plan 0077, section 3).
    *
    * **Two fields, and no third.** The email address, whether it is verified, and
@@ -284,3 +302,39 @@ export interface SetAdminUserRolesRequest extends AdminCredential {
 export type SetAdminUserRolesResult = AdminUserDetailView;
 
 export type ResendAdminVerificationResult = ResendVerificationResult;
+
+/** Mail somebody else the password reset grant (plan 0210, target state 7). */
+export interface SendAdminPasswordResetRequest extends AdminCredential {
+  targetUserId: string;
+  /** Locale for the reset email; defaults to the request locale. */
+  locale?: string;
+}
+
+/** When the mailed grant stops working. */
+export interface SendAdminPasswordResetResult {
+  /** ISO 8601 UTC. */
+  expiresAt: string;
+}
+
+/** Create the two links of a grant for somebody else (plan 0210, target state 8). */
+export interface CreateAdminRecoveryLinksRequest extends AdminCredential {
+  targetUserId: string;
+  /** Locale for the notice mail the person gets; defaults to the request locale. */
+  locale?: string;
+}
+
+/**
+ * The two links of one grant, for the operator to share by hand.
+ *
+ * Both carry the same token, so spending either ends the other. They are a
+ * key to the account until then: the gateway answers this with
+ * `Cache-Control: no-store`, and nothing writes them anywhere else.
+ */
+export interface CreateAdminRecoveryLinksResult {
+  /** Opens the page that chooses a new password. */
+  resetUrl: string;
+  /** Opens the page that signs in and keeps the password. */
+  signInUrl: string;
+  /** ISO 8601 UTC. */
+  expiresAt: string;
+}

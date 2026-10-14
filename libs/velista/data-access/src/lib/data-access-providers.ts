@@ -5,6 +5,7 @@ import { ApiUrl } from './api-url';
 import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
+import { PendingRecoveryLink } from './auth/pending-recovery-link';
 import { SessionStore } from './auth/session-store';
 import { SessionValidation } from './auth/session-validation';
 import { TokenStore } from './auth/token-store';
@@ -217,6 +218,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   SessionStore,
   AccountMemory,
   AccountNotice,
+  // Velista `0148`: a sign in link waiting on the home sheet's question.
+  PendingRecoveryLink,
   AssistantMemory,
   ConnectionRecovery,
   AuthMemory,

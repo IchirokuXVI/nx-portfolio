@@ -295,6 +295,121 @@ describe('AuthApi', () => {
     });
   });
 
+  describe('a reset link (velista 0148)', () => {
+    /** The optional auth gate is async, so the request goes out a tick later. */
+    const tick = () => new Promise((resolve) => setTimeout(resolve));
+
+    function guest() {
+      tokens.set({
+        userId: 'u-guest',
+        kind: 'TEMPORARY',
+        username: 'dani',
+        accessToken: fresh(),
+        refreshToken: 'refresh-0',
+      });
+    }
+
+    it('resets anonymously and stores the pair', async () => {
+      const result = api.resetPassword('link-token', 'a new password');
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/reset-password`);
+      expect(request.request.body).toEqual({
+        token: 'link-token',
+        password: 'a new password',
+      });
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush(pair('u-owner'));
+
+      expect((await result).state).toBe('signed-in');
+      expect(tokens.tokens()?.userId).toBe('u-owner');
+    });
+
+    it('reads a 400 on the password as the rule, and any other as the link', async () => {
+      const short = api.resetPassword('link-token', 'short');
+      httpMock.expectOne(`${GATEWAY}/v1/auth/reset-password`).flush(
+        {
+          code: 'validation_failed',
+          correlationId: 'c1',
+          errors: { password: ['too short'] },
+        },
+        { status: 400, statusText: 'Bad Request' }
+      );
+      expect(await short).toEqual({ state: 'password-rejected' });
+
+      const dead = api.resetPassword('old-token', 'a new password');
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/reset-password`)
+        .flush(
+          { code: 'validation_failed', correlationId: 'c2' },
+          { status: 400, statusText: 'Bad Request' }
+        );
+      expect(await dead).toEqual({ state: 'link-dead' });
+    });
+
+    it('signs in with no bearer when nobody is signed in, and stores the pair', async () => {
+      const result = api.recoverySignIn('link-token');
+      await tick();
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/recovery-sign-in`);
+      // `switchAccount` only goes as a JSON true, so it is left out here.
+      expect(request.request.body).toEqual({ token: 'link-token' });
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush({ outcome: 'SIGNED_IN', tokens: pair('u-owner') });
+
+      expect((await result).state).toBe('signed-in');
+      expect(tokens.tokens()?.userId).toBe('u-owner');
+    });
+
+    it('sends the bearer of this phone, and the switch when asked', async () => {
+      guest();
+      const result = api.recoverySignIn('link-token', { switchAccount: true });
+      await tick();
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/recovery-sign-in`);
+      expect(request.request.headers.get('Authorization')).toBe(
+        `Bearer ${tokens.tokens()?.accessToken}`
+      );
+      expect(request.request.body).toEqual({
+        token: 'link-token',
+        switchAccount: true,
+      });
+      request.flush({ outcome: 'ALREADY_SIGNED_IN' });
+
+      expect(await result).toEqual({ state: 'already-signed-in' });
+      // Nothing to store: the owner was already here.
+      expect(tokens.tokens()?.userId).toBe('u-guest');
+    });
+
+    it.each([
+      ['recovery_other_account', 409, 'other-account'],
+      ['impersonation_not_allowed', 403, 'refused-in-support'],
+      ['validation_failed', 400, 'link-dead'],
+    ])('reads %s as %s', async (code, status, state) => {
+      guest();
+      const result = api.recoverySignIn('link-token');
+      await tick();
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/recovery-sign-in`)
+        .flush({ code, correlationId: 'c1' }, { status, statusText: 'No' });
+
+      expect((await result).state).toBe(state);
+      expect(tokens.tokens()?.userId).toBe('u-guest');
+    });
+
+    it('treats an answer it cannot read as a failure, and stores nothing (rule D4)', async () => {
+      const result = api.recoverySignIn('link-token');
+      await tick();
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/recovery-sign-in`)
+        .flush({ outcome: 'SOMETHING_NEW' });
+
+      expect((await result).state).toBe('failed');
+      expect(tokens.tokens()).toBeNull();
+    });
+  });
+
   describe('rule D4, on the token pair', () => {
     it('refuses to store a pair it could not map', async () => {
       // A half stored session is worse than none: the app would look signed in and

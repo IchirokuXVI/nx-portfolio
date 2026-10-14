@@ -4,7 +4,7 @@
       {{ promptKey() | rokuT }}
       <!-- The only accented words in the sentence, and the only tappable ones. -->
       <button (click)="resend.emit()" class="action" type="button">
-        {{ 'auth.resend.action' | rokuT }}
+        {{ actionKey() | rokuT }}
       </button>
     </p>
   }
@@ -14,11 +14,11 @@
          rather than interrupting whatever they were reading next. -->
     <p aria-live="polite" class="line sent">
       @if (clock(); as wait) {
-        {{ 'auth.resend.sent' | rokuT: { wait } }}
+        {{ sentKey() | rokuT: { wait } }}
       } @else {
         <!-- The server named no wait, and rule C3 forbids inventing one. The
              sentence confirms the send and promises no particular moment. -->
-        {{ 'auth.resend.sentNoWait' | rokuT }}
+        {{ sentNoWaitKey() | rokuT }}
       }
     </p>
   }

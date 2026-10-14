@@ -126,6 +126,15 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // person offers a guest no role, so this is a screen that is behind:
       // the account was a registered one when the page read it.
       return 'resource.error.guestHasNoRoles';
+    case 'recovery_needs_email':
+    case 'recovery_needs_password':
+      // A reset grant asked for an account that cannot have one (backend plan
+      // 0210): a guest, or an account that signs in with Google alone. The
+      // page of a person hides both actions for either, so this is a screen
+      // that is behind, and the sentence says which kind of account it is.
+      return error.code === 'recovery_needs_email'
+        ? 'resource.error.recoveryNeedsEmail'
+        : 'resource.error.recoveryNeedsPassword';
   }
 
   switch (error.status) {
