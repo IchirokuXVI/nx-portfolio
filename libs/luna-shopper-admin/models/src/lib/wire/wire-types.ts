@@ -141,6 +141,13 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `AdminRecoveryDto` in the gateway's OpenAPI document.
+ */
+export type AdminRecoveryDto = {
+  locale?: string;
+};
+
+/**
  * `AppendShopWalkEntryDto` in the gateway's OpenAPI document.
  */
 export type AppendShopWalkEntryDto = {
@@ -644,6 +651,9 @@ export type ProblemDetails = {
     | 'impersonation_ended'
     | 'impersonation_not_allowed'
     | 'not_impersonating'
+    | 'recovery_other_account'
+    | 'recovery_needs_email'
+    | 'recovery_needs_password'
     | 'internal';
   detail?: string;
   message: string;
@@ -719,6 +729,14 @@ export type ProfilePostalCodeDto = {
 export type ProfileSupermarketDto = {
   supermarketId: string;
   excluded?: boolean;
+};
+
+/**
+ * `RecoverySignInDto` in the gateway's OpenAPI document.
+ */
+export type RecoverySignInDto = {
+  token: string;
+  switchAccount?: boolean;
 };
 
 /**
@@ -1852,6 +1870,22 @@ export type AdminUsersAdminUserView = {
 };
 
 /**
+ * `admin-users.CreateAdminRecoveryLinksResult` in the gateway's OpenAPI document.
+ */
+export type AdminUsersCreateAdminRecoveryLinksResult = {
+  resetUrl: string;
+  signInUrl: string;
+  expiresAt: string;
+};
+
+/**
+ * `admin-users.SendAdminPasswordResetResult` in the gateway's OpenAPI document.
+ */
+export type AdminUsersSendAdminPasswordResetResult = {
+  expiresAt: string;
+};
+
+/**
  * `admin.AdminDashboardResponse` in the gateway's OpenAPI document.
  *
  * What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.
@@ -1919,6 +1953,20 @@ export type AuthDeleteAccountResult = {
 export type AuthMintOAuthStateResult = {
   state: string;
 };
+
+/**
+ * `auth.RecoverySignInResult` in the gateway's OpenAPI document.
+ *
+ * What the sign in did. `SIGNED_IN` carries the new token pair. `ALREADY_SIGNED_IN` carries none: the bearer already belongs to the account of the link, its session stays as it is, and the link no longer works.
+ */
+export type AuthRecoverySignInResult =
+  | {
+      outcome: 'SIGNED_IN';
+      tokens: AuthAuthTokens;
+    }
+  | {
+      outcome: 'ALREADY_SIGNED_IN';
+    };
 
 /**
  * `auth.RetryAfterResult` in the gateway's OpenAPI document.

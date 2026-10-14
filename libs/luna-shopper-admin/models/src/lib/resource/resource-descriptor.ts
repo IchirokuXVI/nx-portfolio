@@ -302,8 +302,44 @@ export interface NamedAction<T extends ResourceRow = ResourceRow> {
    * after which the record is gone.
    */
   readonly after?: 'reload' | 'leave';
-  run(row: T): Promise<void>;
+  /**
+   * Drawn on the page of a record and never on a row of the list (backend
+   * plan 0210). For an action whose answer is a panel the operator has to
+   * read, which a list has nowhere to put, or one that is only safe to offer
+   * after the whole record was read.
+   */
+  readonly recordOnly?: true;
+  /**
+   * Do it. Most actions answer nothing and the page reads the record again.
+   * One that answers an {@link ActionOutcome} has it shown as well.
+   */
+  run(row: T): Promise<void | ActionOutcome>;
 }
+
+/**
+ * What the page shows once a named action went through, beyond reading the
+ * record again (backend plan 0210).
+ *
+ * - `line`: a sentence beside the record, as a key and its arguments: "The
+ *   mail was sent. Its links work until 21:40."
+ * - `panel`: a component drawn in a dialog of its own, created with `inputs`,
+ *   with a heading and a close button around it. What it holds lives in that
+ *   component and goes when the dialog closes, which is the point for the
+ *   panel this exists for: two links that are a key to an account.
+ */
+export type ActionOutcome =
+  | {
+      readonly kind: 'line';
+      readonly key: string;
+      readonly args?: Readonly<Record<string, string | number>>;
+    }
+  | {
+      readonly kind: 'panel';
+      /** A translation key, for the heading of the dialog. */
+      readonly heading: string;
+      readonly panel: Type<unknown>;
+      readonly inputs: Readonly<Record<string, unknown>>;
+    };
 
 /**
  * Something done to several ticked rows at once (admin plan 0035, section 2).

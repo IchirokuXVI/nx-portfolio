@@ -54,6 +54,19 @@ export function recordingDirectory() {
   const directory: DirectoryServiceI = {
     deleteUser: async (id) => void calls.push(`deleteUser:${id}`),
     resendVerification: async (id) => void calls.push(`resend:${id}`),
+    sendPasswordReset: async (id) => {
+      calls.push(`sendPasswordReset:${id}`);
+      return { expiresAt: '2026-10-14T20:30:00.000Z' };
+    },
+    createRecoveryLinks: async (id) => {
+      calls.push(`recoveryLinks:${id}`);
+      return {
+        resetUrl: 'https://velista.test/auth/reset-password?token=t1',
+        signInUrl:
+          'https://velista.test/auth/reset-password?token=t1&mode=sign-in',
+        expiresAt: '2026-10-15T19:30:00.000Z',
+      };
+    },
     setUserRoles: async (id, roles) =>
       void calls.push(`roles:${id}:${roles.join(',')}`),
     deleteZone: async (id) => void calls.push(`deleteZone:${id}`),

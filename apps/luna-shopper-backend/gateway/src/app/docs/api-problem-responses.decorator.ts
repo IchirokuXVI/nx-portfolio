@@ -115,6 +115,14 @@ export interface ProblemResponseOptions {
    * - `end`: the token can belong to no session, or to one that is over.
    */
   impersonation?: 'refused' | 'start' | 'exchange' | 'end';
+  /**
+   * The route has a part in a reset grant (plan 0210), and each part answers
+   * a 409 of its own code:
+   *
+   * - `signIn`: a live link opened by another signed in account.
+   * - `operator`: an account with no address, or with no password.
+   */
+  recovery?: 'signIn' | 'operator';
 }
 
 const problemName = hoistProblemDetails();
@@ -234,6 +242,15 @@ export function ApiProblemResponses(
     codes.push(
       ERROR_CODES.IMPERSONATION_ENDED,
       ERROR_CODES.NOT_IMPERSONATING
+    );
+  }
+  if (options.recovery === 'signIn') {
+    codes.push(ERROR_CODES.RECOVERY_OTHER_ACCOUNT);
+  }
+  if (options.recovery === 'operator') {
+    codes.push(
+      ERROR_CODES.RECOVERY_NEEDS_EMAIL,
+      ERROR_CODES.RECOVERY_NEEDS_PASSWORD
     );
   }
   if (options.throttled !== false) {

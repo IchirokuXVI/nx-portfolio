@@ -657,6 +657,24 @@ export class NotImpersonatingException extends DomainException {
   readonly code = ERROR_CODES.NOT_IMPERSONATING;
 }
 
+/**
+ * A live sign in link was opened by another signed in account, which did not
+ * agree to leave (plan 0210). Nothing was spent.
+ */
+export class RecoveryOtherAccountException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_OTHER_ACCOUNT;
+}
+
+/** An operator asked for a reset grant for an account with no address (plan 0210). */
+export class RecoveryNeedsEmailException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_NEEDS_EMAIL;
+}
+
+/** An operator asked for a reset grant for a Google only account (plan 0210). */
+export class RecoveryNeedsPasswordException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_NEEDS_PASSWORD;
+}
+
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
 export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
 

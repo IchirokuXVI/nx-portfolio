@@ -34,6 +34,9 @@ export const AUTH_SCHEMA_IDS = {
   retryAfterResult: schemaId('auth/RetryAfterResult'),
   forgotPasswordRequest: schemaId('msg/auth.forgotPassword/request'),
   resetPasswordRequest: schemaId('msg/auth.resetPassword/request'),
+  // A reset grant spent as a sign in (plan 0210, target state 5).
+  recoverySignInRequest: schemaId('msg/auth.recoverySignIn/request'),
+  recoverySignInResult: schemaId('auth/RecoverySignInResult'),
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
@@ -168,6 +171,50 @@ const resetPasswordRequest = object(
   { token: nonEmptyString(), password: nonEmptyString() },
   ['token', 'password']
 );
+
+const recoverySignInRequest = object(
+  AUTH_SCHEMA_IDS.recoverySignInRequest,
+  {
+    token: nonEmptyString(),
+    switchAccount: boolean(),
+    callerUserId: nonEmptyString(),
+    supportSession: boolean(),
+  },
+  ['token']
+);
+
+/**
+ * The two answers of a sign in with a reset grant (plan 0210, target state 5),
+ * as a `oneOf` on `outcome`. Only `SIGNED_IN` carries a pair: the other answer
+ * means the caller already holds a session of that account and keeps it.
+ *
+ * `enum` with one value rather than `const`, which the wire types generator
+ * reads as a value to export.
+ */
+const recoverySignInResult: JsonSchema = {
+  $id: AUTH_SCHEMA_IDS.recoverySignInResult,
+  description:
+    'What the sign in did. `SIGNED_IN` carries the new token pair. `ALREADY_SIGNED_IN` carries none: the bearer already belongs to the account of the link, its session stays as it is, and the link no longer works.',
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        outcome: { type: 'string', enum: ['SIGNED_IN'] },
+        tokens: ref(AUTH_SCHEMA_IDS.authTokens),
+      },
+      required: ['outcome', 'tokens'],
+      additionalProperties: false,
+    },
+    {
+      type: 'object',
+      properties: {
+        outcome: { type: 'string', enum: ['ALREADY_SIGNED_IN'] },
+      },
+      required: ['outcome'],
+      additionalProperties: false,
+    },
+  ],
+};
 
 const refreshRequest = object(
   AUTH_SCHEMA_IDS.refreshRequest,
@@ -331,6 +378,8 @@ export const authSchemas: JsonSchema[] = [
   retryAfterResult,
   forgotPasswordRequest,
   resetPasswordRequest,
+  recoverySignInRequest,
+  recoverySignInResult,
   refreshRequest,
   upgradeRequest,
   googleLoginRequest,
@@ -383,6 +432,10 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.resetPassword]: {
     request: AUTH_SCHEMA_IDS.resetPasswordRequest,
     response: AUTH_SCHEMA_IDS.authTokens,
+  },
+  [AUTH_PATTERNS.recoverySignIn]: {
+    request: AUTH_SCHEMA_IDS.recoverySignInRequest,
+    response: AUTH_SCHEMA_IDS.recoverySignInResult,
   },
   [AUTH_PATTERNS.refresh]: {
     request: AUTH_SCHEMA_IDS.refreshRequest,

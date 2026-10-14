@@ -89,6 +89,59 @@ describe('DirectoryApi', () => {
     http.verify();
   });
 
+  it('mails a reset grant and reads when its links stop working', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.sendPasswordReset(USER, 'es');
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/send-password-reset`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ locale: 'es' });
+    request.flush({ expiresAt: '2026-10-14T20:30:00.000Z', extra: 'ignored' });
+
+    await expect(done).resolves.toEqual({
+      expiresAt: '2026-10-14T20:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it('creates the recovery links and reads them into this app’s own shape', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.createRecoveryLinks(USER);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/recovery-links`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    request.flush({
+      resetUrl: 'https://velista.app/auth/reset-password?token=t',
+      signInUrl: 'https://velista.app/auth/reset-password?token=t&mode=sign-in',
+      expiresAt: '2026-10-15T19:30:00.000Z',
+      tokenHash: 'never-passed-through',
+    });
+
+    await expect(done).resolves.toEqual({
+      resetUrl: 'https://velista.app/auth/reset-password?token=t',
+      signInUrl: 'https://velista.app/auth/reset-password?token=t&mode=sign-in',
+      expiresAt: '2026-10-15T19:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it('refuses an answer it cannot read rather than draw half a link', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.createRecoveryLinks(USER);
+    http
+      .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/recovery-links`)
+      .flush({ resetUrl: 'javascript:alert(1)', signInUrl: 3 });
+
+    await expect(done).rejects.toThrow('recovery-links');
+    http.verify();
+  });
+
   /**
    * The whole set with a PUT (backend plan 0175), in the order the server
    * lists roles, so a set sent in any order reads back as it was sent.

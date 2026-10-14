@@ -12,7 +12,7 @@ import {
   OAuthIdentity,
   User,
 } from '../entities';
-import { TokenGrantService } from '../tokens/token-grant.service';
+import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
 
@@ -109,7 +109,7 @@ function build(users: Row[] = []) {
   const service = new IdentityService(
     dataSource as never,
     tokens as never,
-    new TokenGrantService(),
+    new InMemoryTokenGrantService(),
     { hash: jest.fn(async () => 'hash'), verify: jest.fn(async () => true) },
     mail as never,
     events as never,

@@ -37,6 +37,19 @@ export enum ImpersonationReason {
 export const IMPERSONATION_NOTE_MAX = 500;
 
 /**
+ * What a sign in with a reset grant did (plan 0210, target state 5).
+ *
+ * `SIGNED_IN` comes with a token pair. `ALREADY_SIGNED_IN` comes with none: the
+ * caller already holds a session of the account the grant belongs to, so the
+ * page keeps that session and says so. It is never an error, because a person
+ * who opens a link of their own while signed in did nothing wrong.
+ */
+export enum RecoverySignInOutcome {
+  SIGNED_IN = 'SIGNED_IN',
+  ALREADY_SIGNED_IN = 'ALREADY_SIGNED_IN',
+}
+
+/**
  * How far a change to the global username travels (plan 0018, section 4.1).
  *
  * A user's per zone names are copies, not derivations, so a global rename has to

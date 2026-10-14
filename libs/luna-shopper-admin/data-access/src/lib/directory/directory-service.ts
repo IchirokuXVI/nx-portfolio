@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
 import { DirectoryMemory } from './directory-memory';
+import type { PasswordResetSent, RecoveryLinks } from './recovery-links';
 
 /**
  * The things an operator can do to a person or a household that are not a field
@@ -44,6 +45,29 @@ export interface DirectoryServiceI {
    * the screen offers it.
    */
   resendVerification(userId: string, locale?: string): Promise<void>;
+
+  /**
+   * Mail somebody the password reset grant, with both of its links (backend
+   * plan 0210, target state 7). Answers when the links stop working.
+   *
+   * Refused for a guest (`recovery_needs_email`) and for an account with no
+   * password (`recovery_needs_password`). The page does not offer it to
+   * either, so the refusals are a backstop.
+   */
+  sendPasswordReset(
+    userId: string,
+    locale?: string
+  ): Promise<PasswordResetSent>;
+
+  /**
+   * Create the two links of a reset grant and hand them to the operator, with
+   * no mail of the links (backend plan 0210, target state 8). The person gets
+   * a notice that they exist.
+   *
+   * The answer is a key to the account. The caller keeps it in a component
+   * and nowhere else.
+   */
+  createRecoveryLinks(userId: string, locale?: string): Promise<RecoveryLinks>;
 
   /**
    * Replace somebody's roles with exactly these (backend plan 0175).

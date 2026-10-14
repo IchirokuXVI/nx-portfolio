@@ -376,6 +376,21 @@ function asStringArray({ value }: { value: unknown }): string[] {
     .filter(Boolean);
 }
 
+/**
+ * The locale of the mail an operator action on a reset grant sends (plan 0210):
+ * the reset mail itself, or the notice that links were created.
+ */
+export class AdminRecoveryDto {
+  @ApiPropertyOptional({
+    description:
+      'Locale for the mail the person gets; defaults to the request locale.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(35)
+  locale?: string;
+}
+
 /** The locale of the confirmation mail an operator resends on somebody's behalf. */
 export class ResendAdminVerificationDto {
   @ApiPropertyOptional({

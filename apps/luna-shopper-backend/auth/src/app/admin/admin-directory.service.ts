@@ -10,6 +10,8 @@ import {
   type AdminUserPage,
   type AdminUserRefView,
   type AdminUserView,
+  type CreateAdminRecoveryLinksRequest,
+  type CreateAdminRecoveryLinksResult,
   type DeleteAdminUserRequest,
   type DeleteAdminUserResult,
   type GetAdminUserRequest,
@@ -19,6 +21,8 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type SendAdminPasswordResetRequest,
+  type SendAdminPasswordResetResult,
   type SetAdminUserRolesRequest,
   type UpdateAdminUserRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -306,6 +310,39 @@ export class AdminDirectoryService {
   ): Promise<ResendAdminVerificationResult> {
     const actorId = await this.gate.requireAdmin(req);
     return this.identity.resendVerificationAsOperator(
+      req.targetUserId,
+      actorId,
+      req.locale
+    );
+  }
+
+  /**
+   * Mail somebody the password reset grant (plan 0210, target state 7).
+   *
+   * No throttle, as {@link resendVerification} has none for an operator. The
+   * refusals are auth's: an account with no address, and one with no
+   * password, each with a code of its own.
+   */
+  async sendPasswordReset(
+    req: SendAdminPasswordResetRequest
+  ): Promise<SendAdminPasswordResetResult> {
+    const actorId = await this.gate.requireAdmin(req);
+    return this.identity.sendPasswordResetAsOperator(
+      req.targetUserId,
+      actorId,
+      req.locale
+    );
+  }
+
+  /**
+   * Create the two links of a reset grant for the operator to share by hand
+   * (plan 0210, target state 8). The answer holds the only copy of the token.
+   */
+  async createRecoveryLinks(
+    req: CreateAdminRecoveryLinksRequest
+  ): Promise<CreateAdminRecoveryLinksResult> {
+    const actorId = await this.gate.requireAdmin(req);
+    return this.identity.createRecoveryLinksAsOperator(
       req.targetUserId,
       actorId,
       req.locale

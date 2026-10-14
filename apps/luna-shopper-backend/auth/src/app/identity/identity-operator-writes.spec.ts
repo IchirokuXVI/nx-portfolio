@@ -4,7 +4,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit } from '../audit/auth-audit.testing';
 import { EmailVerification, User } from '../entities';
-import { TokenGrantService } from '../tokens/token-grant.service';
+import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
 
@@ -102,7 +102,7 @@ function build(users: Partial<User>[] = []) {
   const service = new IdentityService(
     dataSource as never,
     { issueTokens: jest.fn() } as never,
-    new TokenGrantService(),
+    new InMemoryTokenGrantService(),
     { hash: jest.fn(), verify: jest.fn() } as never,
     mail as never,
     events as never,
