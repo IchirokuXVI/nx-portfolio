@@ -1235,10 +1235,11 @@ describe('GET /v1/baskets/:id at a shop: its sections (plan 0167)', () => {
     availability: [],
   });
 
+  // No `source` and no `PINNED` step: the sections are the shop's own, and a
+  // product is in one only through a category (plan 0200).
   const rule = (): ItemSectionsAtLocationView => ({
-    source: 'LOCATION',
     items: [
-      { itemId: 'i-hacendado', sectionIds: [PIZZAS], step: 'PINNED' },
+      { itemId: 'i-hacendado', sectionIds: [PIZZAS], step: 'COVERED' },
       { itemId: 'i-pascual', sectionIds: [PIZZAS, FROZEN], step: 'COVERED' },
       { itemId: 'i-unpriced', sectionIds: [], step: 'NONE' },
     ],

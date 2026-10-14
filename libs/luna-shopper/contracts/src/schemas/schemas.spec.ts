@@ -1713,30 +1713,42 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    describe('shop sections (plan 0167)', () => {
+    describe('shop sections (plan 0167, as plan 0200 left it)', () => {
       const section = {
         id: 's-pizzas',
-        supermarketId: 'mercadona',
+        supermarketLocationId: 'loc-1',
         slug: 'pizzas',
         name: { es: 'Pizzas' },
         position: 3,
         categoryIds: ['c-pizzas'],
       };
 
-      it('a section covers roots and leaves, and may cover none', () => {
+      it('a section belongs to a shop, covers roots and leaves, and may cover none', () => {
         const create = (fields: Record<string, unknown>) =>
           validateMessageRequest('section.create', {
             userId: 'owner',
-            supermarketId: 'mercadona',
+            supermarketLocationId: 'loc-1',
             slug: 'frozen',
             name: { en: 'Frozen', es: 'Congelados' },
             ...fields,
           }).valid;
         expect(create({ categoryIds: ['c-frozen', 'c-pizzas'] })).toBe(true);
-        // The middle aisle of whatever is on offer: pins only.
-        expect(create({ categoryIds: [], position: 0 })).toBe(true);
+        // What a map walk creates: an aisle that covers nothing yet.
+        expect(create({ categoryIds: [] })).toBe(true);
         expect(create({})).toBe(false);
         expect(create({ categoryIds: ['c-frozen', 'c-frozen'] })).toBe(false);
+        // A new section goes after the last one, so a create names no place.
+        expect(create({ categoryIds: [], position: 0 })).toBe(false);
+        // A chain has no sections.
+        expect(
+          validateMessageRequest('section.create', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            slug: 'frozen',
+            name: { es: 'Congelados' },
+            categoryIds: [],
+          }).valid
+        ).toBe(false);
 
         // The slug is an identity: an edit cannot carry one.
         expect(
@@ -1755,39 +1767,44 @@ describe('contract schemas', () => {
           }).valid
         ).toBe(false);
 
-        // The back office's reads carry the shop count; nothing requires it.
+        expect(validateMessageResponse('section.get', section).valid).toBe(
+          true
+        );
+        expect(validateMessageResponse('section.create', section).valid).toBe(
+          true
+        );
+        // The chain id and the shop count left with the chain's sections.
+        const { supermarketLocationId: _shop, ...ofNoShop } = section;
+        expect(
+          validateMessageResponse('section.get', {
+            ...ofNoShop,
+            supermarketId: 'mercadona',
+          }).valid
+        ).toBe(false);
         expect(
           validateMessageResponse('section.get', {
             ...section,
             locationCount: 12,
           }).valid
-        ).toBe(true);
-        expect(validateMessageResponse('section.create', section).valid).toBe(
-          true
-        );
-        expect(
-          validateMessageResponse('section.list', {
-            items: [{ ...section, locationCount: 0 }],
-            nextCursor: null,
-          }).valid
-        ).toBe(true);
-        expect(
-          validateMessageRequest('section.list', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            query: 'piz',
-          }).valid
-        ).toBe(true);
+        ).toBe(false);
         expect(
           validateMessageResponse('section.delete', { id: 's-pizzas' }).valid
         ).toBe(true);
       });
 
-      it('a shop’s list is read with no account, and says whose list it is', () => {
+      it('a shop’s list is read with no account, and carries no source', () => {
         expect(
           validateMessageRequest('section.forLocation', {
             supermarketLocationId: 'loc-1',
           }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.forLocation', {
+            sections: [section],
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.forLocation', { sections: [] }).valid
         ).toBe(true);
         for (const source of ['LOCATION', 'CHAIN']) {
           expect(
@@ -1795,14 +1812,8 @@ describe('contract schemas', () => {
               sections: [section],
               source,
             }).valid
-          ).toBe(true);
+          ).toBe(false);
         }
-        expect(
-          validateMessageResponse('section.forLocation', {
-            sections: [],
-            source: 'NONE',
-          }).valid
-        ).toBe(false);
 
         const put = (sectionIds: unknown) =>
           validateMessageRequest('section.setForLocation', {
@@ -1811,53 +1822,20 @@ describe('contract schemas', () => {
             sectionIds,
           }).valid;
         expect(put(['s-pizzas', 's-frozen'])).toBe(true);
-        // Empty returns the shop to its chain's default.
+        // Empty orders nothing, and is still a well formed request.
         expect(put([])).toBe(true);
         expect(put(['s-pizzas', 's-pizzas'])).toBe(false);
         expect(put(undefined)).toBe(false);
       });
 
-      it('a pin names a product and sections of one chain; empty removes it', () => {
-        const pin = (sectionIds: unknown) =>
-          validateMessageRequest('section.setPins', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            itemId: 'i-pizza',
-            sectionIds,
-          }).valid;
-        expect(pin(['s-pizzas'])).toBe(true);
-        expect(pin([])).toBe(true);
-        expect(pin(['s-pizzas', 's-pizzas'])).toBe(false);
-        expect(
-          validateMessageResponse('section.setPins', {
-            supermarketId: 'mercadona',
-            itemId: 'i-pizza',
-            sectionIds: [],
-          }).valid
-        ).toBe(true);
-
-        expect(
-          validateMessageRequest('section.listPins', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            sectionId: 's-pizzas',
-          }).valid
-        ).toBe(true);
-        expect(
-          validateMessageResponse('section.listPins', {
-            items: [
-              {
-                supermarketId: 'mercadona',
-                itemId: 'i-pizza',
-                sectionIds: ['s-pizzas'],
-              },
-            ],
-            nextCursor: null,
-          }).valid
-        ).toBe(true);
+      it('no subject lists the sections of a chain, and none pins a product', () => {
+        const subjects = Object.values(SECTION_PATTERNS) as string[];
+        expect(subjects).not.toContain('section.list');
+        expect(subjects).not.toContain('section.listPins');
+        expect(subjects).not.toContain('section.setPins');
       });
 
-      it('the rule answers many products at one shop, naming the step', () => {
+      it('the read answers many products at one shop, and no product is pinned', () => {
         expect(
           validateMessageRequest('section.itemsAtLocation', {
             supermarketLocationId: 'loc-1',
@@ -1871,13 +1849,18 @@ describe('contract schemas', () => {
         ).toBe(false);
         const answer = (step: string) =>
           validateMessageResponse('section.itemsAtLocation', {
-            source: 'CHAIN',
             items: [{ itemId: 'i-pizza', sectionIds: [], step }],
           }).valid;
-        expect(answer('PINNED')).toBe(true);
         expect(answer('COVERED')).toBe(true);
         expect(answer('NONE')).toBe(true);
+        expect(answer('PINNED')).toBe(false);
         expect(answer('GUESSED')).toBe(false);
+        expect(
+          validateMessageResponse('section.itemsAtLocation', {
+            source: 'CHAIN',
+            items: [],
+          }).valid
+        ).toBe(false);
       });
 
       it('a basket product at a shop may carry its sections, and need not', () => {

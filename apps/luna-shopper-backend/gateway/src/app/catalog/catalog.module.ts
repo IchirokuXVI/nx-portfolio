@@ -100,7 +100,7 @@ import {
     // Plan 0166: the tree's two levels, and the four rules catalog enforces.
     AdminCatalogCategoriesController,
     // Plan 0167: shop sections at their own id; created and listed under
-    // their chain, and a shop's list under its location.
+    // their shop (plan 0200).
     AdminCatalogSectionsController,
     // Plan 0115: the registry a person fills, and the keys the queue is asking
     // for. The second is composed from catalog and the harvester, which is why

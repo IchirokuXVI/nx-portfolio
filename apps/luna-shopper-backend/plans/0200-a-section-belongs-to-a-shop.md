@@ -1,3 +1,5 @@
+> **PR:** [#707](https://github.com/IchirokuXVI/nx-portfolio/pull/707)
+
 # 0200: a section belongs to a shop
 
 > Asked for by the owner on 2026-10-11, with the redesign of the shopping list: "Sections of

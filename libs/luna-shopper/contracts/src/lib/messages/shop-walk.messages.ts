@@ -337,7 +337,7 @@ export interface ShopperMapView {
   bounds: { x: number; y: number; w: number; h: number };
 }
 
-/** One section name of the shown walk and the chain section it resolved to. */
+/** One section name of the shown walk and the section of the shop it resolved to. */
 export interface ShopMapSectionView {
   name: string;
   sectionId: string;
@@ -349,7 +349,7 @@ export interface ShopMapView {
   /** When the shown walk was last saved, ISO. */
   savedAt: string;
   view: ShopperMapView;
-  /** The chain sections the walk's section names resolved to, in walk order. */
+  /** The sections of the shop the walk's section names resolved to, in walk order. */
   sections: ShopMapSectionView[];
 }
 

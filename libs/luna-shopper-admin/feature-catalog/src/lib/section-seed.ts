@@ -1,5 +1,5 @@
 import { seededCategoryId } from '@portfolio/luna-shopper-admin/data-access';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { ChainSectionView } from './chain-section-view';
 
 /**
  * Shop sections, as they look with no backend listening (admin plan 0037,
@@ -29,7 +29,7 @@ export const SEEDED_SECTION = {
   chilled: 'sec_mercadona_chilled',
 } as const;
 
-export const SECTION_SEED: readonly Wire.CatalogSupermarketSectionView[] = [
+export const SECTION_SEED: readonly ChainSectionView[] = [
   {
     id: SEEDED_SECTION.offers,
     supermarketId: MERCADONA,

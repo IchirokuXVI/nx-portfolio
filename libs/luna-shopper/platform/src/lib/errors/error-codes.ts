@@ -336,26 +336,28 @@ export const ERROR_CODES = {
    * An id names no shop section (plan 0167, section 4).
    *
    * Its own code rather than a plain {@link NOT_FOUND}, for the reason
-   * {@link CATEGORY_NOT_FOUND} gives: on a shop's list or a pin the missing
+   * {@link CATEGORY_NOT_FOUND} gives: on the order of a shop the missing
    * thing is a value in the body, not the route's resource. The ids that
    * matched nothing travel in `details` as `unknown`.
    */
   SECTION_NOT_FOUND: 'section_not_found',
   /**
-   * A shop's list or a pin named a section of another chain (plan 0167,
-   * section 1).
+   * The order of a shop named a section of another shop (plan 0200).
    *
-   * A section belongs to one chain, and a shop lists only its own chain's
-   * sections, which a trigger enforces because a foreign key cannot say it.
-   * The sections that broke the rule travel in `details` as `sectionIds`.
+   * A section belongs to one shop, and the order of a shop holds only its own
+   * sections. The sections that broke the rule travel in `details` as
+   * `sectionIds`. It replaces `section_of_another_chain`, which no write can
+   * answer since a chain has no sections.
    */
-  SECTION_OF_ANOTHER_CHAIN: 'section_of_another_chain',
+  SECTION_OF_ANOTHER_SHOP: 'section_of_another_shop',
   /**
-   * The chain already has a section with this slug (plan 0167, section 1).
+   * The shop already has a section with this slug (plan 0167, section 1, and
+   * plan 0200).
    *
-   * Two sections named "Frescos" in one chain is an operator error worth
-   * refusing. The holder's id travels in `details` as `sectionId`, so the back
-   * office can offer to open it rather than only say no.
+   * Two sections named "Frescos" in one shop is an operator error worth
+   * refusing. Two shops of one chain can both hold the slug. The holder's id
+   * travels in `details` as `sectionId`, so the back office can offer to open
+   * it rather than only say no.
    */
   SECTION_SLUG_TAKEN: 'section_slug_taken',
   /**
@@ -581,10 +583,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,
   // Plan 0167: 404 the way an unknown category is, and 409 for the two that
-  // turn on another row: which chain a section belongs to, and which section
-  // already holds a slug.
+  // turn on another row: which shop a section belongs to (plan 0200), and
+  // which section already holds a slug.
   [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
-  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SECTION_OF_ANOTHER_SHOP]: HttpStatus.CONFLICT,
   [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
   // 409: the reference is well formed, and another shop holds it (plan 0195).
   [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: HttpStatus.CONFLICT,

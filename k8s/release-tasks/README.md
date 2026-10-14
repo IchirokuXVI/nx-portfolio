@@ -337,6 +337,53 @@ empty catalog and harvester databases (k8s plan 0012).
   ones for a week, and a rename brings them back. The dumps that the runner
   takes are the second way back, for 14 days.
 
+## Task 0004
+
+`0004-remove-chain-sections` removes every row of the four tables that held the
+sections of a chain: `supermarket_item_sections`, `location_sections`,
+`section_categories` and `supermarket_sections`, in that order (backend plan
+`0200`). A section belongs to a shop since that plan. The tables stay, and a
+later plan drops them.
+
+- **It ships in the same release as the migration that replaces those rows.**
+  The migration copies the selection of each shop into `shop_sections` and
+  deletes nothing. This task deletes, because a migration takes no dump and
+  cannot expire.
+- **It is armed for staging and for production.** Both windows end on
+  2026-10-28, and `PRODUCTION_RELEASE` is `0.14.0`. A release published after
+  that date needs the dates moved in a commit before it.
+- **Its `check.sh` does not ask for `shop_sections`.** The check runs before
+  `helm upgrade`, and the table does not exist until the migration of the same
+  release has run. A check that asked for it would refuse the deploy that
+  creates it. The check counts the rows of the four tables and refuses above
+  `MAX_ROWS_<ENVIRONMENT>`.
+- **Its `post.sh` is what refuses a cluster where the migration did not run.**
+  With rows in the four tables and no `shop_sections`, those rows are still
+  what the service reads. `post.sh` then deletes nothing and exits 1. The task
+  stays at `pre-done`, and the next deploy runs `post.sh` again.
+- **A selection with no copy does not stop it.** The migration copies every
+  selection, so a missing copy means that a person or a map walk removed that
+  section of the shop afterwards. `post.sh` prints how many there are and
+  deletes the old rows anyway. The dump is the way back.
+- **It leaves no marker, and it does not need one.** All four deletes are one
+  transaction. A second run finds four empty tables and does nothing, and
+  nothing writes to those tables after the release. Both scripts also pass
+  where the four tables do not exist, which is the state after they are
+  dropped.
+- **It has a `post.sh` and no `pre.sh`**, because it must run after the
+  migration has made the copies.
+
+To rehearse it, name a database that you made for the rehearsal. Do not name a
+cluster:
+
+```sh
+ENVIRONMENT=staging \
+  CATALOG_PSQL='docker exec -i my-catalog-db psql -U luna_catalog -d my_copy' \
+  bash k8s/release-tasks/tasks/0004-remove-chain-sections/check.sh
+CATALOG_PSQL='docker exec -i my-catalog-db psql -U luna_catalog -d my_copy' \
+  bash k8s/release-tasks/tasks/0004-remove-chain-sections/post.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote

@@ -5,6 +5,7 @@ import {
   type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { ChainSectionView } from './chain-section-view';
 import type { ItemSectionPin, LocationSectionList } from './section-seed';
 
 /**
@@ -17,7 +18,7 @@ import type { ItemSectionPin, LocationSectionList } from './section-seed';
  * shop's list, and the three branches of "where is this product in this shop".
  */
 
-type Section = Wire.CatalogSupermarketSectionView;
+type Section = ChainSectionView;
 type Category = Wire.CatalogCategoryView;
 type Location = Wire.CatalogSupermarketLocationView;
 type Item = Wire.CatalogItemView;

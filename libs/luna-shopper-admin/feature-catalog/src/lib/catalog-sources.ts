@@ -16,6 +16,7 @@ import {
   type ItemScopePrices,
 } from './catalog-seed';
 import { categoryMemoryRules, itemMemoryRules } from './category-rules';
+import type { ChainSectionView } from './chain-section-view';
 import { sectionMemoryRules } from './section-rules';
 import {
   ITEM_SECTION_PIN_SEED,
@@ -303,7 +304,7 @@ export function locationItemSectionsPath(locationId: string): string {
  * created at `/supermarkets/{id}/sections`, and one is read, changed and
  * deleted at `/sections/{id}`.
  */
-export function sectionSource(): ResourceSource<Wire.CatalogSupermarketSectionView> {
+export function sectionSource(): ResourceSource<ChainSectionView> {
   return {
     path: SECTIONS_PATH,
     collectionPath: (values) => {

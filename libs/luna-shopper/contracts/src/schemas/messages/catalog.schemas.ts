@@ -28,7 +28,6 @@ import {
   ITEM_LINKED_IMAGE_URL_MAX_LENGTH,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
-  LOCATION_SECTIONS_SOURCES,
   PACK_COUNT_FILL_MAX,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
@@ -218,24 +217,17 @@ export const CATALOG_SCHEMA_IDS = {
   updateCategoryRequest: schemaId('msg/category.update/request'),
   categoryIdRequest: schemaId('msg/category.id/request'),
   listCategoriesRequest: schemaId('msg/category.list/request'),
-  // Plan 0167: shop sections, a shop's list of them, and pins.
-  supermarketSectionView: schemaId('catalog/SupermarketSectionView'),
-  supermarketSectionPage: schemaId('catalog/SupermarketSectionPage'),
-  locationSectionsSource: schemaId('enums/LocationSectionsSource'),
+  // Plan 0167, as plan 0200 left it: the sections of a shop.
+  shopSectionView: schemaId('catalog/ShopSectionView'),
   locationSectionsView: schemaId('catalog/LocationSectionsView'),
-  itemSectionPinsView: schemaId('catalog/ItemSectionPinsView'),
-  itemSectionPinsPage: schemaId('catalog/ItemSectionPinsPage'),
   sectionRuleStep: schemaId('enums/SectionRuleStep'),
   itemSectionsAtLocationEntry: schemaId('catalog/ItemSectionsAtLocationEntry'),
   itemSectionsAtLocationView: schemaId('catalog/ItemSectionsAtLocationView'),
-  createSupermarketSectionRequest: schemaId('msg/section.create/request'),
-  updateSupermarketSectionRequest: schemaId('msg/section.update/request'),
-  supermarketSectionIdRequest: schemaId('msg/section.id/request'),
-  listSupermarketSectionsRequest: schemaId('msg/section.list/request'),
+  createShopSectionRequest: schemaId('msg/section.create/request'),
+  updateShopSectionRequest: schemaId('msg/section.update/request'),
+  shopSectionIdRequest: schemaId('msg/section.id/request'),
   locationSectionsRequest: schemaId('msg/section.forLocation/request'),
   setLocationSectionsRequest: schemaId('msg/section.setForLocation/request'),
-  listItemSectionPinsRequest: schemaId('msg/section.listPins/request'),
-  setItemSectionPinsRequest: schemaId('msg/section.setPins/request'),
   itemSectionsAtLocationRequest: schemaId(
     'msg/section.itemsAtLocation/request'
   ),
@@ -1560,7 +1552,7 @@ const listCategoriesRequest = object(
   ['userId']
 );
 
-// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+// --- Shop sections (plan 0167, as plan 0200 left it) ------------------------
 
 /** A list of ids with no repeats, bounded. May be empty. */
 const distinctIds = (maxItems: number): JsonSchema => ({
@@ -1569,44 +1561,34 @@ const distinctIds = (maxItems: number): JsonSchema => ({
   uniqueItems: true,
 });
 
-/**
- * One section of a chain. `locationCount` is deliberately NOT required: the
- * back office's reads of a section carry it, and a shop's list does not.
- */
-const supermarketSectionView = object(
-  CATALOG_SCHEMA_IDS.supermarketSectionView,
+/** One section of a shop. */
+const shopSectionView = object(
+  CATALOG_SCHEMA_IDS.shopSectionView,
   {
     id: nonEmptyString(),
-    supermarketId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
     slug: nonEmptyString({ maxLength: SECTION_SLUG_MAX_LENGTH }),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    position: integer({ minimum: 0 }),
+    position: integer({
+      minimum: 0,
+      description:
+        'The place of the section in the order of its shop. No two sections of a shop share one.',
+    }),
     categoryIds: {
       ...array(nonEmptyString()),
       description:
         'Roots and leaves, as written. A root covers every one of its children.',
     },
-    locationCount: integer({
-      minimum: 0,
-      description:
-        'The shops of the chain this section is present at: the ones whose own list names it, plus the ones with no list of their own. Present on the back office reads of a section, absent inside a shop’s list.',
-    }),
   },
-  ['id', 'supermarketId', 'slug', 'name', 'position', 'categoryIds']
-);
-
-const supermarketSectionPage = paginated(
-  CATALOG_SCHEMA_IDS.supermarketSectionPage,
-  CATALOG_SCHEMA_IDS.supermarketSectionView
+  ['id', 'supermarketLocationId', 'slug', 'name', 'position', 'categoryIds']
 );
 
 const locationSectionsView = object(
   CATALOG_SCHEMA_IDS.locationSectionsView,
   {
-    sections: array(ref(CATALOG_SCHEMA_IDS.supermarketSectionView)),
-    source: ref(CATALOG_SCHEMA_IDS.locationSectionsSource),
+    sections: array(ref(CATALOG_SCHEMA_IDS.shopSectionView)),
   },
-  ['sections', 'source']
+  ['sections']
 );
 
 /** One section of a shop, as a shop row draws it (plan 0170). */
@@ -1633,21 +1615,6 @@ const locationSectionNamesView = object(
   ['locations']
 );
 
-const itemSectionPinsView = object(
-  CATALOG_SCHEMA_IDS.itemSectionPinsView,
-  {
-    supermarketId: nonEmptyString(),
-    itemId: nonEmptyString(),
-    sectionIds: array(nonEmptyString()),
-  },
-  ['supermarketId', 'itemId', 'sectionIds']
-);
-
-const itemSectionPinsPage = paginated(
-  CATALOG_SCHEMA_IDS.itemSectionPinsPage,
-  CATALOG_SCHEMA_IDS.itemSectionPinsView
-);
-
 const itemSectionsAtLocationEntry = object(
   CATALOG_SCHEMA_IDS.itemSectionsAtLocationEntry,
   {
@@ -1661,27 +1628,26 @@ const itemSectionsAtLocationEntry = object(
 const itemSectionsAtLocationView = object(
   CATALOG_SCHEMA_IDS.itemSectionsAtLocationView,
   {
-    source: ref(CATALOG_SCHEMA_IDS.locationSectionsSource),
     items: array(ref(CATALOG_SCHEMA_IDS.itemSectionsAtLocationEntry)),
   },
-  ['source', 'items']
+  ['items']
 );
 
-const createSupermarketSectionRequest = object(
-  CATALOG_SCHEMA_IDS.createSupermarketSectionRequest,
+// No position: a new section goes after the last one of its shop.
+const createShopSectionRequest = object(
+  CATALOG_SCHEMA_IDS.createShopSectionRequest,
   {
     ...adminCredentialProperties,
-    supermarketId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
     slug: nonEmptyString({ maxLength: SECTION_SLUG_MAX_LENGTH }),
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
     categoryIds: distinctIds(SECTION_LIMITS.maxCategoriesPerSection),
-    position: integer({ minimum: 0 }),
   },
-  ['userId', 'supermarketId', 'slug', 'name', 'categoryIds']
+  ['userId', 'supermarketLocationId', 'slug', 'name', 'categoryIds']
 );
 // No slug: it is an identity, written once on create.
-const updateSupermarketSectionRequest = object(
-  CATALOG_SCHEMA_IDS.updateSupermarketSectionRequest,
+const updateShopSectionRequest = object(
+  CATALOG_SCHEMA_IDS.updateShopSectionRequest,
   {
     ...adminCredentialProperties,
     sectionId: nonEmptyString(),
@@ -1691,22 +1657,10 @@ const updateSupermarketSectionRequest = object(
   },
   ['userId', 'sectionId']
 );
-const supermarketSectionIdRequest = object(
-  CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
+const shopSectionIdRequest = object(
+  CATALOG_SCHEMA_IDS.shopSectionIdRequest,
   { ...adminCredentialProperties, sectionId: nonEmptyString() },
   ['userId', 'sectionId']
-);
-const listSupermarketSectionsRequest = object(
-  CATALOG_SCHEMA_IDS.listSupermarketSectionsRequest,
-  {
-    userId: nonEmptyString(),
-    supermarketId: nonEmptyString(),
-    query: string(),
-    cursor: string(),
-    limit: integer({ minimum: 1 }),
-    order: string(),
-  },
-  ['userId', 'supermarketId']
 );
 // No userId, like shopAvailability: a guest reading a shared basket asks.
 const locationSectionsRequest = object(
@@ -1719,34 +1673,10 @@ const setLocationSectionsRequest = object(
   {
     ...adminCredentialProperties,
     supermarketLocationId: nonEmptyString(),
-    // Empty returns the shop to its chain's default.
+    // Empty changes nothing: the write only orders what the shop holds.
     sectionIds: distinctIds(SECTION_LIMITS.maxSectionsPerLocation),
   },
   ['userId', 'supermarketLocationId', 'sectionIds']
-);
-const listItemSectionPinsRequest = object(
-  CATALOG_SCHEMA_IDS.listItemSectionPinsRequest,
-  {
-    userId: nonEmptyString(),
-    supermarketId: nonEmptyString(),
-    itemId: nonEmptyString(),
-    sectionId: nonEmptyString(),
-    cursor: string(),
-    limit: integer({ minimum: 1 }),
-    order: string(),
-  },
-  ['userId', 'supermarketId']
-);
-const setItemSectionPinsRequest = object(
-  CATALOG_SCHEMA_IDS.setItemSectionPinsRequest,
-  {
-    ...adminCredentialProperties,
-    supermarketId: nonEmptyString(),
-    itemId: nonEmptyString(),
-    // Empty removes the pins.
-    sectionIds: distinctIds(SECTION_LIMITS.maxPinsPerItem),
-  },
-  ['userId', 'supermarketId', 'itemId', 'sectionIds']
 );
 // No userId, for the reason section.forLocation gives. Capped, unlike the
 // per shop read below: it is asked about a page of shops rather than a
@@ -3382,15 +3312,11 @@ export const catalogSchemas: JsonSchema[] = [
   categoryTreeView,
   categoryPage,
   itemCategoryView,
-  enumOf(CATALOG_SCHEMA_IDS.locationSectionsSource, LOCATION_SECTIONS_SOURCES),
   enumOf(CATALOG_SCHEMA_IDS.sectionRuleStep, SECTION_RULE_STEPS),
-  supermarketSectionView,
-  supermarketSectionPage,
+  shopSectionView,
   locationSectionsView,
   locationSectionNameView,
   locationSectionNamesView,
-  itemSectionPinsView,
-  itemSectionPinsPage,
   itemSectionsAtLocationEntry,
   itemSectionsAtLocationView,
   itemView,
@@ -3471,14 +3397,11 @@ export const catalogSchemas: JsonSchema[] = [
   updateCategoryRequest,
   categoryIdRequest,
   listCategoriesRequest,
-  createSupermarketSectionRequest,
-  updateSupermarketSectionRequest,
-  supermarketSectionIdRequest,
-  listSupermarketSectionsRequest,
+  createShopSectionRequest,
+  updateShopSectionRequest,
+  shopSectionIdRequest,
   locationSectionsRequest,
   setLocationSectionsRequest,
-  listItemSectionPinsRequest,
-  setItemSectionPinsRequest,
   itemSectionsAtLocationRequest,
   locationSectionNamesRequest,
   createProductGroupOperation,
@@ -3739,23 +3662,19 @@ export const catalogMessageContracts: Record<
     response: CATALOG_SCHEMA_IDS.categoryPage,
   },
   [SECTION_PATTERNS.create]: {
-    request: CATALOG_SCHEMA_IDS.createSupermarketSectionRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
-  },
-  [SECTION_PATTERNS.list]: {
-    request: CATALOG_SCHEMA_IDS.listSupermarketSectionsRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketSectionPage,
+    request: CATALOG_SCHEMA_IDS.createShopSectionRequest,
+    response: CATALOG_SCHEMA_IDS.shopSectionView,
   },
   [SECTION_PATTERNS.get]: {
-    request: CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
+    request: CATALOG_SCHEMA_IDS.shopSectionIdRequest,
+    response: CATALOG_SCHEMA_IDS.shopSectionView,
   },
   [SECTION_PATTERNS.update]: {
-    request: CATALOG_SCHEMA_IDS.updateSupermarketSectionRequest,
-    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
+    request: CATALOG_SCHEMA_IDS.updateShopSectionRequest,
+    response: CATALOG_SCHEMA_IDS.shopSectionView,
   },
   [SECTION_PATTERNS.delete]: {
-    request: CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
+    request: CATALOG_SCHEMA_IDS.shopSectionIdRequest,
     response: COMMON_IDS.idResult,
   },
   [SECTION_PATTERNS.forLocation]: {
@@ -3765,14 +3684,6 @@ export const catalogMessageContracts: Record<
   [SECTION_PATTERNS.setForLocation]: {
     request: CATALOG_SCHEMA_IDS.setLocationSectionsRequest,
     response: CATALOG_SCHEMA_IDS.locationSectionsView,
-  },
-  [SECTION_PATTERNS.listPins]: {
-    request: CATALOG_SCHEMA_IDS.listItemSectionPinsRequest,
-    response: CATALOG_SCHEMA_IDS.itemSectionPinsPage,
-  },
-  [SECTION_PATTERNS.setPins]: {
-    request: CATALOG_SCHEMA_IDS.setItemSectionPinsRequest,
-    response: CATALOG_SCHEMA_IDS.itemSectionPinsView,
   },
   [SECTION_PATTERNS.itemsAtLocation]: {
     request: CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,

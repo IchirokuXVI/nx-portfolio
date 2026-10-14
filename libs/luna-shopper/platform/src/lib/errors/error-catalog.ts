@@ -219,13 +219,13 @@ export const ERROR_CATALOG: Record<
     en: 'That section does not exist.',
     es: 'Esa sección no existe.',
   },
-  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: {
-    en: 'A section belongs to one chain. A shop or a pinned product can only use sections of its own chain.',
-    es: 'Una sección pertenece a una sola cadena. Una tienda o un producto fijado solo puede usar secciones de su propia cadena.',
+  [ERROR_CODES.SECTION_OF_ANOTHER_SHOP]: {
+    en: 'A section belongs to one shop. The order of a shop can only hold its own sections.',
+    es: 'Una sección pertenece a una sola tienda. El orden de una tienda solo puede contener sus propias secciones.',
   },
   [ERROR_CODES.SECTION_SLUG_TAKEN]: {
-    en: 'This chain already has a section with that slug.',
-    es: 'Esta cadena ya tiene una sección con ese identificador.',
+    en: 'This shop already has a section with that slug.',
+    es: 'Esta tienda ya tiene una sección con ese identificador.',
   },
   // One shop for each external reference (plan 0195).
   [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: {
