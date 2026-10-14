@@ -670,3 +670,47 @@ Chosen in this plan, and open to the owner's correction:
 - Three consecutive failures stop a schedule until a run completes (section 6).
 - No abort counts as a failure of the source, also one by a person (section 6).
 - Staging keeps the scheduler off (section 10).
+
+Decided by the owner on 2026-10-13, on the review:
+
+- A retry that is refused spends the attempt (review point 4). Any retry, started or not, sets
+  `lastSlotAttempts` to 2.
+- The six choices above stand as written.
+- Production can fetch Mercadona (review point 8).
+
+## 18. As built
+
+Where the build chose something this plan did not state, or departs from it:
+
+- **Review point 2: the claim writes `lastSlotAttempts = 0`.** The claim spends the slot and sets
+  `lastSlotAt` to it and the attempts to 0. Only a run that starts raises them to 1. The retry
+  query also requires `harvest_runs.scheduleId` to name the schedule.
+- **Review point 1:** `schedule-slot.ts` exports `previousSlot`, and the claim judges the last
+  slot at or before now.
+- **One order for section 5.3 and `blockedBy`:** the source row off or missing, then the source
+  failing, then the preset refused, then a run in the way. `REFUSED` thus comes before
+  `SKIPPED_FAILING` for a row that is off and failing.
+- **`consecutiveFailures` is not reset by the migration.** The view says `SOURCE_FAILING` before
+  the slot, and the first run a person starts that completes clears it. All four production rows
+  read 0 on 2026-10-14.
+- **A schedule that is off still answers `blockedBy`,** so a person sees the block before
+  switching it on.
+- **The worker's writes leave `updatedAt` alone.** That column and `updatedByUserId` say when a
+  person last changed the schedule.
+- **`HarvestRunView.estimate` is absent on the dashboard's runs.** `dashboard.service.ts` is
+  outside the scope and maps runs without it. Every run route carries it.
+- **`scheduleId`, `interrupted` and both `estimate` fields are not required in the schemas,**
+  as `presetId` is not, so the back office's typed fixtures stay valid.
+- **`timeOfDay` is a five character string in the message schema, not a pattern.** No message
+  schema here states a pattern, and the bridge spec samples every schema. The gateway DTO and the
+  harvester check `HH:mm`.
+- **`harvestSchedule.delete` answers `{ id }`** with 200, as every delete of the harvester does,
+  and not nothing.
+- **The executor tells a shutdown from a person's abort** by the runs its hook aborted that were
+  not already aborted. Only those get the shutdown sentence.
+- **The clock is an injection token, `HARVEST_CLOCK`,** so the service and the worker read one
+  that a spec replaces.
+- **Review point 7, the documentation:** the harvester section of `CLAUDE.md`, the comments of
+  `values.production.yaml`, and the chart section of the root `README.md` (the chart has no
+  README of its own). `k8s/catalog-seed/README.md` still says every row is off and is left for a
+  follow up.
