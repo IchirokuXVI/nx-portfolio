@@ -101,11 +101,14 @@
 #ab-LinkDead * { box-sizing: border-box; }
 #ab-LinkDead a { color: #ffb454; text-decoration: none; }
 #ab-LinkDead a:hover { color: #ffc271; }
+#ab-RecoveryLinkSheet * { box-sizing: border-box; }
+#ab-RecoveryLinkSheet a { color: #ffb454; text-decoration: none; }
+#ab-RecoveryLinkSheet a:hover { color: #ffc271; }
 </style>
 
 <header>
   <h1>Velista Credential Flows</h1>
-  <p class="lede">The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and the confirm is a message with one button.</p>
+  <p class="lede">The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and a reset asks first on the page with one button. A sign in link that meets another account goes home, where a sheet asks.</p>
 </header>
 
 <div class="controls">
@@ -1008,41 +1011,10 @@
           </div>
         </div>
       </figure>
-      <figure class="board" style="left: 0px; top: 5290px; width: 1330px;">
-        <figcaption>0148 item 5: somebody else is signed in on this phone</figcaption>
-        <div class="frame" id="ab-OtherAccount" style="width: 1330px; height: 970px;">
-          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
-
-            <!-- SIGN IN LINK, ANOTHER REGISTERED ACCOUNT. Drawn after the server answered recovery_other_account. -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SIGN IN LINK &middot; another account is here</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
-
-                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
-
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Someone else is signed in</h1>
-                  <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This phone is signed in to another account:</p>
-
-                  <!-- Who is signed in here: the username, then the email. Always both (the owner's pick 5). -->
-                  <p style="margin: 0; font-size: 16.5px; font-weight: 650; color: #f7f8fc;">luis_ortega</p>
-                  <p style="margin: 2px 0 24px; font-size: 14.5px; color: #c2c8db;">luis@example.com</p>
-
-                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">To use your link, we sign that account out of this phone. Nothing in it is lost. It can sign in again at any time.</p>
-
-                  <button type="button" style="width: 100%; height: 54px; margin-top: 10px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign out and continue</button>
-
-                </div>
-
-              </div>
-            </div>
+      <figure class="board" style="left: 0px; top: 5290px; width: 900px;">
+        <figcaption>0148 item 5: the reset link meets an account on this phone</figcaption>
+        <div class="frame" id="ab-OtherAccount" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
 
             <!-- RESET LINK, A REGISTERED ACCOUNT. Drawn before the reset, because nothing can tell yet whose link it is. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -1075,9 +1047,9 @@
               </div>
             </div>
 
-            <!-- A GUEST, EITHER LINK. Rule C2: the loss said plainly, and the upgrade page offered in the last paragraph. -->
+            <!-- RESET LINK, A GUEST. Rule C2: the loss said plainly, and the upgrade page offered in the last paragraph. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; either link</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RESET LINK &middot; a guest is here</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
                 <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
@@ -1163,6 +1135,156 @@
           </div>
         </div>
       </figure>
+      <figure class="board" style="left: 960px; top: 5290px; width: 900px;">
+        <figcaption>0148 item 5: the sign in link meets another account, a sheet over home</figcaption>
+        <div class="frame" id="ab-RecoveryLinkSheet" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- REG: a sign in link, another registered account on this phone. Nothing has been sent about the link yet. -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SIGN IN LINK &middot; another account, a sheet over home</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <!-- Home underneath, where the reset page sent the person. -->
+                <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+                    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Flat 3B</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #ffb454; background: rgba(255,180,84,0.13); border-radius: 999px; padding: 4px 9px;">OWNER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">3 members &middot; 2 lists</div>
+                  </div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Casa de mis padres</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #98a0bb; background: rgba(255,255,255,0.07); border-radius: 999px; padding: 4px 9px;">MEMBER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">4 members &middot; 1 list</div>
+                  </div>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div role="dialog" aria-labelledby="reg-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px;">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <h2 id="reg-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Sign out to use this link</h2>
+                  <p style="margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; color: #c2c8db;">This phone is signed in to another account:</p>
+
+                  <!-- Both names of the account on this phone (the owner's pick 5). -->
+                  <p style="margin: 0; font-size: 16px; font-weight: 650; color: #f7f8fc;">luis_ortega</p>
+                  <p style="margin: 2px 0 16px; font-size: 14.5px; color: #c2c8db;">luis@example.com</p>
+
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Your link is for a different account. To use it, we sign this one out of the phone. Nothing in it is lost, and it can sign in again at any time.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you stay signed in, nothing happens to the link. It still works later.</p>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 6px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Sign out and use the link</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Stay signed in</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- GUE: a sign in link, a guest on this phone. Rule C2: the loss said plainly, and the upgrade page in the last paragraph. -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SIGN IN LINK &middot; a guest, the same sheet</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <!-- Home underneath, where the reset page sent the person. -->
+                <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+                    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Flat 3B</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #ffb454; background: rgba(255,180,84,0.13); border-radius: 999px; padding: 4px 9px;">OWNER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">3 members &middot; 2 lists</div>
+                  </div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Casa de mis padres</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #98a0bb; background: rgba(255,255,255,0.07); border-radius: 999px; padding: 4px 9px;">MEMBER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">4 members &middot; 1 list</div>
+                  </div>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div role="dialog" aria-labelledby="gue-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px;">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <h2 id="gue-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">This phone has a guest account</h2>
+                  <p style="margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; color: #c2c8db;">It is signed in to a guest account:</p>
+
+                  <!-- Both names of the account on this phone (the owner's pick 5). -->
+                  <p style="margin: 0; font-size: 16px; font-weight: 650; color: #f7f8fc;">marta_92</p>
+                  <p style="margin: 2px 0 16px; font-size: 14.5px; color: #c2c8db;">No email</p>
+
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">A guest account has no email or password. Once you leave it, nobody can open it again.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #f7f8fc;">Its <span style="font-weight: 700;">2 groups</span> and their lists stay with it. You will lose them.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">To keep them, <a href="#" style="font-weight: 600;">add an email to this account</a> first. Then open your link again.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you stay signed in, nothing happens to the link. It still works later.</p>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 6px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Continue and lose them</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep the guest account</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>Credential flows, plan 0009. The two front door buttons 0008 left recorded, plus the guest banner's action and what a confirmation link opens.</p><p>Phone only, 390x844, Night only: no new colour role, so a Day artboard would restate 0003 rather than find anything.</p><p>These are full routes, not sheets. 0008's rule is that a sheet completes one field in place; each of these is a destination with its own alternatives underneath.</p></aside>
       <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>REGISTERING SIGNS YOU IN IMMEDIATELY. identity.service register() issues tokens at the end and sends the confirmation email outside the transaction, with the comment "verification is optional".</p><p>So there is no "check your email to continue" wall, and designing one would invent a barrier the backend does not have. The second frame is the dashboard, with a dismissible nudge.</p><p>Login never checks emailVerifiedAt either.</p></aside>
       <aside class="note" style="left: 940px; top: 0px; width: 430px;"><p>A GUEST MUST NEVER BE SHOWN REGISTER. register() creates a NEW user, so a guest who used it would be signed in as somebody else and every group they made would be stranded on the account they just walked away from.</p><p>upgrade() converts the SAME user in place, keeps the userId, and therefore keeps the groups. That is why the guest banner has its own screen and its own words, and why it counts the groups back at you.</p><p>This is the email twin of rule D3 from 0004.</p></aside>
@@ -1172,9 +1294,9 @@
       <aside class="note" style="left: 0px; top: 2650px; width: 430px;"><p>PLAN 0148, STAGE 0. A forgotten password has a way back. Backend 0210 sends one mail with two links that share one token: a reset link, and a sign in link (the same address plus mode=sign-in). Using either ends both, and ends every older link of that person.</p><p>Both links open ONE page, auth/reset-password, in two modes. The second action switches the mode in place and keeps the token.</p><p>Night only, as the rest of this folder: no new colour role.</p></aside>
       <aside class="note" style="left: 470px; top: 2650px; width: 430px;"><p>THE RESET LINK SPENDS NOTHING ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button.</p><p>THE SIGN IN LINK HAS NO SCREEN (the owner's pick 2). It spends the link as the page loads and lands on home. While the request runs the page shows the spinner the confirmation link page already shows, and nothing else. The owner accepted the risk: a mail scanner that runs scripts can spend the link first, and it then arrives dead. The reset link still waits for a press.</p><p>If the owner of the link is already signed in, either way into it lands on home with no error, even when the link is old.</p></aside>
       <aside class="note" style="left: 940px; top: 2650px; width: 430px;"><p>THE FORGOT PAGE NEVER SAYS WHETHER AN ACCOUNT EXISTS, and never says a mail arrived. forgot-password answers the same for every address, so the copy says what we did ("if it has an account, we have sent it a mail"). The wait is the server's number (rule C3), as on the resend line.</p><p>The address comes over from the sign in page, so a person who just failed to sign in types nothing again.</p></aside>
-      <aside class="note" style="left: 1060px; top: 4110px; width: 430px;"><p>THE OWNER'S PICKS, 2026-10-14.</p><p>1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.</p><p>2. The sign in link shows no screen. Its alternatives are gone from this canvas.</p><p>3 and 4. The confirm is a message with one button that continues. For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.</p><p>5. Each confirm names the username and the email of the account on this phone, always.</p><p>6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen.</p></aside>
-      <aside class="note" style="left: 1400px; top: 5290px; width: 430px;"><p>THE CONFIRM IS A STATE OF THE PAGE, NOT A SHEET. It has one button, so there is no cancel for a sheet to carry. The back chevron is the way out.</p><p>SIGN IN LINK: drawn when the server answers recovery_other_account. Its button sends the link again with switchAccount.</p><p>RESET LINK: drawn before the reset whenever an account is signed in, because a reset replaces the session too and nothing can tell yet whose link it is. So its words are conditional, and its button saves.</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). Its button takes the destructive colour of the delete sheet. The group count comes from what the app already holds; with no groups, that sentence goes.</p></aside>
-      <aside class="note" style="left: 1400px; top: 5790px; width: 430px;"><p>THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two.</p></aside>
+      <aside class="note" style="left: 1060px; top: 4110px; width: 430px;"><p>THE OWNER'S PICKS, 2026-10-14.</p><p>1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.</p><p>2. The sign in link shows no screen. Its alternatives are gone from this canvas.</p><p>3 and 4. The confirm before a reset is a message with one button that continues. A sign in link that meets another account is asked about in a sheet over home instead (2026-10-14). For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.</p><p>5. Each confirm names the username and the email of the account on this phone, always.</p><p>6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen.</p></aside>
+      <aside class="note" style="left: 1920px; top: 5290px; width: 430px;"><p>THE SIGN IN LINK MEETS ANOTHER ACCOUNT: A SHEET OVER HOME (the owner's requirement of 2026-10-14). The reset page goes home and this sheet says the person must sign out to use the link. The token waits in memory, never in the sheet's URL. Nothing is sent about it until the person presses the button, which spends it with switchAccount. Stay signed in sends nothing, and the link still works later.</p><p>HOW VELISTA TELLS THE OWNER FROM ANOTHER ACCOUNT is still the owner's to decide. Until then a guest is always another account (a guest has no email, so no link is theirs), and a registered account asks the server once, which spends nothing when the answer is another account and lands the owner home.</p><p>THE RESET LINK STILL ASKS ON ITS OWN PAGE before a reset, whenever an account is signed in: a message and one button, with words that hold whoever the link turns out to belong to.</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). The guest's button takes the destructive colour of the delete sheet.</p></aside>
+      <aside class="note" style="left: 1920px; top: 5850px; width: 430px;"><p>THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two.</p></aside>
   </div>
 </div>
 

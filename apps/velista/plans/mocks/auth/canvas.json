@@ -1,6 +1,6 @@
 {
   "title": "Velista Credential Flows",
-  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and the confirm is a message with one button.",
+  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and a reset asks first on the page with one button. A sign in link that meets another account goes home, where a sheet asks.",
   "artboards": [
     {
       "file": "SignIn.dc.html",
@@ -70,9 +70,9 @@
       "file": "OtherAccount.dc.html",
       "x": 0,
       "y": 5060,
-      "w": 1330,
+      "w": 900,
       "h": 970,
-      "title": "0148 item 5: somebody else is signed in on this phone"
+      "title": "0148 item 5: the reset link meets an account on this phone"
     },
     {
       "file": "LinkDead.dc.html",
@@ -81,6 +81,14 @@
       "w": 470,
       "h": 970,
       "title": "0148 item 6: a link that no longer works"
+    },
+    {
+      "file": "RecoveryLinkSheet.dc.html",
+      "x": 960,
+      "y": 5060,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 5: the sign in link meets another account, a sheet over home"
     }
   ],
   "annotations": [
@@ -152,19 +160,19 @@
       "x": 1060,
       "y": 3880,
       "w": 430,
-      "text": "THE OWNER'S PICKS, 2026-10-14.\n1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.\n2. The sign in link shows no screen. Its alternatives are gone from this canvas.\n3 and 4. The confirm is a message with one button that continues. For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.\n5. Each confirm names the username and the email of the account on this phone, always.\n6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen."
+      "text": "THE OWNER'S PICKS, 2026-10-14.\n1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.\n2. The sign in link shows no screen. Its alternatives are gone from this canvas.\n3 and 4. The confirm before a reset is a message with one button that continues. A sign in link that meets another account is asked about in a sheet over home instead (2026-10-14). For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.\n5. Each confirm names the username and the email of the account on this phone, always.\n6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen."
     },
     {
       "id": "p0148-sheet",
-      "x": 1400,
+      "x": 1920,
       "y": 5060,
       "w": 430,
-      "text": "THE CONFIRM IS A STATE OF THE PAGE, NOT A SHEET. It has one button, so there is no cancel for a sheet to carry. The back chevron is the way out.\nSIGN IN LINK: drawn when the server answers recovery_other_account. Its button sends the link again with switchAccount.\nRESET LINK: drawn before the reset whenever an account is signed in, because a reset replaces the session too and nothing can tell yet whose link it is. So its words are conditional, and its button saves.\nA GUEST IS NEVER OFFERED REGISTER (rule C2). Its button takes the destructive colour of the delete sheet. The group count comes from what the app already holds; with no groups, that sentence goes."
+      "text": "THE SIGN IN LINK MEETS ANOTHER ACCOUNT: A SHEET OVER HOME (the owner's requirement of 2026-10-14). The reset page goes home and this sheet says the person must sign out to use the link. The token waits in memory, never in the sheet's URL. Nothing is sent about it until the person presses the button, which spends it with switchAccount. Stay signed in sends nothing, and the link still works later.\nHOW VELISTA TELLS THE OWNER FROM ANOTHER ACCOUNT is still the owner's to decide. Until then a guest is always another account (a guest has no email, so no link is theirs), and a registered account asks the server once, which spends nothing when the answer is another account and lands the owner home.\nTHE RESET LINK STILL ASKS ON ITS OWN PAGE before a reset, whenever an account is signed in: a message and one button, with words that hold whoever the link turns out to belong to.\nA GUEST IS NEVER OFFERED REGISTER (rule C2). The guest's button takes the destructive colour of the delete sheet."
     },
     {
       "id": "p0148-questions",
-      "x": 1400,
-      "y": 5560,
+      "x": 1920,
+      "y": 5620,
       "w": 430,
       "text": "THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two."
     }
