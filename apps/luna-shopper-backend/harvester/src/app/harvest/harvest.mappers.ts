@@ -10,11 +10,11 @@ import type {
   ItemPriceDetails,
   PlaceLocationCandidate,
   PostalCodeDiscoveryRequestView,
+  RunEstimate,
   SourceCatalogEntryView,
   SourceEntryPriceView,
   SourceLocationCandidate,
   SourceLocationView,
-  RunEstimate,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
 import {

@@ -132,9 +132,7 @@ export const HARVEST_SCHEMA_IDS = {
   scheduleIdRequest: schemaId('msg/harvestSchedule.id/request'),
   createScheduleRequest: schemaId('msg/harvestSchedule.create/request'),
   updateScheduleRequest: schemaId('msg/harvestSchedule.update/request'),
-  setScheduleEnabledRequest: schemaId(
-    'msg/harvestSchedule.setEnabled/request'
-  ),
+  setScheduleEnabledRequest: schemaId('msg/harvestSchedule.setEnabled/request'),
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
   sourceCatalogEntryPage: schemaId('harvest/SourceCatalogEntryPage'),
   sourceLocationPage: schemaId('harvest/SourceLocationPage'),
@@ -1401,10 +1399,7 @@ const harvestScheduleView = object(
     },
     lastSlotAt: nullableString(),
     lastOutcome: {
-      anyOf: [
-        ref(HARVEST_SCHEMA_IDS.harvestScheduleOutcome),
-        { type: 'null' },
-      ],
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestScheduleOutcome), { type: 'null' }],
     },
     lastOutcomeAt: nullableString(),
     lastOutcomeNote: nullableString(),
@@ -1469,7 +1464,13 @@ const createScheduleRequest = object(
     // refuses anything but true.
     acknowledgedAutomaticFetch: boolean(),
   },
-  ['userId', 'presetId', 'timeOfDay', 'daysOfWeek', 'acknowledgedAutomaticFetch']
+  [
+    'userId',
+    'presetId',
+    'timeOfDay',
+    'daysOfWeek',
+    'acknowledgedAutomaticFetch',
+  ]
 );
 const updateScheduleRequest = object(
   HARVEST_SCHEMA_IDS.updateScheduleRequest,

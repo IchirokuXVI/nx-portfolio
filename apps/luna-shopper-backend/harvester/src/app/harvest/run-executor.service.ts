@@ -39,8 +39,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
  * the run page says why. It wins over the message of whatever the abort made
  * the runner throw.
  */
-export const SHUTDOWN_STOPPED_RUN =
-  'Stopped because the harvester shut down.';
+export const SHUTDOWN_STOPPED_RUN = 'Stopped because the harvester shut down.';
 
 /**
  * Dispatches a run to its runner, and owns everything they have in common:

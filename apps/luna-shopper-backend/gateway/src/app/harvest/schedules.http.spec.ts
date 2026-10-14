@@ -265,18 +265,21 @@ describe('the schedule routes', () => {
       'acknowledgedAutomaticFetch',
       { enabled: true, acknowledgedAutomaticFetch: 'true' },
     ],
-  ])('refuses a string where the switch takes a boolean: %s', async (field, body) => {
-    const response = await call(
-      context.origin,
-      'PUT',
-      `/v1/admin/harvest/schedules/${SCHEDULE}/enabled`,
-      body
-    );
+  ])(
+    'refuses a string where the switch takes a boolean: %s',
+    async (field, body) => {
+      const response = await call(
+        context.origin,
+        'PUT',
+        `/v1/admin/harvest/schedules/${SCHEDULE}/enabled`,
+        body
+      );
 
-    expect(response.status).toBe(400);
-    expect(await response.text()).toContain(field);
-    expect(context.send).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain(field);
+      expect(context.send).not.toHaveBeenCalled();
+    }
+  );
 
   it('deletes a schedule', async () => {
     const response = await call(

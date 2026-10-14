@@ -1,17 +1,14 @@
 import type { ConfigService } from '@nestjs/config';
 import { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
 import type { HarvestSchedule } from '../entities';
-import type {
-  HarvestRunService,
-  ScheduledStart,
-} from './harvest-run.service';
+import type { HarvestRunService, ScheduledStart } from './harvest-run.service';
 import type {
   ClaimedSlot,
   HarvestScheduleStore,
   ScheduleOutcomeWrite,
 } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
-import { previousSlot, nextSlot } from './schedule-slot';
+import { nextSlot, previousSlot } from './schedule-slot';
 
 /**
  * The worker that fires due schedules (plan 0206, sections 5 and 7).
@@ -75,17 +72,15 @@ function build(
       };
       return { schedule: { ...row }, slot };
     }),
-    recordOutcome: jest.fn(
-      async (_id: string, write: ScheduleOutcomeWrite) => {
-        outcomes.push(write);
-        row = {
-          ...row,
-          lastOutcome: write.outcome,
-          lastRunId: write.runId ?? row.lastRunId,
-          lastSlotAttempts: write.attempts ?? row.lastSlotAttempts,
-        };
-      }
-    ),
+    recordOutcome: jest.fn(async (_id: string, write: ScheduleOutcomeWrite) => {
+      outcomes.push(write);
+      row = {
+        ...row,
+        lastOutcome: write.outcome,
+        lastRunId: write.runId ?? row.lastRunId,
+        lastSlotAttempts: write.attempts ?? row.lastSlotAttempts,
+      };
+    }),
     findInterrupted: jest.fn(async () => options.interrupted ?? []),
     claimRetry: jest.fn(async (_id: string, runId: string) => {
       if (row.lastSlotAttempts !== 1 || row.lastRunId !== runId) {

@@ -12,7 +12,10 @@ import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestSchedule } from '../entities';
 import { HarvestRunService, type ScheduledStart } from './harvest-run.service';
-import { HarvestScheduleStore, type ClaimedSlot } from './harvest-schedule.store';
+import {
+  HarvestScheduleStore,
+  type ClaimedSlot,
+} from './harvest-schedule.store';
 import { HARVEST_CLOCK, isTooLate, type HarvestClock } from './schedule-slot';
 
 /** How often the worker looks for a due schedule. A constant, not a setting. */

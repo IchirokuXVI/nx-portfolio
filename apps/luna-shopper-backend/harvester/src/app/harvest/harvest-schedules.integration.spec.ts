@@ -217,7 +217,13 @@ describeIntegration('harvest schedules (real Postgres)', () => {
       ['a time that is not HH:mm', `'3:00'`, `'{1}'`, 'true', 'NULL'],
       ['a day that is not 1 to 7', `'03:00'`, `'{0}'`, 'true', 'NULL'],
       ['no day at all', `'03:00'`, `'{}'`, 'true', 'NULL'],
-      ['a slot on a schedule that is off', `'03:00'`, `'{1}'`, 'false', 'now()'],
+      [
+        'a slot on a schedule that is off',
+        `'03:00'`,
+        `'{1}'`,
+        'false',
+        'now()',
+      ],
     ])('refuses %s', async (_case, time, days, enabled, next) => {
       await expect(
         one.dataSource.query(

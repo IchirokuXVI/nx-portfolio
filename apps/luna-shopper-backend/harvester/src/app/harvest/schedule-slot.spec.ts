@@ -137,9 +137,9 @@ describe('previousSlot', () => {
 
   it('walks back across a week', () => {
     // Friday only, asked on a Wednesday.
-    expect(previousSlot(rule('03:00', [5]), at('2026-10-14T05:00:00Z'))).toEqual(
-      at('2026-10-09T01:00:00Z')
-    );
+    expect(
+      previousSlot(rule('03:00', [5]), at('2026-10-14T05:00:00Z'))
+    ).toEqual(at('2026-10-09T01:00:00Z'));
   });
 
   it('agrees with nextSlot on the night the clock goes back', () => {

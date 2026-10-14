@@ -128,7 +128,9 @@ export class HarvestScheduleService {
     return this.view(await this.store.load(req.scheduleId));
   }
 
-  async create(req: CreateHarvestScheduleRequest): Promise<HarvestScheduleView> {
+  async create(
+    req: CreateHarvestScheduleRequest
+  ): Promise<HarvestScheduleView> {
     const userId = await this.admin.requireAdmin(req);
     requireAcknowledged(req.acknowledgedAutomaticFetch);
     const rule = validRule({
@@ -160,7 +162,9 @@ export class HarvestScheduleService {
    * A schedule that is on gets its next slot again from now, so a time moved
    * earlier today does not fire a slot that has already passed.
    */
-  async update(req: UpdateHarvestScheduleRequest): Promise<HarvestScheduleView> {
+  async update(
+    req: UpdateHarvestScheduleRequest
+  ): Promise<HarvestScheduleView> {
     const userId = await this.admin.requireAdmin(req);
     const row = await this.store.load(req.scheduleId);
     const rule = validRule({
@@ -270,9 +274,7 @@ export class HarvestScheduleService {
       toHarvestScheduleView(row, {
         presetName: presetById.get(row.presetId)?.name ?? row.presetId,
         lastRun: row.lastRunId ? (runById.get(row.lastRunId) ?? null) : null,
-        blockedBy: this.blockedBy(
-          sourceByChain.get(row.supermarketId) ?? null
-        ),
+        blockedBy: this.blockedBy(sourceByChain.get(row.supermarketId) ?? null),
         estimate: estimates[index],
       })
     );

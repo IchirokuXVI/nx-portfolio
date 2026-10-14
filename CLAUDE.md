@@ -315,22 +315,30 @@ Import through the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.
 
 ## Luna Shopper backend
 
-### The harvester is deployed, and three switches control it
+### The harvester is deployed, three switches and a row control it
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket storefronts and store locations from OpenStreetMap. It writes its results into catalog over NATS. It owns the fourth Postgres, after auth, core and catalog. **Its fourth run mode fetches nothing.** `LEAFLET_IMPORT` (plan 0081) reads a JSON document that an admin uploads. The output is identical to the output of a crawl, and only the fetch differs. That is why it is a run here and not a write in catalog.
 
-**It is deployed in both clusters, and both can start a run.** `values.staging.yaml` and `values.production.yaml` both set `enabled: true` and `harvestEnabled: true`. Neither cluster fetches a storefront. That permission is one row for each chain in the database of the harvester, and each row is off (plan 0083). A catalog discovery run is several thousand HTTP requests over many minutes. Price crawls still run here against the compose stack, because the development machine has room for them. A cluster runs store discovery, which is two requests, and leaflet imports, which are none.
+**It is deployed in both clusters, and both can start a run.** `values.staging.yaml` and `values.production.yaml` both set `enabled: true` and `harvestEnabled: true`. Whether a cluster fetches a storefront is one row for each chain in the database of the harvester (plan 0083). Each row is off by default, and the owner turns one on from the back office. A catalog discovery run is several thousand HTTP requests over many minutes. Price crawls also run here against the compose stack, because the development machine has room for them.
+
+**A preset can start by itself on a schedule, in production only** (plan 0206). A row of `harvest_schedules` names a preset, a time of day, days of the week and a timezone. A 60 second timer in the harvester claims each due row with `FOR UPDATE SKIP LOCKED` and starts the preset through the same `validateRequest` and `start` that a person's start uses, with trigger `SCHEDULED` and no user. Nothing about a schedule lives in memory, so a restart loses no schedule and two harvester processes on one database fire a slot one time. Rules that are easy to break by accident:
+
+- **A schedule needs the row of its chain left on.** A slot of a chain whose row is off starts nothing and is recorded as `REFUSED`, and the schedule view says `SOURCE_DISABLED` before the slot comes. To turn a row on for one run and off after it does not work with a schedule.
+- **A slot that cannot start is skipped, not queued.** A late slot runs only if less than half of the gap to the next slot has passed. A run that a deploy stopped is started again one time.
+- **An abort is not a failure of the source**, whether a person or a deploy stopped the run. Three failures in a row stop the schedules of a chain until a run that a person starts completes.
+- **A schedule is created and switched on only with `acknowledgedAutomaticFetch: true`.** Only a JSON `true` passes, in the gateway and in the harvester.
 
 **The actor id is provisioned, not configured.** `provision-release.sh` generates the uuid by which catalog knows the harvester, one time for each cluster. It keeps the uuid in the Secret of the environment. Both `HARVESTER_ACTOR_ID` and the `SERVICE_ACTOR_IDS` of catalog read that one key. It is not a values field, and `--check` fails without it. That is the point: without it `CatalogClient.actor()` throws and an import writes nothing.
 
-The configuration has **two** switches, because they are two different decisions:
+The configuration has **three** switches, because they are three different decisions:
 
 - `lunaShopperBackend.harvester.enabled` (Helm) decides that the service exists in a cluster.
 - `HARVEST_ENABLED` decides that an existing pod can start a run.
+- `HARVEST_SCHEDULER_ENABLED` (Helm `schedulerEnabled`) decides that a due schedule starts its preset with nobody asking. A tick needs it and `HARVEST_ENABLED` both. It is true in `values.production.yaml` only. Staging and every `luna-slot` keep it false, because two clusters that fetch one chain on one timer double what the chain sees.
 
-Both have the default false, also in the `.env` that `luna-slot.sh` writes. To start the service and to let it start runs are not the same thing. Section 8.1 of the plan explains why they are separate.
+All three have the default false, also in the `.env` that `luna-slot.sh` writes. To start the service, to let it start runs and to let it start runs by itself are not the same thing. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
 
-**A row, not a switch, decides that a chain can be fetched** (plan 0083). The row is `supermarket_sources.enabled`. It is off by default, one for each chain, and the back office writes it through `supermarketSource.setEnabled`. The spawn refuses a run for a source whose row says false. **Do not add an environment variable per chain.** Each one needs changes in four places before a run can start. They are `app-config.ts`, the ConfigMap, `_env.tpl` and both `luna-slot` scripts. The column already exists.
+**A row, not a switch, decides that a chain can be fetched** (plan 0083). The row is `supermarket_sources.enabled`. It is off by default, one for each chain, and the back office writes it through `supermarketSource.setEnabled`. The spawn refuses a run for a source whose row says false, and so does a scheduled start. The rate of a chain is on the same row (`workers` and `maxRequestsPerSecond`). **Do not add an environment variable per chain.** Each one needs changes in four places before a run can start. They are `app-config.ts`, the ConfigMap, `_env.tpl` and both `luna-slot` scripts. The column already exists.
 
 Three rules that are easy to break by accident:
 
