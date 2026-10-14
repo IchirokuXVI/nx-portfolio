@@ -149,6 +149,7 @@ rely on a line of it.
    - `POST /v1/auth/google/state`
    - `POST /v1/zones/:id/members/:mid/transfer-ownership`
    - `POST /v1/auth/resend-verification` (added by this plan, see section 2)
+   - `POST /v1/auth/recovery-sign-in` (added by plan `0210`, target state 5)
 
    Every other route answers as it does for the user. **The assistant routes stay open**
    (the owner, 2026-10-07).

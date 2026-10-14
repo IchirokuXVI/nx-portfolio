@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -69,6 +71,32 @@ export class ResetPasswordDto {
   @MinLength(8)
   @MaxLength(200)
   password!: string;
+}
+
+/**
+ * Sign in with a reset grant and keep the password (plan 0210, target state 5).
+ *
+ * `switchAccount` is read as it was spelled in the JSON, as the harvest
+ * schedule reads its acknowledgement: the global pipe converts types, and a
+ * string `"false"` would otherwise arrive as `true` and leave the session of
+ * somebody who said no. Only a JSON `true` or `false` passes.
+ */
+export class RecoverySignInDto {
+  @ApiProperty({ description: 'The raw token from either link of the mail.' })
+  @IsString()
+  @MinLength(1)
+  token!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'True when the caller is signed in as another account and agreed to leave it. Without it, that case answers 409 `recovery_other_account` and spends nothing.',
+  })
+  @Transform(
+    ({ obj }: { obj: Record<string, unknown> }) => obj?.['switchAccount']
+  )
+  @IsOptional()
+  @IsBoolean()
+  switchAccount?: boolean;
 }
 
 /**

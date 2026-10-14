@@ -23,6 +23,7 @@ import { GoogleController } from './google.controller';
 import { ImpersonationGate } from './impersonation-gate';
 import { ImpersonationController } from './impersonation.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { RecoverySignInController } from './recovery-sign-in.controller';
 
 /**
  * A support session over real HTTP, at the gateway (plan 0194, section 4).
@@ -91,6 +92,7 @@ describe('a support session at the gateway', () => {
           GoogleController,
           ZoneController,
           ImpersonationController,
+          RecoverySignInController,
         ],
         providers: [
           JwtStrategy,
@@ -152,8 +154,9 @@ describe('a support session at the gateway', () => {
     });
 
   /**
-   * The five routes of target state 8, each with the subject its handler sends
-   * when it is allowed to run.
+   * The five routes of target state 8, and the sign in with a reset link that
+   * plan 0210 added, each with the subject its handler sends when it is
+   * allowed to run.
    */
   const REFUSED: Array<[string, string, string, string]> = [
     ['DELETE /account', 'DELETE', '/account', AUTH_PATTERNS.deleteAccount],
@@ -175,6 +178,12 @@ describe('a support session at the gateway', () => {
       'POST',
       '/auth/resend-verification',
       AUTH_PATTERNS.resendVerification,
+    ],
+    [
+      'POST /auth/recovery-sign-in',
+      'POST',
+      '/auth/recovery-sign-in',
+      AUTH_PATTERNS.recoverySignIn,
     ],
   ];
 
