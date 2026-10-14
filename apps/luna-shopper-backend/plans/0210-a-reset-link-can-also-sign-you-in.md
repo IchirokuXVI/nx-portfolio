@@ -187,7 +187,8 @@ a line of it.
 - **A grant ends at most one time.** A spec runs a reset and a sign in at the same instant
   against a real Postgres, and exactly one wins.
 - **Nothing is spent on a read.** The sign in route spends on a POST only. Velista `0148`
-  never calls it on page load, because mail scanners open links.
+  sends that POST as the sign in link loads (the owner's pick of 2026-10-14), and accepts that
+  a mail scanner that runs scripts can spend a grant first. The reset link waits for a press.
 - **The raw token is never logged**, and neither is an operator link.
 - **Non disclosure of `0022` section 2.1 stays.** `forgot-password` answers exactly as before.
 - **The migration only adds.** Existing rows read as `SELF_SERVICE` with `spentAs` null.
