@@ -3,7 +3,8 @@
 The design for `../../0009-credential-flows.md`: the two front door buttons `0008` left
 recorded, plus the guest banner's action and what a confirmation link opens.
 
-Published: https://claude.ai/code/artifact/5bc9cb60-284c-4f4a-9fc9-63e6ace1109a
+Published: https://claude.ai/code/artifact/5bc9cb60-284c-4f4a-9fc9-63e6ace1109a, the same
+artifact as https://claude.ai/artifact/CLPwYdPNXmALuLm9X3G593. It holds plan `0148` too.
 
 How these folders work, how to rebuild `index.html`, and the conventions every artboard
 follows are in **`../README.md`**. Read that first.
@@ -15,6 +16,16 @@ follows are in **`../README.md`**. Read that first.
 | `Upgrade.dc.html` | Securing a guest account, and the dashboard afterwards |
 | `VerifyEmail.dc.html` | A confirmation link that worked, and one that did not |
 | `ResendStates.dc.html` | The resend sentence in all three of its states |
+| `SignInForgot.dc.html` | Plan `0148`: the sign in page with the forgot password entry |
+| `ForgotPassword.dc.html` | Plan `0148`: asking for a link, what we say after, and the wait |
+| `ResetMode.dc.html` | Plan `0148`: the reset link, design C, which the owner picked on 2026-10-14 |
+| `OtherAccount.dc.html` | Plan `0148`: the confirm before a reset when an account or a guest is signed in on this phone, a message with one button |
+| `RecoveryLinkSheet.dc.html` | Plan `0148`: a sign in link that meets another account, or a guest, asked about in a sheet over home |
+| `LinkDead.dc.html` | Plan `0148`: a used or expired link |
+
+The sign in link of plan `0148` has no screen of its own: by the owner's pick it spends the
+link as the page loads and lands on home, with only the spinner of `VerifyEmail` while it
+runs. When another account is on the phone it lands on home with the sheet instead.
 
 Four things this design decided that are easy to undo by accident:
 

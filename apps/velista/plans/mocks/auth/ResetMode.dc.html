@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 470px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- RESET MODE, design C (the owner's pick of 2026-10-14) -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RESET LINK &middot; design C, the pick</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+        <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Choose a new password</h1>
+        <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Saving it signs you out on every other phone, in case someone else knows the old one.</p>
+
+        <label for="np-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">New password</label>
+        <div id="np-c" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px;">
+          <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+          <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+              <circle cx="12" cy="12" r="2.9"/>
+            </svg>
+          </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 7px; margin-top: 9px; margin-bottom: 26px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.8"/>
+            <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span style="font-size: 12px; color: #34d399;">At least 8 characters</span>
+        </div>
+
+        <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Save new password</button>
+
+        <div style="display: flex; align-items: center; gap: 14px; margin: 26px 0;">
+          <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+          <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; color: #98a0bb;">OR</span>
+          <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+        </div>
+
+        <button type="button" style="width: 100%; height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 15.5px; font-weight: 600; cursor: pointer;">Keep my password and sign in</button>
+        <p style="margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb; text-align: center;">Your other phones stay signed in.</p>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
