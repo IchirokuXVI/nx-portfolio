@@ -1,3 +1,5 @@
+> **PR:** [#715](https://github.com/IchirokuXVI/nx-portfolio/pull/715)
+
 # 0148: a forgotten password has a way back
 
 > Asked for by the owner on 2026-10-14, together with backend `0210`: a reset screen that can
