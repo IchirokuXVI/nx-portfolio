@@ -1,3 +1,5 @@
+> **PR:** [#710](https://github.com/IchirokuXVI/nx-portfolio/pull/710)
+
 # 0139: a row of the shopping list is a product
 
 > Asked for by the owner on 2026-10-11: "I think it would be way better to merge all lines
