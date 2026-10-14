@@ -359,6 +359,15 @@ export class ShopWalkService {
       throw tooLarge('entry', SHOP_WALK_LIMITS.entryMaxBytes);
     }
     return this.dataSource.transaction(async (manager) => {
+      // The shop before the walk, the order `update` takes them in (plan
+      // 0200). A save of the shown walk writes the sections of its shop under
+      // the lock of the shop, and a save that took the walk first would cross
+      // a show that took the shop first.
+      const known = await this.requireWalk(manager, req.walkId);
+      await manager.query(
+        `SELECT 1 FROM "supermarket_locations" WHERE "id" = $1 FOR NO KEY UPDATE`,
+        [known.supermarketLocationId]
+      );
       const walk = await this.lockWalk(manager, req.walkId);
       const stored = await manager.getRepository(ShopWalkEntry).findOne({
         where: { id: req.id },

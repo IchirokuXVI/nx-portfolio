@@ -382,7 +382,7 @@ const shopMapView = object(
     sections: {
       ...array(ref(IDS.shopMapSectionView)),
       description:
-        'The chain sections the walk’s section names resolved to, in walk order.',
+        'The sections of the shop the walk’s section names resolved to, in walk order.',
     },
   },
   ['walkId', 'savedAt', 'view', 'sections']

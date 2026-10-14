@@ -314,5 +314,27 @@ describe('the admin API is its own namespace', () => {
         true
       );
     });
+
+    /**
+     * Plan 0200, section 4: a section belongs to a shop. It is created under
+     * its shop, and a chain has no section route and no pin route left.
+     */
+    it('creates a section under its shop, and leaves a chain no section route', () => {
+      expect(has('post', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
+      expect(has('get', '/v1/admin/catalog/locations/{id}/item-sections')).toBe(
+        true
+      );
+      for (const method of ['get', 'patch', 'delete']) {
+        expect(has(method, '/v1/admin/catalog/sections/{id}')).toBe(true);
+      }
+      expect(
+        document.paths['/v1/admin/catalog/supermarkets/{id}/sections']
+      ).toBeUndefined();
+      expect(
+        document.paths['/v1/admin/catalog/supermarkets/{id}/item-sections']
+      ).toBeUndefined();
+    });
   });
 });

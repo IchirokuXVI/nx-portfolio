@@ -4,7 +4,7 @@ import {
   CategoryNotFoundException,
   NotFoundException,
   SectionNotFoundException,
-  SectionOfAnotherChainException,
+  SectionOfAnotherShopException,
   SectionSlugTakenException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -18,9 +18,9 @@ import { seedTaxonomy } from '../db/taxonomy/taxonomy-seed';
 import {
   CATALOG_ENTITIES,
   Category,
+  ShopSection,
   Supermarket,
   SupermarketLocation,
-  SupermarketSection,
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
@@ -28,16 +28,23 @@ import { PlatformAdminService } from './platform-admin.service';
 import { ITEMS_AT_LOCATION_SQL, SectionService } from './section.service';
 
 /**
- * Shop sections through the service, against real Postgres (plan 0167,
- * sections 1 to 3).
+ * The sections of a shop through the service, against real Postgres (plan
+ * 0167, as plan 0200 left it).
  *
- * The rule of section 3 is one statement, so what this file proves is the
- * statement: each branch of the rule on the example the plan states (a frozen
- * pizza on `pizzas-and-doughs`, under the root `frozen-foods-and-ice-cream`,
- * and on `frozen-pizzas`, under `prepared-meals-and-pizzas`), a shop with a
- * list of its own and a shop with none, and the two triggers refusing a
- * section of another chain. It ends with the `EXPLAIN` of the rule for 100
- * products at one shop.
+ * What this file proves:
+ *
+ * - the read is one statement, on the example plan 0167 states (a frozen pizza
+ *   on `pizzas-and-doughs`, under the root `frozen-foods-and-ice-cream`, and
+ *   on `frozen-pizzas`, under `prepared-meals-and-pizzas`)
+ * - a shop with no rows in `shop_sections` has no sections, whatever its chain
+ *   and the four old tables hold: nothing is inherited, no answer carries a
+ *   `source`, and no product is `PINNED`
+ * - the order of a shop is written in one statement that the deferrable
+ *   constraint accepts, and it refuses a section of another shop
+ * - a walk orders and creates the sections of the shop it walked, and deletes
+ *   none
+ *
+ * It ends with the `EXPLAIN` of the read for 100 products at one shop.
  *
  * It works in a scratch schema of its own, seeded with the whole taxonomy, and
  * drops it afterwards.
@@ -45,36 +52,37 @@ import { ITEMS_AT_LOCATION_SQL, SectionService } from './section.service';
  *   LUNA_INTEGRATION=1 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:<port>/luna_catalog \
  *     npx nx run luna-shopper-backend-catalog:test-integration --testFile=section.integration.spec.ts
  */
-const SCHEMA = 'plan0167_section_test';
-const OWNER = 'ac700000-0000-4000-a000-000000000167';
+const SCHEMA = 'plan0200_section_test';
+const OWNER = 'ac700000-0000-4000-a000-000000000200';
 const UNKNOWN_ITEM = 'ac700000-0000-4000-a000-00000000dead';
 
-describeIntegration('shop sections and the rule (real Postgres)', () => {
+describeIntegration('the sections of a shop (real Postgres)', () => {
   let dataSource: DataSource;
   let sections: SectionService;
   let categories: CategoryService;
 
   let chainId: string;
   let otherChainId: string;
-  /** A shop of the chain with a list of its own. */
+  /** A shop of the chain with four sections. */
   let configured: string;
-  /** A shop of the chain with no list, which inherits the chain's. */
+  /** A shop of the same chain with no sections of its own. */
   let bare: string;
+  /** Another shop of the same chain, with one section of its own. */
+  let sibling: string;
   /** A shop of the other chain. */
   let foreignShop: string;
 
-  /** The chain's sections, by what they are in the fixture. */
+  /** The sections of the configured shop, by what they are in the fixture. */
   let pizzas: string;
   let frozen: string;
   let bakery: string;
   let promo: string;
-  let foreignSection: string;
+  /** The one section of the sibling shop. It holds the slug `pizzas` too. */
+  let siblingSection: string;
 
   /** The products. */
   let pizza: string;
-  let pinnedPizza: string;
   let iceCream: string;
-  let pinnedAway: string;
   let milk: string;
 
   const leaf = (slug: string) => categoryId(slug);
@@ -94,21 +102,15 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
   async function sqlRefusal(
     sql: string,
     params: unknown[]
-  ): Promise<{ code?: string; constraint?: string; detail?: string } | null> {
+  ): Promise<{ code?: string; constraint?: string } | null> {
     try {
       await dataSource.query(sql, params);
       return null;
     } catch (error) {
       const driver = (
-        error as {
-          driverError?: { code?: string; constraint?: string; detail?: string };
-        }
+        error as { driverError?: { code?: string; constraint?: string } }
       ).driverError;
-      return {
-        code: driver?.code,
-        constraint: driver?.constraint,
-        detail: driver?.detail,
-      };
+      return { code: driver?.code, constraint: driver?.constraint };
     }
   }
 
@@ -158,23 +160,45 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
   }
 
   async function section(
-    supermarketId: string,
+    supermarketLocationId: string,
     slug: string,
-    categoryIds: string[]
+    categoryIds: string[],
+    name: Record<string, string> = { es: slug, en: slug }
   ): Promise<string> {
     return (
       await sections.create({
         ...as,
-        supermarketId,
+        supermarketLocationId,
         slug,
-        name: { es: slug, en: slug },
+        name,
         categoryIds,
       })
     ).id;
   }
 
+  /** The ids of a shop's sections with their places, straight from the table. */
+  async function stored(
+    supermarketLocationId: string
+  ): Promise<{ id: string; position: number }[]> {
+    return (await dataSource.query(
+      `SELECT "id"::text AS "id", "position" FROM "shop_sections"
+        WHERE "supermarketLocationId" = $1 ORDER BY "position"`,
+      [supermarketLocationId]
+    )) as { id: string; position: number }[];
+  }
+
+  const orderOf = async (supermarketLocationId: string) =>
+    (await sections.forLocation({ supermarketLocationId })).sections.map(
+      (row) => row.id
+    );
+
   const rule = (supermarketLocationId: string, itemIds: string[]) =>
     sections.itemsAtLocation({ supermarketLocationId, itemIds });
+
+  const walk = (supermarketLocationId: string, names: string[]) =>
+    dataSource.transaction((manager) =>
+      sections.followWalk(manager, supermarketLocationId, names, 'es')
+    );
 
   beforeAll(async () => {
     const url = requiredEnv('CATALOG_DB_URL');
@@ -202,7 +226,7 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     } as never);
     const audit = new CatalogAuditService(dataSource);
     sections = new SectionService(
-      dataSource.getRepository(SupermarketSection),
+      dataSource.getRepository(ShopSection),
       admin,
       audit
     );
@@ -216,22 +240,22 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     otherChainId = await chain('Other Mart');
     configured = await shop(chainId, 'configured');
     bare = await shop(chainId, 'bare');
+    sibling = await shop(chainId, 'sibling');
     foreignShop = await shop(otherChainId, 'foreign');
 
-    // The chain's order: Pizzas, Frozen, Bakery, Promo.
-    pizzas = await section(chainId, 'pizzas', [leaf('frozen-pizzas')]);
-    frozen = await section(chainId, 'frozen', [
+    // Created in this order, so each goes after the one before it.
+    pizzas = await section(configured, 'pizzas', [leaf('frozen-pizzas')]);
+    frozen = await section(configured, 'frozen', [
       leaf('frozen-foods-and-ice-cream'),
     ]);
-    bakery = await section(chainId, 'bakery', [leaf('bakery')]);
-    // Covers nothing: it holds only what is pinned to it.
-    promo = await section(chainId, 'promo', []);
-    foreignSection = await section(otherChainId, 'frescos', [
-      leaf('frozen-foods-and-ice-cream'),
-    ]);
+    bakery = await section(configured, 'bakery', [leaf('bakery')]);
+    // Covers nothing, as a section that a map walk created does.
+    promo = await section(configured, 'promo', []);
+    // The same slug in another shop of the same chain, covering other things.
+    siblingSection = await section(sibling, 'pizzas', [leaf('milk')]);
 
-    // The configured shop walks Frozen, then Pizzas, then Bakery, and has no
-    // Promo aisle.
+    // The configured shop is walked Frozen, then Pizzas, then Bakery. Promo is
+    // not named, so it stays, after them.
     await sections.setForLocation({
       ...as,
       supermarketLocationId: configured,
@@ -242,26 +266,8 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       'pizzas-and-doughs',
       'frozen-pizzas',
     ]);
-    pinnedPizza = await product('Pizza fija', [
-      'pizzas-and-doughs',
-      'frozen-pizzas',
-    ]);
     iceCream = await product('Helado', ['ice-creams-and-ice']);
-    pinnedAway = await product('Helado de promo', ['ice-creams-and-ice']);
     milk = await product('Leche', ['milk']);
-
-    await sections.setPins({
-      ...as,
-      supermarketId: chainId,
-      itemId: pinnedPizza,
-      sectionIds: [pizzas],
-    });
-    await sections.setPins({
-      ...as,
-      supermarketId: chainId,
-      itemId: pinnedAway,
-      sectionIds: [promo],
-    });
   }, 180_000);
 
   afterAll(async () => {
@@ -271,36 +277,23 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     }
   });
 
-  describe('the rule of section 3', () => {
+  describe('which sections a product is in', () => {
     it('covers a product through a leaf and through a root, in the shop order', async () => {
       const answer = await rule(configured, [pizza]);
-      expect(answer.source).toBe('LOCATION');
       // Frozen covers the root of `pizzas-and-doughs`, Pizzas covers the
       // leaf `frozen-pizzas`, and the shop walks Frozen first.
-      expect(answer.items).toEqual([
-        { itemId: pizza, step: 'COVERED', sectionIds: [frozen, pizzas] },
-      ]);
+      expect(answer).toEqual({
+        items: [
+          { itemId: pizza, step: 'COVERED', sectionIds: [frozen, pizzas] },
+        ],
+      });
+      expect(answer).not.toHaveProperty('source');
     });
 
     it('covers a product through a root alone', async () => {
       const answer = await rule(configured, [iceCream]);
       expect(answer.items).toEqual([
         { itemId: iceCream, step: 'COVERED', sectionIds: [frozen] },
-      ]);
-    });
-
-    it('answers a pin that is present, and nothing else', async () => {
-      const answer = await rule(configured, [pinnedPizza]);
-      expect(answer.items).toEqual([
-        { itemId: pinnedPizza, step: 'PINNED', sectionIds: [pizzas] },
-      ]);
-    });
-
-    it('falls through a pin to a section the shop lacks', async () => {
-      // Pinned to Promo, which the configured shop does not have.
-      const answer = await rule(configured, [pinnedAway]);
-      expect(answer.items).toEqual([
-        { itemId: pinnedAway, step: 'COVERED', sectionIds: [frozen] },
       ]);
     });
 
@@ -313,14 +306,24 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       ]);
     });
 
-    it('gives a shop with no configuration every section of its chain, in the chain order', async () => {
-      const answer = await rule(bare, [pizza, pinnedAway, milk]);
-      expect(answer.source).toBe('CHAIN');
+    it('gives a shop with no sections of its own none, whatever its chain holds', async () => {
+      const answer = await rule(bare, [pizza, iceCream, milk]);
+      expect(answer).toEqual({
+        items: [
+          { itemId: pizza, step: 'NONE', sectionIds: [] },
+          { itemId: iceCream, step: 'NONE', sectionIds: [] },
+          { itemId: milk, step: 'NONE', sectionIds: [] },
+        ],
+      });
+    });
+
+    it('reads the sections of the shop asked about, and of no other shop of the chain', async () => {
+      // The sibling's one section covers `milk`. The four sections of the
+      // configured shop say nothing there.
+      const answer = await rule(sibling, [pizza, milk]);
       expect(answer.items).toEqual([
-        { itemId: pizza, step: 'COVERED', sectionIds: [pizzas, frozen] },
-        // Promo is present here, so the pin answers.
-        { itemId: pinnedAway, step: 'PINNED', sectionIds: [promo] },
-        { itemId: milk, step: 'NONE', sectionIds: [] },
+        { itemId: pizza, step: 'NONE', sectionIds: [] },
+        { itemId: milk, step: 'COVERED', sectionIds: [siblingSection] },
       ]);
     });
 
@@ -333,20 +336,8 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       ]);
     });
 
-    it('reads a pin of this chain only', async () => {
-      // The other chain's shop has only its own section, which covers the
-      // root `frozen-foods-and-ice-cream`: this chain's pin to Pizzas says nothing there.
-      const answer = await rule(foreignShop, [pinnedPizza]);
-      expect(answer.items).toEqual([
-        { itemId: pinnedPizza, step: 'COVERED', sectionIds: [foreignSection] },
-      ]);
-    });
-
-    it('answers the source alone for a read with no products', async () => {
-      expect(await rule(configured, [])).toEqual({
-        source: 'LOCATION',
-        items: [],
-      });
+    it('answers no entry for a read with no products', async () => {
+      expect(await rule(configured, [])).toEqual({ items: [] });
     });
 
     it('refuses an unknown shop with the ordinary not found', async () => {
@@ -356,46 +347,128 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     });
   });
 
-  describe('a shop list', () => {
-    it('reads the shop order with the categories each covers', async () => {
+  describe('the four old tables are read by nothing', () => {
+    let oldSection: string;
+
+    beforeAll(async () => {
+      // What plan 0167 left in a database: a section of the chain that covers
+      // `milk`, selected by the bare shop, with the milk pinned to it.
+      const [{ id }] = (await dataSource.query(
+        `INSERT INTO "supermarket_sections" ("supermarketId", "slug", "name", "position")
+         VALUES ($1, 'old-dairy', '{"es":"Lácteos de la cadena"}'::jsonb, 0)
+         RETURNING "id"::text AS "id"`,
+        [chainId]
+      )) as { id: string }[];
+      oldSection = id;
+      await dataSource.query(
+        `INSERT INTO "section_categories" ("sectionId", "categoryId") VALUES ($1, $2)`,
+        [oldSection, leaf('milk')]
+      );
+      await dataSource.query(
+        `INSERT INTO "location_sections" ("supermarketLocationId", "sectionId", "position")
+         VALUES ($1, $2, 0)`,
+        [bare, oldSection]
+      );
+      await dataSource.query(
+        `INSERT INTO "supermarket_item_sections" ("supermarketId", "itemId", "sectionId")
+         VALUES ($1, $2, $3)`,
+        [chainId, milk, oldSection]
+      );
+    });
+
+    afterAll(async () => {
+      await dataSource.query(
+        `DELETE FROM "supermarket_sections" WHERE "id" = $1`,
+        [oldSection]
+      );
+    });
+
+    it('a selection and a section of the chain give the shop no section', async () => {
+      const view = await sections.forLocation({ supermarketLocationId: bare });
+      expect(view).toEqual({ sections: [] });
+      const names = await sections.namesForLocations({
+        supermarketLocationIds: [bare],
+      });
+      expect(names.locations[bare]).toEqual([]);
+    });
+
+    it('a pin places no product, in the shop that selected the section or in another', async () => {
+      for (const shopId of [bare, configured]) {
+        const answer = await rule(shopId, [milk]);
+        expect(answer.items).toEqual([
+          { itemId: milk, step: 'NONE', sectionIds: [] },
+        ]);
+      }
+    });
+
+    it('an old section is not a section any more', async () => {
+      expect(
+        await refusal(sections.get({ ...as, sectionId: oldSection }))
+      ).toBeInstanceOf(SectionNotFoundException);
+      expect(
+        await refusal(
+          sections.setForLocation({
+            ...as,
+            supermarketLocationId: bare,
+            sectionIds: [oldSection],
+          })
+        )
+      ).toBeInstanceOf(SectionNotFoundException);
+    });
+  });
+
+  describe('the sections of one shop', () => {
+    it('reads them in the shop order with the categories each covers', async () => {
       const view = await sections.forLocation({
         supermarketLocationId: configured,
       });
-      expect(view.source).toBe('LOCATION');
+      expect(view).not.toHaveProperty('source');
       expect(view.sections.map((row) => row.id)).toEqual([
         frozen,
         pizzas,
-        bakery,
-      ]);
-      expect(view.sections[0].categoryIds).toEqual([
-        leaf('frozen-foods-and-ice-cream'),
-      ]);
-      expect(view.sections[0]).not.toHaveProperty('locationCount');
-    });
-
-    it('reads the chain order for a shop with no list', async () => {
-      const view = await sections.forLocation({ supermarketLocationId: bare });
-      expect(view.source).toBe('CHAIN');
-      expect(view.sections.map((row) => row.id)).toEqual([
-        pizzas,
-        frozen,
         bakery,
         promo,
       ]);
+      expect(view.sections.map((row) => row.position)).toEqual([0, 1, 2, 3]);
+      expect(view.sections[0]).toEqual({
+        id: frozen,
+        supermarketLocationId: configured,
+        slug: 'frozen',
+        name: { es: 'frozen', en: 'frozen' },
+        position: 0,
+        categoryIds: [leaf('frozen-foods-and-ice-cream')],
+      });
     });
 
-    it('refuses a section of another chain, naming it', async () => {
+    it('reads none for a shop that has none', async () => {
+      expect(
+        await sections.forLocation({ supermarketLocationId: bare })
+      ).toEqual({ sections: [] });
+      expect(
+        await sections.forLocation({ supermarketLocationId: foreignShop })
+      ).toEqual({ sections: [] });
+    });
+
+    it('refuses a section of another shop of the same chain, naming it', async () => {
       const refused = await refusal(
         sections.setForLocation({
           ...as,
           supermarketLocationId: configured,
-          sectionIds: [frozen, foreignSection],
+          sectionIds: [frozen, siblingSection],
         })
       );
-      expect(refused).toBeInstanceOf(SectionOfAnotherChainException);
+      expect(refused).toBeInstanceOf(SectionOfAnotherShopException);
       expect(refused).toMatchObject({
-        details: { sectionIds: [foreignSection] },
+        code: 'section_of_another_shop',
+        details: { sectionIds: [siblingSection] },
       });
+      // Nothing moved.
+      expect(await orderOf(configured)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+        promo,
+      ]);
     });
 
     it('refuses an unknown section, naming it', async () => {
@@ -411,32 +484,135 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       expect(refused).toMatchObject({ details: { unknown: [missing] } });
     });
 
-    it('returns a shop to the chain default on an empty list', async () => {
-      const temp = await shop(chainId, 'temp');
-      await sections.setForLocation({
+    it('puts the named sections first and keeps the others after them, in the order they had', async () => {
+      const moved = await sections.setForLocation({
         ...as,
-        supermarketLocationId: temp,
-        sectionIds: [bakery],
+        supermarketLocationId: configured,
+        sectionIds: [promo],
       });
-      const emptied = await sections.setForLocation({
+      expect(moved.sections.map((row) => row.id)).toEqual([
+        promo,
+        frozen,
+        pizzas,
+        bakery,
+      ]);
+      expect(moved.sections.map((row) => row.position)).toEqual([0, 1, 2, 3]);
+
+      const back = await sections.setForLocation({
         ...as,
-        supermarketLocationId: temp,
+        supermarketLocationId: configured,
+        sectionIds: [frozen, pizzas, bakery],
+      });
+      expect(back.sections.map((row) => row.id)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+        promo,
+      ]);
+    });
+
+    it('changes nothing on an empty list: the write deletes no section', async () => {
+      const same = await sections.setForLocation({
+        ...as,
+        supermarketLocationId: configured,
         sectionIds: [],
       });
-      expect(emptied.source).toBe('CHAIN');
-      await dataSource.query(
-        `DELETE FROM "supermarket_locations" WHERE "id" = $1`,
-        [temp]
-      );
+      expect(same.sections.map((row) => row.id)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+        promo,
+      ]);
+    });
+  });
+
+  describe('the order is unique per shop, and one statement reorders it', () => {
+    it('declares the constraint deferrable and checked at the end of each statement', async () => {
+      const [constraint] = (await dataSource.query(
+        `SELECT c.condeferrable AS "deferrable", c.condeferred AS "deferred"
+           FROM pg_constraint c
+           JOIN pg_namespace n ON n.oid = c.connamespace
+          WHERE n.nspname = $1 AND c.conname = 'uq_shop_sections_position'`,
+        [SCHEMA]
+      )) as { deferrable: boolean; deferred: boolean }[];
+      expect(constraint).toEqual({ deferrable: true, deferred: false });
+    });
+
+    it('swaps two sections through the service, each keeping its id and its categories', async () => {
+      const swapped = await sections.setForLocation({
+        ...as,
+        supermarketLocationId: configured,
+        sectionIds: [pizzas, frozen],
+      });
+      expect(swapped.sections.map((row) => [row.id, row.position])).toEqual([
+        [pizzas, 0],
+        [frozen, 1],
+        [bakery, 2],
+        [promo, 3],
+      ]);
+      expect(swapped.sections[0].categoryIds).toEqual([leaf('frozen-pizzas')]);
+      expect(swapped.sections[1].categoryIds).toEqual([
+        leaf('frozen-foods-and-ice-cream'),
+      ]);
+      await sections.setForLocation({
+        ...as,
+        supermarketLocationId: configured,
+        sectionIds: [frozen, pizzas],
+      });
+      expect(await orderOf(configured)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+        promo,
+      ]);
+    });
+
+    it('refuses a second section at a place that is taken', async () => {
+      expect(
+        await sqlRefusal(
+          `UPDATE "shop_sections" SET "position" = 0 WHERE "id" = $1`,
+          [pizzas]
+        )
+      ).toEqual({ code: '23505', constraint: 'uq_shop_sections_position' });
+      expect(
+        await sqlRefusal(
+          `INSERT INTO "shop_sections" ("supermarketLocationId", "slug", "name", "position")
+           VALUES ($1, 'twice', '{"es":"Dos"}'::jsonb, 1)`,
+          [configured]
+        )
+      ).toEqual({ code: '23505', constraint: 'uq_shop_sections_position' });
+      // Nothing moved.
+      expect((await stored(configured)).map((row) => row.id)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+        promo,
+      ]);
+    });
+
+    it('lets the same place be held in two shops', async () => {
+      const [first] = await stored(configured);
+      const [other] = await stored(sibling);
+      expect([first.position, other.position]).toEqual([0, 0]);
+    });
+
+    it('refuses a place below zero', async () => {
+      expect(
+        await sqlRefusal(
+          `UPDATE "shop_sections" SET "position" = -1 WHERE "id" = $1`,
+          [promo]
+        )
+      ).toEqual({ code: '23514', constraint: 'ck_shop_sections_position' });
     });
   });
 
   describe('names for several shops (plan 0170)', () => {
-    it('agrees with the per shop read for a configured and an unconfigured shop of one chain', async () => {
+    it('agrees with the per shop read for every shop of one chain', async () => {
+      const shops = [configured, bare, sibling];
       const names = await sections.namesForLocations({
-        supermarketLocationIds: [configured, bare],
+        supermarketLocationIds: shops,
       });
-      for (const shopId of [configured, bare]) {
+      for (const shopId of shops) {
         const one = await sections.forLocation({
           supermarketLocationId: shopId,
         });
@@ -448,12 +624,11 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
         frozen,
         pizzas,
         bakery,
-      ]);
-      expect(names.locations[bare].map((row) => row.id)).toEqual([
-        pizzas,
-        frozen,
-        bakery,
         promo,
+      ]);
+      expect(names.locations[bare]).toEqual([]);
+      expect(names.locations[sibling].map((row) => row.id)).toEqual([
+        siblingSection,
       ]);
       expect(names.locations[configured][0].name).toEqual({
         es: 'frozen',
@@ -461,15 +636,13 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       });
     });
 
-    it('maps a shop whose chain has no sections to an empty list, and leaves out what names no shop', async () => {
-      const emptyChain = await chain('Empty Mart');
-      const emptyShop = await shop(emptyChain, 'empty');
+    it('maps a shop with no sections to an empty list, and leaves out what names no shop', async () => {
       const names = await sections.namesForLocations({
-        supermarketLocationIds: [emptyShop, foreignShop, UNKNOWN_ITEM, 'nope'],
+        supermarketLocationIds: [foreignShop, sibling, UNKNOWN_ITEM, 'nope'],
       });
       expect(names.locations).toEqual({
-        [emptyShop]: [],
-        [foreignShop]: [{ id: foreignSection, name: expect.any(Object) }],
+        [foreignShop]: [],
+        [sibling]: [{ id: siblingSection, name: expect.any(Object) }],
       });
     });
 
@@ -484,194 +657,149 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     });
   });
 
-  describe('the triggers', () => {
-    it('refuse a shop list naming a section of another chain', async () => {
-      expect(
-        await sqlRefusal(
-          `INSERT INTO "location_sections" ("supermarketLocationId", "sectionId", "position")
-           VALUES ($1, $2, 99)`,
-          [configured, foreignSection]
-        )
-      ).toEqual({
-        code: '23514',
-        constraint: 'ck_location_sections_chain',
-        detail: foreignSection,
-      });
-    });
-
-    it('refuse a pin naming a section of another chain', async () => {
-      expect(
-        await sqlRefusal(
-          `INSERT INTO "supermarket_item_sections" ("supermarketId", "itemId", "sectionId")
-           VALUES ($1, $2, $3)`,
-          [chainId, milk, foreignSection]
-        )
-      ).toEqual({
-        code: '23514',
-        constraint: 'ck_item_sections_chain',
-        detail: foreignSection,
-      });
-    });
-
-    it('refuse moving a row onto another chain by update', async () => {
-      expect(
-        await sqlRefusal(
-          `UPDATE "location_sections" SET "sectionId" = $2
-            WHERE "supermarketLocationId" = $1 AND "sectionId" = $3`,
-          [configured, foreignSection, bakery]
-        )
-      ).toMatchObject({ constraint: 'ck_location_sections_chain' });
-    });
-  });
-
-  describe('pins', () => {
-    it('refuses a section of another chain', async () => {
-      const refused = await refusal(
-        sections.setPins({
+  describe('one section', () => {
+    it('creates a section after the last one of its shop', async () => {
+      const temp = await shop(chainId, 'appends');
+      const made = [
+        await sections.create({
           ...as,
-          supermarketId: chainId,
-          itemId: milk,
-          sectionIds: [foreignSection],
-        })
+          supermarketLocationId: temp,
+          slug: 'first',
+          name: { es: 'Primera' },
+          categoryIds: [],
+        }),
+        await sections.create({
+          ...as,
+          supermarketLocationId: temp,
+          slug: 'second',
+          name: { es: 'Segunda' },
+          categoryIds: [leaf('milk')],
+        }),
+      ];
+      expect(made.map((row) => row.position)).toEqual([0, 1]);
+      expect(made[1]).toEqual({
+        id: made[1].id,
+        supermarketLocationId: temp,
+        slug: 'second',
+        name: { es: 'Segunda' },
+        position: 1,
+        categoryIds: [leaf('milk')],
+      });
+      expect(made[1]).not.toHaveProperty('supermarketId');
+      expect(made[1]).not.toHaveProperty('locationCount');
+      await dataSource.query(
+        `DELETE FROM "supermarket_locations" WHERE "id" = $1`,
+        [temp]
       );
-      expect(refused).toBeInstanceOf(SectionOfAnotherChainException);
-      expect(refused).toMatchObject({
-        details: { sectionIds: [foreignSection] },
-      });
     });
 
-    it('refuses an unknown product with the ordinary not found', async () => {
-      expect(
-        await refusal(
-          sections.setPins({
-            ...as,
-            supermarketId: chainId,
-            itemId: UNKNOWN_ITEM,
-            sectionIds: [pizzas],
-          })
-        )
-      ).toBeInstanceOf(NotFoundException);
-    });
-
-    it('lists one entry per pinned product, filtered by product and by section', async () => {
-      const all = await sections.listPins({ ...as, supermarketId: chainId });
-      expect(all.items.map((entry) => entry.itemId).sort()).toEqual(
-        [pinnedPizza, pinnedAway].sort()
-      );
-      const one = await sections.listPins({
+    it('moves a section to a place, and the ones between move by one', async () => {
+      const first = await sections.update({
         ...as,
-        supermarketId: chainId,
-        itemId: pinnedPizza,
-      });
-      expect(one.items).toEqual([
-        { supermarketId: chainId, itemId: pinnedPizza, sectionIds: [pizzas] },
-      ]);
-      const bySection = await sections.listPins({
-        ...as,
-        supermarketId: chainId,
         sectionId: promo,
+        position: 0,
       });
-      expect(bySection.items.map((entry) => entry.itemId)).toEqual([
-        pinnedAway,
+      expect(first.position).toBe(0);
+      expect(await stored(configured)).toEqual([
+        { id: promo, position: 0 },
+        { id: frozen, position: 1 },
+        { id: pizzas, position: 2 },
+        { id: bakery, position: 3 },
       ]);
-      const both = await sections.listPins({
+
+      const middle = await sections.update({
         ...as,
-        supermarketId: chainId,
-        itemId: pinnedPizza,
         sectionId: promo,
+        position: 2,
       });
-      expect(both.items).toEqual([]);
-    });
-
-    it('pages by product', async () => {
-      const first = await sections.listPins({
-        ...as,
-        supermarketId: chainId,
-        limit: 1,
-      });
-      expect(first.items).toHaveLength(1);
-      expect(first.nextCursor).not.toBeNull();
-      const second = await sections.listPins({
-        ...as,
-        supermarketId: chainId,
-        limit: 1,
-        cursor: first.nextCursor ?? undefined,
-      });
-      expect(second.items).toHaveLength(1);
-      expect(second.items[0].itemId).not.toBe(first.items[0].itemId);
-      expect(second.nextCursor).toBeNull();
-    });
-
-    it('answers the pins in the chain order, and an empty list removes them', async () => {
-      const written = await sections.setPins({
-        ...as,
-        supermarketId: chainId,
-        itemId: milk,
-        sectionIds: [promo, pizzas],
-      });
-      expect(written.sectionIds).toEqual([pizzas, promo]);
-      const removed = await sections.setPins({
-        ...as,
-        supermarketId: chainId,
-        itemId: milk,
-        sectionIds: [],
-      });
-      expect(removed.sectionIds).toEqual([]);
-      expect((await rule(configured, [milk])).items[0].step).toBe('NONE');
-    });
-  });
-
-  describe('sections', () => {
-    it('counts the shops a section is present at', async () => {
-      const page = await sections.list({ ...as, supermarketId: chainId });
-      const count = (id: string) =>
-        page.items.find((row) => row.id === id)?.locationCount;
-      // The configured shop lists Frozen, Pizzas and Bakery; the bare shop
-      // inherits all four.
-      expect(count(frozen)).toBe(2);
-      expect(count(pizzas)).toBe(2);
-      expect(count(promo)).toBe(1);
-      expect(page.items.map((row) => row.id)).toEqual([
-        pizzas,
+      expect(middle.position).toBe(2);
+      expect(await orderOf(configured)).toEqual([
         frozen,
-        bakery,
+        pizzas,
         promo,
+        bakery,
+      ]);
+
+      // A place past the last one is the last one.
+      const last = await sections.update({
+        ...as,
+        sectionId: promo,
+        position: 99,
+      });
+      expect(last.position).toBe(3);
+      expect(await stored(configured)).toEqual([
+        { id: frozen, position: 0 },
+        { id: pizzas, position: 1 },
+        { id: bakery, position: 2 },
+        { id: promo, position: 3 },
       ]);
     });
 
-    it('searches by name and slug', async () => {
-      const page = await sections.list({
-        ...as,
-        supermarketId: chainId,
-        query: 'PROM',
-      });
-      expect(page.items.map((row) => row.id)).toEqual([promo]);
+    it('closes the gap when a section is deleted', async () => {
+      const temp = await shop(chainId, 'gap');
+      const a = await section(temp, 'a', []);
+      const b = await section(temp, 'b', [leaf('milk')]);
+      const c = await section(temp, 'c', []);
+      await sections.delete({ ...as, sectionId: b });
+      expect(await stored(temp)).toEqual([
+        { id: a, position: 0 },
+        { id: c, position: 1 },
+      ]);
+      // Its categories went with it.
+      const [{ left }] = (await dataSource.query(
+        `SELECT count(*)::int AS "left" FROM "shop_section_categories" WHERE "sectionId" = $1`,
+        [b]
+      )) as { left: number }[];
+      expect(left).toBe(0);
+      expect(
+        await refusal(sections.get({ ...as, sectionId: b }))
+      ).toBeInstanceOf(SectionNotFoundException);
+      // The next one goes after the last, not into a place that is taken.
+      const d = await section(temp, 'd', []);
+      expect(await stored(temp)).toEqual([
+        { id: a, position: 0 },
+        { id: c, position: 1 },
+        { id: d, position: 2 },
+      ]);
+      await dataSource.query(
+        `DELETE FROM "supermarket_locations" WHERE "id" = $1`,
+        [temp]
+      );
     });
 
-    it('refuses a slug the chain already holds, naming the holder', async () => {
-      const refused = await refusal(section(chainId, 'pizzas', []));
+    it('refuses a slug the shop already holds, naming the holder', async () => {
+      const refused = await refusal(section(configured, 'pizzas', []));
       expect(refused).toBeInstanceOf(SectionSlugTakenException);
       expect(refused).toMatchObject({ details: { sectionId: pizzas } });
     });
 
-    it('lets another chain take the same slug', async () => {
-      const id = await section(otherChainId, 'pizzas', []);
-      await sections.delete({ ...as, sectionId: id });
+    it('lets two shops of one chain hold the same slug', async () => {
+      const [mine, theirs] = await Promise.all([
+        sections.get({ ...as, sectionId: pizzas }),
+        sections.get({ ...as, sectionId: siblingSection }),
+      ]);
+      expect([mine.slug, theirs.slug]).toEqual(['pizzas', 'pizzas']);
+      expect(mine.supermarketLocationId).toBe(configured);
+      expect(theirs.supermarketLocationId).toBe(sibling);
+      expect(theirs.categoryIds).toEqual([leaf('milk')]);
     });
 
     it('refuses an unknown category', async () => {
       const missing = 'ac700000-0000-4000-a000-00000000cafe';
-      const refused = await refusal(section(chainId, 'nowhere', [missing]));
+      const refused = await refusal(section(configured, 'nowhere', [missing]));
       expect(refused).toBeInstanceOf(CategoryNotFoundException);
       expect(refused).toMatchObject({ details: { unknown: [missing] } });
     });
 
-    it('refuses an unknown chain with the ordinary not found', async () => {
+    it('refuses an unknown shop with the ordinary not found, and a chain is not a shop', async () => {
       expect(
         await refusal(
           section('ac700000-0000-4000-a000-00000000aaaa', 'nowhere', [])
         )
       ).toBeInstanceOf(NotFoundException);
+      expect(await refusal(section(chainId, 'nowhere', []))).toBeInstanceOf(
+        NotFoundException
+      );
     });
 
     it('replaces the categories on update, roots before their leaves', async () => {
@@ -693,48 +821,31 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       expect(back.categoryIds).toEqual([leaf('bakery')]);
     });
 
-    it('cascades a delete out of the shop lists and the pins', async () => {
-      const doomed = await section(chainId, 'doomed', [leaf('milk')]);
-      const temp = await shop(chainId, 'cascade');
-      await sections.setForLocation({
-        ...as,
-        supermarketLocationId: temp,
-        sectionIds: [doomed],
-      });
-      await sections.setPins({
-        ...as,
-        supermarketId: chainId,
-        itemId: milk,
-        sectionIds: [doomed],
-      });
-      await sections.delete({ ...as, sectionId: doomed });
-      const [{ lists, pins }] = (await dataSource.query(
-        `SELECT
-           (SELECT count(*) FROM "location_sections" WHERE "sectionId" = $1)::int AS "lists",
-           (SELECT count(*) FROM "supermarket_item_sections" WHERE "sectionId" = $1)::int AS "pins"`,
-        [doomed]
-      )) as { lists: number; pins: number }[];
-      expect({ lists, pins }).toEqual({ lists: 0, pins: 0 });
-      expect(
-        await refusal(sections.get({ ...as, sectionId: doomed }))
-      ).toBeInstanceOf(SectionNotFoundException);
-      // The shop's list is empty now, so it inherits the chain's again.
-      expect(
-        (await sections.forLocation({ supermarketLocationId: temp })).source
-      ).toBe('CHAIN');
+    it('deletes the sections of a shop with the shop', async () => {
+      const temp = await shop(chainId, 'closes');
+      const held = await section(temp, 'held', [leaf('milk')]);
       await dataSource.query(
         `DELETE FROM "supermarket_locations" WHERE "id" = $1`,
         [temp]
       );
+      const [{ rows, covered }] = (await dataSource.query(
+        `SELECT
+           (SELECT count(*) FROM "shop_sections" WHERE "id" = $1)::int AS "rows",
+           (SELECT count(*) FROM "shop_section_categories" WHERE "sectionId" = $1)::int AS "covered"`,
+        [held]
+      )) as { rows: number; covered: number }[];
+      expect({ rows, covered }).toEqual({ rows: 0, covered: 0 });
     });
+  });
 
-    it('holds a category a section covers against deletion (R4)', async () => {
+  describe('a category that a section covers', () => {
+    it('is held against deletion while a section of a shop covers it (R4)', async () => {
       const root = await categories.create({
         ...as,
-        slug: 'plan-0167-aisle-test',
+        slug: 'plan-0200-aisle-test',
         name: { en: 'Aisle test' },
       });
-      const holder = await section(chainId, 'holds-a-root', [root.id]);
+      const holder = await section(configured, 'holds-a-root', [root.id]);
       expect(
         await refusal(categories.delete({ ...as, categoryId: root.id }))
       ).toBeInstanceOf(CategoryInUseException);
@@ -742,9 +853,193 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       await categories.delete({ ...as, categoryId: root.id });
       await sections.delete({ ...as, sectionId: holder });
     });
+
+    it('names the rule when the foreign key is what refuses the delete', async () => {
+      const root = await categories.create({
+        ...as,
+        slug: 'plan-0200-key-test',
+        name: { en: 'Key test' },
+      });
+      const holder = await section(configured, 'holds-by-key', [root.id]);
+      // Past the service's own check, straight at the key of the new table.
+      expect(
+        await sqlRefusal(`DELETE FROM "categories" WHERE "id" = $1`, [root.id])
+      ).toEqual({
+        code: '23503',
+        constraint: 'fk_shop_section_categories_category',
+      });
+      await sections.delete({ ...as, sectionId: holder });
+      await categories.delete({ ...as, categoryId: root.id });
+    });
+
+    it('is not held by a dead row of the old section_categories table', async () => {
+      const root = await categories.create({
+        ...as,
+        slug: 'plan-0200-stale-test',
+        name: { en: 'Stale test' },
+      });
+      const [{ id: oldSection }] = (await dataSource.query(
+        `INSERT INTO "supermarket_sections" ("supermarketId", "slug", "name", "position")
+         VALUES ($1, 'old-stale', '{"es":"Vieja"}'::jsonb, 7)
+         RETURNING "id"::text AS "id"`,
+        [chainId]
+      )) as { id: string }[];
+      await dataSource.query(
+        `INSERT INTO "section_categories" ("sectionId", "categoryId")
+         VALUES ($1, $2), ($1, $3)`,
+        [oldSection, root.id, leaf('milk')]
+      );
+      // The old key still refuses a bare delete: it is the service that
+      // clears the dead rows of this one category.
+      expect(
+        await sqlRefusal(`DELETE FROM "categories" WHERE "id" = $1`, [root.id])
+      ).toEqual({
+        code: '23503',
+        constraint: 'fk_section_categories_category',
+      });
+
+      await categories.delete({ ...as, categoryId: root.id });
+
+      const left = (await dataSource.query(
+        `SELECT "categoryId"::text AS "categoryId" FROM "section_categories" WHERE "sectionId" = $1`,
+        [oldSection]
+      )) as { categoryId: string }[];
+      // The row of the deleted category went, and no other row of the table.
+      expect(left).toEqual([{ categoryId: leaf('milk') }]);
+      await dataSource.query(
+        `DELETE FROM "supermarket_sections" WHERE "id" = $1`,
+        [oldSection]
+      );
+    });
   });
 
-  describe('the plan of the rule', () => {
+  describe('a walk writes the sections of the shop it walked', () => {
+    let walked: string;
+    let dairy: string;
+    let bread: string;
+    let cleaning: string;
+
+    beforeAll(async () => {
+      walked = await shop(chainId, 'walked');
+      dairy = await section(walked, 'lacteos', [leaf('milk')], {
+        es: 'Lácteos',
+      });
+      bread = await section(walked, 'panaderia', [leaf('bakery')], {
+        es: 'Panadería',
+        en: 'Bakery',
+      });
+      cleaning = await section(walked, 'limpieza', [], { es: 'Limpieza' });
+    });
+
+    it('orders the named sections as walked, creates the missing ones, and keeps the rest after them', async () => {
+      const resolved = await walk(walked, [
+        'Panadería',
+        ' Pescadería ',
+        'panadería',
+      ]);
+      const view = await sections.forLocation({
+        supermarketLocationId: walked,
+      });
+      const fish = view.sections.find((row) => row.slug === 'pescaderia');
+      expect(fish).toMatchObject({
+        supermarketLocationId: walked,
+        name: { es: 'Pescadería' },
+        categoryIds: [],
+      });
+      // Named first, in walk order, a section named twice at its first
+      // place. Then the two the walk did not name, in the order they had.
+      expect(view.sections.map((row) => [row.id, row.position])).toEqual([
+        [bread, 0],
+        [fish?.id, 1],
+        [dairy, 2],
+        [cleaning, 3],
+      ]);
+      expect(resolved).toEqual([
+        { name: 'Panadería', sectionId: bread },
+        { name: 'Pescadería', sectionId: fish?.id },
+        { name: 'panadería', sectionId: bread },
+      ]);
+    });
+
+    it('keeps the categories of a section the walk does not name', async () => {
+      const view = await sections.forLocation({
+        supermarketLocationId: walked,
+      });
+      expect(
+        view.sections.find((row) => row.id === dairy)?.categoryIds
+      ).toEqual([leaf('milk')]);
+      expect(
+        view.sections.find((row) => row.id === bread)?.categoryIds
+      ).toEqual([leaf('bakery')]);
+    });
+
+    it('matches a name in any locale, and creates nothing on a second save', async () => {
+      const before = await stored(walked);
+      const resolved = await walk(walked, ['bakery', 'Pescadería']);
+      expect(resolved.map((entry) => entry.sectionId)).toEqual([
+        bread,
+        before[1].id,
+      ]);
+      expect(await stored(walked)).toEqual(before);
+    });
+
+    it('deletes no section when the walk names fewer, or none', async () => {
+      const before = await stored(walked);
+      await walk(walked, ['Limpieza']);
+      const after = await stored(walked);
+      expect(after.map((row) => row.id)).toEqual([
+        cleaning,
+        ...before.map((row) => row.id).filter((id) => id !== cleaning),
+      ]);
+      expect(after.map((row) => row.position)).toEqual([0, 1, 2, 3]);
+
+      expect(await walk(walked, [])).toEqual([]);
+      expect(await stored(walked)).toEqual(after);
+    });
+
+    it('creates a section for the walked shop alone: another shop of the chain names its own', async () => {
+      const second = await shop(chainId, 'walked-too');
+      const resolved = await walk(second, ['Pescadería', 'Lácteos']);
+      const mine = await sections.forLocation({
+        supermarketLocationId: second,
+      });
+      expect(mine.sections.map((row) => row.slug)).toEqual([
+        'pescaderia',
+        'lacteos',
+      ]);
+      expect(mine.sections.every((row) => row.categoryIds.length === 0)).toBe(
+        true
+      );
+      // New rows of its own, and not the ones of the first shop.
+      const theirs = await orderOf(walked);
+      for (const entry of resolved) {
+        expect(theirs).not.toContain(entry.sectionId);
+      }
+      expect(theirs).toHaveLength(4);
+      await dataSource.query(
+        `DELETE FROM "supermarket_locations" WHERE "id" = $1`,
+        [second]
+      );
+    });
+
+    it('resolves the names of a walk against the sections of that shop only', async () => {
+      const here = await sections.resolveWalkNames(walked, [
+        'Lácteos',
+        'Charcutería',
+      ]);
+      expect(here).toEqual([{ name: 'Lácteos', sectionId: dairy }]);
+      // The bare shop is of the same chain, and holds no section of that name.
+      expect(await sections.resolveWalkNames(bare, ['Lácteos'])).toEqual([]);
+    });
+
+    it('refuses an unknown shop with the ordinary not found', async () => {
+      expect(
+        await refusal(walk('ac700000-0000-4000-a000-00000000beef', ['Pan']))
+      ).toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('the plan of the read', () => {
     it('reads 100 products at one shop in one statement on the indexes', async () => {
       const ids: string[] = [];
       const slugs = [
@@ -757,21 +1052,20 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       for (let i = 0; i < 100; i++) {
         ids.push(await product(`Producto ${i}`, [slugs[i % slugs.length]]));
       }
-      for (const id of ids.slice(0, 10)) {
-        await sections.setPins({
-          ...as,
-          supermarketId: chainId,
-          itemId: id,
-          sectionIds: [pizzas],
-        });
-      }
       await dataSource.query('ANALYZE');
 
       const answer = await rule(configured, ids);
       expect(answer.items).toHaveLength(100);
+      // Milk is covered by no section of this shop; the other four are.
       expect(
-        answer.items.filter((entry) => entry.step === 'PINNED')
-      ).toHaveLength(10);
+        answer.items.filter((entry) => entry.step === 'COVERED')
+      ).toHaveLength(80);
+      expect(
+        answer.items.filter((entry) => entry.step === 'NONE')
+      ).toHaveLength(20);
+      expect(
+        answer.items.some((entry) => (entry.step as string) === 'PINNED')
+      ).toBe(false);
 
       const plan = (await dataSource.query(
         `EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) ${ITEMS_AT_LOCATION_SQL}`,
@@ -782,6 +1076,11 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       // One statement, and the products' categories are read by their key
       // rather than by scanning every product in the catalog.
       expect(text).toMatch(/item_categories/);
+      // It reads the sections of the shop, and none of the four old tables.
+      expect(text).toMatch(/shop_sections/);
+      expect(text).not.toMatch(
+        /supermarket_sections|location_sections|supermarket_item_sections/
+      );
     });
   });
 });

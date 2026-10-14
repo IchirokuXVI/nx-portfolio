@@ -12,17 +12,12 @@ import { PostalCodePoint } from './postal-code-point.entity';
 import { PricePolicy } from './price-policy.entity';
 import { PriceScope } from './price-scope.entity';
 import { ProductGroup } from './product-group.entity';
+import { ShopSection, ShopSectionCategory } from './shop-section.entity';
 import { ShopWalk, ShopWalkEntry } from './shop-walk.entity';
 import { SupermarketItem } from './supermarket-item.entity';
 import { SupermarketLocationItem } from './supermarket-location-item.entity';
 import { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
 import { SupermarketLocation } from './supermarket-location.entity';
-import {
-  LocationSection,
-  SectionCategory,
-  SupermarketItemSection,
-  SupermarketSection,
-} from './supermarket-section.entity';
 import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
@@ -44,17 +39,12 @@ export { PostalCodePoint } from './postal-code-point.entity';
 export { PricePolicy } from './price-policy.entity';
 export { PriceScope } from './price-scope.entity';
 export { ProductGroup } from './product-group.entity';
+export { ShopSection, ShopSectionCategory } from './shop-section.entity';
 export { ShopWalk, ShopWalkEntry } from './shop-walk.entity';
 export { SupermarketItem } from './supermarket-item.entity';
 export { SupermarketLocationItem } from './supermarket-location-item.entity';
 export { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
 export { SupermarketLocation } from './supermarket-location.entity';
-export {
-  LocationSection,
-  SectionCategory,
-  SupermarketItemSection,
-  SupermarketSection,
-} from './supermarket-section.entity';
 export { Supermarket } from './supermarket.entity';
 
 /** Every catalog entity, for TypeOrmModule registration and the CLI data source. */
@@ -90,13 +80,10 @@ export const CATALOG_ENTITIES = [
   PricePolicy,
   SupermarketItem,
   SupermarketLocationItem,
-  // A chain's aisles, the categories each covers, a shop's list of them and
-  // the pins (plan 0167), after the chains, shops, items and categories they
-  // name.
-  SupermarketSection,
-  SectionCategory,
-  LocationSection,
-  SupermarketItemSection,
+  // The aisles of a shop and the categories each covers (plan 0200), after
+  // the shops and categories they name.
+  ShopSection,
+  ShopSectionCategory,
   // A shop's walks and their append only log (plan 0168), after the shops.
   ShopWalk,
   ShopWalkEntry,

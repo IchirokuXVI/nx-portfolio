@@ -276,7 +276,8 @@ export class CatalogLocationsController {
 
 /**
  * A shop's sections, in its order (plan 0167, section 4): the aisles of the
- * shop you are in, which velista `0120` draws the basket by.
+ * shop you are in, which velista `0120` draws the basket by. They are the
+ * shop's own, and a shop with none answers an empty list (plan 0200).
  *
  * **Public: no guard and no token**, and its own controller for that reason,
  * because a guard is carried by the controller and every other read here
@@ -298,7 +299,7 @@ export class CatalogLocationSectionsController {
   @Get(':id/sections')
   @ApiContractResponse(SECTION_PATTERNS.forLocation, {
     description:
-      'The shop’s sections in its order, each with the categories it covers. `source` is `LOCATION` when the shop has a list of its own and `CHAIN` when it inherits its chain’s. An unknown shop is a 404.',
+      'The sections of the shop in its order, each with the categories it covers. Empty when the shop has no sections of its own: nothing is read from its chain. An unknown shop is a 404.',
   })
   @ApiProblemResponses({ notFound: true })
   sections(@UuidParam('id') id: string): Promise<LocationSectionsView> {

@@ -520,8 +520,9 @@ export class BasketCatalogService {
   }
 
   /**
-   * Which of the shop's sections each product is in, by the rule of plan 0167
-   * section 3, keyed by product id; or null.
+   * Which of the shop's own sections each product is in, keyed by product id;
+   * or null. A shop with no sections of its own answers an empty list for
+   * every product: nothing is read from its chain (plan 0200).
    *
    * **One call per read, never one per product**: catalog answers every
    * product in one statement. A basket with no products asks nothing.

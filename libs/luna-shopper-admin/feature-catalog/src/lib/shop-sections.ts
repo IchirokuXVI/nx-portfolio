@@ -26,6 +26,10 @@ import {
   locationSource,
   sectionSource,
 } from './catalog-sources';
+import type {
+  ChainSectionView,
+  SetItemSectionPinsBody,
+} from './chain-section-view';
 import {
   chainSections as memoryChainSections,
   ownList,
@@ -304,7 +308,7 @@ export class ShopSections {
     if (memory !== null) {
       return this._setPinsInMemory(memory, supermarketId, itemId, sectionIds);
     }
-    const body: Wire.SetItemSectionPinsDto = {
+    const body: SetItemSectionPinsBody = {
       itemId,
       sectionIds: [...sectionIds],
     };
@@ -487,7 +491,7 @@ export class ShopSections {
  */
 function checkSections(
   sectionIds: readonly string[],
-  chain: readonly Wire.CatalogSupermarketSectionView[],
+  chain: readonly ChainSectionView[],
   memory: MemoryTables
 ): void {
   const all = memory.table(sectionSource());

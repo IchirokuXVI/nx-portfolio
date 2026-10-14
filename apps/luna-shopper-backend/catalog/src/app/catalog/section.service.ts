@@ -3,52 +3,44 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   SECTION_LIMITS,
   SECTION_SLUG_MAX_LENGTH,
-  type CreateSupermarketSectionRequest,
-  type ItemSectionPinsPage,
-  type ItemSectionPinsView,
+  type CreateShopSectionRequest,
   type ItemSectionsAtLocationEntry,
   type ItemSectionsAtLocationRequest,
   type ItemSectionsAtLocationView,
-  type ListItemSectionPinsRequest,
-  type ListSupermarketSectionsRequest,
   type LocalizedText,
   type LocationSectionNamesRequest,
   type LocationSectionNamesView,
   type LocationSectionsRequest,
   type LocationSectionsView,
   type SectionRuleStep,
-  type SetItemSectionPinsRequest,
   type SetLocationSectionsRequest,
   type ShopMapSectionView,
-  type SupermarketSectionIdRequest,
-  type SupermarketSectionPage,
-  type SupermarketSectionView,
-  type UpdateSupermarketSectionRequest,
+  type ShopSectionIdRequest,
+  type ShopSectionView,
+  type UpdateShopSectionRequest,
 } from '@portfolio/luna-shopper/contracts';
 import type { SupportedLocale } from '@portfolio/luna-shopper/platform';
 import {
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotFoundException,
-  clampPageSize,
-  decodeCursor,
-  encodeCursor,
   isUuid,
   NotFoundException,
-  SECTION_OTHER_CHAIN_DETAIL,
+  SECTION_OTHER_SHOP_DETAIL,
   SECTION_SLUG_HOLDER_DETAIL,
   SECTION_UNKNOWN_DETAIL,
   SectionNotFoundException,
-  SectionOfAnotherChainException,
+  SectionOfAnotherShopException,
   SectionSlugTakenException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
-import { SupermarketSection } from '../entities';
+import { ShopSection } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
   presentSectionsOf,
   sectionNamesOf,
-  type PresentSections,
+  type PresentSectionRow,
+  type SqlRunner,
 } from './location-sections';
 import { PlatformAdminService } from './platform-admin.service';
 
@@ -57,92 +49,65 @@ const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FOREIGN_KEY_VIOLATION = '23503';
-const PG_CHECK_VIOLATION = '23514';
-
-interface SectionListCursor extends Record<string, unknown> {
-  offset: number;
-}
-
-interface PinListCursor extends Record<string, unknown> {
-  after: string;
-}
-
-/** A shop, as the rule reads it: which chain it belongs to. */
-interface ShopRow {
-  id: string;
-  supermarketId: string;
-}
 
 /** One row of {@link ITEMS_AT_LOCATION_SQL}. */
 interface RuleRow {
   known: number;
-  own: boolean;
   itemId: string | null;
   step: SectionRuleStep | null;
   sectionIds: string[] | null;
 }
 
+/** One name of a walk, and the section of the shop it resolved to, if any. */
+interface WalkName {
+  name: string;
+  sectionId: string | null;
+}
+
 /**
- * The rule of plan 0167, section 3, for every product of one read at one shop,
- * in **one statement**. `$1` is the shop, `$2` the products (`uuid[]`).
+ * Which of a shop's sections every product of one read is in, in **one
+ * statement** (plan 0167, section 3, as plan 0200 left it). `$1` is the shop,
+ * `$2` the products (`uuid[]`).
  *
- * 1. `present`: the shop's own rows in its order, else every section of its
- *    chain in `position` order. `own` says which.
- * 2. `pinned`: the product's pins in the shop's chain that are present. A
- *    product whose pins are all absent here has no row, and falls through.
- * 3. `covered`: the present sections covering one of the product's leaves,
+ * 1. `present`: the rows of `shop_sections` of this shop, in its order. A shop
+ *    with no rows has no sections: nothing is read from its chain.
+ * 2. `covered`: the present sections covering one of the product's leaves,
  *    directly or through the leaf's root. `coverage` expands a covered root to
  *    its children once, over the few present sections, so the join onto the
  *    products is an equality on `item_categories`' primary key.
- * 4. Neither: an empty list.
+ * 3. Otherwise an empty list.
  *
- * Every list is in the present order. The statement always answers at least
+ * No product is pinned. A product is in a section only through a category of
+ * that section.
+ *
+ * Every list is in the shop's order. The statement always answers at least
  * one row, the head: `known` is 0 for a shop that does not exist, and a read
- * with no products answers the head alone, so the source is read in the same
- * statement too.
+ * with no products answers the head alone.
  *
  * Exported so the integration spec can `EXPLAIN` exactly this text.
  */
 export const ITEMS_AT_LOCATION_SQL = `
   WITH "loc" AS (
-    SELECT l."id", l."supermarketId"
+    SELECT l."id"
       FROM "supermarket_locations" l
      WHERE l."id" = $1
   ),
-  "own" AS (
-    SELECT ls."sectionId", ls."position"::bigint AS "rank"
-      FROM "location_sections" ls
-     WHERE ls."supermarketLocationId" = $1
-  ),
   "present" AS (
-    SELECT o."sectionId", o."rank" FROM "own" o
-    UNION ALL
-    SELECT s."id", row_number() OVER (ORDER BY s."position", s."id")
-      FROM "supermarket_sections" s
-      JOIN "loc" ON loc."supermarketId" = s."supermarketId"
-     WHERE NOT EXISTS (SELECT 1 FROM "own")
+    SELECT s."id" AS "sectionId", s."position" AS "rank"
+      FROM "shop_sections" s
+     WHERE s."supermarketLocationId" = $1
   ),
   "asked" AS (
     SELECT DISTINCT a."itemId" FROM unnest($2::uuid[]) AS a("itemId")
   ),
-  "pinned" AS (
-    SELECT p."itemId",
-           array_agg(pr."sectionId" ORDER BY pr."rank")::text[] AS "sectionIds"
-      FROM "asked" a
-      JOIN "loc" ON true
-      JOIN "supermarket_item_sections" p
-        ON p."itemId" = a."itemId" AND p."supermarketId" = loc."supermarketId"
-      JOIN "present" pr ON pr."sectionId" = p."sectionId"
-     GROUP BY p."itemId"
-  ),
   "coverage" AS (
     SELECT sc."sectionId", pr."rank", sc."categoryId" AS "leafId"
       FROM "present" pr
-      JOIN "section_categories" sc ON sc."sectionId" = pr."sectionId"
+      JOIN "shop_section_categories" sc ON sc."sectionId" = pr."sectionId"
     UNION
     SELECT sc."sectionId", pr."rank", ch."id"
       FROM "present" pr
-      JOIN "section_categories" sc ON sc."sectionId" = pr."sectionId"
+      JOIN "shop_section_categories" sc ON sc."sectionId" = pr."sectionId"
       JOIN "categories" ch ON ch."parentId" = sc."categoryId"
   ),
   "covered" AS (
@@ -157,205 +122,190 @@ export const ITEMS_AT_LOCATION_SQL = `
      GROUP BY c."itemId"
   ),
   "answers" AS (
-    SELECT a."itemId", pn."sectionIds" AS "pinned", cv."sectionIds" AS "covered"
+    SELECT a."itemId", cv."sectionIds" AS "covered"
       FROM "asked" a
-      LEFT JOIN "pinned" pn ON pn."itemId" = a."itemId"
       LEFT JOIN "covered" cv ON cv."itemId" = a."itemId"
   )
   SELECT (SELECT count(*) FROM "loc")::int AS "known",
-         EXISTS (SELECT 1 FROM "own") AS "own",
          an."itemId"::text AS "itemId",
          CASE
-           WHEN an."pinned" IS NOT NULL THEN 'PINNED'
            WHEN an."covered" IS NOT NULL THEN 'COVERED'
            ELSE 'NONE'
          END AS "step",
-         COALESCE(an."pinned", an."covered", '{}'::text[]) AS "sectionIds"
+         COALESCE(an."covered", '{}'::text[]) AS "sectionIds"
     FROM (SELECT 1) "head"
     LEFT JOIN "answers" an ON true
 `;
 
 /**
- * Shop sections, a shop's list of them, and pins (plan 0167, sections 1 to 3).
+ * The sections of a shop (plan 0167, as plan 0200 left it).
  *
  * | Write | Means |
  * | ----- | ----- |
- * | a section with categories | this chain has an aisle called X, and it holds these kinds of product |
- * | a shop's ordered list | this shop has these of its chain's aisles, walked in this order |
- * | a product's pins in a chain | in this chain, this product is in these aisles and no other |
+ * | a section with categories | this shop has an aisle called X, and it holds these kinds of product |
+ * | the order of a shop | this shop is walked through its aisles in this order |
  *
- * **One chain per section.** A shop's list and a pin name only their own
- * chain's sections. This service refuses the rest with
- * `section_of_another_chain` before it writes, and the two triggers of the
- * migration refuse whatever reaches the tables another way, which this
- * service translates into the same exception.
+ * **One shop per section.** A chain has no sections, and a shop with none of
+ * its own has none: nothing is inherited, and nothing is copied from another
+ * shop. A product has no pin. The order of a shop names only its own sections,
+ * and this service refuses the rest with `section_of_another_shop`.
  *
- * **The rule of section 3 is one statement**, {@link ITEMS_AT_LOCATION_SQL},
- * whatever the number of products, because the basket read at a shop asks it
- * once per read.
+ * **The order is dense and has one writer at a time.** Every write that
+ * changes it locks the row of its shop first, and then writes every position
+ * of the shop in one statement ({@link writeOrder}). The constraint on
+ * `(shop, position)` is deferrable, so that statement is checked when it ends
+ * and two sections can swap places.
+ *
+ * **The read is one statement**, {@link ITEMS_AT_LOCATION_SQL}, whatever the
+ * number of products, because the basket read at a shop asks it once per read.
  *
  * Writes go through the platform admin gate and run inside the audit
- * transaction. The section row is audited like any catalog row; the three join
- * tables are keyed on their pairs and have no `id`, so, as with a product's
+ * transaction. The section row is audited like any catalog row. Its categories
+ * are keyed on their pair and have no `id`, so, as with a product's
  * categories, they are written inside the same transaction and not recorded
- * row by row. Reads are open: a shop's aisle list is not private.
+ * row by row. The same holds for the places of the other sections that a
+ * write moves. Reads are open: a shop's aisle list is not private.
  */
 @Injectable()
 export class SectionService {
   constructor(
-    @InjectRepository(SupermarketSection)
-    private readonly sections: Repository<SupermarketSection>,
+    @InjectRepository(ShopSection)
+    private readonly sections: Repository<ShopSection>,
     private readonly admin: PlatformAdminService,
     private readonly audit: CatalogAuditService
   ) {}
 
-  /** A new section on a chain. An absent position appends after the last. */
-  async create(
-    req: CreateSupermarketSectionRequest
-  ): Promise<SupermarketSectionView> {
+  /** A new section of a shop, after its last one. */
+  async create(req: CreateShopSectionRequest): Promise<ShopSectionView> {
     const actor = await this.admin.requireAdmin(req);
     const slug = validateSlug(req.slug);
     validateName(req.name);
-    await this.requireChain(req.supermarketId);
+    const shopId = await this.requireShop(req.supermarketLocationId);
     const categoryIds = await this.requireCategories(req.categoryIds);
     const holder = await this.sections.findOne({
-      where: { supermarketId: req.supermarketId, slug },
+      where: { supermarketLocationId: shopId, slug },
     });
     if (holder) {
       throw slugTaken(holder.id);
     }
-    const draft = this.sections.create({
-      supermarketId: req.supermarketId,
-      slug,
-      name: req.name,
-      position: req.position ?? (await this.nextPosition(req.supermarketId)),
-    });
-    let saved: SupermarketSection;
+    let saved: ShopSection;
     try {
       saved = await this.audit.write(actor, async (tx) => {
-        const row = await tx.create(SupermarketSection, draft);
+        await lockShop(tx.manager, shopId);
+        const row = await tx.create(
+          ShopSection,
+          this.sections.create({
+            supermarketLocationId: shopId,
+            slug,
+            name: req.name,
+            position: await nextPosition(tx.manager, shopId),
+          })
+        );
         await writeCoverage(tx.manager, row.id, categoryIds);
         return row;
       });
     } catch (error) {
-      throw await this.asViolation(error, req.supermarketId, slug);
+      throw await this.asViolation(error, shopId, slug);
     }
-    return (await this.adminViews([saved]))[0];
+    return (await this.views([saved]))[0];
   }
 
-  /**
-   * One chain's sections in `position` order, filtered by `query` and paged.
-   * Offset paged, like the category list: a chain has tens of aisles.
-   */
-  async list(
-    req: ListSupermarketSectionsRequest
-  ): Promise<SupermarketSectionPage> {
-    await this.requireChain(req.supermarketId);
-    const limit = clampPageSize(req.limit);
-    const offset = Math.max(
-      0,
-      Number(decodeCursor<SectionListCursor>(req.cursor)?.offset ?? 0) || 0
-    );
-    const qb = this.sections
-      .createQueryBuilder('s')
-      .where('s."supermarketId" = :sid', { sid: req.supermarketId })
-      .orderBy('s."position"', 'ASC')
-      .addOrderBy('s."id"', 'ASC')
-      .offset(offset)
-      .limit(limit + 1);
-    const text = req.query?.trim();
-    if (text) {
-      // Both content languages and the slug, through the normalization the
-      // category list uses, so `charcuteria` finds `Charcutería`.
-      qb.andWhere(
-        `(
-          "catalog_norm"(coalesce(s."name" ->> 'es', '')) LIKE '%' || "catalog_norm"(:text) || '%'
-          OR "catalog_norm"(coalesce(s."name" ->> 'en', '')) LIKE '%' || "catalog_norm"(:text) || '%'
-          OR s."slug" LIKE '%' || lower(:text) || '%'
-        )`,
-        { text }
-      );
-    }
-    const rows = await qb.getMany();
-    const hasMore = rows.length > limit;
-    return {
-      items: await this.adminViews(rows.slice(0, limit)),
-      nextCursor: hasMore ? encodeCursor({ offset: offset + limit }) : null,
-    };
-  }
-
-  async get(req: SupermarketSectionIdRequest): Promise<SupermarketSectionView> {
+  async get(req: ShopSectionIdRequest): Promise<ShopSectionView> {
     const row = await this.load(req.sectionId);
-    return (await this.adminViews([row]))[0];
+    return (await this.views([row]))[0];
   }
 
   /**
-   * Rename or reorder a section, or replace the categories it covers. The slug
+   * Rename or move a section, or replace the categories it covers. The slug
    * is an identity and not a field of the request.
+   *
+   * `position` is a move: the section takes that place in its shop, and the
+   * sections between its old place and its new one move by one. A place past
+   * the last one is the last one.
    */
-  async update(
-    req: UpdateSupermarketSectionRequest
-  ): Promise<SupermarketSectionView> {
+  async update(req: UpdateShopSectionRequest): Promise<ShopSectionView> {
     const actor = await this.admin.requireAdmin(req);
-    const row = await this.load(req.sectionId);
-    const before = { ...row };
+    const loaded = await this.load(req.sectionId);
     if (req.name !== undefined) {
       validateName(req.name);
-      row.name = req.name;
-    }
-    if (req.position !== undefined) {
-      row.position = req.position;
     }
     const categoryIds =
       req.categoryIds === undefined
         ? undefined
         : await this.requireCategories(req.categoryIds);
-    let saved: SupermarketSection;
+    const shopId = loaded.supermarketLocationId;
+    let saved: ShopSection;
     try {
       saved = await this.audit.write(actor, async (tx) => {
-        const updated = await tx.update(SupermarketSection, before, row);
+        await lockShop(tx.manager, shopId);
+        // Read again under the lock: another write may have moved it.
+        const row = await tx.manager.findOne(ShopSection, {
+          where: { id: loaded.id },
+        });
+        if (!row) {
+          throw sectionNotFound([req.sectionId]);
+        }
+        const before = { ...row };
+        if (req.name !== undefined) {
+          row.name = req.name;
+        }
+        if (req.position !== undefined) {
+          const order = (await heldIds(tx.manager, shopId)).filter(
+            (id) => id !== lower(row.id)
+          );
+          const place = Math.min(req.position, order.length);
+          order.splice(place, 0, row.id);
+          await writeOrder(tx.manager, shopId, order);
+          row.position = place;
+        }
+        const updated = await tx.update(ShopSection, before, row);
         if (categoryIds !== undefined) {
           await writeCoverage(tx.manager, row.id, categoryIds);
         }
         return updated;
       });
     } catch (error) {
-      throw await this.asViolation(error, row.supermarketId, row.slug);
+      throw await this.asViolation(error, shopId, loaded.slug);
     }
-    return (await this.adminViews([saved]))[0];
+    return (await this.views([saved]))[0];
   }
 
   /**
-   * Delete a section. It cascades out of every shop's list and every pin
-   * (section 2): a section that no longer exists cannot be a place.
+   * Delete a section. Its categories go with it, and the sections after it
+   * move up by one, in the same transaction.
    */
-  async delete(req: SupermarketSectionIdRequest): Promise<{ id: string }> {
+  async delete(req: ShopSectionIdRequest): Promise<{ id: string }> {
     const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.sectionId);
-    await this.audit.write(actor, (tx) => tx.delete(SupermarketSection, row));
+    const shopId = row.supermarketLocationId;
+    await this.audit.write(actor, async (tx) => {
+      await lockShop(tx.manager, shopId);
+      await tx.delete(ShopSection, row);
+      await writeOrder(tx.manager, shopId, await heldIds(tx.manager, shopId));
+    });
     return { id: row.id };
   }
 
-  /** A shop's sections in its order, and where the list comes from. */
+  /** The sections of a shop, in its order. None when it has none of its own. */
   async forLocation(
     req: LocationSectionsRequest
   ): Promise<LocationSectionsView> {
-    const shop = await this.requireShop(req.supermarketLocationId);
-    const { rows, source } = await this.presentSections(shop);
+    const shopId = await this.requireShop(req.supermarketLocationId);
+    const present = await presentSectionsOf(this.sections, [shopId]);
+    const rows = present.get(shopId) ?? [];
     const categories = await this.coverageOf(rows.map((row) => row.id));
     return {
       sections: rows.map((row) =>
         toSectionView(row, categories.get(row.id) ?? [])
       ),
-      source,
     };
   }
 
   /**
    * Several shops' section names, keyed by shop, in one statement (plan
    * 0170): the ids and names {@link forLocation} would answer for each. A
-   * shop that does not exist is absent, and one whose chain has no sections
-   * maps to an empty list.
+   * shop that does not exist is absent, and one with no sections maps to an
+   * empty list.
    */
   async namesForLocations(
     req: LocationSectionNamesRequest
@@ -372,133 +322,31 @@ export class SectionService {
   }
 
   /**
-   * Replace a shop's ordered list, whole. An empty list deletes its rows and
-   * the shop returns to its chain's default.
+   * Set the order of a shop's own sections.
+   *
+   * The sections named come first, in the order given. A section of the shop
+   * that the list does not name is kept, after the named ones, in the order it
+   * had: this write creates and deletes nothing, so an empty list changes
+   * nothing. An id that names no section is refused with `section_not_found`,
+   * and a section of another shop with `section_of_another_shop`.
    */
   async setForLocation(
     req: SetLocationSectionsRequest
   ): Promise<LocationSectionsView> {
     const actor = await this.admin.requireAdmin(req);
-    const shop = await this.requireShop(req.supermarketLocationId);
-    const ids = requireDistinct(req.sectionIds);
-    await this.requireOwnSections(ids, shop.supermarketId);
-    try {
-      await this.audit.write(actor, async (tx) => {
-        await tx.manager.query(
-          `DELETE FROM "location_sections" WHERE "supermarketLocationId" = $1`,
-          [shop.id]
-        );
-        if (ids.length > 0) {
-          await tx.manager.query(
-            `INSERT INTO "location_sections" ("supermarketLocationId", "sectionId", "position")
-             SELECT $1, v."sectionId", v."position" - 1
-               FROM unnest($2::uuid[]) WITH ORDINALITY AS v("sectionId", "position")`,
-            [shop.id, ids]
-          );
-        }
-      });
-    } catch (error) {
-      throw await this.asViolation(error, shop.supermarketId, null);
-    }
-    return this.forLocation({ supermarketLocationId: shop.id });
+    const shopId = await this.requireShop(req.supermarketLocationId);
+    const ids = requireDistinct(req.sectionIds).map(lower);
+    await this.requireOwnSections(ids, shopId);
+    await this.audit.write(actor, async (tx) => {
+      await lockShop(tx.manager, shopId);
+      const held = await heldIds(tx.manager, shopId);
+      await writeOrder(tx.manager, shopId, namedFirst(ids, held));
+    });
+    return this.forLocation({ supermarketLocationId: shopId });
   }
 
   /**
-   * One chain's pins, one entry per pinned product, ordered by product id and
-   * keyset paged on it. `itemId` and `sectionId` narrow together; with
-   * `sectionId`, each entry still carries every pin of that product.
-   */
-  async listPins(
-    req: ListItemSectionPinsRequest
-  ): Promise<ItemSectionPinsPage> {
-    await this.requireChain(req.supermarketId);
-    const empty: ItemSectionPinsPage = { items: [], nextCursor: null };
-    if (
-      (req.itemId !== undefined && !isUuid(req.itemId)) ||
-      (req.sectionId !== undefined && !isUuid(req.sectionId))
-    ) {
-      // A malformed id names nothing, and casting it would fail the query.
-      return empty;
-    }
-    const limit = clampPageSize(req.limit);
-    const after = decodeCursor<PinListCursor>(req.cursor)?.after;
-    const rows = (await this.sections.query(
-      `SELECT p."itemId"::text AS "itemId",
-              array_agg(p."sectionId" ORDER BY s."position", s."id")::text[] AS "sectionIds"
-         FROM "supermarket_item_sections" p
-         JOIN "supermarket_sections" s ON s."id" = p."sectionId"
-        WHERE p."supermarketId" = $1
-          AND ($2::uuid IS NULL OR p."itemId" = $2::uuid)
-          AND ($3::uuid IS NULL OR p."itemId" IN (
-                SELECT q."itemId" FROM "supermarket_item_sections" q
-                 WHERE q."sectionId" = $3::uuid AND q."supermarketId" = $1))
-          AND ($4::uuid IS NULL OR p."itemId" > $4::uuid)
-        GROUP BY p."itemId"
-        ORDER BY p."itemId"
-        LIMIT $5`,
-      [
-        req.supermarketId,
-        req.itemId ?? null,
-        req.sectionId ?? null,
-        after && isUuid(after) ? after : null,
-        limit + 1,
-      ]
-    )) as { itemId: string; sectionIds: string[] }[];
-    const page = rows.slice(0, limit);
-    const last = page[page.length - 1];
-    return {
-      items: page.map((row) => ({
-        supermarketId: req.supermarketId,
-        itemId: row.itemId,
-        sectionIds: row.sectionIds,
-      })),
-      nextCursor:
-        rows.length > limit && last
-          ? encodeCursor({ after: last.itemId })
-          : null,
-    };
-  }
-
-  /**
-   * Replace one product's pins in one chain. An empty list removes them, and
-   * the product returns to the rule's other steps. Whether the chain sells
-   * the product is not checked: a pin says where it would be.
-   */
-  async setPins(req: SetItemSectionPinsRequest): Promise<ItemSectionPinsView> {
-    const actor = await this.admin.requireAdmin(req);
-    await this.requireChain(req.supermarketId);
-    await this.requireItem(req.itemId);
-    const ids = requireDistinct(req.sectionIds);
-    const sections = await this.requireOwnSections(ids, req.supermarketId);
-    try {
-      await this.audit.write(actor, async (tx) => {
-        await tx.manager.query(
-          `DELETE FROM "supermarket_item_sections"
-            WHERE "supermarketId" = $1 AND "itemId" = $2`,
-          [req.supermarketId, req.itemId]
-        );
-        if (ids.length > 0) {
-          await tx.manager.query(
-            `INSERT INTO "supermarket_item_sections" ("supermarketId", "itemId", "sectionId")
-             SELECT $1, $2, v."sectionId" FROM unnest($3::uuid[]) AS v("sectionId")`,
-            [req.supermarketId, req.itemId, ids]
-          );
-        }
-      });
-    } catch (error) {
-      throw await this.asViolation(error, req.supermarketId, null);
-    }
-    return {
-      supermarketId: req.supermarketId,
-      itemId: req.itemId,
-      sectionIds: [...sections]
-        .sort((a, b) => a.position - b.position || compare(a.id, b.id))
-        .map((row) => row.id),
-    };
-  }
-
-  /**
-   * The rule of section 3 for several products at one shop, in one statement.
+   * Which of a shop's sections several products are in, in one statement.
    *
    * One entry per distinct id, in the order first asked. An id catalog does
    * not hold answers `NONE` with no sections rather than an error, because
@@ -528,7 +376,6 @@ export class SectionService {
       }
     }
     return {
-      source: head.own ? 'LOCATION' : 'CHAIN',
       items: asked.map((itemId): ItemSectionsAtLocationEntry => {
         const row = byItem.get(lower(itemId));
         return {
@@ -541,21 +388,26 @@ export class SectionService {
   }
 
   /**
-   * The shop's list follows the shown walk (backend plan 0168, section 4).
+   * The sections of a shop follow its shown walk (backend plan 0168, section
+   * 4, as plan 0200 left it).
    *
-   * Each of `names`, in walk order, resolves to the chain's section whose
-   * localized name matches it after trimming and case folding, in any locale.
-   * A name with no match creates a chain section named in `locale`, with a slug
-   * from the name, covering no category. The shop's list is then replaced by
-   * the resolved sections in that order; a section two names resolve to keeps
-   * its first place.
+   * Each of `names`, in walk order, resolves to the section **of this shop**
+   * whose localized name matches it after trimming and case folding, in any
+   * locale. A name with no match creates a section of this shop named in
+   * `locale`, with a slug from the name, covering no category. The order of
+   * the shop is then written: the resolved sections in walk order, a section
+   * two names resolve to keeping its first place.
+   *
+   * **A walk deletes no section.** A section the walk does not name is kept,
+   * with its categories, after the named ones and in the order it had. A walk
+   * that names nothing leaves the shop as it was.
    *
    * Runs inside the caller's transaction (the walk write), and **outside the
    * admin gate and the audit trail**: the caller is an account holding
    * `shopMap.record`, which the gateway checked, and the audit trail records
-   * operators and services only. The chain's row is locked before a section
-   * is created, so two shops of one chain saving the same new name at once
-   * create it once.
+   * operators and services only. It locks the row of the shop, and not the row
+   * of its chain: two shops of one chain no longer share any section, so their
+   * walks have nothing to wait on each other for.
    */
   async followWalk(
     manager: EntityManager,
@@ -563,189 +415,48 @@ export class SectionService {
     names: readonly string[],
     locale: SupportedLocale
   ): Promise<ShopMapSectionView[]> {
-    const shop = await this.requireShopIn(manager, supermarketLocationId);
-    let resolved = await this.matchWalkNames(
-      manager,
-      shop.supermarketId,
-      names
-    );
-    if (resolved.some((entry) => entry.sectionId === null)) {
-      await manager.query(
-        `SELECT 1 FROM "supermarkets" WHERE "id" = $1 FOR NO KEY UPDATE`,
-        [shop.supermarketId]
-      );
-      // Read again under the lock: another shop may have created one since.
-      resolved = await this.matchWalkNames(manager, shop.supermarketId, names);
-      await this.createWalkSections(
-        manager,
-        shop.supermarketId,
-        resolved,
-        locale
-      );
-    }
+    const shopId = await requireShopIn(manager, supermarketLocationId);
+    await lockShop(manager, shopId);
+    const held = await namedSections(manager, shopId);
+    const resolved = matchWalkNames(held, names);
+    await createWalkSections(manager, shopId, resolved, locale);
     const sections = resolved.filter(
       (entry): entry is ShopMapSectionView => entry.sectionId !== null
     );
-    const ids = [...new Set(sections.map((entry) => entry.sectionId))];
-    await manager.query(
-      `DELETE FROM "location_sections" WHERE "supermarketLocationId" = $1`,
-      [shop.id]
+    // Read again: the order holds the sections this walk just created too.
+    await writeOrder(
+      manager,
+      shopId,
+      namedFirst(
+        sections.map((entry) => entry.sectionId),
+        await heldIds(manager, shopId)
+      )
     );
-    if (ids.length > 0) {
-      await manager.query(
-        `INSERT INTO "location_sections" ("supermarketLocationId", "sectionId", "position")
-         SELECT $1, v."sectionId", v."position" - 1
-           FROM unnest($2::uuid[]) WITH ORDINALITY AS v("sectionId", "position")`,
-        [shop.id, ids]
-      );
-    }
     return sections;
   }
 
   /**
-   * The chain sections a walk's section names resolve to, by the match
-   * {@link followWalk} uses, creating nothing. A name its chain does not have
-   * is left out. What the public map read answers beside the map.
+   * The sections of the shop a walk's section names resolve to, by the match
+   * {@link followWalk} uses, creating nothing. A name the shop has no section
+   * for is left out. What the public map read answers beside the map.
    */
   async resolveWalkNames(
     supermarketLocationId: string,
     names: readonly string[]
   ): Promise<ShopMapSectionView[]> {
-    const shop = await this.requireShop(supermarketLocationId);
-    const resolved = await this.matchWalkNames(
-      this.sections.manager,
-      shop.supermarketId,
-      names
-    );
-    return resolved.filter(
+    const shopId = await this.requireShop(supermarketLocationId);
+    const held = await namedSections(this.sections, shopId);
+    return matchWalkNames(held, names).filter(
       (entry): entry is ShopMapSectionView => entry.sectionId !== null
     );
   }
 
-  /** Each name with the chain section it matches, or null. */
-  private async matchWalkNames(
-    manager: EntityManager,
-    supermarketId: string,
-    names: readonly string[]
-  ): Promise<{ name: string; sectionId: string | null }[]> {
-    const rows = (await manager.query(
-      `SELECT s."id"::text AS "id", s."name" AS "name"
-         FROM "supermarket_sections" s
-        WHERE s."supermarketId" = $1
-        ORDER BY s."position", s."id"`,
-      [supermarketId]
-    )) as { id: string; name: LocalizedText }[];
-    const byKey = new Map<string, string>();
-    for (const row of rows) {
-      for (const value of Object.values(row.name ?? {})) {
-        if (typeof value === 'string' && value.trim() !== '') {
-          const key = walkNameKey(value);
-          if (!byKey.has(key)) {
-            byKey.set(key, row.id);
-          }
-        }
-      }
-    }
-    return names.map((name) => ({
-      name: name.trim(),
-      sectionId: byKey.get(walkNameKey(name)) ?? null,
-    }));
-  }
-
-  /**
-   * One chain section per distinct unmatched name, appended after the chain's
-   * last, and each entry pointed at it. Mutates `resolved`.
-   */
-  private async createWalkSections(
-    manager: EntityManager,
-    supermarketId: string,
-    resolved: { name: string; sectionId: string | null }[],
-    locale: SupportedLocale
-  ): Promise<void> {
-    const taken = new Set(
-      (
-        (await manager.query(
-          `SELECT s."slug" FROM "supermarket_sections" s WHERE s."supermarketId" = $1`,
-          [supermarketId]
-        )) as { slug: string }[]
-      ).map((row) => row.slug)
-    );
-    const [{ next }] = (await manager.query(
-      `SELECT coalesce(max(s."position") + 1, 0)::int AS "next"
-         FROM "supermarket_sections" s WHERE s."supermarketId" = $1`,
-      [supermarketId]
-    )) as { next: number }[];
-    let position = Number(next);
-    const created = new Map<string, string>();
-    for (const entry of resolved) {
-      if (entry.sectionId !== null) {
-        continue;
-      }
-      const key = walkNameKey(entry.name);
-      const known = created.get(key);
-      if (known) {
-        entry.sectionId = known;
-        continue;
-      }
-      const slug = uniqueSlug(slugFromName(entry.name), taken);
-      taken.add(slug);
-      const [row] = (await manager.query(
-        `INSERT INTO "supermarket_sections" ("supermarketId", "slug", "name", "position")
-         VALUES ($1, $2, $3::jsonb, $4)
-         RETURNING "id"::text AS "id"`,
-        [
-          supermarketId,
-          slug,
-          JSON.stringify({ [locale]: entry.name }),
-          position,
-        ]
-      )) as { id: string }[];
-      position += 1;
-      created.set(key, row.id);
-      entry.sectionId = row.id;
-    }
-  }
-
-  private async requireShopIn(
-    manager: EntityManager,
-    id: string
-  ): Promise<ShopRow> {
-    const rows = isUuid(id)
-      ? ((await manager.query(
-          `SELECT l."id"::text AS "id", l."supermarketId"::text AS "supermarketId"
-             FROM "supermarket_locations" l WHERE l."id" = $1`,
-          [id]
-        )) as ShopRow[])
-      : [];
-    if (rows.length === 0) {
-      throw locationNotFound();
-    }
-    return rows[0];
-  }
-
-  /**
-   * Step 1 of the rule: the shop's own rows in its order, else every section
-   * of its chain in `position` order. {@link PRESENT_SECTIONS_SQL} for one
-   * shop, the statement {@link namesForLocations} runs for many.
-   */
-  private async presentSections(shop: ShopRow): Promise<PresentSections> {
-    const present = await presentSectionsOf(this.sections, [shop.id]);
-    return present.get(shop.id.toLowerCase()) ?? { rows: [], source: 'CHAIN' };
-  }
-
-  /** The back office's views: each section with its categories and shop count. */
-  private async adminViews(
-    rows: readonly SupermarketSection[]
-  ): Promise<SupermarketSectionView[]> {
-    const ids = rows.map((row) => row.id);
-    const [categories, counts] = [
-      await this.coverageOf(ids),
-      await this.locationCounts(ids),
-    ];
-    return rows.map((row) => ({
-      ...toSectionView(row, categories.get(row.id) ?? []),
-      locationCount: counts.get(row.id) ?? 0,
-    }));
+  /** Each section with the categories it covers. */
+  private async views(
+    rows: readonly ShopSection[]
+  ): Promise<ShopSectionView[]> {
+    const categories = await this.coverageOf(rows.map((row) => row.id));
+    return rows.map((row) => toSectionView(row, categories.get(row.id) ?? []));
   }
 
   /**
@@ -761,7 +472,7 @@ export class SectionService {
     }
     const rows = (await this.sections.query(
       `SELECT sc."sectionId"::text AS "sectionId", sc."categoryId"::text AS "categoryId"
-         FROM "section_categories" sc
+         FROM "shop_section_categories" sc
          JOIN "categories" c ON c."id" = sc."categoryId"
          LEFT JOIN "categories" p ON p."id" = c."parentId"
         WHERE sc."sectionId" = ANY($1::uuid[])
@@ -785,52 +496,16 @@ export class SectionService {
   }
 
   /**
-   * How many of its chain's shops each section is present at by step 1: the
-   * shops whose own list names it, plus the shops with no list of their own.
-   * The first half counts rows on the section's index; the second is one
-   * anti join over the chain's shops.
-   */
-  private async locationCounts(
-    sectionIds: readonly string[]
-  ): Promise<Map<string, number>> {
-    if (sectionIds.length === 0) {
-      return new Map();
-    }
-    const rows = (await this.sections.query(
-      `WITH "inheriting" AS (
-         SELECT l."supermarketId", count(*)::int AS "count"
-           FROM "supermarket_locations" l
-          WHERE l."supermarketId" IN (
-                  SELECT s."supermarketId" FROM "supermarket_sections" s
-                   WHERE s."id" = ANY($1::uuid[]))
-            AND NOT EXISTS (
-                  SELECT 1 FROM "location_sections" o
-                   WHERE o."supermarketLocationId" = l."id")
-          GROUP BY l."supermarketId"
-       )
-       SELECT s."id"::text AS "id",
-              ((SELECT count(*) FROM "location_sections" ls
-                 WHERE ls."sectionId" = s."id")
-               + coalesce(i."count", 0))::int AS "count"
-         FROM "supermarket_sections" s
-         LEFT JOIN "inheriting" i ON i."supermarketId" = s."supermarketId"
-        WHERE s."id" = ANY($1::uuid[])`,
-      [[...sectionIds]]
-    )) as { id: string; count: number }[];
-    return new Map(rows.map((row) => [row.id, Number(row.count)]));
-  }
-
-  /**
-   * The sections a shop's list or a pin names, all of them of `chainId`:
-   * refused with `section_not_found` naming the ids that match nothing, then
-   * with `section_of_another_chain` naming the ones of another chain.
+   * The sections the order of a shop names, all of them of `shopId`: refused
+   * with `section_not_found` naming the ids that match nothing, then with
+   * `section_of_another_shop` naming the ones of another shop.
    */
   private async requireOwnSections(
     ids: readonly string[],
-    chainId: string
-  ): Promise<SupermarketSection[]> {
+    shopId: string
+  ): Promise<void> {
     if (ids.length === 0) {
-      return [];
+      return;
     }
     const valid = ids.filter((id) => isUuid(id));
     const rows =
@@ -846,12 +521,12 @@ export class SectionService {
       throw sectionNotFound(unknown);
     }
     const foreign = ids.filter(
-      (id) => known.get(lower(id))?.supermarketId !== chainId
+      (id) =>
+        lower(known.get(lower(id))?.supermarketLocationId ?? '') !== shopId
     );
     if (foreign.length > 0) {
-      throw anotherChain(foreign);
+      throw anotherShop(foreign);
     }
-    return ids.map((id) => known.get(lower(id)) as SupermarketSection);
   }
 
   /** The categories a section write names, all of them rows. */
@@ -876,44 +551,12 @@ export class SectionService {
     return unique;
   }
 
-  private async requireChain(id: string): Promise<void> {
-    const rows = isUuid(id)
-      ? ((await this.sections.query(
-          `SELECT 1 FROM "supermarkets" WHERE "id" = $1`,
-          [id]
-        )) as unknown[])
-      : [];
-    if (rows.length === 0) {
-      throw new NotFoundException('Supermarket not found');
-    }
+  /** The id of a shop as the database spells it, or the ordinary 404. */
+  private requireShop(id: string): Promise<string> {
+    return requireShopIn(this.sections, id);
   }
 
-  private async requireShop(id: string): Promise<ShopRow> {
-    const rows = isUuid(id)
-      ? ((await this.sections.query(
-          `SELECT l."id"::text AS "id", l."supermarketId"::text AS "supermarketId"
-             FROM "supermarket_locations" l WHERE l."id" = $1`,
-          [id]
-        )) as ShopRow[])
-      : [];
-    if (rows.length === 0) {
-      throw locationNotFound();
-    }
-    return rows[0];
-  }
-
-  private async requireItem(id: string): Promise<void> {
-    const rows = isUuid(id)
-      ? ((await this.sections.query(`SELECT 1 FROM "items" WHERE "id" = $1`, [
-          id,
-        ])) as unknown[])
-      : [];
-    if (rows.length === 0) {
-      throw new NotFoundException('Item not found');
-    }
-  }
-
-  private async load(id: string): Promise<SupermarketSection> {
+  private async load(id: string): Promise<ShopSection> {
     const row = isUuid(id)
       ? await this.sections.findOne({ where: { id } })
       : null;
@@ -923,77 +566,227 @@ export class SectionService {
     return row;
   }
 
-  /** After the chain's last section, or 0 for the first. */
-  private async nextPosition(supermarketId: string): Promise<number> {
-    const [{ next }] = (await this.sections.query(
-      `SELECT coalesce(max(s."position") + 1, 0)::int AS "next"
-         FROM "supermarket_sections" s
-        WHERE s."supermarketId" = $1`,
-      [supermarketId]
-    )) as { next: number }[];
-    return Number(next);
-  }
-
   /**
    * The database's refusal of a section write, as the rule it enforces.
    *
    * The service checks every rule first, so reaching one of these means a
    * concurrent write got between the check and the statement: another create
-   * took the slug, a section or category was deleted, or, from outside this
-   * service, a row of another chain reached a trigger.
+   * took the slug, or a shop, a section or a category was deleted.
    */
   private async asViolation(
     error: unknown,
-    supermarketId: string,
-    slug: string | null
+    shopId: string,
+    slug: string
   ): Promise<unknown> {
     const driver = driverErrorOf(error);
     if (!driver) {
       return error;
     }
-    const { code, constraint, detail } = driver;
-    if (
-      code === PG_CHECK_VIOLATION &&
-      (constraint === 'ck_location_sections_chain' ||
-        constraint === 'ck_item_sections_chain')
-    ) {
-      return anotherChain(detail ? [detail] : []);
-    }
+    const { code, constraint } = driver;
     if (
       code === PG_UNIQUE_VIOLATION &&
-      constraint === 'uq_supermarket_sections_slug' &&
-      slug !== null
+      constraint === 'uq_shop_sections_slug'
     ) {
       const holder = await this.sections.findOne({
-        where: { supermarketId, slug },
+        where: { supermarketLocationId: shopId, slug },
       });
       return slugTaken(holder?.id ?? '');
     }
     if (code === PG_FOREIGN_KEY_VIOLATION) {
-      if (constraint === 'fk_section_categories_category') {
+      if (constraint === 'fk_shop_section_categories_category') {
         return categoryNotFound([]);
       }
-      if (
-        constraint === 'fk_location_sections_section' ||
-        constraint === 'fk_item_sections_section' ||
-        constraint === 'fk_section_categories_section'
-      ) {
+      if (constraint === 'fk_shop_section_categories_section') {
         return sectionNotFound([]);
       }
-      if (constraint === 'fk_location_sections_location') {
+      if (constraint === 'fk_shop_sections_location') {
         return locationNotFound();
-      }
-      if (constraint === 'fk_item_sections_item') {
-        return new NotFoundException('Item not found');
-      }
-      if (
-        constraint === 'fk_item_sections_supermarket' ||
-        constraint === 'fk_supermarket_sections_supermarket'
-      ) {
-        return new NotFoundException('Supermarket not found');
       }
     }
     return error;
+  }
+}
+
+/**
+ * One writer of a shop's sections at a time: the lock every write that
+ * changes the order takes first, on the row of the shop.
+ *
+ * `FOR NO KEY UPDATE`, so it does not wait on the foreign key checks of rows
+ * that name the shop. A caller that also locks a walk of the shop takes this
+ * lock **before** the walk's (`ShopWalkService`), so the two orders cannot
+ * cross.
+ */
+async function lockShop(manager: EntityManager, shopId: string): Promise<void> {
+  await manager.query(
+    `SELECT 1 FROM "supermarket_locations" WHERE "id" = $1 FOR NO KEY UPDATE`,
+    [shopId]
+  );
+}
+
+/** The id of a shop as the database spells it, or the ordinary 404. */
+async function requireShopIn(runner: SqlRunner, id: string): Promise<string> {
+  const rows = isUuid(id)
+    ? ((await runner.query(
+        `SELECT l."id"::text AS "id" FROM "supermarket_locations" l WHERE l."id" = $1`,
+        [id]
+      )) as { id: string }[])
+    : [];
+  if (rows.length === 0) {
+    throw locationNotFound();
+  }
+  return rows[0].id;
+}
+
+/** The ids of a shop's sections, in its order. */
+async function heldIds(
+  manager: EntityManager,
+  shopId: string
+): Promise<string[]> {
+  const rows = (await manager.query(
+    `SELECT s."id"::text AS "id"
+       FROM "shop_sections" s
+      WHERE s."supermarketLocationId" = $1
+      ORDER BY s."position", s."id"`,
+    [shopId]
+  )) as { id: string }[];
+  return rows.map((row) => row.id);
+}
+
+/** A shop's sections with their names, in its order: what a walk matches. */
+async function namedSections(
+  runner: SqlRunner,
+  shopId: string
+): Promise<{ id: string; slug: string; name: LocalizedText }[]> {
+  return (await runner.query(
+    `SELECT s."id"::text AS "id", s."slug" AS "slug", s."name" AS "name"
+       FROM "shop_sections" s
+      WHERE s."supermarketLocationId" = $1
+      ORDER BY s."position", s."id"`,
+    [shopId]
+  )) as { id: string; slug: string; name: LocalizedText }[];
+}
+
+/** After the shop's last section, or 0 for the first. */
+async function nextPosition(
+  manager: EntityManager,
+  shopId: string
+): Promise<number> {
+  const [{ next }] = (await manager.query(
+    `SELECT coalesce(max(s."position") + 1, 0)::int AS "next"
+       FROM "shop_sections" s
+      WHERE s."supermarketLocationId" = $1`,
+    [shopId]
+  )) as { next: number }[];
+  return Number(next);
+}
+
+/**
+ * Write the order of a shop: `ids` are **all** of its sections, and each takes
+ * the place it has in the list, from 0.
+ *
+ * One statement, so the deferrable constraint on `(shop, position)` checks it
+ * when it ends: two sections can swap, and a gap closes, without a collision
+ * halfway. A row already in its place is not written. Runs under
+ * {@link lockShop}.
+ */
+async function writeOrder(
+  manager: EntityManager,
+  shopId: string,
+  ids: readonly string[]
+): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
+  await manager.query(
+    `UPDATE "shop_sections" s
+        SET "position" = v."place" - 1, "updatedAt" = now()
+       FROM unnest($2::uuid[]) WITH ORDINALITY AS v("id", "place")
+      WHERE s."id" = v."id"
+        AND s."supermarketLocationId" = $1
+        AND s."position" <> v."place" - 1`,
+    [shopId, [...ids]]
+  );
+}
+
+/**
+ * The order a write gives a shop: the sections it names first, each at its
+ * first mention, then the ones it does not name, in the order they had. An id
+ * the shop no longer holds is left out, so the answer is always every section
+ * of the shop, one time each.
+ */
+export function namedFirst(
+  named: readonly string[],
+  held: readonly string[]
+): string[] {
+  const holds = new Set(held.map(lower));
+  const first = [...new Set(named.map(lower))].filter((id) => holds.has(id));
+  const taken = new Set(first);
+  return [...first, ...held.map(lower).filter((id) => !taken.has(id))];
+}
+
+/** Each name of a walk with the section of the shop it matches, or null. */
+function matchWalkNames(
+  held: readonly { id: string; name: LocalizedText }[],
+  names: readonly string[]
+): WalkName[] {
+  const byKey = new Map<string, string>();
+  for (const row of held) {
+    for (const value of Object.values(row.name ?? {})) {
+      if (typeof value === 'string' && value.trim() !== '') {
+        const key = walkNameKey(value);
+        if (!byKey.has(key)) {
+          byKey.set(key, row.id);
+        }
+      }
+    }
+  }
+  return names.map((name) => ({
+    name: name.trim(),
+    sectionId: byKey.get(walkNameKey(name)) ?? null,
+  }));
+}
+
+/**
+ * One section of the shop per distinct unmatched name, after the shop's last
+ * one, and each entry pointed at it. Mutates `resolved`. Runs under
+ * {@link lockShop}, so a second save of the same walk finds what this one
+ * created.
+ */
+async function createWalkSections(
+  manager: EntityManager,
+  shopId: string,
+  resolved: WalkName[],
+  locale: SupportedLocale
+): Promise<void> {
+  if (resolved.every((entry) => entry.sectionId !== null)) {
+    return;
+  }
+  const taken = new Set(
+    (await namedSections(manager, shopId)).map((row) => row.slug)
+  );
+  let position = await nextPosition(manager, shopId);
+  const created = new Map<string, string>();
+  for (const entry of resolved) {
+    if (entry.sectionId !== null) {
+      continue;
+    }
+    const key = walkNameKey(entry.name);
+    const known = created.get(key);
+    if (known) {
+      entry.sectionId = known;
+      continue;
+    }
+    const slug = uniqueSlug(slugFromName(entry.name), taken);
+    taken.add(slug);
+    const [row] = (await manager.query(
+      `INSERT INTO "shop_sections" ("supermarketLocationId", "slug", "name", "position")
+       VALUES ($1, $2, $3::jsonb, $4)
+       RETURNING "id"::text AS "id"`,
+      [shopId, slug, JSON.stringify({ [locale]: entry.name }), position]
+    )) as { id: string }[];
+    position += 1;
+    created.set(key, row.id);
+    entry.sectionId = row.id;
   }
 }
 
@@ -1004,12 +797,12 @@ async function writeCoverage(
   categoryIds: readonly string[]
 ): Promise<void> {
   await manager.query(
-    `DELETE FROM "section_categories" WHERE "sectionId" = $1`,
+    `DELETE FROM "shop_section_categories" WHERE "sectionId" = $1`,
     [sectionId]
   );
   if (categoryIds.length > 0) {
     await manager.query(
-      `INSERT INTO "section_categories" ("sectionId", "categoryId")
+      `INSERT INTO "shop_section_categories" ("sectionId", "categoryId")
        SELECT $1, v."categoryId" FROM unnest($2::uuid[]) AS v("categoryId")`,
       [sectionId, [...categoryIds]]
     );
@@ -1018,14 +811,14 @@ async function writeCoverage(
 
 export function toSectionView(
   row: Pick<
-    SupermarketSection,
-    'id' | 'supermarketId' | 'slug' | 'name' | 'position'
+    PresentSectionRow,
+    'id' | 'supermarketLocationId' | 'slug' | 'name' | 'position'
   >,
   categoryIds: string[]
-): SupermarketSectionView {
+): ShopSectionView {
   return {
     id: row.id,
-    supermarketId: row.supermarketId,
+    supermarketLocationId: row.supermarketLocationId,
     slug: row.slug,
     name: row.name,
     position: row.position,
@@ -1074,8 +867,9 @@ function lower(id: string): string {
 }
 
 /**
- * How a walk's section name compares with a chain section's (plan 0168,
- * section 4): trimmed and case folded, as `walkOrderV2` groups them.
+ * How a walk's section name compares with the name of a section of the shop
+ * (plan 0168, section 4): trimmed and case folded, as `walkOrderV2` groups
+ * them.
  */
 export function walkNameKey(name: string): string {
   return name.trim().toLowerCase();
@@ -1089,7 +883,7 @@ export function walkNameKey(name: string): string {
 export function slugFromName(name: string): string {
   const slug = name
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -1098,7 +892,7 @@ export function slugFromName(name: string): string {
   return slug === '' ? 'section' : slug;
 }
 
-/** `slug`, or `slug-2`, `slug-3` and so on, whichever the chain does not hold. */
+/** `slug`, or `slug-2`, `slug-3` and so on, whichever the shop does not hold. */
 export function uniqueSlug(slug: string, taken: ReadonlySet<string>): string {
   if (!taken.has(slug)) {
     return slug;
@@ -1113,10 +907,6 @@ export function uniqueSlug(slug: string, taken: ReadonlySet<string>): string {
       return candidate;
     }
   }
-}
-
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function driverErrorOf(
@@ -1140,18 +930,18 @@ function sectionNotFound(unknown: readonly string[]): SectionNotFoundException {
   });
 }
 
-function anotherChain(
+function anotherShop(
   sectionIds: readonly string[]
-): SectionOfAnotherChainException {
-  return new SectionOfAnotherChainException(
-    'A shop and a pin may only name sections of their own chain.',
-    { details: { [SECTION_OTHER_CHAIN_DETAIL]: [...sectionIds] } }
+): SectionOfAnotherShopException {
+  return new SectionOfAnotherShopException(
+    'The order of a shop may only name its own sections.',
+    { details: { [SECTION_OTHER_SHOP_DETAIL]: [...sectionIds] } }
   );
 }
 
 function slugTaken(holderId: string): SectionSlugTakenException {
   return new SectionSlugTakenException(
-    'This chain already has a section with that slug.',
+    'This shop already has a section with that slug.',
     { details: { [SECTION_SLUG_HOLDER_DETAIL]: holderId } }
   );
 }

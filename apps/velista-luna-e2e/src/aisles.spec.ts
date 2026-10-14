@@ -1,19 +1,19 @@
 import { expect, test } from '@playwright/test';
 import {
   LINE_EGGS_ID,
-  SUPERMARKET_MERCADONA_ID,
+  LOCATION_MERCADONA_VALENCIA_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
   adminLogin,
   ALICE_EMAIL,
   categoryIdBySlug,
-  chainSections,
   createSection,
   deleteSection,
   ensureItem,
   login,
   resetAliceWorld,
   setLineProducts,
+  shopSections,
   type Session,
 } from './support/api';
 import {
@@ -32,14 +32,16 @@ const SLUG_PREFIX = 'e2e-aisles-';
 /**
  * The aisles of the shop you are in (velista plan 0120, target 6).
  *
- * Mercadona gets two sections through the back office, walked bakery first and
- * fridge second, which is the reverse of the order the basket lists Milk and
- * Bread in. Eggs gets a product of its own that no section covers. Grouped by
- * category at Mercadona Colón, the page draws the two aisles in the shop's order,
- * then the band, then Eggs under its own category, then the line with no product.
+ * Mercadona Colón gets two sections through the back office, walked bakery
+ * first and fridge second, which is the reverse of the order the basket lists
+ * Milk and Bread in. Eggs gets a product of its own that no section covers.
+ * Grouped by category at that shop, the page draws the two aisles in the shop's
+ * order, then the band, then Eggs under its own category, then the line with no
+ * product.
  *
- * The sections are the chain's, so they would regroup every later spec that buys
- * at this shop. They are taken down after the run, and before it, by slug.
+ * The sections belong to that one shop (backend plan `0200`), and they would
+ * regroup every later spec that buys there. They are taken down after the run,
+ * and before it, by slug.
  */
 test.describe('the aisles of the shop you are in', () => {
   let alice: Session;
@@ -47,7 +49,10 @@ test.describe('the aisles of the shop you are in', () => {
   let eggsCategory = '';
 
   async function clearSections(): Promise<void> {
-    for (const held of await chainSections(admin, SUPERMARKET_MERCADONA_ID)) {
+    for (const held of await shopSections(
+      admin,
+      LOCATION_MERCADONA_VALENCIA_ID
+    )) {
       if (held.slug.startsWith(SLUG_PREFIX)) {
         await deleteSection(admin, held.id);
       }
@@ -60,17 +65,16 @@ test.describe('the aisles of the shop you are in', () => {
     await resetAliceWorld(alice);
     await clearSections();
 
-    await createSection(admin, SUPERMARKET_MERCADONA_ID, {
+    // Each goes after the last one of the shop, so bakery is walked first.
+    await createSection(admin, LOCATION_MERCADONA_VALENCIA_ID, {
       slug: `${SLUG_PREFIX}bakery`,
       name: { en: 'Fresh bakery', es: 'Horno' },
       categoryIds: [await categoryIdBySlug(alice, 'freshly-baked-bread')],
-      position: 0,
     });
-    await createSection(admin, SUPERMARKET_MERCADONA_ID, {
+    await createSection(admin, LOCATION_MERCADONA_VALENCIA_ID, {
       slug: `${SLUG_PREFIX}fridge`,
       name: { en: 'Fridge', es: 'Refrigerados' },
       categoryIds: [await categoryIdBySlug(alice, 'milk')],
-      position: 1,
     });
 
     // The third product: eggs, under a leaf neither section covers.

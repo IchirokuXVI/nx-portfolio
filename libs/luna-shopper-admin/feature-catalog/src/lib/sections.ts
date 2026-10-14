@@ -4,12 +4,12 @@ import {
   CONTENT_LOCALES,
   defineResource,
   localizedTextValue,
-  type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { sectionSource } from './catalog-sources';
+import type { ChainSectionView } from './chain-section-view';
 
 /** One aisle of one chain, as the gateway describes it. */
-export type Section = Wire.CatalogSupermarketSectionView;
+export type Section = ChainSectionView;
 
 /**
  * A chain's sections (backend plan 0167, admin plan 0037, target 1).

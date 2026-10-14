@@ -368,7 +368,7 @@ const DEV_ADMIN_PASSWORD =
 
 /**
  * `POST /v1/admin/auth/login` as the development admin, for the setup only the
- * back office can write: a chain's sections and a product of its own (velista
+ * back office can write: a shop's sections and a product of its own (velista
  * `0120`). The same `Session` shape, since an admin token rides the same header.
  */
 export async function adminLogin(): Promise<Session> {
@@ -405,30 +405,36 @@ export interface SectionView {
   categoryIds: string[];
 }
 
-/** `GET /v1/admin/catalog/supermarkets/:id/sections`: a chain's sections. */
-export async function chainSections(
+/**
+ * `GET /v1/admin/catalog/locations/:id/sections`: the sections of one shop, in
+ * its order. A section belongs to a shop, and a chain has none (backend plan
+ * `0200`).
+ */
+export async function shopSections(
   admin: Session,
-  supermarketId: string
+  supermarketLocationId: string
 ): Promise<SectionView[]> {
-  const page = await admin.get<{ items: SectionView[] }>(
-    `/v1/admin/catalog/supermarkets/${supermarketId}/sections`
+  const view = await admin.get<{ sections: SectionView[] }>(
+    `/v1/admin/catalog/locations/${supermarketLocationId}/sections`
   );
-  return page.items;
+  return view.sections;
 }
 
-/** `POST /v1/admin/catalog/supermarkets/:id/sections`. */
+/**
+ * `POST /v1/admin/catalog/locations/:id/sections`: a section of one shop,
+ * after its last one. The order of the calls is the order of the shop.
+ */
 export async function createSection(
   admin: Session,
-  supermarketId: string,
+  supermarketLocationId: string,
   body: {
     slug: string;
     name: { en: string; es: string };
     categoryIds: string[];
-    position: number;
   }
 ): Promise<SectionView> {
   return admin.post<SectionView>(
-    `/v1/admin/catalog/supermarkets/${supermarketId}/sections`,
+    `/v1/admin/catalog/locations/${supermarketLocationId}/sections`,
     body
   );
 }
