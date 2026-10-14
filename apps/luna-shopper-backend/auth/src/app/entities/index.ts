@@ -23,7 +23,11 @@ export { EmailVerification } from './email-verification.entity';
 export { ImpersonationSession } from './impersonation-session.entity';
 export { OAuthIdentity } from './oauth-identity.entity';
 export { OAuthState } from './oauth-state.entity';
-export { PasswordReset } from './password-reset.entity';
+export {
+  PasswordReset,
+  PasswordResetChannel,
+  PasswordResetSpentAs,
+} from './password-reset.entity';
 export { RefreshToken } from './refresh-token.entity';
 export { User } from './user.entity';
 
