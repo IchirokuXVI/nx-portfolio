@@ -7,6 +7,7 @@ import type {
   BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
+  BasketProductChangeRequest,
   BasketProductList,
   BasketRenameRequest,
   BasketRevertRequest,
@@ -352,6 +353,27 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketRowResult(answer), 'basket.demand');
+  }
+
+  /**
+   * Take another product on these lines (velista `0140`, section 4).
+   *
+   * Under the participant credential like every write here. The gateway refuses a
+   * guest, so the page offers this to an account alone.
+   */
+  async changeProduct(
+    basketId: string,
+    body: BasketProductChangeRequest
+  ): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(basketId)}/lines/product`,
+        { lineIds: [...body.lineIds], itemId: body.itemId, keep: body.keep },
+        this._participantOptions(basketId, 'basket.changeProduct')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.changeProduct');
   }
 
   /**

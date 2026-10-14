@@ -111,16 +111,19 @@ export function foldBasketEntries(
  * second fold places each one with `lineProductOf` as an add. It is that function
  * twice and no rule of its own: a row the lines leave is rebuilt or dropped, and a
  * line joins the row of its new product or makes one.
+ *
+ * @param named The lines the write named, by default the answered ones. A named
+ *   line that is not in the answer left the basket, as for the fold.
  */
 export function regroupBasketEntries(
   rows: readonly BasketRow[],
   entries: readonly BasketRowEntry[],
-  served: ReadonlySet<string>
+  served: ReadonlySet<string>,
+  named: readonly string[] = entries.map((entry) => entry.lineId)
 ): readonly BasketRow[] {
-  if (entries.length === 0) {
+  if (named.length === 0) {
     return rows;
   }
-  const named = entries.map((entry) => entry.lineId);
   const without = foldBasketEntries(rows, [], named, served);
   return foldBasketEntries(without, entries, named, served);
 }

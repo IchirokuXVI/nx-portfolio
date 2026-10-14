@@ -17,6 +17,7 @@ import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
 import { BasketStore } from './basket-store';
+import { HeldProductChoices } from './held-product-choices';
 
 /**
  * The basket store (plan 0044).
@@ -142,6 +143,7 @@ function build(
     skip: (id, target) => memory.skip(id, target),
     unskip: (id, target) => memory.unskip(id, target),
     setDemand: (id, body) => memory.setDemand(id, body),
+    changeProduct: (id, body) => memory.changeProduct(id, body),
     productLists: (id, itemId) => memory.productLists(id, itemId),
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
@@ -162,6 +164,7 @@ function build(
   TestBed.configureTestingModule({
     providers: [
       BasketStore,
+      HeldProductChoices,
       { provide: BasketSessionStore, useValue: sessions },
       { provide: BASKET_SERVICE, useValue: service },
       { provide: BasketSocket, useValue: socket },
@@ -1848,6 +1851,171 @@ describe('BasketStore: skip, demand and the add', () => {
       'zl-5',
       'zl-8',
     ]);
+  });
+
+  describe('a change of product (velista 0140, section 4)', () => {
+    const PASCUAL = 'item-milk-pascual';
+
+    it('holds a change for this trip on the device when the line has no buy', async () => {
+      const sent: unknown[] = [];
+      const { store } = build({
+        changeProduct: async (_id, body) => {
+          sent.push(body);
+          return { entries: [], skippedCount: 0 };
+        },
+      });
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const lineId = milk.entries[0].lineId;
+
+      const done = await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [lineId], itemId: PASCUAL, keep: false },
+        null
+      );
+
+      expect(done).toBe(true);
+      expect(sent).toEqual([]);
+      const moved = store
+        .rows()
+        .find((row) => row.entries.some((entry) => entry.lineId === lineId));
+      expect(moved?.productId).toBe(PASCUAL);
+      // The next buy of that row names the product held for it.
+      expect(moved === undefined ? null : store.itemIdFor(moved.rowKey)).toBe(
+        PASCUAL
+      );
+    });
+
+    it('draws a held product the read does not name from what the sheet had', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const product = {
+        ...(store.products().get(milk.productId ?? '') ?? null),
+        id: 'item-oat',
+      };
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [milk.entries[0].lineId], itemId: 'item-oat', keep: false },
+        product as never
+      );
+
+      expect(store.products().get('item-oat')?.id).toBe('item-oat');
+    });
+
+    it('counts the header over the rows a held choice split', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const before = store.progress().total;
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [milk.entries[0].lineId], itemId: PASCUAL, keep: false },
+        null
+      );
+
+      expect(store.progress().total).toBe(before + 1);
+    });
+
+    it('sends a kept change and moves the line to the row of its favourite', async () => {
+      const sent: { keep: boolean; lineIds: readonly string[] }[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        changeProduct: (id, body) => {
+          sent.push(body);
+          return memory.changeProduct(id, body);
+        },
+      });
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const lineId = milk.entries[0].lineId;
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [lineId], itemId: PASCUAL, keep: true },
+        null
+      );
+
+      expect(sent).toEqual([
+        { lineIds: [lineId], itemId: PASCUAL, keep: true },
+      ]);
+      const moved = store
+        .rows()
+        .find((row) => row.entries.some((entry) => entry.lineId === lineId));
+      expect(moved?.productId).toBe(PASCUAL);
+      expect(moved?.entries[0].favoriteItemId).toBe(PASCUAL);
+    });
+
+    it('sends the lines with a buy today and holds the rest', async () => {
+      const sent: { keep: boolean; lineIds: readonly string[] }[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: (id, target, body) => memory.settle(id, target, body),
+        changeProduct: (id, body) => {
+          sent.push(body);
+          return memory.changeProduct(id, body);
+        },
+      });
+      await store.open('basket-saturday');
+      const eggs = rowOf(store, 'Eggs');
+      const [bought, ...rest] = eggs.entries.map((entry) => entry.lineId);
+      const body: BasketSettleRequest = {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: eggs.left,
+        itemId: eggs.productId ?? undefined,
+        allocations: [{ lineId: bought, quantity: 1 }],
+      };
+      await store.settle(eggs.rowKey, body);
+      await store.refresh();
+      const hadBuy = rest.filter((lineId) => store.hasTripBuy(lineId));
+
+      await store.changeProduct(
+        rowOf(store, 'Eggs').rowKey,
+        { lineIds: [bought, ...rest], itemId: PASCUAL, keep: false },
+        null
+      );
+
+      expect(sent).toEqual([
+        {
+          lineIds: [bought, ...hadBuy],
+          itemId: PASCUAL,
+          keep: false,
+        },
+      ]);
+    });
+
+    it('holds nothing when the write fails, and says it failed', async () => {
+      const { store } = build({
+        changeProduct: async () => {
+          throw new GatewayError({
+            code: 'forbidden',
+            status: 403,
+            correlationId: 'spec',
+          });
+        },
+      });
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+
+      const done = await store.changeProduct(
+        milk.rowKey,
+        {
+          lineIds: milk.entries.map((entry) => entry.lineId),
+          itemId: PASCUAL,
+          keep: true,
+        },
+        null
+      );
+
+      expect(done).toBe(false);
+      expect(rowOf(store, 'Milk').productId).toBe(milk.productId);
+      expect(store.error()).toBeInstanceOf(GatewayError);
+    });
   });
 
   it('reads the lists that can take a product', async () => {

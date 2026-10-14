@@ -340,6 +340,30 @@ describe('BasketApi, the writes on a row', () => {
     expect((await done).entries).toEqual([]);
   });
 
+  it('posts a change of product with lineIds, itemId and keep (velista 0140)', async () => {
+    const done = api.changeProduct(BASKET, {
+      lineIds: ['zl-1', 'zl-2'],
+      itemId: 'item-milk-pascual',
+      keep: false,
+    });
+    const req = httpMock.expectOne(
+      `${GATEWAY}/v1/baskets/${BASKET}/lines/product`
+    );
+
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      lineIds: ['zl-1', 'zl-2'],
+      itemId: 'item-milk-pascual',
+      keep: false,
+    });
+    req.flush({
+      entries: [{ ...ANSWER.entries[0], tripItemId: 'item-milk-pascual' }],
+      progress: ANSWER.progress,
+    });
+
+    expect((await done).entries[0].tripItemId).toBe('item-milk-pascual');
+  });
+
   it('reads the lists that can take a product from the product route', async () => {
     const done = api.productLists(BASKET, 'item-eggs');
     const req = httpMock.expectOne(

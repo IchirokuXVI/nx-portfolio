@@ -12,6 +12,8 @@ import {
   basketProgressOf,
   foldBasketEntries,
   isOpenBasket,
+  regroupBasketEntries,
+  withHeldChoices,
   type Basket,
   type BasketAccessEnded,
   type BasketAddLineRequest,
@@ -22,6 +24,7 @@ import {
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketProductChangeRequest,
   type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
@@ -42,6 +45,10 @@ import {
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
+import {
+  HeldProductChoices,
+  type HeldProductChoice,
+} from './held-product-choices';
 
 /**
  * How long a refetch waits, so a burst of events costs one request.
@@ -119,6 +126,9 @@ export class BasketStore {
 
   /** The app coming back, which is one of the two edges that read again. */
   private readonly _resumed = inject(AppResumed);
+
+  /** The products chosen for this trip on this device (velista `0140`). */
+  private readonly _choices = inject(HeldProductChoices);
 
   private readonly _basket = signal<Basket | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
@@ -508,9 +518,38 @@ export class BasketStore {
     });
   });
 
-  /** The rows, in the order the server sent them, which is the order to walk. */
-  readonly rows = computed<readonly BasketRow[]>(
-    () => this._basket()?.rows ?? []
+  /** The choices this device holds on this basket, by line id. */
+  private readonly _held = computed<ReadonlyMap<string, HeldProductChoice>>(
+    () => this._choices.heldOn(this._basket()?.id ?? null)
+  );
+
+  /**
+   * The rows, in the order the server sent them, which is the order to walk.
+   *
+   * With the products this device chose for this trip put on their lines and the
+   * lines grouped again by the shared rule (velista `0140`, section 4). The row is
+   * drawn under the chosen product here and nowhere else, and every write and
+   * settle of the page reads the row from here, so the next buy names it.
+   */
+  readonly rows = computed<readonly BasketRow[]>(() => {
+    const basket = this._basket();
+    if (basket === null) {
+      return [];
+    }
+    const held = this._held();
+    if (held.size === 0) {
+      return basket.rows;
+    }
+    return withHeldChoices(
+      basket.rows,
+      new Map([...held].map(([lineId, choice]) => [lineId, choice.itemId])),
+      new Set(basket.lists.map((ref) => ref.listId))
+    );
+  });
+
+  /** Whether {@link rows} differ from the read, because a held choice moved a line. */
+  private readonly _regrouped = computed(
+    () => this.rows() !== (this._basket()?.rows ?? [])
   );
 
   /**
@@ -531,9 +570,24 @@ export class BasketStore {
    * `BasketViewStore` were both doing: two identities for one map means a row is
    * redrawn whenever either of them is recomputed for an unrelated reason.
    */
-  readonly products = computed<ReadonlyMap<string, BasketProduct>>(
-    () => this._basket()?.products ?? new Map()
-  );
+  readonly products = computed<ReadonlyMap<string, BasketProduct>>(() => {
+    const read = this._basket()?.products ?? new Map<string, BasketProduct>();
+    // A product held for this trip that no row of the read draws is drawn from
+    // what the change sheet had to hand. The read's own wins wherever it has one.
+    const missing = [...this._held().values()].filter(
+      (choice) => choice.product !== null && !read.has(choice.itemId)
+    );
+    if (missing.length === 0) {
+      return read;
+    }
+    const products = new Map(read);
+    for (const choice of missing) {
+      if (choice.product !== null) {
+        products.set(choice.itemId, choice.product);
+      }
+    }
+    return products;
+  });
 
   /** What this basket is (backend `0133`, section 2). Velista `0091` reads it. */
   readonly kind = computed(() => this._basket()?.kind ?? 'UNKNOWN');
@@ -572,7 +626,11 @@ export class BasketStore {
    * (`progressOf` of `@portfolio/luna-shopper/basket-rules`, backend `0201`), so a
    * `SKIPPED` row is pending here exactly as it is on the server.
    */
-  readonly pending = computed(() => this._basket()?.pending ?? 0);
+  readonly pending = computed(() =>
+    this._regrouped()
+      ? basketProgressOf(this.rows()).pending
+      : (this._basket()?.pending ?? 0)
+  );
 
   /** Everybody on the basket, for the presence row and for attribution. */
   readonly participants = computed<readonly BasketParticipant[]>(
@@ -602,8 +660,10 @@ export class BasketStore {
    * Zeroed before the first read, which draws as a basket with nothing in it for
    * the moment there is nothing in it.
    */
-  readonly progress = computed<BasketProgress>(
-    () => this._basket()?.progress ?? { done: 0, unavailable: 0, total: 0 }
+  readonly progress = computed<BasketProgress>(() =>
+    this._regrouped()
+      ? basketProgressOf(this.rows()).progress
+      : (this._basket()?.progress ?? { done: 0, unavailable: 0, total: 0 })
   );
 
   /**
@@ -1076,6 +1136,62 @@ export class BasketStore {
   }
 
   /**
+   * Whether the server states a buy of this line in this trip (backend `0201`,
+   * section 1): its latest standing buy named a product. Read off the basket as it
+   * was read, never off a choice this device holds.
+   */
+  hasTripBuy(lineId: string): boolean {
+    return (this._basket()?.rows ?? []).some((row) =>
+      row.entries.some(
+        (entry) => entry.lineId === lineId && entry.tripItemId !== null
+      )
+    );
+  }
+
+  /**
+   * Take another product on these lines (velista `0140`, section 4).
+   *
+   * - **`keep`**: one write, and each line holds the product as its favourite.
+   * - **No `keep`**: the lines with a buy in this trip are written, so the buys
+   *   take the new product and the lines follow it until the trip ends. The rest
+   *   are held on this device, with nothing sent, until their first buy names it.
+   *
+   * The answer moves each line to the row of its product with the shared rule,
+   * and the basket is read again as after every write. False when the write
+   * failed: nothing is held then either, so the row stays as it was, and
+   * {@link error} holds the refusal.
+   *
+   * @param product What the row draws for a held choice, see `HeldProductChoice`.
+   */
+  async changeProduct(
+    rowKey: string,
+    body: BasketProductChangeRequest,
+    product: BasketProduct | null
+  ): Promise<boolean> {
+    const id = this._basket()?.id ?? null;
+    if (id === null || body.lineIds.length === 0) {
+      return false;
+    }
+    const sent = body.keep
+      ? body.lineIds
+      : body.lineIds.filter((lineId) => this.hasTripBuy(lineId));
+    const kept = body.lineIds.filter((lineId) => !sent.includes(lineId));
+
+    if (sent.length > 0) {
+      const result = await this._write(rowKey, (basketId) =>
+        this._service.changeProduct(basketId, { ...body, lineIds: sent })
+      );
+      if (result === null) {
+        return false;
+      }
+      this._choices.release(id, sent);
+      this._regroup(result, sent);
+    }
+    this._choices.hold(id, kept, { itemId: body.itemId, product });
+    return true;
+  }
+
+  /**
    * The covered lists that could take a product, or null when the read failed
    * (backend `0201`, section 5; velista `0139`, section 3).
    *
@@ -1204,6 +1320,26 @@ export class BasketStore {
 
     const served = new Set(held.lists.map((ref) => ref.listId));
     const rows = foldBasketEntries(held.rows, result.entries, named, served);
+    const { progress, pending } = basketProgressOf(rows);
+    this._basket.set({ ...held, rows, progress, pending });
+    this._changed();
+    this._scheduleRefresh();
+  }
+
+  /**
+   * Fold the answer of a change of product: the lines move to the rows of the
+   * products they count as now (`regroupBasketEntries`), which {@link _fold}
+   * does not do, because no other write changes a product. The rest is
+   * {@link _fold}'s.
+   */
+  private _regroup(result: BasketRowResult, named: readonly string[]): void {
+    const held = this._basket();
+    if (held === null) {
+      return;
+    }
+
+    const served = new Set(held.lists.map((ref) => ref.listId));
+    const rows = regroupBasketEntries(held.rows, result.entries, served, named);
     const { progress, pending } = basketProgressOf(rows);
     this._basket.set({ ...held, rows, progress, pending });
     this._changed();

@@ -12,6 +12,7 @@ import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
 import { BasketStore } from './basket-store';
+import { HeldProductChoices } from './held-product-choices';
 
 /**
  * What changed on the covered lists, as the sheet reads it (velista `0093`,
@@ -89,8 +90,7 @@ function build(
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     changes: (id, context, cursor) => memory.changes(id, context, cursor),
-    acknowledgeChanges: (id, through) =>
-      memory.acknowledgeChanges(id, through),
+    acknowledgeChanges: (id, through) => memory.acknowledgeChanges(id, through),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
     ensureShareLink: () => memory.ensureShareLink(),
@@ -107,6 +107,7 @@ function build(
   TestBed.configureTestingModule({
     providers: [
       BasketStore,
+      HeldProductChoices,
       BasketChangeStore,
       { provide: BasketSessionStore, useValue: new FakeSessions() },
       { provide: BASKET_SERVICE, useValue: service },

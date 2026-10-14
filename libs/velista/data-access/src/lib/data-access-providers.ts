@@ -12,6 +12,7 @@ import { BasketListMemory } from './baskets/basket-list-memory';
 import { BasketListStore } from './baskets/basket-list-store';
 import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
+import { HeldProductChoices } from './baskets/held-product-choices';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
 import { CatalogAddStore } from './catalog/catalog-add-store';
@@ -20,6 +21,7 @@ import { CategoryStore } from './catalog/category-store';
 import { GroupMembers } from './catalog/group-members';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
+import { ProductPickStore } from './catalog/product-pick-store';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { ContactMemory } from './contacts/contact-memory';
@@ -238,6 +240,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   MappingSettingsStore,
   GroupMembers,
   CatalogAddStore,
+  ProductPickStore,
+  HeldProductChoices,
   GroupNames,
   ItemNames,
   MemberNames,
