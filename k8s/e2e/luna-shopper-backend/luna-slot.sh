@@ -1345,9 +1345,10 @@ MAIL_FROM=Luna Shopper <no-reply@luna.localhost>
 # has none and carries the query string with it, so the link opens at
 # \`/{locale}/auth/verify?token=...\` in the reader's own language.
 MAIL_VERIFY_BASE_URL=http://localhost:${VELISTA_PORT}/auth/verify
-# A placeholder for a page that does not exist yet: nothing in \`feature-auth\`
-# routes a reset token. Auth requires the variable, so it is set and unusable.
-MAIL_RESET_BASE_URL=http://localhost:${VELISTA_PORT}/reset-password
+# The reset page of velista plan 0148, beside \`auth/verify\` and with no locale
+# segment for the same reason. The sign in link of the mail is this URL with
+# \`&mode=sign-in\` after the token (backend plan 0210).
+MAIL_RESET_BASE_URL=http://localhost:${VELISTA_PORT}/auth/reset-password
 GOOGLE_CLIENT_ID=your-dev-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-dev-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:${GATEWAY_PORT}/auth/google/callback
