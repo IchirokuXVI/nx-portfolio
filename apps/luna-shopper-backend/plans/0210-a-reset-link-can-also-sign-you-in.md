@@ -272,3 +272,41 @@ The agent builds the default of each. The owner can change any of them before th
   hours, and sends the notice. Its sign in link works one time.
 - **Admin app.** The panel shows both links and drops them on close; the actions are hidden
   for a guest and a Google only account.
+
+## 5. As built
+
+The build follows the text above, with the default of each decision D1 to D6. It differs in
+the points below. Velista `0148` reads this section as the contract where it differs from the
+target state.
+
+- **The codes of the two operator refusals** are `recovery_needs_email` (a guest, no address)
+  and `recovery_needs_password` (no password credential). Both 409, as is
+  `recovery_other_account`. The text above did not name the two.
+- **`POST /v1/auth/recovery-sign-in` is in a controller of its own**,
+  `recovery-sign-in.controller.ts`, and not in `auth.controller.ts`. The body is a raw token,
+  and the error log prints the body of a request that failed with a 500. The controller of
+  its own is what `WithholdBodyMiddleware` is applied to, so the constraint "the raw token is
+  never logged" holds on that path too. `reset-password` still carries its token in a body
+  that the middleware does not cover; that is outside this plan.
+- **`switchAccount` passes only as a JSON boolean.** The global pipe converts types, so the
+  DTO reads the field as it was spelled, as the harvest schedule reads its acknowledgement.
+  A string `"false"` answers 400 and does not leave a session.
+- **No `@Throttle` on the sign in route.** `reset-password` carries none of its own, so the
+  bucket it uses is the default one, and the sign in route uses the same.
+- **The migration adds three CHECK constraints** besides the columns: the allowed values of
+  `channel` and `spentAs`, `spentAs` only with `consumedAt`, and an operator on exactly the two
+  operator channels. It still only adds.
+- **The operator routes take a body of `{ locale? }`.** For `send-password-reset` it is the
+  language of the reset mail; for `recovery-links` it is the language of the notice mail.
+  `recovery-links` refuses with 501 `not_configured` when no SMTP host is set, because the
+  notice of decision D2 could not be sent.
+- **The notice mail writes its date in UTC and says so.** Auth does not know where the person
+  is.
+- **The admin app needed two additions to the descriptor framework.** A named action may now
+  answer an outcome: a `line` the record page draws in the tone of a save, or a `panel` the
+  record page draws in a dialog and drops on close. And `recordOnly` keeps an action off the
+  rows of the list, where a panel has nowhere to go. Both are in
+  `libs/luna-shopper-admin/models` and `feature-resource`, which the scope above did not list.
+  The admin models of the two answers (`RecoveryLinks`, `PasswordResetSent`) are in
+  `data-access/src/lib/directory/recovery-links.ts`, beside their mappers, as the harvest
+  answers are.
