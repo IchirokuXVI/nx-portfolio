@@ -1,3 +1,5 @@
+> **PR:** [#716](https://github.com/IchirokuXVI/nx-portfolio/pull/716)
+
 # 0140: a line takes another product from the shopping list
 
 > Asked for by the owner on 2026-10-11: "Each zone list line will be displayed with a
