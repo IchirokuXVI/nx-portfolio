@@ -21,6 +21,7 @@ import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
+import { pathFromRootAt } from '../catalog-route.testing';
 import { CatalogSupermarketPage } from './supermarket-page';
 
 interface Harness {
@@ -44,6 +45,8 @@ async function render(
     readonly query?: Record<string, string>;
     /** A person with no shopping profile, who has no chains to offer. */
     readonly noProfile?: boolean;
+    /** Where the picker is, which says what opened it. The tab by default. */
+    readonly under?: string;
   } = {}
 ): Promise<Harness> {
   TestBed.resetTestingModule();
@@ -73,6 +76,9 @@ async function render(
         useValue: {
           snapshot: {
             queryParamMap: convertToParamMap(options.query ?? {}),
+            pathFromRoot: pathFromRootAt(
+              options.under ?? '/velista/en/catalog/supermarket'
+            ),
           },
         },
       },
@@ -223,6 +229,21 @@ describe('CatalogSupermarketPage', () => {
     host(fixture).querySelector<HTMLInputElement>('.any input')?.click();
     expect(last(navigate)).toEqual({
       url: '/velista/en/catalog?category=milk&q=leche&order=price',
+      replace: true,
+    });
+  });
+
+  it('answers the catalog that chooses when that is what opened it (velista 0140)', async () => {
+    const opener = '/velista/en/zones/z1/lists/l1/lines/zl-1/product';
+    const { fixture, navigate } = await render({
+      query: { q: 'leche' },
+      under: `${opener}/supermarket`,
+    });
+
+    chip(fixture, 'Mercadona')?.click();
+
+    expect(last(navigate)).toEqual({
+      url: `${opener}?chain=sm-mercadona&q=leche`,
       replace: true,
     });
   });

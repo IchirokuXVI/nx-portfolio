@@ -1,7 +1,29 @@
+@use '../styles/choice' as choice;
+
 // One catalog product (velista 0100, section 3), drawn as the mock draws it: a
 // picture, the name over `brand · size`, and the price at the trailing edge.
 :host {
   display: block;
+}
+
+// In the catalog that chooses (velista 0140, section 3), the radio at the
+// trailing edge, and the chosen card's edge in the accent colour. The radio says
+// it too, so the edge is never the only sign.
+.pick {
+  @include choice.radio-dot;
+}
+
+.row.is-chosen {
+  border-color: var(--app-action-quiet-fg);
+}
+
+.row:has(.pick:focus-visible) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+label.open .pick:focus-visible {
+  outline: none;
 }
 
 // The card. The product button fills it, and the plus sits after that button as

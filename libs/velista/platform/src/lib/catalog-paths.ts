@@ -35,6 +35,15 @@ export const CATALOG_PATHS = {
 } as const;
 
 /**
+ * The route data key that opens the catalog page to choose rather than as the tab
+ * (velista `0140`, section 3), and the kind it chooses: `'one'` today. Velista
+ * `0146` adds the kind that chooses a line's set under the same key. The route
+ * says it because the page has no inputs, and the pickers under the page carry it
+ * too, so they know they answer to it.
+ */
+export const CATALOG_PICK_DATA = 'catalogPick';
+
+/**
  * The URL of the catalog opened to choose one product for a line:
  * `/{mount}/{locale}/zones/{zoneId}/lists/{listId}/lines/{lineId}/product`.
  */

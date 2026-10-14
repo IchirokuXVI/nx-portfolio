@@ -21,6 +21,7 @@ import {
   CatalogBrowseMemory,
   fakeCategoryStore,
   MEMORY_CATEGORIES,
+  ProductPickStore,
   provideFakeCategoryStore,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
@@ -124,6 +125,7 @@ async function render(
       provideRouter([]),
       provideFakeCategoryStore(tree),
       ...adds.providers,
+      ProductPickStore,
       { provide: ActivatedRoute, useValue: { queryParamMap: query } },
       { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -1442,6 +1444,7 @@ describe('CatalogPage', () => {
           ]),
           provideFakeCategoryStore(fakeCategoryStore(MEMORY_CATEGORIES)),
           ...fakeAdds().providers,
+          ProductPickStore,
           { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
           { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
         ],

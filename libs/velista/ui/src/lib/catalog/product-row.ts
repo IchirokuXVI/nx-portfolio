@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -54,6 +55,13 @@ export interface ProductRowAdd {
   readonly lines: readonly HoldingRow[];
 }
 
+/** The radio of a row in the catalog that chooses (velista `0140`, section 3). */
+export interface ProductRowChoice {
+  /** The group the radios of one list share. */
+  readonly name: string;
+  readonly checked: boolean;
+}
+
 /** A press on the stepper of one line under a row. */
 export interface ProductRowLineStep {
   readonly lineId: string;
@@ -93,64 +101,96 @@ export interface ProductRowLineStep {
  */
 @Component({
   selector: 'lib-product-row',
-  imports: [PlusIcon, ProductIcon, QuantityStepper, RokuTranslatorPipe],
+  imports: [
+    NgTemplateOutlet,
+    PlusIcon,
+    ProductIcon,
+    QuantityStepper,
+    RokuTranslatorPipe,
+  ],
   template: `
-    <div [class.has-add]="add() !== null" class="row">
-      <button
-        (click)="opened.emit(row().id)"
-        [attr.aria-label]="
-          verb() === null
-            ? row().label
-            : (verbLabel() ?? '' | rokuT: { label: row().label })
-        "
-        [disabled]="disabled()"
-        class="open"
-        type="button"
-      >
-        <span aria-hidden="true" class="thumb">
-          @if (image(); as src) {
-            <img
-              (error)="broken.set(src)"
-              [src]="src"
-              alt=""
-              class="image"
-              decoding="async"
-              loading="lazy"
-            />
-          } @else {
-            <lib-product-icon class="glyph" />
-          }
-        </span>
-
-        <span class="what">
-          <span class="name">{{ row().name }}</span>
-          @if (row().detail; as detail) {
-            <span class="detail">{{ detail }}</span>
-          }
-        </span>
-
-        @if (row().price; as price) {
-          <span [class.is-stale]="row().stale" class="price">
-            <span class="amount">{{ price }}</span>
-            @if (row().caption; as caption) {
-              <span class="caption">{{ caption }}</span>
-            }
-          </span>
+    <ng-template #content>
+      <span aria-hidden="true" class="thumb">
+        @if (image(); as src) {
+          <img
+            (error)="broken.set(src)"
+            [src]="src"
+            alt=""
+            class="image"
+            decoding="async"
+            loading="lazy"
+          />
         } @else {
-          <span class="no-price">
-            <span class="no-price-word">{{
-              'catalog.row.noPrice' | rokuT
-            }}</span>
-            @if (row().caption; as caption) {
-              <span class="caption">{{ caption }}</span>
-            }
-          </span>
+          <lib-product-icon class="glyph" />
         }
+      </span>
 
-        @if (verb(); as key) {
-          <span aria-hidden="true" class="verb">{{ key | rokuT }}</span>
+      <span class="what">
+        <span class="name">{{ row().name }}</span>
+        @if (row().detail; as detail) {
+          <span class="detail">{{ detail }}</span>
         }
-      </button>
+      </span>
+
+      @if (row().price; as price) {
+        <span [class.is-stale]="row().stale" class="price">
+          <span class="amount">{{ price }}</span>
+          @if (row().caption; as caption) {
+            <span class="caption">{{ caption }}</span>
+          }
+        </span>
+      } @else {
+        <span class="no-price">
+          <span class="no-price-word">{{ 'catalog.row.noPrice' | rokuT }}</span>
+          @if (row().caption; as caption) {
+            <span class="caption">{{ caption }}</span>
+          }
+        </span>
+      }
+
+      @if (verb(); as key) {
+        <span aria-hidden="true" class="verb">{{ key | rokuT }}</span>
+      }
+    </ng-template>
+
+    <div
+      [class.has-add]="add() !== null"
+      [class.is-chosen]="choice()?.checked === true"
+      class="row"
+    >
+      @if (choice(); as picking) {
+        <!--
+          The catalog that chooses (velista 0140, section 3): the whole card is the
+          label of a radio at its trailing edge, so a press anywhere on it chooses
+          the product and opens nothing.
+        -->
+        <label class="open">
+          <ng-container [ngTemplateOutlet]="content" />
+          <input
+            (change)="chosen.emit(row().id)"
+            [attr.aria-label]="row().label"
+            [checked]="picking.checked"
+            [disabled]="disabled()"
+            [name]="picking.name"
+            class="pick"
+            type="radio"
+          />
+        </label>
+      } @else {
+        <button
+          (click)="opened.emit(row().id)"
+          [attr.aria-label]="
+            verb() === null
+              ? row().label
+              : (verbLabel() ?? '' | rokuT: { label: row().label })
+          "
+          [disabled]="disabled()"
+          class="open"
+          type="button"
+        >
+          <ng-container [ngTemplateOutlet]="content" />
+        </button>
+      }
 
       @if (add(); as adding) {
         <button
@@ -224,6 +264,16 @@ export class ProductRow {
 
   /** The plus, or null for a row that offers none. See {@link ProductRowAdd}. */
   readonly add = input<ProductRowAdd | null>(null);
+
+  /**
+   * A radio in place of the plus, for the catalog opened to choose one product
+   * (velista `0140`, section 3), or null for a row that opens its product. Rows of
+   * one list share the `name`.
+   */
+  readonly choice = input<ProductRowChoice | null>(null);
+
+  /** The row was chosen, in the catalog that chooses. */
+  readonly chosen = output<string>();
 
   /** The product's id, when the row is pressed. */
   readonly opened = output<string>();

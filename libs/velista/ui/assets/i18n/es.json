@@ -1848,6 +1848,7 @@
       "failedRead": "No se han podido cargar los productos.",
       "retry": "Volver a intentarlo",
       "pickTitle": "Elige un producto",
+      "pickClose": "Cerrar sin elegir",
       "pickFor": "Para {{list}}",
       "pickForAll_one": "Para 1 lista",
       "pickForAll_other": "Para {{count}} listas"

@@ -16,6 +16,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
   RENDERS_WHILE_CONNECTING,
@@ -113,6 +114,71 @@ function sheet(route: Route): Route {
     path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
     canDeactivate: [sheetFallGuard],
   };
+}
+
+/**
+ * The catalog opened to choose one product for a line (velista `0140`, section 3;
+ * `0146`, section 2), and its two pickers.
+ *
+ * **A page and not a sheet**, so it is addressed under the line and never under
+ * the `sheet` marker: a page cannot take one (velista `0140`, review point 1). The
+ * path is the one velista `0146` gives the same page.
+ *
+ * It is the catalog tab's own component, told by its data what it chooses. The
+ * supermarket and the category pickers are declared again under it rather than
+ * under the tab, so each comes back to the page that opened it with the line and
+ * the mode intact (review point 2): a picker finds its opener by its own route.
+ * None of the four draws the bar of tabs, which is one of the four differences
+ * from the tab.
+ *
+ * The guards of the line's pages, because the page reads catalog prices, which
+ * need an account, and names a line of a list. Which reader may change that line
+ * is the caller's to decide, and the server's to refuse.
+ */
+function productPickRoutes(): Route[] {
+  const line = 'zones/:zoneId/lists/:listId/lines/:lineId';
+  const page = `${line}/${CATALOG_PATHS.pickOne}`;
+  const data = { [CATALOG_PICK_DATA]: 'one', [NAV_CHROME]: NO_NAV_CHROME };
+  const guards: Pick<Route, 'canMatch' | 'canActivate'> = {
+    canMatch: [zoneIdGuard, listIdGuard],
+    canActivate: [authenticatedGuard, setupGuard],
+  };
+  return [
+    {
+      path: `${page}/${CATALOG_PATHS.categoryPicker}/:parentSlug`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CategoryChildrenPage
+        ),
+    },
+    {
+      path: `${page}/${CATALOG_PATHS.categoryPicker}`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CategoriesPage
+        ),
+    },
+    {
+      path: `${page}/${CATALOG_PATHS.supermarketPicker}`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CatalogSupermarketPage
+        ),
+    },
+    {
+      path: page,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then((m) => m.CatalogPage),
+    },
+  ];
 }
 
 /**
@@ -787,6 +853,7 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.LineProductsPage
               ),
           },
+          ...productPickRoutes(),
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',
             canMatch: [zoneIdGuard, listIdGuard],

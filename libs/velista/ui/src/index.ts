@@ -25,6 +25,7 @@ export * from './lib/brand/brand-mark';
 export * from './lib/brand/brand-wordmark';
 export * from './lib/catalog/adding-bar';
 export * from './lib/catalog/catalog-selectors';
+export * from './lib/catalog/choosing-bar';
 export * from './lib/catalog/list-choice';
 export * from './lib/catalog/lists-table';
 export * from './lib/catalog/order-menu';

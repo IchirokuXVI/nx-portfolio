@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Route } from '@angular/router';
 import {
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
   productPagePath,
@@ -571,6 +572,32 @@ describe('AppShellRoutes', () => {
           const path = `${linePath}/${page}`;
           expect(paths).toContain(path);
           expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
+      });
+
+      it('has the catalog that chooses and its two pickers as pages under the line, outside the marker (velista 0140)', () => {
+        // A page cannot take a `sheet` segment, so the catalog that chooses one
+        // product is addressed under the line, at the path velista `0146` gives it.
+        // Its pickers are declared under it, so each comes back to it.
+        const paths = pages.map((route) => route.path);
+        const page = `${linePath}/product`;
+
+        for (const path of [
+          `${page}/categories/:parentSlug`,
+          `${page}/categories`,
+          `${page}/supermarket`,
+          page,
+        ]) {
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(path.split('/')).not.toContain(SHEET_SEGMENT);
+          expect(routeAt(path)?.data).toEqual({
+            [CATALOG_PICK_DATA]: 'one',
+            [NAV_CHROME]: NO_NAV_CHROME,
+          });
           expect(routeAt(path)?.canMatch).toHaveLength(2);
           expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
           expect(routeAt(path)?.children).toBeUndefined();
@@ -1331,6 +1358,12 @@ describe('the bottom bar', () => {
     'shops/:locationId/walks/:walkId/edit',
     // Velista 0126: the same for recording, where Stop is the way out.
     'shops/:locationId/walks/:walkId/record',
+    // Velista 0140: the catalog that chooses, and its two pickers. No bar of tabs
+    // is one of the differences from the tab, and Close is the way out.
+    'zones/:zoneId/lists/:listId/lines/:lineId/product',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/supermarket',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories/:parentSlug',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {

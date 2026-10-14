@@ -218,6 +218,50 @@ describe('ProductRow', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  describe('in the catalog that chooses (velista 0140)', () => {
+    async function choosing(checked: boolean) {
+      const fixture = await render(productRowView(OIL, options()));
+      fixture.componentRef.setInput('choice', { name: 'pick', checked });
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('is a radio named for the product, with no button that opens it and no plus', async () => {
+      const fixture = await choosing(false);
+
+      const radio = host(fixture).querySelector<HTMLInputElement>('input.pick');
+      expect(radio?.type).toBe('radio');
+      expect(radio?.name).toBe('pick');
+      expect(radio?.getAttribute('aria-label')).toContain('€8.45');
+      expect(host(fixture).querySelectorAll('button')).toHaveLength(0);
+      expect(host(fixture).querySelector('label.open .name')?.textContent).toBe(
+        OIL.name.en
+      );
+    });
+
+    it('says it was chosen and opens nothing', async () => {
+      const fixture = await choosing(false);
+      const chosen: string[] = [];
+      const opened: string[] = [];
+      fixture.componentInstance.chosen.subscribe((id) => chosen.push(id));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      host(fixture).querySelector<HTMLInputElement>('input.pick')?.click();
+
+      expect(chosen).toEqual([OIL.id]);
+      expect(opened).toEqual([]);
+    });
+
+    it('marks the chosen card with its edge as well as its radio', async () => {
+      const fixture = await choosing(true);
+
+      expect(host(fixture).querySelector('.row.is-chosen')).not.toBeNull();
+      expect(
+        host(fixture).querySelector<HTMLInputElement>('input.pick')?.checked
+      ).toBe(true);
+    });
+  });
+
   it('is one button named for the product, the size and the price', async () => {
     const fixture = await render(productRowView(OIL, options()));
 
