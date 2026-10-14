@@ -120,14 +120,27 @@ test.describe('the owner and a guest', () => {
       );
     });
 
-    await test.step('5. the guest sees no list names, no lists behind a row and no line history', async () => {
-      await expect(guest.locator('lib-basket-row .from')).toHaveCount(0);
+    await test.step('5. the guest sees no list names, no other lists to add to and no line history', async () => {
+      // The caption counts the lists that ask and names none of them: a guest
+      // is served no list (velista `0139`, section 1).
+      await expect(row(guest, 'Milk').locator('.caption-lists')).toHaveText(
+        'Another list'
+      );
       await expect(
-        guest.locator('lib-basket-row .content').first()
-      ).toBeVisible();
+        guest.locator('lib-basket-row .caption', { hasText: 'Groceries' })
+      ).toHaveCount(0);
 
+      // The lists behind the row with their quantities, unnamed, and nothing to
+      // add the product to (velista `0139`, section 3).
       const dialog = await openSettleSheet(guest, 'Eggs');
-      await expect(dialog.locator('lib-row-entries')).toHaveCount(0);
+      const entries = dialog.locator('lib-row-entries');
+      await expect(
+        entries.locator('.row-name', { hasText: 'Another list' })
+      ).toBeVisible();
+      await expect(entries).not.toContainText('Groceries');
+      await expect(
+        dialog.getByRole('button', { name: 'Add it to another list' })
+      ).toHaveCount(0);
       await expect(
         dialog.getByRole('button', { name: 'Show line history' })
       ).toHaveCount(0);

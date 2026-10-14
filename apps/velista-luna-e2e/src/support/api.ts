@@ -236,11 +236,13 @@ export async function finishOpenBaskets(s: Session): Promise<void> {
 
 /**
  * A basket row as the wire names it, as narrow as the assertions need. A row
- * is the list lines of one merge key, read at request time (backend `0136`).
+ * is the list lines that count as one product, or share a name when they hold
+ * none, read at request time (backend `0201`).
  */
 export interface BasketRowView {
   rowKey: string;
   content: string;
+  productId: string | null;
   left: number;
   bought: number;
   /** Units bought through another basket, or through none (backend `0188`). */
@@ -269,28 +271,45 @@ export async function readLiveBasket(
   return s.get<{ id: string; rows: BasketRowView[] }>('/v1/baskets/live');
 }
 
-/** `POST /v1/baskets/:id/lines`: a line added from a basket onto a covered list. */
+/**
+ * `POST /v1/baskets/:id/lines`: a line added from a basket onto a covered list.
+ * The answer is the lines of the write and no row (backend `0201`, section 4),
+ * so this answers the added line's id.
+ */
 export async function addBasketLine(
   s: Session,
   basketId: string,
   body: { targetListId: string; content: string; quantity: number }
-): Promise<BasketRowView> {
-  const result = await s.post<{ row: BasketRowView }>(
+): Promise<{ lineId: string }> {
+  const result = await s.post<{ entries: { lineId: string }[] }>(
     `/v1/baskets/${basketId}/lines`,
     body
   );
-  return result.row;
+  const lineId = result.entries[0]?.lineId;
+  if (lineId === undefined) {
+    throw new Error('the add answered no line');
+  }
+  return { lineId };
 }
 
-/** `POST /v1/baskets/:id/rows/:rowKey/settle`: buy units of one row. */
+/**
+ * `POST /v1/baskets/:id/rows/:rowKey/settle`: buy units of the named lines of
+ * one row. Every row write names its lines (backend `0201`, section 4); the key
+ * is one of them.
+ */
 export async function buyBasketRow(
   s: Session,
   basketId: string,
-  rowKey: string,
+  lineIds: readonly string[],
   body: { quantity: number; from: number }
 ): Promise<void> {
+  const rowKey = lineIds[0];
+  if (rowKey === undefined) {
+    throw new Error('a settle names at least one line');
+  }
   await s.post(`/v1/baskets/${basketId}/rows/${rowKey}/settle`, {
     outcome: 'BOUGHT',
+    lineIds,
     ...body,
   });
 }
@@ -323,8 +342,8 @@ export const SEEDED_QUANTITIES: Record<string, number> = {
  *
  * - every live basket of hers finished, so the lines are free to be drawn again;
  * - any line an earlier run added to Groceries or Hardware deleted;
- * - Milk asking for 2 and carrying Bread as a second product, Bread approved,
- *   Eggs and Nails back at their seeded amounts;
+ * - Milk asking for 2 and carrying Bread as a second product, with Milk its
+ *   favourite, Bread approved, Eggs and Nails back at their seeded amounts;
  * - postal code 46004 on her default profile, where the demo store is.
  */
 export async function resetAliceWorld(alice: Session): Promise<void> {
@@ -352,6 +371,12 @@ export async function resetAliceWorld(alice: Session): Promise<void> {
     await setLineQuantity(alice, lineId, quantity);
   }
   await setLineProducts(alice, LINE_MILK_ID, [ITEM_MILK_ID, ITEM_BREAD_ID]);
+  // Milk is the Milk line's favourite. Without one the line counts as its
+  // cheapest product (backend `0201`, section 1), which is Bread in the seed, and
+  // it would join the Bread row: the trip expects a Milk row of its own.
+  await alice.patch(`/v1/lines/${LINE_MILK_ID}`, {
+    favoriteItemId: ITEM_MILK_ID,
+  });
   // Eggs names no product in the seed. The aisles spec gives it one for the
   // length of its run and takes it back; this puts it back if a run stopped early.
   await setLineProducts(alice, LINE_EGGS_ID, []);

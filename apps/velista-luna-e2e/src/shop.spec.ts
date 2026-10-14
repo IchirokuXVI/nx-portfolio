@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
   demoWorld,
-  ITEM_BREAD_ID,
   ITEM_MILK_ID,
   LINE_MILK_ID,
   LIST_GROCERIES_ID,
@@ -16,15 +15,14 @@ import {
 } from './support/api';
 import {
   addInTheAisle,
+  askReel,
   chip,
-  chooseProduct,
   clearBasketSearch,
   closeSettleSheet,
   composerField,
   expectBasketUrl,
   filterTool,
   generateBasket,
-  gotReel,
   nudge,
   openFilterSheet,
   openSettleSheet,
@@ -43,9 +41,10 @@ import {
  * Every step below is one of the basket plans' e2e asks, in the order a person
  * would meet them on a single shop: generate (0045), search (0074), filter and
  * group (0075, 0077), prices from one shop (0078), the row's status control
- * (0052), the settle sheet (0044), the reel that settles and then reverts
- * (0073 test 13), two products bought as two settles (0092, which replaced the
- * split of 0069 test 9), the composer in the aisle (0053, 0110), finishing
+ * (0052), the settle sheet (0044, as velista 0139 drew it around the lists
+ * that ask), the reel that settles and then reverts (0073 test 13), a row
+ * bought whole as its product (0139), the composer in the aisle (0053, 0110),
+ * finishing
  * (0057), and what the next basket remembers (0076).
  *
  * The world is set up through the API as absolute values, so the trip starts
@@ -194,15 +193,17 @@ test.describe('one trip, by the owner', () => {
       await expectBasketUrl(page, basketId);
 
       await expect(chip(page, 'Mercadona')).toBeVisible();
-      // Bread names one product, so the row prices it at the shop. Milk names
-      // two and nobody has said which was got, so it quotes no price at all
-      // (velista `0092`, section 5): the first option's number would name a
-      // product nobody picked up.
-      await expect(row(page, 'Bread').locator('.product')).toContainText(
+      // A row is one product (velista `0139`), so each row is priced at the shop,
+      // then names the list that asks for it. Milk holds Bread too, and counts as
+      // Milk because Milk is its favourite.
+      await expect(row(page, 'Bread').locator('.caption-price')).toHaveText(
         '€0.95'
       );
-      await expect(row(page, 'Milk').locator('.product')).toHaveText(
-        'No product chosen'
+      await expect(row(page, 'Milk').locator('.caption-price')).toHaveText(
+        '€1.15'
+      );
+      await expect(row(page, 'Milk').locator('.caption-lists')).toHaveText(
+        'Groceries'
       );
     });
 
@@ -219,25 +220,29 @@ test.describe('one trip, by the owner', () => {
       );
     });
 
-    await test.step('6. on the settle sheet, say Milk was the Milk product and buy one for Groceries', async () => {
+    await test.step('6. the settle sheet names the product, its price and the list that asks, and the reel buys one', async () => {
       const dialog = await openSettleSheet(page, 'Milk');
-      await expect(dialog.locator('.outstanding')).toHaveText(/2 outstanding/);
-
-      // The choice prices the product at the shop, as the row in step 4 could
-      // not, on the card that stands for it on the sheet.
-      await chooseProduct(dialog, 'Milk');
-      await expect(dialog.locator('lib-settle-product')).toContainText('€1.15');
-
-      // "Got some" is gone (velista `0092`). Part of a row is bought on the
-      // lists behind it, one household at a time, and the sheet stays open.
-      await nudge(gotReel(dialog, 'Groceries'), 1);
-      await expect(gotReel(dialog, 'Groceries')).toHaveAttribute(
-        'aria-valuenow',
-        '1'
+      // Under the product: the price of one at the shop, and what is left
+      // (velista `0139`, section 3).
+      await expect(dialog.locator('.subtitle')).toHaveText(
+        /€1\.15 each\s*·\s*2 to get/
       );
-      await expect(dialog.locator('.outstanding')).toHaveText(/1 outstanding/);
+      // One list asks, with its quantity as a reel the owner may move.
+      const entries = dialog.locator('lib-row-entries');
+      await expect(
+        entries.getByRole('heading', { name: 'Asked for on 1 list' })
+      ).toBeVisible();
+      await expect(askReel(dialog, 'Groceries')).toHaveAttribute(
+        'aria-valuenow',
+        '2'
+      );
+      await expect(
+        dialog.getByRole('button', { name: 'Got all 2', exact: true })
+      ).toBeVisible();
       await closeSettleSheet(page, dialog, basketId);
 
+      // Part of a row is bought with the row's own reel.
+      await nudge(reel(row(page, 'Milk'), 'Milk, still to get'), -1);
       await expect(
         reel(row(page, 'Milk'), 'Milk, still to get')
       ).toHaveAttribute('aria-valuenow', '1');
@@ -279,37 +284,32 @@ test.describe('one trip, by the owner', () => {
         .toBe(0);
     });
 
-    await test.step('8. buy Milk as two products, one settle each, and the zone line names both', async () => {
-      // Two products on one row are two settles, which is what replaced the
-      // split (velista `0092`, section 5): one unit as the Milk product, then
-      // the other as Bread, each from the sheet that holds the choice.
+    await test.step('8. buy all of Milk from the sheet, and the settlement names the Milk product', async () => {
+      // The sheet's primary button buys what the lines still ask for, as the
+      // row's product (velista `0139`, section 4). Another product for this
+      // trip is plan `0140`'s Change.
       const dialog = await openSettleSheet(page, 'Milk');
-      await chooseProduct(dialog, 'Milk');
-      await nudge(gotReel(dialog, 'Groceries'), 1);
-      await expect(dialog.locator('.outstanding')).toHaveText(/1 outstanding/);
-
-      await chooseProduct(dialog, 'Bread');
-      await nudge(gotReel(dialog, 'Groceries'), 1);
-      await expect(gotReel(dialog, 'Groceries')).toHaveAttribute(
-        'aria-valuenow',
-        '2'
-      );
-      await closeSettleSheet(page, dialog, basketId);
+      await dialog
+        .getByRole('button', { name: 'Got all 2', exact: true })
+        .click();
+      await expectBasketUrl(page, basketId);
 
       await expect(
         row(page, 'Milk').getByRole('button', { name: 'Milk is got. Undo it' })
       ).toBeVisible();
 
-      // Plan 0069 test 9, still true of the new shape: two settlements on the
-      // one zone line, naming two different products.
       await expect
         .poll(async () =>
-          (await liveSettlementsOfThisTrip()).map((s) => s.itemId).sort()
+          (await liveSettlementsOfThisTrip()).map((s) => [s.itemId, s.quantity])
         )
-        .toEqual([ITEM_MILK_ID, ITEM_BREAD_ID].sort());
+        .toEqual([[ITEM_MILK_ID, 2]]);
     });
 
     await test.step('9. add a line in the aisle with the composer', async () => {
+      // The settle sheet of step 8 leaves after its fall, and the first character
+      // typed pushes `?search=1`, which lands on the sheet's URL while it falls.
+      // Step 10 waits out the filter sheet for the same reason.
+      await expect(page.locator('lib-settle-sheet')).toHaveCount(0);
       await addInTheAisle(page, basketId, 'Hardware', 'Batteries');
       await expect(
         row(page, 'Batteries').getByRole('button', {
