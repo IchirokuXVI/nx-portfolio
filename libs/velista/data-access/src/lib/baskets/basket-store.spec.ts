@@ -136,12 +136,13 @@ function build(
     getBasket: () => memory.getBasket(),
     getLiveBasket: () => memory.getLiveBasket(),
     getLiveSummary: () => memory.getLiveSummary(),
-    settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
-    revert: (id, rowKey, body) => memory.revert(id, rowKey, body),
-    renameRow: (id, rowKey, body) => memory.renameRow(id, rowKey, body),
-    skip: (id, rowKey) => memory.skip(id, rowKey),
-    unskip: (id, rowKey) => memory.unskip(id, rowKey),
-    setDemand: (id, rowKey, body) => memory.setDemand(id, rowKey, body),
+    settle: (id, target, body) => memory.settle(id, target, body),
+    revert: (id, target, body) => memory.revert(id, target, body),
+    renameRow: (id, target, body) => memory.renameRow(id, target, body),
+    skip: (id, target) => memory.skip(id, target),
+    unskip: (id, target) => memory.unskip(id, target),
+    setDemand: (id, body) => memory.setDemand(id, body),
+    productLists: (id, itemId) => memory.productLists(id, itemId),
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     changes: (id, ctx, cursor) => memory.changes(id, ctx, cursor),
@@ -202,10 +203,10 @@ describe('BasketStore', () => {
 
       expect(rowOf(store, 'Sourdough loaf').state).toBe('NOT_AVAILABLE');
       expect(store.progress().unavailable).toBe(1);
-      // One, and it is not the loaf: the butter somebody bought through another
-      // basket is done (velista `0131`).
-      expect(rowOf(store, 'Butter').state).toBe('DONE');
-      expect(store.progress().done).toBe(1);
+      // None: the butter somebody bought through another basket counts for
+      // nothing in this one (backend `0203`).
+      expect(rowOf(store, 'Butter').state).toBe('BOUGHT_ELSEWHERE');
+      expect(store.progress().done).toBe(0);
     });
 
     /**
@@ -398,31 +399,93 @@ describe('BasketStore', () => {
     });
 
     /**
-     * **It takes the answer's counts whole and patches nothing.** Every number on
-     * this screen is one the server sent, so a store that added the units it just
-     * sent to the number it was holding would be a second arithmetic.
+     * The header is counted over the rows held, with the shared rule, and not taken
+     * from the answer: a write's progress is core's count with no prices, and can
+     * be one off the read (backend `0201`, "What the build decided", point 1).
      */
-    it('takes the counts from the answer rather than adjusting its own', async () => {
+    it('counts the header over the rows it holds, not from the answer', async () => {
       const memory = new BasketMemory();
       const { store } = build({
         getBasket: () => memory.getBasket(),
-        settle: async (id, rowKey, body) => ({
-          ...(await memory.settle(id, rowKey, body)),
+        settle: async (id, target, body) => ({
+          ...(await memory.settle(id, target, body)),
           progress: { done: 5, unavailable: 1, total: 8 },
           pending: 2,
         }),
       });
       await store.open('basket-saturday');
 
-      const milk = rowOf(store, 'Milk');
-      await store.settle(milk.rowKey, {
+      const eggs = rowOf(store, 'Eggs');
+      await store.settle(eggs.rowKey, {
         outcome: 'BOUGHT',
-        quantity: 1,
-        from: milk.left,
+        quantity: eggs.left,
+        from: eggs.left,
       });
 
-      expect(store.progress()).toEqual({ done: 5, unavailable: 1, total: 8 });
-      expect(store.pending()).toBe(2);
+      // Eggs done, the loaf had none, the milk is still wanted.
+      expect(store.progress()).toEqual({ done: 1, unavailable: 1, total: 3 });
+      expect(store.pending()).toBe(1);
+    });
+
+    /** Every write names every line of the row, served or not (velista `0139`). */
+    it('names every line of the row on each write, a guest\u2019s unserved ones too', async () => {
+      const memory = new BasketMemory();
+      memory.servesLists = false;
+      const targets: unknown[] = [];
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: (id, target, body) => {
+          targets.push(target);
+          return memory.settle(id, target, body);
+        },
+        revert: (id, target, body) => {
+          targets.push(target);
+          return memory.revert(id, target, body);
+        },
+        skip: (id, target) => {
+          targets.push(target);
+          return memory.skip(id, target);
+        },
+        unskip: (id, target) => {
+          targets.push(target);
+          return memory.unskip(id, target);
+        },
+      });
+      await store.open('basket-saturday');
+      const eggs = rowOf(store, 'Eggs');
+      expect(eggs.entries.every((entry) => entry.listId === null)).toBe(true);
+
+      await store.skip(eggs.rowKey);
+      await store.unskip(eggs.rowKey);
+      await store.settle(eggs.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: rowOf(store, 'Eggs').left,
+      });
+      await store.revert(eggs.rowKey, {
+        target: 'UNITS',
+        units: 1,
+        from: rowOf(store, 'Eggs').bought,
+      });
+
+      expect(targets).toEqual(
+        Array(4).fill({ rowKey: 'zl-3', lineIds: ['zl-3', 'zl-5'] })
+      );
+    });
+
+    it('sends nothing for a row it does not hold', async () => {
+      const settle = jest.fn();
+      const { store } = build({ settle });
+      await store.open('basket-saturday');
+
+      const result = await store.settle('zl-gone', {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: 1,
+      });
+
+      expect(result).toBeNull();
+      expect(settle).not.toHaveBeenCalled();
     });
 
     it('reports an entry a write could not reach rather than swallowing it', async () => {
@@ -548,17 +611,20 @@ describe('BasketStore', () => {
    * always the row the rename addressed.
    */
   describe('renaming a row', () => {
-    it('renames in place when the name is free', async () => {
+    it('renames the lines of a row with no product, and keeps its key', async () => {
       const { store } = build();
       await store.open('basket-saturday');
-      const eggs = rowOf(store, 'Eggs');
+      const loaf = rowOf(store, 'Sourdough loaf');
 
-      const result = await store.renameRow(eggs.rowKey, {
-        content: 'Free range eggs',
+      const result = await store.renameRow(loaf.rowKey, {
+        content: 'Rye bread',
       });
 
-      expect(result?.absorbedRowKey).toBeNull();
-      expect(rowOf(store, 'Free range eggs').rowKey).toBe(eggs.rowKey);
+      expect(result?.entries.map((entry) => entry.content)).toEqual([
+        'Rye bread',
+      ]);
+      const row = store.rows().find((held) => held.rowKey === loaf.rowKey);
+      expect(row?.entries[0].content).toBe('Rye bread');
     });
 
     it('answers null and keeps the question when the name is taken', async () => {
@@ -566,38 +632,41 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
       const before = store.rows().length;
 
-      const result = await store.renameRow(rowOf(store, 'Eggs').rowKey, {
-        content: 'milk',
-      });
+      const result = await store.renameRow(
+        rowOf(store, 'Sourdough loaf').rowKey,
+        { content: 'butter' }
+      );
 
       expect(result).toBeNull();
       expect(store.rows()).toHaveLength(before);
       expect((store.error() as GatewayError).code).toBe('line_merge_required');
     });
 
-    /**
-     * The earliest line survives, so the row the rename addressed can be the one
-     * that goes away: the answer names the survivor and `replacedRowKey` names the
-     * key the request used, and the store drops that one.
-     */
-    it('drops the absorbed row at once and folds the survivor', async () => {
+    /** The read after the write is where the merged row comes from. */
+    it('takes the merged row from the read that follows', async () => {
       const { store } = build();
       await store.open('basket-saturday');
-      const eggs = rowOf(store, 'Eggs');
       const before = store.rows().length;
 
-      const result = await store.renameRow(eggs.rowKey, {
-        content: 'milk',
+      await store.renameRow(rowOf(store, 'Sourdough loaf').rowKey, {
+        content: 'butter',
         confirmMerge: true,
       });
+      await store.refresh();
 
-      // The **survivor's** own spelling, which is the earliest line's: a merge
-      // folds the renamed row into the one already there rather than renaming it.
-      expect(result?.row.content).toBe('Milk');
       expect(store.rows()).toHaveLength(before - 1);
-      expect(store.rows().some((row) => row.rowKey === eggs.rowKey)).toBe(
-        false
-      );
+    });
+
+    it('refuses a row with a product, which the catalog names', async () => {
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const result = await store.renameRow(rowOf(store, 'Eggs').rowKey, {
+        content: 'Free range eggs',
+      });
+
+      expect(result).toBeNull();
+      expect((store.error() as GatewayError).code).toBe('validation_failed');
     });
   });
 
@@ -1302,9 +1371,9 @@ describe('BasketStore: moving a row’s reel', () => {
     const memory = new BasketMemory();
     const { store } = build({
       getBasket: () => memory.getBasket(),
-      settle: (id, rowKey, body) => {
-        sent.push({ rowKey, body });
-        return memory.settle(id, rowKey, body);
+      settle: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.settle(id, target, body);
       },
     });
     await store.open('basket-saturday');
@@ -1314,7 +1383,7 @@ describe('BasketStore: moving a row’s reel', () => {
 
     expect(sent).toEqual([
       {
-        rowKey: milk.rowKey,
+        target: { rowKey: milk.rowKey, lineIds: ['zl-1', 'zl-2'] },
         body: { outcome: 'BOUGHT', quantity: 2, from: milk.left },
       },
     ]);
@@ -1329,9 +1398,9 @@ describe('BasketStore: moving a row’s reel', () => {
     const memory = new BasketMemory();
     const { store } = build({
       getBasket: () => memory.getBasket(),
-      revert: (id, rowKey, body) => {
-        sent.push({ rowKey, body });
-        return memory.revert(id, rowKey, body);
+      revert: (id, target, body) => {
+        sent.push({ target, body });
+        return memory.revert(id, target, body);
       },
     });
     await store.open('basket-saturday');
@@ -1341,7 +1410,7 @@ describe('BasketStore: moving a row’s reel', () => {
 
     expect(sent).toEqual([
       {
-        rowKey: eggs.rowKey,
+        target: { rowKey: eggs.rowKey, lineIds: ['zl-3', 'zl-5'] },
         body: { target: 'UNITS', units: 1, from: eggs.bought },
       },
     ]);
@@ -1376,14 +1445,15 @@ describe('BasketStore: moving a row’s reel', () => {
    * a server that answered something other than the arithmetic the gesture implied
    * is what the screen shows.
    */
-  it('draws the answer’s row rather than the number that was sent', async () => {
+  it('draws the answer’s lines rather than the number that was sent', async () => {
     const memory = new BasketMemory();
     const { store } = build({
       getBasket: () => memory.getBasket(),
-      settle: async (id, rowKey, body) => {
-        const answered = await memory.settle(id, rowKey, body);
-        // A second shopper bought one more while this gesture was in flight.
-        return { ...answered, row: { ...answered.row, left: 99 } };
+      settle: async (id, target, body) => {
+        const answered = await memory.settle(id, target, body);
+        // The list asked for more while this gesture was in flight.
+        const [first, ...rest] = answered.entries;
+        return { ...answered, entries: [{ ...first, left: 99 }, ...rest] };
       },
     });
     await store.open('basket-saturday');
@@ -1698,7 +1768,7 @@ describe('BasketStore: skip, demand and the add', () => {
     await store.open('basket-saturday');
     const milk = rowOf(store, 'Milk');
 
-    await store.setDemand(milk.rowKey, {
+    await store.setDemand({
       lineId: milk.entries[0].lineId,
       quantity: 5,
       from: milk.entries[0].left,
@@ -1709,42 +1779,45 @@ describe('BasketStore: skip, demand and the add', () => {
     expect(after.entries[1].left).toBe(1);
   });
 
-  it('drops the row when a demand leaves nothing to buy of it', async () => {
+  it('drops the row when a demand leaves nothing to buy of it, and says the line left', async () => {
     const { store } = build();
     await store.open('basket-saturday');
     const loaf = rowOf(store, 'Sourdough loaf');
 
-    const result = await store.setDemand(loaf.rowKey, {
+    const result = await store.setDemand({
       lineId: loaf.entries[0].lineId,
       quantity: 0,
       from: loaf.entries[0].left,
     });
 
     // Not a failure: the list now asks for nothing, which is what was asked for.
-    // The caller reads the null row to know which of the two happened.
-    expect(result?.row).toBeNull();
+    // The caller reads `lineLeft` to know which of the two happened.
+    expect(result).not.toBeNull();
+    expect(
+      result !== null && store.lineLeft(result, loaf.entries[0].lineId)
+    ).toBe(true);
     expect(store.rows().some((row) => row.content === 'Sourdough loaf')).toBe(
       false
     );
   });
 
-  it('takes the counts from the answer even when the row went away', async () => {
+  it('counts the header again when the row went away', async () => {
     const { store } = build();
     await store.open('basket-saturday');
     const loaf = rowOf(store, 'Sourdough loaf');
     const before = store.progress().total;
 
-    await store.setDemand(loaf.rowKey, {
+    await store.setDemand({
       lineId: loaf.entries[0].lineId,
       quantity: 0,
       from: loaf.entries[0].left,
     });
 
-    // The row leaving is what changed them, so they are read and not recounted.
+    // Counted over the rows held, by the shared rule: one fewer.
     expect(store.progress().total).toBe(before - 1);
   });
 
-  it('adds a line and folds the row it landed on', async () => {
+  it('adds a line and draws it as a row of its own', async () => {
     const { store } = build();
     await store.open('basket-saturday');
 
@@ -1754,8 +1827,46 @@ describe('BasketStore: skip, demand and the add', () => {
       quantity: 1,
     });
 
-    expect(result?.row?.content).toBe('Batteries');
+    expect(result?.entries[0].content).toBe('Batteries');
     expect(store.rows().some((row) => row.content === 'Batteries')).toBe(true);
+  });
+
+  /** "Add it to another list" (velista `0139`, section 3). */
+  it('raises a line at zero into the row of its product', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    const result = await store.setDemand({
+      lineId: 'zl-8',
+      quantity: 2,
+      from: 0,
+    });
+
+    expect(result).not.toBeNull();
+    expect(rowOf(store, 'Eggs').entries.map((entry) => entry.lineId)).toEqual([
+      'zl-3',
+      'zl-5',
+      'zl-8',
+    ]);
+  });
+
+  it('reads the lists that can take a product', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    expect(
+      (await store.productLists('item-eggs'))?.map((list) => list.lineId)
+    ).toEqual(['zl-8']);
+  });
+
+  it('answers null for lists it could not read, and keeps the basket ready', async () => {
+    const { store } = build({
+      productLists: () => Promise.reject(new Error('offline')),
+    });
+    await store.open('basket-saturday');
+
+    expect(await store.productLists('item-eggs')).toBeNull();
+    expect(store.state()).toBe('ready');
   });
 
   it('folds an add that merged in place, rather than drawing a second row', async () => {
@@ -1937,44 +2048,16 @@ describe('BasketStore: buying at one shop', () => {
     void memory;
   });
 
-  /**
-   * The row names the option it offers in place of a default the shop is known not
-   * to have, so the settle buys it. A choice somebody made wins over it.
-   */
-  it('buys the option offered in place of a missing default, unless somebody chose', async () => {
-    const memory = new BasketMemory();
-    const { store } = build({
-      getBasket: async (id, locationId) => {
-        const read = await memory.getBasket(id, locationId);
-        if (locationId === undefined) {
-          return read;
-        }
-        const products = new Map(read.products);
-        for (const [key, product] of products) {
-          products.set(key, {
-            ...product,
-            atShop: {
-              priceScopeId: null,
-              price: null,
-              currency: null,
-              available: key === 'item-milk-hacendado' ? false : null,
-            },
-          });
-        }
-        return { ...read, products };
-      },
-    });
+  /** A row is one product, and a settle on it names that product (velista `0139`). */
+  it('buys the row\u2019s own product, and none for a row with no product', async () => {
+    const { store } = build();
     await store.open('basket-saturday');
-    const milk = rowOf(store, 'Milk');
-    const [first, second] = milk.optionIds;
-    expect(first).toBe('item-milk-hacendado');
-    expect(store.itemIdFor(milk.rowKey)).toBeUndefined();
 
-    await store.readAtShop('loc-tejares');
-
-    expect(store.itemIdFor(milk.rowKey)).toBe(second);
-
-    store.choose(milk.rowKey, first);
-    expect(store.itemIdFor(milk.rowKey)).toBe(first);
+    expect(store.itemIdFor(rowOf(store, 'Milk').rowKey)).toBe(
+      'item-milk-hacendado'
+    );
+    expect(
+      store.itemIdFor(rowOf(store, 'Sourdough loaf').rowKey)
+    ).toBeUndefined();
   });
 });
