@@ -140,6 +140,7 @@ export {
   idOf,
   nounKeyOf,
   type ActionConfirmation,
+  type ActionOutcome,
   type AnyResourceDescriptor,
   type BriefPresentation,
   type BulkAction,

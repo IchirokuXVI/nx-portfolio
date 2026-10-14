@@ -1,4 +1,5 @@
 import { inject } from '@angular/core';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
   ADMIN_USERS_PATH,
   DIRECTORY_SERVICE,
@@ -6,8 +7,10 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
+import { instant } from './people-format';
 import { USER_SEED, type UserRow } from './people-seed';
 import { PersonZonesTab } from './person-tabs';
+import { RecoveryLinksPanel } from './recovery-links-panel';
 import { PERSON_ZONES_TAB } from './shopper-params';
 import { roleActions, rolesCell, USER_ROLE_OPTIONS } from './user-roles';
 
@@ -31,6 +34,12 @@ const USER_KIND_OPTIONS = [
  * **A role is given and taken away in the More menu** (admin plan 0057): one
  * named action for each, with its own question. Nothing on the page that
  * reads writes, so a role is no switch.
+ *
+ * **A reset grant is two more named actions** (backend plan 0210): mailing it
+ * to the person, and creating its two links for the operator to share by hand.
+ * Both are on the page of a person only, both are hidden for a guest and for
+ * an account with no password, and the links are shown once, in a panel, and
+ * kept nowhere.
  *
  * **Two editable fields and two named actions of its own.** `0007` made this screen read
  * only, on the grounds that the invariants around a user live in services
@@ -299,6 +308,9 @@ export const USERS = defineResource<User>({
     named: () => {
       const directory = inject(DIRECTORY_SERVICE);
       const changes = inject(ResourceChanges);
+      // Optional, so that a spec which only lists the actions needs no
+      // translator. The app always provides one.
+      const translator = inject(RokuTranslatorService, { optional: true });
 
       return [
         {
@@ -315,6 +327,52 @@ export const USERS = defineResource<User>({
             confirm: 'people.users.confirm.resendVerification.confirm',
           },
           run: (row) => directory.resendVerification(row.userId),
+        },
+        // The reset grant of backend plan 0210, in the pattern of the resend
+        // above: offered only where it can work, asked about first, and on
+        // the page of the person alone. Both read `hasPassword`, which only
+        // the read of one person carries, and the second answers with a panel
+        // that a list has nowhere to put.
+        {
+          name: 'send-password-reset',
+          label: 'people.users.action.sendPasswordReset',
+          recordOnly: true,
+          available: canRecover,
+          confirm: {
+            heading: 'people.users.confirm.sendPasswordReset.heading',
+            body: 'people.users.confirm.sendPasswordReset.body',
+            confirm: 'people.users.confirm.sendPasswordReset.confirm',
+          },
+          run: async (row) => {
+            const sent = await directory.sendPasswordReset(row.userId);
+            return {
+              kind: 'line',
+              key: 'people.users.passwordResetSent',
+              args: {
+                until: instant(sent.expiresAt, translator?.locale() ?? 'en'),
+              },
+            };
+          },
+        },
+        {
+          name: 'create-recovery-links',
+          label: 'people.users.action.createRecoveryLinks',
+          recordOnly: true,
+          available: canRecover,
+          confirm: {
+            heading: 'people.users.confirm.createRecoveryLinks.heading',
+            body: 'people.users.confirm.createRecoveryLinks.body',
+            confirm: 'people.users.confirm.createRecoveryLinks.confirm',
+          },
+          // The links go from the answer into the outcome and from there into
+          // the panel, and nowhere else. The page drops the outcome when the
+          // dialog closes.
+          run: async (row) => ({
+            kind: 'panel',
+            heading: 'people.users.recovery.heading',
+            panel: RecoveryLinksPanel,
+            inputs: { links: await directory.createRecoveryLinks(row.userId) },
+          }),
         },
         // One to give and one to take away for each role, each with its own
         // question. The list beside the page shows the roles as a column, and
@@ -359,4 +417,22 @@ export const USERS = defineResource<User>({
 /** Whether an account has an address that nobody confirmed. */
 export function isUnconfirmed(row: User): boolean {
   return row.email !== null && row.emailVerifiedAt === null;
+}
+
+/**
+ * Whether an account can be sent a reset grant (backend plan 0210): it has an
+ * address and a password. A guest has neither, and an account that signs in
+ * with Google alone has no password for the grant to reset (decision D3). The
+ * server refuses both, and the page does not offer what it would refuse.
+ *
+ * `hasPassword` is on the read of one person and not on a row of the list,
+ * so a row that has not been read in full is offered nothing.
+ */
+export function canRecover(row: User): boolean {
+  return (
+    row.kind === 'REGISTERED' &&
+    typeof row.email === 'string' &&
+    row.email !== '' &&
+    row.hasPassword === true
+  );
 }

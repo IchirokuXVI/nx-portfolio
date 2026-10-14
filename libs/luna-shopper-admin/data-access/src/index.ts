@@ -72,6 +72,7 @@ export {
   type AccountRole,
   type DirectoryServiceI,
 } from './lib/directory/directory-service';
+export { type RecoveryLinks } from './lib/directory/recovery-links';
 export {
   GatewayError,
   notFoundError,

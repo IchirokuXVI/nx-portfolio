@@ -68,6 +68,54 @@ describe('DirectoryMemory, for roles', () => {
 });
 
 /**
+ * The reset grant of the memory twin (backend plan 0210): the refusals of
+ * auth, and links in the shape of the real ones on a host that is not one.
+ */
+describe('DirectoryMemory, for a reset grant', () => {
+  const PASSWORD = 'user-password';
+  const GOOGLE = 'user-google';
+
+  function setUp() {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({});
+    const users = TestBed.inject(ResourceMemoryGateways).for<ResourceRow>({
+      path: ADMIN_USERS_PATH,
+      idField: 'userId',
+      seed: [
+        { userId: PASSWORD, email: 'a@b.test', hasPassword: true },
+        { userId: GOOGLE, email: 'g@b.test', hasPassword: false },
+        { userId: GUEST, email: null, hasPassword: false },
+      ],
+    });
+    void users.list({});
+    return TestBed.inject(DirectoryMemory);
+  }
+
+  it('hands out two links of one token for an account with a password', async () => {
+    const links = await setUp().createRecoveryLinks(PASSWORD);
+
+    expect(links.signInUrl).toBe(`${links.resetUrl}&mode=sign-in`);
+    expect(new URL(links.resetUrl).hostname).toBe('velista.invalid');
+  });
+
+  it.each([
+    [GUEST, 'recovery_needs_email'],
+    [GOOGLE, 'recovery_needs_password'],
+  ])('refuses %s with %s, both ways', async (userId, code) => {
+    const directory = setUp();
+
+    await expect(directory.sendPasswordReset(userId)).rejects.toMatchObject({
+      code,
+      status: 409,
+    });
+    await expect(directory.createRecoveryLinks(userId)).rejects.toMatchObject({
+      code,
+      status: 409,
+    });
+  });
+});
+
+/**
  * The two counts a zone row carries (admin plan 0045, section 2).
  *
  * The gateway counts them on every read. This table keeps what was written, so

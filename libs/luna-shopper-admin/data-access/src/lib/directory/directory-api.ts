@@ -15,6 +15,12 @@ import {
   type DirectoryServiceI,
   type LineApproval,
 } from './directory-service';
+import {
+  toPasswordResetSent,
+  toRecoveryLinks,
+  type PasswordResetSent,
+  type RecoveryLinks,
+} from './recovery-links';
 
 /**
  * The seven named actions, over HTTP (plan 0007, section 1).
@@ -46,6 +52,47 @@ export class DirectoryApi implements DirectoryServiceI {
       // and null is not the same claim.
       locale === undefined || locale === '' ? {} : { locale }
     );
+  }
+
+  async sendPasswordReset(
+    userId: string,
+    locale?: string
+  ): Promise<PasswordResetSent> {
+    const answer = toPasswordResetSent(
+      await this._send<unknown>(
+        'post',
+        `${ADMIN_USERS_PATH}/${part(userId)}/send-password-reset`,
+        locale === undefined || locale === '' ? {} : { locale }
+      )
+    );
+    if (answer === null) {
+      throw new Error('The answer of send-password-reset could not be read');
+    }
+    return answer;
+  }
+
+  /**
+   * The two links, read from the answer and handed straight back.
+   *
+   * Nothing here keeps them: no cache, no store, no log. The error thrown for
+   * an unreadable answer names the route and not the body, because the body
+   * is a key to an account.
+   */
+  async createRecoveryLinks(
+    userId: string,
+    locale?: string
+  ): Promise<RecoveryLinks> {
+    const answer = toRecoveryLinks(
+      await this._send<unknown>(
+        'post',
+        `${ADMIN_USERS_PATH}/${part(userId)}/recovery-links`,
+        locale === undefined || locale === '' ? {} : { locale }
+      )
+    );
+    if (answer === null) {
+      throw new Error('The answer of recovery-links could not be read');
+    }
+    return answer;
   }
 
   async setUserRoles(

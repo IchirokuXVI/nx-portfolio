@@ -322,6 +322,130 @@ describe('a person', () => {
     expect(calls).toEqual([`resend:${MARC.userId}`]);
   });
 
+  /**
+   * The reset grant (backend plan 0210). Offered where the server would
+   * grant it: an account with an address and a password. A guest has neither
+   * and marc signs in with Google alone.
+   */
+  it('offers the reset grant to a password account, and to no guest or Google account', async () => {
+    const withPassword = await bootShoppers(`${PEOPLE}/${ROSA.userId}`);
+    expect(menuEntries(withPassword)).toEqual(
+      expect.arrayContaining(['send-password-reset', 'create-recovery-links'])
+    );
+
+    for (const id of [MARC.userId, GUEST.userId]) {
+      const fixture = await bootShoppers(`${PEOPLE}/${id}`);
+      expect(menuEntries(fixture)).not.toContain('send-password-reset');
+      expect(menuEntries(fixture)).not.toContain('create-recovery-links');
+    }
+  });
+
+  it('offers the reset grant on the page of a person and never on a row', async () => {
+    const fixture = await bootShoppers(PEOPLE);
+
+    expect(find(fixture, '[data-action="send-password-reset"]')).toBeNull();
+    expect(find(fixture, '[data-action="create-recovery-links"]')).toBeNull();
+  });
+
+  it('mails the reset grant once confirmed, and says until when its links work', async () => {
+    const { calls, directory } = recordingDirectory();
+    const fixture = await bootShoppers(
+      `${PEOPLE}/${ROSA.userId}`,
+      withDirectory(directory)
+    );
+
+    find(fixture, '[data-action="send-password-reset"]')?.click();
+    await settle(fixture);
+    expect(calls).toEqual([]);
+    expect(question(fixture).tone()).toBe('primary');
+
+    controlSaying(
+      fixture,
+      'people.users.confirm.sendPasswordReset.confirm'
+    )?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(calls).toEqual([`sendPasswordReset:${ROSA.userId}`]);
+    expect(find(fixture, '[data-action-done]')?.textContent).toContain(
+      'people.users.passwordResetSent'
+    );
+  });
+
+  it('shows both recovery links in a panel once confirmed, and drops them when it closes', async () => {
+    const { calls, directory } = recordingDirectory();
+    const fixture = await bootShoppers(
+      `${PEOPLE}/${ROSA.userId}`,
+      withDirectory(directory)
+    );
+
+    find(fixture, '[data-action="create-recovery-links"]')?.click();
+    await settle(fixture);
+    // The question says the links are a key to the account.
+    expect(textOf(fixture)).toContain(
+      'people.users.confirm.createRecoveryLinks.body'
+    );
+    controlSaying(
+      fixture,
+      'people.users.confirm.createRecoveryLinks.confirm'
+    )?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(calls).toEqual([`recoveryLinks:${ROSA.userId}`]);
+    expect(find(fixture, '[data-action-outcome]')).not.toBeNull();
+    expect(
+      find<HTMLInputElement>(fixture, '[data-recovery-link="reset"]')?.value
+    ).toBe('https://velista.test/auth/reset-password?token=t1');
+    expect(
+      find<HTMLInputElement>(fixture, '[data-recovery-link="signIn"]')?.value
+    ).toBe('https://velista.test/auth/reset-password?token=t1&mode=sign-in');
+    expect(textOf(fixture)).toContain('people.users.recovery.warning');
+    expect(textOf(fixture)).toContain('people.users.recovery.expires');
+    // Not in the address, and not in the storage of the browser.
+    expect(currentUrl()).not.toContain('token');
+    expect(JSON.stringify({ ...localStorage })).not.toContain('token=t1');
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain('token=t1');
+
+    find<HTMLButtonElement>(
+      fixture,
+      '[data-action-outcome] [data-close]'
+    )?.click();
+    await settle(fixture);
+
+    expect(find(fixture, '[data-action-outcome]')).toBeNull();
+    expect(recordPage(fixture).panel()).toBeNull();
+    expect(fixture.nativeElement.innerHTML).not.toContain('token=t1');
+  });
+
+  it('says why when the server refuses a reset grant', async () => {
+    const { directory } = recordingDirectory();
+    const fixture = await bootShoppers(
+      `${PEOPLE}/${ROSA.userId}`,
+      withDirectory({
+        ...directory,
+        createRecoveryLinks: async () => {
+          throw new GatewayError({
+            code: 'recovery_needs_password',
+            status: 409,
+            correlationId: '',
+          });
+        },
+      })
+    );
+
+    find(fixture, '[data-action="create-recovery-links"]')?.click();
+    await settle(fixture);
+    controlSaying(
+      fixture,
+      'people.users.confirm.createRecoveryLinks.confirm'
+    )?.click();
+    await settle(fixture);
+
+    expect(textOf(fixture)).toContain('resource.error.recoveryNeedsPassword');
+    expect(find(fixture, '[data-action-outcome]')).toBeNull();
+  });
+
   /** Every action is confirmed, and nothing happens until the operator says yes. */
   it('asks before it deletes an account, and then goes to the list', async () => {
     const { calls, directory } = recordingDirectory();
