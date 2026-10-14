@@ -81,6 +81,8 @@ interface Options {
   readonly members?: Readonly<Record<string, string>>;
   /** Who reads the sheet. The owner, by default. */
   readonly me?: BasketParticipant;
+  /** The basket the page holds, or null before its first read. */
+  readonly basket?: WritableSignal<{ id: string } | null>;
 }
 
 async function render(options: Options = {}) {
@@ -108,6 +110,7 @@ async function render(options: Options = {}) {
       {
         provide: BasketStore,
         useValue: {
+          basket: options.basket ?? signal({ id: 'basket-saturday' }),
           me: signal(options.me ?? ME),
           address: signal({ basketId: 'basket-saturday' }),
         },
@@ -159,6 +162,17 @@ async function render(options: Options = {}) {
 describe('ChangesSheet', () => {
   it('reads the first page when it opens', async () => {
     const { load } = await render();
+
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the first page once the basket arrives, on a cold load of the sheet', async () => {
+    const basket = signal<{ id: string } | null>(null);
+    const { load, fixture } = await render({ basket, state: 'loading' });
+    expect(load).not.toHaveBeenCalled();
+
+    basket.set({ id: 'basket-saturday' });
+    fixture.detectChanges();
 
     expect(load).toHaveBeenCalledTimes(1);
   });
@@ -445,6 +459,22 @@ describe('ChangesSheet: a buy made outside this shopping list (velista 0142)', (
     ]);
     expect(names.asked).toEqual([]);
     expect(host.textContent).not.toContain('basket.changes.entry.inList');
+  });
+
+  it('names an account that is not on this shopping list from the zone members too', async () => {
+    const { views, names } = await render({
+      entries: [
+        change({
+          kind: 'ADDED',
+          list: LIST,
+          actor: { participantId: null, userId: 'u-ana', name: null },
+        }),
+      ],
+      members: { 'u-ana': 'Ana' },
+    });
+
+    expect(views()[0].who).toBe('Ana');
+    expect(names.asked).toEqual([LIST.zoneId]);
   });
 
   it('keeps who for a buy of this shopping list, and names no list', async () => {

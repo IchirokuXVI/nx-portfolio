@@ -27,7 +27,7 @@ interface DrawnEntry {
   readonly list: string;
   /**
    * "zone · line name", or null for a list the reader was not served. An entry
-   * somebody bought outside this shopping list ends with "Already bought".
+   * somebody bought outside this shopping list starts with "Already bought".
    */
   readonly where: string | null;
   /** What the list asks for, which is the entry's `left`. */
@@ -221,7 +221,8 @@ export class RowEntries {
           ? ref.zoneName
           : `${ref.zoneName} · ${line}`;
     // Its quantity is 0, and the words say why (velista `0142`, section 1). The
-    // entry carries no note, so it does not say where the buy was made.
+    // entry carries no note, so it does not say where the buy was made. First,
+    // because the line is cut at its end and a long line name must not take them.
     const bought =
       entry.state === 'BOUGHT_ELSEWHERE'
         ? this._translator.t('basket.line.alreadyBought', undefined, locale)
@@ -231,7 +232,7 @@ export class RowEntries {
         ? bought
         : bought === null
           ? place
-          : `${place} · ${bought}`;
+          : `${bought} · ${place}`;
 
     return {
       lineId: entry.lineId,

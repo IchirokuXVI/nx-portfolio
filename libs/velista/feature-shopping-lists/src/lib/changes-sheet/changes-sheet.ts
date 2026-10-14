@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -115,7 +116,7 @@ export class ChangesSheet {
         id: change.id,
         key: sentence.key,
         args: sentence.args,
-        who: origin === null ? this._who(change, meId) : '',
+        who: origin === null ? this._who(change, meId, reader.userId) : '',
         list:
           origin !== null || isBuy || change.list === null
             ? ''
@@ -133,30 +134,47 @@ export class ChangesSheet {
   });
 
   /**
-   * The zones whose members can name a person behind a buy (velista `0142`,
-   * section 4). The owner of another shopping list is on no participant row of
-   * this one, and the server serves an account only beside a list the reader
-   * was served, so its zone is the one to ask.
+   * The zones whose members can name a person the basket cannot (velista
+   * `0142`, section 4). The owner of another shopping list, and anybody else
+   * who is not on this one, is on no participant row of it. The server serves
+   * an account only beside a list the reader was served, so that list's zone is
+   * the one to ask, and a guest, served no list, asks nothing.
    */
   private readonly _zonesToName = computed(() => {
     const zones = new Set<string>();
     for (const change of this._changes.changes()) {
       const origin = change.origin;
-      const person =
-        origin === null
-          ? null
-          : origin.kind === 'ANOTHER_BASKET'
-            ? origin.owner
-            : change.actor;
-      if (person?.name === null && person.userId !== null && change.list) {
-        zones.add(change.list.zoneId);
+      const people = [
+        change.actor,
+        origin?.kind === 'ANOTHER_BASKET' ? origin.owner : null,
+      ];
+      for (const person of people) {
+        if (
+          person !== null &&
+          person.name === null &&
+          person.userId !== null &&
+          change.list !== null
+        ) {
+          zones.add(change.list.zoneId);
+        }
       }
     }
     return [...zones];
   });
 
+  /** The basket the sheet reads the changes of, once the page has read it. */
+  private readonly _basketId = computed(() => this._store.basket()?.id ?? null);
+
   constructor() {
-    void this._changes.load();
+    // Once the basket is known, and again only if it is another basket. On a
+    // cold load of the sheet's own URL the page has not read the basket yet,
+    // and a read asked for then answers nothing, which left the sheet drawing
+    // its skeleton for good.
+    effect(() => {
+      if (this._basketId() !== null) {
+        untracked(() => void this._changes.load());
+      }
+    });
 
     // Once per zone and only when the sheet holds a buy whose person the basket
     // cannot name: `MemberNames` answers the same map to every screen.
@@ -221,8 +239,10 @@ export class ChangesSheet {
   }
 
   /**
-   * A person a buy names, from the basket's participants and then from the
+   * A person a change names, from the basket's participants and then from the
    * members of the zone of the list the change is on, or null for "someone".
+   * One rule for an actor and for the owner of another shopping list, so one
+   * person is never named on one entry and "Someone" on the next.
    */
   private _nameOf(
     change: BasketChange,
@@ -250,18 +270,25 @@ export class ChangesSheet {
    * An actor the server withheld entirely draws nothing at all: there is no
    * person in the sentence, so there is none in the line under it either.
    */
-  private _who(change: BasketChange, meId: string | null): string {
+  private _who(
+    change: BasketChange,
+    meId: string | null,
+    myUserId: string | null
+  ): string {
     const actor = change.actor;
     if (actor === null) {
       return '';
     }
 
     const locale = this._locale();
-    if (meId !== null && actor.participantId === meId) {
+    if (
+      (meId !== null && actor.participantId === meId) ||
+      (myUserId !== null && actor.userId === myUserId)
+    ) {
       return this._translator.t('basket.history.you', undefined, locale);
     }
     return (
-      actor.name ??
+      this._nameOf(change, actor) ??
       this._translator.t('basket.history.someone', undefined, locale)
     );
   }

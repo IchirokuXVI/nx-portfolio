@@ -301,9 +301,10 @@ export class BasketChangeStore {
  * reader who can write the list is in its zone and already resolves them. The
  * basket page holds no zone memberships, so resolving it would mean a read per
  * covered zone on the one screen that already makes the largest read in the app,
- * for a caption. Velista `0093` section 2 asks for it; it is deferred on that
- * cost, and the redaction is unaffected either way — the name is less specific
- * than it could be, never wider.
+ * for a caption. So this answers null for them, and the changes sheet names them
+ * from `MemberNames` when it opens, for the zones of the people it could not
+ * name here (velista `0142`, section 4). The redaction is unaffected either way:
+ * the server serves such an account only beside a list the reader was served.
  *
  * A **name and not a role word**: the owner with no username resolves to null
  * here, because "Owner" is a word the sheet has a translator for and this
