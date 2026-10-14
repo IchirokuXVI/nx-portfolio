@@ -10,7 +10,7 @@
     <lib-similar-products
       (picked)="choose($event)"
       [busy]="busy()"
-      [excludeIds]="row()?.optionIds ?? []"
+      [excludeIds]="heldIds()"
       [failed]="similar.failed"
       [loading]="similar.loading"
       [members]="similar.members"

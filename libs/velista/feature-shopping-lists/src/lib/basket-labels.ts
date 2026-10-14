@@ -1,14 +1,18 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketElsewhere,
+  basketRowLists,
+  basketRowProduct,
+  catalogName,
   formatVisitMoment,
   type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
+  type BasketProduct,
   type BasketRow,
   type BasketRowState,
 } from '@portfolio/velista/models';
-import type { ListPickerRow } from '@portfolio/velista/ui';
+import { productSizeText, type ListPickerRow } from '@portfolio/velista/ui';
 
 /**
  * The three sentences every row on the basket has to be able to say, in one
@@ -320,50 +324,68 @@ export function elsewhereCaption(
 }
 
 /**
- * The "from" caption naming the households a row came from.
+ * The name a row is drawn under (velista `0139`, sections 1 and 2): the product,
+ * as the catalog cards print it, name then brand then size, on a row of one; the
+ * line's own words on a row whose lines hold no product, and on a row whose
+ * product the read could not name.
  *
- * **Null when this reader was served no list the row is on**, which is a guest,
- * and null when the row's every entry is on a list the basket did not serve. Both
- * are the same nothing to draw, and the entry's own null `listId` is what says so:
- * there is one question here since backend `0136`, and one answer to it.
- *
- * Names come from the basket's own served refs, which the caller supplies; an
- * entry whose list is not among them is dropped rather than printed.
+ * One function, for the row and the sheet's title, so the two cannot disagree.
  */
-export function originsCaption(
+export function basketRowName(
+  row: BasketRow,
+  products: ReadonlyMap<string, BasketProduct>,
+  translator: RokuTranslatorService,
+  locale: string
+): string {
+  const product = basketRowProduct(row, products);
+  if (product === null) {
+    return row.content;
+  }
+  const size = productSizeText(
+    product.size,
+    product.unit,
+    locale,
+    (key, args) => translator.t(key, undefined, locale, args)
+  );
+  return [
+    catalogName(product.name, locale),
+    product.brand?.trim() ?? '',
+    size ?? '',
+  ]
+    .filter((part) => part !== '')
+    .join(' ');
+}
+
+/**
+ * The lists that ask for a row, as its caption names them (velista `0139`,
+ * section 1): "Compra semanal, Básicos, Cocina".
+ *
+ * The lists this reader was served are named, once each, joined with commas. A
+ * list the reader was not served is counted in words and never named: "Compra
+ * semanal and 1 more list", or "Another list" for a guest, who is served none.
+ * Null for a row with no entry, which is a `REMOVED` row.
+ */
+export function listsCaption(
   row: BasketRow,
   lists: ReadonlyMap<string, BasketListRef>,
   translator: RokuTranslatorService,
   locale: string
 ): string | null {
-  const names = [
-    ...new Set(
-      row.entries
-        .map((entry) =>
-          entry.listId === null ? undefined : lists.get(entry.listId)?.name
-        )
-        .filter((name): name is string => name !== undefined && name !== '')
-    ),
-  ];
-
+  const { names, others } = basketRowLists(row, lists);
   if (names.length === 0) {
-    return null;
+    return others === 0
+      ? null
+      : translator.t('basket.row.otherLists', undefined, locale, {
+          count: others,
+        });
   }
-  if (names.length === 1) {
-    return translator.t('basket.from.one', undefined, locale, {
-      first: names[0],
-    });
-  }
-  if (names.length === 2) {
-    return translator.t('basket.from.two', undefined, locale, {
-      first: names[0],
-      second: names[1],
-    });
-  }
-  return translator.t('basket.from.more', undefined, locale, {
-    first: names[0],
-    count: names.length - 1,
-  });
+  const named = names.join(', ');
+  return others === 0
+    ? named
+    : translator.t('basket.row.listsAndMore', undefined, locale, {
+        names: named,
+        count: others,
+      });
 }
 
 /**

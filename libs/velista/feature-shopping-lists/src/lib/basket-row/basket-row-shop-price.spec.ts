@@ -44,14 +44,22 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     // The product this row means is the **first of its options**: a row has no
     // `pickId` any more, because that was a column on the line the basket used
     // to store (backend `0136`).
-    optionIds: ['i-milk'],
+    productId: 'i-milk',
     touchedBy: null,
     touchedAt: null,
     usual: null,
     entries: [
       {
         lineId: 'zl-1',
-        listId: null,
+        listId: 'l-weekly',
+        content: 'Milk',
+        itemIds: ['i-milk'],
+        favoriteItemId: null,
+        canWrite: true,
+        tripItemId: null,
+        skipped: false,
+        closed: false,
+        act: null,
         left: 3,
         bought: 0,
         asked: 3,
@@ -125,7 +133,6 @@ async function render(options: {
   readonly product?: BasketProduct;
   readonly shelf?: BasketShelfMark | null;
   readonly row?: BasketRow;
-  readonly chosenId?: string | null;
 }) {
   TestBed.resetTestingModule();
 
@@ -148,20 +155,31 @@ async function render(options: {
       ['i-oat', OAT],
     ])
   );
-  fixture.componentRef.setInput('lists', new Map());
+  fixture.componentRef.setInput(
+    'lists',
+    new Map([
+      [
+        'l-weekly',
+        { listId: 'l-weekly', name: 'Weekly', zoneId: 'z', zoneName: 'Home' },
+      ],
+    ])
+  );
   fixture.componentRef.setInput('atShop', options.atShop ?? false);
   fixture.componentRef.setInput('priceMark', options.mark ?? null);
   fixture.componentRef.setInput('shelf', options.shelf ?? null);
-  fixture.componentRef.setInput('chosenId', options.chosenId ?? null);
   fixture.detectChanges();
 
   return fixture;
 }
 
+/** The caption's pieces joined as the stylesheet separates them. */
 const caption = (fixture: Awaited<ReturnType<typeof render>>) =>
-  (fixture.nativeElement as HTMLElement)
-    .querySelector('.product')
-    ?.textContent?.trim() ?? '';
+  [
+    ...((fixture.nativeElement as HTMLElement).querySelector('.caption')
+      ?.children ?? []),
+  ]
+    .map((piece) => piece.textContent?.trim() ?? '')
+    .join(' · ');
 
 const rowLabel = (fixture: Awaited<ReturnType<typeof render>>) =>
   (fixture.nativeElement as HTMLElement)
@@ -172,7 +190,7 @@ describe('BasketRowComponent: prices from one shop', () => {
   it('draws the cheapest anywhere when no shop is in use', async () => {
     const fixture = await render({ atShop: false });
 
-    expect(caption(fixture)).toBe('Milk · €0.79');
+    expect(caption(fixture)).toBe('€0.79 · Weekly');
   });
 
   it('draws the chosen shop’s own price instead', async () => {
@@ -180,7 +198,7 @@ describe('BasketRowComponent: prices from one shop', () => {
 
     // Not 0.79. Quoting Dia's number under a heading that says Mercadona is the
     // defect this whole plan exists to remove.
-    expect(caption(fixture)).toBe('Milk · €0.95');
+    expect(caption(fixture)).toBe('€0.95 · Weekly');
   });
 
   it('says where it is cheaper, after the price', async () => {
@@ -189,13 +207,13 @@ describe('BasketRowComponent: prices from one shop', () => {
       mark: { kind: 'cheaper', price: 0.79, currency: 'EUR', chain: 'Dia' },
     });
 
-    expect(caption(fixture)).toBe('Milk · €0.95 · basket.price.cheaperAt');
+    expect(caption(fixture)).toBe('€0.95 · Weekly · basket.price.cheaperAt');
     // The colour is never the only carrier: the sentence is in the accessible
     // name too (section 7).
     expect(rowLabel(fixture)).toContain('basket.price.cheaperAt');
   });
 
-  it('says the shop does not list it, and where it is sold', async () => {
+  it('says it is not sold here, and where it is sold (velista 0139)', async () => {
     const fixture = await render({
       atShop: true,
       // The product the mark is about: unlisted at Mercadona means there is no
@@ -211,18 +229,19 @@ describe('BasketRowComponent: prices from one shop', () => {
     // No price of its own, because there is none here: the two clauses are one
     // string, so a line break cannot fall between a price and its shop.
     expect(caption(fixture)).toBe(
-      'Milk · basket.price.notListedAt · basket.price.cheaperAt'
+      'Weekly · basket.row.notSoldHere · basket.price.cheaperAt'
     );
+    expect(rowLabel(fixture)).toContain('basket.row.notSoldHere');
   });
 
-  it('says only that it is unlisted when nobody else sells it either', async () => {
+  it('says only that it is not sold here when nobody else sells it either', async () => {
     const fixture = await render({
       atShop: true,
       product: DIA_ONLY,
       mark: { kind: 'unlisted', chain: 'Mercadona', elsewhere: null },
     });
 
-    expect(caption(fixture)).toBe('Milk · basket.price.notListedAt');
+    expect(caption(fixture)).toBe('Weekly · basket.row.notSoldHere');
   });
 
   /**
@@ -246,7 +265,7 @@ describe('BasketRowComponent: prices from one shop', () => {
       },
     });
 
-    expect(caption(fixture)).toBe('Milk');
+    expect(caption(fixture)).toBe('Weekly');
   });
 
   /** The settle controls never leave a row, listed or not (section 5). */
@@ -284,29 +303,6 @@ describe('BasketRowComponent: what the shop does not have', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('button.status')).not.toBeNull();
     expect(element.querySelector('lib-quantity-reel')).not.toBeNull();
-  });
-
-  it('draws the option it offers instead, and says what it replaced', async () => {
-    const fixture = await render({
-      atShop: true,
-      row: line({ optionIds: ['i-milk', 'i-oat'] }),
-      shelf: { kind: 'instead', optionId: 'i-oat', replacedId: 'i-milk' },
-      chosenId: 'i-oat',
-    });
-
-    expect(caption(fixture)).toBe('Oat drink · €0.95');
-    expect(shelf(fixture)).toBe('basket.shelf.instead');
-  });
-
-  it('says nothing about a replacement somebody chose against', async () => {
-    const fixture = await render({
-      atShop: true,
-      row: line({ optionIds: ['i-milk', 'i-oat'] }),
-      shelf: { kind: 'instead', optionId: 'i-oat', replacedId: 'i-milk' },
-      chosenId: 'i-milk',
-    });
-
-    expect(shelf(fixture)).toBeNull();
   });
 
   it('draws no shelf line on a row the shop said nothing about', async () => {

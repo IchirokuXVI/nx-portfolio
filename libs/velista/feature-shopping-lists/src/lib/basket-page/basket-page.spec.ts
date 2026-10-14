@@ -297,11 +297,11 @@ function line(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
-    entries: [entry(null, `zl-${content}`, left)],
+    entries: [entry(null, `zl-${content}`, left, { content })],
     ...overrides,
   };
 }
@@ -315,6 +315,14 @@ function entry(
   return {
     lineId,
     listId,
+    content: '',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left,
     bought: 0,
     asked: left,
@@ -336,15 +344,9 @@ const SERVED = [
   ref('l-weekly', 'Weekly shop'),
 ];
 
-/** What a row write answers: the row as it now stands, and the counts. */
+/** What a row write answers: the lines of the row as they now stand. */
 function rowResult(row: BasketRow): BasketRowResult {
-  return {
-    row,
-    progress: { done: 0, unavailable: 0, total: 1 },
-    pending: 1,
-    replacedRowKey: null,
-    skippedCount: 0,
-  };
+  return { entries: row.entries, skippedCount: 0 };
 }
 
 function participant(entry: BasketPresenceEntry): BasketParticipant {
@@ -469,13 +471,11 @@ async function render(options: Options = {}): Promise<{
     handedOver: signal<{ text: string; seq: number } | null>(null),
     handOver: jest.fn(),
     adding: signal(false),
-    // An add answers the row it landed on, exactly as the store folds it: the row
-    // on screen is the answer's and never the words that were typed.
+    // An add answers the line it made or raised, which the store folds into the
+    // row of its product.
     addLine: jest.fn(
       (body: { content: string }): Promise<BasketRowResult | null> =>
-        Promise.resolve(
-          rowResult({ ...line('zl-added'), content: body.content })
-        )
+        Promise.resolve(rowResult(line(body.content)))
     ),
   };
 
@@ -621,12 +621,12 @@ async function render(options: Options = {}): Promise<{
           // What the composer needs: whether an add is out, and the add itself.
           adding: store.adding,
           addLine: store.addLine,
-          chosen: signal(new Map<string, string>()),
-          choose: jest.fn(),
           itemIdFor: () => undefined,
           skip: jest.fn().mockResolvedValue(null),
           unskip: jest.fn().mockResolvedValue(null),
           setDemand: jest.fn().mockResolvedValue(null),
+          lineLeft: (result: BasketRowResult, lineId: string) =>
+            !result.entries.some((held) => held.lineId === lineId),
           rowFor: (key: string) =>
             store.rows().find((row) => row.rowKey === key) ??
             store
@@ -1205,8 +1205,7 @@ describe('the number on a row', () => {
         },
       ],
     ]);
-    const pricedMilk = () =>
-      line('Milk', { left: 5, optionIds: ['item-milk'] });
+    const pricedMilk = () => line('Milk', { left: 5, productId: 'item-milk' });
 
     it('the reel names the scope of the price the row draws', async () => {
       const { fixture, store } = await render({
@@ -1217,7 +1216,9 @@ describe('the number on a row', () => {
       row(fixture).left.emit({ from: 5, to: 3 });
       await settleWrites(fixture);
 
+      // The row's product travels with the buy (velista `0139`, section 4).
       expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
+        itemId: 'item-milk',
         priceScopeId: 's-dia',
       });
     });
@@ -1236,7 +1237,42 @@ describe('the number on a row', () => {
         outcome: 'BOUGHT',
         quantity: 5,
         from: 5,
+        itemId: 'item-milk',
         priceScopeId: 's-dia',
+      });
+    });
+
+    /**
+     * Every write names the row by its key, and `BasketStore.targetOf` sends every
+     * line of that row with it (velista `0139`, section 4; asserted with the lines
+     * in `basket-store.spec.ts`). The page never picks a subset of the lines.
+     */
+    it('addresses the whole row by its key on a settle and on a revert', async () => {
+      const twoLists = pricedMilk();
+      const held = {
+        ...twoLists,
+        bought: 2,
+        state: 'PARTLY' as const,
+        entries: [
+          entry('l-groceries', 'row-Milk', 3),
+          entry('l-weekly', 'zl-other', 2),
+        ],
+      };
+      const { fixture, store } = await render({
+        lines: [held],
+        products: priced,
+      });
+
+      row(fixture).settle.emit();
+      row(fixture).revert.emit();
+      await settleWrites(fixture);
+
+      expect(store.settle.mock.calls[0][0]).toBe('row-Milk');
+      expect(store.revert.mock.calls[0][0]).toBe('row-Milk');
+      expect(store.revert.mock.calls[0][1]).toEqual({
+        target: 'UNITS',
+        units: 2,
+        from: 2,
       });
     });
 
@@ -1659,7 +1695,7 @@ describe('searching the basket', () => {
   }
 
   const threeLines: readonly BasketRow[] = [
-    line('Milk', { rowKey: 'l-1', optionIds: ['item-milk'] }),
+    line('Milk', { rowKey: 'l-1', productId: 'item-milk' }),
     line('Sourdough loaf', { rowKey: 'l-2' }),
     line('Plátano', { rowKey: 'l-3' }),
   ];
@@ -2251,7 +2287,7 @@ describe('searching the basket', () => {
         left: 0,
         bought: 3,
         state: 'DONE',
-        optionIds: ['i-milk'],
+        productId: 'i-milk',
         entries: [
           entry('l-weekly', 'zl-1', 0, {
             bought: 2,
@@ -2268,7 +2304,7 @@ describe('searching the basket', () => {
       line('Cheese', {
         rowKey: 'l-2',
         left: 4,
-        optionIds: ['i-milk'],
+        productId: 'i-milk',
         entries: [entry('l-weekly', 'zl-3', 4)],
       }),
       // A row this reader cannot place, which is what a null `listId` means.
@@ -2366,7 +2402,7 @@ describe('searching the basket', () => {
         line('Bread', {
           rowKey: 'l-1',
           state: 'NOT_AVAILABLE',
-          optionIds: ['i-milk'],
+          productId: 'i-milk',
         }),
       ];
       const { fixture } = await render({
@@ -2406,7 +2442,9 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {});
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {
+        itemId: 'i-milk',
+      });
     });
 
     it('commits an ungrouped row through the same call', async () => {
@@ -2415,7 +2453,9 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {});
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {
+        itemId: 'i-milk',
+      });
     });
 
     /**
@@ -3428,7 +3468,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
 
   const milk = () =>
     line('Milk', {
-      optionIds: ['item-milk'],
+      productId: 'item-milk',
       entries: [
         entry('l-groceries', 'zl-1', 2),
         entry('l-hidden', 'zl-2', 1, { demandEditable: false }),
@@ -3467,11 +3507,66 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
 
     await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
 
-    expect(store.setDemand).toHaveBeenCalledWith('row-Milk', {
+    // Sent under its own line (backend `0201`, section 4), whichever row holds it.
+    expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl-1',
       quantity: 3,
       from: 2,
     });
+  });
+
+  it('says the line is no longer asked for when the answer no longer holds it', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 0 });
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('basket.demand.nothingLeft');
+  });
+
+  it('names an entry by its own line, which can differ from the row (velista 0139)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Milk', {
+          productId: 'item-milk',
+          entries: [
+            entry('l-groceries', 'zl-1', 2, { content: 'Leche para el café' }),
+          ],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => held.text)
+    ).toEqual(['Leche para el café']);
+  });
+
+  it('holds nothing for a product no row is, even when a line lists it', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Oat drink', {
+          productId: 'item-oat',
+          entries: [
+            entry('l-groceries', 'zl-3', 1, {
+              itemIds: ['item-oat', 'item-milk'],
+            }),
+          ],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(page.holdingsOf()(MILK)).toEqual([]);
   });
 
   it('links to the product for an account, and to nothing for a guest', async () => {
@@ -3633,7 +3728,7 @@ describe('similar products on the basket', () => {
 
   const milkRow = (listId: string | null) =>
     line('Milk', {
-      optionIds: ['i-milk'],
+      productId: 'i-milk',
       entries: [entry(listId, 'zl-Milk')],
     });
 
@@ -3772,9 +3867,9 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ]);
 
   const LINES = [
-    line('Olive oil', { optionIds: ['i-oil'] }),
-    line('Pizza', { optionIds: ['i-pizza'] }),
-    line('Apple', { optionIds: ['i-apple'] }),
+    line('Olive oil', { productId: 'i-oil' }),
+    line('Pizza', { productId: 'i-pizza' }),
+    line('Apple', { productId: 'i-apple' }),
   ];
 
   function section(id: string, name: string) {
@@ -3957,7 +4052,7 @@ describe('BasketPage: the map of the shop you are in', () => {
       ],
     });
     const rendered = await render({
-      lines: [line('Milk', { optionIds: ['i-milk'] })],
+      lines: [line('Milk', { productId: 'i-milk' })],
       products: new Map([['i-milk', MILK]]),
       readAtShop: EL_JAMON,
       shopDetails,
@@ -4205,7 +4300,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
   /** Two yogurts with a product, and a line that is only words. */
   const lines = (): readonly BasketRow[] => [
-    line('Yogurt', { left: 2, optionIds: ['item-yogurt'] }),
+    line('Yogurt', { left: 2, productId: 'item-yogurt' }),
     line('Candles'),
   ];
 
@@ -4408,8 +4503,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
       };
       const atShop = await render({
         lines: [
-          line('Yogurt', { optionIds: ['item-yogurt'] }),
-          line('Coffee', { optionIds: ['item-coffee'] }),
+          line('Yogurt', { productId: 'item-yogurt' }),
+          line('Coffee', { productId: 'item-coffee' }),
         ],
         products: new Map([
           ['item-yogurt', yogurt(1.5)],

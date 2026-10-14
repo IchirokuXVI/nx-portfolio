@@ -70,10 +70,22 @@ function member(id: string, en: string): CatalogItem {
   };
 }
 
-function entry(lineId: string, listId: string): BasketRowEntry {
+function entry(
+  lineId: string,
+  listId: string,
+  itemIds: readonly string[]
+): BasketRowEntry {
   return {
     lineId,
     listId,
+    content: 'Milk',
+    itemIds,
+    favoriteItemId: null,
+    canWrite: true,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left: 1,
     bought: 0,
     asked: 1,
@@ -96,11 +108,16 @@ const ROW: BasketRow = {
   noteAt: null,
   mark: null,
   awaitingApproval: false,
-  optionIds: [MILK.id],
+  productId: MILK.id,
   touchedBy: null,
   touchedAt: null,
   usual: null,
-  entries: [entry('zl-1', 'l-home'), entry('zl-2', 'l-work')],
+  entries: [
+    entry('zl-1', 'l-home', [MILK.id]),
+    // A second line that holds another product beside the row's: the change
+    // replaces the row's product on it and keeps the other one.
+    entry('zl-2', 'l-work', ['item-oat', MILK.id]),
+  ],
 };
 
 async function render(options: { failWrite?: boolean } = {}): Promise<{
@@ -185,7 +202,7 @@ describe('SwapSheet', () => {
     ]);
   });
 
-  it('changes the product on every line of the row, then closes', async () => {
+  it("changes the row's product on every line of the row, keeping each line's others, then closes", async () => {
     const { fixture, updateLine, refresh, dismiss } = await render();
 
     rows(fixture)[0].click();
@@ -193,7 +210,7 @@ describe('SwapSheet', () => {
 
     expect(updateLine.mock.calls).toEqual([
       ['zl-1', { itemIds: ['item-milk-pascual'] }],
-      ['zl-2', { itemIds: ['item-milk-pascual'] }],
+      ['zl-2', { itemIds: ['item-oat', 'item-milk-pascual'] }],
     ]);
     expect(refresh).toHaveBeenCalled();
     expect(dismiss).toHaveBeenCalledWith('/en/shopping-lists/live');
