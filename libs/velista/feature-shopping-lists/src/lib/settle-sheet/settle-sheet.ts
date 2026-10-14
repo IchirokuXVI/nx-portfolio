@@ -549,9 +549,21 @@ export class SettleSheet {
       return null;
     }
     const read = this._others();
-    return read !== null && read.itemId === row.productId
-      ? read.state
-      : { state: 'loading' };
+    if (read === null || read.itemId !== row.productId) {
+      return { state: 'loading' };
+    }
+    if (read.state.state !== 'ready') {
+      return read.state;
+    }
+    // The server decides the lists with no picks, so a list whose line counts
+    // as this product only by its price comes back too. The row already draws
+    // it, and it is left out here (backend `0201`, "What the build decided",
+    // point 14).
+    const drawn = new Set(row.entries.map((entry) => entry.listId));
+    return {
+      state: 'ready',
+      lists: read.state.lists.filter((list) => !drawn.has(list.listId)),
+    };
   });
 
   /** The read of {@link others}, and the product it was for. */
@@ -1111,7 +1123,8 @@ export class SettleSheet {
     from: number;
     to: number;
   }): Promise<void> {
-    const name = this.row()?.content ?? '';
+    // The name the sheet is titled with, taken before the row can leave.
+    const name = this.title();
 
     this._settling.set(true);
     this._failedOp.set(null);

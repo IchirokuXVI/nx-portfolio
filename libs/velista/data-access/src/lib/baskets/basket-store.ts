@@ -1090,7 +1090,9 @@ export class BasketStore {
       return null;
     }
     try {
-      return await this._service.productLists(id, itemId);
+      const lists = await this._service.productLists(id, itemId);
+      // A basket let go or switched while the read was out answers for none.
+      return this._id === id ? lists : null;
     } catch {
       return null;
     }

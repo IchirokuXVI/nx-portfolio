@@ -88,8 +88,8 @@
                     [label]="other.label"
                     [min]="0"
                     [readonly]="busy()"
-                    [value]="0"
-                    class="ask-reel is-zero"
+                    [value]="other.list.quantity ?? 0"
+                    class="ask-reel"
                   />
                 </li>
               }

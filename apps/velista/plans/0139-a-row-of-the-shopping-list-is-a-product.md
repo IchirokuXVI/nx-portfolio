@@ -89,6 +89,11 @@ disagree, this section is right.
     `0139`"). `shop.spec.ts` step 9 waits for the settle sheet to finish its fall before it
     types, which step 10 already does for the filter sheet. `member.spec.ts` step 4 still
     expects `DONE` where backend `0203` serves `BOUGHT_ELSEWHERE`, and is velista `0142`'s.
+15. **"Add it to another list" trusts the read only as far as it can** (added in review).
+    The server decides the lists with no picks (backend `0201` point 14). So the sheet
+    leaves out a list the row already draws, and draws a list whose line asks for the
+    product in another row at that line's own quantity, never at 0, because a demand from
+    a reel drawn at 0 would lower the line.
 
 ## Brief for the agent
 

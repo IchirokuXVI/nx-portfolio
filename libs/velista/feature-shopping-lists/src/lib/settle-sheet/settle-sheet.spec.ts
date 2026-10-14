@@ -1920,6 +1920,37 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       expect(text(fixture)).toContain('Pantry');
     });
 
+    it('leaves out a list the row already draws', async () => {
+      // The server decides the lists with no picks, so a list whose line
+      // counts as the product only by its price comes back too (backend
+      // `0201`, "What the build decided", point 14).
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [
+          { ...PANTRY, listId: 'l1', listName: 'Groceries' },
+          BREAKFAST,
+        ],
+      });
+      await openOthers(fixture);
+
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-where')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Office']);
+    });
+
+    it('is not drawn when every list it answers is already drawn', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [{ ...PANTRY, listId: 'l1' }],
+      });
+
+      expect(disclosure(fixture)).toBeNull();
+    });
+
     it('is not drawn when the read answers no list', async () => {
       const { fixture } = await render({
         lines: [milkRow()],
@@ -1955,6 +1986,36 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
           node.textContent?.trim()
         )
       ).toEqual(['Breakfast']);
+    });
+
+    it('draws a line that asks for the product in another row at its own quantity', async () => {
+      // The read uses no picks, so a line that holds the product but counts as
+      // another one comes back asking for 3. A reel drawn at 0 would send 3 to 1
+      // and take two units off that line.
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [{ ...PANTRY, quantity: 3 }],
+      });
+      store.setDemand.mockResolvedValue({
+        entries: [entry('l-pantry', 'zl9', 4)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+
+      const reel = fixture.debugElement.query(
+        By.css('.others lib-quantity-reel')
+      ).componentInstance as QuantityReel;
+      expect(reel.value()).toBe(3);
+
+      reel.committedTo.emit({ from: 3, to: 4 });
+      await fixture.whenStable();
+
+      expect(store.setDemand).toHaveBeenCalledWith({
+        lineId: 'zl9',
+        quantity: 4,
+        from: 3,
+      });
     });
 
     it('adds a line named by the product to a list that does not hold it', async () => {

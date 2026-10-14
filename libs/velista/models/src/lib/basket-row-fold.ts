@@ -6,7 +6,11 @@ import {
   type BasketRuleEntry,
 } from '@portfolio/luna-shopper/basket-rules';
 import type { BasketProgress, BasketRow, BasketRowEntry } from './basket-view';
-import type { BasketRowState } from './enums';
+import {
+  BASKET_ROW_STATE_FALLBACK,
+  BASKET_ROW_STATES,
+  type BasketRowState,
+} from './enums';
 
 /**
  * Put the lines a write answered back into the rows a page holds (velista `0139`,
@@ -126,7 +130,7 @@ export function rebuildBasketRow(
     bought: numbers.bought,
     asked: numbers.asked,
     boughtElsewhere: numbers.boughtElsewhere,
-    state: rowStateOf(rules) as BasketRowState,
+    state: knownState(rowStateOf(rules)),
     awaitingApproval: entries.some((entry) => entry.awaitingApproval),
     touchedBy: numbers.act?.participantId ?? null,
     touchedAt: numbers.act === null ? null : toDate(numbers.act.at),
@@ -208,4 +212,15 @@ function sameName(a: string, b: string): boolean {
 function toDate(at: string): Date | null {
   const date = new Date(at);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * A state of the shared rules that velista draws, or the fallback the mapper
+ * gives an unknown state on the wire: a state added to the rules first must not
+ * reach a template that has no branch for it.
+ */
+function knownState(state: string): BasketRowState {
+  return (BASKET_ROW_STATES as readonly string[]).includes(state)
+    ? (state as BasketRowState)
+    : BASKET_ROW_STATE_FALLBACK;
 }
