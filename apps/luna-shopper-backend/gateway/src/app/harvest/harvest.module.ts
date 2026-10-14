@@ -8,6 +8,7 @@ import {
   AdminHarvestPostalCodesController,
   AdminHarvestPresetsController,
   AdminHarvestRunsController,
+  AdminHarvestSchedulesController,
   AdminHarvestShopsController,
   AdminHarvestSourcesController,
 } from './harvest.controller';
@@ -25,6 +26,8 @@ import {
     AdminHarvestRunsController,
     // Run requests saved under a name, and the run started from one (plan 0120).
     AdminHarvestPresetsController,
+    // A preset that starts by itself (plan 0206).
+    AdminHarvestSchedulesController,
     // The file import, and the one queue it fills along with every walk and
     // crawl (plan 0086). The alias and item ref controllers were the same queue
     // over two other tables and are gone.

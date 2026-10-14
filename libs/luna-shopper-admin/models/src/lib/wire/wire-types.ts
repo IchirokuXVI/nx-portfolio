@@ -278,6 +278,17 @@ export type CreateHarvestRunPresetDto = {
 };
 
 /**
+ * `CreateHarvestScheduleDto` in the gateway's OpenAPI document.
+ */
+export type CreateHarvestScheduleDto = {
+  presetId: string;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  timezone?: string;
+  acknowledgedAutomaticFetch: boolean;
+};
+
+/**
  * `CreateItemDto` in the gateway's OpenAPI document.
  */
 export type CreateItemDto = {
@@ -847,6 +858,14 @@ export type SetBasketRowDemandDto = {
 };
 
 /**
+ * `SetHarvestScheduleEnabledDto` in the gateway's OpenAPI document.
+ */
+export type SetHarvestScheduleEnabledDto = {
+  enabled: boolean;
+  acknowledgedAutomaticFetch?: boolean;
+};
+
+/**
  * `SetLinkedImagesEnabledDto` in the gateway's OpenAPI document.
  */
 export type SetLinkedImagesEnabledDto = {
@@ -1107,6 +1126,15 @@ export type UpdateCategoryDto = {
 export type UpdateHarvestRunPresetDto = {
   name?: string;
   input?: HarvestRunPresetInputDto;
+};
+
+/**
+ * `UpdateHarvestScheduleDto` in the gateway's OpenAPI document.
+ */
+export type UpdateHarvestScheduleDto = {
+  timezone?: string;
+  timeOfDay?: string;
+  daysOfWeek?: number[];
 };
 
 /**
@@ -3752,6 +3780,25 @@ export type EnumsHarvestRunWrites =
   | 'AVAILABILITY';
 
 /**
+ * `enums.HarvestScheduleBlock` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestScheduleBlock =
+  | 'HARVEST_DISABLED'
+  | 'SCHEDULER_DISABLED'
+  | 'SOURCE_DISABLED'
+  | 'SOURCE_FAILING';
+
+/**
+ * `enums.HarvestScheduleOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestScheduleOutcome =
+  | 'STARTED'
+  | 'SKIPPED_LATE'
+  | 'SKIPPED_FAILING'
+  | 'REFUSED'
+  | 'SKIPPED_BUSY';
+
+/**
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestWarningCode =
@@ -4354,6 +4401,7 @@ export type HarvestHarvestRunPresetView = {
   createdAt: string;
   updatedAt: string;
   lastRun: HarvestHarvestRunPresetLastRun | null;
+  estimate?: HarvestRunEstimate;
 };
 
 /**
@@ -4393,6 +4441,9 @@ export type HarvestHarvestRunView = {
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
   presetId?: string | null;
+  scheduleId?: string | null;
+  interrupted?: boolean;
+  estimate?: HarvestRunEstimate;
 };
 
 /**
@@ -4404,6 +4455,49 @@ export type HarvestHarvestRunWarning = {
   page: number | null;
   name: string | null;
   message: string;
+};
+
+/**
+ * `harvest.HarvestScheduleLastRun` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestScheduleLastRun = {
+  id: string;
+  status: EnumsHarvestRunStatus;
+  requestedAt: string;
+};
+
+/**
+ * `harvest.HarvestSchedulePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestHarvestSchedulePage = {
+  items: HarvestHarvestScheduleView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.HarvestScheduleView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestScheduleView = {
+  id: string;
+  presetId: string;
+  presetName: string;
+  supermarketId: string;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  timezone: string;
+  enabled: boolean;
+  nextRunAt: string | null;
+  blockedBy: EnumsHarvestScheduleBlock | null;
+  lastSlotAt: string | null;
+  lastOutcome: EnumsHarvestScheduleOutcome | null;
+  lastOutcomeAt: string | null;
+  lastOutcomeNote: string | null;
+  lastRun: HarvestHarvestScheduleLastRun | null;
+  estimate: HarvestRunEstimate;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /**
@@ -4606,6 +4700,15 @@ export type HarvestQueuedSourceEntryView = {
   decidedAt: string | null;
   prices: HarvestSourceEntryPriceView[];
   brandMatches: CatalogBrandMatchView[];
+};
+
+/**
+ * `harvest.RunEstimate` in the gateway's OpenAPI document.
+ */
+export type HarvestRunEstimate = {
+  seconds: number;
+  basis: 'PRESET' | 'SOURCE' | 'DEFAULT';
+  samples: number;
 };
 
 /**

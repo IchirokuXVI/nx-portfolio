@@ -24154,6 +24154,30 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "scheduleId",
+            "required": false,
+            "in": "query",
+            "description": "The runs one schedule started (plan 0206). A deleted schedule still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "trigger",
+            "required": false,
+            "in": "query",
+            "description": "The runs of one trigger: MANUAL for a person, SCHEDULED for a schedule, SYSTEM for the postal code queue.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "SCHEDULED",
+                "SYSTEM"
+              ]
+            }
           }
         ],
         "responses": {
@@ -25166,6 +25190,573 @@
           },
           "501": {
             "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules": {
+      "get": {
+        "operationId": "AdminHarvestSchedulesController_list_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "One chain’s schedules. Absent lists every chain’s.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "presetId",
+            "required": false,
+            "in": "query",
+            "description": "The schedules of one preset.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestSchedulePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHarvestSchedulesController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHarvestScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `harvestSchedule.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules/{id}": {
+      "get": {
+        "operationId": "AdminHarvestSchedulesController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "put": {
+        "operationId": "AdminHarvestSchedulesController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHarvestScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestSchedulesController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules/{id}/enabled": {
+      "put": {
+        "operationId": "AdminHarvestSchedulesController_setEnabled_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetHarvestScheduleEnabledDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.setEnabled` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27661,6 +28252,30 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "required": false,
+            "in": "query",
+            "description": "The runs one schedule started (plan 0206). A deleted schedule still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "trigger",
+            "required": false,
+            "in": "query",
+            "description": "The runs of one trigger: MANUAL for a person, SCHEDULED for a schedule, SYSTEM for the postal code queue.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "SCHEDULED",
+                "SYSTEM"
+              ]
             }
           }
         ],
@@ -31360,6 +31975,89 @@
             ]
           }
         }
+      },
+      "CreateHarvestScheduleDto": {
+        "type": "object",
+        "properties": {
+          "presetId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The preset the schedule starts. It never changes: to point at another, delete the schedule and create one. An unknown preset answers 404."
+          },
+          "timeOfDay": {
+            "type": "string",
+            "example": "03:00",
+            "description": "The time of day, `HH:mm` on a 24 hour clock, in `timezone`."
+          },
+          "daysOfWeek": {
+            "example": [
+              1,
+              4
+            ],
+            "description": "The days it fires, 1 for Monday to 7 for Sunday, one to seven different days.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "Europe/Madrid",
+            "description": "An IANA name. Absent is Europe/Madrid."
+          },
+          "acknowledgedAutomaticFetch": {
+            "type": "boolean",
+            "description": "Must be true. A schedule fetches the chain with nobody asking, and the person who sets one up is told so first: this field says the warning was shown. Only a JSON true passes."
+          }
+        },
+        "required": [
+          "presetId",
+          "timeOfDay",
+          "daysOfWeek",
+          "acknowledgedAutomaticFetch"
+        ]
+      },
+      "UpdateHarvestScheduleDto": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "Europe/Madrid",
+            "description": "An IANA name. Absent is Europe/Madrid."
+          },
+          "timeOfDay": {
+            "type": "string",
+            "example": "03:00"
+          },
+          "daysOfWeek": {
+            "example": [
+              1,
+              4
+            ],
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "SetHarvestScheduleEnabledDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True takes the next slot from now. False clears it and keeps the last outcome as the history. Only a JSON true or false passes."
+          },
+          "acknowledgedAutomaticFetch": {
+            "type": "boolean",
+            "description": "Must be true to switch a schedule on, as on a create. Only a JSON true passes."
+          }
+        },
+        "required": [
+          "enabled"
+        ]
       },
       "ImportHarvestDocumentDto": {
         "type": "object",
@@ -39677,6 +40375,25 @@
           "AVAILABILITY"
         ]
       },
+      "enums.HarvestScheduleBlock": {
+        "type": "string",
+        "enum": [
+          "HARVEST_DISABLED",
+          "SCHEDULER_DISABLED",
+          "SOURCE_DISABLED",
+          "SOURCE_FAILING"
+        ]
+      },
+      "enums.HarvestScheduleOutcome": {
+        "type": "string",
+        "enum": [
+          "STARTED",
+          "SKIPPED_LATE",
+          "SKIPPED_FAILING",
+          "REFUSED",
+          "SKIPPED_BUSY"
+        ]
+      },
       "enums.HarvestWarningCode": {
         "type": "string",
         "enum": [
@@ -40734,6 +41451,9 @@
                 "type": "null"
               }
             ]
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
           }
         },
         "required": [
@@ -40906,6 +41626,18 @@
               "string",
               "null"
             ]
+          },
+          "scheduleId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interrupted": {
+            "type": "boolean"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
           }
         },
         "required": [
@@ -40976,6 +41708,182 @@
           "page",
           "name",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestScheduleLastRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.HarvestRunStatus"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requestedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestSchedulePage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.HarvestScheduleView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presetId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presetName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeOfDay": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 5,
+            "description": "HH:mm on a 24 hour clock, such as 03:00."
+          },
+          "daysOfWeek": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "minItems": 1,
+            "maxItems": 7,
+            "uniqueItems": true
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextRunAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blockedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestScheduleBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSlotAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestScheduleOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastOutcomeAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastOutcomeNote": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.HarvestScheduleLastRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "presetId",
+          "presetName",
+          "supermarketId",
+          "timeOfDay",
+          "daysOfWeek",
+          "timezone",
+          "enabled",
+          "nextRunAt",
+          "blockedBy",
+          "lastSlotAt",
+          "lastOutcome",
+          "lastOutcomeAt",
+          "lastOutcomeNote",
+          "lastRun",
+          "estimate",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       },
@@ -41817,6 +42725,33 @@
           "decidedAt",
           "prices",
           "brandMatches"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.RunEstimate": {
+        "type": "object",
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "PRESET",
+              "SOURCE",
+              "DEFAULT"
+            ]
+          },
+          "samples": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seconds",
+          "basis",
+          "samples"
         ],
         "additionalProperties": false
       },

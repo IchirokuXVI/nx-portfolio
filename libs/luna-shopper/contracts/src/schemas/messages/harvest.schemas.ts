@@ -1365,9 +1365,16 @@ const harvestScheduleLastRun = object(
   },
   ['id', 'status', 'requestedAt']
 );
-/** `HH:mm`, 24 hour. */
+/**
+ * `HH:mm`, 24 hour. A length and not a pattern, as every message schema here
+ * states: the gateway DTO and the harvester both check the form itself.
+ */
 const timeOfDay = (): JsonSchema =>
-  string({ pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' });
+  string({
+    minLength: 5,
+    maxLength: 5,
+    description: 'HH:mm on a 24 hour clock, such as 03:00.',
+  });
 /** ISO weekday numbers, 1 is Monday and 7 is Sunday, each at most once. */
 const daysOfWeek = (): JsonSchema => ({
   type: 'array',
