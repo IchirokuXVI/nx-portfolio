@@ -20,7 +20,7 @@ import type {
   BasketParticipant,
   BasketPriceScope,
   BasketProduct,
-  BasketRenameResult,
+  BasketProductList,
   BasketRow,
   BasketRowEntry,
   BasketRowResult,
@@ -88,7 +88,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -106,6 +106,14 @@ function entry(
   return {
     lineId,
     listId,
+    content: 'Milk',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left,
     bought: 0,
     asked: left,
@@ -176,6 +184,11 @@ interface World {
   readonly chosen?: ReadonlyMap<string, string>;
   /** The shop the rows were read at, which the device chose (velista `0102`). */
   readonly readAt?: string;
+  /**
+   * What the read of the lists that could take the product answers (velista
+   * `0139`, section 3): the lists, or null for a read that failed.
+   */
+  readonly productLists?: readonly BasketProductList[] | null;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -245,20 +258,8 @@ function storeDouble(world: World) {
    * only counts while it is still one of the row's own options, and a row with
    * exactly one option needs no choice at all.
    */
-  const chosen = signal<ReadonlyMap<string, string>>(
-    world.chosen ?? new Map<string, string>()
-  );
-  const itemIdFor = (key: string): string | undefined => {
-    const row = rowFor(key);
-    if (row === null) {
-      return undefined;
-    }
-    const held = chosen().get(key);
-    if (held !== undefined && row.optionIds.includes(held)) {
-      return held;
-    }
-    return row.optionIds.length === 1 ? row.optionIds[0] : undefined;
-  };
+  const itemIdFor = (key: string): string | undefined =>
+    rowFor(key)?.productId ?? undefined;
 
   // The shop the rows are read at (velista `0102`), which a world may name.
   const readAt = signal<string | null>(world.readAt ?? null);
@@ -270,13 +271,12 @@ function storeDouble(world: World) {
       readAt.set(locationId);
       return Promise.resolve();
     }),
-    chosen,
     itemIdFor,
-    choose: jest.fn((key: string, itemId: string) => {
-      const next = new Map(chosen());
-      next.set(key, itemId);
-      chosen.set(next);
-    }),
+    productLists: jest.fn(async () =>
+      world.productLists === undefined ? [] : world.productLists
+    ),
+    lineLeft: (result: BasketRowResult, lineId: string) =>
+      !result.entries.some((held) => held.lineId === lineId),
     skip: jest.fn().mockResolvedValue(null),
     unskip: jest.fn().mockResolvedValue(null),
     setDemand: jest.fn().mockResolvedValue(null),
@@ -318,20 +318,20 @@ function storeDouble(world: World) {
       async (
         rowKey: string,
         body: { content: string }
-      ): Promise<BasketRenameResult | null> => {
+      ): Promise<BasketRowResult | null> => {
         const held = rowFor(rowKey) ?? line();
-        const renamed = { ...held, content: body.content };
+        const renamed = {
+          ...held,
+          content: body.content,
+          entries: held.entries.map((one) => ({
+            ...one,
+            content: body.content,
+          })),
+        };
         rows.set(
           rows().map((row) => (row.rowKey === held.rowKey ? renamed : row))
         );
-        return {
-          row: renamed,
-          progress: { done: 0, unavailable: 0, total: 1 },
-          pending: 1,
-          replacedRowKey: null,
-          absorbedRowKey: null,
-          skippedCount: 0,
-        };
+        return { entries: renamed.entries, skippedCount: 0 };
       }
     ),
     suggest: jest.fn().mockResolvedValue([]),
@@ -469,7 +469,7 @@ async function openHistory(fixture: ComponentFixture<SettleSheet>) {
  */
 async function commitReel(
   fixture: ComponentFixture<SettleSheet>,
-  which: 'got-reel' | 'ask-reel',
+  which: 'ask-reel',
   change: { from: number; to: number },
   index = 0
 ) {
@@ -481,9 +481,14 @@ async function commitReel(
   fixture.detectChanges();
 }
 
-/** One more on the first household's "got" reel: a purchase of one. */
-const gotOne = (fixture: ComponentFixture<SettleSheet>) =>
-  commitReel(fixture, 'got-reel', { from: 0, to: 1 });
+/** Press the primary button, "Got all N", which buys everything left. */
+async function gotOne(fixture: ComponentFixture<SettleSheet>) {
+  (fixture.nativeElement as HTMLElement)
+    .querySelector<HTMLButtonElement>('.actions .primary')
+    ?.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
 
 /** Press "They had none", which every reader who may settle is offered. */
 async function pressNone(fixture: ComponentFixture<SettleSheet>) {
@@ -737,13 +742,7 @@ describe('SettleSheet: what a write could not reach', () => {
   }
 
   function result(skippedCount: number): BasketRowResult {
-    return {
-      row: line(),
-      progress: { done: 0, unavailable: 0, total: 1 },
-      pending: 1,
-      replacedRowKey: null,
-      skippedCount,
-    };
+    return { entries: line().entries, skippedCount };
   }
 
   const missed = (fixture: ComponentFixture<SettleSheet>) =>
@@ -780,8 +779,8 @@ describe('SettleSheet: what a write could not reach', () => {
     expect(dismissedTo()).toHaveLength(1);
   });
 
-  /** The reel keeps the sheet up, but a missed entry is still told. */
-  it('says it after a "got" reel too', async () => {
+  /** A missed entry is told after the primary button too. */
+  it('says it after "Got all" too', async () => {
     const { fixture, store } = await render();
     store.settle.mockResolvedValue(result(1));
 
@@ -883,59 +882,14 @@ describe('SettleSheet: the trip is finished', () => {
     expect(control(fixture, '.primary')).toBeNull();
   });
 
-  it('offers no way to swap the product', async () => {
-    // A correction of the record is still a change to it, and the server refuses it.
+  it('offers no "Got all" on a product row either', async () => {
     const { fixture } = await render({
-      lines: [line({ optionIds: ['item-1'] })],
-      products: new Map([
-        [
-          'item-1',
-          {
-            id: 'item-1',
-            name: { en: 'Hacendado milk', es: 'Leche Hacendado' },
-            brand: null,
-            size: null,
-            unit: null,
-            offer: null,
-            offers: [],
-            productGroupId: null,
-            categories: [
-              {
-                id: 'cat-uncategorised',
-                parentId: 'cat-other',
-                slug: 'uncategorised',
-                name: { en: 'Not yet categorised', es: 'Sin categoría' },
-              },
-            ],
-          },
-        ],
-        [
-          'item-2',
-          {
-            id: 'item-2',
-            name: { en: 'Pascual milk', es: 'Leche Pascual' },
-            brand: null,
-            size: null,
-            unit: null,
-            offer: null,
-            offers: [],
-            productGroupId: null,
-            categories: [
-              {
-                id: 'cat-uncategorised',
-                parentId: 'cat-other',
-                slug: 'uncategorised',
-                name: { en: 'Not yet categorised', es: 'Sin categoría' },
-              },
-            ],
-          },
-        ],
-      ]),
+      lines: [line({ productId: 'item-1' })],
       basketFinished: true,
     });
 
-    expect(control(fixture, 'lib-settle-product .name')).not.toBeNull();
-    expect(control(fixture, 'lib-settle-product .change')).toBeNull();
+    expect(control(fixture, '.primary')).toBeNull();
+    expect(control(fixture, '.disclosure')).toBeNull();
   });
 
   it('keeps the entries pane and takes its reels off', async () => {
@@ -1105,69 +1059,20 @@ describe('SettleSheet: a settlement that was taken back', () => {
  * open**, because somebody adjusting a number wants to see where it landed. The
  * buttons that close the line ("They had none") still close the sheet.
  */
-describe('SettleSheet: the reels on the entries pane', () => {
+describe('SettleSheet: the buttons and the quantity of each list', () => {
   function landed(): BasketRowResult {
-    return {
-      row: line(),
-      progress: { done: 0, unavailable: 0, total: 1 },
-      pending: 1,
-      replacedRowKey: null,
-      skippedCount: 0,
-    };
+    return { entries: line().entries, skippedCount: 0 };
   }
 
-  it('offers no "Got all" and no "Got some"', async () => {
+  it('offers "Got all" first, and no "Got some"', async () => {
     const { fixture } = await render();
 
-    expect(text(fixture)).not.toContain('basket.settle.all');
-    expect(text(fixture)).not.toContain('basket.settle.some');
     expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.primary')
-    ).toBeNull();
-  });
-
-  it('settles against one household when "got" goes up, and stays open', async () => {
-    const { fixture, store } = await render();
-    store.settle.mockResolvedValue(landed());
-
-    await commitReel(fixture, 'got-reel', { from: 0, to: 2 });
-
-    expect(store.settle).toHaveBeenCalledWith(
-      LINE_ID,
-      expect.objectContaining({
-        outcome: 'BOUGHT',
-        quantity: 2,
-        from: 4,
-        allocations: [{ lineId: 'zl1', quantity: 2 }],
-      })
-    );
-    expect(dismissedTo()).toEqual([]);
-  });
-
-  it('takes units back when "got" goes down, and stays open', async () => {
-    const { fixture, store } = await render({
-      lines: [
-        line({
-          bought: 2,
-          left: 2,
-          state: 'PARTLY',
-          entries: [
-            entry('l1', 'zl1', 1, { bought: 2, asked: 3 }),
-            entry('l2', 'zl2', 1),
-          ],
-        }),
-      ],
-    });
-    store.revert.mockResolvedValue(landed());
-
-    await commitReel(fixture, 'got-reel', { from: 2, to: 1 });
-
-    expect(store.revert).toHaveBeenCalledWith(LINE_ID, {
-      target: 'UNITS',
-      units: 1,
-      from: 2,
-    });
-    expect(dismissedTo()).toEqual([]);
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.actions .primary')
+        ?.textContent?.trim()
+    ).toBe('basket.sheet.gotAll');
+    expect(text(fixture)).not.toContain('basket.settle.some');
   });
 
   it('still closes on "They had none"', async () => {
@@ -1179,24 +1084,36 @@ describe('SettleSheet: the reels on the entries pane', () => {
     expect(dismissedTo()).toHaveLength(1);
   });
 
-  it('changes what a list asks for when "asked for" settles, with no button', async () => {
+  it('changes what a list asks for when its quantity settles, with no button', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue({ row: line() });
+    store.setDemand.mockResolvedValue(landed());
 
     await commitReel(fixture, 'ask-reel', { from: 3, to: 5 });
 
-    expect(store.setDemand).toHaveBeenCalledWith(LINE_ID, {
+    expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl1',
       quantity: 5,
       from: 3,
     });
-    expect(text(fixture)).not.toContain('basket.demand.apply');
     expect(dismissedTo()).toEqual([]);
   });
 
-  it('closes after "asked for" only when the row left the basket', async () => {
+  it('stays open when a list asks for none and another still asks', async () => {
     const { fixture, store } = await render();
-    store.setDemand.mockResolvedValue({ row: null });
+    store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    await commitReel(fixture, 'ask-reel', { from: 3, to: 0 });
+
+    expect(store.handOver).not.toHaveBeenCalled();
+    expect(dismissedTo()).toEqual([]);
+  });
+
+  it('closes, and hands the page a sentence, when the row left the basket', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockImplementation(async () => {
+      store.rows.set([]);
+      return { entries: [], skippedCount: 0 };
+    });
 
     await commitReel(fixture, 'ask-reel', { from: 3, to: 0 });
 
@@ -1245,18 +1162,15 @@ describe('SettleSheet: what each household asked for and got', () => {
     expect(pane(fixture)).not.toBeNull();
   });
 
-  /**
-   * A row with one entry whose list this reader was not served says nothing
-   * anybody can act on — "another list asks for 4" on a row that asks for 4 — so
-   * the pane is not drawn at all rather than drawn empty.
-   */
-  it('draws nothing for a lone entry nobody can name', async () => {
+  /** A guest sees the lists and the quantities (velista `0139`, section 3). */
+  it('draws a lone entry nobody can name as "Another list"', async () => {
     const { fixture } = await render({
       lines: [line({ entries: [entry(null, 'zl1', 4)] })],
       served: [],
     });
 
-    expect(pane(fixture)).toBeNull();
+    expect(pane(fixture)).not.toBeNull();
+    expect(text(fixture)).toContain('basket.entries.otherList');
   });
 
   /** One served entry is worth a pane: it says which household is asking. */
@@ -1568,26 +1482,36 @@ describe('SettleSheet: renaming the line', () => {
       expect(store.renameRow).toHaveBeenCalledTimes(1);
     });
 
-    it('follows the survivor with leaveTo when this line was absorbed', async () => {
+    it('follows its lines to the key of the survivor when the merge regroups them', async () => {
       const { fixture, store } = await asked();
       store.renameRow.mockImplementationOnce(async () => {
-        // The earliest line survives a merge, so the answer's row is keyed by a
-        // different anchor: the row the rename addressed is the one absorbed.
-        const survivor = line({ rowKey: 'zl-0', content: 'Leche Entera' });
+        // The earliest line survives a merge, so the row that holds this sheet's
+        // lines is keyed by a different anchor once the basket is read again.
+        // This sheet's line is among its entries, as a key always is.
+        const survivor = line({
+          rowKey: 'zl-0',
+          content: 'Leche Entera',
+          entries: [entry('l1', 'zl-0', 1), entry('l1', LINE_ID, 3)],
+        });
         store.rows.set([survivor]);
-        return {
-          row: survivor,
-          progress: { done: 0, unavailable: 0, total: 1 },
-          pending: 1,
-          replacedRowKey: LINE_ID,
-          absorbedRowKey: LINE_ID,
-          skippedCount: 0,
-        };
+        return { entries: survivor.entries, skippedCount: 0 };
+      });
+      // A real navigation moves the sheet's key onto the survivor's, which ends
+      // the following. The double stands in for that by keying the row as the
+      // sheet now is, so it follows once.
+      const leaveTo = TestBed.inject(SheetNavigation).leaveTo as jest.Mock;
+      leaveTo.mockImplementation(async () => {
+        store.rows.set(
+          store.rows().map((held) => ({ ...held, rowKey: LINE_ID }))
+        );
       });
 
       await press(fixture, mergeButton(fixture));
+      // The sheet follows its row from an effect, which the next tick runs.
+      TestBed.tick();
+      await fixture.whenStable();
 
-      const leaveTo = TestBed.inject(SheetNavigation).leaveTo as jest.Mock;
+      expect(leaveTo).toHaveBeenCalledTimes(1);
       expect(leaveTo).toHaveBeenCalledWith(
         `/velista/en/shopping-lists/${BASKET_ID}/sheet/rows/zl-0/settle`
       );
@@ -1776,284 +1700,388 @@ describe('SettleSheet: putting a row off for now', () => {
  * half: a choice reaches the server as `itemId` on a purchase and by no other
  * route, which is why every assertion about it ends on a settle body.
  */
-describe('SettleSheet: the product somebody got', () => {
+describe('SettleSheet: a product row (velista 0139, section 3)', () => {
   const MILK: BasketProduct = {
     id: 'i-whole',
-    name: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
-    brand: null,
-    format: null,
+    name: { en: 'Whole milk', es: 'Leche entera' },
+    brand: 'Hacendado',
+    size: null,
+    unit: null,
     imageUrl: null,
-    offer: null,
+    offer: {
+      price: 0.92,
+      currency: 'EUR',
+      unitPrice: null,
+      unitPriceLabel: null,
+      observedAt: null,
+      sourceKind: 'OFFICIAL_WEB',
+      stale: false,
+      priceScopeId: 's-dia',
+    },
     offers: [],
+    atShop: null,
     productGroupId: null,
     categories: [],
+    sectionIds: null,
   };
-  const SKIMMED: BasketProduct = { ...MILK, id: 'i-skimmed' };
+  const products = new Map([[MILK.id, MILK]]);
+  const milkRow = (over: Partial<BasketRow> = {}) =>
+    line({ productId: MILK.id, ...over });
 
-  const products = new Map([
-    [MILK.id, MILK],
-    [SKIMMED.id, SKIMMED],
-  ]);
+  const el = (fixture: ComponentFixture<SettleSheet>) =>
+    fixture.nativeElement as HTMLElement;
 
-  const twoOptions = (over: Partial<BasketRow> = {}) =>
-    line({ optionIds: [MILK.id, SKIMMED.id], ...over });
+  const disclosure = (fixture: ComponentFixture<SettleSheet>) =>
+    el(fixture).querySelector<HTMLButtonElement>('.disclosure');
 
-  const options = (fixture: ComponentFixture<SettleSheet>) => [
-    ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-      '.option'
-    ),
-  ];
-
-  async function openProducts(fixture: ComponentFixture<SettleSheet>) {
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.product-change')
-      ?.click();
+  async function openOthers(fixture: ComponentFixture<SettleSheet>) {
+    disclosure(fixture)?.click();
     await fixture.whenStable();
     fixture.detectChanges();
   }
 
-  it('offers the way in only when there is something to choose between', async () => {
-    const one = await render({
-      lines: [line({ optionIds: [MILK.id] })],
-      products,
+  const PANTRY: BasketProductList = {
+    listId: 'l-pantry',
+    listName: 'Pantry',
+    zoneId: 'z1',
+    zoneName: 'Home',
+    lineId: 'zl9',
+    lineName: 'Leche',
+    quantity: 0,
+  };
+  const BREAKFAST: BasketProductList = {
+    listId: 'l-breakfast',
+    listName: 'Breakfast',
+    zoneId: 'z2',
+    zoneName: 'Office',
+    lineId: null,
+    lineName: null,
+    quantity: null,
+  };
+
+  async function raise(
+    fixture: ComponentFixture<SettleSheet>,
+    to: number,
+    index = 0
+  ) {
+    const reels = fixture.debugElement.queryAll(
+      By.css('.others lib-quantity-reel')
+    );
+    (reels[index].componentInstance as QuantityReel).committedTo.emit({
+      from: 0,
+      to,
     });
-    expect(
-      (one.fixture.nativeElement as HTMLElement).querySelector(
-        '.product-change'
-      )
-    ).toBeNull();
-
-    const two = await render({ lines: [twoOptions()], products });
-    expect(
-      (two.fixture.nativeElement as HTMLElement).querySelector(
-        '.product-change'
-      )
-    ).not.toBeNull();
-  });
-
-  it('says no product is chosen on a row of several, and draws the one on a row of one', async () => {
-    const none = await render({ lines: [twoOptions()], products });
-    expect(text(none.fixture)).toContain('basket.line.free');
-
-    // Not a choice at all: there was nothing to choose between, and the row has
-    // been drawing that product all along.
-    const one = await render({
-      lines: [line({ optionIds: [MILK.id] })],
-      products,
-    });
-    expect(text(one.fixture)).toContain('Whole milk 1 L');
-  });
-
-  describe('the product card', () => {
-    const CARD: BasketProduct = {
-      ...MILK,
-      id: 'i-card',
-      brand: 'Hacendado',
-      imageUrl: 'https://img.example/milk.png',
-      offer: {
-        price: 0.95,
-        currency: 'EUR',
-        unitPrice: null,
-        unitPriceLabel: null,
-        observedAt: null,
-        sourceKind: 'OFFICIAL_WEB',
-        stale: false,
-        priceScopeId: 's-dia',
-      },
-    };
-
-    const card = (fixture: ComponentFixture<SettleSheet>) =>
-      (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-settle-product'
-      );
-
-    it('draws the picture, the name over the brand, and the price', async () => {
-      const { fixture } = await render({
-        lines: [line({ optionIds: [CARD.id] })],
-        products: new Map([[CARD.id, CARD]]),
-      });
-
-      expect(card(fixture)?.querySelector('img')?.getAttribute('src')).toBe(
-        CARD.imageUrl
-      );
-      expect(card(fixture)?.querySelector('.name')?.textContent).toContain(
-        'Whole milk 1 L'
-      );
-      expect(card(fixture)?.querySelector('.detail')?.textContent).toContain(
-        'Hacendado'
-      );
-      expect(card(fixture)?.querySelector('.amount')?.textContent).toContain(
-        '0.95'
-      );
-    });
-
-    it('draws the carton for a product with no picture, and says no price', async () => {
-      const { fixture } = await render({
-        lines: [line({ optionIds: [MILK.id] })],
-        products,
-      });
-
-      expect(card(fixture)?.querySelector('img')).toBeNull();
-      expect(card(fixture)?.querySelector('lib-product-icon')).not.toBeNull();
-      expect(card(fixture)?.textContent).toContain('basket.product.noPrice');
-    });
-
-    it('draws every option on the product pane as the same card, the chosen one marked', async () => {
-      const PICTURED: BasketProduct = { ...CARD, id: 'i-pictured' };
-      const { fixture } = await render({
-        lines: [line({ optionIds: [MILK.id, PICTURED.id] })],
-        products: new Map([
-          [MILK.id, MILK],
-          [PICTURED.id, PICTURED],
-        ]),
-        chosen: new Map([[LINE_ID, PICTURED.id]]),
-      });
-
-      card(fixture)?.querySelector<HTMLButtonElement>('.change')?.click();
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      const cards = options(fixture).map((option) =>
-        option.querySelector('lib-settle-product')
-      );
-      expect(cards).toHaveLength(2);
-      // The row without a picture draws the carton; the one with, its image.
-      expect(cards[0]?.querySelector('lib-product-icon')).not.toBeNull();
-      expect(cards[1]?.querySelector('img')?.getAttribute('src')).toBe(
-        CARD.imageUrl
-      );
-      expect(cards[1]?.querySelector('.amount')?.textContent).toContain('0.95');
-      // No "Change" inside the list: the radio is the choice.
-      expect(cards[1]?.querySelector('.change')).toBeNull();
-      expect(cards[0]?.querySelector('.card.is-chosen')).toBeNull();
-      expect(cards[1]?.querySelector('.card.is-chosen')).not.toBeNull();
-      expect(
-        options(fixture)[1].querySelector<HTMLInputElement>('input')?.checked
-      ).toBe(true);
-    });
-
-    it('offers "Change" on the card once a product of several is chosen', async () => {
-      const { fixture } = await render({
-        lines: [twoOptions()],
-        products,
-        chosen: new Map([[LINE_ID, SKIMMED.id]]),
-      });
-
-      card(fixture)?.querySelector<HTMLButtonElement>('.change')?.click();
-      await fixture.whenStable();
-      fixture.detectChanges();
-
-      expect(options(fixture)).toHaveLength(2);
-    });
-  });
-
-  it('lists the options in the server’s order', async () => {
-    const { fixture } = await render({ lines: [twoOptions()], products });
-    await openProducts(fixture);
-
-    // Never sorted by price: the anchor's product first and then the rest as the
-    // entries named them, which is the order the row above draws.
-    expect(options(fixture)).toHaveLength(2);
-    expect(options(fixture)[0].textContent).toContain('Whole milk 1 L');
-  });
-
-  it('records the choice and goes back to the settle buttons', async () => {
-    const { fixture, store } = await render({
-      lines: [twoOptions()],
-      products,
-    });
-    await openProducts(fixture);
-    options(fixture)[1].querySelector('input')?.click();
     await fixture.whenStable();
     fixture.detectChanges();
+  }
 
-    expect(store.choose).toHaveBeenCalledWith(LINE_ID, SKIMMED.id);
-    // Closing the pane on the choice is the whole gesture: somebody who has
-    // answered must not be left looking at their own answer with a second
-    // button still to press.
-    expect(options(fixture)).toHaveLength(0);
-    expect(text(fixture)).toContain('basket.settle.none');
+  it('is titled by the product, with the price of one and how many are left', async () => {
+    const { fixture } = await render({ lines: [milkRow()], products });
+
+    expect(el(fixture).querySelector('.title')?.textContent?.trim()).toBe(
+      'Whole milk Hacendado'
+    );
+    expect(el(fixture).querySelector('.subtitle')?.textContent?.trim()).toBe(
+      'basket.sheet.each · basket.sheet.toGet'
+    );
   });
 
-  it('writes nothing to the server when somebody chooses', async () => {
-    const { fixture, store } = await render({
-      lines: [twoOptions()],
-      products,
-    });
-    await openProducts(fixture);
-    options(fixture)[1].querySelector('input')?.click();
-    await fixture.whenStable();
+  it('draws no price for a row with no product, and says how many are left', async () => {
+    const { fixture } = await render();
 
-    // **Nothing is stored about a product before the purchase.** Backend `0136`
-    // deleted the stored pick, and this is what replaces it on the screen.
-    expect(store.settle).not.toHaveBeenCalled();
-    expect(store.renameRow).not.toHaveBeenCalled();
+    expect(el(fixture).querySelector('.title')?.textContent?.trim()).toBe(
+      'Milk'
+    );
+    expect(el(fixture).querySelector('.subtitle')?.textContent?.trim()).toBe(
+      'basket.sheet.toGet'
+    );
   });
 
-  it('sends the chosen product with the purchase', async () => {
-    const { fixture, store } = await render({
-      lines: [twoOptions()],
-      products,
-      chosen: new Map([[LINE_ID, SKIMMED.id]]),
-    });
+  it('says what was got on one quiet line, only once something was', async () => {
+    const none = await render({ lines: [milkRow()], products });
+    expect(text(none.fixture)).not.toContain('basket.sheet.gotAt');
 
+    const some = await render({
+      lines: [milkRow({ bought: 2, left: 2, state: 'PARTLY' })],
+      products,
+    });
+    expect(text(some.fixture)).toContain('basket.sheet.gotAt');
+  });
+
+  it('offers "Got all N" and buys what is left, with the row\'s product, then closes', async () => {
+    const { fixture, store } = await render({ lines: [milkRow()], products });
+    store.settle.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    expect(el(fixture).querySelector('.primary')?.textContent?.trim()).toBe(
+      'basket.sheet.gotAll'
+    );
     await gotOne(fixture);
 
     expect(store.settle).toHaveBeenCalledWith(
       LINE_ID,
-      expect.objectContaining({ outcome: 'BOUGHT', itemId: SKIMMED.id })
+      expect.objectContaining({
+        outcome: 'BOUGHT',
+        quantity: 4,
+        from: 4,
+        itemId: MILK.id,
+      })
+    );
+    expect(dismissedTo()).toHaveLength(1);
+  });
+
+  it('says "Got the other N" once some of it is bought', async () => {
+    const { fixture } = await render({
+      lines: [milkRow({ bought: 2, left: 2, state: 'PARTLY' })],
+      products,
+    });
+
+    expect(el(fixture).querySelector('.primary')?.textContent?.trim()).toBe(
+      'basket.sheet.gotOther'
     );
   });
 
-  it('sends a row’s only product without anybody choosing it', async () => {
-    const { fixture, store } = await render({
-      lines: [line({ optionIds: [MILK.id] })],
-      products,
-    });
+  it('names no product on the buy of a row with none', async () => {
+    const { fixture, store } = await render();
+    store.settle.mockResolvedValue({ entries: [], skippedCount: 0 });
 
     await gotOne(fixture);
 
-    expect(store.settle).toHaveBeenCalledWith(
-      LINE_ID,
-      expect.objectContaining({ itemId: MILK.id })
-    );
+    expect(
+      (store.settle as unknown as jest.Mock).mock.calls[0][1]
+    ).not.toHaveProperty('itemId');
   });
 
-  it('names no product when nobody chose from several', async () => {
-    const { fixture, store } = await render({
-      lines: [twoOptions()],
-      products,
-    });
+  it('has no product pane to ask which was got', async () => {
+    const { fixture } = await render({ lines: [milkRow()], products });
 
-    await gotOne(fixture);
-
-    // The honest record: nobody said which. An `itemId` here would name the
-    // first option, which is a product nobody picked up.
-    const [, body] = (store.settle as unknown as jest.Mock).mock.calls[0];
-    expect(body.itemId).toBeUndefined();
+    expect(text(fixture)).not.toContain('basket.product.title');
+    expect(el(fixture).querySelector('.product-change')).toBeNull();
   });
 
-  it('names no product on a close, which buys nothing', async () => {
-    const { fixture, store } = await render({
-      lines: [line({ optionIds: [MILK.id] })],
-      products,
+  describe('Add it to another list', () => {
+    it('is closed, and reads the lists of the product once', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [PANTRY],
+      });
+
+      expect(disclosure(fixture)?.getAttribute('aria-expanded')).toBe('false');
+      expect(store.productLists).toHaveBeenCalledTimes(1);
+      expect(store.productLists).toHaveBeenCalledWith(MILK.id);
     });
 
-    const none = [
-      ...(
-        fixture.nativeElement as HTMLElement
-      ).querySelectorAll<HTMLButtonElement>('.actions button'),
-    ].find((button) =>
-      (button.textContent ?? '').includes('basket.settle.none')
-    );
-    none?.click();
-    await fixture.whenStable();
+    it('opens on the lists, the one at zero with its line', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [PANTRY, BREAKFAST],
+      });
+      await openOthers(fixture);
 
-    const [, body] = (store.settle as unknown as jest.Mock).mock.calls[0];
-    expect(body.outcome).toBe('NOT_AVAILABLE');
-    // Naming one would put a product in a purchase history that has no purchase
-    // in it.
-    expect(body.itemId).toBeUndefined();
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-where')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Home · Leche', 'Office']);
+    });
+
+    it('draws the loading row while the read is out', async () => {
+      const { fixture, store } = await render({ lines: [milkRow()], products });
+      store.productLists.mockReturnValue(new Promise(() => undefined));
+      // Ask again on a read that never answers.
+      (
+        fixture.componentInstance as unknown as {
+          retryOthers(): void;
+        }
+      ).retryOthers();
+      fixture.detectChanges();
+      await openOthers(fixture);
+
+      expect(text(fixture)).toContain('basket.sheet.othersLoading');
+    });
+
+    it('draws a failed row, and its retry reads again', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: null,
+      });
+      await openOthers(fixture);
+
+      expect(text(fixture)).toContain('basket.sheet.othersFailed');
+
+      store.productLists.mockResolvedValue([PANTRY]);
+      el(fixture).querySelector<HTMLButtonElement>('.retry')?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.productLists).toHaveBeenCalledTimes(2);
+      expect(text(fixture)).toContain('Pantry');
+    });
+
+    it('leaves out a list the row already draws', async () => {
+      // The server decides the lists with no picks, so a list whose line
+      // counts as the product only by its price comes back too (backend
+      // `0201`, "What the build decided", point 14).
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [
+          { ...PANTRY, listId: 'l1', listName: 'Groceries' },
+          BREAKFAST,
+        ],
+      });
+      await openOthers(fixture);
+
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-where')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Office']);
+    });
+
+    it('is not drawn when every list it answers is already drawn', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [{ ...PANTRY, listId: 'l1' }],
+      });
+
+      expect(disclosure(fixture)).toBeNull();
+    });
+
+    it('is not drawn when the read answers no list', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [],
+      });
+
+      expect(disclosure(fixture)).toBeNull();
+    });
+
+    it('raises a list that holds the product at zero through its line', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [PANTRY, BREAKFAST],
+      });
+      store.setDemand.mockResolvedValue({
+        entries: [entry('l-pantry', 'zl9', 2)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+
+      await raise(fixture, 2);
+
+      expect(store.setDemand).toHaveBeenCalledWith({
+        lineId: 'zl9',
+        quantity: 2,
+        from: 0,
+      });
+      // It asks now, so it leaves the lists that could.
+      expect(
+        [...el(fixture).querySelectorAll('.others .row-name')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['Breakfast']);
+    });
+
+    it('draws a line that asks for the product in another row at its own quantity', async () => {
+      // The read uses no picks, so a line that holds the product but counts as
+      // another one comes back asking for 3. A reel drawn at 0 would send 3 to 1
+      // and take two units off that line.
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [{ ...PANTRY, quantity: 3 }],
+      });
+      store.setDemand.mockResolvedValue({
+        entries: [entry('l-pantry', 'zl9', 4)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+
+      const reel = fixture.debugElement.query(
+        By.css('.others lib-quantity-reel')
+      ).componentInstance as QuantityReel;
+      expect(reel.value()).toBe(3);
+
+      reel.committedTo.emit({ from: 3, to: 4 });
+      await fixture.whenStable();
+
+      expect(store.setDemand).toHaveBeenCalledWith({
+        lineId: 'zl9',
+        quantity: 4,
+        from: 3,
+      });
+    });
+
+    it('adds a line named by the product to a list that does not hold it', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+      });
+      store.addLine.mockResolvedValue({
+        entries: [entry('l-breakfast', 'zl10', 1)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+
+      await raise(fixture, 1);
+
+      expect(store.addLine).toHaveBeenCalledWith({
+        targetListId: 'l-breakfast',
+        content: 'Whole milk',
+        quantity: 1,
+        itemIds: [MILK.id],
+      });
+      expect(disclosure(fixture)).toBeNull();
+    });
+
+    it('keeps the list and says so when the add is refused', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+      });
+      await openOthers(fixture);
+
+      await raise(fixture, 1);
+
+      expect(el(fixture).querySelector('.failed')).not.toBeNull();
+      expect(text(fixture)).toContain('Breakfast');
+      expect(store.addLine).toHaveBeenCalledTimes(1);
+    });
+
+    it('is never offered to a guest, who is not read for', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        meKind: 'GUEST',
+        served: [],
+        productLists: [PANTRY],
+      });
+
+      expect(disclosure(fixture)).toBeNull();
+      expect(store.productLists).not.toHaveBeenCalled();
+    });
+
+    it('is not offered on a row with no product, which keeps its rename', async () => {
+      const { fixture, store } = await render({ productLists: [PANTRY] });
+
+      expect(disclosure(fixture)).toBeNull();
+      expect(store.productLists).not.toHaveBeenCalled();
+      expect(el(fixture).querySelector('#settle-name')).not.toBeNull();
+    });
+
+    it('offers no rename on a product row, which the catalog names', async () => {
+      const { fixture } = await render({ lines: [milkRow()], products });
+
+      expect(el(fixture).querySelector('#settle-name')).toBeNull();
+    });
   });
 
   describe('the price scope (velista 0095, section 6)', () => {
@@ -2077,7 +2105,7 @@ describe('SettleSheet: the product somebody got', () => {
       selector: 'got' | ((button: HTMLButtonElement) => boolean)
     ): Promise<Record<string, unknown>> {
       const { fixture, store } = await render({
-        lines: [line({ optionIds: [PRICED.id] })],
+        lines: [line({ productId: PRICED.id })],
         products: priced,
       });
       if (selector === 'got') {
@@ -2167,7 +2195,7 @@ describe('SettleSheet: the product somebody got', () => {
       selector: 'got' | ((button: HTMLButtonElement) => boolean)
     ): Promise<Record<string, unknown>> {
       const { fixture, store } = await render({
-        lines: [line({ optionIds: [AT_SHOP.id] })],
+        lines: [line({ productId: AT_SHOP.id })],
         products: new Map([[AT_SHOP.id, AT_SHOP]]),
         scopes: SCOPES,
         ...(readAt === undefined ? {} : { readAt }),
@@ -2269,7 +2297,7 @@ describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
 
     await commitReel(fixture, 'ask-reel', { from: 0, to: 1 });
 
-    expect(store.setDemand).toHaveBeenCalledWith(LINE_ID, {
+    expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl1',
       quantity: 1,
       from: 0,
@@ -2289,6 +2317,6 @@ describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
 
     expect(text(fixture)).toContain('basket.elsewhere.caption');
     expect(text(fixture)).toContain('basket.settle.none');
-    expect(reels(fixture, 'got-reel').length).toBeGreaterThan(0);
+    expect(text(fixture)).toContain('basket.sheet.gotAll');
   });
 });

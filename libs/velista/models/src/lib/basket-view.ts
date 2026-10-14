@@ -39,8 +39,9 @@ import type { LocalizedName } from './shopping-profile';
  * ## A row is not a line
  *
  * One thing to buy can be asked for by two households, and it is one thing to
- * pick off one shelf. So a **row** is the covered lines that share a merge key,
- * each of them an **entry**, and a write addresses the row.
+ * pick off one shelf. So a **row** is the covered lines that count as the same
+ * product, or that share a name when they hold none (backend `0201`), each of
+ * them an **entry**, and a write names the lines of the row it acts on.
  *
  * ## Redaction is a list this reader was served
  *
@@ -521,6 +522,39 @@ export interface BasketRowEntry {
    * client has a single test for "served" and cannot disagree with itself.
    */
   readonly listId: string | null;
+  /**
+   * The name of the line on its own list (backend `0201`, section 3). The sheet
+   * of a row draws it under the list, and the search of the page matches it.
+   */
+  readonly content: string;
+  /** The products of the line, in the order the line holds them. */
+  readonly itemIds: readonly string[];
+  /** The favourite of the line, or null. */
+  readonly favoriteItemId: string | null;
+  /**
+   * Whether the reader may edit this line, by the server: they hold `WRITE` on
+   * its list themselves. False for a guest.
+   */
+  readonly canWrite: boolean;
+  /**
+   * The product of the latest standing buy of this line through this basket in
+   * its trip, or null (backend `0201`, section 1). While it is set the line
+   * counts as that product, so a value that differs from the row's
+   * {@link BasketRow.productId} means the line belongs to another row now, and
+   * only a read can say which.
+   */
+  readonly tripItemId: string | null;
+  /** A standing skip of this basket on the line (backend `0137`). */
+  readonly skipped: boolean;
+  /** The newest act of this basket on the line is "they had none", and it holds. */
+  readonly closed: boolean;
+  /**
+   * The newest standing act of this basket on the line, or null (backend
+   * `0204`). Read so that a row rebuilt from the entries of a write answer names
+   * who touched it last, as the read does. `at` orders two acts and is never
+   * compared with this device's clock.
+   */
+  readonly act: BasketEntryAct | null;
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
@@ -555,6 +589,19 @@ export interface BasketRowEntry {
 }
 
 /**
+ * The newest thing a basket did to one line: a purchase, "they had none", or a
+ * skip (backend `0204`, section 2).
+ *
+ * `outcome` is a plain string, because the one question the rules ask of it is
+ * whether it was a skip. `at` is the server's instant, as it was sent.
+ */
+export interface BasketEntryAct {
+  readonly participantId: string | null;
+  readonly at: string;
+  readonly outcome: string;
+}
+
+/**
  * One thing to buy, however many households asked for it.
  *
  * ## The key is a line id, and that is not an accident
@@ -572,7 +619,20 @@ export interface BasketRowEntry {
 export interface BasketRow {
   /** The anchor's list line id. The key on the wire and in a sheet's URL. */
   readonly rowKey: string;
+  /**
+   * The anchor's name. A row with a product is named by the product, and this
+   * is what it draws when the catalog cannot name that product.
+   */
   readonly content: string;
+  /**
+   * The product every entry of this row counts as, or null for a row whose
+   * lines hold no product (backend `0201`, section 2).
+   *
+   * One product or none, never a set: the server decides which product each
+   * line counts as (its buy in this trip, its favourite, its cheapest, its
+   * first), and merges the lines that agree.
+   */
+  readonly productId: string | null;
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
@@ -603,8 +663,6 @@ export interface BasketRow {
    * and one word for two facts is how a screen comes to say the wrong number.
    */
   readonly awaitingApproval: boolean;
-  /** The union of the entries' product sets, in the server's order, anchor first. */
-  readonly optionIds: readonly string[];
   /**
    * The participant behind the newest standing act on this row, or null.
    *
@@ -677,23 +735,19 @@ export interface BasketListRef {
  * heading that says Mercadona is the defect this whole plan exists to remove.
  */
 /**
- * The product a row means, or undefined for a row that means none.
+ * The product a row is, or undefined for a row that is none.
  *
- * The **first** of {@link BasketRow.optionIds}, which backend `0136` orders anchor
- * first: a row has no `pickId` any more, because a pick was a column on the line
- * the basket stored and a basket stores no lines. What is left is the union of its
- * entries' product sets, and the first of them is what the anchor line named.
- *
- * One function so the search, the price mark and the row itself all resolve the
- * same product. Undefined for a free text row, and undefined for a product the
- * catalog can no longer name, which are the same nothing to draw.
+ * {@link BasketRow.productId}, named by the products the read carried (backend
+ * `0201`). One function so the search, the price mark, the total and the row
+ * itself all resolve the same product. Undefined for a row whose lines hold no
+ * product, and undefined for a product the catalog could not name this time,
+ * which are the same nothing to draw.
  */
 export function basketRowPick(
-  row: Pick<BasketRow, 'optionIds'>,
+  row: Pick<BasketRow, 'productId'>,
   products: ReadonlyMap<string, BasketProduct>
 ): BasketProduct | undefined {
-  const first = row.optionIds[0];
-  return first === undefined ? undefined : products.get(first);
+  return row.productId === null ? undefined : products.get(row.productId);
 }
 
 /**
@@ -704,12 +758,14 @@ export interface BasketElsewhere {
   /** The units bought elsewhere. The server's number, passed through. */
   readonly count: number;
   /**
-   * Whether that purchase is all that closed the row: the state is `DONE` and
-   * this basket bought none of it.
+   * Whether that purchase is all that closed the row: the state is
+   * `BOUGHT_ELSEWHERE` (backend `0203`), or, from a server before that plan,
+   * `DONE` with none of it bought here.
    *
    * Such a row is drawn as a done row and offers **no revert**. A revert takes
    * back this basket's own purchases, it has none here, and the server refuses to
    * let one basket undo a purchase of another (backend `0188`, target 8).
+   * Velista `0142` gives the state its own look.
    */
   readonly closed: boolean;
 }
@@ -729,8 +785,18 @@ export function basketElsewhere(
   }
   return {
     count: unit.boughtElsewhere,
-    closed: unit.state === 'DONE' && unit.bought === 0,
+    closed:
+      unit.state === 'BOUGHT_ELSEWHERE' ||
+      (unit.state === 'DONE' && unit.bought === 0),
   };
+}
+
+/**
+ * Whether a row or an entry is drawn as done: bought here, or closed by a buy
+ * made elsewhere (velista `0139`, until `0142` draws the second its own way).
+ */
+export function basketDrawnDone(unit: Pick<BasketRow, 'state'>): boolean {
+  return unit.state === 'DONE' || unit.state === 'BOUGHT_ELSEWHERE';
 }
 
 /**
@@ -774,21 +840,15 @@ export function offerAt(
 /**
  * The product a basket row prices: what is in the trolley.
  *
- * A choice that is still one of the row's options, or the row's only option, or none.
- * One function, so the row that draws a price and the settle that names its scope
- * resolve the same product.
+ * The row's own product since backend `0201`: a row is one product, so there is
+ * nothing left to choose between. One function, so the row that draws a price, the
+ * total and the settle that names its product resolve the same one.
  */
 export function basketRowProduct(
-  row: Pick<BasketRow, 'optionIds'>,
-  products: ReadonlyMap<string, BasketProduct>,
-  chosenId: string | null
+  row: Pick<BasketRow, 'productId'>,
+  products: ReadonlyMap<string, BasketProduct>
 ): BasketProduct | null {
-  if (chosenId !== null && row.optionIds.includes(chosenId)) {
-    return products.get(chosenId) ?? null;
-  }
-  return row.optionIds.length === 1
-    ? (basketRowPick(row, products) ?? null)
-    : null;
+  return basketRowPick(row, products) ?? null;
 }
 
 /**
@@ -887,71 +947,70 @@ export function basketSettleShop(
 /**
  * What a row says about the shelf at the chosen shop (velista `0102`), or nothing.
  *
- * - `unavailable`: **every** product the row offers is known missing at this shop.
- * - `instead`: the product the row buys by default is known missing and another of
- *   its options is not, so the row offers that one and a settle buys it.
+ * `unavailable`: the row's product is known missing at this shop. There is no
+ * second kind any more: velista `0102` offered another option of the row in place
+ * of a missing default, and a row has one product since backend `0201`. Taking
+ * another product is plan `0140`'s Change.
  *
  * A mark and never a move: the row keeps its place and its controls, because the
  * shelf may be restocked and the person is the one looking at it.
  */
-export type BasketShelfMark =
-  | { readonly kind: 'unavailable' }
-  | {
-      readonly kind: 'instead';
-      /** The option the row offers in place of its default. */
-      readonly optionId: string;
-      /** The default it replaced, which the caption names. */
-      readonly replacedId: string;
-    };
+export type BasketShelfMark = { readonly kind: 'unavailable' };
 
 /**
- * The shelf mark for one row, from the products' `atShop.available` (velista `0102`).
+ * The shelf mark for one row, from its product's `atShop.available` (velista `0102`).
  *
  * **Only a stored false counts.** Unknown is never marked, because availability is
- * read and never inferred, and most shops have no record at all yet: a row with one
- * option whose shop said nothing is an ordinary row.
- *
- * Only products the read named are asked, and a product it could not name is
- * neither missing nor present. The replacement prefers an option known to be there,
- * and then one nobody has said anything about, in the server's option order.
+ * read and never inferred, and most shops have no record at all yet.
  *
  * @param atShop Whether the products' `atShop` describes the chosen shop. False
  *   answers null for every row, which is "any of your shops" and a read in flight.
  */
 export function basketShelfMark(
-  row: Pick<BasketRow, 'optionIds'>,
+  row: Pick<BasketRow, 'productId'>,
   products: ReadonlyMap<string, BasketProduct>,
   atShop: boolean
 ): BasketShelfMark | null {
   if (!atShop) {
     return null;
   }
+  return basketRowPick(row, products)?.atShop?.available === false
+    ? { kind: 'unavailable' }
+    : null;
+}
 
-  const options = row.optionIds
-    .map((id) => products.get(id))
-    .filter((product): product is BasketProduct => product !== undefined);
-  if (options.length === 0) {
-    return null;
+/**
+ * The lists that ask for a row, as the caption of the row names them (velista
+ * `0139`, section 1).
+ *
+ * `names` are the lists this reader was served, once each, in the order of the
+ * entries, which is oldest first. `others` counts the entries on lists the reader
+ * was not served, which a guest sees for every entry: those are counted in words
+ * ("and 1 more list") and never named. An entry is one line, so two lines of one
+ * unserved list count twice; the reader cannot tell them apart, and neither can
+ * this.
+ */
+export interface BasketRowLists {
+  readonly names: readonly string[];
+  readonly others: number;
+}
+
+export function basketRowLists(
+  row: Pick<BasketRow, 'entries'>,
+  lists: ReadonlyMap<string, BasketListRef>
+): BasketRowLists {
+  const names: string[] = [];
+  let others = 0;
+  for (const entry of row.entries) {
+    const name =
+      entry.listId === null ? undefined : lists.get(entry.listId)?.name;
+    if (name === undefined || name === '') {
+      others += 1;
+    } else if (!names.includes(name)) {
+      names.push(name);
+    }
   }
-
-  const missing = (product: BasketProduct) =>
-    product.atShop?.available === false;
-  if (options.every(missing)) {
-    return { kind: 'unavailable' };
-  }
-
-  const fallback = row.optionIds[0];
-  const first = fallback === undefined ? undefined : products.get(fallback);
-  if (first === undefined || !missing(first)) {
-    return null;
-  }
-
-  const other =
-    options.find((product) => product.atShop?.available === true) ??
-    options.find((product) => !missing(product));
-  return other === undefined
-    ? null
-    : { kind: 'instead', optionId: other.id, replacedId: first.id };
+  return { names, others };
 }
 
 /** How a run of lines is progressing: got, had none, and how many there are. */
@@ -1154,9 +1213,12 @@ export interface BasketSettleRequest {
   readonly outcome: SettlementOutcome;
   /** Required for `BOUGHT`. Absent for `NOT_AVAILABLE`, which buys nothing. */
   readonly quantity?: number;
-  /** The row's `left` the person was looking at. */
+  /** The `left` of the lines the write names, as the person was looking at it. */
   readonly from: number;
-  /** The product actually in the trolley, when it is not the row's first option. */
+  /**
+   * The product of the row as it was drawn (backend `0201`, section 4). Absent for
+   * a row with no product, and on every `NOT_AVAILABLE`.
+   */
   readonly itemId?: string;
   /**
    * Units per entry, for a reader who named them. Served entries only.
@@ -1185,6 +1247,19 @@ export interface BasketSettleRequest {
 }
 
 /**
+ * What a write on a row addresses (backend `0201`, section 4): the row's key for
+ * the path, and the lines the write acts on.
+ *
+ * `BasketStore` builds it from the row it holds, so the page, the sheet and the
+ * reel cannot name different lines for one row. The key is one of the lines.
+ */
+export interface BasketRowTarget {
+  readonly rowKey: string;
+  /** 1 to 100 line ids, each an entry of the row. */
+  readonly lineIds: readonly string[];
+}
+
+/**
  * Taking part of a row back (velista `0090`; backend `0136`, section 5.2).
  *
  * Two targets rather than two requests, because they are one gesture with two
@@ -1196,7 +1271,7 @@ export type BasketRevertRequest =
   | {
       readonly target: 'UNITS';
       readonly units: number;
-      /** The row's `bought` the person was looking at. */
+      /** The `bought` of the lines the write names, as the person saw it. */
       readonly from: number;
     }
   | { readonly target: 'CLOSE' };
@@ -1218,12 +1293,12 @@ export type BasketRevertRequest =
  */
 export interface BasketDemandRequest {
   /**
-   * Which household's ask to move.
+   * Which household's ask to move, and the key the request is sent under
+   * (backend `0201`, section 4).
    *
-   * Always sent, although the server requires it only on a row of several
-   * entries: the control is drawn per entry, so the caller always knows which
-   * one it is about, and a request that left it to the server's single entry
-   * rule would be one entry away from moving the wrong list.
+   * It need not be a row of the basket: a line on a covered list that holds the
+   * product at zero is raised this way, which is "Add it to another list"
+   * (velista `0139`, section 3).
    */
   readonly lineId: string;
   /** What that list asks for from now on. Zero is allowed. */
@@ -1253,51 +1328,47 @@ export interface BasketAddLineRequest {
 }
 
 /**
- * What every write on a row answers (backend `0136`, `BasketRowResult`).
+ * What every write on a row answers (backend `0201`, section 4).
  *
- * One shape for all of them, because a client redraws one row after any of them.
- * The store folds {@link row} by its key and takes {@link progress} whole; **it
- * never patches a number**, which is the rule the whole row model rests on.
+ * **The lines, and no row.** A row is a group the server makes with the prices of
+ * a read, which a write does not have, so the answer is the lines the write named
+ * or touched, as they are now. `BasketStore` puts each back into the row that
+ * holds it, rebuilds that row's numbers with the rules core uses
+ * (`@portfolio/luna-shopper/basket-rules`), and reads the basket again, which is
+ * where the row as the server groups it comes from.
+ *
+ * There is no progress here. The write's own progress is counted by core with no
+ * picks, and can be one off the read's (backend `0201`, "What the build decided",
+ * point 1), so the page counts its header itself over the rows it holds.
  */
 export interface BasketRowResult {
   /**
-   * The row as it now stands, under whatever key it now has, or null when the
-   * write took it out of the basket altogether (velista `0092`, section 6.2).
-   *
-   * A row bought to zero is **not** that case: it stays in the view as `DONE`,
-   * because the purchase that emptied it is in scope. The one write that can
-   * empty a basket of a row is {@link BasketDemandRequest}, which lowers what a
-   * list asks for: a row nothing asks for and nothing was bought of is not a
-   * thing to buy, so it leaves the view.
-   *
-   * **The wire says it with a row rather than with a null.** The server answers
-   * a row carrying the requested key, an empty `entries` array and zeros, which
-   * `toBasketRowResult` reads as this null: the client has one question here,
-   * "is there still a row", so it has one representable answer. Reading a row
-   * whose every number is zero and whose state is `WANTED` as a real row would
-   * put an empty line on the screen with nothing to say and nothing to press.
+   * The lines of the write as they now stand. **A line that is absent left the
+   * basket**: a demand taken to zero with no buy that keeps it, a line merged
+   * away, deleted or rejected.
    */
-  readonly row: BasketRow | null;
-  readonly progress: BasketProgress;
-  /**
-   * `total - done - unavailable`, by the server, lifted out of the wire's
-   * `progress` exactly as {@link Basket.pending} is.
-   *
-   * It is here rather than left inside {@link progress} because the store has to
-   * put it back on the basket after every write, and the alternative is to work
-   * it out from the three numbers beside it. Nothing in this scope subtracts one
-   * count from another (velista `0060`, section 4), so the server sends it.
-   */
-  readonly pending: number;
-  /**
-   * Set by a rename that folded this row into another: the key the request used.
-   *
-   * The store drops that row and redraws {@link row} without reading the basket
-   * again.
-   */
-  readonly replacedRowKey: string | null;
+  readonly entries: readonly BasketRowEntry[];
   /** Set by a revert: entries whose line was deleted since, so no units went back. */
   readonly skippedCount: number;
+}
+
+/**
+ * A covered list that does not ask for a product yet, and could (backend `0201`,
+ * section 5; velista `0139`, section 3).
+ *
+ * Every covered list the reader may write that has no line counting as that
+ * product. When the list holds a line with the product among its products, the
+ * line is named, and it can be at zero: raising it is the demand route. Otherwise
+ * the three line fields are null, and setting a quantity adds a line.
+ */
+export interface BasketProductList {
+  readonly listId: string;
+  readonly listName: string;
+  readonly zoneId: string;
+  readonly zoneName: string;
+  readonly lineId: string | null;
+  readonly lineName: string | null;
+  readonly quantity: number | null;
 }
 
 /**
@@ -1313,25 +1384,6 @@ export interface BasketRenameRequest {
    * refuses with `line_merge_required` and writes nothing.
    */
   confirmMerge?: boolean;
-}
-
-/**
- * What a rename did.
- *
- * {@link row} is the surviving row, and its key differs from the one the request
- * named when that row was the one absorbed: the earliest line survives a merge,
- * and the anchor moves with it. {@link absorbedRowKey} is the row that went
- * away, which the store drops.
- */
-export interface BasketRenameResult extends BasketRowResult {
-  /**
-   * The row a merge took away, or null when no row merged.
-   *
-   * The same value the wire calls `replacedRowKey`, named for what a rename did
-   * with it. A rename is the only write that produces one today, and the sheet
-   * reads it to know whether its own row survived.
-   */
-  readonly absorbedRowKey: string | null;
 }
 
 /**

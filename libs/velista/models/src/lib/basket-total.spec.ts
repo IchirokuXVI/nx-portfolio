@@ -58,13 +58,13 @@ function product(
 }
 
 /**
- * One row with one option unless a test says otherwise, asking for one.
+ * One row of one product, or of none for an empty list, asking for one.
  *
  * The three quantities are written the way the server writes them: `asked` is
  * `bought + left`, and `boughtElsewhere` is in neither.
  */
 function row(
-  optionIds: readonly string[],
+  productIds: readonly string[],
   numbers: Partial<
     Pick<BasketRow, 'left' | 'bought' | 'boughtElsewhere' | 'state'>
   > = {}
@@ -72,7 +72,8 @@ function row(
   const left = numbers.left ?? 1;
   const bought = numbers.bought ?? 0;
   return {
-    rowKey: `l-${optionIds.join('-') || 'text'}`,
+    rowKey: `l-${productIds.join('-') || 'text'}`,
+    productId: productIds[0] ?? null,
     content: 'Something',
     left,
     bought,
@@ -83,7 +84,6 @@ function row(
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds,
     touchedBy: null,
     touchedAt: null,
     entries: [],
@@ -132,13 +132,29 @@ describe('basketTotal', () => {
     });
   });
 
-  /** Quoting the first option would price something nobody has picked up. */
-  it('counts a row with several options and no choice as a line and nothing else', () => {
-    const oat = product('p-oat', offer(2.1));
+  /** A row adds what the catalog can name, and the read could not name this one. */
+  it('counts a row whose product the read did not name as a line and nothing else', () => {
+    expect(basketTotal([row(['p-gone'])], context([milk]))).toEqual({
+      ...EMPTY_BASKET_TOTAL,
+      lines: 1,
+    });
+  });
 
-    expect(
-      basketTotal([row(['p-milk', 'p-oat'])], context([milk, oat]))
-    ).toEqual({ ...EMPTY_BASKET_TOTAL, lines: 1 });
+  /** The state of backend `0203` is summed as the done row it was; velista `0142` removes the sum. */
+  it('still prices a row bought elsewhere on the bought side, until velista 0142', () => {
+    const total = basketTotal(
+      [
+        row(['p-milk'], {
+          left: 0,
+          boughtElsewhere: 2,
+          state: 'BOUGHT_ELSEWHERE',
+        }),
+      ],
+      context([milk])
+    );
+
+    expect(total.lines).toBe(1);
+    expect(total.boughtCents).toBe(270);
   });
 
   it('counts a row whose product has no price as a line with a product', () => {
@@ -259,20 +275,6 @@ describe('basketTotal', () => {
       lines: 1,
       withProduct: 1,
     });
-  });
-
-  /** The row draws the option it offers in place of its default, so the sum prices that one. */
-  it('prices the option a row offers instead of a missing default', () => {
-    const gone = product('p-milk', offer(1.35), here(1.49, false));
-    const oat = product('p-oat', offer(2.1), here(2.25, true));
-    const total = basketTotal(
-      [row(['p-milk', 'p-oat'])],
-      context([gone, oat], true)
-    );
-
-    expect(total.withProduct).toBe(1);
-    expect(total.withPrice).toBe(1);
-    expect(total.totalCents).toBe(225);
   });
 
   describe('a row the chosen shop does not list', () => {

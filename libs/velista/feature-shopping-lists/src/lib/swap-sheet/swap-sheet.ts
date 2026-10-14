@@ -22,7 +22,6 @@ import {
 import {
   APP_BASE_PATH,
   basketRowProduct,
-  basketShelfMark,
   catalogName,
   type BasketProduct,
   type BasketRow as BasketRowModel,
@@ -44,8 +43,10 @@ import { basketGroupScope, swappedItemIds } from './swap';
  *
  * A basket stores no lines, so the change is made where the product lives: on
  * each list line the row stands for, `PATCH /v1/lines/:id` with the product
- * replaced in place. Every line of a row carries the same set (rows are grouped
- * by it), so one set is computed and sent to each. The page offers this only
+ * replaced in place. A row is one product since backend `0201`, but its lines
+ * can hold other products beside it, so each line gets its own set with that one
+ * product replaced (velista `0139` keeps this sheet until `0140` replaces it with
+ * Change). The page offers this only
  * when the reader may write every one of those lists, so a change never splits
  * a row in two. The basket is then read again, and the sheet closes.
  */
@@ -81,14 +82,13 @@ export class SwapSheet {
     if (row === null) {
       return null;
     }
-    const products = this._store.products();
-    const shelf = basketShelfMark(row, products, this._view.readAtShop());
-    return basketRowProduct(
-      row,
-      products,
-      shelf?.kind === 'instead' ? shelf.optionId : null
-    );
+    return basketRowProduct(row, this._store.products());
   });
+
+  /** Every product the row's lines hold, which the similar products leave out. */
+  protected readonly heldIds = computed<readonly string[]>(() => [
+    ...new Set((this.row()?.entries ?? []).flatMap((entry) => entry.itemIds)),
+  ]);
 
   protected readonly name = computed(() => {
     const product = this.product();
@@ -106,7 +106,7 @@ export class SwapSheet {
     }
     const entry = this._groupMembers.entry(groupId, this._scope());
     const members = entry?.status === 'ready' ? entry.members : null;
-    const held = this.row()?.optionIds ?? [];
+    const held = this.heldIds();
     return {
       members,
       loading: entry === null || entry.status === 'loading',
@@ -133,12 +133,13 @@ export class SwapSheet {
       return;
     }
 
-    const itemIds = swappedItemIds(row.optionIds, product.id, itemId);
     this.busy.set(true);
     this.failed.set(false);
     const results = await Promise.allSettled(
       row.entries.map((entry) =>
-        this._lines.updateLine(entry.lineId, { itemIds })
+        this._lines.updateLine(entry.lineId, {
+          itemIds: swappedItemIds(entry.itemIds, product.id, itemId),
+        })
       )
     );
     await this._store.refresh();

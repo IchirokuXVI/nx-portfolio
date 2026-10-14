@@ -295,6 +295,12 @@ export function isOpenBasket(status: string): boolean {
  * `SKIPPED` arrives with backend `0137` and `REMOVED` with `0138`, so those plans
  * change which value a row carries rather than changing this shape.
  *
+ * `BOUGHT_ELSEWHERE` arrives with backend `0203`: nothing is left, this basket
+ * bought none of it, and somebody bought it lately through another basket or on
+ * the list page. It is read so that a row rebuilt here from its entries
+ * (velista `0139`) can carry it, and until velista `0142` gives it its own look it
+ * is drawn as the done row "Bought on another basket" was before that plan.
+ *
  * `WANTED` is the fallback because it is the one state that hides nothing. A row
  * this build cannot classify is still a thing to buy, and drawing it as wanted
  * costs a caption where reading it as `DONE` would take it off somebody's screen.
@@ -303,6 +309,7 @@ export const BASKET_ROW_STATES = [
   'WANTED',
   'PARTLY',
   'DONE',
+  'BOUGHT_ELSEWHERE',
   'NOT_AVAILABLE',
   'SKIPPED',
   'REMOVED',

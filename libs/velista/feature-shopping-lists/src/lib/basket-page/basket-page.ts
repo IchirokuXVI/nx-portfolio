@@ -37,7 +37,6 @@ import {
   type BasketRow as BasketRowModel,
   basketRowPick,
   basketRowProduct,
-  basketShelfMark,
   type BasketViewRow,
   type BasketViewSection,
   catalogName,
@@ -1078,9 +1077,9 @@ export class BasketPage {
     }
   );
 
-  /** The product a row draws: its choice, its one option, or none. */
+  /** The product a row draws: its one product, or none. */
   private _rowProduct(row: BasketRowModel): BasketProduct | null {
-    return basketRowProduct(row, this.products(), this.insteadOf(row));
+    return basketRowProduct(row, this.products());
   }
 
   /** Every product group a row's product belongs to, once each. */
@@ -1185,43 +1184,22 @@ export class BasketPage {
 
   /**
    * Where a settle from the row happened and what it bought, as a body fragment to
-   * spread (velista `0095`, section 6; `0102`).
+   * spread (velista `0095`, section 6; `0102`; `0139`, section 4).
    *
-   * The scope of the price the row draws, and the shop the person is buying at,
-   * both from `BasketViewStore.settleShop`, which the settle sheet asks too. And the
-   * option the row offers in place of a default the shop is known not to have:
-   * the row names it, so the settle buys it.
-   *
-   * The row on this page is bound with no product anybody chose, so this asks the
-   * same question with the same answer: what is sent is what the row drew.
+   * The scope of the price the row draws and the shop the person is buying at,
+   * both from `BasketViewStore.settleShop`, which the settle sheet asks too. And
+   * the row's product as `itemId`, which a row of no product leaves out: what is
+   * sent is what the row drew.
    */
   private _settleAt(row: BasketRowModel): {
     itemId?: string;
     priceScopeId?: string;
     supermarketLocationId?: string;
   } {
-    const instead = this.insteadOf(row);
     return {
-      ...(instead === null ? {} : { itemId: instead }),
-      ...this._view.settleShop(basketRowProduct(row, this.products(), instead)),
+      ...(row.productId === null ? {} : { itemId: row.productId }),
+      ...this._view.settleShop(this._rowProduct(row)),
     };
-  }
-
-  /**
-   * The option this row offers in place of a default the chosen shop is known not
-   * to have, or null (velista `0102`).
-   *
-   * What the row draws as its product, and what a settle from the row buys. The
-   * page binds the row with it as the product in the trolley, because the row says
-   * so: "Instead of Danone griego, not available at this shop".
-   */
-  protected insteadOf(row: BasketRowModel): string | null {
-    const shelf = basketShelfMark(
-      row,
-      this.products(),
-      this._view.readAtShop()
-    );
-    return shelf?.kind === 'instead' ? shelf.optionId : null;
   }
 
   /**
@@ -2034,11 +2012,11 @@ export class BasketPage {
 
   /**
    * The lines in this basket already holding what a card offers (velista `0101`,
-   * section 4): one per entry of every row whose products name it, because the same
-   * product reaches the basket from several lists.
+   * section 4): one per entry of the row of that product (velista `0139`, section
+   * 5), because the same product reaches the basket from several lists.
    *
-   * The words are the row's, since an entry carries none of its own, and the list
-   * above them is named only where this reader was served that list. How many is the
+   * The words are the line's own, and the list above them is named only where
+   * this reader was served that list. How many is the
    * entry's `left`, and the stepper moves only where the server says that entry's
    * demand may change. A group is held by nothing here: a basket row names products,
    * not the group a line followed.
@@ -2051,12 +2029,12 @@ export class BasketPage {
         return [];
       }
       return rows
-        .filter((row) => row.optionIds.includes(suggestion.item.id))
+        .filter((row) => row.productId === suggestion.item.id)
         .flatMap((row) =>
           row.entries.map((entry) => ({
             key: `${row.rowKey}:${entry.lineId}`,
             lineId: entry.lineId,
-            text: row.content,
+            text: entry.content === '' ? row.content : entry.content,
             listName:
               entry.listId === null
                 ? null
@@ -2085,25 +2063,14 @@ export class BasketPage {
 
   /**
    * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{rowKey}/demand`, and the same sentences
-   * after it. The row is found again by the line, because a row's key can change
-   * under the panel while somebody else adds or settles.
+   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
+   * after it. It is sent under the line itself (backend `0201`), because a row's key
+   * can change under the panel while somebody else adds or settles.
    */
   protected async changeHolding(
     change: SuggestionHoldingChange
   ): Promise<void> {
-    const row = this._store
-      .rows()
-      .find((candidate) =>
-        candidate.entries.some(
-          (entry) => entry.lineId === change.holding.lineId
-        )
-      );
-    if (row === undefined) {
-      return;
-    }
-
-    const result = await this._store.setDemand(row.rowKey, {
+    const result = await this._store.setDemand({
       lineId: change.holding.lineId,
       quantity: change.to,
       from: change.from,
@@ -2121,7 +2088,7 @@ export class BasketPage {
       return;
     }
 
-    if (result.row === null) {
+    if (this._store.lineLeft(result, change.holding.lineId)) {
       this._say(
         this._translator.t(
           'basket.demand.nothingLeft',
@@ -2264,7 +2231,7 @@ export class BasketPage {
 
     this._say(
       this._translator.t('basket.added.announced', undefined, this._locale(), {
-        content: result.row?.content ?? entry.content,
+        content: result.entries[0]?.content ?? entry.content,
       })
     );
   }

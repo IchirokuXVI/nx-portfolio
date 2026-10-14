@@ -1418,10 +1418,7 @@
     },
     "line": {
       "open": "Registrar {{name}}",
-      "outstanding_one": "queda {{count}}",
-      "outstanding_other": "quedan {{count}}",
       "wanted": "×{{count}}",
-      "free": "Sin producto elegido",
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
       "takenBack_other": "{{count}} devueltos",
@@ -1441,11 +1438,6 @@
     },
     "elsewhere": {
       "caption": "Comprado en otra cesta"
-    },
-    "from": {
-      "one": "de {{first}}",
-      "two": "de {{first}} y {{second}}",
-      "more": "de {{first}} y {{count}} más"
     },
     "view": {
       "open": "Filtrar y ordenar",
@@ -1544,12 +1536,9 @@
       }
     },
     "price": {
-      "cheaperAt": "{{price}} en {{chain}}",
-      "notListedAt": "no está en {{chain}}"
+      "cheaperAt": "{{price}} en {{chain}}"
     },
     "group": {
-      "notListed": "No está en {{chain}}",
-      "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
       "uncovered": "Categorías que no encontramos en esta tienda",
@@ -1572,21 +1561,7 @@
       "missed_other": "No se han podido actualizar {{count}} casas de esta línea.",
       "missedNamed": "Sin actualizar: {{lists}}"
     },
-    "product": {
-      "change": "Cambiar",
-      "title": "¿Cuáles has cogido?",
-      "hint": "Reparte las unidades entre los que has cogido. {{name}} se queda con el resto.",
-      "hintNone": "Reparte las unidades entre los que has cogido. El resto se queda sin producto.",
-      "units": "{{name}}, unidades",
-      "none": "Esta línea no nombra ningún producto",
-      "cheapest": "Más barato",
-      "noPrice": "Sin precio",
-      "asOf": "Precios de {{when}}",
-      "asOfStale": "Precios de {{when}}, y alguno puede estar desactualizado"
-    },
     "units": {
-      "askedFor": "Pedido",
-      "got": "Conseguido",
       "askedLabel": "{{name}}, pedido",
       "gotLabel": "{{name}}, conseguido",
       "pending": "esperando a que la lista lo acepte"
@@ -1745,15 +1720,17 @@
       "isPartly": "{{name}} está conseguido en parte"
     },
     "entries": {
-      "title": "Listas que lo piden",
       "otherList": "Otra lista",
-      "asks": "pide {{count}}",
-      "got": "{{count}} conseguidos",
-      "gotLabel": "{{name}}, conseguidos"
+      "asks": "pide {{count}}"
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
-      "gone": "Esa línea ya no está en esta lista."
+      "gone": "Esa línea ya no está en esta lista.",
+      "listsAndMore_one": "{{names}} y 1 lista más",
+      "listsAndMore_other": "{{names}} y {{count}} listas más",
+      "otherLists_one": "Otra lista",
+      "otherLists_other": "Otras {{count}} listas",
+      "notSoldHere": "No lo venden aquí"
     },
     "skip": {
       "action": "Hoy no",
@@ -1853,6 +1830,27 @@
     },
     "map": {
       "openLabel": "Mapa de {{shop}}"
+    },
+    "sheet": {
+      "each": "{{price}} la unidad",
+      "toGet_one": "Falta {{count}}",
+      "toGet_other": "Faltan {{count}}",
+      "got_one": "Hoy se ha cogido {{count}}.",
+      "got_other": "Hoy se han cogido {{count}}.",
+      "gotAt_one": "Hoy se ha cogido {{count}} a {{price}}.",
+      "gotAt_other": "Hoy se han cogido {{count}} a {{price}}.",
+      "gotAtShop_one": "Hoy se ha cogido {{count}} a {{price}}, en {{shop}}.",
+      "gotAtShop_other": "Hoy se han cogido {{count}} a {{price}}, en {{shop}}.",
+      "askedOn_one": "Lo pide 1 lista",
+      "askedOn_other": "Lo piden {{count}} listas",
+      "addElsewhere": "Añadirlo a otra lista",
+      "othersLoading": "Mirando tus otras listas",
+      "othersFailed": "No se han podido cargar tus otras listas.",
+      "othersRetry": "Volver a intentarlo",
+      "gotAll_one": "Ya lo tengo",
+      "gotAll_other": "Ya tengo los {{count}}",
+      "gotOther_one": "Ya tengo el que falta",
+      "gotOther_other": "Ya tengo los {{count}} que faltan"
     }
   },
   "getList": {

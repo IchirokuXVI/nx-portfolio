@@ -30,6 +30,12 @@ import {
 const SLUG_PREFIX = 'e2e-aisles-';
 
 /**
+ * The product the Eggs line holds for this run. A row is named by its product
+ * (velista `0139`, section 1), so this is the row's name.
+ */
+const AISLE_EGGS = 'E2E aisle eggs';
+
+/**
  * The aisles of the shop you are in (velista plan 0120, target 6).
  *
  * Mercadona Colón gets two sections through the back office, walked bakery
@@ -86,7 +92,7 @@ test.describe('the aisles of the shop you are in', () => {
     eggsCategory = eggs.name.en;
     const eggsItem = await ensureItem(
       admin,
-      { en: 'E2E aisle eggs', es: 'Huevos del pasillo E2E' },
+      { en: AISLE_EGGS, es: 'Huevos del pasillo E2E' },
       [eggs.id]
     );
     await setLineProducts(alice, LINE_EGGS_ID, [eggsItem]);
@@ -108,7 +114,7 @@ test.describe('the aisles of the shop you are in', () => {
       ['Groceries', 'Hardware'],
       `Aisles ${Date.now()}`
     );
-    await expect(row(page, 'Eggs')).toBeVisible();
+    await expect(row(page, AISLE_EGGS)).toBeVisible();
 
     await test.step('group by category and buy at Mercadona Colón', async () => {
       const dialog = await openFilterSheet(page);
@@ -174,7 +180,7 @@ test.describe('the aisles of the shop you are in', () => {
       ).toHaveText(eggsCategory);
       await expect(
         page
-          .locator('section.group', { has: row(page, 'Eggs') })
+          .locator('section.group', { has: row(page, AISLE_EGGS) })
           .locator('h2.group-title > span')
           .first()
       ).toHaveText(eggsCategory);

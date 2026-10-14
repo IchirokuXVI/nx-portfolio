@@ -26,7 +26,7 @@ function row(rowKey: string, state: BasketRow['state']): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: ['i-eggs'],
+    productId: 'i-eggs',
     touchedBy: null,
     touchedAt: null,
     entries: [],

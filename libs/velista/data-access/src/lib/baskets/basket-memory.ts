@@ -9,21 +9,23 @@ import {
   type BasketChangeMark,
   type BasketChangePage,
   type BasketDemandRequest,
+  type BasketEntryAct,
   type BasketLinkPreview,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
   type BasketProductAtShop,
+  type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
-  type BasketRenameResult,
   type BasketRevertRequest,
   type BasketRow,
   type BasketRowEntry,
   type BasketRowNote,
   type BasketRowResult,
   type BasketRowState,
+  type BasketRowTarget,
   type BasketSession,
   type BasketSettleRequest,
   type BasketShareLink,
@@ -410,7 +412,9 @@ interface StoredLine {
   /** What the household asks for now, which is the entry's `left`. */
   quantity: number;
   /** The products this line names, first one first. */
-  optionIds: readonly string[];
+  itemIds: readonly string[];
+  /** The favourite of the line (backend `0199`), or null. */
+  favoriteItemId?: string | null;
   /** Whether the household has agreed to it yet. */
   approved: boolean;
   /** Whether the basket's owner may change what this list asks for. */
@@ -474,6 +478,11 @@ interface Settlement {
    * price there; this twin keeps the scope so a spec can see what was sent.
    */
   readonly priceScopeId?: string;
+  /**
+   * The product the buy names (backend `0201`, section 4). The newest standing
+   * buy of a line with one is what the line counts as for the rest of the trip.
+   */
+  readonly itemId?: string;
   reverted: boolean;
 }
 
@@ -573,7 +582,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Milk',
       quantity: 2,
-      optionIds: [
+      itemIds: [
         'item-milk-hacendado',
         'item-milk-pascual',
         'item-milk-central',
@@ -588,7 +597,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-groceries',
       content: 'Milk',
       quantity: 1,
-      optionIds: ['item-milk-hacendado'],
+      itemIds: ['item-milk-hacendado'],
       // Waiting for the household to agree, so the row draws the caption and
       // stays buyable (backend `0130`, section 3).
       approved: false,
@@ -601,7 +610,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Eggs',
       quantity: 10,
-      optionIds: ['item-eggs'],
+      itemIds: ['item-eggs'],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -612,7 +621,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Sourdough loaf',
       quantity: 1,
-      optionIds: [],
+      itemIds: [],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -626,7 +635,7 @@ export class BasketMemory implements BasketServiceI {
       listId: UNSERVED_LIST_ID,
       content: 'Eggs',
       quantity: 2,
-      optionIds: ['item-eggs'],
+      itemIds: ['item-eggs'],
       approved: true,
       // The owner of this basket cannot change what a list they do not write asks
       // for, which is the one field no client can compute.
@@ -647,7 +656,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Olive oil',
       quantity: 1,
-      optionIds: [],
+      itemIds: [],
       approved: true,
       demandEditable: true,
       deleted: true,
@@ -663,7 +672,21 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Butter',
       quantity: 0,
-      optionIds: [],
+      itemIds: [],
+      approved: true,
+      demandEditable: true,
+      deleted: false,
+      skippedAt: null,
+    },
+    {
+      // A list that holds the eggs and asks for none (velista `0139`, section
+      // 3). Not covered, so it is no entry of any row: a line at zero with no
+      // buy is not a thing to buy. "Add it to another list" raises it.
+      id: 'zl-8',
+      listId: 'list-groceries',
+      content: 'Huevos',
+      quantity: 0,
+      itemIds: ['item-eggs'],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -992,18 +1015,18 @@ export class BasketMemory implements BasketServiceI {
 
   async settle(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketSettleRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     this._requireFrom(body.from, row.left);
 
     if (body.outcome === 'NOT_AVAILABLE') {
       // A close holds no units and names no entry: the shop had none of it, for
       // everybody who asked.
-      this._write(row.entries[0]?.lineId ?? rowKey, 'NOT_AVAILABLE', 0);
-      return this._result(rowKey);
+      this._write(row.entries[0]?.lineId ?? target.rowKey, 'NOT_AVAILABLE', 0);
+      return this._result(target.lineIds);
     }
 
     const quantity = body.quantity ?? row.left;
@@ -1016,28 +1039,35 @@ export class BasketMemory implements BasketServiceI {
         ? body.allocations
         : this._divide(row, quantity);
 
+    // The product the lines agree on when the settle names none (backend `0201`,
+    // "What the build decided", point 12).
+    const agreed = new Set(row.entries.map((entry) => this._productOf(entry)));
+    const itemId =
+      body.itemId ?? (agreed.size === 1 ? [...agreed][0] : undefined);
+
     for (const allocation of allocations) {
       if (allocation.quantity > 0) {
         this._write(
           allocation.lineId,
           'BOUGHT',
           allocation.quantity,
-          body.priceScopeId
+          body.priceScopeId,
+          itemId ?? undefined
         );
       }
     }
 
-    return this._result(rowKey);
+    return this._result(target.lineIds);
   }
 
   async revert(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRevertRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
-    const lineIds = new Set(row.entries.map((entry) => entry.lineId));
+    const row = this._requireLines(target);
+    const lineIds = new Set(target.lineIds);
 
     if (body.target === 'CLOSE') {
       const close = this._standing()
@@ -1049,7 +1079,7 @@ export class BasketMemory implements BasketServiceI {
         throw this._refuse('validation_failed', 400, 'Nothing to take back');
       }
       close.reverted = true;
-      return this._result(rowKey);
+      return this._result(target.lineIds);
     }
 
     this._requireFrom(body.from, row.bought);
@@ -1083,12 +1113,13 @@ export class BasketMemory implements BasketServiceI {
         quantity: act.quantity - left,
         by: this.me.id,
         at: act.at,
+        ...(act.itemId === undefined ? {} : { itemId: act.itemId }),
         reverted: false,
       });
       left = 0;
     }
 
-    return this._result(rowKey);
+    return this._result(target.lineIds);
   }
 
   /**
@@ -1101,9 +1132,12 @@ export class BasketMemory implements BasketServiceI {
    * the `from` every other write carries: a row already bought or already closed
    * is not one anybody is walking past.
    */
-  async skip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async skip(
+    _basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     if (row.left === 0) {
       throw this._refuse(
         'conflict',
@@ -1117,18 +1151,21 @@ export class BasketMemory implements BasketServiceI {
       line.skippedAt = at;
     }
 
-    return this._result(rowKey);
+    return this._result(target.lineIds);
   }
 
   /** Take the skip back. The same fact, unset. */
-  async unskip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async unskip(
+    _basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     for (const line of this._livesOf(row)) {
       line.skippedAt = null;
     }
 
-    return this._result(rowKey);
+    return this._result(target.lineIds);
   }
 
   /**
@@ -1139,22 +1176,23 @@ export class BasketMemory implements BasketServiceI {
    * `forbidden`, and a quantity that is not a whole number is a validation
    * failure. A kinder fake would let a screen ship that never drew any of them.
    *
-   * A row whose every entry asks for nothing, and which nothing was bought of,
-   * **leaves the basket**. The answer's row is null there, which is what
-   * `toBasketRowResult` reads out of the server's emptied row.
+   * A line that asks for nothing, and which nothing was bought of, **leaves the
+   * basket**: it is absent from the answer. And a line at zero that the basket
+   * does not draw is raised here (backend `0201`, "What the build decided", point
+   * 2), which is how "Add it to another list" asks a list for a product it holds.
    */
   async setDemand(
     _basketId: string,
-    rowKey: string,
     body: BasketDemandRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
-    const entry = row.entries.find((held) => held.lineId === body.lineId);
-    const line = this._lines.find((held) => held.id === body.lineId);
-    if (entry === undefined || line === undefined) {
-      throw this._refuse('validation_failed', 400, 'That line is not here');
+    const line = this._lines.find(
+      (held) => held.id === body.lineId && !held.deleted
+    );
+    if (line === undefined) {
+      throw this._refuse('not_found', 404, 'No such row on this basket');
     }
+    const entry = this._entry(line);
     if (!entry.demandEditable) {
       throw this._refuse(
         'forbidden',
@@ -1172,7 +1210,48 @@ export class BasketMemory implements BasketServiceI {
     this._requireFrom(body.from, entry.left);
 
     line.quantity = body.quantity;
-    return this._result(rowKey);
+    return this._result([line.id]);
+  }
+
+  /**
+   * The covered lists that could take a product (backend `0201`, section 5).
+   *
+   * Every served list with no covered line counting as that product. A list
+   * holding a line with the product among its products names it, at zero or
+   * not. A guest is refused, as the gateway refuses one.
+   */
+  async productLists(
+    _basketId: string,
+    itemId: string
+  ): Promise<readonly BasketProductList[]> {
+    if (this.me.kind === 'GUEST') {
+      throw this._refuse('forbidden', 403, 'Guests cannot add to a list');
+    }
+    if (!this.servesLists) {
+      return [];
+    }
+    const asking = new Set(
+      this._rows()
+        .filter((row) => row.productId === itemId)
+        .flatMap((row) => row.entries.map((entry) => entry.listId))
+    );
+    return LISTS.filter((ref) => !asking.has(ref.listId)).map((ref) => {
+      const line = this._lines.find(
+        (held) =>
+          !held.deleted &&
+          held.listId === ref.listId &&
+          held.itemIds.includes(itemId)
+      );
+      return {
+        listId: ref.listId,
+        listName: ref.name,
+        zoneId: ref.zoneId,
+        zoneName: ref.zoneName,
+        lineId: line?.id ?? null,
+        lineName: line?.content ?? null,
+        quantity: line?.quantity ?? null,
+      };
+    });
   }
 
   /**
@@ -1213,12 +1292,12 @@ export class BasketMemory implements BasketServiceI {
         !line.deleted &&
         line.listId === body.targetListId &&
         normalizeContent(line.content) === key &&
-        productSetKey(line.optionIds) === wanted
+        productSetKey(line.itemIds) === wanted
     );
 
     if (held !== undefined) {
       held.quantity += quantity;
-      return this._result(held.id);
+      return this._result([held.id]);
     }
 
     const line: StoredLine = {
@@ -1226,7 +1305,7 @@ export class BasketMemory implements BasketServiceI {
       listId: body.targetListId,
       content,
       quantity,
-      optionIds: body.itemIds === undefined ? [] : [...body.itemIds],
+      itemIds: body.itemIds === undefined ? [] : [...body.itemIds],
       // Every list this fake serves auto approves, which is the ordinary case.
       // The `zl-2` fixture is where a screen meets a line waiting for one.
       approved: true,
@@ -1235,25 +1314,38 @@ export class BasketMemory implements BasketServiceI {
       skippedAt: null,
     };
     this._lines.push(line);
-    return this._result(line.id);
+    return this._result([line.id]);
   }
 
+  /**
+   * Rename the named lines (backend `0113`), refused for a line that holds a
+   * product: a row with a product is named by the catalog (backend `0201`).
+   */
   async renameRow(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult> {
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     const content = body.content.trim();
     if (content === '') {
       throw this._refuse('validation_failed', 400, 'A line needs a name');
+    }
+    if (row.entries.some((entry) => entry.itemIds.length > 0)) {
+      throw this._refuse(
+        'validation_failed',
+        400,
+        'A line with a product is named by the catalog'
+      );
     }
 
     const name = normalizeContent(content);
     const folds = this._rows().find(
       (other) =>
-        other.rowKey !== rowKey && normalizeContent(other.content) === name
+        other.rowKey !== row.rowKey &&
+        other.productId === null &&
+        normalizeContent(other.content) === name
     );
 
     if (folds !== undefined && body.confirmMerge !== true) {
@@ -1264,27 +1356,14 @@ export class BasketMemory implements BasketServiceI {
       );
     }
 
+    const named = new Set(target.lineIds);
     for (const line of this._lines) {
-      if (row.entries.some((entry) => entry.lineId === line.id)) {
+      if (named.has(line.id)) {
         line.content = content;
       }
     }
 
-    // The earliest line survives, so after a fold the row is keyed by whichever
-    // of the two came first, which may not be the one the request named.
-    const survivor = this._rows().find(
-      (other) => normalizeContent(other.content) === name
-    );
-    if (survivor === undefined) {
-      throw this._refuse('not_found', 404, 'That row is no longer here');
-    }
-
-    const result = await this._result(survivor.rowKey);
-    return {
-      ...result,
-      replacedRowKey: survivor.rowKey === rowKey ? null : rowKey,
-      absorbedRowKey: survivor.rowKey === rowKey ? null : rowKey,
-    };
+    return this._result(target.lineIds);
   }
 
   async suggest(
@@ -1483,14 +1562,26 @@ export class BasketMemory implements BasketServiceI {
    * the plan's table states them. It is the one arithmetic this scope is allowed,
    * because this class stands in for the server.
    *
-   * The merge key is the normalized content, which is what the server groups by.
+   * The merge key is the product a line counts as, or its normalized content
+   * when it holds none, which is what the server groups by (backend `0201`,
+   * section 2). This twin reads no price, so a line counts as its buy in this
+   * trip, its favourite or its first product, which is what core does alone.
    * A deleted line still forms a row, because a row every entry has left is
    * `REMOVED` and that is information about the basket rather than nothing.
    */
   private _rows(): readonly BasketRow[] {
     const groups = new Map<string, StoredLine[]>();
     for (const line of this._lines) {
-      const key = normalizeContent(line.content);
+      if (!line.deleted && !this._covered(line)) {
+        // A line at zero with no buy is not covered (backend `0130`), so it is
+        // no entry of any row. A list raised from zero brings it back.
+        continue;
+      }
+      const product = this._lineProduct(line);
+      const key =
+        product === null
+          ? `text:${normalizeContent(line.content)}`
+          : `item:${product}`;
       const held = groups.get(key);
       if (held === undefined) {
         groups.set(key, [line]);
@@ -1539,6 +1630,7 @@ export class BasketMemory implements BasketServiceI {
       rows.push({
         rowKey: anchor.id,
         content: anchor.content,
+        productId: live.length === 0 ? null : this._lineProduct(anchor),
         left,
         bought,
         asked: bought + left,
@@ -1561,9 +1653,6 @@ export class BasketMemory implements BasketServiceI {
         // the row it names to have been built.
         mark: null,
         awaitingApproval: entries.some((entry) => entry.awaitingApproval),
-        // First seen order, anchor first, which is what the server promises and
-        // what makes `optionIds[0]` the product the row means.
-        optionIds: [...new Set(live.flatMap((line) => line.optionIds))],
         touchedBy: newest?.by ?? null,
         touchedAt: newest?.at ?? null,
         entries,
@@ -1613,18 +1702,79 @@ export class BasketMemory implements BasketServiceI {
     });
   }
 
-  /** The row one line ended up in, by the anchor rule, or null when it is gone. */
+  /** The row one line ended up in, or null when it is gone. */
   private _rowKeyOf(lineId: string, rows: readonly BasketRow[]): string | null {
     const line = this._lines.find((held) => held.id === lineId);
     if (line === undefined) {
       return null;
     }
 
+    const held = rows.find((candidate) =>
+      candidate.entries.some((entry) => entry.lineId === lineId)
+    );
+    if (held !== undefined) {
+      return held.rowKey;
+    }
+    // A line that left the coverage, which only a `REMOVED` row still names.
     const key = normalizeContent(line.content);
     const row = rows.find(
-      (candidate) => normalizeContent(candidate.content) === key
+      (candidate) =>
+        candidate.state === 'REMOVED' &&
+        normalizeContent(candidate.content) === key
     );
     return row?.rowKey ?? null;
+  }
+
+  /**
+   * The product a line counts as with no prices (backend `0201`, section 1,
+   * steps 1, 2, 4 and 5): its buy in this trip, its favourite, its first.
+   */
+  private _lineProduct(line: StoredLine): string | null {
+    const trip = this._tripItemOf(line.id);
+    if (trip !== null) {
+      return trip;
+    }
+    const favorite = line.favoriteItemId ?? null;
+    if (favorite !== null && line.itemIds.includes(favorite)) {
+      return favorite;
+    }
+    return line.itemIds[0] ?? null;
+  }
+
+  /** The product of the newest standing buy of a line that names one, or null. */
+  private _tripItemOf(lineId: string): string | null {
+    const buy = this._standing()
+      .filter(
+        (act) =>
+          act.lineId === lineId &&
+          act.outcome === 'BOUGHT' &&
+          act.itemId !== undefined
+      )
+      .pop();
+    return buy?.itemId ?? null;
+  }
+
+  /** The product an entry counts as, for a settle that names none. */
+  private _productOf(entry: BasketRowEntry): string | null {
+    const line = this._lines.find((held) => held.id === entry.lineId);
+    return line === undefined ? null : this._lineProduct(line);
+  }
+
+  /**
+   * Whether the basket covers a live line: it asks for something, or this basket
+   * or another bought some of it in scope (backend `0130`, section 4).
+   */
+  private _covered(line: StoredLine): boolean {
+    if (line.quantity > 0) {
+      return true;
+    }
+    const bought = this._standing().some(
+      (act) => act.lineId === line.id && act.outcome === 'BOUGHT'
+    );
+    return (
+      bought ||
+      this._recentElsewhere().some((purchase) => purchase.lineId === line.id)
+    );
   }
 
   /**
@@ -1689,14 +1839,28 @@ export class BasketMemory implements BasketServiceI {
       .filter((purchase) => purchase.lineId === line.id)
       .reduce((sum, purchase) => sum + purchase.quantity, 0);
 
+    // Null for a list this reader was not served, which is the whole of the
+    // redaction: the client knows how much and never where.
+    const listId =
+      this.servesLists && LISTS.some((ref) => ref.listId === line.listId)
+        ? line.listId
+        : null;
+    const newest = this._newestOn([line]);
+    const skipStands = this._skipStands([line]);
+
     return {
       lineId: line.id,
-      // Null for a list this reader was not served, which is the whole of the
-      // redaction: the client knows how much and never where.
-      listId:
-        this.servesLists && LISTS.some((ref) => ref.listId === line.listId)
-          ? line.listId
-          : null,
+      listId,
+      content: line.content,
+      itemIds: line.itemIds,
+      favoriteItemId: line.favoriteItemId ?? null,
+      // The reader writes the lists they are served, and only those (backend
+      // `0201`, "What the build decided", point 8).
+      canWrite: listId !== null && this.me.kind !== 'GUEST',
+      tripItemId: this._tripItemOf(line.id),
+      skipped: skipStands && line.quantity > 0,
+      closed: newest?.outcome === 'NOT_AVAILABLE',
+      act: this._actOf(line, newest),
       left: line.quantity,
       bought,
       asked: bought + line.quantity,
@@ -1705,6 +1869,31 @@ export class BasketMemory implements BasketServiceI {
       awaitingApproval: !line.approved,
       demandEditable: line.demandEditable,
     };
+  }
+
+  /** The newest act of this basket on a line: a skip, or a settlement. */
+  private _actOf(
+    line: StoredLine,
+    newest: Settlement | undefined
+  ): BasketEntryAct | null {
+    const skipped = line.skippedAt;
+    if (
+      skipped !== null &&
+      (newest === undefined || skipped.getTime() > newest.at.getTime())
+    ) {
+      return {
+        participantId: this.me.id,
+        at: skipped.toISOString(),
+        outcome: 'SKIPPED',
+      };
+    }
+    return newest === undefined
+      ? null
+      : {
+          participantId: newest.by,
+          at: newest.at.toISOString(),
+          outcome: newest.outcome,
+        };
   }
 
   /**
@@ -1733,10 +1922,14 @@ export class BasketMemory implements BasketServiceI {
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    // Nothing left, and somebody bought it: this basket, or another one lately
-    // (backend `0188`, target 5).
-    if (left === 0 && (bought > 0 || boughtElsewhere > 0)) {
+    // Nothing left, and this basket bought some of it.
+    if (left === 0 && bought > 0) {
       return 'DONE';
+    }
+    // Nothing left, none of it bought here, and somebody bought it lately
+    // through another basket or on the list page (backend `0203`, section 3).
+    if (left === 0 && boughtElsewhere > 0) {
+      return 'BOUGHT_ELSEWHERE';
     }
     if (left > 0 && bought > 0) {
       return 'PARTLY';
@@ -1777,8 +1970,11 @@ export class BasketMemory implements BasketServiceI {
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    if (line.quantity === 0 && (bought > 0 || boughtElsewhere > 0)) {
+    if (line.quantity === 0 && bought > 0) {
       return 'DONE';
+    }
+    if (line.quantity === 0 && boughtElsewhere > 0) {
+      return 'BOUGHT_ELSEWHERE';
     }
     if (line.quantity > 0 && bought > 0) {
       return 'PARTLY';
@@ -1853,7 +2049,10 @@ export class BasketMemory implements BasketServiceI {
    * disagree, which is the one thing a spec over this is for.
    */
   private _progress(rows: readonly BasketRow[]): BasketProgress {
-    const counted = rows.filter((row) => row.state !== 'REMOVED');
+    // A buy made outside the basket counts for nothing in it (backend `0203`).
+    const counted = rows.filter(
+      (row) => row.state !== 'REMOVED' && row.state !== 'BOUGHT_ELSEWHERE'
+    );
     return {
       done: counted.filter((row) => row.state === 'DONE').length,
       unavailable: counted.filter((row) => row.state === 'NOT_AVAILABLE')
@@ -1875,7 +2074,8 @@ export class BasketMemory implements BasketServiceI {
     lineId: string,
     outcome: 'BOUGHT' | 'NOT_AVAILABLE',
     quantity: number,
-    priceScopeId?: string
+    priceScopeId?: string,
+    itemId?: string
   ): void {
     this._settlements.push({
       id: (this._settlementId += 1),
@@ -1885,6 +2085,7 @@ export class BasketMemory implements BasketServiceI {
       by: this.me.id,
       at: new Date(),
       ...(priceScopeId === undefined ? {} : { priceScopeId }),
+      ...(itemId === undefined ? {} : { itemId }),
       reverted: false,
     });
 
@@ -1947,53 +2148,51 @@ export class BasketMemory implements BasketServiceI {
   }
 
   /**
-   * What every write answers: the row as it now stands, and the counts.
+   * What every write answers: the named lines as they now stand (backend `0201`,
+   * section 4).
    *
-   * **A row that is no longer there answers null rather than a 404.** A demand
-   * taken to zero on a row nothing was bought of takes the row out of the view,
-   * and that is the write succeeding: the list now asks for nothing, which is
-   * what was asked for. A 404 here would report a failure to somebody whose
-   * change landed.
+   * **A line that left the basket is absent**, which is a demand taken to zero
+   * on a line nothing was bought of. That is the write succeeding: the list now
+   * asks for nothing, which is what was asked for.
    */
-  private async _result(rowKey: string): Promise<BasketRowResult> {
-    const rows = this._rows();
-    const row =
-      rows.find((held) => held.rowKey === rowKey) ??
-      rows.find((held) =>
-        held.entries.some((entry) => entry.lineId === rowKey)
-      ) ??
-      null;
-
-    return {
-      row,
-      progress: this._progress(rows),
-      pending: this._pending(rows),
-      replacedRowKey: null,
-      skippedCount: 0,
-    };
+  private async _result(lineIds: readonly string[]): Promise<BasketRowResult> {
+    const wanted = new Set(lineIds);
+    const entries = this._rows()
+      .flatMap((row) => row.entries)
+      .filter((entry) => wanted.has(entry.lineId));
+    return { entries, skippedCount: 0 };
   }
 
   // --- Internals -------------------------------------------------------------
 
   /**
-   * The row a key addresses: by its own key, then by any entry's line id.
+   * The named lines, as one row, or a refusal (backend `0201`, section 4).
    *
-   * The second lookup is the server's rule and not a convenience (backend `0136`):
-   * a row whose anchor was just bought to zero must not turn the next tap on the
-   * same row into a not found.
+   * Every named line must be an entry of a row of this basket, else the whole
+   * write is the one "Row not found" of the server, and the key must be one of
+   * them. The numbers a write checks `from` against are the sums over the named
+   * lines, so the answer is a row of exactly those entries.
    */
-  private _requireRow(rowKey: string): BasketRow {
+  private _requireLines(target: BasketRowTarget): BasketRow {
     const rows = this._rows();
-    const row =
-      rows.find((held) => held.rowKey === rowKey) ??
-      rows.find((held) =>
-        held.entries.some((entry) => entry.lineId === rowKey)
-      );
+    const named = new Set(target.lineIds);
+    const entries = rows
+      .flatMap((row) => row.entries)
+      .filter((entry) => named.has(entry.lineId));
+    const host = rows.find((row) =>
+      row.entries.some((entry) => entry.lineId === target.rowKey)
+    );
 
-    if (row === undefined) {
+    if (
+      host === undefined ||
+      entries.length !== named.size ||
+      !named.has(target.rowKey)
+    ) {
       throw this._refuse('not_found', 404, 'No such row on this basket');
     }
-    return row;
+    const left = entries.reduce((sum, entry) => sum + entry.left, 0);
+    const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
+    return { ...host, entries, left, bought, asked: left + bought };
   }
 
   /**

@@ -1,3 +1,5 @@
+> **PR:** [#710](https://github.com/IchirokuXVI/nx-portfolio/pull/710)
+
 # 0139: a row of the shopping list is a product
 
 > Asked for by the owner on 2026-10-11: "I think it would be way better to merge all lines
@@ -43,6 +45,55 @@ zero.** The page raises such a line with the demand route. `coveredLinesSql` in
 zero or it has a purchase in scope, and backend `0201` section 4 answers "Row not found"
 for a line that the basket does not cover. The same point is in the review section of
 backend `0201`. Do not build this flow until that plan says how such a line is raised.
+
+## What the build decided
+
+The build of 2026-10-14 settled the review above and made the choices below. Each is a
+choice of the builder that the owner can overturn. Where this section and a later section
+disagree, this section is right.
+
+1. **The review is settled by backend `0201`.** Its "What the build decided", point 2: the
+   demand route names its line and reaches a line at zero on a covered list. So "Add it to
+   another list" is built in full.
+2. **A write names every entry of the row, served or not.** Section 4 says "on a list
+   served to the reader". A guest is served no list, so that reading leaves a guest nothing
+   to send, and backend `0201` point 10 reads it as "on a covered list".
+3. **The header counts itself after a write.** The page counts its progress with
+   `progressOf` over the rows it holds (backend `0201` point 1). A full read keeps the
+   server's count, which is the same number.
+4. **The page reads the basket after every write**, coalesced with the event the write
+   sends (1500 ms). The answer of a write is put into the rows first with the shared rules.
+5. **The lists that can take the product are read when the sheet opens**, once for its
+   product, and not when the disclosure opens. Only a read can say that no list can take
+   it, and the disclosure is then not drawn. Loading and a failure with a retry are drawn
+   inside the open disclosure.
+6. **The sheet lost the "got" reel of each list.** The mock draws one quantity for each
+   list. Part of a row is bought with the row's own reel.
+7. **The sheet lost the product card.** The title is the product, and "Got all N" (or "Got
+   the other N") is the primary button, as in the mock.
+8. **"What was got today" uses the price and the shop the row draws now**, not the
+   settlement. A settle records the price shown at the shop it names, so the two agree
+   until the shop or its price moves. The history pane holds the record.
+9. **`BOUGHT_ELSEWHERE` is read into the models** and drawn as the done row "Bought on
+   another basket" that velista `0131` drew. It counts nowhere, as `progressOf` says. Its
+   own look is velista `0142`.
+10. **"Not sold here" keeps the cheapest price elsewhere after it**, as "not listed at"
+    did. The lists in the caption give way before a mark does.
+11. **A line added from the sheet is named by the catalog name of the product** in the
+    reader's language, without the brand or the size.
+12. **The shelf mark "instead" is gone.** It offered another option of a row, and a row
+    has one product now.
+13. **The search finds a row by the names of its lines**, and paints only the drawn name.
+14. **`velista-luna-e2e`:** the reset makes Milk the favourite of the Milk line, so that
+    line stays its own row (backend `0201`, "Velista between this plan and velista
+    `0139`"). `shop.spec.ts` step 9 waits for the settle sheet to finish its fall before it
+    types, which step 10 already does for the filter sheet. `member.spec.ts` step 4 still
+    expects `DONE` where backend `0203` serves `BOUGHT_ELSEWHERE`, and is velista `0142`'s.
+15. **"Add it to another list" trusts the read only as far as it can** (added in review).
+    The server decides the lists with no picks (backend `0201` point 14). So the sheet
+    leaves out a list the row already draws, and draws a list whose line asks for the
+    product in another row at that line's own quantity, never at 0, because a demand from
+    a reel drawn at 0 would lower the line.
 
 ## Brief for the agent
 

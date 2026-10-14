@@ -1418,10 +1418,7 @@
     },
     "line": {
       "open": "Settle {{name}}",
-      "outstanding_one": "{{count}} outstanding",
-      "outstanding_other": "{{count}} outstanding",
       "wanted": "×{{count}}",
-      "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
       "takenBack_other": "{{count}} taken back",
@@ -1441,11 +1438,6 @@
     },
     "elsewhere": {
       "caption": "Bought on another basket"
-    },
-    "from": {
-      "one": "from {{first}}",
-      "two": "from {{first}} and {{second}}",
-      "more": "from {{first}} and {{count}} more"
     },
     "view": {
       "open": "Filter and order",
@@ -1544,12 +1536,9 @@
       }
     },
     "price": {
-      "cheaperAt": "{{price}} at {{chain}}",
-      "notListedAt": "not listed at {{chain}}"
+      "cheaperAt": "{{price}} at {{chain}}"
     },
     "group": {
-      "notListed": "Not listed at {{chain}}",
-      "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
       "uncovered": "Categories we could not find in this shop",
@@ -1572,21 +1561,7 @@
       "missed_other": "{{count}} households on this line could not be updated.",
       "missedNamed": "Not updated: {{lists}}"
     },
-    "product": {
-      "change": "Change",
-      "title": "Which did you get?",
-      "hint": "Move units to the ones you got. {{name}} keeps the rest.",
-      "hintNone": "Move units to the ones you got. The rest stays without a product.",
-      "units": "{{name}}, units",
-      "none": "This line names no product",
-      "cheapest": "Cheapest",
-      "noPrice": "No price",
-      "asOf": "Prices from {{when}}",
-      "asOfStale": "Prices from {{when}}, and some may be out of date"
-    },
     "units": {
-      "askedFor": "Asked for",
-      "got": "Got",
       "askedLabel": "{{name}}, asked for",
       "gotLabel": "{{name}}, got",
       "pending": "waiting for the list to agree"
@@ -1745,15 +1720,17 @@
       "isPartly": "{{name}} is partly got"
     },
     "entries": {
-      "title": "Lists that ask for this",
       "otherList": "Another list",
-      "asks": "asks for {{count}}",
-      "got": "got {{count}}",
-      "gotLabel": "{{name}}, got"
+      "asks": "asks for {{count}}"
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",
-      "gone": "That line is no longer in this list."
+      "gone": "That line is no longer in this list.",
+      "listsAndMore_one": "{{names}} and 1 more list",
+      "listsAndMore_other": "{{names}} and {{count}} more lists",
+      "otherLists_one": "Another list",
+      "otherLists_other": "{{count}} other lists",
+      "notSoldHere": "Not sold here"
     },
     "skip": {
       "action": "Not today",
@@ -1853,6 +1830,27 @@
     },
     "map": {
       "openLabel": "Map of {{shop}}"
+    },
+    "sheet": {
+      "each": "{{price}} each",
+      "toGet_one": "{{count}} to get",
+      "toGet_other": "{{count}} to get",
+      "got_one": "Got {{count}} today.",
+      "got_other": "Got {{count}} today.",
+      "gotAt_one": "Got {{count}} today at {{price}}.",
+      "gotAt_other": "Got {{count}} today at {{price}}.",
+      "gotAtShop_one": "Got {{count}} today at {{price}}, at {{shop}}.",
+      "gotAtShop_other": "Got {{count}} today at {{price}}, at {{shop}}.",
+      "askedOn_one": "Asked for on 1 list",
+      "askedOn_other": "Asked for on {{count}} lists",
+      "addElsewhere": "Add it to another list",
+      "othersLoading": "Looking at your other lists",
+      "othersFailed": "Your other lists did not load.",
+      "othersRetry": "Try again",
+      "gotAll_one": "Got it",
+      "gotAll_other": "Got all {{count}}",
+      "gotOther_one": "Got the last one",
+      "gotOther_other": "Got the other {{count}}"
     }
   },
   "getList": {

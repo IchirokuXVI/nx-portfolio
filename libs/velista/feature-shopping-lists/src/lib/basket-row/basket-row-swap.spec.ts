@@ -42,7 +42,7 @@ function row(): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [MILK.id],
+    productId: MILK.id,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -97,10 +97,10 @@ describe('BasketRow, change product', () => {
 });
 
 describe('BasketRow, a cheaper similar product', () => {
-  it('says so in words on the product line, and in the row name', async () => {
+  it('says so in words on the caption line, and in the row name', async () => {
     const fixture = await render({ groupCheaper: true });
 
-    expect(host(fixture).querySelector('.product')?.textContent).toContain(
+    expect(host(fixture).querySelector('.caption')?.textContent).toContain(
       'basket.swap.cheaper'
     );
     expect(

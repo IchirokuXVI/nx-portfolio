@@ -201,136 +201,17 @@ describe('BasketApi.join', () => {
  * **A rename asks before it merges** (velista `0084`). The first request carries no
  * `confirmMerge` at all, and only the Merge button's request carries `true`.
  */
-describe('BasketApi.renameRow', () => {
+describe('BasketApi, the writes on a row', () => {
   let api: BasketApi;
   let httpMock: HttpTestingController;
 
-  /** The row every write on this surface answers with (backend `0136`). */
-  const ROW_VIEW = {
-    rowKey: 'zl-1',
-    content: 'Leche entera',
-    left: 3,
-    bought: 0,
-    asked: 3,
-    state: 'WANTED',
-    note: null,
-    noteAt: null,
-    mark: null,
-    awaitingApproval: false,
-    optionIds: [],
-    touchedBy: null,
-    touchedAt: null,
-    entries: [
-      {
-        lineId: 'zl-1',
-        left: 3,
-        bought: 0,
-        state: 'WANTED',
-        approvalStatus: 'APPROVED',
-        demandEditable: true,
-      },
-    ],
-  };
-
-  const PROGRESS = { done: 0, unavailable: 0, total: 1, pending: 1 };
-
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(withInterceptors([gatewayInterceptor])),
-        provideHttpClientTesting(),
-        provideFakeBrowserFacade(new Map<string, string>()),
-        {
-          provide: APP_API_CONFIG,
-          useValue: {
-            gatewayBaseUrl: GATEWAY,
-            realtimeBaseUrl: 'https://realtime.example',
-          },
-        },
-        { provide: RokuTranslatorService, useValue: { getLocale: () => 'en' } },
-        { provide: APP_VERSION, useValue: '1.4.0' },
-        { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
-        ...VELISTA_DATA_ACCESS_PROVIDERS,
-        BasketApi,
-      ],
-    });
-
-    api = TestBed.inject(BasketApi);
-    httpMock = TestBed.inject(HttpTestingController);
-  });
-
-  afterEach(() => httpMock.verify());
-
-  // The row writes moved to the basket's own path with backend `0136`, and
-  // backend `0144` moved the sharing half there too.
-  const url = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
-
-  it('patches the row route and leaves confirmMerge off the first request', async () => {
-    const done = api.renameRow(BASKET, 'zl-1', { content: 'Leche entera' });
-    const req = httpMock.expectOne(url);
-
-    expect(req.request.method).toBe('PATCH');
-    expect(req.request.body).toEqual({ content: 'Leche entera' });
-    req.flush({ row: ROW_VIEW, progress: PROGRESS });
-
-    expect((await done).absorbedRowKey).toBeNull();
-  });
-
-  it('sends confirmMerge only when it is true, and reads the absorbed row', async () => {
-    const done = api.renameRow(BASKET, 'zl-1', {
-      content: 'Leche entera',
-      confirmMerge: true,
-    });
-    const req = httpMock.expectOne(url);
-
-    expect(req.request.body).toEqual({
-      content: 'Leche entera',
-      confirmMerge: true,
-    });
-    req.flush({
-      row: ROW_VIEW,
-      progress: PROGRESS,
-      replacedRowKey: 'zl-2',
-    });
-
-    // The wire's `replacedRowKey`, named for what a rename did with it: the row
-    // the request addressed was the one absorbed.
-    expect((await done).absorbedRowKey).toBe('zl-2');
-  });
-});
-
-/**
- * The four routes velista `0092` reaches: a skip, taking it back, what a list
- * asks for, and an add that names a list.
- *
- * Asserted here rather than only through the store, because what each of them
- * gets wrong is invisible above this layer. A skip on the wrong verb reads as a
- * write that silently did nothing; a demand with the `lineId` left off moves
- * whichever list the server picked; an add with an empty `itemIds` array is a
- * product set somebody chose where an absent key is free text.
- */
-describe('BasketApi, the writes of velista 0092', () => {
-  let api: BasketApi;
-  let httpMock: HttpTestingController;
-
-  const ROW_VIEW = {
-    rowKey: 'zl-1',
-    content: 'Milk',
-    left: 2,
-    bought: 0,
-    asked: 2,
-    state: 'SKIPPED',
-    note: null,
-    noteAt: null,
-    mark: null,
-    awaitingApproval: false,
-    optionIds: [],
-    touchedBy: null,
-    touchedAt: null,
+  /** What every write on a row answers: the lines, and no row (backend `0201`). */
+  const ANSWER = {
     entries: [
       {
         lineId: 'zl-1',
         listId: 'list-weekly',
+        content: 'Milk',
         left: 2,
         bought: 0,
         state: 'SKIPPED',
@@ -338,9 +219,11 @@ describe('BasketApi, the writes of velista 0092', () => {
         demandEditable: true,
       },
     ],
+    progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
   };
 
-  const PROGRESS = { done: 0, unavailable: 0, total: 1, pending: 1 };
+  /** A row of two lines, keyed by the first: every write names both. */
+  const TARGET = { rowKey: 'zl-1', lineIds: ['zl-1', 'zl-2'] };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -369,98 +252,125 @@ describe('BasketApi, the writes of velista 0092', () => {
 
   afterEach(() => httpMock.verify());
 
-  const skipUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/skip`;
+  const rowUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
+  const skipUrl = `${rowUrl}/skip`;
 
-  it('puts a skip on the row\u2019s skip route and folds the answer', async () => {
-    const done = api.skip(BASKET, 'zl-1');
-    const req = httpMock.expectOne(skipUrl);
+  it('patches the row route with its lines, and leaves confirmMerge off the first request', async () => {
+    const done = api.renameRow(BASKET, TARGET, { content: 'Leche entera' });
+    const req = httpMock.expectOne(rowUrl);
 
-    // `PUT` and not `POST`: skipping an already skipped row is the state that
-    // was asked for rather than a second act.
-    expect(req.request.method).toBe('PUT');
-    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({
+      lineIds: ['zl-1', 'zl-2'],
+      content: 'Leche entera',
+    });
+    req.flush(ANSWER);
 
-    const result = await done;
-    // Read and never patched: the state is whatever the server answered.
-    expect(result.row?.state).toBe('SKIPPED');
+    expect((await done).entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
   });
 
-  it('carries no from on a skip, because a skip has no number', async () => {
-    const done = api.skip(BASKET, 'zl-1');
-    const req = httpMock.expectOne(skipUrl);
+  it('sends confirmMerge only when it is true', async () => {
+    const done = api.renameRow(BASKET, TARGET, {
+      content: 'Leche entera',
+      confirmMerge: true,
+    });
+    const req = httpMock.expectOne(rowUrl);
 
-    // Every other write on a row names the number it started from. A skip has
-    // none to be stale about; the server refuses a row with nothing left to get
-    // instead (backend `0137`, section 5).
-    expect(req.request.body).toEqual({});
-    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+    expect(req.request.body).toEqual({
+      lineIds: ['zl-1', 'zl-2'],
+      content: 'Leche entera',
+      confirmMerge: true,
+    });
+    req.flush(ANSWER);
     await done;
   });
 
-  it('takes a skip back with DELETE on the same route', async () => {
-    const done = api.unskip(BASKET, 'zl-1');
+  it('puts a skip on the row\u2019s skip route, naming its lines and nothing else', async () => {
+    const done = api.skip(BASKET, TARGET);
     const req = httpMock.expectOne(skipUrl);
 
-    expect(req.request.method).toBe('DELETE');
-    req.flush({ row: { ...ROW_VIEW, state: 'WANTED' }, progress: PROGRESS });
+    // `PUT` and not `POST`: skipping an already skipped row is the state that
+    // was asked for rather than a second act. No `from`: a skip has no number.
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ lineIds: ['zl-1', 'zl-2'] });
+    req.flush(ANSWER);
 
-    expect((await done).row?.state).toBe('WANTED');
+    expect((await done).entries[0].state).toBe('SKIPPED');
   });
 
-  it('sends lineId, quantity and from on a demand', async () => {
-    const done = api.setDemand(BASKET, 'zl-1', {
-      lineId: 'zl-1',
-      quantity: 5,
-      from: 2,
+  it('takes a skip back with DELETE, its lines in the query string', async () => {
+    const done = api.unskip(BASKET, TARGET);
+    const req = httpMock.expectOne((candidate) => candidate.url === skipUrl);
+
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.body).toBeNull();
+    expect(req.request.params.get('lineIds')).toBe('zl-1,zl-2');
+    req.flush(ANSWER);
+    await done;
+  });
+
+  it('posts a demand under its own line, with lineId, quantity and from', async () => {
+    const done = api.setDemand(BASKET, {
+      lineId: 'zl-8',
+      quantity: 2,
+      from: 0,
     });
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`
+      `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-8/demand`
     );
 
     expect(req.request.method).toBe('POST');
-    // `lineId` always, although the server requires it only on a row of several
-    // entries: the control is drawn per entry, so there is one to name.
-    expect(req.request.body).toEqual({ lineId: 'zl-1', quantity: 5, from: 2 });
-    req.flush({ row: { ...ROW_VIEW, left: 5 }, progress: PROGRESS });
+    expect(req.request.body).toEqual({ lineId: 'zl-8', quantity: 2, from: 0 });
+    req.flush({ entries: [{ ...ANSWER.entries[0], lineId: 'zl-8', left: 2 }] });
 
-    expect((await done).row?.left).toBe(5);
+    expect((await done).entries[0].left).toBe(2);
   });
 
-  it('reads the server\u2019s emptied row as no row at all', async () => {
-    // A demand taken to zero on a row nothing was bought of. The server states
-    // the row it was asked about with no entries and zeros, which is its way of
-    // saying the row left the view; the client has one answer for that, null.
-    const done = api.setDemand(BASKET, 'zl-1', {
+  /** A demand taken to zero on a line nothing was bought of: the line left. */
+  it('reads an answer with no lines as the line leaving the basket', async () => {
+    const done = api.setDemand(BASKET, {
       lineId: 'zl-1',
       quantity: 0,
       from: 2,
     });
     httpMock
       .expectOne(`${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`)
-      .flush({
-        row: {
-          rowKey: 'zl-1',
-          content: '',
-          left: 0,
-          bought: 0,
-          asked: 0,
-          state: 'WANTED',
-          note: null,
-          noteAt: null,
-          mark: null,
-          awaitingApproval: false,
-          optionIds: [],
-          touchedBy: null,
-          touchedAt: null,
-          entries: [],
-        },
-        progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
-      });
+      .flush({ entries: [], progress: ANSWER.progress });
 
-    const result = await done;
-    expect(result.row).toBeNull();
-    // The counts still land: the row going away is what changed them.
-    expect(result.progress.total).toBe(0);
+    expect((await done).entries).toEqual([]);
+  });
+
+  it('reads the lists that can take a product from the product route', async () => {
+    const done = api.productLists(BASKET, 'item-eggs');
+    const req = httpMock.expectOne(
+      `${GATEWAY}/v1/baskets/${BASKET}/products/item-eggs/lists`
+    );
+
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      lists: [
+        {
+          listId: 'list-groceries',
+          listName: 'Groceries',
+          zoneId: 'z-1',
+          zoneName: 'Flat 3B',
+          lineId: 'zl-8',
+          lineName: 'Huevos',
+          quantity: 0,
+        },
+      ],
+    });
+
+    expect((await done).map((list) => list.lineId)).toEqual(['zl-8']);
+  });
+
+  it('throws on a body with no lists, so the sheet can offer a retry', async () => {
+    const done = api.productLists(BASKET, 'item-eggs');
+    httpMock
+      .expectOne(`${GATEWAY}/v1/baskets/${BASKET}/products/item-eggs/lists`)
+      .flush({});
+
+    await expect(done).rejects.toBeDefined();
   });
 
   it('posts an add to the basket\u2019s lines, naming its list', async () => {
@@ -480,11 +390,10 @@ describe('BasketApi, the writes of velista 0092', () => {
       quantity: 1,
     });
     req.flush({
-      row: { ...ROW_VIEW, rowKey: 'zl-9', content: 'Batteries' },
-      progress: PROGRESS,
+      entries: [{ ...ANSWER.entries[0], lineId: 'zl-9', content: 'Batteries' }],
     });
 
-    expect((await done).row?.content).toBe('Batteries');
+    expect((await done).entries[0].content).toBe('Batteries');
   });
 
   it('sends a suggestion\u2019s product set as itemIds', async () => {
@@ -502,13 +411,32 @@ describe('BasketApi, the writes of velista 0092', () => {
       quantity: 2,
       itemIds: ['item-a', 'item-b'],
     });
-    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+    req.flush(ANSWER);
     await done;
   });
 
-  describe('a settle names a scope and never money (velista 0095, test 9)', () => {
-    const rowUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
+  it('names the lines of the row on a settle and on a revert', async () => {
+    const settled = api.settle(BASKET, TARGET, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: 2,
+    });
+    const settle = httpMock.expectOne(`${rowUrl}/settle`);
+    expect(settle.request.body).toMatchObject({ lineIds: ['zl-1', 'zl-2'] });
+    settle.flush(ANSWER);
+    await settled;
 
+    const reverted = api.revert(BASKET, TARGET, { target: 'CLOSE' });
+    const revert = httpMock.expectOne(`${rowUrl}/revert`);
+    expect(revert.request.body).toEqual({
+      lineIds: ['zl-1', 'zl-2'],
+      target: 'CLOSE',
+    });
+    revert.flush(ANSWER);
+    await reverted;
+  });
+
+  describe('a settle names a scope and never money (velista 0095, test 9)', () => {
     /** Every key of a body, nested ones included. */
     function keysOf(value: unknown): string[] {
       if (Array.isArray(value)) {
@@ -526,10 +454,10 @@ describe('BasketApi, the writes of velista 0092', () => {
     async function settleBody(
       body: Parameters<BasketApi['settle']>[2]
     ): Promise<Record<string, unknown>> {
-      const done = api.settle(BASKET, 'zl-1', body);
+      const done = api.settle(BASKET, TARGET, body);
       const req = httpMock.expectOne(`${rowUrl}/settle`);
       const sent = req.request.body as Record<string, unknown>;
-      req.flush({ row: ROW_VIEW, progress: PROGRESS });
+      req.flush(ANSWER);
       await done;
       return sent;
     }
@@ -537,10 +465,10 @@ describe('BasketApi, the writes of velista 0092', () => {
     async function revertBody(
       body: Parameters<BasketApi['revert']>[2]
     ): Promise<Record<string, unknown>> {
-      const done = api.revert(BASKET, 'zl-1', body);
+      const done = api.revert(BASKET, TARGET, body);
       const req = httpMock.expectOne(`${rowUrl}/revert`);
       const sent = req.request.body as Record<string, unknown>;
-      req.flush({ row: ROW_VIEW, progress: PROGRESS });
+      req.flush(ANSWER);
       await done;
       return sent;
     }

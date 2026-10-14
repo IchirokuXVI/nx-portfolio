@@ -124,11 +124,11 @@ test.describe('a registered participant', () => {
       await expectBasketUrl(dana, basketId);
 
       // What a guest never gets: the lists behind the row on the settle sheet,
-      // with the list that asks for the line named (velista `0090`, 9.2).
+      // with the list that asks for the line named (velista `0139`, section 3).
       const dialog = await openSettleSheet(dana, 'Milk');
       const entries = dialog.locator('lib-row-entries');
       await expect(
-        entries.getByRole('heading', { name: 'Lists that ask for this' })
+        entries.getByRole('heading', { name: 'Asked for on 1 list' })
       ).toBeVisible();
       await expect(
         entries.locator('.row-name', { hasText: 'Groceries' })
@@ -218,7 +218,7 @@ test.describe('a registered participant', () => {
         hers.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
       ).toBeVisible();
 
-      await buyBasketRow(alice, live.id, added.rowKey, {
+      await buyBasketRow(alice, live.id, [added.lineId], {
         quantity: 2,
         from: 2,
       });

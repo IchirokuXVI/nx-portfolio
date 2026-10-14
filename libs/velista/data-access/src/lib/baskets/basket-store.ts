@@ -9,7 +9,8 @@ import {
 } from '@angular/core';
 import {
   BASKET_ACCESS_ENDED_FALLBACK,
-  basketShelfMark,
+  basketProgressOf,
+  foldBasketEntries,
   isOpenBasket,
   type Basket,
   type BasketAccessEnded,
@@ -21,19 +22,19 @@ import {
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
-  type BasketRenameResult,
   type BasketRevertRequest,
   type BasketRow,
   type BasketRowResult,
+  type BasketRowTarget,
   type BasketSettleRequest,
   type BasketShareLink,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { AppResumed } from '@portfolio/velista/platform';
 import { endedReasonOf, GatewayError, hasResponse } from '../errors';
-import { restrictRowToServedLists } from '../mapping/basket-mappers';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -132,7 +133,6 @@ export class BasketStore {
   /** See {@link adding}. */
   private readonly _adding = signal(false);
   /** See {@link chosen}. */
-  private readonly _chosen = signal<ReadonlyMap<string, string>>(new Map());
   /** See {@link handedOver}. The counter is what lets one sentence be said twice. */
   private readonly _handedOver = signal<{
     readonly text: string;
@@ -381,73 +381,38 @@ export class BasketStore {
   readonly adding = this._adding.asReadonly();
 
   /**
-   * Which product somebody said they got, per row (velista `0092`, section 5).
-   *
-   * **In memory for the visit, and never stored.** Backend `0136` deleted the
-   * stored pick: a basket holds no lines, so there is nowhere to keep one, and
-   * the only place a product belongs is on the purchase it was bought as. This is
-   * what replaces it on the screen, and it is deliberately as short lived as the
-   * page: a choice made in one aisle is not a fact about the household's list.
-   *
-   * Keyed on the row key, which can move under an open sheet. A choice lost to a
-   * re-key is a choice somebody makes again, which is cheaper than a choice
-   * quietly attached to a row it was not made on.
-   */
-  readonly chosen = this._chosen.asReadonly();
-
-  /**
-   * Say which product was got, for this row, for this visit.
-   *
-   * It writes nothing to the server, and that is the whole design: a product is
-   * recorded when it is **bought**, as `itemId` on the settle, and never before
-   * (velista `0092`, section 5).
-   */
-  choose(rowKey: string, itemId: string): void {
-    const next = new Map(this._chosen());
-    next.set(rowKey, itemId);
-    this._chosen.set(next);
-  }
-
-  /**
    * The product id a `BOUGHT` settle on this row carries, or undefined.
    *
    * **The one place the rule lives**, because three controls send a settle: the
-   * row's glyph, the row's reel and the sheet's three buttons. A rule copied
-   * three times is three chances for one of them to record a purchase against no
-   * product while the screen says otherwise.
-   *
-   * Two ways to have one. Somebody chose, and the choice is still one of the
-   * row's own options, which a re-key or a refetch can end. Or the row has
-   * exactly one option, which is not a choice at all: there was nothing to
-   * choose between, and the row has been drawing that product all along.
-   *
-   * Undefined otherwise, which is a row of several options nobody has chosen
-   * from, and a free text row. The settle then names no product, which is the
-   * honest record: nobody said which.
+   * row's glyph, the row's reel and the sheet's buttons. Since backend `0201` it
+   * is the row's own product: a row is one product, so there is nothing left to
+   * choose between, and a row whose lines hold none names none.
    */
   itemIdFor(rowKey: string): string | undefined {
+    return this.rowFor(rowKey)?.productId ?? undefined;
+  }
+
+  /**
+   * What a write on a row names: its key and **every line it gathers** (backend
+   * `0201`, section 4; velista `0139`, section 4).
+   *
+   * Every entry, served or not. A guest is served no list, and the server reads
+   * "a line of the actor" as "a covered line" so that who may settle does not
+   * change (backend `0201`, "What the build decided", point 10). Naming only the
+   * served entries would leave a guest nothing to send.
+   *
+   * Null for a row this store does not hold, which is a write with nothing to
+   * name: the caller sends nothing.
+   */
+  targetOf(rowKey: string): BasketRowTarget | null {
     const row = this.rowFor(rowKey);
-    if (row === null) {
-      return undefined;
+    if (row === null || row.entries.length === 0) {
+      return null;
     }
-
-    const held = this._chosen().get(rowKey);
-    if (held !== undefined && row.optionIds.includes(held)) {
-      return held;
-    }
-    if (row.optionIds.length === 1) {
-      return row.optionIds[0];
-    }
-
-    // The third way, since velista `0102`: at a shop that is known not to have the
-    // row's default, the option the row offers instead. The row names it, so the
-    // settle buys it; a person who chose is the first case and wins over this.
-    const shelf = basketShelfMark(
-      row,
-      this.products(),
-      this.shopRead() !== null
-    );
-    return shelf?.kind === 'instead' ? shelf.optionId : undefined;
+    return {
+      rowKey: row.rowKey,
+      lineIds: row.entries.map((entry) => entry.lineId),
+    };
   }
 
   /**
@@ -600,14 +565,12 @@ export class BasketStore {
   readonly finished = computed(() => this._basket() !== null && !this.isOpen());
 
   /**
-   * How many rows still have something to do, **by the server** (backend `0130`,
-   * section 4).
+   * How many rows still have something to do (backend `0130`, section 4).
    *
-   * What the finish sheet warns about and what `allSettled` reads. It used to be
-   * `total - done - unavailable` computed here, which is the same arithmetic the
-   * server now does and sends: a `SKIPPED` row is pending, and this side has no
-   * way to know that. Nothing in this scope subtracts one count from another
-   * (velista `0060`, section 4).
+   * What the finish sheet warns about and what `allSettled` reads. The read's
+   * number, and after a write the same rule counted over the rows held
+   * (`progressOf` of `@portfolio/luna-shopper/basket-rules`, backend `0201`), so a
+   * `SKIPPED` row is pending here exactly as it is on the server.
    */
   readonly pending = computed(() => this._basket()?.pending ?? 0);
 
@@ -629,7 +592,9 @@ export class BasketStore {
   /**
    * How much of this basket has been got, for the header's "4 of 12" line.
    *
-   * **The server's, never recounted** (backend `0130`, section 4). Rows and not
+   * The read's count, and after a write the shared rule's count over the rows
+   * held (backend `0201`, "What the build decided", point 1): the progress a
+   * write answers is core's count with no prices, and can be one off. Rows and not
    * units, which is how `0047` counts a zone list: "four things done out of
    * twelve" is what somebody in a shop is tracking, and a basket of one row asking
    * for twelve tins would otherwise read as almost finished.
@@ -796,9 +761,6 @@ export class BasketStore {
     this._present.set([]);
     this._busyRows.set(new Set());
     this._adding.set(false);
-    // The choices are about **this** basket's rows, and they were never stored:
-    // they go with it rather than following the next one into a shop.
-    this._chosen.set(new Map());
     // The shop is the device's and outlives the basket in `BasketViewStore`'s
     // record, which puts it back on the next one. This store asks nothing of a
     // basket it has let go.
@@ -969,11 +931,9 @@ export class BasketStore {
     rowKey: string,
     body: BasketSettleRequest
   ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.settle(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.settle(id, target, body)
+    );
   }
 
   /**
@@ -987,11 +947,9 @@ export class BasketStore {
     rowKey: string,
     body: BasketRevertRequest
   ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.revert(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.revert(id, target, body)
+    );
   }
 
   /**
@@ -1010,9 +968,9 @@ export class BasketStore {
    * The ceiling the reel offers is `row.asked`, which is read and never computed.
    *
    * `at` is where the purchase happened and what was bought: the scope of the price
-   * the row drew (velista `0095`, section 6), the shop the person is buying at and
-   * the option the row offered in place of a missing default (velista `0102`). Only
-   * the settling direction sends it: a revert names no scope and no shop.
+   * the row drew (velista `0095`, section 6), the shop the person is buying at
+   * (velista `0102`) and the row's product (velista `0139`). Only the settling
+   * direction sends it: a revert names no scope and no shop.
    */
   async setLeft(
     rowKey: string,
@@ -1064,12 +1022,10 @@ export class BasketStore {
   async renameRow(
     rowKey: string,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.renameRow(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+  ): Promise<BasketRowResult | null> {
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.renameRow(id, target, body)
+    );
   }
 
   /**
@@ -1084,42 +1040,62 @@ export class BasketStore {
    * is the server's answer rather than this side's arithmetic.
    */
   async skip(rowKey: string): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.skip(id, rowKey);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.skip(id, target)
+    );
   }
 
   /** The same fact, unset. See {@link skip}. */
   async unskip(rowKey: string): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.unskip(id, rowKey);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.unskip(id, target)
+    );
   }
 
   /**
    * Change what one list asks for (velista `0092`, section 6).
    *
    * The one write here that changes a household's list rather than recording
-   * what a trip did, and the answer is folded like any other: the row comes back
-   * with new numbers, or `null` when nothing is left to buy of it and nothing
-   * was bought this trip, in which case {@link _fold} drops it.
-   *
-   * The caller reads `result.row === null` to know which happened. It is not a
+   * what a trip did, and the answer is folded like any other: the line comes
+   * back with new numbers, or is absent when nothing is left to buy of it and
+   * nothing was bought this trip, in which case {@link _fold} takes it off its
+   * row. The caller reads {@link lineLeft} to know which happened. It is not a
    * failure: the list now asks for nothing, which is what was asked for.
+   *
+   * Named by its line alone (backend `0201`, section 4), which need not be a row
+   * of this basket: a list that holds the product at zero is raised this way,
+   * and its line then joins the row of the product.
    */
-  async setDemand(
-    rowKey: string,
-    body: BasketDemandRequest
-  ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.setDemand(id, rowKey, body);
-      this._fold(result, rowKey);
+  async setDemand(body: BasketDemandRequest): Promise<BasketRowResult | null> {
+    const busyKey = this.rowFor(body.lineId)?.rowKey ?? body.lineId;
+    return this._write(busyKey, async (id) => {
+      const result = await this._service.setDemand(id, body);
+      this._fold(result, [body.lineId]);
       return result;
     });
+  }
+
+  /**
+   * The covered lists that could take a product, or null when the read failed
+   * (backend `0201`, section 5; velista `0139`, section 3).
+   *
+   * A read and not a write, so a failure here moves nothing: the basket on screen
+   * stays, and the sheet says the lists did not load with a retry beside it.
+   */
+  async productLists(
+    itemId: string
+  ): Promise<readonly BasketProductList[] | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+    try {
+      const lists = await this._service.productLists(id, itemId);
+      // A basket let go or switched while the read was out answers for none.
+      return this._id === id ? lists : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1132,10 +1108,8 @@ export class BasketStore {
    *
    * It is folded rather than appended, because the add goes through the target
    * list's ordinary rules and can land on a line the list already held (backend
-   * `0091`). So the answer is a row that may already be on the screen, under a
-   * key nobody named, and {@link _fold} puts it where it belongs. The key it is
-   * folded against is the answer's own: there is no earlier row for this write
-   * to replace.
+   * `0091`). So the answer is a line that may already be on the screen, and
+   * {@link _fold} puts it into the row of its product, or makes it a row.
    */
   async addLine(body: BasketAddLineRequest): Promise<BasketRowResult | null> {
     const id = this._id;
@@ -1146,10 +1120,7 @@ export class BasketStore {
     this._adding.set(true);
     try {
       const result = await this._service.addLine(id, body);
-      // Folded against the answer's **own** key, because there is no earlier row
-      // this write replaces: an add either makes a row or raises one that was
-      // already there, and either way the answer names it.
-      this._fold(result, result.row?.rowKey ?? '');
+      this._fold(result, []);
       return result;
     } catch (error) {
       this._fail(id, error);
@@ -1177,100 +1148,66 @@ export class BasketStore {
   }
 
   /**
+   * Whether a write's answer took this line out of the basket: it named the line,
+   * and the line is not among the lines it answered (backend `0201`, section 4).
+   * A demand taken to zero on a line nothing was bought of is the one write that
+   * does it.
+   */
+  lineLeft(result: BasketRowResult, lineId: string): boolean {
+    return !result.entries.some((entry) => entry.lineId === lineId);
+  }
+
+  /**
+   * One write on a row, by the lines of the row this store holds.
+   *
+   * Null without a write when the store holds no such row, which is a row that
+   * left under an open sheet: there is nothing to name.
+   */
+  private async _rowWrite(
+    rowKey: string,
+    send: (id: string, target: BasketRowTarget) => Promise<BasketRowResult>
+  ): Promise<BasketRowResult | null> {
+    const target = this.targetOf(rowKey);
+    if (target === null) {
+      return null;
+    }
+    return this._write(target.rowKey, async (id) => {
+      const result = await send(id, target);
+      this._fold(result, target.lineIds);
+      return result;
+    });
+  }
+
+  /**
    * Fold one write's answer into the basket. **The single place a write lands.**
    *
-   * It replaces the row by key and takes the counts whole. It **never patches a
-   * number**: every number on this screen is one the server sent, so there is
-   * nothing here to add up and nothing to get wrong.
+   * The answer is lines and no row (backend `0201`, section 4), so
+   * `foldBasketEntries` puts each line back into the row that holds it and
+   * rebuilds that row with the rules core uses. **It never works out a number of
+   * its own**: every sum and state is `@portfolio/luna-shopper/basket-rules`'s
+   * answer over the entries the server sent.
    *
-   * Three things it has to get right, and they are three:
+   * The header is counted here over the rows held, with the same rules
+   * (`progressOf`), and not taken from the answer: the write's progress is
+   * core's count with no prices and can be one off the read (backend `0201`,
+   * "What the build decided", point 1).
    *
-   * - **The answered row may carry a new key.** A rename that merged, or an anchor
-   *   that was bought to zero, moves it. So the row named by `rowKey` is dropped
-   *   and the answered row is put back in its place, which keeps the position the
-   *   shopper is looking at.
-   * - **`replacedRowKey` names a second row that went away**, which is the row a
-   *   rename folded this one into, or out of. It is dropped too.
-   * - **The row's list ids are gated here**, because the answer carries no refs to
-   *   gate them against. It is the same function `toBasket` uses, so a row that
-   *   arrived through a write and a row that arrived through a read cannot
-   *   disagree about which lists this reader may name.
+   * Then the basket is read again, coalesced with the event the write sends, as
+   * it was before: the read is where the row as the server groups it comes from,
+   * with its product named and its note and its mark.
    */
-  private _fold(result: BasketRowResult, rowKey: string): void {
+  private _fold(result: BasketRowResult, named: readonly string[]): void {
     const held = this._basket();
     if (held === null) {
       return;
     }
 
-    if (result.row === null) {
-      // **The write took the row out of the basket**, which only a demand
-      // lowered to zero can do (velista `0092`, section 6.2). It is dropped by
-      // the key the request used, and by `replacedRowKey` where the server
-      // named a second one, exactly as a surviving row's old keys are dropped
-      // below. The counts still come from the answer: the row going away is
-      // what changed them.
-      const dropped = new Set(
-        [rowKey, result.replacedRowKey].filter(
-          (key): key is string => key !== null
-        )
-      );
-      this._basket.set({
-        ...held,
-        rows: held.rows.filter((current) => !dropped.has(current.rowKey)),
-        progress: result.progress,
-        pending: result.pending,
-      });
-      this._changed();
-      return;
-    }
-
     const served = new Set(held.lists.map((ref) => ref.listId));
-    const row = withHeldUsual(
-      restrictRowToServedLists(result.row, served),
-      held.rows,
-      rowKey
-    );
-    const gone = new Set(
-      [rowKey, result.replacedRowKey].filter(
-        (key): key is string => key !== null
-      )
-    );
-    gone.delete(row.rowKey);
-
-    let placed = false;
-    const rows: BasketRow[] = [];
-    for (const current of held.rows) {
-      if (current.rowKey === row.rowKey) {
-        rows.push(row);
-        placed = true;
-        continue;
-      }
-      if (gone.has(current.rowKey)) {
-        // The row the request named, under the key it had. The answered row takes
-        // its place, so the position the shopper is looking at is kept.
-        if (!placed) {
-          rows.push(row);
-          placed = true;
-        }
-        continue;
-      }
-      rows.push(current);
-    }
-
-    if (!placed) {
-      // A row this basket did not hold, which a re-key can produce: the read that
-      // would have carried it is still out. The end is the only honest place for
-      // it, and the read that follows puts it where the server says.
-      rows.push(row);
-    }
-
-    this._basket.set({
-      ...held,
-      rows,
-      progress: result.progress,
-      pending: result.pending,
-    });
+    const rows = foldBasketEntries(held.rows, result.entries, named, served);
+    const { progress, pending } = basketProgressOf(rows);
+    this._basket.set({ ...held, rows, progress, pending });
     this._changed();
+    this._scheduleRefresh();
   }
 
   // --- The owner's share sheet ----------------------------------------------
@@ -1530,31 +1467,4 @@ export class BasketStore {
  */
 function isShopLocked(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'basket_shop_locked';
-}
-
-/**
- * The answered row, carrying the `usual` of the row it replaces when it carries
- * none of its own (velista `0104`).
- *
- * A write answers a row with `usual` null (backend `0165`): the settle or revert
- * that wrote it counts nothing about the chain. Taking that null as the answer
- * would make a row the usual filter hid jump back onto the screen the moment
- * somebody settled it, and lose the message under one it kept. So the last read's
- * value stays until the next read, which is the one place it is counted. Found by
- * the answered key first and then by the key the request used, which is the same
- * pair {@link BasketStore} folds the row by.
- */
-function withHeldUsual(
-  row: BasketRow,
-  held: readonly BasketRow[],
-  requested: string
-): BasketRow {
-  if (row.usual !== null) {
-    return row;
-  }
-  const previous =
-    held.find((current) => current.rowKey === row.rowKey) ??
-    held.find((current) => current.rowKey === requested);
-  const usual = previous?.usual ?? null;
-  return usual === null ? row : { ...row, usual };
 }

@@ -105,7 +105,7 @@
     color: var(--app-text-muted);
   }
 
-  .product,
+  .caption,
   .from {
     opacity: 0.7;
   }
@@ -222,14 +222,58 @@
   color: var(--app-text-secondary);
 }
 
-// The name, the price and the mark, as **inline** spans rather than flex items.
-// The separator travels inside each piece, so the caption reads "name · 2.49 € ·
-// 1.99 € at Dia" however many of the three are present, and a flex item would have
-// its leading space collapsed away at the start of a line.
-.product {
+// A product row's name is one line, cut with an ellipsis (velista 0139, section 1),
+// with the change tag kept whole after it. A row with no product keeps its own
+// words wrapping, as it always did.
+.content.is-product {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  min-inline-size: 0;
+
+  .name {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mark {
+    flex: none;
+  }
+}
+
+// The price, the lists and the marks on one line (velista 0139, section 1). The
+// lists give way first and are cut at their end, so the price and a mark about
+// the shop are never the part that is lost. The separator is drawn here between
+// the pieces, so the caption reads "0.92 € · Weekly, Basics" however many are
+// present.
+.caption {
+  display: flex;
+  align-self: stretch;
+  min-inline-size: 0;
   font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
   color: var(--app-text-secondary);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+
+  > * {
+    flex: none;
+  }
+
+  > * + *::before {
+    content: '\00B7';
+    padding-inline: var(--app-space-2);
+  }
+}
+
+// Written under `.caption` so it outranks the rule above once Angular scopes both.
+.caption > .caption-lists {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 // The section a row is found in (velista 0121), quieter than the product.
@@ -290,13 +334,6 @@
   color: var(--app-text-muted);
 }
 
-// A pick catalog no longer names. The line is still a line to buy, so this is
-// muted rather than an error treatment.
-.is-missing {
-  color: var(--app-text-muted);
-  font-style: italic;
-}
-
 // What the chosen shop is known not to have (velista `0102`). Its own line under
 // the product, so the caption above keeps its shape whether a shop is chosen or not.
 .shelf {
@@ -317,12 +354,6 @@
 .shelf-glyph {
   flex: none;
   font-size: var(--app-icon-sm);
-}
-
-// The option the row took in place of a missing default: a plain sentence in the
-// row's own ink, because the row has already done something about it.
-.is-instead {
-  color: var(--app-text-secondary);
 }
 
 .touched {
