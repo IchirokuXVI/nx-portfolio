@@ -1829,15 +1829,28 @@
       "unavailable": "No disponible en esta tienda",
       "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
     },
-    "swap": {
-      "open": "Cambiar producto",
-      "openLabel": "Cambiar {{name}} por un producto similar",
-      "title": "Cambiar producto",
-      "instead": "En lugar de {{name}}",
-      "none": "No hay productos similares.",
-      "failed": "El cambio no se ha guardado. Inténtalo de nuevo.",
-      "cancel": "Cancelar",
-      "cheaper": "otro más barato"
+    "change": {
+      "one": "Cambiar",
+      "oneLabel": "Cambiar el producto de {{name}}",
+      "all": "Cambiar en todas las listas",
+      "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
+      "cheaper": "otro más barato",
+      "title": "Cambiar el producto",
+      "titleAll_one": "Cambiar el producto en 1 lista",
+      "titleAll_other": "Cambiar el producto en {{count}} listas",
+      "chosenNow": "Elegido ahora",
+      "notSold": "No lo venden aquí",
+      "catalog": "Buscar otro en el catálogo",
+      "keep": "Guardarlo para la próxima vez",
+      "use": "Usar este producto",
+      "useAll_one": "Usarlo en la lista",
+      "useAll_other": "Usarlo en las {{count}} listas",
+      "failedRead": "No se han podido cargar los productos.",
+      "retry": "Volver a intentarlo",
+      "pickTitle": "Elige un producto",
+      "pickFor": "Para {{list}}",
+      "pickForAll_one": "Para 1 lista",
+      "pickForAll_other": "Para {{count}} listas"
     },
     "map": {
       "openLabel": "Mapa de {{shop}}"

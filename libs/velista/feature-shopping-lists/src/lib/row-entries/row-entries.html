@@ -1,13 +1,25 @@
 <!--
   The lists that ask (velista 0139, section 3). A small heading in the secondary
   colour on a hairline, then one row per list: the list, then "zone · line" under
-  it, then what it asks for. The heading's row has room for plan 0140's "Change for
-  all lists", which this plan does not draw.
+  it, Change (velista 0140, section 1), then what it asks for. "Change for all
+  lists" closes the heading's row when two lists or more can change.
 
   A polite live region, so a quantity that a write moved is read out once.
 -->
 <section aria-live="polite" class="entries" role="status">
-  <h3 class="heading">{{ heading() }}</h3>
+  <div class="head">
+    <h3 class="heading">{{ heading() }}</h3>
+    @if (changesAll()) {
+      <button
+        (click)="changedAll.emit()"
+        [disabled]="busy()"
+        class="change-all"
+        type="button"
+      >
+        {{ 'basket.change.all' | rokuT }}
+      </button>
+    }
+  </div>
 
   <ul class="rows">
     @for (entry of entries(); track entry.lineId) {
@@ -18,6 +30,18 @@
             <span class="row-where">{{ where }}</span>
           }
         </span>
+
+        @if (entry.changeable) {
+          <button
+            (click)="changed.emit(entry.lineId)"
+            [attr.aria-label]="entry.changeLabel"
+            [disabled]="busy()"
+            class="change"
+            type="button"
+          >
+            {{ 'basket.change.one' | rokuT }}
+          </button>
+        }
 
         @if (entry.editable) {
           <lib-quantity-reel

@@ -131,10 +131,13 @@
       -->
       @if (row(); as held) {
         <lib-row-entries
+          (changed)="changeLine($event)"
+          (changedAll)="changeAll()"
           (demanded)="demand($event)"
           (raised)="raise($event)"
           (retry)="retryOthers()"
           [busy]="busy()"
+          [changeable]="changeable()"
           [finished]="basketFinished()"
           [lists]="lists()"
           [others]="others()"

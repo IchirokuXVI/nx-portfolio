@@ -244,14 +244,14 @@
               @for (row of resultRows(); track row.key) {
                 <li>
                   <lib-basket-row
+                    (changeProduct)="openChange(row.row)"
                     (left)="setRowLeft(row, $event)"
                     (open)="openRow(row.row)"
                     (revert)="revertRow(row.row)"
                     (settle)="settleRow(row.row)"
-                    (swap)="openSwap(row.row)"
                     [atShop]="pricedAtShop()"
                     [busy]="isBusy(row.row)"
-                    [canSwap]="canSwap(row.row)"
+                    [canChange]="canChange(row.row)"
                     [entry]="row.entry"
                     [finished]="finished()"
                     [groupCheaper]="groupCheaper(row.row)"
@@ -628,14 +628,14 @@
                     -->
                     <li [libSeenTarget]="row.row.mark !== null">
                       <lib-basket-row
+                        (changeProduct)="openChange(row.row)"
                         (left)="setRowLeft(row, $event)"
                         (open)="openRow(row.row)"
                         (revert)="revertRow(row.row)"
                         (settle)="settleRow(row.row)"
-                        (swap)="openSwap(row.row)"
                         [atShop]="pricedAtShop()"
                         [busy]="isBusy(row.row)"
-                        [canSwap]="canSwap(row.row)"
+                        [canChange]="canChange(row.row)"
                         [entry]="row.entry"
                         [finished]="finished()"
                         [groupCheaper]="groupCheaper(row.row)"

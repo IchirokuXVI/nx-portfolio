@@ -50,7 +50,7 @@ function row(): BasketRow {
   };
 }
 
-async function render(inputs: { canSwap?: boolean; groupCheaper?: boolean }) {
+async function render(inputs: { canChange?: boolean; groupCheaper?: boolean }) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [BasketRowComponent, RokuTranslatorTestingModule.forTesting()],
@@ -64,7 +64,7 @@ async function render(inputs: { canSwap?: boolean; groupCheaper?: boolean }) {
   fixture.componentRef.setInput('row', row());
   fixture.componentRef.setInput('people', new Map());
   fixture.componentRef.setInput('products', new Map([[MILK.id, MILK]]));
-  fixture.componentRef.setInput('canSwap', inputs.canSwap ?? false);
+  fixture.componentRef.setInput('canChange', inputs.canChange ?? false);
   fixture.componentRef.setInput('groupCheaper', inputs.groupCheaper ?? false);
   fixture.detectChanges();
   return fixture;
@@ -76,23 +76,26 @@ function host(fixture: { nativeElement: unknown }): HTMLElement {
 
 describe('BasketRow, change product', () => {
   it('offers the change as a control of its own, named after the product', async () => {
-    const fixture = await render({ canSwap: true });
+    const fixture = await render({ canChange: true });
     const swaps: void[] = [];
-    fixture.componentInstance.swap.subscribe(() => swaps.push(undefined));
+    fixture.componentInstance.changeProduct.subscribe(() =>
+      swaps.push(undefined)
+    );
 
-    const button = host(fixture).querySelector<HTMLButtonElement>('.swap');
+    const button =
+      host(fixture).querySelector<HTMLButtonElement>('.change-product');
     button?.click();
 
-    expect(button?.getAttribute('aria-label')).toBe('basket.swap.openLabel');
+    expect(button?.getAttribute('aria-label')).toBe('basket.change.openLabel');
     expect(swaps).toHaveLength(1);
     // Pressing it does not open the row's own sheet.
-    expect(host(fixture).querySelector('.body .swap')).toBeNull();
+    expect(host(fixture).querySelector('.body .change-product')).toBeNull();
   });
 
   it('draws no change control when the page does not offer one', async () => {
-    const fixture = await render({ canSwap: false });
+    const fixture = await render({ canChange: false });
 
-    expect(host(fixture).querySelector('.swap')).toBeNull();
+    expect(host(fixture).querySelector('.change-product')).toBeNull();
   });
 });
 
@@ -101,16 +104,16 @@ describe('BasketRow, a cheaper similar product', () => {
     const fixture = await render({ groupCheaper: true });
 
     expect(host(fixture).querySelector('.caption')?.textContent).toContain(
-      'basket.swap.cheaper'
+      'basket.change.cheaper'
     );
     expect(
       host(fixture).querySelector('.body')?.getAttribute('aria-label')
-    ).toContain('basket.swap.cheaper');
+    ).toContain('basket.change.cheaper');
   });
 
   it('draws nothing when the product is the best price of its group', async () => {
     const fixture = await render({ groupCheaper: false });
 
-    expect(host(fixture).textContent).not.toContain('basket.swap.cheaper');
+    expect(host(fixture).textContent).not.toContain('basket.change.cheaper');
   });
 });

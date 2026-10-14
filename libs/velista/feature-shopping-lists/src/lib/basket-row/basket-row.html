@@ -255,19 +255,19 @@
     </button>
 
     <!--
-      Change the product for a similar one: another product of its group. A
-      control of its own beside the body, because a button cannot hold a button,
-      and only on a row whose product has a group the reader may change.
+      The cheaper mark's control (velista 0140, section 1): it opens the change
+      sheet for all lists. A control of its own beside the body, because a button
+      cannot hold a button, and only on a row the cheaper mark is drawn on.
     -->
-    @if (canSwap()) {
+    @if (canChange()) {
       <button
-        (click)="swap.emit()"
-        [attr.aria-label]="swapLabel()"
+        (click)="changeProduct.emit()"
+        [attr.aria-label]="changeLabel()"
         [disabled]="busy()"
-        class="swap"
+        class="change-product"
         type="button"
       >
-        <lib-swap-icon class="swap-glyph" />
+        <lib-swap-icon class="change-product-glyph" />
       </button>
     }
 

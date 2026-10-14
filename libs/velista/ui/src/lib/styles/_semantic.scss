@@ -285,6 +285,18 @@ $app-content-max: 480px;
   // width from "0" to "12" or a column of them ripples as the numbers move.
   --app-quantity-width: 52px;
   --app-quantity-height: 40px;
+
+  // The two drawn choices of velista `0140`: a radio ring that closes to a dot, and
+  // the owner's "more stylized and a bit smaller" checkbox, an 18px box ticked in a
+  // 9 by 5 stroke. Their whole row is the target, so neither is a touch target.
+  --app-choice-radio-size: 24px;
+  --app-choice-radio-ring: 1.5px;
+  --app-choice-radio-chosen: 7px;
+  --app-choice-check-size: 18px;
+  --app-choice-check-radius: 6px;
+  --app-choice-tick-width: 9px;
+  --app-choice-tick-height: 5px;
+  --app-choice-tick-stroke: 2px;
   // Narrower inside a preview row, which is 38px tall and is a picture rather than a
   // control.
   --app-preview-quantity-width: 34px;

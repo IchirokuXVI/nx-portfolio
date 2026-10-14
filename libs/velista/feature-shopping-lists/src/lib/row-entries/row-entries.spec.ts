@@ -119,6 +119,7 @@ async function render(
     lists?: ReadonlyMap<string, BasketListRef>;
     finished?: boolean;
     others?: OtherListsState | null;
+    changeable?: ReadonlySet<string>;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -137,6 +138,7 @@ async function render(
   fixture.componentRef.setInput('finished', options.finished ?? false);
   fixture.componentRef.setInput('busy', false);
   fixture.componentRef.setInput('others', options.others ?? null);
+  fixture.componentRef.setInput('changeable', options.changeable ?? new Set());
   fixture.detectChanges();
 
   return fixture;
@@ -220,6 +222,70 @@ describe('RowEntries: the lists that ask', () => {
       'basket.entries.otherList',
     ]);
     expect(texts(fixture, '.row-where')).toHaveLength(1);
+  });
+});
+
+describe('RowEntries: Change (velista 0140, section 1)', () => {
+  const two = () =>
+    row([
+      entry(),
+      entry({ lineId: 'zl-2', listId: 'l-basics', content: 'Leche' }),
+    ]);
+
+  it('draws Change before the quantity on the entries the sheet allows', async () => {
+    const fixture = await render(two(), { changeable: new Set(['zl-2']) });
+
+    const rows = [...html(fixture).querySelectorAll('.entries > .rows .row')];
+    expect(rows.map((held) => held.querySelector('.change') !== null)).toEqual([
+      false,
+      true,
+    ]);
+    // The list, Change, the quantity.
+    const change = rows[1].querySelector('.change');
+    expect(change?.nextElementSibling?.classList.contains('ask-reel')).toBe(
+      true
+    );
+    expect(change?.getAttribute('aria-label')).toBe('basket.change.oneLabel');
+  });
+
+  it('says which line was pressed', async () => {
+    const fixture = await render(two(), { changeable: new Set(['zl-1']) });
+    const changed: string[] = [];
+    fixture.componentInstance.changed.subscribe((lineId) =>
+      changed.push(lineId)
+    );
+
+    html(fixture).querySelector<HTMLButtonElement>('.change')?.click();
+
+    expect(changed).toEqual(['zl-1']);
+  });
+
+  it('draws no "Change for all lists" with one such entry', async () => {
+    const fixture = await render(two(), { changeable: new Set(['zl-1']) });
+
+    expect(html(fixture).querySelector('.change-all')).toBeNull();
+  });
+
+  it('draws "Change for all lists" in the heading row with two such entries', async () => {
+    const fixture = await render(two(), {
+      changeable: new Set(['zl-1', 'zl-2']),
+    });
+    let all = 0;
+    fixture.componentInstance.changedAll.subscribe(() => (all += 1));
+
+    const button =
+      html(fixture).querySelector<HTMLButtonElement>('.head .change-all');
+    button?.click();
+
+    expect(button?.textContent).toContain('basket.change.all');
+    expect(all).toBe(1);
+  });
+
+  it('draws no Change at all when the sheet allows none', async () => {
+    const fixture = await render(two());
+
+    expect(html(fixture).querySelector('.change')).toBeNull();
+    expect(html(fixture).querySelector('.change-all')).toBeNull();
   });
 });
 

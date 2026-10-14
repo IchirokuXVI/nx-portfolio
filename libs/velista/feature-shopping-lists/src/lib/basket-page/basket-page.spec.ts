@@ -3737,8 +3737,13 @@ describe('similar products on the basket', () => {
       .componentInstance as BasketRowComponent;
   }
 
-  it('offers the change on a row whose product has a group, on a list the reader writes', async () => {
-    const groupMembers = fakeGroupMembers();
+  const cheaperGroup = () =>
+    fakeGroupMembers({
+      members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 0.9)] },
+    });
+
+  it('opens the change sheet for all lists from the cheaper mark (velista 0140)', async () => {
+    const groupMembers = cheaperGroup();
     const { fixture, store } = await render({
       lines: [milkRow('l-groceries')],
       served: SERVED,
@@ -3746,37 +3751,52 @@ describe('similar products on the basket', () => {
       groupMembers,
     });
 
-    expect(drawn(fixture).canSwap()).toBe(true);
+    expect(drawn(fixture).canChange()).toBe(true);
     expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
       ['g-milk'],
     ]);
 
-    drawn(fixture).swap.emit();
+    drawn(fixture).changeProduct.emit();
 
     expect(store.navigate).toHaveBeenCalledWith(
-      ['sheet', 'rows', 'row-Milk', 'swap'],
+      ['sheet', 'rows', 'row-Milk', 'change'],
       expect.anything()
     );
   });
 
-  it('offers no change on a list the reader may not write, or with no group', async () => {
+  it('draws no control where the cheaper mark is not drawn', async () => {
+    const { fixture } = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 1.5)] },
+      }),
+    });
+
+    expect(drawn(fixture).canChange()).toBe(false);
+  });
+
+  it('draws no control on a list the reader may not write, or with no group', async () => {
     const unserved = await render({
       lines: [milkRow(null)],
       served: SERVED,
       products: new Map([['i-milk', GROUPED]]),
+      groupMembers: cheaperGroup(),
     });
-    expect(drawn(unserved.fixture).canSwap()).toBe(false);
+    expect(drawn(unserved.fixture).canChange()).toBe(false);
 
     const ungrouped = await render({
       lines: [milkRow('l-groceries')],
       served: SERVED,
       products: new Map([['i-milk', { ...GROUPED, productGroupId: null }]]),
+      groupMembers: cheaperGroup(),
     });
-    expect(drawn(ungrouped.fixture).canSwap()).toBe(false);
+    expect(drawn(ungrouped.fixture).canChange()).toBe(false);
   });
 
   it('offers a guest no change and reads no group for one', async () => {
-    const groupMembers = fakeGroupMembers();
+    const groupMembers = cheaperGroup();
     const { fixture } = await render({
       me: participant(guest('p-9', 1)),
       lines: [milkRow('l-groceries')],
@@ -3785,7 +3805,7 @@ describe('similar products on the basket', () => {
       groupMembers,
     });
 
-    expect(drawn(fixture).canSwap()).toBe(false);
+    expect(drawn(fixture).canChange()).toBe(false);
     expect(groupMembers.asked).toEqual([]);
   });
 

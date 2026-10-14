@@ -253,13 +253,22 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.SettleSheet
         ),
     }),
-    // Change a row's product for another of its group. The page offers it only
-    // to a reader who may write every list the row stands for.
+    // Take another product for one list of a row, or for every list the reader
+    // may change (velista `0140`, section 2). The settle sheet opens both, and the
+    // cheaper mark of a row the second. Which lines it may change is the sheet's
+    // to decide, from the reader and the row, so neither carries a guard.
     sheet({
-      path: 'rows/:rowKey/swap',
+      path: 'rows/:rowKey/change/:lineId',
       loadComponent: () =>
         import('@portfolio/velista/feature-shopping-lists').then(
-          (m) => m.SwapSheet
+          (m) => m.ChangeSheet
+        ),
+    }),
+    sheet({
+      path: 'rows/:rowKey/change',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.ChangeSheet
         ),
     }),
     // There were three sheets about one line here and now there is one.

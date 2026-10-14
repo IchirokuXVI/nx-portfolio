@@ -1,0 +1,17 @@
+@use '../styles/choice' as choice;
+
+:host {
+  display: block;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-line-row-height);
+  cursor: pointer;
+}
+
+.dot {
+  @include choice.radio-dot;
+}

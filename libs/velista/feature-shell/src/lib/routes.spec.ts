@@ -852,7 +852,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the ten sheets over the basket, and no units sheet', () => {
+    it('offers the eleven sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -866,8 +866,10 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
-          // Change a row's product for another of its product group.
-          'sheet/rows/:rowKey/swap',
+          // Take another product for one list of a row, or for all of them
+          // (velista `0140`, section 2). The swap sheet went with it.
+          'sheet/rows/:rowKey/change/:lineId',
+          'sheet/rows/:rowKey/change',
           // What changed on the covered lists while somebody was shopping
           // (velista `0093`, section 6). Over both basket routes, because a
           // basket follows its lists whichever way it was opened.
@@ -1009,7 +1011,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(10);
+      expect(sheets).toHaveLength(11);
       for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1216,7 +1218,10 @@ describe('the sheets and their exit animation', () => {
     // and the comments.
     //
     // `0137` added one more over the line page: what the info button says.
-    expect(sheets).toHaveLength(60);
+    //
+    // `0140` took away the swap sheet and added the change sheet twice, for one
+    // list and for all of them, over both baskets: two more.
+    expect(sheets).toHaveLength(62);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
