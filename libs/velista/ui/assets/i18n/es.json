@@ -170,7 +170,8 @@
       "body": "Entra y tus grupos te acompañan, en cualquier teléfono",
       "submit": "Entrar",
       "newHere": "¿Es tu primera vez?",
-      "createAccount": "Crear una cuenta"
+      "createAccount": "Crear una cuenta",
+      "forgot": "¿Has olvidado tu contraseña?"
     },
     "register": {
       "title": "Crea una cuenta",
@@ -230,6 +231,78 @@
       "shortPassword": "Las contraseñas necesitan al menos 8 caracteres",
       "passwordMismatch": "Las dos contraseñas no coinciden. Revisa la segunda",
       "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo"
+    },
+    "forgot": {
+      "title": "¿Has olvidado tu contraseña?",
+      "body": "Te podemos enviar un enlace para volver a entrar. Escribe el correo con el que entras",
+      "submit": "Envíame un enlace",
+      "remembered": "¿Ya te acuerdas?",
+      "signIn": "Entrar",
+      "sentTitle": "Mira tu correo",
+      "sentBody": "Si {{email}} tiene una cuenta con nosotros, le hemos enviado un correo con un enlace. Puede tardar unos minutos. Mira también en spam",
+      "sentRule": "El enlace sirve una vez, durante una hora",
+      "prompt": "¿Aún nada?",
+      "again": "Envía otro enlace",
+      "waiting": "Puedes pedir otro enlace en {{wait}}",
+      "waitingNoWait": "El correo puede tardar unos minutos en llegar",
+      "wrongEmail": "¿Correo equivocado?",
+      "change": "Cámbialo"
+    },
+    "reset": {
+      "title": "Elige una contraseña nueva",
+      "body": "Al guardarla se cierra tu sesión en los demás teléfonos, por si alguien conoce la antigua",
+      "field": "Contraseña nueva",
+      "placeholder": "Tu contraseña nueva",
+      "submit": "Guardar contraseña nueva",
+      "keep": "Mantener mi contraseña y entrar",
+      "keepNote": "Tus otros teléfonos siguen con la sesión abierta",
+      "working": "Entrando",
+      "changed": "Contraseña cambiada. Se ha cerrado la sesión en los demás dispositivos",
+      "held": {
+        "title": "Este teléfono tiene una sesión abierta",
+        "lede": "Tiene abierta esta cuenta:",
+        "body": "Si tu enlace es de otra cuenta, al guardar se cierra esta en el teléfono. No se pierde nada de ella. Puede volver a entrar cuando quiera",
+        "continue": "Guardar contraseña nueva"
+      },
+      "guest": {
+        "title": "Este teléfono tiene una cuenta de invitado",
+        "lede": "Tiene abierta una cuenta de invitado:",
+        "noEmail": "Sin correo",
+        "body": "Una cuenta de invitado no tiene correo ni contraseña. Cuando sales de ella, nadie puede volver a abrirla",
+        "loss_one": "Su grupo y las listas que tiene se quedan en ella. Los perderás",
+        "loss_other": "Sus {{count}} grupos y sus listas se quedan en ella. Los perderás",
+        "keepBefore": "Para conservarlos,",
+        "keepLink": "añade un correo a esta cuenta",
+        "keepAfter": "antes. Después abre tu enlace otra vez",
+        "continue": "Seguir y perderlos"
+      },
+      "dead": {
+        "title": "Ese enlace ha caducado",
+        "body": "Un enlace sirve una vez y caduca al poco tiempo. Al usar un enlace también dejan de servir los demás que te enviamos. Tu cuenta está bien. Pide un enlace nuevo y usa el correo más reciente",
+        "bodySignedIn": "Un enlace sirve una vez y caduca al poco tiempo. Al usar un enlace también dejan de servir los demás que te enviamos. Tu cuenta está bien",
+        "newLink": "Envíame un enlace nuevo",
+        "signIn": "Entrar con mi contraseña"
+      },
+      "failed": {
+        "title": "No ha funcionado",
+        "body": "Ahora mismo no podemos conectar. Inténtalo de nuevo en un momento",
+        "retry": "Intentar de nuevo"
+      },
+      "sheet": {
+        "close": "Cerrar",
+        "unused": "Si cierras esto, al enlace no le pasa nada. Seguirá sirviendo más tarde",
+        "other": {
+          "title": "Cierra la sesión para usar este enlace",
+          "lede": "Este teléfono tiene abierta otra cuenta:",
+          "body": "Tu enlace es de otra cuenta. Para usarlo, cerramos esta en el teléfono. No se pierde nada de ella, y puede volver a entrar cuando quiera",
+          "continue": "Cerrar sesión y usar el enlace"
+        },
+        "guest": {
+          "title": "Este teléfono tiene una cuenta de invitado",
+          "lede": "Tiene abierta una cuenta de invitado:",
+          "continue": "Seguir y perderlos"
+        }
+      }
     }
   },
   "entry": {

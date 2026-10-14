@@ -3,7 +3,9 @@ import type { SessionTokens, UserKind } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import type {
   AuthServiceI,
+  RecoveryOutcome,
   ResendOutcome,
+  ResetPasswordOutcome,
   VerifiedEmail,
 } from './auth-service';
 import { TokenStore } from './token-store';
@@ -28,6 +30,12 @@ const RESET_REFUSED_WAIT_SECONDS = 47;
 
 /** The wait a sent reset reports. */
 const RESET_SENT_WAIT_SECONDS = 60;
+
+/** The one reset link this fake knows, and whose it is. */
+export const MEMORY_RESET_TOKEN = 'good-reset';
+
+/** The rule the server holds a new password to. */
+const PASSWORD_MIN_LENGTH = 8;
 
 /**
  * Credentials, in memory. Asked for by name, never a default.
@@ -59,6 +67,20 @@ export class AuthMemory implements AuthServiceI {
 
   /** Every address a reset was asked for, in order, so a spec can assert which one. */
   readonly forgotPasswordAsks: string[] = [];
+
+  /**
+   * Live reset links and the account each belongs to.
+   *
+   * One grant, two links, as on the server (backend `0210`): spending it either way
+   * removes it, and the owner check survives the spend, which is what lets a second
+   * visit by its owner still answer `already-signed-in`.
+   */
+  private readonly _resetGrants = new Map<string, string>([
+    [MEMORY_RESET_TOKEN, 'u-taken'],
+  ]);
+
+  /** Whose each link was, spent or not. */
+  private readonly _resetOwners = new Map<string, string>(this._resetGrants);
 
   async register(email: string, password: string): Promise<SessionTokens> {
     if (this._accounts.has(normalize(email))) {
@@ -142,6 +164,63 @@ export class AuthMemory implements AuthServiceI {
     return this.forgotPasswordAsks.length > 1
       ? { state: 'refused', waitSeconds: RESET_REFUSED_WAIT_SECONDS }
       : { state: 'sent', waitSeconds: RESET_SENT_WAIT_SECONDS };
+  }
+
+  async resetPassword(
+    token: string,
+    password: string
+  ): Promise<ResetPasswordOutcome> {
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      return { state: 'password-rejected' };
+    }
+
+    const owner = this._resetGrants.get(token);
+    if (owner === undefined) {
+      return { state: 'link-dead' };
+    }
+
+    this._resetGrants.delete(token);
+    for (const [email, account] of this._accounts) {
+      if (account.userId === owner) {
+        this._accounts.set(email, { userId: owner, password });
+      }
+    }
+
+    return {
+      state: 'signed-in',
+      tokens: this._issue(owner, 'REGISTERED', `${owner}@example.com`),
+    };
+  }
+
+  /**
+   * The decision table of backend `0210`, section 5, in the same order: the owner
+   * first, then a dead link, then another account without the switch.
+   */
+  async recoverySignIn(
+    token: string,
+    options: { readonly switchAccount?: boolean } = {}
+  ): Promise<RecoveryOutcome> {
+    const caller = this._tokens.tokens()?.userId ?? null;
+    const owner = this._resetOwners.get(token);
+
+    if (owner !== undefined && caller === owner) {
+      this._resetGrants.delete(token);
+      return { state: 'already-signed-in' };
+    }
+
+    if (!this._resetGrants.has(token) || owner === undefined) {
+      return { state: 'link-dead' };
+    }
+
+    if (caller !== null && options.switchAccount !== true) {
+      return { state: 'other-account' };
+    }
+
+    this._resetGrants.delete(token);
+    return {
+      state: 'signed-in',
+      tokens: this._issue(owner, 'REGISTERED', `${owner}@example.com`),
+    };
   }
 
   private _issue(

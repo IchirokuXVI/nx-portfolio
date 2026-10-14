@@ -153,6 +153,18 @@ export const ERROR_CODES = [
   'shop_map_invalid',
   /** An entry or the map it folds to is over its size limit (backend `0168`), as a 422. */
   'shop_map_too_large',
+  /**
+   * A support session called a route only the person may use (backend `0194`), as a
+   * 403. Velista meets it on the sign in link of a reset mail (backend `0210`), and
+   * shows it as the dead link screen (velista `0148`).
+   */
+  'impersonation_not_allowed',
+  /**
+   * A sign in link was opened while another account is signed in, and the link is
+   * still good (backend `0210`), as a 409. Nothing was spent. The reset page asks
+   * before it sends the link again with `switchAccount` (velista `0148`).
+   */
+  'recovery_other_account',
   'internal',
 ] as const;
 

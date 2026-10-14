@@ -1,3 +1,5 @@
+> **PR:** [#715](https://github.com/IchirokuXVI/nx-portfolio/pull/715)
+
 # 0148: a forgotten password has a way back
 
 > Asked for by the owner on 2026-10-14, together with backend `0210`: a reset screen that can
@@ -207,3 +209,41 @@ and **stop for the owner's pick**.
   device signs the current person out with no word, and on a guest device it strands the
   groups of the guest. **Owner** can drop it for registered accounts.
 - **The token leaves the URL** as soon as the page reads it.
+
+## 3. As built
+
+Stage 1 follows the owner's picks and the requirement the owner added on 2026-10-14 after
+them. It differs from the text above in these points.
+
+- **A sign in link that meets another account asks in a sheet over home**, not on the reset
+  page (the owner's requirement and decision of 2026-10-14). With a session, the page asks
+  the server once without `switchAccount`, the bearer going along. `already-signed-in` lands
+  home with no error. `other-account`, which spends nothing, goes to
+  `home/sheet/recovery-link` with a replace, and the token waits in `PendingRecoveryLink` in
+  memory, never in a URL. The sheet names the account by username and email and has one
+  button, "Sign out and use the link", which retries with `switchAccount`. For a guest its
+  last paragraph links to the upgrade page. Escape, the scrim and back spend nothing, and the
+  link still works later. "Keep my password and sign in" on the reset link takes the same
+  path. The confirm on the reset page now only comes before a reset.
+- **A switch of account starts the document over at home.** `ZoneStore` and the other stores
+  keep the account that left, so after a reset or a sign in that replaced another account the
+  page reloads at home. The "Password changed" line does not survive that reload; it shows when
+  nobody else was signed in.
+- **The confirm and the sheet are drawn from what the app holds**: the username from
+  `SessionStore`, the address from `ProfileStore`, the group count from `ZoneStore`. A guest
+  shows "No email".
+- **Two small additions to `ui`**: `OutcomeScreen` gained an `outcomeFooter` slot under its
+  button, for "Sign in with my password" on the dead link screen, and `ResendSentence` takes
+  its action and sent words as inputs, because "Sent again" is false after the first send.
+- **The dead link screen is the one screen for a used, an expired, an unknown or a missing
+  token, and for a refusal inside a support session.** Somebody signed in gets "Go to my
+  groups" instead of the two ways back, because they cannot open the sign in page.
+- **A failed request on load** (the sign in link could not reach the server) shows a short
+  screen with "Try again". The link is not spent then.
+- **Home says the password changed** through a new `AccountNotice` kind, which touches
+  `feature-home`, outside the scope list above.
+- **The reset page does not focus the field on arrival.** It offers two ways through, and a
+  keyboard that opens by itself covers the second one.
+- **Found on the walk, not fixed here:** `setupGuard` sends an account whose setup is not done
+  from home to the setup, which drops the sheet. The token stays unused, so opening the link
+  again after the setup works.

@@ -170,7 +170,8 @@
       "body": "Sign in and your groups come with you, on any phone",
       "submit": "Sign in",
       "newHere": "New here?",
-      "createAccount": "Create an account"
+      "createAccount": "Create an account",
+      "forgot": "Forgot your password?"
     },
     "register": {
       "title": "Make an account",
@@ -230,6 +231,78 @@
       "shortPassword": "Passwords need at least 8 characters",
       "passwordMismatch": "Those two passwords are not the same. Check the second one",
       "tooMany": "Too many tries. Wait a minute and try again"
+    },
+    "forgot": {
+      "title": "Forgot your password?",
+      "body": "We can send you a link that gets you back in. Type the email you sign in with",
+      "submit": "Send me a link",
+      "remembered": "Remembered it?",
+      "signIn": "Sign in",
+      "sentTitle": "Look in your email",
+      "sentBody": "If {{email}} has an account with us, we have sent it a mail with a link. Mail can take a few minutes. Look in spam too",
+      "sentRule": "The link works one time, for one hour",
+      "prompt": "Nothing yet?",
+      "again": "Send another link",
+      "waiting": "You can ask for another link in {{wait}}",
+      "waitingNoWait": "Mail can take a few minutes to arrive",
+      "wrongEmail": "Wrong email?",
+      "change": "Change it"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "body": "Saving it signs you out on every other phone, in case someone else knows the old one",
+      "field": "New password",
+      "placeholder": "Your new password",
+      "submit": "Save new password",
+      "keep": "Keep my password and sign in",
+      "keepNote": "Your other phones stay signed in",
+      "working": "Signing you in",
+      "changed": "Password changed. Other devices are signed out",
+      "held": {
+        "title": "This phone is signed in",
+        "lede": "It is signed in to this account:",
+        "body": "If your link is for another account, saving signs this one out of the phone. Nothing in it is lost. It can sign in again at any time",
+        "continue": "Save new password"
+      },
+      "guest": {
+        "title": "This phone has a guest account",
+        "lede": "It is signed in to a guest account:",
+        "noEmail": "No email",
+        "body": "A guest account has no email or password. Once you leave it, nobody can open it again",
+        "loss_one": "Its group and the lists in it stay with it. You will lose them",
+        "loss_other": "Its {{count}} groups and their lists stay with it. You will lose them",
+        "keepBefore": "To keep them,",
+        "keepLink": "add an email to this account",
+        "keepAfter": "first. Then open your link again",
+        "continue": "Continue and lose them"
+      },
+      "dead": {
+        "title": "That link has run out",
+        "body": "A link works one time, and it runs out after a while. Using one link also ends the other links we sent you. Your account is fine. Ask for a new link and use the newest mail",
+        "bodySignedIn": "A link works one time, and it runs out after a while. Using one link also ends the other links we sent you. Your account is fine",
+        "newLink": "Send me a new link",
+        "signIn": "Sign in with my password"
+      },
+      "failed": {
+        "title": "That did not work",
+        "body": "We could not reach the app just now. Try again in a moment",
+        "retry": "Try again"
+      },
+      "sheet": {
+        "close": "Close",
+        "unused": "If you close this, nothing happens to the link. It still works later",
+        "other": {
+          "title": "Sign out to use this link",
+          "lede": "This phone is signed in to another account:",
+          "body": "Your link is for a different account. To use it, we sign this one out of the phone. Nothing in it is lost, and it can sign in again at any time",
+          "continue": "Sign out and use the link"
+        },
+        "guest": {
+          "title": "This phone has a guest account",
+          "lede": "It is signed in to a guest account:",
+          "continue": "Continue and lose them"
+        }
+      }
     }
   },
   "entry": {

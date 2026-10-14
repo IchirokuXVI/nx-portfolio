@@ -8,11 +8,14 @@ import { toSessionTokens } from '../mapping/mappers';
 import { isRecord, str } from '../mapping/primitives';
 import type {
   AuthServiceI,
+  RecoveryOutcome,
   ResendOutcome,
+  ResetPasswordOutcome,
   VerifiedEmail,
 } from './auth-service';
 import { anonymous, operation } from './http-context';
 import { TokenStore } from './token-store';
+import { refuseUnprovenSession } from './unproven-session';
 
 /**
  * Credentials, over HTTP. The default behind `AUTH_SERVICE`.
@@ -166,6 +169,115 @@ export class AuthApi implements AuthServiceI {
       { email },
       anonymous
     );
+  }
+
+  /**
+   * `POST /v1/auth/reset-password`, **anonymous**.
+   *
+   * The route takes no bearer, so none is sent, and a 401 could not mean a stale
+   * session. A `validation_failed` that names the password is the rule; any other is
+   * the link, because the server answers one error for a used, an expired and an
+   * unknown token.
+   */
+  async resetPassword(
+    token: string,
+    password: string
+  ): Promise<ResetPasswordOutcome> {
+    try {
+      const body = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/auth/reset-password'),
+          { token, password },
+          { context: anonymous('auth.resetPassword') }
+        )
+      );
+
+      return {
+        state: 'signed-in',
+        tokens: this._persist(body, 'auth.resetPassword'),
+      };
+    } catch (error) {
+      if (error instanceof GatewayError && error.code === 'validation_failed') {
+        return Object.keys(error.fieldErrors ?? {}).includes('password')
+          ? { state: 'password-rejected' }
+          : { state: 'link-dead' };
+      }
+
+      return { state: 'failed', error };
+    }
+  }
+
+  /**
+   * `POST /v1/auth/recovery-sign-in`, optional bearer (backend `0210`).
+   *
+   * Through the gate of `authorizeOptionalAuthCall`, for the reason the zone handshake
+   * goes through it: a session held but unproven (auth restarting) would go out with no
+   * bearer, and the server would read that as nobody signed in and replace the session
+   * with no question. So it does not go out. A guest whose account is already lost has
+   * nothing left to replace, and goes out anonymous.
+   *
+   * With a bearer, a 401 refreshes and retries as on any other route, which is what
+   * the route asks for: a stale token is a 401 there, never a quiet anonymous request.
+   */
+  async recoverySignIn(
+    token: string,
+    options: { readonly switchAccount?: boolean } = {}
+  ): Promise<RecoveryOutcome> {
+    try {
+      const authorized = await this._tokens.authorizeOptionalAuthCall();
+      refuseUnprovenSession(authorized, 'auth.recoverySignIn');
+
+      const body = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/auth/recovery-sign-in'),
+          // Only a JSON `true` switches (backend `0210`, section 5), so the field is
+          // left out rather than sent false.
+          options.switchAccount === true
+            ? { token, switchAccount: true }
+            : { token },
+          { context: operation('auth.recoverySignIn') }
+        )
+      );
+
+      return this._recoveryFrom(body);
+    } catch (error) {
+      if (error instanceof GatewayError) {
+        switch (error.code) {
+          case 'recovery_other_account':
+            return { state: 'other-account' };
+          case 'impersonation_not_allowed':
+            return { state: 'refused-in-support' };
+          case 'validation_failed':
+            return { state: 'link-dead' };
+        }
+      }
+
+      return { state: 'failed', error };
+    }
+  }
+
+  /**
+   * Rule D4: the answer is `unknown` until it is read here.
+   *
+   * A pair is stored only with `SIGNED_IN`, and an answer this app cannot read is a
+   * failure rather than a guess: the link may well be spent by now, and the page says
+   * so through its error sentence.
+   */
+  private _recoveryFrom(body: unknown): RecoveryOutcome {
+    const outcome = isRecord(body) ? body['outcome'] : null;
+
+    if (outcome === 'ALREADY_SIGNED_IN') {
+      return { state: 'already-signed-in' };
+    }
+
+    if (outcome === 'SIGNED_IN' && isRecord(body)) {
+      return {
+        state: 'signed-in',
+        tokens: this._persist(body['tokens'], 'auth.recoverySignIn'),
+      };
+    }
+
+    throw new Error('auth.recoverySignIn returned an unknown outcome');
   }
 
   /**

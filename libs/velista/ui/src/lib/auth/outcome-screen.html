@@ -22,5 +22,9 @@
     <button (click)="action.emit()" class="primary" type="button">
       {{ actionLabel() }}
     </button>
+
+    <!-- A quieter way on under the one action, when the caller has one: the dead
+         reset link offers signing in with the password kept (velista 0148). -->
+    <ng-content select="[outcomeFooter]" />
   </main>
 </div>

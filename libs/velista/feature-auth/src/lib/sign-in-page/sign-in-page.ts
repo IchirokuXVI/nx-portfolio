@@ -151,6 +151,20 @@ export class SignInPage {
     void this._pages.back(appPath(this._locale(), this._basePath));
   }
 
+  /**
+   * To the forgot password page, with whatever address is typed (velista `0148`).
+   *
+   * The address goes as `?email=`, the way the register page hands one here. An empty
+   * field sends none, so the next page opens empty rather than holding a blank value.
+   */
+  forgotPassword(): void {
+    const email = this.email().trim();
+    void this._router.navigate(
+      [appPath(this._locale(), this._basePath, 'auth', 'forgot-password')],
+      email === '' ? {} : { queryParams: { email } }
+    );
+  }
+
   createAccount(): void {
     void this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'auth', 'register')

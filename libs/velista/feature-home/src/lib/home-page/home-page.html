@@ -96,6 +96,10 @@
           />
         }
 
+        @if (passwordChanged()) {
+          <lib-success-note [message]="'auth.reset.changed' | rokuT" />
+        }
+
         @if (page.guest) {
           <lib-guest-upgrade-banner
             (dismiss)="dismissGuestBanner()"
@@ -159,6 +163,10 @@
           <lib-success-note
             [message]="'auth.upgrade.done' | rokuT: { email: address }"
           />
+        }
+
+        @if (passwordChanged()) {
+          <lib-success-note [message]="'auth.reset.changed' | rokuT" />
         }
 
         @if (page.guest) {

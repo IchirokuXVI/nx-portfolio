@@ -1,0 +1,70 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!busy()"
+  #shell
+  labelledBy="recovery-link-title"
+>
+  @if (dead()) {
+    <h2 class="title" id="recovery-link-title">
+      {{ 'auth.reset.dead.title' | rokuT }}
+    </h2>
+    <p class="body">{{ 'auth.reset.dead.bodySignedIn' | rokuT }}</p>
+
+    <button (click)="shell.requestDismiss()" class="primary" type="button">
+      {{ 'auth.reset.sheet.close' | rokuT }}
+    </button>
+  } @else {
+    @let kind = guest() ? 'guest' : 'other';
+    <h2 class="title" id="recovery-link-title">
+      {{ 'auth.reset.sheet.' + kind + '.title' | rokuT }}
+    </h2>
+    <p class="body lede">{{ 'auth.reset.sheet.' + kind + '.lede' | rokuT }}</p>
+
+    <!-- Who is on this phone, by both names, always (the owner's pick 5). -->
+    <div class="who">
+      <p class="who-name">{{ username() }}</p>
+      @if (guest()) {
+        <p class="who-email">{{ 'auth.reset.guest.noEmail' | rokuT }}</p>
+      } @else if (email(); as address) {
+        <p class="who-email">{{ address }}</p>
+      }
+    </div>
+
+    @if (guest()) {
+      <p class="body">{{ 'auth.reset.guest.body' | rokuT }}</p>
+      @if (groupCount() > 0) {
+        <p class="body loss">
+          {{ 'auth.reset.guest.loss' | rokuT: { count: groupCount() } }}
+        </p>
+      }
+      <p class="body">
+        {{ 'auth.reset.guest.keepBefore' | rokuT }}
+        <button (click)="upgrade()" class="inline-link" type="button">
+          {{ 'auth.reset.guest.keepLink' | rokuT }}
+        </button>
+        {{ 'auth.reset.guest.keepAfter' | rokuT }}
+      </p>
+    } @else {
+      <p class="body">{{ 'auth.reset.sheet.other.body' | rokuT }}</p>
+    }
+    <p class="body">{{ 'auth.reset.sheet.unused' | rokuT }}</p>
+
+    @if (error(); as rejection) {
+      <p class="error" role="alert">{{ rejection.key | rokuT }}</p>
+    }
+
+    <button
+      (click)="proceed()"
+      [attr.aria-busy]="busy()"
+      [class.destructive]="guest()"
+      [disabled]="busy()"
+      class="primary"
+      type="button"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'auth.reset.sheet.' + kind + '.continue' | rokuT }}</span>
+    </button>
+  }
+</lib-sheet-shell>

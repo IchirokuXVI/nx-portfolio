@@ -106,7 +106,7 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard, and nothing else', () => {
+    it('offers the same two over the dashboard, and the sign in link sheet', () => {
       // Both pages offer both entry actions, so those two copies come from one
       // function and cannot drift apart.
       //
@@ -114,9 +114,13 @@ describe('AppShellRoutes', () => {
       // the button that opened it was in home's bottom row, and that row went when
       // the app's own bar took its place. A sheet no control can open is a URL that
       // draws a form over the wrong page.
+      //
+      // The third is velista 0148: a sign in link opened while another account is on
+      // this phone goes home, and this sheet asks before the link is spent.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
         'sheet/zones/new',
         'sheet/zones/join',
+        'sheet/recovery-link',
       ]);
     });
 
@@ -177,9 +181,11 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
-      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home']
-      );
+      expect(
+        sheetsOf('home')
+          .filter((route) => route.path !== 'sheet/recovery-link')
+          .map((route) => route.data?.['returnTo'])
+      ).toEqual(['home', 'home']);
       expect(
         sheetsOf('shopping-lists').map((route) => route.data?.['returnTo'])
       ).toEqual(['shopping-lists']);
@@ -272,9 +278,11 @@ describe('AppShellRoutes', () => {
       'auth/upgrade',
       'auth/verify',
       'auth/callback',
+      'auth/forgot-password',
+      'auth/reset-password',
     ];
 
-    it('declares all five, before the front door', () => {
+    it('declares all seven, before the front door', () => {
       // The `''` ordering assertion above covers this for the table as a whole. This
       // one names the five, so removing one is a failure rather than a shorter list
       // that still happens to be ordered.
@@ -297,6 +305,16 @@ describe('AppShellRoutes', () => {
       ).toHaveLength(1);
     });
 
+    it('guards the forgot password page as it guards sign in (velista 0148)', () => {
+      // It is the way out of the sign in page, and somebody signed in asks for a
+      // link from the account page with their own address.
+      const login = pages.find((r) => r.path === 'auth/login');
+      const forgot = pages.find((r) => r.path === 'auth/forgot-password');
+
+      expect(forgot?.canActivate).toHaveLength(1);
+      expect(forgot?.canActivate?.[0]).toBe(login?.canActivate?.[0]);
+    });
+
     it('guards upgrade, and guards it differently', () => {
       // Rule C1. The two guards are not the same function, which is the whole point:
       // whichever of the two screens a guest reaches, they end up on upgrade.
@@ -307,7 +325,7 @@ describe('AppShellRoutes', () => {
       expect(upgrade?.canActivate?.[0]).not.toBe(register?.canActivate?.[0]);
     });
 
-    it('leaves the two public ones public', () => {
+    it('leaves the three public ones public', () => {
       // A confirmation link is opened wherever the mail app happens to be, which is
       // often a phone that has never signed in, and the OAuth callback lands before
       // there is a session at all.
@@ -316,6 +334,11 @@ describe('AppShellRoutes', () => {
       ).toBeUndefined();
       expect(
         pages.find((r) => r.path === 'auth/callback')?.canActivate
+      ).toBeUndefined();
+      // A reset mail is opened wherever the mail app is, too, and the page answers
+      // a person signed in as somebody else with a question, not a guard (velista 0148).
+      expect(
+        pages.find((r) => r.path === 'auth/reset-password')?.canActivate
       ).toBeUndefined();
     });
 
@@ -1216,7 +1239,9 @@ describe('the sheets and their exit animation', () => {
     // and the comments.
     //
     // `0137` added one more over the line page: what the info button says.
-    expect(sheets).toHaveLength(60);
+    //
+    // `0148` added one over home: a sign in link meeting another account.
+    expect(sheets).toHaveLength(61);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1319,6 +1344,8 @@ describe('the bottom bar', () => {
     'auth/upgrade',
     'auth/verify',
     'auth/callback',
+    'auth/forgot-password',
+    'auth/reset-password',
     'join/:code',
     's/:secret',
     'lab/walk',
