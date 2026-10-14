@@ -51,7 +51,18 @@ section and a later section disagree, this section is right.**
    second button.
 5. **Each confirm shows the email and the username** of the account signed in on this device,
    always. Never only a first name.
-6. **No support session frame.** A recovery link is how support hands a person a way back in
+6. **A sign in link opened while a different account is signed in goes home and asks in a
+   sheet** (the owner, later the same day). The page sends one `recoverySignIn` with the
+   bearer and no `switchAccount`. That request spends nothing for another account: it answers
+   `recovery_other_account` and leaves the grant live. The page then navigates to the home
+   page and opens a sheet over it (a child route built with `sheet()`), which explains that
+   the person must sign out to use the link. The token stays in memory and never enters the
+   sheet URL. The sheet button retries with `switchAccount: true`. Dismissing the sheet, or
+   leaving, spends nothing, and the link works again later. The owner chose this one request
+   over putting the user id in the link. This replaces the in-page confirm of picks 3 and 4
+   for sign in mode; their content (one button, the email and the username, the text link for
+   a guest) moves into the sheet. The confirm before a reset in reset mode is unchanged.
+7. **No support session frame.** A recovery link is how support hands a person a way back in
    when they lost access to their email. It has nothing to do with a support session (velista
    `0133`). The backend still refuses the route inside one; velista shows that answer as the
    dead link screen, with no copy of its own.
