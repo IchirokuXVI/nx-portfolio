@@ -27,6 +27,35 @@
 > `auth-service.ts`, `auth-memory.ts`, `account-notice.ts`) and
 > `libs/velista/feature-account/src/lib/account-page/account-page.ts` (`changePassword`).
 
+## The owner's picks of 2026-10-14
+
+The mock of stage 0 is in pull request #713 (canvas
+https://claude.ai/artifact/CLPwYdPNXmALuLm9X3G593). The owner answered it. **Where this
+section and a later section disagree, this section is right.**
+
+1. **Reset mode is design C** of `ResetModeOptions.dc.html`: the OR rule and the outlined
+   "Keep my password and sign in" button.
+2. **Sign in mode shows no screen.** The sign in link spends the grant as the page loads and
+   lands on the home page (`SIGNED_IN`, or `ALREADY_SIGNED_IN` for the owner, with no error).
+   The only screen it can show is the confirm of item 3, when a different account is signed in
+   on this device, and the dead link screen. The confirm has no "set a new password" option.
+   `SignInModeOptions.dc.html` is thus dropped. While the request runs, the page shows the
+   quiet loading state the auth pages already use, and nothing else.
+   - The risk the owner accepted: a mail scanner that runs scripts (Microsoft Defender Safe
+     Links is one) can spend the grant before the person clicks, and the link then arrives
+     dead. The reset link still waits for a button press.
+3. **The confirm for a different registered account stays** (`OtherAccount.dc.html`). It is an
+   informative message and one button that continues.
+4. **The guest confirm is the same informative message and one button.** Its last paragraph
+   carries a plain text link to the upgrade page (`auth/upgrade`), which keeps the groups. No
+   second button.
+5. **Each confirm shows the email and the username** of the account signed in on this device,
+   always. Never only a first name.
+6. **No support session frame.** A recovery link is how support hands a person a way back in
+   when they lost access to their email. It has nothing to do with a support session (velista
+   `0133`). The backend still refuses the route inside one; velista shows that answer as the
+   dead link screen, with no copy of its own.
+
 ## Brief for the agent
 
 ### Objective
@@ -102,16 +131,16 @@ and **stop for the owner's pick**.
 5. **The reset page** (`feature-auth/src/lib/reset-password-page/`).
    - It reads `token` and `mode` once, keeps the token in the component, and replaces the URL
      without them, so the token is not left in history or sent as a referrer.
-   - **It never spends on load.** Mail scanners open links. Each action is a button press.
+   - **Reset mode never spends on load.** Each action is a button press (design C).
+   - **Sign in mode spends on load** (the owner's pick 2), once per page instance.
    - Reset mode submits `resetPassword` and lands on the home page with an account notice:
      "Password changed. Other devices are signed out."
    - "Keep my password and sign in" and the sign in mode both call `recoverySignIn`.
      `already-signed-in` lands on the home page with no error. `other-account` shows the
-     confirm of stage 0 item 5, and its confirm retries with `switchAccount: true`.
-   - When somebody is signed in and the person submits a new password, the page shows the
-     same confirm first, because a reset replaces the session too.
-   - `link-dead` shows stage 0 item 6. `refused-in-support` says that the link cannot be used
-     inside a support session.
+     confirm of the owner's picks 3 to 5, and its button retries with `switchAccount: true`.
+   - When somebody else is signed in and the person submits a new password, the page shows
+     the same confirm first, because a reset replaces the session too.
+   - `link-dead` and `refused-in-support` both show the dead link screen.
    - The back control is `PageNavigation.back` with the sign in page as the fallback.
 6. **Copy** in English and Spanish in `libs/velista/ui/assets/i18n/` (the assets live outside
    `src`). No product name in a key (rule N1).
