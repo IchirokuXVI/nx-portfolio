@@ -1,6 +1,6 @@
 import { basketChangeSentence, type BasketChange } from './basket-changes';
-import { countableBasketRows } from './basket-view';
 import type { BasketRow, BasketRowState } from './basket-view';
+import { countableBasketRows } from './basket-view';
 
 /**
  * Which sentence a change reads as, and which rows a count is over
@@ -45,7 +45,7 @@ function row(state: BasketRowState, rowKey = 'zl-1'): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -98,7 +98,11 @@ describe('basketChangeSentence', () => {
   it('names both spellings of a rename', () => {
     expect(
       basketChangeSentence(
-        change({ kind: 'RENAMED', contentBefore: 'Leche', contentAfter: 'Milk' })
+        change({
+          kind: 'RENAMED',
+          contentBefore: 'Leche',
+          contentAfter: 'Milk',
+        })
       )
     ).toEqual({
       key: 'basket.changes.entry.renamed',

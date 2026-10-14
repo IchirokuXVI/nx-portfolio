@@ -48,11 +48,14 @@ export function foldForSearch(text: string): string {
 /**
  * Whether one basket row answers what somebody typed.
  *
- * Three places are searched and they are the three a person in a shop would
+ * Four places are searched and they are the ones a person in a shop would
  * expect: the words on the row, the name of its product in the reader's own
- * language, and that product's brand. The brand is there because somebody
- * standing at the own brand shelf types "hacendado" and means every row that
- * comes from it.
+ * language, that product's brand, and the name of every line the row gathers
+ * (velista `0139`, section 5). The brand is there because somebody standing at
+ * the own brand shelf types "hacendado" and means every row that comes from it.
+ * The lines are there because a row is named by its product and a household
+ * names its line its own way: "leche" finds the milk whose line on one list is
+ * called "Leche para el café".
  *
  * **An empty query matches everything**, so the page draws the same list with the
  * field open as with it closed and the count says so. There is no minimum length
@@ -75,6 +78,12 @@ export function matchesBasketRow(
   }
 
   if (foldForSearch(row.content).includes(folded)) {
+    return true;
+  }
+
+  if (
+    row.entries.some((entry) => foldForSearch(entry.content).includes(folded))
+  ) {
     return true;
   }
 
