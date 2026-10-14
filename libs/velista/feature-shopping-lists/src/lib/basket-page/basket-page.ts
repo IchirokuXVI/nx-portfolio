@@ -407,7 +407,19 @@ export class BasketPage {
    */
   protected readonly surface = computed(() => {
     const basket = this._store.basket();
-    return basket === null ? null : selectBasketSurface(basket, basket.me);
+    // The rows and the counts the store draws, which a choice held on this
+    // device can have grouped differently from the read (velista `0140`).
+    return basket === null
+      ? null
+      : selectBasketSurface(
+          {
+            ...basket,
+            rows: this._store.rows(),
+            progress: this._store.progress(),
+            pending: this._store.pending(),
+          },
+          basket.me
+        );
   });
   protected readonly busyRows = this._store.busyRows;
   protected readonly participantsById = this._store.participantsById;
