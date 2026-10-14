@@ -1,3 +1,5 @@
+> **PR:** [#711](https://github.com/IchirokuXVI/nx-portfolio/pull/711)
+
 # 0142: a line bought from another shopping list
 
 > Asked for by the owner on 2026-10-11: "If someone is buying things from a different list,
