@@ -15,6 +15,12 @@ follows are in **`../README.md`**. Read that first.
 | `Upgrade.dc.html` | Securing a guest account, and the dashboard afterwards |
 | `VerifyEmail.dc.html` | A confirmation link that worked, and one that did not |
 | `ResendStates.dc.html` | The resend sentence in all three of its states |
+| `SignInForgot.dc.html` | Plan `0148`: the sign in page with the forgot password entry |
+| `ForgotPassword.dc.html` | Plan `0148`: asking for a link, what we say after, and the wait |
+| `ResetModeOptions.dc.html` | Plan `0148`: the reset link in reset mode, alternatives A, B and C |
+| `SignInModeOptions.dc.html` | Plan `0148`: the sign in link in sign in mode, alternatives A, B and C |
+| `OtherAccount.dc.html` | Plan `0148`: the confirm when somebody else, or a guest, is signed in |
+| `LinkDead.dc.html` | Plan `0148`: a used or expired link, and a link inside a support session |
 
 Four things this design decided that are easy to undo by accident:
 

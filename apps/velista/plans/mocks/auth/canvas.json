@@ -1,6 +1,6 @@
 {
   "title": "Velista Credential Flows",
-  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. Items 3 and 4 are drawn as alternatives A, B and C, quietest first, to pick one letter for both.",
   "artboards": [
     {
       "file": "SignIn.dc.html",
@@ -41,6 +41,54 @@
       "w": 470,
       "h": 700,
       "title": "The resend line, three states"
+    },
+    {
+      "file": "SignInForgot.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 1: sign in, with the way back"
+    },
+    {
+      "file": "ForgotPassword.dc.html",
+      "x": 960,
+      "y": 2700,
+      "w": 1330,
+      "h": 970,
+      "title": "0148 item 2: forgot your password"
+    },
+    {
+      "file": "ResetModeOptions.dc.html",
+      "x": 0,
+      "y": 3880,
+      "w": 1330,
+      "h": 970,
+      "title": "0148 item 3: the reset link in reset mode, A B C"
+    },
+    {
+      "file": "SignInModeOptions.dc.html",
+      "x": 1400,
+      "y": 3880,
+      "w": 1330,
+      "h": 970,
+      "title": "0148 item 4: the sign in link in sign in mode, A B C"
+    },
+    {
+      "file": "OtherAccount.dc.html",
+      "x": 0,
+      "y": 5060,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 5: somebody else is signed in"
+    },
+    {
+      "file": "LinkDead.dc.html",
+      "x": 960,
+      "y": 5060,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 6: a link that no longer works"
     }
   ],
   "annotations": [
@@ -85,6 +133,48 @@
       "y": 1120,
       "w": 450,
       "text": "RESENDING IS PLAIN TEXT, NOT A BUTTON (user decision 2026-08-26). One sentence inside the card: amber while it can be used, then it becomes its own reply and counts down for a minute before returning.\nIt is deliberately quiet. Confirming is optional, so the affordance must not compete with the group actions underneath it.\nTHE COUNTDOWN IS THE SERVER'S NUMBER, NOT SIXTY. The refused state exists because the verifyResend bucket is 3 per 10 minutes, so the fourth ask waits far longer than a minute. A hardcoded 60 would count to zero and then fail again. The client reads retryAfterSeconds from the response BODY: enableCors sets no exposedHeaders, so a browser cannot read a Retry-After header cross origin.\nBoth the resend endpoint and sending a verification on upgrade are being implemented by the user."
+    },
+    {
+      "id": "p0148-brief",
+      "x": 0,
+      "y": 2420,
+      "w": 430,
+      "text": "PLAN 0148, STAGE 0. A forgotten password has a way back. Backend 0210 sends one mail with two links that share one token: a reset link, and a sign in link (the same address plus mode=sign-in). Using either ends both, and ends every older link of that person.\nBoth links open ONE page, auth/reset-password, in two modes. The second action switches the mode in place and keeps the token.\nNight only, as the rest of this folder: no new colour role."
+    },
+    {
+      "id": "p0148-nothing-on-load",
+      "x": 470,
+      "y": 2420,
+      "w": 430,
+      "text": "NOTHING IS SPENT ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button. Every action on these artboards is a press.\nIf the owner of the link is already signed in, Sign in lands on home with no error, even when the link is old. That is why no artboard draws it."
+    },
+    {
+      "id": "p0148-no-disclosure",
+      "x": 940,
+      "y": 2420,
+      "w": 430,
+      "text": "THE FORGOT PAGE NEVER SAYS WHETHER AN ACCOUNT EXISTS, and never says a mail arrived. forgot-password answers the same for every address, so the copy says what we did (\"if it has an account, we have sent it a mail\"). The wait is the server's number (rule C3), as on the resend line.\nThe address comes over from the sign in page, so a person who just failed to sign in types nothing again."
+    },
+    {
+      "id": "p0148-pick",
+      "x": 2780,
+      "y": 3880,
+      "w": 430,
+      "text": "PICK ONE LETTER FOR BOTH ROWS. A, B and C put the second action in the same place in both modes, so nothing jumps when the mode changes.\nA: the footer row every auth page already pins to the bottom (\"New here? Create an account\"). Quietest, and the farthest from the thumb.\nB: the same quiet amber text right under the primary, with one plain line that says what it does.\nC: the OR rule and the outlined button the sign in page uses for Google. The louder one: the two choices look close to equal."
+    },
+    {
+      "id": "p0148-sheet",
+      "x": 1920,
+      "y": 5060,
+      "w": 430,
+      "text": "THE CONFIRM IS A SHEET over the reset page, like every confirm in the app. It opens when Sign in answers recovery_other_account, and BEFORE a reset when somebody is signed in, because a reset replaces the session too (the primary then reads \"Sign out Luis and save\").\nA GUEST IS NEVER OFFERED REGISTER (rule C2). The guest sheet takes the destructive colour of the delete sheet, and its safe action is the quiet one. The group count comes from the cache, as on the delete sheet; with no groups, that sentence goes."
+    },
+    {
+      "id": "p0148-questions",
+      "x": 1920,
+      "y": 5560,
+      "w": 430,
+      "text": "OPEN FOR THE OWNER.\n1. The confirm for a registered account is the plan author's idea. You can drop it, and the link then signs the other person out with no question.\n2. Should the guest sheet also offer \"Secure the guest account first\" (the upgrade page, which keeps the groups), then come back to the link?\n3. The support session page has no mark: the outcome screen only has a check and a clock today."
     }
   ]
 }
