@@ -446,8 +446,8 @@ export const ERROR_CODES = {
   /**
    * A support session called a route that only the person may use (plan
    * 0194): deleting the account, upgrading it, linking Google, giving a
-   * household away, or sending mail to the address of the person. A 403, so
-   * the session stays.
+   * household away, sending mail to the address of the person, or signing in
+   * with a reset link (plan 0210). A 403, so the session stays.
    */
   IMPERSONATION_NOT_ALLOWED: 'impersonation_not_allowed',
   /**
@@ -455,6 +455,25 @@ export const ERROR_CODES = {
    * none (plan 0194).
    */
   NOT_IMPERSONATING: 'not_impersonating',
+  /**
+   * A sign in link was opened while another account is signed in, and the
+   * grant is still live (plan 0210, target state 5). Nothing was spent. The
+   * client asks whether to leave the account it has, and sends the request
+   * again with `switchAccount: true` if the person says yes.
+   */
+  RECOVERY_OTHER_ACCOUNT: 'recovery_other_account',
+  /**
+   * An operator asked to mail or create a reset grant for an account with no
+   * email address: a guest (plan 0210, target state 7). There is nobody to
+   * mail, and a link for a guest is a feature of its own.
+   */
+  RECOVERY_NEEDS_EMAIL: 'recovery_needs_email',
+  /**
+   * An operator asked to mail or create a reset grant for an account with no
+   * password, one that signs in with Google alone (plan 0210, decision D3).
+   * The reset half would give it a first password, which nobody asked for.
+   */
+  RECOVERY_NEEDS_PASSWORD: 'recovery_needs_password',
   INTERNAL: 'internal',
 } as const;
 
@@ -617,5 +636,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409: the request is well formed, and what refuses it is the kind of
   // session the token belongs to.
   [ERROR_CODES.NOT_IMPERSONATING]: HttpStatus.CONFLICT,
+  // Plan 0210. All three 409: the request is well formed, and what refuses
+  // it is the session the caller holds, or the kind of account it names.
+  [ERROR_CODES.RECOVERY_OTHER_ACCOUNT]: HttpStatus.CONFLICT,
+  [ERROR_CODES.RECOVERY_NEEDS_EMAIL]: HttpStatus.CONFLICT,
+  [ERROR_CODES.RECOVERY_NEEDS_PASSWORD]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

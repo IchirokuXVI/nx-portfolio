@@ -283,6 +283,20 @@ export const ERROR_CATALOG: Record<
     en: 'This is not a support session.',
     es: 'Esta no es una sesión de soporte.',
   },
+  // A reset grant (plan 0210). The person reads the first, an operator the
+  // other two.
+  [ERROR_CODES.RECOVERY_OTHER_ACCOUNT]: {
+    en: 'This link belongs to another account than the one signed in here. Sign out of this one to use it.',
+    es: 'Este enlace es de otra cuenta distinta de la que tiene la sesión abierta aquí. Cierra esta sesión para usarlo.',
+  },
+  [ERROR_CODES.RECOVERY_NEEDS_EMAIL]: {
+    en: 'This account has no email address, so it has no password to reset.',
+    es: 'Esta cuenta no tiene correo, así que no tiene contraseña que restablecer.',
+  },
+  [ERROR_CODES.RECOVERY_NEEDS_PASSWORD]: {
+    en: 'This account signs in with Google and has no password to reset.',
+    es: 'Esta cuenta entra con Google y no tiene contraseña que restablecer.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
