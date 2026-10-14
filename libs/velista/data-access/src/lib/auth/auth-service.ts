@@ -113,7 +113,7 @@ export interface AuthServiceI {
  *   Nothing was spent.
  * - `link-dead`: used, expired or unknown, which the server answers alike.
  * - `refused-in-support`: a support session asked (backend `0194`). The page shows it
- *   as the dead link screen, with no copy of its own (the owner's pick 6).
+ *   as the dead link screen, with no copy of its own (the owner's pick 7).
  * - `password-rejected`: the new password failed the rule. A reset only.
  * - `failed`: anything else, with the error for its sentence.
  */

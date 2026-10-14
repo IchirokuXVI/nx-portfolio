@@ -294,7 +294,7 @@ export class ResetPasswordPage {
       case 'link-dead':
       case 'refused-in-support':
         // A support session is shown the dead link screen, with no copy of its own
-        // (the owner's pick 6).
+        // (the owner's pick 7).
         this.view.set('dead');
         return;
 
