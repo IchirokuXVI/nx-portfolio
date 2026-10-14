@@ -860,6 +860,102 @@
         ]
       }
     },
+    "/v1/auth/recovery-sign-in": {
+      "post": {
+        "operationId": "RecoverySignInController_recoverySignIn_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverySignInDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.recoverySignIn` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.RecoverySignInResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_other_account` — This link belongs to another account than the one signed in here. Sign out of this one to use it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/admin/auth/login": {
       "post": {
         "operationId": "AdminAuthController_login_v1",
@@ -1646,6 +1742,236 @@
           },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/send-password-reset": {
+      "post": {
+        "operationId": "AdminUsersController_sendPasswordReset_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRecoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `adminUser.sendPasswordReset` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-users.SendAdminPasswordResetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_needs_email` — This account has no email address, so it has no password to reset.\n\n`recovery_needs_password` — This account signs in with Google and has no password to reset.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/recovery-links": {
+      "post": {
+        "operationId": "AdminUsersController_createRecoveryLinks_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRecoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `adminUser.createRecoveryLinks` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-users.CreateAdminRecoveryLinksResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_needs_email` — This account has no email address, so it has no password to reset.\n\n`recovery_needs_password` — This account signs in with Google and has no password to reset.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29112,6 +29438,22 @@
           "code"
         ]
       },
+      "RecoverySignInDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The raw token from either link of the mail."
+          },
+          "switchAccount": {
+            "type": "boolean",
+            "description": "True when the caller is signed in as another account and agreed to leave it. Without it, that case answers 409 `recovery_other_account` and spends nothing."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
       "AdminLoginDto": {
         "type": "object",
         "properties": {
@@ -29135,6 +29477,15 @@
           "locale": {
             "type": "string",
             "description": "Locale for the confirmation email; defaults to the request locale."
+          }
+        }
+      },
+      "AdminRecoveryDto": {
+        "type": "object",
+        "properties": {
+          "locale": {
+            "type": "string",
+            "description": "Locale for the mail the person gets; defaults to the request locale."
           }
         }
       },
@@ -34225,6 +34576,46 @@
         ],
         "additionalProperties": false
       },
+      "admin-users.CreateAdminRecoveryLinksResult": {
+        "type": "object",
+        "properties": {
+          "resetUrl": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opens the page that chooses a new password."
+          },
+          "signInUrl": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opens the page that signs in and keeps the password. The same token as `resetUrl`."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When both links stop working: 24 hours after they were made."
+          }
+        },
+        "required": [
+          "resetUrl",
+          "signInUrl",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "admin-users.SendAdminPasswordResetResult": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the mailed links stop working: one hour after the mail."
+          }
+        },
+        "required": [
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
       "admin.AdminDashboardResponse": {
         "type": "object",
         "description": "What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.",
@@ -34428,6 +34819,45 @@
           "state"
         ],
         "additionalProperties": false
+      },
+      "auth.RecoverySignInResult": {
+        "description": "What the sign in did. `SIGNED_IN` carries the new token pair. `ALREADY_SIGNED_IN` carries none: the bearer already belongs to the account of the link, its session stays as it is, and the link no longer works.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "SIGNED_IN"
+                ]
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/auth.AuthTokens"
+              }
+            },
+            "required": [
+              "outcome",
+              "tokens"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "ALREADY_SIGNED_IN"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "auth.RetryAfterResult": {
         "type": "object",
@@ -45263,6 +45693,9 @@
               "impersonation_ended",
               "impersonation_not_allowed",
               "not_impersonating",
+              "recovery_other_account",
+              "recovery_needs_email",
+              "recovery_needs_password",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
