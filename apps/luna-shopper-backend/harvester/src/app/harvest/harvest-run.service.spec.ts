@@ -6,6 +6,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestRunWrites,
+  HarvestScheduleOutcome,
   PriceScopeKind,
   PriceSourceKind,
   type HarvestDocument,
@@ -100,6 +101,7 @@ function settings(overrides: Partial<HarvesterConfig> = {}): HarvesterConfig {
     logLevel: 'silent',
     actorId: 'ac700000-0000-4000-a000-000000000001',
     harvestEnabled: true,
+    schedulerEnabled: true,
     userAgent: 'LunaShopper/test',
     batchSize: 200,
     defaultWorkers: 4,
@@ -166,6 +168,10 @@ function build(
     scopes?: PriceScopeView[];
     /** The preset `load` answers, for the start from a preset cases. */
     preset?: HarvestRunPreset;
+    /** The run of the chain in flight, for the busy cases. */
+    activeOfChain?: HarvestRun | null;
+    /** The store discovery in flight anywhere, for the busy cases. */
+    activeDiscovery?: HarvestRun | null;
   } = {}
 ) {
   const admin = {
@@ -228,6 +234,19 @@ function build(
     })),
     reapStale: jest.fn(async () => 2),
     repository: jest.fn(),
+    // The reads behind an estimate (plan 0206). No history, so every view
+    // here carries its adapter's default.
+    sourcesFor: jest.fn(async () => []),
+    recentDurations: jest.fn(async () => ({
+      byPreset: new Map(),
+      bySourceMode: new Map(),
+    })),
+    findActiveBySupermarket: jest.fn(
+      async () => overrides.activeOfChain ?? null
+    ),
+    findActiveStoreDiscovery: jest.fn(
+      async () => overrides.activeDiscovery ?? null
+    ),
   } as unknown as HarvestRunStore;
 
   const executor = {
@@ -1950,6 +1969,221 @@ describe('HarvestRunService.spawn, a file import (plan 0086)', () => {
         document: harvestDocument(),
       })
     ).rejects.toBeInstanceOf(NotConfiguredException);
+  });
+});
+
+/**
+ * The start of a scheduled run (plan 0206, section 5.4): the same validation
+ * and the same start as a person's start from a preset, with trigger
+ * SCHEDULED and no user, answering what became of the slot.
+ */
+describe('HarvestRunService.startScheduled (plan 0206)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000000e1';
+  const SCHEDULE = { id: 'schedule-1', presetId: PRESET };
+
+  function preset(over: Partial<HarvestRunPreset> = {}): HarvestRunPreset {
+    return {
+      id: PRESET,
+      supermarketId: SUPERMARKET,
+      name: 'Weekly Mercadona',
+      input: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeIds: [SCOPE],
+        writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+        details: HarvestDetailFetch.NEW,
+      },
+      createdByUserId: ADMIN,
+      updatedByUserId: ADMIN,
+      createdAt: new Date('2026-09-01T09:00:00.000Z'),
+      updatedAt: new Date('2026-09-01T09:00:00.000Z'),
+      ...over,
+    } as HarvestRunPreset;
+  }
+
+  it('starts the preset with trigger SCHEDULED, no user, its input, the preset and the schedule', async () => {
+    const { service, store, executor } = build({ preset: preset() });
+
+    const started = await service.startScheduled(SCHEDULE);
+
+    expect(started).toEqual({
+      outcome: HarvestScheduleOutcome.STARTED,
+      note: null,
+      runId: 'run-1',
+    });
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        trigger: HarvestRunTrigger.SCHEDULED,
+        requestedByUserId: null,
+        supermarketId: SUPERMARKET,
+        sourceId: 'src-1',
+        presetId: PRESET,
+        scheduleId: 'schedule-1',
+        payload: expect.objectContaining({
+          priceScopeIds: [SCOPE],
+          writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+          details: HarvestDetailFetch.NEW,
+        }),
+      })
+    );
+    expect(executor.start).toHaveBeenCalledWith('run-1');
+  });
+
+  it('refuses a chain whose row is off, with the words a spawn uses', async () => {
+    const { service, store } = build({
+      preset: preset(),
+      source: { enabled: false },
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: 'That source is disabled. Enable it with supermarketSource.setEnabled.',
+      runId: null,
+    });
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('says the row is off before it says the source is failing', async () => {
+    const { service } = build({
+      preset: preset(),
+      source: { enabled: false, consecutiveFailures: 5 },
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toMatchObject({
+      outcome: HarvestScheduleOutcome.REFUSED,
+    });
+  });
+
+  it('skips a source with three consecutive failures, and starts nothing', async () => {
+    const { service, store } = build({
+      preset: preset(),
+      source: { consecutiveFailures: 3 },
+    });
+
+    const started = await service.startScheduled(SCHEDULE);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_FAILING);
+    expect(started.note).toMatch(/failed 3 runs in a row/);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('starts a source with two', async () => {
+    const { service } = build({
+      preset: preset(),
+      source: { consecutiveFailures: 2 },
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toMatchObject({
+      outcome: HarvestScheduleOutcome.STARTED,
+    });
+  });
+
+  it('refuses a preset the spawn validation refuses, naming the preset', async () => {
+    const { service, store } = build({
+      preset: preset({
+        input: {
+          mode: HarvestRunMode.CATALOG_DISCOVERY,
+          priceScopeIds: ['5efa0000-0000-4000-a000-0000000000e2'],
+        },
+      }),
+    });
+
+    const started = await service.startScheduled(SCHEDULE);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.REFUSED);
+    expect(started.note).toMatch(
+      /^The preset "Weekly Mercadona" \(5efa0000-0000-4000-a000-0000000000e1\) cannot start a run: /
+    );
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a chain with no source row through the spawn validation', async () => {
+    const { service, store } = build({ preset: preset(), source: null });
+
+    const started = await service.startScheduled(SCHEDULE);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.REFUSED);
+    expect(started.note).toMatch(/cannot start a run: /);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a preset that is gone', async () => {
+    const { service } = build({ preset: preset({ id: 'another' }) });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toMatchObject({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: `The preset ${PRESET} of this schedule no longer exists.`,
+    });
+  });
+
+  it('skips as busy and names the run of the chain in the way', async () => {
+    const { service } = build({
+      preset: preset(),
+      createImpl: (async () => {
+        throw new ActiveRunExistsError('run-of-chain');
+      }) as unknown as HarvestRunStore['create'],
+      activeOfChain: { id: 'run-of-chain' } as HarvestRun,
+    });
+
+    await expect(service.startScheduled(SCHEDULE)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+      note: 'A run of this chain is in progress: run-of-chain.',
+      runId: null,
+    });
+  });
+
+  it('skips a store discovery as busy behind a store discovery of another source (review point 6)', async () => {
+    // `uq_harvest_run_active_store_discovery` allows one store discovery in
+    // the whole database, so the postal code queue draining an OpenStreetMap
+    // run is in the way of a chain's own store list.
+    const { service } = build({
+      preset: preset({ input: { mode: HarvestRunMode.STORE_DISCOVERY } }),
+      source: { adapterKey: 'lidl-api' },
+      createImpl: (async () => {
+        throw new ActiveRunExistsError(null);
+      }) as unknown as HarvestRunStore['create'],
+      activeOfChain: null,
+      activeDiscovery: { id: 'run-of-the-queue' } as HarvestRun,
+    });
+
+    const started = await service.startScheduled(SCHEDULE);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_BUSY);
+    expect(started.note).toBe(
+      'A store discovery is in progress: run-of-the-queue. One store ' +
+        'discovery runs at a time across every source, the runs of the ' +
+        'postal code queue included.'
+    );
+  });
+
+  it('leaves a person’s start from a preset MANUAL and named', async () => {
+    const { service, store } = build({ preset: preset() });
+
+    await service.spawnFromPreset({ userId: ADMIN, presetId: PRESET });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: HarvestRunTrigger.MANUAL,
+        requestedByUserId: ADMIN,
+        scheduleId: null,
+      })
+    );
+  });
+
+  it('answers a run view with an estimate, scheduleId and interrupted', async () => {
+    const { service } = build({ preset: preset() });
+
+    const view = await service.spawnFromPreset({
+      userId: ADMIN,
+      presetId: PRESET,
+    });
+
+    // No history and no source row read back, so the default of no adapter.
+    expect(view).toMatchObject({
+      scheduleId: null,
+      interrupted: false,
+      estimate: { basis: 'DEFAULT', samples: 0, seconds: 1800 },
+    });
   });
 });
 

@@ -133,15 +133,21 @@ part of the render and would trip that very check.
   #
   # HARVEST_ENABLED is a SECOND switch, separate from `harvester.enabled`: that one
   # decides whether the pod exists, this one whether it may fetch. Both default
-  # false. There is no third: which chains may be fetched is a row per chain in
-  # the harvester's own database, off by default, written from the back office
+  # false. Which chains may be fetched is not a switch here: it is a row per chain
+  # in the harvester's own database, off by default, written from the back office
   # (plan 0083), so adding a chain never touches this file.
+  #
+  # HARVEST_SCHEDULER_ENABLED (plan 0206) decides whether a due schedule starts
+  # its preset with nobody asking. A tick needs it and HARVEST_ENABLED both.
+  # False by default and on in production only, so two clusters never fetch one
+  # chain on one timer.
   #
   # HARVESTER_ACTOR_ID is not here either, for the reason SERVICE_ACTOR_IDS is
   # not (plan 0081, section 11): it is the same uuid, `provision-release.sh`
   # generates it once per cluster, and the Secret is the only per environment
   # store that script owns.
   HARVEST_ENABLED: {{ $harvest.harvestEnabled | default false | quote }}
+  HARVEST_SCHEDULER_ENABLED: {{ $harvest.schedulerEnabled | default false | quote }}
   # An honest User-Agent naming the app and a contact address, never a browser
   # impersonation.
   HARVEST_USER_AGENT: {{ $harvest.userAgent | default "" | quote }}

@@ -147,11 +147,9 @@ lunaShopperBackend:
     # page exists. Nothing sends a reset mail from this cluster today.
     mailResetBaseUrl: https://velista.app/reset-password
 
-  # The harvester (plan 0038) is not deployed to production YET, and "yet" is the
-  # whole content of this line: k8s plan 0008 turns it on for store discovery, and
-  # it says staging goes first and production follows only after a soak long
-  # enough to see real traffic, not on the same day. Staging has it. This is the
-  # flag that follows.
+  # The harvester (plan 0038) is deployed to production. k8s plan 0008 turned it
+  # on for store discovery after a soak on staging, and backend plan 0206 makes
+  # production the one cluster where a schedule starts a run.
   #
   # The old reason was capacity, and it came apart into two halves. The fetching
   # half is gone for this workload: a catalog discovery run is 4,383 HTTP requests
@@ -164,17 +162,18 @@ lunaShopperBackend:
   # sizes it: store discovery writes tens of thousands of small rows, which is
   # comfortable inside both numbers.
   #
-  # TO FOLLOW STAGING, once the soak has shown real profile edits producing runs:
-  # set `enabled` and `harvestEnabled` true here, and leave every chain's
-  # `supermarket_sources` row off. That per chain switch is a separate decision
-  # about one storefront (plan 0083), it lives in the database rather than in
-  # this file, and store discovery never touches a storefront. Then run
-  # `k8s/bootstrap/provision-release.sh --check --env production` BEFORE the
-  # deploy: it renders the chart and asserts every secretKeyRef exists, which is
-  # exactly the failure a newly enabled service introduces. The two keys it needs
-  # (HARVESTER_DB_URL and the harvester-db instance secret) are already written
-  # unconditionally, so --check should pass on the first try; if it does not, that
-  # is the answer arriving in seconds instead of at rollout.
+  # WHICH CHAINS ARE FETCHED is not in this file. It is the `supermarket_sources`
+  # row of each chain (plan 0083), off by default and written from the back
+  # office. A person turns a row on to let a run of that chain start, by hand or
+  # from a schedule. A SCHEDULE NEEDS ITS ROW LEFT ON: a slot of a chain whose
+  # row is off starts nothing and is recorded as refused, and the schedule shows
+  # `SOURCE_DISABLED` before the slot comes. The rate is on the same row
+  # (`workers` and `maxRequestsPerSecond`), and so are the schedules, in
+  # `harvest_schedules`: none of them is configuration.
+  #
+  # Run `k8s/bootstrap/provision-release.sh --check --env production` before a
+  # deploy that changes this block: it renders the chart and asserts every
+  # secretKeyRef exists, which is the failure a newly enabled service introduces.
   #
   # The nightly backup of the harvester's database is not optional when that
   # happens. Its places are regenerable and its import decisions are not: see the
@@ -184,14 +183,20 @@ lunaShopperBackend:
     # The second switch, on since plan 0081 section 11: an admin uploading a
     # leaflet is a run, and a pod that exists and refuses every spawn cannot
     # import one. Which chains may be fetched is a row per chain in the
-    # harvester's own database (plan 0083), every one of them off, and an
-    # upload touches no storefront at all.
+    # harvester's own database (plan 0083), and an upload touches no storefront
+    # at all.
     #
     # The actor id is no longer a values field: `provision-release.sh` generates
     # it into the per environment Secret and both catalog and the harvester read
     # it from there. Run `--check --env production` before the first deploy that
     # carries this, which is what asserts the key is actually in the cluster.
     harvestEnabled: true
+    # The third switch (plan 0206, section 10): a due schedule starts its preset
+    # here and nowhere else. Staging keeps it off. With no schedule row it does
+    # nothing, so it was safe to turn on before the back office had a screen.
+    # The owner creates each schedule and turns each chain's row on from the
+    # back office; neither is in this file.
+    schedulerEnabled: true
 
   # Two cores for the catalog database. values.yaml gives it one, with the
   # measurements. One search statement is one process, so the second core is for

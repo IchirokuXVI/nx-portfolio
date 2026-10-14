@@ -10,6 +10,7 @@ import {
   type UpdateHarvestRunPresetRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  ConflictException,
   ValidationException,
   clampPageSize,
   decodeCursor,
@@ -18,6 +19,7 @@ import {
 import type { HarvestRunPreset } from '../entities';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
+import { HarvestScheduleStore } from './harvest-schedule.store';
 import { toHarvestRunPresetView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -49,7 +51,8 @@ export class HarvestRunPresetService {
     private readonly store: HarvestRunPresetStore,
     private readonly runs: HarvestRunService,
     private readonly sources: SupermarketSourceService,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly schedules: HarvestScheduleStore
   ) {}
 
   async list(req: ListHarvestRunPresetsRequest): Promise<HarvestRunPresetPage> {
@@ -128,9 +131,22 @@ export class HarvestRunPresetService {
   /**
    * Delete a preset. Its runs are left as they were: each keeps its own input
    * and still names the preset it came from.
+   *
+   * **Refused while a schedule names it** (plan 0206, section 2.1). A schedule
+   * without a preset can start nothing, and deleting both silently removes a
+   * crawl somebody set up on purpose. There is no foreign key to say so, for
+   * the reason `harvest_runs.presetId` has none, so the refusal is here.
    */
   async delete(req: HarvestRunPresetIdRequest): Promise<{ id: string }> {
     await this.admin.requireAdmin(req);
+    const schedules = await this.schedules.findByPreset(req.presetId);
+    if (schedules.length > 0) {
+      throw new ConflictException(
+        `The preset is named by ${schedules.length} schedule(s): ` +
+          `${schedules.map((schedule) => schedule.id).join(', ')}. Delete ` +
+          'them first.'
+      );
+    }
     await this.store.delete(req.presetId);
     return { id: req.presetId };
   }
@@ -176,8 +192,17 @@ export class HarvestRunPresetService {
     rows: readonly HarvestRunPreset[]
   ): Promise<HarvestRunPresetView[]> {
     const latest = await this.store.lastRuns(rows.map((row) => row.id));
-    return rows.map((row) =>
-      toHarvestRunPresetView(row, latest.get(row.id) ?? null)
+    // About how long a run of each takes (plan 0206, section 8), for the page
+    // in one go.
+    const estimates = await this.runs.estimates(
+      rows.map((row) => ({
+        presetId: row.id,
+        supermarketId: row.supermarketId,
+        mode: row.input.mode,
+      }))
+    );
+    return rows.map((row, index) =>
+      toHarvestRunPresetView(row, latest.get(row.id) ?? null, estimates[index])
     );
   }
 }

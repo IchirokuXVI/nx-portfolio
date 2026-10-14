@@ -15,6 +15,13 @@
  *   answers the first of the two. The schedule fires one time that day, not two.
  */
 
+/**
+ * The clock the schedule service and worker read, as an injection token so a
+ * spec passes its own instead of waiting for real time.
+ */
+export const HARVEST_CLOCK = Symbol('HARVEST_CLOCK');
+export type HarvestClock = () => Date;
+
 /** What a slot is computed from: the three fields of a schedule row. */
 export interface SlotRule {
   /** `HH:mm`, 24 hour. */

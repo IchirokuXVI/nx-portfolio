@@ -62,6 +62,15 @@ export const harvesterValidationSchema = Joi.object({
   HARVESTER_ACTOR_ID: Joi.string().uuid().allow('').default(''),
 
   HARVEST_ENABLED: Joi.boolean().default(false),
+  /**
+   * Whether this pod starts the runs of due schedules by itself (plan 0206,
+   * section 10). Separate from `HARVEST_ENABLED` for the reason that one is
+   * separate from the Helm switch: a pod that runs a walk a person asked for
+   * and a pod that starts walks with nobody asking are two decisions. A tick
+   * needs both. Off by default, on in production only, so two clusters never
+   * fetch one chain on one timer.
+   */
+  HARVEST_SCHEDULER_ENABLED: Joi.boolean().default(false),
   HARVEST_USER_AGENT: Joi.string().default(
     'LunaShopper/0.1 (+https://velista.app; personal price comparison; contact@velista.app)'
   ),
@@ -143,6 +152,8 @@ export interface HarvesterConfig {
   logLevel: (typeof LOG_LEVELS)[number];
   actorId: string;
   harvestEnabled: boolean;
+  /** Whether due schedules start runs here (plan 0206). */
+  schedulerEnabled: boolean;
   userAgent: string;
   batchSize: number;
   defaultWorkers: number;
@@ -191,6 +202,10 @@ export const harvesterConfiguration = registerAs(
     logLevel: process.env.LOG_LEVEL as HarvesterConfig['logLevel'],
     actorId: process.env.HARVESTER_ACTOR_ID ?? '',
     harvestEnabled: parseBoolean(process.env.HARVEST_ENABLED, false),
+    schedulerEnabled: parseBoolean(
+      process.env.HARVEST_SCHEDULER_ENABLED,
+      false
+    ),
     userAgent: process.env.HARVEST_USER_AGENT as string,
     batchSize: Number(process.env.HARVEST_BATCH_SIZE ?? 200),
     defaultWorkers: Number(process.env.HARVEST_DEFAULT_WORKERS ?? 4),

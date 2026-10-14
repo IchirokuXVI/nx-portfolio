@@ -138,6 +138,10 @@ lunaShopperBackend:
   harvester:
     enabled: true
     harvestEnabled: true
+    # Staging fires no schedule (plan 0206, section 10). Production does, and
+    # two clusters fetching one chain on one timer double what the chain sees.
+    # A person can still start any run here.
+    schedulerEnabled: false
 
   # The catalog database keeps the one core that values.yaml gives it, and Redis
   # keeps its 100m. Both would take more, and this node has four cores: 3,310m of
