@@ -5,9 +5,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketElsewhere,
   QUANTITY_REEL_IDLE_MS,
-  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketRow,
@@ -94,8 +92,6 @@ async function render(
     finished?: boolean;
     /** What the basket is being searched for, already folded (velista `0074`). */
     highlight?: string;
-    /** What the pipeline says was bought through another basket (velista `0131`). */
-    elsewhere?: BasketElsewhere | null;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -121,7 +117,6 @@ async function render(
   fixture.componentRef.setInput('notice', options.notice ?? null);
   fixture.componentRef.setInput('finished', options.finished ?? false);
   fixture.componentRef.setInput('highlight', options.highlight ?? '');
-  fixture.componentRef.setInput('elsewhere', options.elsewhere ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -988,130 +983,164 @@ describe('BasketRow: how often it was bought here', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * Velista `0142`: a row somebody bought outside this shopping list.
  *
- * It looks like a done row, it says where the purchase was made, and it offers
- * nothing that takes the purchase back: the server refuses to let one basket
- * revert a purchase of another, and a control it refuses is not drawn (`0030`).
+ * Crossed out like a `REMOVED` row, with where it was bought under the name. No
+ * circle and no reel, because nothing on it buys or takes back, and it still
+ * opens its sheet. A row that outside buys only lowered is an ordinary row.
  */
-describe('BasketRow: bought on another basket (velista 0131)', () => {
-  const elsewhereRow = () =>
+describe('BasketRow: bought outside this shopping list (velista 0142)', () => {
+  const boughtElsewhere = (over: Partial<BasketRow> = {}) =>
     line({
       content: 'Butter',
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      mark: 'CHANGED',
+      entries: [
+        entry(null, {
+          left: 0,
+          bought: 0,
+          asked: 0,
+          boughtElsewhere: 2,
+          state: 'BOUGHT_ELSEWHERE',
+        }),
+      ],
+      ...over,
     });
-
-  const drawn = (row: BasketRow) =>
-    render(row, { elsewhere: basketElsewhere(row) });
 
   const element = (fixture: Awaited<ReturnType<typeof render>>) =>
     fixture.nativeElement as HTMLElement;
 
-  it('draws the caption under the name, in the caption style the row already has', async () => {
-    const fixture = await drawn(elsewhereRow());
+  it.each([
+    ['BOUGHT_ON_ANOTHER_BASKET', 'basket.line.boughtFromAnotherList'],
+    ['BOUGHT_ON_THE_LIST', 'basket.line.boughtFromTheList'],
+    [null, 'basket.line.alreadyBought'],
+  ] as const)(
+    'strikes the name and says where it was bought, for the note %p',
+    async (note, key) => {
+      const fixture = await render(boughtElsewhere({ note }));
 
-    const captions = [...element(fixture).querySelectorAll('.touched')].map(
-      (caption) => caption.textContent?.trim()
-    );
-    expect(captions).toEqual(['basket.elsewhere.caption']);
-  });
+      const row = element(fixture).querySelector('.row.is-removed');
+      expect(row).not.toBeNull();
+      expect(row?.querySelector('.content')?.textContent?.trim()).toBe(
+        'Butter'
+      );
+      expect(row?.querySelector('.removed-note')?.textContent?.trim()).toBe(
+        key
+      );
+      expect(element(fixture).textContent).not.toContain('basket.line.removed');
+    }
+  );
 
-  it('looks like a done row', async () => {
-    const fixture = await drawn(elsewhereRow());
+  it('draws no circle, no reel and no number', async () => {
+    const fixture = await render(boughtElsewhere());
 
-    expect(element(fixture).querySelector('.row.is-done')).not.toBeNull();
-    expect(
-      element(fixture).querySelector('.status-glyph.is-bought')
-    ).not.toBeNull();
-  });
-
-  it('draws no control that undoes a purchase', async () => {
-    const fixture = await drawn(elsewhereRow());
-    const reverted = jest.fn();
-    fixture.componentInstance.revert.subscribe(reverted);
-
-    // A statement of what the row is, and nothing to press.
-    expect(element(fixture).querySelector('button.status')).toBeNull();
-    expect(status(fixture)?.getAttribute('role')).toBe('img');
-    expect(status(fixture)?.getAttribute('aria-label')).toBe(
-      'basket.status.isGot'
-    );
-    // A reel raised from zero takes units back, so the number is a readout.
+    expect(element(fixture).querySelector('.status')).toBeNull();
     expect(element(fixture).querySelector('lib-quantity-reel')).toBeNull();
-    expect(element(fixture).querySelector('.settled-count')).not.toBeNull();
-    expect(reverted).not.toHaveBeenCalled();
+    expect(element(fixture).querySelector('.settled-count')).toBeNull();
+    expect(element(fixture).querySelector('.swap')).toBeNull();
   });
 
-  it('still opens the sheet, where the list can be asked for more', async () => {
-    const fixture = await drawn(elsewhereRow());
+  it('still opens its sheet, named by the row and its words', async () => {
+    const fixture = await render(boughtElsewhere());
     const opened = jest.fn();
     fixture.componentInstance.open.subscribe(opened);
 
-    element(fixture).querySelector<HTMLButtonElement>('button.body')?.click();
+    const body = element(fixture).querySelector<HTMLButtonElement>(
+      '.row.is-removed button.body'
+    );
+    body?.click();
 
     expect(opened).toHaveBeenCalledTimes(1);
-  });
-
-  it('says it in the row\u2019s accessible name', async () => {
-    const fixture = await drawn(elsewhereRow());
-
-    expect(
-      element(fixture).querySelector('button.body')?.getAttribute('aria-label')
-    ).toContain('basket.elsewhere.caption');
-  });
-
-  it('keeps today\u2019s look and controls on a row with something left, and adds the caption', async () => {
-    const fixture = await drawn(
-      line({ left: 1, asked: 1, boughtElsewhere: 1 })
-    );
-
-    expect(element(fixture).querySelector('.row.is-done')).toBeNull();
-    expect(element(fixture).querySelector('button.status')).not.toBeNull();
-    expect(element(fixture).querySelector('lib-quantity-reel')).not.toBeNull();
-    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
-  });
-
-  it('keeps the revert on a done row this basket bought some of', async () => {
-    const fixture = await drawn(
-      line({ left: 0, bought: 1, asked: 1, boughtElsewhere: 1, state: 'DONE' })
-    );
-
-    expect(element(fixture).querySelector('button.status')).not.toBeNull();
-    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
-  });
-
-  it('draws no caption on a row nothing was bought of elsewhere', async () => {
-    const fixture = await drawn(bought());
-
-    expect(element(fixture).textContent).not.toContain(
-      'basket.elsewhere.caption'
+    expect(body?.getAttribute('aria-label')).toBe(
+      'Butter. basket.line.boughtFromAnotherList'
     );
   });
 
-  /** Under a list heading the pipeline hands the entry's, and the row draws it. */
-  it('draws what it is handed, which under a list heading is the entry\u2019s', async () => {
+  it('crosses out an entry bought elsewhere under its list heading', async () => {
     const mine = entry('l1', {
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
     });
     const row = line({ left: 3, boughtElsewhere: 2, entries: [mine] });
 
     const fixture = await render(row, {
       entry: mine,
-      elsewhere: basketElsewhere(mine),
       lists: new Map([['l1', ref('l1', 'Weekly shop')]]),
     });
 
-    expect(element(fixture).querySelector('button.status')).toBeNull();
-    expect(element(fixture).textContent).toContain('basket.elsewhere.caption');
+    expect(
+      element(fixture).querySelector('.row.is-removed .removed-note')
+        ?.textContent
+    ).toContain('basket.line.alreadyBought');
+    expect(element(fixture).querySelector('.status')).toBeNull();
+  });
+
+  it('draws a row that outside buys only lowered as any row that changed, with no caption', async () => {
+    const fixture = await render(
+      line({
+        left: 2,
+        asked: 2,
+        boughtElsewhere: 1,
+        mark: 'CHANGED',
+        note: 'BOUGHT_ON_ANOTHER_BASKET',
+        noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      })
+    );
+
+    expect(element(fixture).querySelector('.row.is-removed')).toBeNull();
+    expect(element(fixture).querySelector('button.status')).not.toBeNull();
+    expect(element(fixture).querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element(fixture).querySelector('.mark')?.textContent).toContain(
+      'basket.mark.changed'
+    );
+    expect(element(fixture).textContent).not.toContain('basket.line.bought');
+    expect(element(fixture).textContent).not.toContain(
+      'basket.line.alreadyBought'
+    );
+  });
+
+  /** Three asked: two bought here, the last by somebody else. */
+  it('reads 2 of 2 on a row this shopping list bought two of and somebody else finished', async () => {
+    const fixture = await render(
+      line({
+        left: 0,
+        bought: 2,
+        asked: 2,
+        boughtElsewhere: 1,
+        state: 'DONE',
+      })
+    );
+
+    expect(element(fixture).querySelector('.row.is-done')).not.toBeNull();
+    expect(element(fixture).querySelector('.progress')?.textContent).toContain(
+      'basket.row.boughtOf'
+    );
+    // The revert stays: this shopping list bought two, and those it can take back.
+    expect(element(fixture).querySelector('button.status')).not.toBeNull();
+  });
+});
+
+/** Backend `0203` keeps a removed row for six hours, and its mark ends first. */
+describe('BasketRow: a crossed out row with no mark (velista 0142, section 5)', () => {
+  it('draws a REMOVED row with no mark crossed out, with no tag', async () => {
+    const fixture = await render(
+      line({ state: 'REMOVED', mark: null, entries: [] })
+    );
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(
+      element.querySelector('.row.is-removed .removed-note')?.textContent
+    ).toContain('basket.line.removed');
+    expect(element.querySelector('.mark')).toBeNull();
+    expect(element.querySelector('button')).toBeNull();
   });
 });

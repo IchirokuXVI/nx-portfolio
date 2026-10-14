@@ -1,6 +1,5 @@
 import { matchesBasketRow } from './basket-search';
 import type {
-  BasketElsewhere,
   BasketListRef,
   BasketPriceScope,
   BasketProduct,
@@ -11,7 +10,7 @@ import type {
   BasketShelfMark,
   BasketShop,
 } from './basket-view';
-import { basketElsewhere, basketRowPick, basketShelfMark } from './basket-view';
+import { basketRowPick, basketShelfMark, isCrossedOutRow } from './basket-view';
 import { catalogName } from './catalog-browse';
 import type { BasketRowState } from './enums';
 import { categoryName, type ProductCategory } from './product-category';
@@ -262,18 +261,6 @@ export interface BasketViewRow {
    * null, so nothing about the page changes until somebody asks for it.
    */
   readonly usual: Pick<BasketRowUsual, 'bought' | 'of'> | null;
-  /**
-   * What was bought through another basket, or null (velista `0131`).
-   *
-   * **The entry's under a list heading** and the row's everywhere else, like the
-   * numbers and the state the row draws, so a household whose share somebody else
-   * bought says so under its own heading and the household beside it does not.
-   *
-   * It never moves a row. A row closed from elsewhere stays where the order put
-   * it, exactly as a row this basket bought does. Its section counts it nowhere,
-   * as the server's progress does since backend `0203`.
-   */
-  readonly elsewhere: BasketElsewhere | null;
 }
 
 /**
@@ -399,9 +386,10 @@ const AISLE_SECTION_PREFIX = 'aisle:';
  * were in. Sinking after grouping would need the rule written once per grouping,
  * and the three copies would eventually disagree.
  *
- * A `REMOVED` row sinks below them, and passes every filter on the way: it is
- * information about the basket rather than a thing to find, so nothing hides it
- * and nothing lets it sit among the things still to buy. Velista `0093` draws it.
+ * A crossed out row ({@link isCrossedOutRow}: `REMOVED`, or `BOUGHT_ELSEWHERE`)
+ * sinks below them, and passes every filter on the way: it is information about
+ * the basket rather than a thing to find, so nothing hides it and nothing lets it
+ * sit among the things still to buy. Velista `0093` and `0142` draw it.
  */
 export function composeBasketView(
   rows: readonly BasketRow[],
@@ -443,14 +431,14 @@ export function basketUsualApplies(
  * `NO_SHOP_KNOWN`, which is a separate state so that keeping it is one line here if
  * the first weeks prove it should be kept (backend `0165`, section 3).
  *
- * Two more rows stay, and neither is a state. A `REMOVED` row passes every filter,
+ * Two more rows stay, and neither is a state. A crossed out row passes every filter,
  * for the reason it also sinks. And a row with no `usual` at all is kept, because
  * nobody has said where it is bought: a read at a shop answers it on every row, so
  * this is a row a write put on the screen before the next read, usually one
  * somebody has just added, and hiding it would take it away under their thumb.
  */
 export function keptByUsual(row: BasketRow): boolean {
-  if (row.state === 'REMOVED' || row.usual === null) {
+  if (isCrossedOutRow(row) || row.usual === null) {
     return true;
   }
   const state = row.usual.state;
@@ -665,7 +653,7 @@ function cheapestElsewhere(
 }
 
 /**
- * Put the `REMOVED` rows at the end.
+ * Put the crossed out rows at the end: `REMOVED` and `BOUGHT_ELSEWHERE`.
  *
  * A stable partition and not a sort, so everything above them keeps the order the
  * step before gave it. By identity when there is none, which is every basket until
@@ -679,12 +667,12 @@ function cheapestElsewhere(
  * place of that product.
  */
 function sinkRemoved(rows: readonly BasketRow[]): readonly BasketRow[] {
-  if (!rows.some((row) => row.state === 'REMOVED')) {
+  if (!rows.some(isCrossedOutRow)) {
     return rows;
   }
   return [
-    ...rows.filter((row) => row.state !== 'REMOVED'),
-    ...rows.filter((row) => row.state === 'REMOVED'),
+    ...rows.filter((row) => !isCrossedOutRow(row)),
+    ...rows.filter(isCrossedOutRow),
   ];
 }
 
@@ -699,7 +687,7 @@ function filterRows(
       ? rows
       : rows.filter(
           (row) =>
-            row.state === 'REMOVED' ||
+            isCrossedOutRow(row) ||
             matchesBasketRow(
               row,
               basketRowPick(row, context.products),
@@ -723,14 +711,14 @@ function filterRows(
  * stays, which is the filter doing its job. A row with an entry this reader was
  * not served stays too, because **a reader cannot filter out what they cannot
  * name**: the entry might be on a kept list and there is no way to ask. And a
- * `REMOVED` row stays whatever the filter says, for the reason it also sinks.
+ * crossed out row stays whatever the filter says, for the reason it also sinks.
  *
  * This is the successor of "lines on no list yet are always shown" (velista
  * `0075`, section 6). No such line exists now, and the sentence that replaced it
  * is about redaction rather than about a line nobody has claimed.
  */
 function keptByLists(row: BasketRow, lists: ReadonlySet<string>): boolean {
-  if (row.state === 'REMOVED') {
+  if (isCrossedOutRow(row)) {
     return true;
   }
   return row.entries.some(
@@ -1042,7 +1030,6 @@ function byList(
         priceMark: prices?.marks.get(row.rowKey) ?? null,
         shelf: prices?.shelves.get(row.rowKey) ?? null,
         usual: usualNote(row, notes.usual),
-        elsewhere: basketElsewhere(entry),
       };
 
       const listId = entry.listId;
@@ -1104,7 +1091,6 @@ function rowsOf(
     priceMark: prices?.marks.get(row.rowKey) ?? null,
     shelf: prices?.shelves.get(row.rowKey) ?? null,
     usual: usualNote(row, notes.usual),
-    elsewhere: basketElsewhere(row),
   }));
 }
 
@@ -1173,7 +1159,7 @@ function countedUnits(
  * section 4 took over: the server knows about closes, skips and purchases another
  * shopper made, and this side knows what it was told.
  *
- * `total` is every unit that is not `REMOVED`, because a row somebody took off the
+ * `total` is every unit that is not crossed out, because a row somebody took off the
  * basket is not a thing to buy and must not make the basket look unfinished.
  *
  * **`done` is not `finished`.** A `NOT_AVAILABLE` row is closed without anything
@@ -1195,7 +1181,7 @@ export function basketRowsProgress(
   for (const unit of units) {
     // Neither counts for anything, which is `progressOf` of the shared rules
     // (backend `0203`, section 4): a buy made outside the basket is no part of it.
-    if (unit.state === 'REMOVED' || unit.state === 'BOUGHT_ELSEWHERE') {
+    if (isCrossedOutRow(unit)) {
       continue;
     }
     total += 1;

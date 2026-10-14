@@ -31,12 +31,29 @@
   every reader who does not see a line through text, which is velista 0052
   section 6.3 applied to the one row that has no glyph to carry it.
 -->
-@if (removed()) {
+<!--
+  A row somebody bought outside this shopping list (velista 0142, section 1) is
+  drawn the same way, with where it was bought in place of "No longer on the
+  list". It has no circle and no reel, and it is the one crossed out row that is
+  a button: it still opens its sheet, because a list can ask for the product
+  again.
+-->
+@if (crossed()) {
   <div class="row is-removed">
-    <div class="removed-body">
-      <span class="content">{{ row().content }}</span>
-      <span class="removed-note">{{ 'basket.line.removed' | rokuT }}</span>
-    </div>
+    @if (removed()) {
+      <div class="removed-body">
+        <ng-container [ngTemplateOutlet]="crossedText" />
+      </div>
+    } @else {
+      <button
+        (click)="onBody()"
+        [attr.aria-label]="crossedLabel()"
+        class="body"
+        type="button"
+      >
+        <ng-container [ngTemplateOutlet]="crossedText" />
+      </button>
+    }
   </div>
 } @else {
   <div
@@ -206,14 +223,6 @@
       }
 
       <!--
-        Somebody bought it through another basket (velista 0131). It names nobody
-        and says no time.
-      -->
-      @if (elsewhereCaption(); as said) {
-        <span class="touched">{{ said }}</span>
-      }
-
-      <!--
         How often this was bought at the chosen shop's chain (velista 0104). Only
         with the usual filter on, and a shade brighter than the captions around it.
       -->
@@ -359,6 +368,18 @@
 @if (notice(); as said) {
   <p class="line-notice">{{ said.key | rokuT: { count: said.count } }}</p>
 }
+
+<!--
+  The name of a crossed out row and the line that says why, for both of its
+  shapes. The name is the product on a product row, cut to one line, and the
+  line's own words otherwise (velista 0139).
+-->
+<ng-template #crossedText>
+  <span [class.is-product]="isProduct()" class="content">
+    <span class="name">{{ name() }}</span>
+  </span>
+  <span class="removed-note">{{ crossedNoteKey() | rokuT }}</span>
+</ng-template>
 
 <!--
   The four shapes, in one place, so the button and the static indicator cannot draw

@@ -563,7 +563,8 @@ export interface BasketRowEntry {
    * (velista `0131`; backend `0188`). Zero when there are none.
    *
    * A count and nothing else: it names no person and no basket. It is in neither
-   * {@link bought} nor {@link asked}, which count this basket alone.
+   * {@link bought} nor {@link asked}, which count this basket alone, and no count
+   * or sum of the page reads it (velista `0142`, section 3).
    */
   readonly boughtElsewhere: number;
   /** This entry's own state, by the server. Never `REMOVED` (backend `0136`). */
@@ -641,7 +642,9 @@ export interface BasketRow {
    * units somebody bought lately through another basket, or through none.
    *
    * The server keeps such a row for six hours, by its own clock, and the row
-   * leaves when a read no longer holds it. Nothing on this side counts the hours.
+   * leaves when a read no longer holds it. Nothing on this side counts the hours,
+   * and no count or sum of the page reads the number (velista `0142`, section 3):
+   * a buy made outside this shopping list counts toward nothing in it.
    */
   readonly boughtElsewhere: number;
   readonly state: BasketRowState;
@@ -751,77 +754,44 @@ export function basketRowPick(
 }
 
 /**
- * What a row, or one entry of it, says about a purchase made through another
- * basket (velista `0131`), or null when nothing was bought elsewhere.
- */
-export interface BasketElsewhere {
-  /** The units bought elsewhere. The server's number, passed through. */
-  readonly count: number;
-  /**
-   * Whether that purchase is all that closed the row: the state is
-   * `BOUGHT_ELSEWHERE` (backend `0203`), or, from a server before that plan,
-   * `DONE` with none of it bought here.
-   *
-   * Such a row is drawn as a done row and offers **no revert**. A revert takes
-   * back this basket's own purchases, it has none here, and the server refuses to
-   * let one basket undo a purchase of another (backend `0188`, target 8).
-   * Velista `0142` gives the state its own look.
-   */
-  readonly closed: boolean;
-}
-
-/**
- * Read {@link BasketElsewhere} off a row or an entry.
+ * Whether a row or an entry is drawn crossed out: a thing nobody needs to buy
+ * from this shopping list any more (velista `0142`, section 1).
  *
- * One function, so the row, the entries pane and the settle sheet agree about
- * which rows are closed from elsewhere. It compares the state the server wrote
- * and two numbers the server sent with zero, and derives no number of its own.
+ * Two states, one look. `REMOVED` is a row whose lines all left the coverage
+ * (velista `0093`, section 4). `BOUGHT_ELSEWHERE` is a row nothing is left of,
+ * which this shopping list bought none of, because somebody bought it through
+ * another shopping list or on the list page (backend `0203`, section 3). Neither
+ * is a thing to buy, so every count, every filter and the order of the page ask
+ * this one question, and the two cannot drift apart.
  */
-export function basketElsewhere(
-  unit: Pick<BasketRow, 'state' | 'bought' | 'boughtElsewhere'>
-): BasketElsewhere | null {
-  if (!(unit.boughtElsewhere > 0)) {
-    return null;
-  }
-  return {
-    count: unit.boughtElsewhere,
-    closed:
-      unit.state === 'BOUGHT_ELSEWHERE' ||
-      (unit.state === 'DONE' && unit.bought === 0),
-  };
+export function isCrossedOutRow(unit: Pick<BasketRow, 'state'>): boolean {
+  return unit.state === 'REMOVED' || unit.state === 'BOUGHT_ELSEWHERE';
 }
 
 /**
- * Whether a row or an entry is drawn as done: bought here, or closed by a buy
- * made elsewhere (velista `0139`, until `0142` draws the second its own way).
- */
-export function basketDrawnDone(unit: Pick<BasketRow, 'state'>): boolean {
-  return unit.state === 'DONE' || unit.state === 'BOUGHT_ELSEWHERE';
-}
-
-/**
- * The rows every count on the basket page is over: everything but `REMOVED`.
+ * The rows every count on the basket page is over: every row that is not
+ * crossed out ({@link isCrossedOutRow}).
  *
  * **One selector, read by every count**, which is the whole of it (velista
- * `0093`, section 4). A row whose lines all left the coverage is information
- * about the basket rather than a thing to buy, so the tools bar's total, its
- * shown, the chip row's pair and "all done" each leave it out; before this each
- * of them counted array elements, and an arriving `REMOVED` row made an
- * unfiltered basket report more rows than it holds.
+ * `0093`, section 4). A crossed out row is information about the basket rather
+ * than a thing to buy, so the tools bar's total, its shown, the chip row's pair,
+ * "all done" and the total of plan `0132` each leave it out; before this each of
+ * them counted array elements, and an arriving `REMOVED` row made an unfiltered
+ * basket report more rows than it holds. A buy made outside this shopping list
+ * counts toward nothing in it (velista `0142`, section 3).
  *
  * It does **not** touch the progress numbers. Those are the server's
  * {@link Basket.progress}, which already excludes these rows, and this side
  * never recounts them (velista `0060`, section 4).
  *
- * By identity when nothing is dropped, which is the ordinary case: no basket
- * carries a `REMOVED` row until somebody edits a list under it, so a page that
- * asks this on every render re-renders nothing.
+ * By identity when nothing is dropped, which is the ordinary case, so a page
+ * that asks this on every render re-renders nothing.
  */
 export function countableBasketRows(
   rows: readonly BasketRow[]
 ): readonly BasketRow[] {
-  return rows.some((row) => row.state === 'REMOVED')
-    ? rows.filter((row) => row.state !== 'REMOVED')
+  return rows.some(isCrossedOutRow)
+    ? rows.filter((row) => !isCrossedOutRow(row))
     : rows;
 }
 

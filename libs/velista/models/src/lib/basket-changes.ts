@@ -33,9 +33,12 @@ import type { LineApprovalStatus } from './enums';
  * change it cannot name is still a change worth saying happened, and
  * `basket.changes.entry.unknown` says exactly that much.
  *
- * A purchase, a revert, a skip and a reorder are **not** here and never will be
- * (backend `0130`, section 11, decision 12): a shopper buying a thing is not the
- * household changing what it asked for.
+ * `BOUGHT` and `BUY_REVERTED` are a buy and a taken back buy that moved the
+ * quantity of a line (backend `0203`, section 1). This reverses backend `0130`
+ * decision 12: a buy made outside this shopping list changes what is left to get
+ * here, so it is told. A buy this shopping list made is never marked, and it
+ * reaches the changes view only as history, with no {@link BasketChange.origin}.
+ * A skip and a reorder are still not changes.
  */
 export const BASKET_CHANGE_KINDS = [
   'ADDED',
@@ -44,6 +47,8 @@ export const BASKET_CHANGE_KINDS = [
   'MERGED',
   'DELETED',
   'APPROVAL_CHANGED',
+  'BOUGHT',
+  'BUY_REVERTED',
   'UNKNOWN',
 ] as const;
 export type BasketChangeKind = (typeof BASKET_CHANGE_KINDS)[number];
@@ -66,6 +71,24 @@ export interface BasketChangeActor {
   readonly userId: string | null;
   readonly name: string | null;
 }
+
+/**
+ * Where a buy came from, when it was not made through this shopping list
+ * (backend `0203`, section 5).
+ *
+ * `ANOTHER_BASKET` is a buy through another shopping list, and `owner` is the
+ * person whose shopping list it was, or null when this reader may not be told.
+ * `LIST` is a buy on the zone's list page, made by the change's own actor.
+ *
+ * **The other shopping list is never named**, and nothing here could name it:
+ * the server sends neither its id nor its name.
+ */
+export type BasketChangeOrigin =
+  | {
+      readonly kind: 'ANOTHER_BASKET';
+      readonly owner: BasketChangeActor | null;
+    }
+  | { readonly kind: 'LIST' };
 
 /** One change to a covered list, as the changes sheet reads it. */
 export interface BasketChange {
@@ -98,6 +121,11 @@ export interface BasketChange {
   readonly rowContent: string | null;
   /** Null when the reader is not entitled to know (backend `0130`, section 6). */
   readonly actor: BasketChangeActor | null;
+  /**
+   * Where a `BOUGHT` or a `BUY_REVERTED` came from, or null for every other kind
+   * and for a buy this shopping list made (backend `0203`, section 5).
+   */
+  readonly origin: BasketChangeOrigin | null;
   /** Served only to a reader who holds `WRITE` there. Resolved against `Basket.lists`. */
   readonly list: BasketListRef | null;
   /** The server's clock, for display. Never compared to anything. */
@@ -196,6 +224,23 @@ export function basketChangeSentence(
     case 'DELETED':
       return { key: 'basket.changes.entry.deleted', args: { name } };
 
+    case 'BOUGHT':
+      // What is left to get, said as a need: the reader asked for this, so the
+      // sentence says what they need now rather than what somebody else did.
+      // Nothing left gets a sentence of its own, as a quantity of zero does.
+      return change.quantityAfter === 0
+        ? { key: 'basket.changes.entry.boughtAll', args: { name } }
+        : {
+            key: 'basket.changes.entry.bought',
+            args: { name, after: change.quantityAfter ?? 0 },
+          };
+
+    case 'BUY_REVERTED':
+      return {
+        key: 'basket.changes.entry.buyReverted',
+        args: { name, after: change.quantityAfter ?? 0 },
+      };
+
     case 'APPROVAL_CHANGED':
       // From `approvalAfter` and never from `approvalBefore`: the sentence says
       // where the line has got to, and a reader who missed three moves wants
@@ -208,6 +253,75 @@ export function basketChangeSentence(
     default:
       return { key: 'basket.changes.entry.unknown', args: { name } };
   }
+}
+
+/**
+ * The reader of the changes sheet, as the two keys a change can name them by.
+ */
+export interface BasketChangeReader {
+  readonly participantId: string | null;
+  readonly userId: string | null;
+}
+
+/**
+ * The line under a buy that says where it came from (velista `0142`, section 4),
+ * or null for a change with no {@link BasketChange.origin}, which keeps the
+ * "who" and the list of every other kind.
+ *
+ * It replaces both of them. **No list is named**, for a `LIST` buy either, so the
+ * two lines read as one family: the other shopping list is never named because
+ * the server does not send it.
+ *
+ * A person is named by `nameOf`, which the sheet answers from what the client
+ * holds. Whoever it cannot name is "someone", and so is a person the server
+ * withheld, which is every person a guest is told about.
+ */
+export function basketChangeOriginLine(
+  change: Pick<BasketChange, 'origin' | 'actor'>,
+  reader: BasketChangeReader,
+  nameOf: (actor: BasketChangeActor) => string | null
+): BasketChangeSentence | null {
+  const origin = change.origin;
+  if (origin === null) {
+    return null;
+  }
+
+  const person = origin.kind === 'ANOTHER_BASKET' ? origin.owner : change.actor;
+  const keys =
+    origin.kind === 'ANOTHER_BASKET'
+      ? {
+          named: 'basket.changes.origin.anotherBasket',
+          you: 'basket.changes.origin.anotherBasketYours',
+          someone: 'basket.changes.origin.anotherBasketSomeone',
+        }
+      : {
+          named: 'basket.changes.origin.list',
+          you: 'basket.changes.origin.listYou',
+          someone: 'basket.changes.origin.listSomeone',
+        };
+
+  if (person === null) {
+    return { key: keys.someone, args: {} };
+  }
+  if (isReader(person, reader)) {
+    return { key: keys.you, args: {} };
+  }
+  const name = nameOf(person);
+  return name === null
+    ? { key: keys.someone, args: {} }
+    : { key: keys.named, args: { name } };
+}
+
+/** Whether a person a change names is the reader, by either key. */
+function isReader(
+  person: BasketChangeActor,
+  reader: BasketChangeReader
+): boolean {
+  return (
+    (reader.participantId !== null &&
+      person.participantId === reader.participantId) ||
+    (reader.userId !== null && person.userId === reader.userId)
+  );
 }
 
 /**

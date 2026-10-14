@@ -610,34 +610,43 @@ describe('toBasketMergeRequired', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * A row somebody bought outside this shopping list (velista `0131`, `0142`;
+ * backend `0203`).
  *
- * Backend `0188` keeps the row and says how many were bought elsewhere. Before
- * this build read the field, such a row arrived as a done row saying "0 of 0".
+ * The state `BOUGHT_ELSEWHERE` and the note that says where the buy came from.
  */
-describe('toBasketRow: bought on another basket (velista 0131)', () => {
+describe('toBasketRow: bought outside this shopping list (velista 0142)', () => {
   const ELSEWHERE = {
     ...ROW,
     left: 0,
     bought: 0,
     asked: 0,
     boughtElsewhere: 2,
-    state: 'DONE',
+    state: 'BOUGHT_ELSEWHERE',
     note: 'BOUGHT_ON_ANOTHER_BASKET',
     noteAt: '2026-10-04T10:00:00.000Z',
+    mark: 'CHANGED',
     entries: [
-      { ...ENTRY, left: 0, bought: 0, boughtElsewhere: 2, state: 'DONE' },
+      {
+        ...ENTRY,
+        left: 0,
+        bought: 0,
+        boughtElsewhere: 2,
+        state: 'BOUGHT_ELSEWHERE',
+      },
     ],
   };
 
-  it('reads the count on the row and on each entry', () => {
+  it('reads the state and the count on the row and on each entry', () => {
     const row = toBasketRow(ELSEWHERE);
 
+    expect(row?.state).toBe('BOUGHT_ELSEWHERE');
+    expect(row?.entries[0].state).toBe('BOUGHT_ELSEWHERE');
+    expect(row?.mark).toBe('CHANGED');
     expect(row?.boughtElsewhere).toBe(2);
     expect(row?.entries[0].boughtElsewhere).toBe(2);
     // This basket's own numbers keep their meaning beside it.
     expect(row?.bought).toBe(0);
-    expect(row?.state).toBe('DONE');
   });
 
   it('maps the note, and keeps the moment behind it', () => {
@@ -645,6 +654,25 @@ describe('toBasketRow: bought on another basket (velista 0131)', () => {
 
     expect(row?.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
     expect(row?.noteAt).toEqual(new Date('2026-10-04T10:00:00.000Z'));
+  });
+
+  it('maps a buy on the list page to its own note', () => {
+    expect(
+      toBasketRow({ ...ELSEWHERE, note: 'BOUGHT_ON_THE_LIST' })?.note
+    ).toBe('BOUGHT_ON_THE_LIST');
+  });
+
+  /** Backend `0203` keeps a removed row for six hours, with no mark once it was seen. */
+  it('reads a REMOVED row with no mark', () => {
+    const row = toBasketRow({
+      ...ROW,
+      state: 'REMOVED',
+      mark: null,
+      entries: [],
+    });
+
+    expect(row?.state).toBe('REMOVED');
+    expect(row?.mark).toBeNull();
   });
 
   /** A gateway without backend `0188` behind it sends no such field. */

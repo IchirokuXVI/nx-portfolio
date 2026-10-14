@@ -73,6 +73,7 @@ describe('toBasketChange', () => {
       approvalAfter: null,
       rowContent: 'Milk',
       actor: { participantId: 'p-1', userId: null, name: 'Dani' },
+      origin: null,
       list: LIST,
       at: new Date('2026-09-01T09:00:00.000Z'),
       unseen: true,
@@ -165,6 +166,73 @@ describe('toBasketChange', () => {
     expect(
       toBasketChange(wire({ actor: { userId: 'u-9' } }), context())?.actor
     ).toEqual({ participantId: null, userId: 'u-9', name: null });
+  });
+
+  it('reads the two kinds of a buy (backend 0203)', () => {
+    expect(toBasketChange(wire({ kind: 'BOUGHT' }), context())?.kind).toBe(
+      'BOUGHT'
+    );
+    expect(
+      toBasketChange(wire({ kind: 'BUY_REVERTED' }), context())?.kind
+    ).toBe('BUY_REVERTED');
+  });
+
+  it('reads a buy through another shopping list, and names its owner as an actor', () => {
+    const named = context({
+      nameFor: (_participantId, userId) => (userId === 'u-a' ? 'Alice' : null),
+    });
+
+    expect(
+      toBasketChange(
+        wire({
+          kind: 'BOUGHT',
+          origin: { kind: 'ANOTHER_BASKET', owner: { userId: 'u-a' } },
+        }),
+        named
+      )?.origin
+    ).toEqual({
+      kind: 'ANOTHER_BASKET',
+      owner: { participantId: null, userId: 'u-a', name: 'Alice' },
+    });
+  });
+
+  it('reads an owner the server withheld as null, which is a guest’s view', () => {
+    expect(
+      toBasketChange(
+        wire({
+          kind: 'BOUGHT',
+          origin: { kind: 'ANOTHER_BASKET', owner: null },
+        }),
+        context()
+      )?.origin
+    ).toEqual({ kind: 'ANOTHER_BASKET', owner: null });
+  });
+
+  it('reads a buy on the list page', () => {
+    expect(
+      toBasketChange(
+        wire({ kind: 'BOUGHT', origin: { kind: 'LIST' } }),
+        context()
+      )?.origin
+    ).toEqual({ kind: 'LIST' });
+  });
+
+  it('reads a missing origin as null, which is a buy of this shopping list', () => {
+    expect(
+      toBasketChange(wire({ kind: 'BOUGHT' }), context())?.origin
+    ).toBeNull();
+  });
+
+  it.each([
+    'ANOTHER_BASKET',
+    { kind: 'SOMEWHERE_NEW' },
+    { owner: { userId: 'u-a' } },
+    [],
+  ])('reads a malformed origin (%p) as null', (malformed) => {
+    expect(
+      toBasketChange(wire({ kind: 'BOUGHT', origin: malformed }), context())
+        ?.origin
+    ).toBeNull();
   });
 
   it('never invents an unseen flag', () => {

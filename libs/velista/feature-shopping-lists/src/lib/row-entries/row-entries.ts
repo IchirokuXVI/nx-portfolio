@@ -25,7 +25,10 @@ interface DrawnEntry {
   readonly lineId: string;
   /** The list, or "Another list" for a list the reader was not served. */
   readonly list: string;
-  /** "zone · line name", or null for a list the reader was not served. */
+  /**
+   * "zone · line name", or null for a list the reader was not served. An entry
+   * somebody bought outside this shopping list starts with "Already bought".
+   */
   readonly where: string | null;
   /** What the list asks for, which is the entry's `left`. */
   readonly asks: number;
@@ -193,8 +196,8 @@ export class RowEntries {
   }
 
   private _mayDemand(entry: BasketRowEntry): boolean {
-    // A row closed by a buy made elsewhere keeps it (velista `0131`): asking the
-    // list for more is the one thing left to do there.
+    // A row bought outside this shopping list keeps it (velista `0142`): asking
+    // the list for the product again is the one thing left to do there.
     return (
       !this.finished() &&
       entry.demandEditable &&
@@ -211,12 +214,25 @@ export class RowEntries {
         ? this._translator.t('basket.entries.otherList', undefined, locale)
         : ref.name;
     const line = entry.content.trim();
-    const where =
+    const place =
       ref === undefined
         ? null
         : line === ''
           ? ref.zoneName
           : `${ref.zoneName} · ${line}`;
+    // Its quantity is 0, and the words say why (velista `0142`, section 1). The
+    // entry carries no note, so it does not say where the buy was made. First,
+    // because the line is cut at its end and a long line name must not take them.
+    const bought =
+      entry.state === 'BOUGHT_ELSEWHERE'
+        ? this._translator.t('basket.line.alreadyBought', undefined, locale)
+        : null;
+    const where =
+      place === null
+        ? bought
+        : bought === null
+          ? place
+          : `${bought} · ${place}`;
 
     return {
       lineId: entry.lineId,

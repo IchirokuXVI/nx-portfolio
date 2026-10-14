@@ -76,12 +76,13 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  *
  * ## The quantity
  *
- * The whole of a row is `bought + boughtElsewhere + left`. The server computes
- * `asked` as `bought + left` over this basket alone, and `boughtElsewhere` is in
- * neither (backend `0188`): those units left the line before this basket looked.
- * So `asked` is the whole of a row that is partly bought here, and it is short
- * by exactly `boughtElsewhere` on a row somebody else bought part of. The bought
- * side is `bought + boughtElsewhere`, and what is left is the server's `left`.
+ * The bought side is `bought`, what this shopping list bought, and what is left
+ * is the server's `left`. A unit somebody bought through another shopping list or
+ * on the list page is in neither (backend `0203`, section 4), and **this sum does
+ * not add `boughtElsewhere`** (velista `0142`, section 3): the owner's rule is
+ * that a buy from another basket counts toward nothing here, and a price is a
+ * count. A row nothing is left of that this shopping list bought none of is
+ * crossed out, and {@link countableBasketRows} leaves it out before it is priced.
  *
  * This is the one place this scope adds a row's numbers together, and it does
  * so to price them, never to say how far a row has got: `state` and `left` are
@@ -136,9 +137,8 @@ export function basketTotal(
     withPrice += 1;
 
     const cents = Math.round(offer.price * 100);
-    const done = row.bought + row.boughtElsewhere;
-    boughtCents += cents * done;
-    totalCents += cents * (done + row.left);
+    boughtCents += cents * row.bought;
+    totalCents += cents * (row.bought + row.left);
   }
 
   return lines === 0

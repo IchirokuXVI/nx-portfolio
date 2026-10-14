@@ -8,7 +8,7 @@ import type {
 } from '@portfolio/velista/models';
 import {
   basketRowName,
-  elsewhereCaption,
+  crossedOutNoteKey,
   listPickerRows,
   listsCaption,
   participantInitials,
@@ -709,50 +709,56 @@ describe('listPickerRows', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * Velista `0142`: a row somebody bought outside this shopping list.
  *
- * This basket's own pair on such a row is zero and zero, so before this the done
- * row said "0 of 0".
+ * A row this shopping list bought part of reads its own numbers, and outside
+ * buys never enter the count. A crossed out row says why in one line.
  */
-describe('a row bought on another basket (velista 0131)', () => {
-  it('reads the done row\u2019s count from boughtElsewhere, never from bought', () => {
+describe('a row bought outside this shopping list (velista 0142)', () => {
+  it('reads 2 of 2 on a row this shopping list bought two of and somebody else finished', () => {
     expect(
       quantityCaption(
-        { state: 'DONE', bought: 0, asked: 0, left: 0, boughtElsewhere: 2 },
+        { state: 'DONE', bought: 2, asked: 2, left: 0 },
         translator,
         'en'
       )
     ).toBe('basket.row.boughtOf:{"bought":2,"asked":2}');
   });
 
-  it('leaves a row this basket bought itself saying its own numbers', () => {
-    expect(
-      quantityCaption(
-        { state: 'DONE', bought: 3, asked: 3, left: 0, boughtElsewhere: 1 },
-        translator,
-        'en'
-      )
-    ).toBe('basket.row.boughtOf:{"bought":3,"asked":3}');
-  });
-
   it('leaves a row with something left saying what is left', () => {
     expect(
       quantityCaption(
-        { state: 'WANTED', bought: 0, asked: 3, left: 3, boughtElsewhere: 1 },
+        { state: 'WANTED', bought: 0, asked: 2, left: 2 },
         translator,
         'en'
       )
-    ).toBe('basket.line.wanted:{"count":3}');
+    ).toBe('basket.line.wanted:{"count":2}');
   });
 
-  /** It names nobody and says no time, so the sentence takes no value at all. */
-  it('says one sentence with nothing in it', () => {
-    expect(elsewhereCaption({ count: 2, closed: true }, translator, 'en')).toBe(
-      'basket.elsewhere.caption'
-    );
+  it('says where a crossed out row was bought, from its note', () => {
     expect(
-      elsewhereCaption({ count: 1, closed: false }, translator, 'en')
-    ).toBe('basket.elsewhere.caption');
-    expect(elsewhereCaption(null, translator, 'en')).toBeNull();
+      crossedOutNoteKey({
+        state: 'BOUGHT_ELSEWHERE',
+        note: 'BOUGHT_ON_ANOTHER_BASKET',
+      })
+    ).toBe('basket.line.boughtFromAnotherList');
+    expect(
+      crossedOutNoteKey({
+        state: 'BOUGHT_ELSEWHERE',
+        note: 'BOUGHT_ON_THE_LIST',
+      })
+    ).toBe('basket.line.boughtFromTheList');
+    expect(
+      crossedOutNoteKey({ state: 'BOUGHT_ELSEWHERE', note: 'SKIPPED_EARLIER' })
+    ).toBe('basket.line.alreadyBought');
+    expect(crossedOutNoteKey({ state: 'BOUGHT_ELSEWHERE', note: null })).toBe(
+      'basket.line.alreadyBought'
+    );
+  });
+
+  it('keeps "No longer on the list" for a REMOVED row', () => {
+    expect(crossedOutNoteKey({ state: 'REMOVED', note: null })).toBe(
+      'basket.line.removed'
+    );
   });
 });

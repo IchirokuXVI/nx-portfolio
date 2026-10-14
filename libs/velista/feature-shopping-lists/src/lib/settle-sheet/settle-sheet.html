@@ -100,29 +100,28 @@
         tappable on purpose (plan 0043, section 3.2), and "0 to get" would answer
         the wrong question.
       -->
-      @if (subtitle(); as sub) {
-        <p class="subtitle">{{ sub }}</p>
-      }
-      @if (finished()) {
-        @if (whatHappened(); as caption) {
-          <p class="happened">{{ caption }}</p>
+      <!--
+        A row somebody bought outside this shopping list draws none of the three
+        (velista 0142, section 1): the lists below, each at 0 and "Already
+        bought", are the whole of its sheet.
+      -->
+      @if (!boughtElsewhere()) {
+        @if (subtitle(); as sub) {
+          <p class="subtitle">{{ sub }}</p>
         }
-      }
+        @if (finished()) {
+          @if (whatHappened(); as caption) {
+            <p class="happened">{{ caption }}</p>
+          }
+        }
 
-      <!--
-        What this basket got of these lines, in one quiet line with no container
-        (velista 0139, section 3).
-      -->
-      @if (gotToday(); as got) {
-        <p class="happened">{{ got }}</p>
-      }
-
-      <!--
-        Somebody bought it through another basket (velista 0131), in the words the
-        row underneath uses. Nothing here takes it back.
-      -->
-      @if (boughtElsewhere(); as said) {
-        <p class="happened">{{ said }}</p>
+        <!--
+          What this basket got of these lines, in one quiet line with no
+          container (velista 0139, section 3).
+        -->
+        @if (gotToday(); as got) {
+          <p class="happened">{{ got }}</p>
+        }
       }
 
       <!--

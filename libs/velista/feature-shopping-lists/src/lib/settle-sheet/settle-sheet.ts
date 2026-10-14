@@ -29,7 +29,6 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  basketElsewhere,
   basketRowProduct,
   catalogName,
   LINE_CONTENT_MAX_LENGTH,
@@ -57,7 +56,6 @@ import {
 } from '../basket-error-copy';
 import {
   basketRowName,
-  elsewhereCaption,
   participantName,
   touchedCaption,
 } from '../basket-labels';
@@ -420,23 +418,17 @@ export class SettleSheet {
   });
 
   /**
-   * "Bought on another basket", or null (velista `0131`).
+   * Whether somebody bought this row outside this shopping list (velista `0142`,
+   * section 1).
    *
-   * The sentence the row underneath draws, from the same function, so the sheet
-   * and the row cannot disagree. On a row closed that way it is the whole answer
-   * to "what happened": this basket bought nothing, so {@link whatHappened} is
-   * null, and the sheet offers no way to take the purchase back.
+   * Its sheet is the lists that ask, each with its quantity, **and nothing else**:
+   * no button buys, skips or takes back, because this shopping list bought none
+   * of it and the server refuses to undo a buy of another. A list can still ask
+   * for the product again from its quantity, where `demandEditable` allows it.
    */
-  protected readonly boughtElsewhere = computed<string | null>(() => {
-    const row = this.row();
-    return row === null
-      ? null
-      : elsewhereCaption(
-          basketElsewhere(row),
-          this._translator,
-          this._locale()
-        );
-  });
+  protected readonly boughtElsewhere = computed(
+    () => this.row()?.state === 'BOUGHT_ELSEWHERE'
+  );
 
   /**
    * The row's product, or null for a row whose lines hold none (backend `0201`).
@@ -542,6 +534,7 @@ export class SettleSheet {
     if (
       row === null ||
       row.productId === null ||
+      this.boughtElsewhere() ||
       this.basketFinished() ||
       this._store.me()?.kind === 'GUEST' ||
       this.lists().size === 0
@@ -699,6 +692,7 @@ export class SettleSheet {
     const row = this.row();
     return (
       row !== null &&
+      !this.boughtElsewhere() &&
       this._store.me()?.kind !== 'GUEST' &&
       row.entries.some((entry) => entry.listId !== null)
     );
@@ -745,7 +739,7 @@ export class SettleSheet {
     if (row === null || me === null || this.basketFinished()) {
       return false;
     }
-    if (me.kind === 'GUEST') {
+    if (me.kind === 'GUEST' || this.boughtElsewhere()) {
       return false;
     }
     // A row with a product is named by the catalog, and the server refuses a

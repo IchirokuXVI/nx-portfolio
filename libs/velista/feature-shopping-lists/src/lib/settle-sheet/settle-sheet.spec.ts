@@ -2242,26 +2242,28 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
 });
 
 /**
- * Velista `0131`: the sheet over a row somebody bought through another basket.
+ * Velista `0142`: the sheet over a row somebody bought outside this shopping
+ * list.
  *
- * The purchase is not this basket's, so nothing on the sheet takes it back. The
- * one thing left to do is to ask the list for more, where the server allows it.
+ * The lists that ask, each with its quantity, and nothing else: nothing buys,
+ * skips or takes back. A list can ask for the product again where the server
+ * allows it.
  */
-describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
+describe('SettleSheet: a row bought outside this shopping list (velista 0142)', () => {
   const elsewhere = (demandEditable = true) =>
     line({
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
       entries: [
         entry('l1', 'zl1', 0, {
           asked: 0,
           boughtElsewhere: 2,
-          state: 'DONE',
+          state: 'BOUGHT_ELSEWHERE',
           demandEditable,
         }),
       ],
@@ -2270,27 +2272,31 @@ describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
   const reels = (fixture: ComponentFixture<SettleSheet>, which: string) =>
     fixture.debugElement.queryAll(By.css(`lib-quantity-reel.${which}`));
 
-  it('says where it was bought, in the row\u2019s own words', async () => {
+  const element = (fixture: ComponentFixture<SettleSheet>) =>
+    fixture.nativeElement as HTMLElement;
+
+  it('draws the lists that ask, each at 0 and already bought, and nothing else', async () => {
     const { fixture } = await render({ lines: [elsewhere()] });
 
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.happened')
-        ?.textContent
-    ).toContain('basket.elsewhere.caption');
+    expect(element(fixture).querySelector('lib-row-entries')).not.toBeNull();
+    expect(text(fixture)).toContain('basket.line.alreadyBought');
+    expect(element(fixture).querySelector('.subtitle')).toBeNull();
+    expect(element(fixture).querySelector('.happened')).toBeNull();
+    expect(element(fixture).querySelector('.disclosure')).toBeNull();
+    expect(element(fixture).querySelector('.rename')).toBeNull();
+    expect(text(fixture)).not.toContain('basket.history.open');
   });
 
-  it('offers no revert and no settle target', async () => {
+  it('offers nothing that buys, skips or takes back', async () => {
     const { fixture, store } = await render({ lines: [elsewhere()] });
 
-    // Lowering the got reel is the sheet's only revert, and it is not drawn.
-    expect(reels(fixture, 'got-reel')).toHaveLength(0);
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.actions')
-    ).toBeNull();
+    expect(element(fixture).querySelector('.actions')).toBeNull();
+    expect(text(fixture)).not.toContain('basket.settle.none');
+    expect(text(fixture)).not.toContain('basket.skip.action');
     expect(store.revert).not.toHaveBeenCalled();
   });
 
-  it('keeps the quantity control where demandEditable is true', async () => {
+  it('raises the quantity where demandEditable is true', async () => {
     const { fixture, store } = await render({ lines: [elsewhere(true)] });
 
     expect(reels(fixture, 'ask-reel')).toHaveLength(1);
@@ -2310,13 +2316,13 @@ describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
     expect(reels(fixture, 'ask-reel')).toHaveLength(0);
   });
 
-  it('adds the caption to a row with something left, and keeps its controls', async () => {
+  it('keeps every control on a row that outside buys only lowered', async () => {
     const { fixture } = await render({
       lines: [line({ boughtElsewhere: 1, note: 'BOUGHT_ON_ANOTHER_BASKET' })],
     });
 
-    expect(text(fixture)).toContain('basket.elsewhere.caption');
     expect(text(fixture)).toContain('basket.settle.none');
     expect(text(fixture)).toContain('basket.sheet.gotAll');
+    expect(text(fixture)).not.toContain('basket.line.alreadyBought');
   });
 });

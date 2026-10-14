@@ -1,11 +1,9 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketElsewhere,
   basketRowLists,
   basketRowProduct,
   catalogName,
   formatVisitMoment,
-  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketProduct,
@@ -266,24 +264,10 @@ export function touchedCaption(
 }
 
 export function quantityCaption(
-  row: Pick<
-    BasketRow,
-    'state' | 'bought' | 'asked' | 'left' | 'boughtElsewhere'
-  >,
+  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left'>,
   translator: RokuTranslatorService,
   locale: string
 ): string {
-  const elsewhere = basketElsewhere(row);
-  if (elsewhere?.closed === true) {
-    // Closed by a purchase made through another basket (velista `0131`). This
-    // basket bought none and asks for none, so its own pair reads "0 of 0". The
-    // count is the server's `boughtElsewhere`, said on both sides because
-    // nothing is left: what was got is what there was to get.
-    return translator.t('basket.row.boughtOf', undefined, locale, {
-      bought: elsewhere.count,
-      asked: elsewhere.count,
-    });
-  }
   if (row.state === 'PARTLY') {
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
@@ -293,7 +277,9 @@ export function quantityCaption(
   if (row.state === 'DONE' || row.state === 'NOT_AVAILABLE') {
     // Both are finished, and both say what was got out of what was asked for. A
     // `NOT_AVAILABLE` row says "0 of 6", which is true and is the sentence the
-    // glyph beside it needs: the shop had none of the six.
+    // glyph beside it needs: the shop had none of the six. A row this shopping
+    // list bought two of and somebody else finished reads "2 of 2", because
+    // `asked` counts this shopping list alone (velista `0142`, section 2).
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
       asked: row.asked,
@@ -307,20 +293,29 @@ export function quantityCaption(
 }
 
 /**
- * "Bought on another basket", or null (velista `0131`).
+ * The one line under the name of a crossed out row (velista `0093`, `0142`), as
+ * a key.
  *
- * One sentence for a row closed from elsewhere and for a row that still has
- * something left. **It names nobody and says no time**: the server sends neither
- * the person nor the basket, and the row leaves when a read no longer holds it.
+ * "No longer on the list" for a `REMOVED` row. For a `BOUGHT_ELSEWHERE` row, where
+ * the buy was made, from the note of the row: through another shopping list, on
+ * the list page, or "Already bought" for any other note. **It names nobody**: who
+ * bought it is in the changes sheet, and the other shopping list is never named,
+ * because the server does not send it.
  */
-export function elsewhereCaption(
-  elsewhere: BasketElsewhere | null,
-  translator: RokuTranslatorService,
-  locale: string
-): string | null {
-  return elsewhere === null
-    ? null
-    : translator.t('basket.elsewhere.caption', undefined, locale);
+export function crossedOutNoteKey(
+  row: Pick<BasketRow, 'state' | 'note'>
+): string {
+  if (row.state === 'REMOVED') {
+    return 'basket.line.removed';
+  }
+  switch (row.note) {
+    case 'BOUGHT_ON_ANOTHER_BASKET':
+      return 'basket.line.boughtFromAnotherList';
+    case 'BOUGHT_ON_THE_LIST':
+      return 'basket.line.boughtFromTheList';
+    default:
+      return 'basket.line.alreadyBought';
+  }
 }
 
 /**

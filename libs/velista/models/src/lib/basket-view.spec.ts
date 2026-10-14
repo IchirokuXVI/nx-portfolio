@@ -4,12 +4,11 @@ import type {
   BasketRowEntry,
 } from './basket-view';
 import {
-  basketDrawnDone,
-  basketElsewhere,
   basketRowLists,
   basketRowProduct,
   basketSettleShop,
   basketShelfMark,
+  isCrossedOutRow,
   offerAt,
   shownOffer,
   shownPriceScope,
@@ -271,29 +270,21 @@ describe('basketRowLists', () => {
   });
 });
 
-describe('basketElsewhere', () => {
-  it('is closed for a row of backend 0203 that only another basket bought', () => {
-    expect(
-      basketElsewhere({
-        state: 'BOUGHT_ELSEWHERE',
-        bought: 0,
-        boughtElsewhere: 2,
-      })
-    ).toEqual({ count: 2, closed: true });
+describe('isCrossedOutRow', () => {
+  it('crosses out a REMOVED row and a row bought outside this shopping list', () => {
+    expect(isCrossedOutRow({ state: 'REMOVED' })).toBe(true);
+    expect(isCrossedOutRow({ state: 'BOUGHT_ELSEWHERE' })).toBe(true);
   });
 
-  it('is closed for the done row an older server sent, and open while some is left', () => {
-    expect(
-      basketElsewhere({ state: 'DONE', bought: 0, boughtElsewhere: 1 })
-    ).toEqual({ count: 1, closed: true });
-    expect(
-      basketElsewhere({ state: 'WANTED', bought: 0, boughtElsewhere: 1 })
-    ).toEqual({ count: 1, closed: false });
-  });
-
-  it('draws a row bought elsewhere as done, until velista 0142', () => {
-    expect(basketDrawnDone({ state: 'BOUGHT_ELSEWHERE' })).toBe(true);
-    expect(basketDrawnDone({ state: 'DONE' })).toBe(true);
-    expect(basketDrawnDone({ state: 'PARTLY' })).toBe(false);
+  it('crosses out nothing a shopper still acts on', () => {
+    for (const state of [
+      'WANTED',
+      'PARTLY',
+      'DONE',
+      'NOT_AVAILABLE',
+      'SKIPPED',
+    ] as const) {
+      expect(isCrossedOutRow({ state })).toBe(false);
+    }
   });
 });

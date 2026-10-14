@@ -4174,70 +4174,57 @@ describe('BasketPage: the map of the shop you are in', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket, on the page.
+ * Velista `0142`: a row somebody bought outside this shopping list, on the page.
  *
- * The pipeline hands the row what was bought elsewhere and the row draws it, so
- * this asserts the two are wired: the caption is on the page and the control that
- * undoes a purchase is not. The quantity control is the sheet's "asks for" reel,
- * which the entries pane and the settle sheet specs assert against
- * `demandEditable`.
+ * Crossed out, last, counted nowhere, and still a way into its sheet. A row that
+ * outside buys only lowered is today's row with nothing added.
  */
-describe('a row bought on another basket (velista 0131)', () => {
-  const butter = (demandEditable = true) =>
+describe('a row bought outside this shopping list (velista 0142)', () => {
+  const butter = () =>
     line('Butter', {
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
       entries: [
         entry(null, 'zl-Butter', 0, {
           boughtElsewhere: 2,
-          state: 'DONE',
-          demandEditable,
+          state: 'BOUGHT_ELSEWHERE',
         }),
       ],
     });
 
-  it('draws the caption', async () => {
-    const { fixture } = await render({ lines: [butter()] });
-
-    expect(text(fixture)).toContain('basket.elsewhere.caption');
-  });
-
-  it('draws it as a done row with no revert control', async () => {
-    const { fixture, store } = await render({ lines: [butter()] });
-    const page = fixture.nativeElement as HTMLElement;
-
-    expect(page.querySelector('lib-basket-row .row.is-done')).not.toBeNull();
-    expect(page.querySelector('lib-basket-row button.status')).toBeNull();
-    expect(page.querySelector('lib-basket-row lib-quantity-reel')).toBeNull();
-    expect(store.revert).not.toHaveBeenCalled();
-  });
-
-  it('draws no caption and keeps the revert on a row this basket bought', async () => {
-    const { fixture } = await render({
-      lines: [line('Eggs', { left: 0, bought: 2, state: 'DONE' })],
+  it('draws it crossed out, last, with where it was bought and no control', async () => {
+    const { fixture, store } = await render({
+      lines: [butter(), line('Milk', { left: 2 })],
     });
     const page = fixture.nativeElement as HTMLElement;
 
-    expect(text(fixture)).not.toContain('basket.elsewhere.caption');
-    expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
+    const rows = [...page.querySelectorAll('lib-basket-row')];
+    expect(rows).toHaveLength(2);
+    const last = rows[1];
+    expect(last.querySelector('.row.is-removed')).not.toBeNull();
+    expect(last.textContent).toContain('basket.line.boughtFromAnotherList');
+    expect(last.querySelector('.status')).toBeNull();
+    expect(last.querySelector('lib-quantity-reel')).toBeNull();
+    expect(store.revert).not.toHaveBeenCalled();
   });
 
-  it('keeps today\u2019s row and adds the caption when something is left', async () => {
+  it('keeps today\u2019s row, with no caption, when something is left', async () => {
     const { fixture } = await render({
       lines: [line('Milk', { left: 2, boughtElsewhere: 1 })],
     });
     const page = fixture.nativeElement as HTMLElement;
 
-    expect(text(fixture)).toContain('basket.elsewhere.caption');
+    expect(page.querySelector('lib-basket-row .row.is-removed')).toBeNull();
     expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
     expect(
       page.querySelector('lib-basket-row lib-quantity-reel')
     ).not.toBeNull();
+    expect(text(fixture)).not.toContain('basket.line.alreadyBought');
   });
 });
 

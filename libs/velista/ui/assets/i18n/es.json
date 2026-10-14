@@ -1422,7 +1422,10 @@
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
       "takenBack_other": "{{count}} devueltos",
-      "removed": "Ya no está en la lista"
+      "removed": "Ya no está en la lista",
+      "boughtFromAnotherList": "Comprado desde otra lista de la compra",
+      "boughtFromTheList": "Comprado desde la lista",
+      "alreadyBought": "Ya está comprado"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
@@ -1435,9 +1438,6 @@
       "gotSome": "{{name}} consiguió {{count}}",
       "none": "{{name}} dice que no había",
       "you": "tú"
-    },
-    "elsewhere": {
-      "caption": "Comprado en otra cesta"
     },
     "view": {
       "open": "Filtrar y ordenar",
@@ -1811,7 +1811,18 @@
         "rejected": "«{{name}}» se ha rechazado",
         "approved": "«{{name}}» se ha aprobado",
         "unknown": "«{{name}}» ha cambiado",
+        "bought": "Se compró «{{name}}». Ahora necesitas {{after}}",
+        "boughtAll": "Se compró «{{name}}». Ya no lo necesitas",
+        "buyReverted": "Se deshizo una compra de «{{name}}». Ahora necesitas {{after}}",
         "inList": "en {{list}}"
+      },
+      "origin": {
+        "anotherBasket": "Modificado desde una lista de la compra de {{name}}",
+        "anotherBasketYours": "Modificado desde otra de tus listas de la compra",
+        "anotherBasketSomeone": "Modificado desde la lista de la compra de alguien",
+        "list": "Comprado desde la lista por {{name}}",
+        "listYou": "Comprado desde la lista por ti",
+        "listSomeone": "Comprado desde la lista por alguien"
       }
     },
     "shelf": {
