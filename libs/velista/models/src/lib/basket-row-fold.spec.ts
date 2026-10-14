@@ -1,4 +1,9 @@
-import { basketProgressOf, foldBasketEntries } from './basket-row-fold';
+import {
+  basketProgressOf,
+  foldBasketEntries,
+  regroupBasketEntries,
+  withHeldChoices,
+} from './basket-row-fold';
 import type { BasketRow, BasketRowEntry } from './basket-view';
 
 function entry(
@@ -204,6 +209,87 @@ describe('foldBasketEntries', () => {
     );
 
     expect(folded.state).toBe('BOUGHT_ELSEWHERE');
+  });
+});
+
+describe('regroupBasketEntries', () => {
+  const milk = row('a', [entry('a'), entry('b', { listId: 'l-basics' })]);
+  const oat = row('o', [entry('o', { itemIds: ['p-oat'] })], {
+    productId: 'p-oat',
+  });
+
+  it('moves a line whose product changed into the row of that product', () => {
+    const rows = regroupBasketEntries(
+      [milk, oat],
+      [
+        entry('b', {
+          listId: 'l-basics',
+          favoriteItemId: 'p-oat',
+          itemIds: ['p-milk', 'p-oat'],
+        }),
+      ],
+      SERVED
+    );
+
+    expect(rows.map((held) => [held.rowKey, held.productId])).toEqual([
+      ['a', 'p-milk'],
+      ['o', 'p-oat'],
+    ]);
+    expect(rows[0].entries.map((held) => held.lineId)).toEqual(['a']);
+    expect(rows[1].entries.map((held) => held.lineId)).toEqual(['o', 'b']);
+    expect(rows[1].left).toBe(4);
+  });
+
+  it('makes a row of its own for a product no row draws', () => {
+    const rows = regroupBasketEntries(
+      [milk],
+      [
+        entry('a', { tripItemId: 'p-soy' }),
+        entry('b', { listId: 'l-basics', tripItemId: 'p-soy' }),
+      ],
+      SERVED
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ rowKey: 'a', productId: 'p-soy', left: 4 });
+  });
+
+  it('changes nothing for no lines', () => {
+    const rows = [milk];
+    expect(regroupBasketEntries(rows, [], SERVED)).toBe(rows);
+  });
+});
+
+describe('withHeldChoices', () => {
+  const milk = row('a', [entry('a'), entry('b', { listId: 'l-basics' })]);
+
+  it('draws a line under the product held for it on this device', () => {
+    const rows = withHeldChoices([milk], new Map([['b', 'p-oat']]), SERVED);
+
+    expect(rows.map((held) => [held.rowKey, held.productId])).toEqual([
+      ['a', 'p-milk'],
+      ['b', 'p-oat'],
+    ]);
+    expect(rows[1].entries[0].tripItemId).toBe('p-oat');
+  });
+
+  it('lets a buy the server states win over a held choice', () => {
+    const bought = row('a', [entry('a', { tripItemId: 'p-milk' })]);
+    const rows = withHeldChoices([bought], new Map([['a', 'p-oat']]), SERVED);
+
+    expect(rows).toEqual([bought]);
+  });
+
+  it('changes nothing when the row already draws the held product', () => {
+    const rows = [milk];
+    expect(withHeldChoices(rows, new Map([['a', 'p-milk']]), SERVED)).toBe(
+      rows
+    );
+  });
+
+  it('changes nothing with no choice held', () => {
+    const rows = [milk];
+    expect(withHeldChoices(rows, new Map(), SERVED)).toBe(rows);
   });
 });
 

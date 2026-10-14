@@ -36,6 +36,7 @@ export * from './lib/nearby-shops';
 export * from './lib/price-history';
 export * from './lib/problem';
 export * from './lib/product-category';
+export * from './lib/product-change';
 export * from './lib/product-group';
 export * from './lib/purchases';
 export * from './lib/requests';
