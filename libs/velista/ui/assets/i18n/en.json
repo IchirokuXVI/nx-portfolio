@@ -1422,7 +1422,10 @@
       "busy": "Saving",
       "takenBack_one": "1 taken back",
       "takenBack_other": "{{count}} taken back",
-      "removed": "No longer on the list"
+      "removed": "No longer on the list",
+      "boughtFromAnotherList": "Bought from another shopping list",
+      "boughtFromTheList": "Bought from the list",
+      "alreadyBought": "Already bought"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
@@ -1435,9 +1438,6 @@
       "gotSome": "{{name}} got {{count}}",
       "none": "{{name}} says they had none",
       "you": "you"
-    },
-    "elsewhere": {
-      "caption": "Bought on another basket"
     },
     "view": {
       "open": "Filter and order",
@@ -1811,7 +1811,18 @@
         "rejected": "“{{name}}” was turned down",
         "approved": "“{{name}}” was approved",
         "unknown": "“{{name}}” changed",
+        "bought": "“{{name}}” was bought. You need {{after}} now",
+        "boughtAll": "“{{name}}” was bought. You do not need it now",
+        "buyReverted": "A buy of “{{name}}” was undone. You need {{after}} now",
         "inList": "in {{list}}"
+      },
+      "origin": {
+        "anotherBasket": "Modified from a shopping list of {{name}}",
+        "anotherBasketYours": "Modified from another shopping list of yours",
+        "anotherBasketSomeone": "Modified from a shopping list of someone",
+        "list": "Bought from the list by {{name}}",
+        "listYou": "Bought from the list by you",
+        "listSomeone": "Bought from the list by someone"
       }
     },
     "shelf": {

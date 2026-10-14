@@ -12,11 +12,17 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketChangeStore, BasketStore } from '@portfolio/velista/data-access';
+import {
+  BasketChangeStore,
+  BasketStore,
+  MemberNames,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  basketChangeOriginLine,
   basketChangeSentence,
   type BasketChange,
+  type BasketChangeActor,
 } from '@portfolio/velista/models';
 import { SheetNavigation } from '@portfolio/velista/platform';
 import {
@@ -60,6 +66,7 @@ export class ChangesSheet {
   private readonly _store = inject(BasketStore);
   private readonly _changes = inject(BasketChangeStore);
   private readonly _acknowledger = inject(ChangeAcknowledger);
+  private readonly _names = inject(MemberNames);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -90,18 +97,27 @@ export class ChangesSheet {
    */
   protected readonly entries = computed<readonly ChangeEntryView[]>(() => {
     const locale = this._locale();
-    const meId = this._store.me()?.id ?? null;
+    const me = this._store.me();
+    const meId = me?.id ?? null;
+    const reader = { participantId: meId, userId: me?.userId ?? null };
     const format = dateFormat(locale);
 
     return this._changes.changes().map((change) => {
       const sentence = basketChangeSentence(change);
+      // Where a buy came from replaces who and which list (velista `0142`,
+      // section 4). A buy of this shopping list has no origin and keeps who,
+      // with no list.
+      const origin = basketChangeOriginLine(change, reader, (person) =>
+        this._nameOf(change, person)
+      );
+      const isBuy = change.kind === 'BOUGHT' || change.kind === 'BUY_REVERTED';
       return {
         id: change.id,
         key: sentence.key,
         args: sentence.args,
-        who: this._who(change, meId),
+        who: origin === null ? this._who(change, meId) : '',
         list:
-          change.list === null
+          origin !== null || isBuy || change.list === null
             ? ''
             : this._translator.t(
                 'basket.changes.entry.inList',
@@ -109,14 +125,46 @@ export class ChangesSheet {
                 locale,
                 { list: change.list.name }
               ),
+        origin,
         when: format(change.at),
         unseen: change.unseen,
       };
     });
   });
 
+  /**
+   * The zones whose members can name a person behind a buy (velista `0142`,
+   * section 4). The owner of another shopping list is on no participant row of
+   * this one, and the server serves an account only beside a list the reader
+   * was served, so its zone is the one to ask.
+   */
+  private readonly _zonesToName = computed(() => {
+    const zones = new Set<string>();
+    for (const change of this._changes.changes()) {
+      const origin = change.origin;
+      const person =
+        origin === null
+          ? null
+          : origin.kind === 'ANOTHER_BASKET'
+            ? origin.owner
+            : change.actor;
+      if (person?.name === null && person.userId !== null && change.list) {
+        zones.add(change.list.zoneId);
+      }
+    }
+    return [...zones];
+  });
+
   constructor() {
     void this._changes.load();
+
+    // Once per zone and only when the sheet holds a buy whose person the basket
+    // cannot name: `MemberNames` answers the same map to every screen.
+    effect(() => {
+      for (const zoneId of this._zonesToName()) {
+        void this._names.ensure(zoneId);
+      }
+    });
 
     // How many changes are really drawn, which is half of what decides an
     // acknowledgement (velista `0093`, section 7). Loading and the empty state
@@ -170,6 +218,23 @@ export class ChangesSheet {
     void this._sheet.dismiss(
       basketPath(this._locale(), this._basePath, this._address())
     );
+  }
+
+  /**
+   * A person a buy names, from the basket's participants and then from the
+   * members of the zone of the list the change is on, or null for "someone".
+   */
+  private _nameOf(
+    change: BasketChange,
+    person: BasketChangeActor
+  ): string | null {
+    if (person.name !== null) {
+      return person.name;
+    }
+    if (person.userId === null || change.list === null) {
+      return null;
+    }
+    return this._names.nameOf(change.list.zoneId, person.userId);
   }
 
   /**

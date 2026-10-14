@@ -15,12 +15,11 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketDrawnDone,
   basketMatchRange,
   basketRowProduct,
+  isCrossedOutRow,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   shownOffer,
-  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -42,7 +41,7 @@ import {
 } from '@portfolio/velista/ui';
 import {
   basketRowName,
-  elsewhereCaption,
+  crossedOutNoteKey,
   listsCaption,
   outstandingCaption,
   quantityCaption,
@@ -269,17 +268,6 @@ export class BasketRow {
   } | null>(null);
 
   /**
-   * What was bought of this row through another basket, or null (velista `0131`).
-   *
-   * Composed by the pipeline beside {@link usual}, which hands the entry's under
-   * a list heading and the row's everywhere else, so the row draws what it is
-   * handed. It adds one caption under the name. When that purchase is all that
-   * closed the row, it also takes the two controls that undo a purchase off it:
-   * the glyph is a statement and the number is a readout.
-   */
-  readonly elsewhere = input<BasketElsewhere | null>(null);
-
-  /**
    * What this row says about that shop, beside the number, or null.
    *
    * Composed by the pipeline rather than here, because the **sink** is decided
@@ -463,14 +451,9 @@ export class BasketRow {
     () => this.entry()?.state ?? this.row().state
   );
 
-  /**
-   * Whether the row is drawn quietly as finished: bought here, closed by the shop,
-   * or bought elsewhere (drawn as done until velista `0142` gives it a look).
-   */
+  /** Whether the row is drawn quietly as finished: bought here, or closed by the shop. */
   protected readonly drawnDone = computed(
-    () =>
-      basketDrawnDone({ state: this.state() }) ||
-      this.state() === 'NOT_AVAILABLE'
+    () => this.state() === 'DONE' || this.state() === 'NOT_AVAILABLE'
   );
 
   /**
@@ -634,6 +617,43 @@ export class BasketRow {
   protected readonly removed = computed(() => this.row().state === 'REMOVED');
 
   /**
+   * Whether the row is drawn crossed out (velista `0142`, section 1): `REMOVED`,
+   * or bought outside this shopping list. **The entry's state under a list
+   * heading**, as everything else the row draws, so a household whose share
+   * somebody else bought is crossed out under its own heading.
+   *
+   * A row bought elsewhere has no circle and no reel, because nothing on it buys
+   * or takes back: this shopping list bought none of it, and the server refuses
+   * to let it undo a buy of another. It still opens its sheet, where a list can
+   * ask for the product again.
+   */
+  protected readonly crossed = computed(
+    () => isCrossedOutRow(this.row()) || this.state() === 'BOUGHT_ELSEWHERE'
+  );
+
+  /**
+   * The one line under the crossed out name: where it was bought, or that it is
+   * no longer on the list. The row's note says where, so an entry crossed out
+   * inside a row that still asks for something says "Already bought".
+   */
+  protected readonly crossedNoteKey = computed(() => {
+    const row = this.row();
+    return crossedOutNoteKey(
+      row.state === 'REMOVED' || row.state === 'BOUGHT_ELSEWHERE'
+        ? row
+        : { state: 'BOUGHT_ELSEWHERE', note: null }
+    );
+  });
+
+  /** The crossed out row's name and its line, as one accessible name. */
+  protected readonly crossedLabel = computed(() =>
+    [
+      this.name(),
+      this._translator.t(this.crossedNoteKey(), undefined, this._locale()),
+    ].join('. ')
+  );
+
+  /**
    * The word on the tag at the end of the name line, or null (velista `0093`,
    * section 3).
    *
@@ -670,7 +690,7 @@ export class BasketRow {
     if (state === 'PARTLY') {
       return 'partly';
     }
-    if (state === 'DONE' || state === 'BOUGHT_ELSEWHERE') {
+    if (state === 'DONE') {
       return 'bought';
     }
     if (state === 'NOT_AVAILABLE') {
@@ -698,35 +718,7 @@ export class BasketRow {
    * `0044`: press it, and the reel comes back with the row.
    */
   protected readonly showsReel = computed(
-    () =>
-      this.state() !== 'SKIPPED' &&
-      this.state() !== 'NOT_AVAILABLE' &&
-      // Raising the reel of a done row takes units back, and there are none of
-      // this basket's to take (velista `0131`). What the list asks for is raised
-      // on the sheet, where the server allows it.
-      !this._closedElsewhere()
-  );
-
-  /**
-   * Whether a purchase made through another basket is all that closed this row
-   * (velista `0131`).
-   *
-   * It is a done row to look at and offers no revert: the server refuses to let
-   * one basket take back a purchase of another, and a control it refuses is not
-   * drawn (`0030`).
-   */
-  private readonly _closedElsewhere = computed(
-    () => this.elsewhere()?.closed === true
-  );
-
-  /**
-   * "Bought on another basket", under the name, or null (velista `0131`).
-   *
-   * It names nobody and says no time. The same sentence on a row closed from
-   * elsewhere and on a row that still has something left.
-   */
-  protected readonly elsewhereCaption = computed<string | null>(() =>
-    elsewhereCaption(this.elsewhere(), this._translator, this._locale())
+    () => this.state() !== 'SKIPPED' && this.state() !== 'NOT_AVAILABLE'
   );
 
   /**
@@ -747,20 +739,15 @@ export class BasketRow {
   /**
    * Whether the glyph is a control, or only a statement of what the row is.
    *
-   * Three ways to be a statement rather than a button: a finished trip, which
-   * takes every control off the screen; a `REMOVED` row, which is information
-   * about the basket rather than a thing to act on; and a row somebody closed
-   * through another basket (velista `0131`), where pressing would ask for a revert
-   * the server refuses.
+   * One way to be a statement rather than a button: a finished trip, which takes
+   * every control off the screen. A crossed out row draws no glyph at all
+   * (velista `0142`), so it never asks.
    *
    * The third was a build with no reopen route behind it. There is no such build:
    * `BASKET_REOPEN_AVAILABLE` guarded a route backend `0136` replaced with a revert
    * that is always available, so the constant went with it.
    */
-  protected readonly statusIsButton = computed(
-    () =>
-      !this.finished() && this.state() !== 'REMOVED' && !this._closedElsewhere()
-  );
+  protected readonly statusIsButton = computed(() => !this.finished());
 
   /**
    * The status control's accessible name: **the act it performs**, and which state it
@@ -994,8 +981,6 @@ export class BasketRow {
       // What the shop is known not to have, said as it is drawn (velista `0102`).
       this._shelfLabel(),
       this.touched() ?? '',
-      // Bought on another basket, said as it is drawn (velista `0131`).
-      this.elsewhereCaption() ?? '',
       // How often it was bought here, said as it is drawn (velista `0104`).
       this.usualCaption() ?? '',
       // Said with the rest of the row, because a reader moving by button hears

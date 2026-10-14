@@ -4,7 +4,12 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketChangeStore, BasketStore } from '@portfolio/velista/data-access';
+import {
+  BasketChangeStore,
+  BasketStore,
+  fakeMemberNames,
+  provideFakeMemberNames,
+} from '@portfolio/velista/data-access';
 import type {
   BasketChange,
   BasketListRef,
@@ -14,6 +19,7 @@ import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import type { ChangeEntryView } from '@portfolio/velista/ui';
 import { ChangeAcknowledger } from '../basket-page/change-acknowledger';
 import { ChangesSheet } from './changes-sheet';
 
@@ -58,6 +64,7 @@ function change(over: Partial<BasketChange> = {}): BasketChange {
     approvalAfter: null,
     rowContent: null,
     actor: null,
+    origin: null,
     list: null,
     at: new Date('2026-09-01T09:00:00.000Z'),
     unseen: false,
@@ -70,6 +77,10 @@ interface Options {
   readonly entries?: readonly BasketChange[];
   readonly hasMore?: boolean;
   readonly loadMore?: jest.Mock;
+  /** The zone members the app holds, by user id. */
+  readonly members?: Readonly<Record<string, string>>;
+  /** Who reads the sheet. The owner, by default. */
+  readonly me?: BasketParticipant;
 }
 
 async function render(options: Options = {}) {
@@ -83,6 +94,7 @@ async function render(options: Options = {}) {
   const loadMore = options.loadMore ?? jest.fn().mockResolvedValue(0);
   const dismiss = jest.fn().mockResolvedValue(undefined);
   const reportSheetEntries = jest.fn();
+  const names = fakeMemberNames(options.members ?? {});
 
   await TestBed.configureTestingModule({
     imports: [ChangesSheet, RokuTranslatorTestingModule.forTesting()],
@@ -96,7 +108,7 @@ async function render(options: Options = {}) {
       {
         provide: BasketStore,
         useValue: {
-          me: signal(ME),
+          me: signal(options.me ?? ME),
           address: signal({ basketId: 'basket-saturday' }),
         },
       },
@@ -115,6 +127,7 @@ async function render(options: Options = {}) {
         provide: ChangeAcknowledger,
         useValue: { reportSheetEntries },
       },
+      provideFakeMemberNames(names),
     ],
   }).compileComponents();
 
@@ -132,6 +145,14 @@ async function render(options: Options = {}) {
     reportSheetEntries,
     state,
     entries,
+    names,
+    /** The entries as the sheet hands them to `lib-change-entry`. */
+    views: () =>
+      (
+        fixture.componentInstance as unknown as {
+          entries: () => readonly ChangeEntryView[];
+        }
+      ).entries(),
   };
 }
 
@@ -220,9 +241,7 @@ describe('ChangesSheet', () => {
     expect(withList.host.textContent).toContain('basket.changes.entry.inList');
 
     const guest = await render({ entries: [change({ list: null })] });
-    expect(guest.host.textContent).not.toContain(
-      'basket.changes.entry.inList'
-    );
+    expect(guest.host.textContent).not.toContain('basket.changes.entry.inList');
   });
 
   it('offers a second page only while there is one', async () => {
@@ -284,7 +303,9 @@ describe('ChangesSheet', () => {
 
     host.querySelector<HTMLButtonElement>('.quiet')?.click();
 
-    expect(dismiss).toHaveBeenCalledWith('/velista/en/shopping-lists/basket-saturday');
+    expect(dismiss).toHaveBeenCalledWith(
+      '/velista/en/shopping-lists/basket-saturday'
+    );
   });
 
   it('tells the acknowledger how many entries it drew, and nothing while loading', async () => {
@@ -316,5 +337,126 @@ describe('ChangesSheet', () => {
 
     // One of two, although both carry the same `at`: the flag is the server's.
     expect(host.querySelectorAll('.tag')).toHaveLength(1);
+  });
+});
+
+/**
+ * Where a buy came from (velista `0142`, section 4). One line replaces who and
+ * which list, and it names a person from the basket or from the zone members
+ * the app holds, never the other shopping list.
+ */
+describe('ChangesSheet: a buy made outside this shopping list (velista 0142)', () => {
+  const owner = (userId: string | null) => ({
+    kind: 'ANOTHER_BASKET' as const,
+    owner: userId === null ? null : { participantId: null, userId, name: null },
+  });
+  const buy = (over: Partial<BasketChange> = {}) =>
+    change({
+      kind: 'BOUGHT',
+      contentBefore: null,
+      contentAfter: null,
+      rowContent: 'Milk',
+      quantityBefore: 2,
+      quantityAfter: 0,
+      list: LIST,
+      ...over,
+    });
+
+  it('names the owner of the other shopping list from the zone members', async () => {
+    const { views, names } = await render({
+      entries: [buy({ origin: owner('u-ana') })],
+      members: { 'u-ana': 'Ana' },
+    });
+
+    expect(views()[0]).toMatchObject({
+      key: 'basket.changes.entry.boughtAll',
+      origin: {
+        key: 'basket.changes.origin.anotherBasket',
+        args: { name: 'Ana' },
+      },
+      who: '',
+      list: '',
+    });
+    expect(names.asked).toEqual([LIST.zoneId]);
+  });
+
+  it('tells the reader the other shopping list is one of theirs', async () => {
+    const { views } = await render({
+      entries: [buy({ origin: owner('u-me') })],
+    });
+
+    expect(views()[0].origin?.key).toBe(
+      'basket.changes.origin.anotherBasketYours'
+    );
+  });
+
+  it('says someone for an owner nobody can name', async () => {
+    const { views } = await render({
+      entries: [buy({ origin: owner('u-stranger') })],
+    });
+
+    expect(views()[0].origin?.key).toBe(
+      'basket.changes.origin.anotherBasketSomeone'
+    );
+  });
+
+  it('names who bought it on the list page, and calls the reader you', async () => {
+    const { views } = await render({
+      entries: [
+        buy({
+          id: 'a',
+          origin: { kind: 'LIST' },
+          actor: { participantId: null, userId: 'u-ana', name: null },
+        }),
+        buy({
+          id: 'b',
+          origin: { kind: 'LIST' },
+          actor: { participantId: null, userId: 'u-me', name: null },
+        }),
+      ],
+      members: { 'u-ana': 'Ana' },
+    });
+
+    expect(views().map((view) => view.origin)).toEqual([
+      { key: 'basket.changes.origin.list', args: { name: 'Ana' } },
+      { key: 'basket.changes.origin.listYou', args: {} },
+    ]);
+  });
+
+  it('tells a guest someone, and asks for no members', async () => {
+    const guest: BasketParticipant = {
+      ...ME,
+      id: 'p-guest',
+      kind: 'GUEST',
+      username: null,
+      userId: null,
+    };
+    const { views, names, host } = await render({
+      me: guest,
+      entries: [
+        buy({ origin: owner(null), list: null }),
+        buy({ id: 'b', origin: { kind: 'LIST' }, actor: null, list: null }),
+      ],
+    });
+
+    expect(views().map((view) => view.origin?.key)).toEqual([
+      'basket.changes.origin.anotherBasketSomeone',
+      'basket.changes.origin.listSomeone',
+    ]);
+    expect(names.asked).toEqual([]);
+    expect(host.textContent).not.toContain('basket.changes.entry.inList');
+  });
+
+  it('keeps who for a buy of this shopping list, and names no list', async () => {
+    const { views } = await render({
+      entries: [
+        buy({
+          origin: null,
+          actor: { participantId: 'p-2', userId: null, name: 'Marc' },
+        }),
+      ],
+    });
+
+    expect(views()[0]).toMatchObject({ who: 'Marc', list: '', origin: null });
   });
 });

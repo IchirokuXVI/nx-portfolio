@@ -5,8 +5,10 @@ import {
   type Basket,
   type BasketAddLineRequest,
   type BasketChange,
+  type BasketChangeActor,
   type BasketChangeKind,
   type BasketChangeMark,
+  type BasketChangeOrigin,
   type BasketChangePage,
   type BasketDemandRequest,
   type BasketEntryAct,
@@ -346,6 +348,13 @@ const LINK_VISIT_MS = LINK_VISIT_HOURS * 60 * 60 * 1000;
  */
 const ELSEWHERE_WINDOW_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * The account that owns the other basket a buy goes through by default. On no
+ * participant row of this basket, so the changes sheet names them from the
+ * zone's members, or says "someone".
+ */
+const OTHER_OWNER_USER_ID = 'u-lucia';
+
 /** A moment {@link LINK_VISIT_MS} after another, which is every expiry here. */
 function visitEnd(from: Date): Date {
   return new Date(from.getTime() + LINK_VISIT_MS);
@@ -454,6 +463,13 @@ interface StoredChange {
   readonly listId: string | null;
   /** A participant of this basket, or null for somebody this reader may not know. */
   readonly actorParticipantId: string | null;
+  /**
+   * The account behind a buy made outside this basket (backend `0203`), served
+   * only beside a list the reader was served, as the gateway serves it.
+   */
+  readonly actorUserId?: string | null;
+  /** Where a buy came from, for the two kinds of a buy. */
+  readonly origin?: ElsewhereOrigin;
   readonly at: Date;
 }
 
@@ -487,15 +503,30 @@ interface Settlement {
 }
 
 /**
+ * Where a buy made outside this basket came from (backend `0203`, section 5):
+ * another basket, and the account that owns it, or the zone's list page. The
+ * buyer is the account that bought, or null for a guest.
+ */
+export type ElsewhereOrigin =
+  | {
+      readonly kind: 'ANOTHER_BASKET';
+      readonly ownerUserId: string | null;
+      readonly buyerUserId: string | null;
+    }
+  | { readonly kind: 'LIST'; readonly buyerUserId: string | null };
+
+/**
  * A purchase of one covered line made through **another** basket, or through
  * none (backend `0188`).
  *
- * It carries no person and no basket, because the server loads neither: a reader
- * learns how many were bought and when, and never who bought them.
+ * It names no basket, because the server serves none. Whether it went through a
+ * basket at all is the note of the row (backend `0203`, section 3), and who made
+ * it is told by the change the buy wrote, never by the row.
  */
 interface ElsewherePurchase {
   readonly lineId: string;
-  readonly quantity: number;
+  quantity: number;
+  readonly through: ElsewhereOrigin['kind'];
   readonly at: Date;
 }
 
@@ -702,24 +733,104 @@ export class BasketMemory implements BasketServiceI {
    * be outside the six hours on every day but one.
    */
   private _elsewhere: ElsewherePurchase[] = [
-    { lineId: 'zl-7', quantity: 1, at: new Date() },
+    { lineId: 'zl-7', quantity: 1, through: 'ANOTHER_BASKET', at: new Date() },
   ];
 
   /**
-   * Somebody buys units of one line through another basket (velista `0131`).
+   * Somebody buys units of one line outside this basket (velista `0131`, `0142`):
+   * through another basket, or on the list page.
    *
    * A knob and not a part of `BasketServiceI`, for {@link servesLists}'s reason:
    * no route of this basket can do it, so a spec that needs the row calls this.
    * The list asks for that many fewer, never below zero, as it does after any
-   * purchase.
+   * purchase, and the buy is a `BOUGHT` change of the line (backend `0203`,
+   * section 1). A buy that moves no quantity writes no change.
    */
-  buyElsewhere(lineId: string, quantity: number): void {
+  buyElsewhere(
+    lineId: string,
+    quantity: number,
+    origin: ElsewhereOrigin = {
+      kind: 'ANOTHER_BASKET',
+      ownerUserId: OTHER_OWNER_USER_ID,
+      buyerUserId: OTHER_OWNER_USER_ID,
+    }
+  ): void {
     const line = this._lines.find((held) => held.id === lineId);
     if (line === undefined) {
       return;
     }
-    this._elsewhere.push({ lineId, quantity, at: this.now() });
+    const before = line.quantity;
+    this._elsewhere.push({
+      lineId,
+      quantity,
+      through: origin.kind,
+      at: this.now(),
+    });
     line.quantity = Math.max(0, line.quantity - quantity);
+    this._recordBuy('BOUGHT', line, before, origin);
+  }
+
+  /**
+   * The other basket takes back units it bought of one line (backend `0203`,
+   * section 1): the list asks for them again, and the revert is a
+   * `BUY_REVERTED` change. A knob for {@link buyElsewhere}'s reason.
+   *
+   * Only a buy through another basket can be taken back, because no route takes
+   * back a buy made on the list page (backend `0203`, "What the build decided",
+   * point 10).
+   */
+  revertElsewhere(
+    lineId: string,
+    quantity: number,
+    origin: Extract<ElsewhereOrigin, { kind: 'ANOTHER_BASKET' }> = {
+      kind: 'ANOTHER_BASKET',
+      ownerUserId: OTHER_OWNER_USER_ID,
+      buyerUserId: OTHER_OWNER_USER_ID,
+    }
+  ): void {
+    const line = this._lines.find((held) => held.id === lineId);
+    const purchase = [...this._elsewhere]
+      .reverse()
+      .find(
+        (held) => held.lineId === lineId && held.through === 'ANOTHER_BASKET'
+      );
+    if (line === undefined || purchase === undefined) {
+      return;
+    }
+    const units = Math.min(quantity, purchase.quantity);
+    const before = line.quantity;
+    purchase.quantity -= units;
+    this._elsewhere = this._elsewhere.filter((held) => held.quantity > 0);
+    line.quantity += units;
+    this._recordBuy('BUY_REVERTED', line, before, origin);
+  }
+
+  /** A buy or a revert made outside this basket, newest first in the log. */
+  private _recordBuy(
+    kind: 'BOUGHT' | 'BUY_REVERTED',
+    line: StoredLine,
+    before: number,
+    origin: ElsewhereOrigin
+  ): void {
+    if (line.quantity === before) {
+      return;
+    }
+    this._changes.unshift({
+      id: `chg-buy-${this._changes.length + 1}`,
+      kind,
+      lineId: line.id,
+      contentBefore: null,
+      contentAfter: null,
+      quantityBefore: before,
+      quantityAfter: line.quantity,
+      approvalBefore: null,
+      approvalAfter: null,
+      listId: line.listId,
+      actorParticipantId: null,
+      actorUserId: origin.buyerUserId,
+      origin,
+      at: this.now(),
+    });
   }
 
   /**
@@ -1606,7 +1717,7 @@ export class BasketMemory implements BasketServiceI {
       // (backend `0188`, target 4).
       const skipNote = this._note(lines, bought);
       const note: BasketRowNote | null =
-        skipNote ?? (boughtElsewhere > 0 ? 'BOUGHT_ON_ANOTHER_BASKET' : null);
+        skipNote ?? (boughtElsewhere > 0 ? this._elsewhereNote(live) : null);
 
       // **A row nothing asks for and nothing was bought of is not a thing to
       // buy**, so it leaves the view (backend `0136`). That is what a demand
@@ -1816,17 +1927,64 @@ export class BasketMemory implements BasketServiceI {
       approvalBefore: change.approvalBefore,
       approvalAfter: change.approvalAfter,
       rowContent: rowKey === null ? null : context.contentFor(rowKey),
-      actor:
-        change.actorParticipantId === null
-          ? null
-          : {
-              participantId: change.actorParticipantId,
-              userId: null,
-              name: context.nameFor(change.actorParticipantId, null),
-            },
+      actor: this._actorOf(change, listId, context),
+      origin: this._originOf(change, listId, context),
       list: listId === null ? null : context.listFor(listId),
       at: change.at,
       unseen: unseen.has(change.id),
+    };
+  }
+
+  /**
+   * Who made a change: a participant of this basket, or an account served only
+   * beside a list the reader was served (backend `0138`, section 8).
+   */
+  private _actorOf(
+    change: StoredChange,
+    listId: string | null,
+    context: BasketChangeContext
+  ): BasketChangeActor | null {
+    if (change.actorParticipantId !== null) {
+      return {
+        participantId: change.actorParticipantId,
+        userId: null,
+        name: context.nameFor(change.actorParticipantId, null),
+      };
+    }
+    const userId = change.actorUserId ?? null;
+    return userId === null || listId === null
+      ? null
+      : { participantId: null, userId, name: context.nameFor(null, userId) };
+  }
+
+  /**
+   * Where a buy came from (backend `0203`, section 5). The owner of the other
+   * basket is served by the rule of an account, so a reader served no list, which
+   * is a guest, is told nobody.
+   */
+  private _originOf(
+    change: StoredChange,
+    listId: string | null,
+    context: BasketChangeContext
+  ): BasketChangeOrigin | null {
+    const origin = change.origin;
+    if (origin === undefined) {
+      return null;
+    }
+    if (origin.kind === 'LIST') {
+      return { kind: 'LIST' };
+    }
+    const owner = origin.ownerUserId;
+    return {
+      kind: 'ANOTHER_BASKET',
+      owner:
+        owner === null || listId === null
+          ? null
+          : {
+              participantId: null,
+              userId: owner,
+              name: context.nameFor(null, owner),
+            },
     };
   }
 
@@ -1949,6 +2107,26 @@ export class BasketMemory implements BasketServiceI {
     return this._elsewhere.filter(
       (purchase) => now - purchase.at.getTime() < ELSEWHERE_WINDOW_MS
     );
+  }
+
+  /**
+   * Which kind of outside buy the newest one on these lines was (backend `0203`,
+   * section 3): through another basket, or on the list page.
+   */
+  private _elsewhereNote(lines: readonly StoredLine[]): BasketRowNote {
+    const ids = new Set(lines.map((line) => line.id));
+    const newest = this._recentElsewhere()
+      .filter((purchase) => ids.has(purchase.lineId))
+      .reduce<ElsewherePurchase | null>(
+        (held, purchase) =>
+          held === null || purchase.at.getTime() >= held.at.getTime()
+            ? purchase
+            : held,
+        null
+      );
+    return newest?.through === 'LIST'
+      ? 'BOUGHT_ON_THE_LIST'
+      : 'BOUGHT_ON_ANOTHER_BASKET';
   }
 
   /** The newest purchase another basket made on these lines, or null. */

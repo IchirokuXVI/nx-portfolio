@@ -4,6 +4,7 @@ import {
   LINE_APPROVAL_STATUSES,
   type BasketChange,
   type BasketChangeActor,
+  type BasketChangeOrigin,
   type BasketChangePage,
   type BasketListRef,
 } from '@portfolio/velista/models';
@@ -112,6 +113,7 @@ export function toBasketChange(
     approvalAfter: oneOfOrNull(raw['approvalAfter'], LINE_APPROVAL_STATUSES),
     rowContent,
     actor: toBasketChangeActor(raw['actor'], context),
+    origin: toBasketChangeOrigin(raw['origin'], context),
     // Absent rather than null for a list this reader may not see (backend
     // `0130`, section 6), and resolved against the refs the basket served, so a
     // list id with no ref behind it names nothing. That is the same redaction
@@ -143,6 +145,36 @@ export function toBasketChangePage(
     items: mapArray(raw['items'], (item) => toBasketChange(item, context)),
     nextCursor: nullableStr(raw['nextCursor']),
   };
+}
+
+/**
+ * Where a buy came from (backend `0203`, section 5), or null.
+ *
+ * Null when it is absent, which is every kind but a buy and a buy made through
+ * this shopping list, and null when it is malformed or of a kind this build does
+ * not know: the entry then keeps the "who" of every other change, which names
+ * nobody it was not served. An `ANOTHER_BASKET` owner is named as an actor is,
+ * and an owner the server withheld, which is every owner a guest is told of, is
+ * null.
+ */
+function toBasketChangeOrigin(
+  raw: unknown,
+  context: BasketChangeContext
+): BasketChangeOrigin | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  switch (raw['kind']) {
+    case 'ANOTHER_BASKET':
+      return {
+        kind: 'ANOTHER_BASKET',
+        owner: toBasketChangeActor(raw['owner'], context),
+      };
+    case 'LIST':
+      return { kind: 'LIST' };
+    default:
+      return null;
+  }
 }
 
 /**

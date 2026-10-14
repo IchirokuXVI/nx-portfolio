@@ -19,6 +19,15 @@ export interface ChangeEntryView {
   readonly who: string;
   /** Which list, already named, or the empty string when the reader has no ref. */
   readonly list: string;
+  /**
+   * Where a buy came from, as a key and its arguments, or null (velista `0142`,
+   * section 4). When it is set it replaces {@link who} and {@link list}: the line
+   * says who modified the line from where, and never names a list.
+   */
+  readonly origin: {
+    readonly key: string;
+    readonly args: Record<string, string | number>;
+  } | null;
   /** When, already formatted through `Intl` in the reader's locale. */
   readonly when: string;
   /** The server's flag. Draws the same tag a marked row wears. */
@@ -59,7 +68,12 @@ export interface ChangeEntryView {
       }
     </p>
 
-    @if (meta(); as said) {
+    @if (entry().origin; as origin) {
+      <p class="meta">
+        {{ origin.key | rokuT: origin.args
+        }}{{ entry().when === '' ? '' : ' · ' + entry().when }}
+      </p>
+    } @else if (meta(); as said) {
       <p class="meta">{{ said }}</p>
     }
   `,

@@ -271,7 +271,7 @@ describe('RowEntries: who may change what a list asks for', () => {
     expect(askReels(fixture)).toHaveLength(0);
   });
 
-  it('keeps it on an entry closed by a buy made elsewhere (velista 0131)', async () => {
+  it('keeps it on an entry bought outside this shopping list, at 0 and already bought (velista 0142)', async () => {
     const fixture = await render(
       row([
         entry({
@@ -284,6 +284,18 @@ describe('RowEntries: who may change what a list asks for', () => {
     );
 
     expect(askReels(fixture)).toHaveLength(1);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.row-where')
+        ?.textContent
+    ).toContain('basket.line.alreadyBought');
+  });
+
+  it('says nothing about a buy on an entry that still asks', async () => {
+    const fixture = await render(row([entry()]));
+
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain(
+      'basket.line.alreadyBought'
+    );
   });
 
   it('sends one demand, with where it started and where it landed', async () => {

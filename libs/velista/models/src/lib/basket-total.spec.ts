@@ -140,8 +140,8 @@ describe('basketTotal', () => {
     });
   });
 
-  /** The state of backend `0203` is summed as the done row it was; velista `0142` removes the sum. */
-  it('still prices a row bought elsewhere on the bought side, until velista 0142', () => {
+  /** A buy made outside this shopping list counts toward nothing in it (velista `0142`). */
+  it('leaves a row bought outside this shopping list out of the lines and the sums', () => {
     const total = basketTotal(
       [
         row(['p-milk'], {
@@ -153,8 +153,7 @@ describe('basketTotal', () => {
       context([milk])
     );
 
-    expect(total.lines).toBe(1);
-    expect(total.boughtCents).toBe(270);
+    expect(total).toEqual(EMPTY_BASKET_TOTAL);
   });
 
   it('counts a row whose product has no price as a line with a product', () => {
@@ -210,36 +209,37 @@ describe('basketTotal', () => {
   });
 
   /**
-   * `boughtElsewhere` is in neither `bought` nor `asked` (backend `0188`), so a
-   * row somebody else closed asks for nothing here and still cost what it cost.
+   * One unit went through another shopping list and two are still wanted. Only
+   * the two are priced: `boughtElsewhere` is not a part of this shopping list.
    */
-  it('puts what was bought through another basket on the bought side', () => {
-    const closed = row(['p-milk'], {
-      left: 0,
-      boughtElsewhere: 2,
-      state: 'DONE',
-    });
-    const total = basketTotal([closed], context([milk]));
-
-    expect(closed.asked).toBe(0);
-    expect(total.boughtCents).toBe(270);
-    expect(total.leftCents).toBe(0);
-    expect(total.totalCents).toBe(270);
-  });
-
-  /**
-   * The case `asked` is short in: one unit went through another basket and two
-   * are still wanted, so the row is three units and `asked` says two.
-   */
-  it('counts the units bought elsewhere beside the ones still left', () => {
+  it('prices what is left and nothing that was bought outside this shopping list', () => {
     const total = basketTotal(
       [row(['p-milk'], { left: 2, boughtElsewhere: 1 })],
       context([milk])
     );
 
-    expect(total.boughtCents).toBe(135);
+    expect(total.boughtCents).toBe(0);
     expect(total.leftCents).toBe(270);
-    expect(total.totalCents).toBe(405);
+    expect(total.totalCents).toBe(270);
+  });
+
+  /**
+   * Three asked: this shopping list bought two and somebody else the last. The
+   * row is done and is two units, both bought here (velista `0142`, section 2).
+   */
+  it('prices a row finished by somebody else as what this shopping list bought', () => {
+    const mixed = row(['p-milk'], {
+      left: 0,
+      bought: 2,
+      boughtElsewhere: 1,
+      state: 'DONE',
+    });
+    const total = basketTotal([mixed], context([milk]));
+
+    expect(mixed.asked).toBe(2);
+    expect(total.boughtCents).toBe(270);
+    expect(total.leftCents).toBe(0);
+    expect(total.totalCents).toBe(270);
   });
 
   it('counts a NOT_AVAILABLE row and a SKIPPED row with a price, on the left side', () => {

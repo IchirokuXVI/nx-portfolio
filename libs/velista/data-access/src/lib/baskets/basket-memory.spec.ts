@@ -869,7 +869,7 @@ describe('BasketMemory: adding a line', () => {
  * The fake keeps the server's rules here too, so the app in its memory mode
  * shows the row and a spec meets the refusals the real server makes.
  */
-describe('BasketMemory: a line bought through another basket', () => {
+describe('BasketMemory: a line bought through another basket (velista 0131, 0142)', () => {
   const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
   it('keeps the row as BOUGHT_ELSEWHERE, with the count and the note, and no purchase of its own', async () => {
@@ -943,6 +943,112 @@ describe('BasketMemory: a line bought through another basket', () => {
       boughtElsewhere: 1,
     });
     expect(rowOf(await rowsOf(memory), 'Butter').state).toBe('WANTED');
+  });
+});
+
+/**
+ * Velista `0142`: a buy made outside this basket is a change (backend `0203`).
+ *
+ * The twin writes the change the server writes, with the origin the changes
+ * sheet draws, so the sheet is reachable with no backend.
+ */
+describe('BasketMemory: a buy made outside this basket is a change', () => {
+  const CONTEXT = {
+    nameFor: () => null,
+    listFor: () => null,
+    contentFor: (rowKey: string) => (rowKey === 'zl-1' ? 'Milk' : null),
+  };
+
+  async function newest(memory: BasketMemory) {
+    return (await memory.changes(BASKET, CONTEXT)).items[0];
+  }
+
+  it('writes a BOUGHT change through another basket, and marks the row', async () => {
+    const memory = new BasketMemory();
+    memory.buyElsewhere('zl-1', 1, {
+      kind: 'ANOTHER_BASKET',
+      ownerUserId: 'u-lucia',
+      buyerUserId: 'u-lucia',
+    });
+
+    expect(await newest(memory)).toMatchObject({
+      kind: 'BOUGHT',
+      quantityBefore: 2,
+      quantityAfter: 1,
+      unseen: true,
+      actor: { participantId: null, userId: 'u-lucia' },
+      origin: {
+        kind: 'ANOTHER_BASKET',
+        owner: { participantId: null, userId: 'u-lucia' },
+      },
+    });
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    expect(milk.mark).toBe('CHANGED');
+    expect((await memory.getBasket(BASKET)).unseenChangeCount).toBe(6);
+  });
+
+  it('closes a line bought on the list page with its own note and origin', async () => {
+    const memory = new BasketMemory();
+    memory.buyElsewhere('zl-1', 2, { kind: 'LIST', buyerUserId: 'u-ana' });
+
+    const entry = rowOf(await rowsOf(memory), 'Milk').entries.find(
+      (held) => held.lineId === 'zl-1'
+    );
+    expect(entry?.state).toBe('BOUGHT_ELSEWHERE');
+    expect(rowOf(await rowsOf(memory), 'Milk').note).toBe('BOUGHT_ON_THE_LIST');
+    expect(await newest(memory)).toMatchObject({
+      kind: 'BOUGHT',
+      quantityAfter: 0,
+      origin: { kind: 'LIST' },
+    });
+  });
+
+  it('makes a whole row BOUGHT_ELSEWHERE once every line of it is bought outside', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    for (const entry of milk.entries) {
+      memory.buyElsewhere(entry.lineId, entry.left);
+    }
+
+    const bought = rowOf(await rowsOf(memory), 'Milk');
+    expect(bought.state).toBe('BOUGHT_ELSEWHERE');
+    expect(bought.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
+    expect((await memory.getBasket(BASKET)).progress.total).toBe(
+      (await new BasketMemory().getBasket(BASKET)).progress.total - 1
+    );
+  });
+
+  it('writes a BUY_REVERTED change when the other basket takes its buy back', async () => {
+    const memory = new BasketMemory();
+    memory.buyElsewhere('zl-1', 2);
+    memory.revertElsewhere('zl-1', 2);
+
+    expect(await newest(memory)).toMatchObject({
+      kind: 'BUY_REVERTED',
+      quantityBefore: 0,
+      quantityAfter: 2,
+      origin: { kind: 'ANOTHER_BASKET' },
+    });
+    expect(rowOf(await rowsOf(memory), 'Milk').left).toBe(3);
+  });
+
+  it('writes no change for a buy that moved no quantity', async () => {
+    const memory = new BasketMemory();
+    const before = (await memory.changes(BASKET, CONTEXT)).items.length;
+    memory.buyElsewhere('zl-7', 1);
+
+    expect((await memory.changes(BASKET, CONTEXT)).items).toHaveLength(before);
+  });
+
+  it('tells a reader served no list nobody, which is a guest’s view', async () => {
+    const memory = new BasketMemory();
+    memory.servesLists = false;
+    memory.buyElsewhere('zl-1', 1);
+
+    expect(await newest(memory)).toMatchObject({
+      actor: null,
+      origin: { kind: 'ANOTHER_BASKET', owner: null },
+    });
   });
 });
 

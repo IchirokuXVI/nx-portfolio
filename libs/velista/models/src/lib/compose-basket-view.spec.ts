@@ -801,7 +801,7 @@ describe('composeBasketView, grouped by list', () => {
  * that had none from a purchase.
  */
 describe('basketRowsProgress', () => {
-  it('counts states, and never a REMOVED row', () => {
+  it('counts states, and never a crossed out row', () => {
     expect(
       basketRowsProgress([
         { state: 'DONE' },
@@ -810,6 +810,7 @@ describe('basketRowsProgress', () => {
         { state: 'WANTED' },
         { state: 'SKIPPED' },
         { state: 'REMOVED' },
+        { state: 'BOUGHT_ELSEWHERE' },
       ])
     ).toEqual({ done: 1, unavailable: 1, total: 5 });
   });
@@ -1834,23 +1835,23 @@ describe('composeBasketView, grouped by aisle', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * Velista `0142`: a row somebody bought outside this shopping list.
  *
- * The basket page has no section of its own for done rows: a done row stays where
- * the order put it and its section counts it. So "where done rows are drawn" is
- * the row's own place, and the two things asserted here are that the pipeline
- * does not move it and that the count it hands the row is `boughtElsewhere`.
+ * A `BOUGHT_ELSEWHERE` row goes where a `REMOVED` row goes: last, through every
+ * filter, and counted nowhere. A row that outside buys only lowered is an
+ * ordinary row with its own number, and nothing moves it.
  */
-describe('composeBasketView: bought on another basket (velista 0131)', () => {
-  const closed = (rowKey: string, content: string, listId: string | null) =>
+describe('composeBasketView: bought outside this shopping list (velista 0142)', () => {
+  const bought = (rowKey: string, content: string, listId: string | null) =>
     row(rowKey, content, {
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      mark: 'CHANGED',
       entries: [
         entry(listId, {
           lineId: `zl-${rowKey}`,
@@ -1858,14 +1859,19 @@ describe('composeBasketView: bought on another basket (velista 0131)', () => {
           bought: 0,
           asked: 0,
           boughtElsewhere: 2,
-          state: 'DONE',
+          state: 'BOUGHT_ELSEWHERE',
         }),
       ],
     });
 
-  it('keeps the row where a done row is drawn, and reads its count from boughtElsewhere', () => {
+  it('puts the row last, beside a REMOVED row, and keeps the order above it', () => {
     const sections = composeBasketView(
-      [row('a', 'Apples'), closed('b', 'Butter', null), row('c', 'Cheese')],
+      [
+        row('a', 'Apples'),
+        bought('b', 'Butter', null),
+        row('c', 'Cheese'),
+        row('d', 'Olives', { state: 'REMOVED', entries: [] }),
+      ],
       state(),
       CONTEXT
     );
@@ -1873,68 +1879,63 @@ describe('composeBasketView: bought on another basket (velista 0131)', () => {
     expect(sections).toHaveLength(1);
     expect(sections[0].rows.map((drawn) => drawn.row.content)).toEqual([
       'Apples',
-      'Butter',
       'Cheese',
+      'Butter',
+      'Olives',
     ]);
-    // Two, which is the server's number. The row's own `bought` is zero.
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 2, closed: true });
-    expect(sections[0].rows[1].row.bought).toBe(0);
   });
 
-  it('counts it as done under its heading, as the server wrote it', () => {
+  it('keeps the row past the search, the list filter and the usual filter', () => {
     const sections = composeBasketView(
       [
         row('a', 'Apples', { entries: [entry('l1')] }),
-        closed('b', 'Butter', 'l1'),
+        {
+          ...bought('b', 'Butter', 'l2'),
+          usual: { state: 'ELSEWHERE', bought: 0, of: 6 },
+        },
+      ],
+      state({ lists: new Set(['l1']), shop: MERCA, usual: true }),
+      { ...priced(), query: 'nothing matches this' }
+    );
+
+    expect(
+      sections.flatMap((part) => part.rows.map((drawn) => drawn.row.rowKey))
+    ).toEqual(['b']);
+  });
+
+  it('counts the row nowhere under its heading', () => {
+    const sections = composeBasketView(
+      [
+        row('a', 'Apples', { entries: [entry('l1')] }),
+        bought('b', 'Butter', 'l1'),
       ],
       state({ grouping: 'list' }),
       { ...CONTEXT, lists: new Map([['l1', ref('l1', 'Weekly shop')]]) }
     );
 
-    expect(sections[0].progress).toEqual({ done: 1, unavailable: 0, total: 2 });
-    // The entry's own count under a list heading.
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 2, closed: true });
+    expect(sections[0].rows).toHaveLength(2);
+    expect(sections[0].progress).toEqual({ done: 0, unavailable: 0, total: 1 });
   });
 
-  it('keeps a row with something left in its section, and does not call it closed', () => {
+  it('leaves a row with something left in its place, as the state the server sent', () => {
     const partly = row('m', 'Milk', {
       left: 1,
       boughtElsewhere: 1,
+      mark: 'CHANGED',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
     });
 
     const sections = composeBasketView(
-      [row('a', 'Apples'), partly],
+      [partly, row('a', 'Apples')],
       state(),
       CONTEXT
     );
 
     expect(sections[0].rows.map((drawn) => drawn.row.content)).toEqual([
-      'Apples',
       'Milk',
+      'Apples',
     ]);
-    expect(sections[0].rows[1].row.state).toBe('WANTED');
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 1, closed: false });
-  });
-
-  /** A row this basket bought itself is an ordinary done row, with its revert. */
-  it('does not call a row closed from elsewhere when this basket bought some of it', () => {
-    const both = row('e', 'Eggs', {
-      left: 0,
-      bought: 1,
-      boughtElsewhere: 1,
-      state: 'DONE',
-    });
-
-    const [only] = composeBasketView([both], state(), CONTEXT);
-
-    expect(only.rows[0].elsewhere).toEqual({ count: 1, closed: false });
-  });
-
-  it('hands every other row nothing', () => {
-    const [only] = composeBasketView([row('a', 'Apples')], state(), CONTEXT);
-
-    expect(only.rows[0].elsewhere).toBeNull();
+    expect(sections[0].rows[0].row.state).toBe('WANTED');
   });
 });

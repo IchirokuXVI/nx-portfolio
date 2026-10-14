@@ -284,8 +284,8 @@ describe('BasketRowComponent: the caption (velista 0139, section 1)', () => {
   });
 });
 
-describe('BasketRowComponent: a row bought elsewhere (backend 0203)', () => {
-  it('is drawn as the done row it was before, with no control to take it back', async () => {
+describe('BasketRowComponent: a row bought elsewhere (velista 0142)', () => {
+  it('strikes the product name, one line, and draws no price and no control', async () => {
     const fixture = await render(
       line({
         productId: 'i-milk',
@@ -305,14 +305,14 @@ describe('BasketRowComponent: a row bought elsewhere (backend 0203)', () => {
       new Map([product('i-milk', offer(0.95))]),
       LISTS
     );
-    fixture.componentRef.setInput('elsewhere', { count: 2, closed: true });
-    fixture.detectChanges();
-
-    expect(host(fixture).querySelector('.row.is-done')).not.toBeNull();
-    expect(host(fixture).querySelector('button.status')).toBeNull();
-    expect(host(fixture).querySelector('lib-quantity-reel')).toBeNull();
+    expect(text(fixture, '.is-removed .content .name')).toBe(
+      'Whole milk Hacendado'
+    );
     expect(
-      host(fixture).querySelector('.status-glyph.is-bought')
+      host(fixture).querySelector('.is-removed .content.is-product')
     ).not.toBeNull();
+    expect(host(fixture).querySelector('.status')).toBeNull();
+    expect(host(fixture).querySelector('lib-quantity-reel')).toBeNull();
+    expect(host(fixture).textContent).not.toContain('0.95');
   });
 });
