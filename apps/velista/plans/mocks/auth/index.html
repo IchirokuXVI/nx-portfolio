@@ -92,12 +92,9 @@
 #ab-ForgotPassword * { box-sizing: border-box; }
 #ab-ForgotPassword a { color: #ffb454; text-decoration: none; }
 #ab-ForgotPassword a:hover { color: #ffc271; }
-#ab-ResetModeOptions * { box-sizing: border-box; }
-#ab-ResetModeOptions a { color: #ffb454; text-decoration: none; }
-#ab-ResetModeOptions a:hover { color: #ffc271; }
-#ab-SignInModeOptions * { box-sizing: border-box; }
-#ab-SignInModeOptions a { color: #ffb454; text-decoration: none; }
-#ab-SignInModeOptions a:hover { color: #ffc271; }
+#ab-ResetMode * { box-sizing: border-box; }
+#ab-ResetMode a { color: #ffb454; text-decoration: none; }
+#ab-ResetMode a:hover { color: #ffc271; }
 #ab-OtherAccount * { box-sizing: border-box; }
 #ab-OtherAccount a { color: #ffb454; text-decoration: none; }
 #ab-OtherAccount a:hover { color: #ffc271; }
@@ -108,7 +105,7 @@
 
 <header>
   <h1>Velista Credential Flows</h1>
-  <p class="lede">The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. Items 3 and 4 are drawn as alternatives A, B and C, quietest first, to pick one letter for both.</p>
+  <p class="lede">The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and the confirm is a message with one button.</p>
 </header>
 
 <div class="controls">
@@ -119,7 +116,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 3210px; height: 6260px;">
+  <div class="canvas" id="canvas" style="width: 2910px; height: 6260px;">
       <figure class="board" style="left: 0px; top: 230px; width: 1330px;">
         <figcaption>Sign in</figcaption>
         <div class="frame" id="ab-SignIn" style="width: 1330px; height: 970px;">
@@ -951,112 +948,14 @@
           </div>
         </div>
       </figure>
-      <figure class="board" style="left: 0px; top: 4110px; width: 1330px;">
-        <figcaption>0148 item 3: the reset link in reset mode, A B C</figcaption>
-        <div class="frame" id="ab-ResetModeOptions" style="width: 1330px; height: 970px;">
-          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+      <figure class="board" style="left: 0px; top: 4110px; width: 470px;">
+        <figcaption>0148 item 3: the reset link, design C</figcaption>
+        <div class="frame" id="ab-ResetMode" style="width: 470px; height: 970px;">
+          <div style="width: 470px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
 
-            <!-- A -->
+            <!-- RESET MODE, design C (the owner's pick of 2026-10-14) -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A &middot; QUIETEST: the footer row</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
-
-                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
-
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Choose a new password</h1>
-                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Saving it signs you out on every other phone, in case someone else knows the old one.</p>
-
-                  <label for="np-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">New password</label>
-                  <div id="np-a" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px;">
-                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
-                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
-                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
-                        <circle cx="12" cy="12" r="2.9"/>
-                      </svg>
-                    </button>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 7px; margin-top: 9px; margin-bottom: 26px;">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.8"/>
-                      <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span style="font-size: 12px; color: #34d399;">At least 8 characters</span>
-                  </div>
-
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Save new password</button>
-
-                  <div style="flex: 1;"></div>
-
-                  <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; column-gap: 6px; min-height: 44px; font-size: 14.5px; color: #98a0bb; text-align: center;">
-                    Remembered it?
-                    <a href="#" style="font-weight: 600;">Keep my password and sign in</a>
-                  </div>
-
-                </div>
-
-              </div>
-            </div>
-
-            <!-- B -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">B &middot; QUIET: a text button under Save</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
-
-                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
-
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Choose a new password</h1>
-                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Saving it signs you out on every other phone, in case someone else knows the old one.</p>
-
-                  <label for="np-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">New password</label>
-                  <div id="np-b" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px;">
-                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
-                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
-                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
-                        <circle cx="12" cy="12" r="2.9"/>
-                      </svg>
-                    </button>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 7px; margin-top: 9px; margin-bottom: 26px;">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.8"/>
-                      <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span style="font-size: 12px; color: #34d399;">At least 8 characters</span>
-                  </div>
-
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Save new password</button>
-
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px;">
-                    <a href="#" style="font-size: 14.5px; font-weight: 600;">Keep my password and sign in</a>
-                  </div>
-                  <p style="margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb; text-align: center;">Your other phones stay signed in.</p>
-
-                </div>
-
-              </div>
-            </div>
-
-            <!-- C -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">C &middot; LOUDER: OR and an outlined button</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RESET LINK &middot; design C, the pick</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
                 <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
@@ -1109,14 +1008,14 @@
           </div>
         </div>
       </figure>
-      <figure class="board" style="left: 1400px; top: 4110px; width: 1330px;">
-        <figcaption>0148 item 4: the sign in link in sign in mode, A B C</figcaption>
-        <div class="frame" id="ab-SignInModeOptions" style="width: 1330px; height: 970px;">
+      <figure class="board" style="left: 0px; top: 5290px; width: 1330px;">
+        <figcaption>0148 item 5: somebody else is signed in on this phone</figcaption>
+        <div class="frame" id="ab-OtherAccount" style="width: 1330px; height: 970px;">
           <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
 
-            <!-- A -->
+            <!-- SIGN IN LINK, ANOTHER REGISTERED ACCOUNT. Drawn after the server answered recovery_other_account. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A &middot; QUIETEST: the footer row</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SIGN IN LINK &middot; another account is here</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
                 <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
@@ -1129,26 +1028,25 @@
 
                 <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
 
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Sign in with your link</h1>
-                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This signs you in on this phone. Your password stays the same. The link works one time.</p>
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Someone else is signed in</h1>
+                  <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This phone is signed in to another account:</p>
 
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign in</button>
+                  <!-- Who is signed in here: the username, then the email. Always both (the owner's pick 5). -->
+                  <p style="margin: 0; font-size: 16.5px; font-weight: 650; color: #f7f8fc;">luis_ortega</p>
+                  <p style="margin: 2px 0 24px; font-size: 14.5px; color: #c2c8db;">luis@example.com</p>
 
-                  <div style="flex: 1;"></div>
+                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">To use your link, we sign that account out of this phone. Nothing in it is lost. It can sign in again at any time.</p>
 
-                  <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; column-gap: 6px; min-height: 44px; font-size: 14.5px; color: #98a0bb; text-align: center;">
-                    Worried someone has your password?
-                    <a href="#" style="font-weight: 600;">Set a new password instead</a>
-                  </div>
+                  <button type="button" style="width: 100%; height: 54px; margin-top: 10px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign out and continue</button>
 
                 </div>
 
               </div>
             </div>
 
-            <!-- B -->
+            <!-- RESET LINK, A REGISTERED ACCOUNT. Drawn before the reset, because nothing can tell yet whose link it is. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">B &middot; QUIET: a text button under Sign in</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RESET LINK &middot; an account is here</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
                 <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
@@ -1161,24 +1059,25 @@
 
                 <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
 
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Sign in with your link</h1>
-                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This signs you in on this phone. Your password stays the same. The link works one time.</p>
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">This phone is signed in</h1>
+                  <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">It is signed in to this account:</p>
 
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign in</button>
+                  <!-- Who is signed in here: the username, then the email. Always both (the owner's pick 5). -->
+                  <p style="margin: 0; font-size: 16.5px; font-weight: 650; color: #f7f8fc;">luis_ortega</p>
+                  <p style="margin: 2px 0 24px; font-size: 14.5px; color: #c2c8db;">luis@example.com</p>
 
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px;">
-                    <a href="#" style="font-size: 14.5px; font-weight: 600;">Set a new password instead</a>
-                  </div>
-                  <p style="margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb; text-align: center;">Do this if you think someone else knows it.</p>
+                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If your link is for another account, saving signs this one out of the phone. Nothing in it is lost. It can sign in again at any time.</p>
+
+                  <button type="button" style="width: 100%; height: 54px; margin-top: 10px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Save new password</button>
 
                 </div>
 
               </div>
             </div>
 
-            <!-- C -->
+            <!-- A GUEST, EITHER LINK. Rule C2: the loss said plainly, and the upgrade page offered in the last paragraph. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">C &middot; LOUDER: OR and an outlined button</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; either link</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
                 <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
@@ -1191,19 +1090,18 @@
 
                 <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
 
-                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Sign in with your link</h1>
-                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This signs you in on this phone. Your password stays the same. The link works one time.</p>
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">This phone has a guest account</h1>
+                  <p style="margin: 0 0 18px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">It is signed in to a guest account:</p>
 
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign in</button>
+                  <!-- Who is signed in here: the username, then the email. Always both (the owner's pick 5). -->
+                  <p style="margin: 0; font-size: 16.5px; font-weight: 650; color: #f7f8fc;">marta_92</p>
+                  <p style="margin: 2px 0 24px; font-size: 14.5px; color: #c2c8db;">No email</p>
 
-                  <div style="display: flex; align-items: center; gap: 14px; margin: 26px 0;">
-                    <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
-                    <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; color: #98a0bb;">OR</span>
-                    <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
-                  </div>
+                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">A guest account has no email or password. Once you leave it, nobody can open it again.</p>
+                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #f7f8fc;">Its <span style="font-weight: 700;">2 groups</span> and their lists stay with it. You will lose them.</p>
+                  <p style="margin: 0 0 14px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">To keep them, <a href="#" style="font-weight: 600;">add an email to this account</a> first. Then open your link again.</p>
 
-                  <button type="button" style="width: 100%; height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 15.5px; font-weight: 600; cursor: pointer;">Set a new password instead</button>
-                  <p style="margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb; text-align: center;">Do this if you think someone else knows it.</p>
+                  <button type="button" style="width: 100%; height: 54px; margin-top: 10px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Continue and lose them</button>
 
                 </div>
 
@@ -1213,101 +1111,14 @@
           </div>
         </div>
       </figure>
-      <figure class="board" style="left: 0px; top: 5290px; width: 900px;">
-        <figcaption>0148 item 5: somebody else is signed in</figcaption>
-        <div class="frame" id="ab-OtherAccount" style="width: 900px; height: 970px;">
-          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
-
-            <!-- ANOTHER REGISTERED ACCOUNT -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SOMEONE ELSE &middot; a registered account</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
-
-                <!-- The page underneath: the reset page in sign in mode, after Sign in was pressed. -->
-                <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <div style="padding: 8px 24px 24px;">
-                    <div style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-size: 32px; line-height: 1.18;">Sign in with your link</div>
-                    <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This signs you in on this phone. Your password stays the same. The link works one time.</p>
-                    <div style="width: 100%; height: 54px; border-radius: 14px; background: #ffb454;"></div>
-                  </div>
-                </div>
-
-                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
-
-                <div role="dialog" aria-labelledby="oa-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
-                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
-
-                  <h2 id="oa-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Someone else is signed in</h2>
-
-                  <p style="margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; color: #c2c8db;">This phone is signed in as <span style="color: #f7f8fc; font-weight: 600;">luis@example.com</span>. To use your link, we sign that account out here.</p>
-                  <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #c2c8db;">Nothing in it is lost. Luis can sign in again at any time.</p>
-
-                  <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Sign out Luis and continue</button>
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
-                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <!-- A GUEST ACCOUNT -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; the loss said plainly</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
-
-                <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <div style="padding: 8px 24px 24px;">
-                    <div style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-size: 32px; line-height: 1.18;">Sign in with your link</div>
-                    <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">This signs you in on this phone. Your password stays the same. The link works one time.</p>
-                    <div style="width: 100%; height: 54px; border-radius: 14px; background: #ffb454;"></div>
-                  </div>
-                </div>
-
-                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
-
-                <div role="dialog" aria-labelledby="og-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
-                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
-
-                  <h2 id="og-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">This phone has a guest account</h2>
-
-                  <p style="margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; color: #c2c8db;">It has no email or password, so once you leave it, nobody can open it again.</p>
-                  <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #f7f8fc;">Its <span style="font-weight: 700;">2 groups</span> and their lists stay with the guest account. You will lose them.</p>
-
-                  <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Sign in and lose them</button>
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
-                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep the guest account</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </figure>
-      <figure class="board" style="left: 960px; top: 5290px; width: 900px;">
+      <figure class="board" style="left: 530px; top: 4110px; width: 470px;">
         <figcaption>0148 item 6: a link that no longer works</figcaption>
-        <div class="frame" id="ab-LinkDead" style="width: 900px; height: 970px;">
-          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+        <div class="frame" id="ab-LinkDead" style="width: 470px; height: 970px;">
+          <div style="width: 470px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
 
             <!-- USED OR EXPIRED -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">USED OR EXPIRED &middot; after a button press</span>
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">USED OR EXPIRED &middot; either link</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
 
                 <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 4px; position: relative;">
@@ -1335,7 +1146,7 @@
                   </div>
 
                   <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">That link has run out</h1>
-                  <p style="margin: 0 0 14px; font-size: 15px; line-height: 1.55; color: #98a0bb;">These links last one hour and work one time. Using one link also ends the others in the same mail, and in older mails.</p>
+                  <p style="margin: 0 0 14px; font-size: 15px; line-height: 1.55; color: #98a0bb;">A link works one time, and it runs out after a while. Using one link also ends the other links we sent you.</p>
                   <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Your account is fine. Ask for a new link and use the newest mail.</p>
 
                   <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Send me a new link</button>
@@ -1343,38 +1154,6 @@
                   <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px;">
                     <a href="#" style="font-size: 14.5px; font-weight: 600;">Sign in with my password</a>
                   </div>
-
-                </div>
-
-              </div>
-            </div>
-
-            <!-- SUPPORT SESSION -->
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">IN A SUPPORT SESSION &middot; refused, nothing spent</span>
-              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
-
-                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 4px; position: relative;">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
-                    <g transform="translate(-0.25 0.732) scale(0.98)">
-                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
-                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
-                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
-                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
-                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
-                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
-                    </g>
-                  </svg>
-                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-                </div>
-
-                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 24px; position: relative;">
-
-                  <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Not during a support session</h1>
-                  <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Support is looking at an account on this phone, so this link cannot be used here. The link still works. Open it again after the session ends.</p>
-
-                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Back to the app</button>
 
                 </div>
 
@@ -1391,11 +1170,11 @@
       <aside class="note" style="left: 0px; top: 2400px; width: 430px;"><p>ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.</p><p>So the screen must never say "no account with that email", and the message hangs under the pair of fields rather than under one of them.</p></aside>
       <aside class="note" style="left: 2460px; top: 1350px; width: 450px;"><p>RESENDING IS PLAIN TEXT, NOT A BUTTON (user decision 2026-08-26). One sentence inside the card: amber while it can be used, then it becomes its own reply and counts down for a minute before returning.</p><p>It is deliberately quiet. Confirming is optional, so the affordance must not compete with the group actions underneath it.</p><p>THE COUNTDOWN IS THE SERVER'S NUMBER, NOT SIXTY. The refused state exists because the verifyResend bucket is 3 per 10 minutes, so the fourth ask waits far longer than a minute. A hardcoded 60 would count to zero and then fail again. The client reads retryAfterSeconds from the response BODY: enableCors sets no exposedHeaders, so a browser cannot read a Retry-After header cross origin.</p><p>Both the resend endpoint and sending a verification on upgrade are being implemented by the user.</p></aside>
       <aside class="note" style="left: 0px; top: 2650px; width: 430px;"><p>PLAN 0148, STAGE 0. A forgotten password has a way back. Backend 0210 sends one mail with two links that share one token: a reset link, and a sign in link (the same address plus mode=sign-in). Using either ends both, and ends every older link of that person.</p><p>Both links open ONE page, auth/reset-password, in two modes. The second action switches the mode in place and keeps the token.</p><p>Night only, as the rest of this folder: no new colour role.</p></aside>
-      <aside class="note" style="left: 470px; top: 2650px; width: 430px;"><p>NOTHING IS SPENT ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button. Every action on these artboards is a press.</p><p>If the owner of the link is already signed in, Sign in lands on home with no error, even when the link is old. That is why no artboard draws it.</p></aside>
+      <aside class="note" style="left: 470px; top: 2650px; width: 430px;"><p>THE RESET LINK SPENDS NOTHING ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button.</p><p>THE SIGN IN LINK HAS NO SCREEN (the owner's pick 2). It spends the link as the page loads and lands on home. While the request runs the page shows the spinner the confirmation link page already shows, and nothing else. The owner accepted the risk: a mail scanner that runs scripts can spend the link first, and it then arrives dead. The reset link still waits for a press.</p><p>If the owner of the link is already signed in, either way into it lands on home with no error, even when the link is old.</p></aside>
       <aside class="note" style="left: 940px; top: 2650px; width: 430px;"><p>THE FORGOT PAGE NEVER SAYS WHETHER AN ACCOUNT EXISTS, and never says a mail arrived. forgot-password answers the same for every address, so the copy says what we did ("if it has an account, we have sent it a mail"). The wait is the server's number (rule C3), as on the resend line.</p><p>The address comes over from the sign in page, so a person who just failed to sign in types nothing again.</p></aside>
-      <aside class="note" style="left: 2780px; top: 4110px; width: 430px;"><p>PICK ONE LETTER FOR BOTH ROWS. A, B and C put the second action in the same place in both modes, so nothing jumps when the mode changes.</p><p>A: the footer row every auth page already pins to the bottom ("New here? Create an account"). Quietest, and the farthest from the thumb.</p><p>B: the same quiet amber text right under the primary, with one plain line that says what it does.</p><p>C: the OR rule and the outlined button the sign in page uses for Google. The louder one: the two choices look close to equal.</p></aside>
-      <aside class="note" style="left: 1920px; top: 5290px; width: 430px;"><p>THE CONFIRM IS A SHEET over the reset page, like every confirm in the app. It opens when Sign in answers recovery_other_account, and BEFORE a reset when somebody is signed in, because a reset replaces the session too (the primary then reads "Sign out Luis and save").</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). The guest sheet takes the destructive colour of the delete sheet, and its safe action is the quiet one. The group count comes from the cache, as on the delete sheet; with no groups, that sentence goes.</p></aside>
-      <aside class="note" style="left: 1920px; top: 5790px; width: 430px;"><p>OPEN FOR THE OWNER.</p><p>1. The confirm for a registered account is the plan author's idea. You can drop it, and the link then signs the other person out with no question.</p><p>2. Should the guest sheet also offer "Secure the guest account first" (the upgrade page, which keeps the groups), then come back to the link?</p><p>3. The support session page has no mark: the outcome screen only has a check and a clock today.</p></aside>
+      <aside class="note" style="left: 1060px; top: 4110px; width: 430px;"><p>THE OWNER'S PICKS, 2026-10-14.</p><p>1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.</p><p>2. The sign in link shows no screen. Its alternatives are gone from this canvas.</p><p>3 and 4. The confirm is a message with one button that continues. For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.</p><p>5. Each confirm names the username and the email of the account on this phone, always.</p><p>6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen.</p></aside>
+      <aside class="note" style="left: 1400px; top: 5290px; width: 430px;"><p>THE CONFIRM IS A STATE OF THE PAGE, NOT A SHEET. It has one button, so there is no cancel for a sheet to carry. The back chevron is the way out.</p><p>SIGN IN LINK: drawn when the server answers recovery_other_account. Its button sends the link again with switchAccount.</p><p>RESET LINK: drawn before the reset whenever an account is signed in, because a reset replaces the session too and nothing can tell yet whose link it is. So its words are conditional, and its button saves.</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). Its button takes the destructive colour of the delete sheet. The group count comes from what the app already holds; with no groups, that sentence goes.</p></aside>
+      <aside class="note" style="left: 1400px; top: 5790px; width: 430px;"><p>THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two.</p></aside>
   </div>
 </div>
 
@@ -1404,7 +1183,7 @@
   // does nothing else: these are artboards, not an editor.
   (function () {
     var canvas = document.getElementById('canvas');
-    var w = 3210;
+    var w = 2910;
     var h = 6260;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
