@@ -790,6 +790,7 @@ export class BasketController {
       content: dto.content,
       quantity: dto.quantity,
       itemIds: dto.itemIds,
+      named: dto.named,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.lineAdd, req);
   }

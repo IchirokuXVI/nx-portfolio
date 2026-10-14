@@ -24,6 +24,7 @@ import {
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 import {
+  CatalogItemLookupController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationSectionsController,
@@ -190,6 +191,7 @@ const USER_CONTROLLERS = [
   CatalogLocationsController,
   CatalogShopsController,
   CatalogItemsController,
+  CatalogItemLookupController,
   CatalogProductGroupsController,
   CatalogSuggestController,
   CatalogScopeController,

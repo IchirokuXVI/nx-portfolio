@@ -265,6 +265,17 @@ export class AddBasketLineDto {
   @ArrayMaxSize(BASKET_LIMITS.maxOptions)
   @IsUUID('4', { each: true })
   itemIds?: string[];
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product.',
+  })
+  // As on the list's own add: only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
 }
 
 /**

@@ -1,3 +1,5 @@
+> **PR:** [#706](https://github.com/IchirokuXVI/nx-portfolio/pull/706)
+
 # 0207: a line says whether it was named, and a lookup answers prices
 
 > Asked for by the owner on 2026-10-11, for the rows of a list in velista: "List lines will

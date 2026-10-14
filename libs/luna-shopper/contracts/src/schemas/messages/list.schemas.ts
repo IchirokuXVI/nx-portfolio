@@ -181,6 +181,9 @@ const lineViewProperties: Record<string, JsonSchema> = {
   // the fields around them are.
   favoriteItemId: nullableString(),
   preferredSupermarketId: nullableString(),
+  // Whether a person typed the name (plan 0207, section 1.5). Required: an
+  // absent flag would read as "named" on one client and "not named" on another.
+  named: boolean(),
   position: integer(),
   approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
   createdByUserId: nonEmptyString(),
@@ -216,6 +219,7 @@ const lineViewRequired = [
   'groupItemIds',
   'favoriteItemId',
   'preferredSupermarketId',
+  'named',
   'position',
   'approvalStatus',
   'createdByUserId',
@@ -548,6 +552,8 @@ const addLineRequest = object(
     // Which group the set came from, subscribing the new line to it (plan 0070,
     // section 9). The set is taken as sent and never re-derived from the group.
     productGroupId: nonEmptyString(),
+    // Whether a person typed the name (plan 0207, section 1.3). Absent is true.
+    named: boolean(),
   },
   ['userId', 'listId', 'content']
 );
@@ -560,6 +566,7 @@ const addLinesItem = object(
       maximum: LINE_QUANTITY_MAX,
     }),
     itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
+    named: boolean(),
   },
   ['content']
 );
@@ -622,6 +629,9 @@ const updateLineRequest = object(
     // neither is required.
     favoriteItemId: nullableString(),
     preferredSupermarketId: nullableString(),
+    // Whether a person typed the name (plan 0207, section 1.3). Absent with a
+    // `content` names the line, and absent with none leaves the flag alone.
+    named: boolean(),
     // Merge onto the line that already holds the new name (plan 0112, section
     // 2). Anything but `true` refuses such a rename and writes nothing.
     confirmMerge: boolean(),

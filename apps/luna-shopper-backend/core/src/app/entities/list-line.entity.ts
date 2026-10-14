@@ -119,6 +119,17 @@ export class ListLine extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   preferredSupermarketId!: string | null;
 
+  /**
+   * Whether a person typed {@link content} (plan 0207, section 1.1).
+   *
+   * False means the name is the name a product had when the line was made.
+   * `content` is present and is read as before in both cases. A line with no
+   * product is always true: every write that can move the flag or empty the
+   * products asks `line-named.ts` for the value.
+   */
+  @Column({ type: 'boolean', default: true })
+  named!: boolean;
+
   @Column({ type: 'double precision', default: 0 })
   position!: number;
 

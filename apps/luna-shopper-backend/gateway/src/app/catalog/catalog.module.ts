@@ -24,6 +24,7 @@ import {
 import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogCategoriesController,
+  CatalogItemLookupController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationsController,
@@ -80,6 +81,9 @@ import {
     CatalogNearbyShopsController,
     CatalogSuggestController,
     CatalogItemsController,
+    // Plan 0207: the lookup, which also names the chains of its prices. The
+    // one POST under `catalog/items`, so the GET routes above cannot take it.
+    CatalogItemLookupController,
     CatalogSupermarketItemsController,
     CatalogLocationItemsController,
     // Plan 0073: the same resources for an operator, one namespace over and

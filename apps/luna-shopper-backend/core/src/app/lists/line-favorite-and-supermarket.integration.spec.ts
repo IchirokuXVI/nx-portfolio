@@ -206,11 +206,18 @@ describeIntegration('LineFavoriteAndSupermarket (real Postgres)', () => {
     );
 
     const repo = probe.getRepository(ListLine);
+    // The two columns of this migration and no other. The entity names every
+    // column of the newest schema, and this database stops at this migration.
+    const select = {
+      id: true,
+      favoriteItemId: true,
+      preferredSupermarketId: true,
+    } as const;
     expect(
-      await repo.findOneOrFail({ where: { id: PRODUCT_LINE } })
+      await repo.findOneOrFail({ where: { id: PRODUCT_LINE }, select })
     ).toMatchObject({ favoriteItemId: ITEM, preferredSupermarketId: CHAIN });
     expect(
-      await repo.findOneOrFail({ where: { id: FREE_TEXT_LINE } })
+      await repo.findOneOrFail({ where: { id: FREE_TEXT_LINE }, select })
     ).toMatchObject({ favoriteItemId: null, preferredSupermarketId: null });
   });
 

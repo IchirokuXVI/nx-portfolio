@@ -26,6 +26,7 @@ import {
 } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 import { keptFavorite } from './line-item-set';
+import { mergedNamed } from './line-named';
 
 /**
  * The products two lines hold together, the survivor's first and in its own
@@ -255,6 +256,8 @@ export class LineMergeService {
     this.mergeApproval(survivor, absorbed);
     survivor.itemSetHash = itemSetHash(union);
     Object.assign(survivor, mergedChoices(survivor, absorbed, union));
+    // Named when either line is (plan 0207, section 1.3).
+    survivor.named = mergedNamed(survivor, absorbed);
     survivor.version = version;
 
     // After the survivor holds its merged quantity and approval, and before the

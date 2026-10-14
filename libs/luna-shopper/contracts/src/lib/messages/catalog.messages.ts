@@ -2610,6 +2610,33 @@ export interface GetItemsResult {
   items: ItemView[];
 }
 
+/**
+ * What `POST /v1/catalog/items/lookup` answers (plan 0207, section 2).
+ *
+ * A gateway shape, as {@link CatalogSuggestResponse} is: no broker subject
+ * answers with it. Without `prices` it is {@link GetItemsResult} and nothing
+ * more, which is what the route answered before that plan.
+ *
+ * With `prices: true` every item carries `bestOffer` and `offers`, read at
+ * the price scopes of the default profile of the caller, as the dropdown of the
+ * composer reads them. An item with no price at those scopes is still in the
+ * answer, with a null `bestOffer` and no offer. A caller with no scope gets
+ * every item with no `bestOffer` at all.
+ */
+export interface ItemLookupResponse extends GetItemsResult {
+  /**
+   * The chain behind every scope an offer on {@link items} names, and no other
+   * scope. One request is thus enough to draw a price beside its chain.
+   *
+   * **Present exactly when the request asked for prices**, and then possibly
+   * empty. The rules of {@link CatalogSuggestResponse.scopes} hold here: a
+   * scope the gateway cannot name is left out and never guessed, the offer that
+   * names it still comes back, and a chain can appear under more than one
+   * scope.
+   */
+  scopes?: PriceScopeChainView[];
+}
+
 export interface SearchItemsRequest extends PageQuery {
   userId: string;
   query?: string;
