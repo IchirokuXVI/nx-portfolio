@@ -1,3 +1,5 @@
+> **PR:** [#714](https://github.com/IchirokuXVI/nx-portfolio/pull/714)
+
 # 0210: a reset link can also sign you in
 
 > Asked for by the owner on 2026-10-14:
