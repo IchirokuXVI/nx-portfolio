@@ -5,6 +5,7 @@ import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
+  HARVEST_SCHEDULE_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
   SOURCE_ENTRY_PATTERNS,
@@ -21,6 +22,7 @@ import {
   type BrandSpellingsResult,
   type BrandSuggestionPage,
   type CreateHarvestRunPresetRequest,
+  type CreateHarvestScheduleRequest,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -35,6 +37,9 @@ import {
   type HarvestRunPresetPage,
   type HarvestRunPresetView,
   type HarvestRunView,
+  type HarvestScheduleIdRequest,
+  type HarvestSchedulePage,
+  type HarvestScheduleView,
   type ImportDiscoveredPlaceRequest,
   type ItemSourceEntryPage,
   type LinkDiscoveredPlaceRequest,
@@ -44,6 +49,7 @@ import {
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunPresetsRequest,
   type ListHarvestRunsRequest,
+  type ListHarvestSchedulesRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
   type ListSourceEntriesByItemRequest,
   type ListSourceEntriesRequest,
@@ -56,6 +62,7 @@ import {
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
+  type SetHarvestScheduleEnabledRequest,
   type SetSupermarketSourceEnabledRequest,
   type SettleItemAtChainRequest,
   type SettleItemAtChainResult,
@@ -71,12 +78,14 @@ import {
   type SupermarketSourcePage,
   type SupermarketSourceView,
   type UpdateHarvestRunPresetRequest,
+  type UpdateHarvestScheduleRequest,
   type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunService } from './harvest-run.service';
+import { HarvestScheduleService } from './harvest-schedule.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryService } from './source-entry.service';
@@ -107,7 +116,8 @@ export class HarvestController {
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService,
     private readonly dashboard: HarvestDashboardService,
-    private readonly presets: HarvestRunPresetService
+    private readonly presets: HarvestRunPresetService,
+    private readonly schedules: HarvestScheduleService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -178,6 +188,51 @@ export class HarvestController {
     @Payload() req: HarvestRunPresetIdRequest
   ): Promise<{ id: string }> {
     return this.presets.delete(req);
+  }
+
+  // --- Schedules (plan 0206) -------------------------------------------------
+
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.list)
+  listSchedules(
+    @Payload() req: ListHarvestSchedulesRequest
+  ): Promise<HarvestSchedulePage> {
+    return this.schedules.list(req);
+  }
+
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.get)
+  getSchedule(
+    @Payload() req: HarvestScheduleIdRequest
+  ): Promise<HarvestScheduleView> {
+    return this.schedules.get(req);
+  }
+
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.create)
+  createSchedule(
+    @Payload() req: CreateHarvestScheduleRequest
+  ): Promise<HarvestScheduleView> {
+    return this.schedules.create(req);
+  }
+
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.update)
+  updateSchedule(
+    @Payload() req: UpdateHarvestScheduleRequest
+  ): Promise<HarvestScheduleView> {
+    return this.schedules.update(req);
+  }
+
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.setEnabled)
+  setScheduleEnabled(
+    @Payload() req: SetHarvestScheduleEnabledRequest
+  ): Promise<HarvestScheduleView> {
+    return this.schedules.setEnabled(req);
+  }
+
+  /** The runs a schedule started keep their record and still name it. */
+  @MessagePattern(HARVEST_SCHEDULE_PATTERNS.delete)
+  deleteSchedule(
+    @Payload() req: HarvestScheduleIdRequest
+  ): Promise<{ id: string }> {
+    return this.schedules.delete(req);
   }
 
   @MessagePattern(HARVEST_PATTERNS.abort)

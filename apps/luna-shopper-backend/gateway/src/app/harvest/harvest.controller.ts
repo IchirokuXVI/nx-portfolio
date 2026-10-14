@@ -20,6 +20,7 @@ import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
+  HARVEST_SCHEDULE_PATTERNS,
   HARVEST_SCHEMA_IDS,
   HarvestRunMode,
   POSTAL_CODE_DISCOVERY_PATTERNS,
@@ -38,6 +39,8 @@ import {
   type HarvestRunPresetPage,
   type HarvestRunPresetView,
   type HarvestRunView,
+  type HarvestSchedulePage,
+  type HarvestScheduleView,
   type ItemSourceEntryPage,
   type LinkPlacesByRefResult,
   type PlaceLinkResult,
@@ -71,23 +74,27 @@ import {
   AddPostalCodeDiscoveryDto,
   ApplySourceEntryDecisionsDto,
   CreateHarvestRunPresetDto,
+  CreateHarvestScheduleDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
   HarvestRunListQueryDto,
   HarvestRunPresetListQueryDto,
+  HarvestScheduleListQueryDto,
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
   LinkDiscoveredPlaceDto,
   LinkPlacesByRefDto,
   MapSourceLocationDto,
   PostalCodeDiscoveryListQueryDto,
+  SetHarvestScheduleEnabledDto,
   SetSourceEnabledDto,
   SettleItemAtChainDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
   SpawnHarvestRunDto,
   UpdateHarvestRunPresetDto,
+  UpdateHarvestScheduleDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
 
@@ -154,6 +161,8 @@ export class AdminHarvestRunsController {
       status: query.status,
       reverted: query.reverted,
       presetId: query.presetId,
+      scheduleId: query.scheduleId,
+      trigger: query.trigger,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -1182,6 +1191,132 @@ export class AdminHarvestPresetsController {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawnFromPreset, {
       ...adminCredential(admin),
       presetId: id,
+    });
+  }
+}
+
+/**
+ * A preset that starts by itself (plan 0206): a time of day, the days of the
+ * week and a timezone, polled by a timer in the harvester.
+ *
+ * **A create and a switch on need `acknowledgedAutomaticFetch: true`**, which
+ * says the person was warned that the chain is then fetched with nobody
+ * asking. Anything else answers 400 naming the field.
+ *
+ * A schedule can be created while the chain's row is off, while the scheduler
+ * is off on the deployment and while its preset would be refused. Each is a
+ * state that changes, and the view's `blockedBy` and `lastOutcome` say which.
+ * The preset of a schedule never changes; deleting the preset is refused with
+ * 409 while a schedule names it.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/schedules', version: '1' })
+export class AdminHarvestSchedulesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /** Ordered by the next slot, with the schedules that are off last. */
+  @Get()
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: HarvestScheduleListQueryDto
+  ): Promise<HarvestSchedulePage> {
+    return this.nats.send<HarvestSchedulePage>(HARVEST_SCHEDULE_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId: query.supermarketId,
+      presetId: query.presetId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Post()
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  create(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: CreateHarvestScheduleDto
+  ): Promise<HarvestScheduleView> {
+    return this.nats.send<HarvestScheduleView>(
+      HARVEST_SCHEDULE_PATTERNS.create,
+      {
+        ...adminCredential(admin),
+        presetId: dto.presetId,
+        timeOfDay: dto.timeOfDay,
+        daysOfWeek: dto.daysOfWeek,
+        timezone: dto.timezone,
+        acknowledgedAutomaticFetch: dto.acknowledgedAutomaticFetch,
+      }
+    );
+  }
+
+  @Get(':id')
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<HarvestScheduleView> {
+    return this.nats.send<HarvestScheduleView>(HARVEST_SCHEDULE_PATTERNS.get, {
+      ...adminCredential(admin),
+      scheduleId: id,
+    });
+  }
+
+  /** A schedule that is on takes its next slot again from now. */
+  @Put(':id')
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: UpdateHarvestScheduleDto
+  ): Promise<HarvestScheduleView> {
+    return this.nats.send<HarvestScheduleView>(
+      HARVEST_SCHEDULE_PATTERNS.update,
+      {
+        ...adminCredential(admin),
+        scheduleId: id,
+        timeOfDay: dto.timeOfDay,
+        daysOfWeek: dto.daysOfWeek,
+        timezone: dto.timezone,
+      }
+    );
+  }
+
+  @Put(':id/enabled')
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.setEnabled)
+  @ApiProblemResponses({ body: true })
+  setEnabled(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: SetHarvestScheduleEnabledDto
+  ): Promise<HarvestScheduleView> {
+    return this.nats.send<HarvestScheduleView>(
+      HARVEST_SCHEDULE_PATTERNS.setEnabled,
+      {
+        ...adminCredential(admin),
+        scheduleId: id,
+        enabled: dto.enabled,
+        acknowledgedAutomaticFetch: dto.acknowledgedAutomaticFetch,
+      }
+    );
+  }
+
+  /** The runs the schedule started keep their record and still name it. */
+  @Delete(':id')
+  @ApiContractResponse(HARVEST_SCHEDULE_PATTERNS.delete)
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(HARVEST_SCHEDULE_PATTERNS.delete, {
+      ...adminCredential(admin),
+      scheduleId: id,
     });
   }
 }

@@ -8,6 +8,7 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunTrigger,
   HarvestRunWrites,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
@@ -734,6 +735,24 @@ export class HarvestRunListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsUUID()
   presetId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The runs one schedule started (plan 0206). A deleted schedule still filters its runs, which keep its id.',
+  })
+  @IsOptional()
+  @IsUUID()
+  scheduleId?: string;
+
+  @ApiPropertyOptional({
+    enum: HarvestRunTrigger,
+    description:
+      'The runs of one trigger: MANUAL for a person, SCHEDULED for a schedule, SYSTEM for the postal code queue.',
+  })
+  @IsOptional()
+  @IsEnum(HarvestRunTrigger)
+  trigger?: HarvestRunTrigger;
 }
 
 export class DiscoveredPlaceListQueryDto extends PageQueryDto {
@@ -1001,4 +1020,128 @@ export class HarvestRunPresetListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsUUID()
   supermarketId?: string;
+}
+
+// --- Schedules (plan 0206) ---------------------------------------------------
+
+/** `HH:mm`, 24 hour. */
+const TIME_OF_DAY_PATTERN = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+/**
+ * The value of a boolean field as the body spelled it.
+ *
+ * The pipe converts implicitly, and that conversion reads the string "false"
+ * as true. For a consent or a switch that would turn something on that the
+ * person did not turn on, so only a JSON true or false passes.
+ */
+const asSpelled = (field: string) =>
+  Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.[field]);
+
+export class CreateHarvestScheduleDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The preset the schedule starts. It never changes: to point at another, delete the schedule and create one. An unknown preset answers 404.',
+  })
+  @IsUUID()
+  presetId!: string;
+
+  @ApiProperty({
+    example: '03:00',
+    description: 'The time of day, `HH:mm` on a 24 hour clock, in `timezone`.',
+  })
+  @IsString()
+  @Matches(TIME_OF_DAY_PATTERN)
+  timeOfDay!: string;
+
+  @ApiProperty({
+    type: [Number],
+    example: [1, 4],
+    description:
+      'The days it fires, 1 for Monday to 7 for Sunday, one to seven different days.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  daysOfWeek!: number[];
+
+  @ApiPropertyOptional({
+    maxLength: 64,
+    example: 'Europe/Madrid',
+    description: 'An IANA name. Absent is Europe/Madrid.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+
+  @ApiProperty({
+    description:
+      'Must be true. A schedule fetches the chain with nobody asking, and the person who sets one up is told so first: this field says the warning was shown. Only a JSON true passes.',
+  })
+  @asSpelled('acknowledgedAutomaticFetch')
+  @IsBoolean()
+  acknowledgedAutomaticFetch!: boolean;
+}
+
+/** Change when a schedule fires. Its preset never changes. */
+export class UpdateHarvestScheduleDto extends OmitType(
+  CreateHarvestScheduleDto,
+  ['presetId', 'timeOfDay', 'daysOfWeek', 'acknowledgedAutomaticFetch'] as const
+) {
+  @ApiPropertyOptional({ example: '03:00' })
+  @IsOptional()
+  @IsString()
+  @Matches(TIME_OF_DAY_PATTERN)
+  timeOfDay?: string;
+
+  @ApiPropertyOptional({ type: [Number], example: [1, 4] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  daysOfWeek?: number[];
+}
+
+export class SetHarvestScheduleEnabledDto {
+  @ApiProperty({
+    description:
+      'True takes the next slot from now. False clears it and keeps the last outcome as the history. Only a JSON true or false passes.',
+  })
+  @asSpelled('enabled')
+  @IsBoolean()
+  enabled!: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Must be true to switch a schedule on, as on a create. Only a JSON true passes.',
+  })
+  @IsOptional()
+  @asSpelled('acknowledgedAutomaticFetch')
+  @IsBoolean()
+  acknowledgedAutomaticFetch?: boolean;
+}
+
+export class HarvestScheduleListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'One chain’s schedules. Absent lists every chain’s.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'The schedules of one preset.',
+  })
+  @IsOptional()
+  @IsUUID()
+  presetId?: string;
 }

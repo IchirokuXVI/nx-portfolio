@@ -298,11 +298,12 @@ Postgres instances, NATS with JetStream, Redis) and the zero downtime deploy con
 `gateway` and `realtime` are public; the rest are ClusterIP and reached over NATS.
 
 The **harvester is deployed in both clusters** (`harvester.enabled: true` and
-`harvestEnabled: true`), and both clusters can start a run. Neither fetches a
-storefront, because whether a chain is fetched is a row per chain in the harvester's
-own database (`supermarket_sources.enabled`), and every row is off. A cluster runs
-store discovery and leaflet imports. Price crawls run locally against the compose
-stack. See the Luna Shopper section of [`CLAUDE.md`](./CLAUDE.md).
+`harvestEnabled: true`), and both clusters can start a run. Whether a chain is
+fetched is a row per chain in the harvester's own database
+(`supermarket_sources.enabled`), off by default and turned on by the owner from the
+back office. In production only (`schedulerEnabled: true`), a schedule can start a
+saved preset by itself at a time of day (backend plan 0206). A schedule needs the row
+of its chain left on. See the Luna Shopper section of [`CLAUDE.md`](./CLAUDE.md).
 
 ### Provisioning a cluster
 

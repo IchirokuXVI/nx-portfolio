@@ -91,10 +91,11 @@ export enum HarvestDetailFetch {
 }
 
 /**
- * Who asked for a run. Every run in plan 0038 is MANUAL: the scheduler is
- * deferred to backlog 0001 section 7.6, and section 8.1 leans on "a person asked
- * for this" as the reason the fetching is defensible at all. SCHEDULED and SYSTEM
- * exist so the column does not need a migration when that changes.
+ * Who asked for a run. MANUAL is a person, from a typed request or a preset.
+ * SYSTEM is the postal code queue (plan 0063). SCHEDULED is a schedule that
+ * names a preset (plan 0206), and its run has no requesting user, because no
+ * person asked for it at that moment: the person who set up the schedule was
+ * warned that it fetches by itself.
  */
 export enum HarvestRunTrigger {
   MANUAL = 'MANUAL',
@@ -115,6 +116,47 @@ export enum HarvestRunStatus {
   FAILED = 'FAILED',
   ABORTED = 'ABORTED',
   STALE = 'STALE',
+}
+
+/**
+ * What happened to the last slot of a schedule (plan 0206, section 5.3).
+ *
+ * Every value but STARTED means no run started, and the slot is skipped rather
+ * than queued: the next slot is the retry.
+ */
+export enum HarvestScheduleOutcome {
+  /** A run started for the slot. */
+  STARTED = 'STARTED',
+  /** More than half of the gap to the slot after it had passed. */
+  SKIPPED_LATE = 'SKIPPED_LATE',
+  /** The source has three or more consecutive failures. */
+  SKIPPED_FAILING = 'SKIPPED_FAILING',
+  /**
+   * The preset no longer validates, the source row is off or missing, or the
+   * start failed for another reason. The note holds the sentence.
+   */
+  REFUSED = 'REFUSED',
+  /**
+   * A run was in the way: one of the chain, or for a store discovery any store
+   * discovery at all, the postal code queue included.
+   */
+  SKIPPED_BUSY = 'SKIPPED_BUSY',
+}
+
+/**
+ * What stands in the way of the next slot of a schedule, as things are now
+ * (plan 0206, section 6). Computed on read and never stored. When several
+ * apply, the first in this order is answered.
+ */
+export enum HarvestScheduleBlock {
+  /** `HARVEST_ENABLED` is false on this deployment. */
+  HARVEST_DISABLED = 'HARVEST_DISABLED',
+  /** `HARVEST_SCHEDULER_ENABLED` is false on this deployment. */
+  SCHEDULER_DISABLED = 'SCHEDULER_DISABLED',
+  /** The `supermarket_sources` row of the chain is off, or there is none. */
+  SOURCE_DISABLED = 'SOURCE_DISABLED',
+  /** The source has three or more consecutive failures. */
+  SOURCE_FAILING = 'SOURCE_FAILING',
 }
 
 /**
