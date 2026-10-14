@@ -1140,7 +1140,7 @@
         <div class="frame" id="ab-RecoveryLinkSheet" style="width: 900px; height: 970px;">
           <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
 
-            <!-- REG: a sign in link, another registered account on this phone. Nothing has been sent about the link yet. -->
+            <!-- REG: a sign in link, another registered account on this phone. Drawn after the one request without switchAccount answered recovery_other_account, which spends nothing. -->
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SIGN IN LINK &middot; another account, a sheet over home</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
@@ -1199,12 +1199,9 @@
                   <p style="margin: 2px 0 16px; font-size: 14.5px; color: #c2c8db;">luis@example.com</p>
 
                     <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Your link is for a different account. To use it, we sign this one out of the phone. Nothing in it is lost, and it can sign in again at any time.</p>
-                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you stay signed in, nothing happens to the link. It still works later.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you close this, nothing happens to the link. It still works later.</p>
 
                   <button type="button" style="width: 100%; height: 52px; margin-top: 6px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Sign out and use the link</button>
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
-                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Stay signed in</span>
-                  </div>
                 </div>
 
               </div>
@@ -1271,12 +1268,9 @@
                     <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">A guest account has no email or password. Once you leave it, nobody can open it again.</p>
                     <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #f7f8fc;">Its <span style="font-weight: 700;">2 groups</span> and their lists stay with it. You will lose them.</p>
                     <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">To keep them, <a href="#" style="font-weight: 600;">add an email to this account</a> first. Then open your link again.</p>
-                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you stay signed in, nothing happens to the link. It still works later.</p>
+                    <p style="margin: 0 0 12px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">If you close this, nothing happens to the link. It still works later.</p>
 
                   <button type="button" style="width: 100%; height: 52px; margin-top: 6px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Continue and lose them</button>
-                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
-                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep the guest account</span>
-                  </div>
                 </div>
 
               </div>
@@ -1295,7 +1289,7 @@
       <aside class="note" style="left: 470px; top: 2650px; width: 430px;"><p>THE RESET LINK SPENDS NOTHING ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button.</p><p>THE SIGN IN LINK HAS NO SCREEN (the owner's pick 2). It spends the link as the page loads and lands on home. While the request runs the page shows the spinner the confirmation link page already shows, and nothing else. The owner accepted the risk: a mail scanner that runs scripts can spend the link first, and it then arrives dead. The reset link still waits for a press.</p><p>If the owner of the link is already signed in, either way into it lands on home with no error, even when the link is old.</p></aside>
       <aside class="note" style="left: 940px; top: 2650px; width: 430px;"><p>THE FORGOT PAGE NEVER SAYS WHETHER AN ACCOUNT EXISTS, and never says a mail arrived. forgot-password answers the same for every address, so the copy says what we did ("if it has an account, we have sent it a mail"). The wait is the server's number (rule C3), as on the resend line.</p><p>The address comes over from the sign in page, so a person who just failed to sign in types nothing again.</p></aside>
       <aside class="note" style="left: 1060px; top: 4110px; width: 430px;"><p>THE OWNER'S PICKS, 2026-10-14.</p><p>1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.</p><p>2. The sign in link shows no screen. Its alternatives are gone from this canvas.</p><p>3 and 4. The confirm before a reset is a message with one button that continues. A sign in link that meets another account is asked about in a sheet over home instead (2026-10-14). For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.</p><p>5. Each confirm names the username and the email of the account on this phone, always.</p><p>6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen.</p></aside>
-      <aside class="note" style="left: 1920px; top: 5290px; width: 430px;"><p>THE SIGN IN LINK MEETS ANOTHER ACCOUNT: A SHEET OVER HOME (the owner's requirement of 2026-10-14). The reset page goes home and this sheet says the person must sign out to use the link. The token waits in memory, never in the sheet's URL. Nothing is sent about it until the person presses the button, which spends it with switchAccount. Stay signed in sends nothing, and the link still works later.</p><p>HOW VELISTA TELLS THE OWNER FROM ANOTHER ACCOUNT is still the owner's to decide. Until then a guest is always another account (a guest has no email, so no link is theirs), and a registered account asks the server once, which spends nothing when the answer is another account and lands the owner home.</p><p>THE RESET LINK STILL ASKS ON ITS OWN PAGE before a reset, whenever an account is signed in: a message and one button, with words that hold whoever the link turns out to belong to.</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). The guest's button takes the destructive colour of the delete sheet.</p></aside>
+      <aside class="note" style="left: 1920px; top: 5290px; width: 430px;"><p>THE SIGN IN LINK MEETS ANOTHER ACCOUNT: A SHEET OVER HOME (the owner's decision of 2026-10-14). With a session, the page asks the server once without switchAccount, the bearer going along. The owner of the link lands home with no error. Another account (a 409 that spends nothing) goes home, and this sheet opens there.</p><p>The token waits in memory, never in the sheet's URL. The sheet names the account by username and email and has ONE button, which retries with switchAccount. Closing it (the scrim, Escape, back) spends nothing, and the link still works later.</p><p>THE RESET LINK STILL ASKS ON ITS OWN PAGE before a reset, whenever an account is signed in: a message and one button, with words that hold whoever the link turns out to belong to.</p><p>A GUEST IS NEVER OFFERED REGISTER (rule C2). The guest's last paragraph links to the upgrade page, and its button takes the destructive colour of the delete sheet.</p></aside>
       <aside class="note" style="left: 1920px; top: 5850px; width: 430px;"><p>THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two.</p></aside>
   </div>
 </div>
