@@ -251,8 +251,10 @@ describe('ImpersonationSession', () => {
     );
 
     it('writes the marker, then the pair, to this tab, and loads home as a new document', () => {
+      // Built once: a second build a second later carries another expiry.
+      const operator = ordinaryPair();
       const persisted = new Map([
-        [StorageKeys.session, JSON.stringify(ordinaryPair())],
+        [StorageKeys.session, JSON.stringify(operator)],
       ]);
       const tab = new Map([
         ['last-list:velista', 'left by the last session'],
@@ -276,7 +278,7 @@ describe('ImpersonationSession', () => {
       expect(tab.get('something:shell')).toBe('not ours');
       // The operator's account is not touched.
       expect(JSON.parse(persisted.get(StorageKeys.session) ?? '')).toEqual(
-        ordinaryPair()
+        operator
       );
       expect(replaceDocument).toHaveBeenCalledWith('/velista/en/home');
     });
