@@ -1,3 +1,5 @@
+> **PR:** [#720](https://github.com/IchirokuXVI/nx-portfolio/pull/720)
+
 # 0143: a buy reaches the other phone at once
 
 > Reported by the owner on 2026-10-11: "The sync time between two devices is about 2 to 3
