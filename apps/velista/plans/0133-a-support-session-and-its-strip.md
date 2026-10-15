@@ -1,3 +1,5 @@
+> **PR:** [#725](https://github.com/IchirokuXVI/nx-portfolio/pull/725)
+
 # 0133: a support session and its strip
 
 > Asked for by the owner on 2026-10-07. An operator opens the app as a user to see a bug
