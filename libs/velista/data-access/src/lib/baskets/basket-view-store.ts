@@ -331,24 +331,33 @@ export class BasketViewStore {
   );
 
   /**
-   * Whether grouping by category draws the shop's aisles right now (velista
-   * `0120`).
+   * Whether the chosen shop offers its aisles to group by (velista `0120`).
    *
-   * What the filter sheet's radio and the chip read, so the words Aisle and By
-   * aisle appear in the same frame as the headings and never before them. So it is
-   * false while the tree has not landed under the category grouping, too: the
-   * pipeline draws the rows ungrouped then, with no aisle heading for the words to
-   * name (velista `0138`). Under any other grouping no heading is waiting on the
-   * tree, which is not even asked for, so the radio names the aisles from the first
-   * frame instead of changing its word under the finger once the tree lands.
+   * What the filter sheet's radio reads, so it names the option Aisle or Category
+   * by what the shop has. It does not wait for the category tree: picking the
+   * radio is what asks for the tree, and a word that waited for it would change
+   * from Aisle to Category and back under the finger. A failed tree read leaves it
+   * as it is, too. What the page behind draws is {@link drawnByAisle}.
    */
-  readonly byAisle = computed(() => {
-    const context = this._context();
-    return (
-      (this.state().grouping !== 'category' || context.parents !== null) &&
-      basketGroupsByAisle(this.state(), context)
-    );
-  });
+  readonly shopOffersAisles = computed(() =>
+    basketGroupsByAisle(this.state(), this._context())
+  );
+
+  /**
+   * Whether the page draws the shop's aisles right now (velista `0120`).
+   *
+   * What the chip and the rows' section names read, so they follow the headings
+   * on the screen and never come before them. True only under the category
+   * grouping with the shop's aisles offered and the tree landed: until the tree
+   * names the parents, the pipeline draws the rows ungrouped, with no aisle
+   * heading for the chip to name (velista `0138`).
+   */
+  readonly drawnByAisle = computed(
+    () =>
+      this.state().grouping === 'category' &&
+      this._parents() !== null &&
+      this.shopOffersAisles()
+  );
 
   constructor() {
     // Ask for the chosen shop's aisles as soon as it is chosen, rather than when
@@ -481,7 +490,7 @@ export class BasketViewStore {
       // another.
       chainName: this.chosenShop()?.chain ?? null,
       shopLocked: this.shopLocked(),
-      byAisle: this.byAisle(),
+      byAisle: this.drawnByAisle(),
     })
   );
 

@@ -166,9 +166,9 @@ below is a choice of the builder that the owner can overturn.
    shop included. The aisles do not need the tree, but drawing them with the rest ungrouped
    below them would be a second interim layout. The tree is read once per session, so this is
    one short wait per session. A tree that failed to load draws the list ungrouped until the
-   next basket opens (decision 2). `BasketViewStore.byAisle` is false for the same time, so the
-   chip, the radio of the filter sheet and the section name on each row say "category" while
-   no aisle heading is drawn.
+   next basket opens (decision 2). `BasketViewStore.drawnByAisle` is false for the same time, so
+   the chip and the section name on each row say "category" while no aisle heading is drawn.
+   The radio of the filter sheet does not wait (see the fix below).
 4. **A product with one known root and one stale root is drawn under the known one only.** It
    goes under "No category" only when none of its roots is in the tree.
 5. **Stage 2 removed the `ShopSections` wrapper too.** With `source` gone it held one field, so
@@ -191,6 +191,10 @@ The browser walk of 2026-10-15 (390 pixels, English and Spanish, 31 rows under n
 and Mercadona Colón with two sections of its own) is a private artifact:
 https://claude.ai/artifact/6CdwhY1HnYGuHZEsVaYXDd
 
-**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** `byAisle` waits for the tree only under the category
-grouping. Under the default grouping the radio said Category until the tree loaded, and then
-Aisle under the finger.
+**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** `byAisle` served two meanings, and it is now two
+signals. `BasketViewStore.shopOffersAisles` is what the radio of the filter sheet reads: the
+shop has aisles to group by, whether or not the tree has landed. `drawnByAisle` is what the chip
+and the section name on each row read: the page draws the aisles now, which is false while the
+category grouping waits for the tree (decision 3). Before, the radio said Category until the
+tree loaded, and a first pick of the category grouping changed it from Aisle to Category and
+back under the finger.

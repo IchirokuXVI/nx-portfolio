@@ -338,10 +338,7 @@ export class BasketPage {
    */
   protected rowSection(row: BasketRowModel): string | null {
     const shop = this.mapShop();
-    if (
-      shop === null ||
-      (this._view.grouping() === 'category' && this._view.byAisle())
-    ) {
+    if (shop === null || this._view.drawnByAisle()) {
       return null;
     }
     const sections = this._shopSections.sectionsOf(shop.id) ?? [];

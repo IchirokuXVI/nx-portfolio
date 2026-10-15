@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Response } from '@playwright/test';
 import {
   ALICE_EMAIL,
   login,
@@ -172,6 +172,12 @@ test.describe('the owner and a guest', () => {
           name: /Also remove the \d+ guests? who joined with it/,
         })
         .check();
+      // The read of the rows that the cascade's event asks for, refused. Watched
+      // from before the revoke, because it can land before the tap or after it.
+      const rowsReadRefused = guest
+        .waitForResponse(refusedRowsRead(basketId), { timeout: 30_000 })
+        .then(() => undefined)
+        .catch(() => undefined);
       await revoke.getByRole('button', { name: 'Revoke the link' }).click();
       await expectBasketUrl(page, basketId);
 
@@ -185,12 +191,34 @@ test.describe('the owner and a guest', () => {
       await expect(tap.or(refused)).toBeVisible();
       await tap.click({ timeout: 2_000 }).catch(() => undefined);
       // Refused, in words, on the screen they are on. Whichever refusal comes
-      // second must not turn it into the join screen.
+      // second must not turn it into the join screen, so the check waits for
+      // the event's read to be refused (a guest whose tap came first may never
+      // make it, hence the bound) and then holds over a short window, rather
+      // than passing on the first frame after the first refusal.
       await expect(refused).toBeVisible();
-      await expect(
-        guest.getByText('This link is no longer accepting people')
-      ).toHaveCount(0);
+      let bound: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        rowsReadRefused,
+        new Promise<void>((resolve) => {
+          bound = setTimeout(resolve, 5_000);
+        }),
+      ]);
+      clearTimeout(bound);
+      const join = guest.getByText('This link is no longer accepting people');
+      for (let check = 0; check < 10; check++) {
+        await expect(join).toHaveCount(0, { timeout: 100 });
+        await expect(refused).toBeVisible({ timeout: 100 });
+        await guest.waitForTimeout(150);
+      }
       await expectBasketUrl(guest, basketId);
     });
   });
 });
+
+/** A refused `GET` of the basket's rows, which a cascade's event asks for. */
+function refusedRowsRead(basketId: string): (response: Response) => boolean {
+  return (response) =>
+    response.status() === 401 &&
+    response.request().method() === 'GET' &&
+    new URL(response.url()).pathname.endsWith(`/baskets/${basketId}/rows`);
+}

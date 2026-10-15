@@ -1021,10 +1021,9 @@ export interface Basket {
    * The covered lists this reader writes themselves, and no others.
    *
    * What replaced the old all or nothing flag, `sources` and `listNames` at once.
-   * "May this
-   * reader be offered the grouping by list" is `lists.length > 0`; "may this
-   * entry be named" is `entry.listId !== null`; and the heading's words are this
-   * ref's `name`. One collection answers all three, so they cannot disagree.
+   * "May this reader be offered the grouping by list" is `lists.length > 0`; "may
+   * this entry be named" is `entry.listId !== null`; and the heading's words are
+   * this ref's `name`. One collection answers all three, so they cannot disagree.
    */
   readonly lists: readonly BasketListRef[];
   readonly participants: readonly BasketParticipant[];

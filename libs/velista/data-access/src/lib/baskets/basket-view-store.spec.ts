@@ -1426,7 +1426,8 @@ describe('BasketViewStore: the aisles of the shop', () => {
     expect(view.sections().map((part) => part.key)).toEqual([
       'category:cat-other',
     ]);
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(false);
+    expect(view.drawnByAisle()).toBe(false);
     expect(view.chips().map((chip) => chip.key)).toContain(
       'basket.view.chip.byCategory'
     );
@@ -1439,28 +1440,32 @@ describe('BasketViewStore: the aisles of the shop', () => {
       ['aisle:sec-dairy', false],
       ['category:cat-other', true],
     ]);
-    expect(view.byAisle()).toBe(true);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
     expect(view.chips().map((chip) => chip.key)).toContain(
       'basket.view.chip.byAisle'
     );
   });
 
   // Velista `0138`: the pipeline draws the rows ungrouped until the tree names the
-  // parents, so the words wait for the tree as well as for the aisles.
-  it('says By aisle only once the tree has landed too, and not after it failed', () => {
+  // parents, so the chip waits for the tree as well as for the aisles. The radio
+  // states what the shop offers and does not wait, even for a read that failed.
+  it('says By aisle only once the tree has landed too, and keeps the radio on Aisle', () => {
     const categories = fakeCategoryStore();
     const { view, sections } = atTejares(categories);
     sections.land('loc-tejares', [DAIRY]);
 
     expect(view.sections().map((part) => part.key)).toEqual(['all']);
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
     expect(view.chips().map((chip) => chip.key)).not.toContain(
       'basket.view.chip.byAisle'
     );
 
     categories.fail();
 
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
 
     categories.land(TREE);
 
@@ -1468,12 +1473,12 @@ describe('BasketViewStore: the aisles of the shop', () => {
       'aisle:sec-dairy',
       'category:cat-other',
     ]);
-    expect(view.byAisle()).toBe(true);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
   });
 
-  // The tree gates the words only under the category grouping, the one view that
-  // waits on it. Under the default the radio would otherwise read Category until
-  // somebody grouped by category, then change to Aisle under the finger.
+  // Under the default the tree is not even asked for, and the radio still names
+  // the aisles, so a first pick cannot change its word under the finger.
   it('names the radio Aisle under the default grouping with the tree not read', () => {
     const categories = fakeCategoryStore();
     const { view, sections } = atTejares(categories, 'none');
@@ -1482,7 +1487,34 @@ describe('BasketViewStore: the aisles of the shop', () => {
     expect(view.grouping()).toBe('none');
     expect(categories.loaded()).toBe(false);
     expect(categories.ensured()).toBe(0);
-    expect(view.byAisle()).toBe(true);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+  });
+
+  it('keeps the radio on Aisle through a first pick of category, while the chip waits for the tree', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories, 'none');
+    sections.land('loc-tejares', [DAIRY]);
+    expect(view.shopOffersAisles()).toBe(true);
+
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+    expect(categories.loaded()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byCategory'
+    );
+
+    categories.land(TREE);
+
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byAisle'
+    );
   });
 
   it('regroups by category, with no message, when the shop is put back to any', () => {
@@ -1492,7 +1524,8 @@ describe('BasketViewStore: the aisles of the shop', () => {
     view.setShop(null);
     TestBed.tick();
 
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(false);
+    expect(view.drawnByAisle()).toBe(false);
     expect(view.sections().map((part) => part.key)).toEqual([
       'category:cat-other',
     ]);
