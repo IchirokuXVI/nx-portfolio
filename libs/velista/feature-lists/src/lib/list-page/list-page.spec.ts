@@ -61,6 +61,7 @@ import type {
   ZoneRole,
 } from '@portfolio/velista/models';
 import {
+  AppResumed,
   NavChrome,
   NOTIFICATION_TONE,
   provideFakeBrowserFacade,
@@ -201,6 +202,8 @@ interface Options {
   readonly due?: readonly DueLine[] | 'fail';
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
+  /** Whether the socket is up as the page builds. Up by default. */
+  readonly connected?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -225,6 +228,8 @@ async function render(options: Options = {}): Promise<{
   trips: TripStore;
   tripCalls: { heads: number; rows: string[] };
   dueCalls: { reads: number };
+  /** The app's resume count, which a spec bumps to bring the app back. */
+  resumes: ReturnType<typeof signal<number>>;
 }> {
   TestBed.resetTestingModule();
 
@@ -246,6 +251,8 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
+  realtime.setConnected(options.connected ?? true);
+  const resumes = signal(0);
   const itemNames = fakeItemNames({
     items: options.items ?? [],
     failed: options.failedItems ?? [],
@@ -331,6 +338,7 @@ async function render(options: Options = {}): Promise<{
       provideFakePresenceStore(fakePresenceStore(options.presence)),
       provideFakeSessionStore('REGISTERED'),
       { provide: REALTIME_CLIENT, useValue: realtime },
+      { provide: AppResumed, useValue: { resumes } },
       { provide: Router, useValue: router },
       { provide: NavChrome, useValue: chrome },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -372,6 +380,7 @@ async function render(options: Options = {}): Promise<{
     chrome,
     profiles,
     itemNames,
+    resumes,
     view: TestBed.inject(ListViewStore),
     trips: TestBed.inject(TripStore),
     tripCalls,
@@ -1489,6 +1498,67 @@ describe('ListPage: searching and viewing one category', () => {
       ['milk', 'carrot'],
       ['milk', 'carrot'],
     ]);
+  });
+
+  it('does not read the products again on the first connect after the page builds (velista 0145)', async () => {
+    const { fixture, realtime, itemNames } = await render({
+      lines: LINES,
+      items: ITEMS,
+      connected: false,
+    });
+    expect(itemNames.refreshed).toHaveLength(1);
+
+    realtime.setConnected(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(itemNames.refreshed).toEqual([['milk', 'carrot']]);
+  });
+
+  it('reads the products once when the app comes back and the socket reconnects after it (velista 0145)', async () => {
+    const { fixture, realtime, itemNames, resumes } = await render({
+      lines: LINES,
+      items: ITEMS,
+    });
+
+    realtime.setConnected(false);
+    resumes.update((count) => count + 1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    realtime.setConnected(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(itemNames.refreshed).toEqual([
+      ['milk', 'carrot'],
+      ['milk', 'carrot'],
+    ]);
+  });
+
+  it('reads the products again on a reconnect long after the app came back (velista 0145)', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      const { fixture, realtime, itemNames, resumes } = await render({
+        lines: LINES,
+        items: ITEMS,
+      });
+
+      resumes.update((count) => count + 1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      realtime.setConnected(false);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      now.mockReturnValue(1_000_000 + 60_000);
+      realtime.setConnected(true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(itemNames.refreshed).toHaveLength(3);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('counts A to Z and a picked category on the filter badge', async () => {

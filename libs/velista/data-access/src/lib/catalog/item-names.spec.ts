@@ -190,4 +190,64 @@ describe('ItemNames prices (velista 0145, section 7)', () => {
     expect(names.anyFailed(['a'])).toBe(false);
     expect(names.anyFailed(['b'])).toBe(true);
   });
+
+  it('keeps a gone answer when a later refresh fails', async () => {
+    let failing = false;
+    const { names } = setup(
+      () => failing,
+      (id) => id !== 'gone'
+    );
+
+    await names.ensure(['gone']);
+    failing = true;
+    await names.refresh(['gone']);
+
+    expect(names.pricesOf('gone')).toEqual([]);
+    expect(names.anyFailed(['gone'])).toBe(false);
+    expect(names.settled('gone')).toBe(true);
+  });
+
+  it('does not read again a product whose read is still out', async () => {
+    const { names, requests } = setup();
+
+    const first = names.refresh(['a']);
+    const second = names.refresh(['a', 'b']);
+    await Promise.all([first, second]);
+
+    expect(requests).toEqual([['a'], ['b']]);
+    expect(names.pricesOf('a')).toEqual([
+      expect.objectContaining({ kind: 'priced' }),
+    ]);
+  });
+
+  it('keeps the prices it holds when a record with none is primed', async () => {
+    const { names } = setup();
+
+    await names.ensure(['a']);
+    names.prime([{ ...product('a'), chainPrices: [] }]);
+
+    expect(names.pricesOf('a')).toEqual([
+      expect.objectContaining({
+        supermarketId: 'chain-mercadona',
+        kind: 'priced',
+      }),
+    ]);
+  });
+
+  it('does not answer the prices of a product primed with none, and reads them later', async () => {
+    const { names, requests } = setup();
+
+    names.prime([{ ...product('x'), chainPrices: [] }]);
+
+    expect(names.nameOf('x')).not.toBeNull();
+    expect(names.pricesOf('x')).toBeUndefined();
+    expect(names.settled('x')).toBe(false);
+
+    await names.ensure(['x']);
+
+    expect(requests).toEqual([['x']]);
+    expect(names.pricesOf('x')).toEqual([
+      expect.objectContaining({ kind: 'priced' }),
+    ]);
+  });
 });

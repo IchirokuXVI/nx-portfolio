@@ -410,3 +410,21 @@ overturn it.
 11. **The brand and the size read "Hacendado · 1 L"**, brand first, as the mock draws them.
     A new `productBrandSizeText` says it; `productDetailText` keeps its order for the
     screens that use it.
+
+**The review round of 2026-10-16.**
+
+- **One visit reads once.** The socket's first connect after the page builds does not
+  start a visit, because on a cold open the socket starts down and the page has just
+  read. A reconnect within 15 seconds of a resume is the same return, which the resume
+  already read for (`RECONNECT_AFTER_RESUME_MS` in `list-page.ts`). `ItemNames` also
+  does not read a product whose read is still out: a second call waits for that read.
+- **The star and the "+N" are in the row's accessible name.** The row is a button with
+  a name of its own, so the names of the two marks inside it were never read out.
+  `accessibleName` says them with the keys the marks use, `list.row.favorite` and
+  `list.row.more`, after the line's name and after the price.
+- **A record with no prices does not erase prices.** `GroupMembers` primes the members
+  of a group read with no scopes, so they carry no prices. `ItemNames.prime` keeps the
+  prices it holds for such a product, and for a product it holds none of, the prices
+  stay unread: the row draws a bone and the next lookup reads them.
+- **A failed read keeps every earlier answer**, a product that is gone included. Only
+  a product no read has answered is marked failed.

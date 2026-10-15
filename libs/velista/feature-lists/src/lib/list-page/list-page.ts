@@ -122,6 +122,13 @@ import { voiceFailureCopy } from '../voice-error-copy';
 /** What the list page hands the catalog that chooses a product, to know its answer. */
 const LIST_ROW_PICK = 'list-row';
 
+/**
+ * How long after the app comes back a reconnect counts as the same return
+ * (velista `0145`): the resume already read every product, and the socket that
+ * died in the background comes back a few seconds after it.
+ */
+const RECONNECT_AFTER_RESUME_MS = 15_000;
+
 interface ListRowPick {
   readonly from: typeof LIST_ROW_PICK;
 }
@@ -1080,17 +1087,32 @@ export class ListPage {
     });
 
     // The app or the socket came back: a new visit for the prices. The edges only,
-    // so neither first run counts.
+    // so neither first run counts. The socket's first connect is not a return
+    // either: on a cold open it starts down, and the page has just read. A
+    // reconnect that follows a resume closely is the same return, which the resume
+    // has read for already.
     let seenResumes = untracked(() => this._resumed.resumes());
     let wasConnected = untracked(() => this._realtime.connected());
+    let hasConnected = wasConnected;
+    let resumedAt: number | null = null;
     effect(() => {
       const resumes = this._resumed.resumes();
       const connected = this._realtime.connected();
       untracked(() => {
-        const back = resumes !== seenResumes || (connected && !wasConnected);
+        const resumed = resumes !== seenResumes;
+        const reconnected = connected && !wasConnected && hasConnected;
         seenResumes = resumes;
         wasConnected = connected;
-        if (back) {
+        hasConnected ||= connected;
+        const now = Date.now();
+        if (resumed) {
+          resumedAt = now;
+        }
+        const afterResume =
+          !resumed &&
+          resumedAt !== null &&
+          now - resumedAt < RECONNECT_AFTER_RESUME_MS;
+        if (resumed || (reconnected && !afterResume)) {
           this._priceVisit.update((visit) => visit + 1);
         }
       });

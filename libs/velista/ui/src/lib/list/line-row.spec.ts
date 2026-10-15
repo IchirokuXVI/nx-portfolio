@@ -226,6 +226,34 @@ describe('LineRow', () => {
       );
     });
 
+    it('says the star and the other products, which the name hides from a screen reader (velista 0145)', async () => {
+      const named = await render(
+        vm({
+          content: 'Leche',
+          named: true,
+          quantity: 6,
+          product: shown({ favorite: true, others: 2 }),
+        })
+      );
+
+      expect(row(named).getAttribute('aria-label')).toBe(
+        'Leche, list.row.favorite, Leche semidesnatada, Hacendado · 1 L, 0,92 €, list.row.more, 6'
+      );
+
+      const notNamed = await render(
+        vm({
+          content: 'Leche semidesnatada',
+          named: false,
+          quantity: 6,
+          product: shown({ favorite: true, others: 1 }),
+        })
+      );
+
+      expect(row(notNamed).getAttribute('aria-label')).toBe(
+        'Leche semidesnatada, list.row.favorite, 0,92 €, list.row.more, 6'
+      );
+    });
+
     it('says zero rather than dropping it', async () => {
       const fixture = await render(vm({ content: 'Olive oil', quantity: 0 }));
 

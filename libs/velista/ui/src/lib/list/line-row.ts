@@ -9,7 +9,10 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   lineStatuses,
   QUANTITY_REEL_CLICK_SHIELD_MS,
@@ -242,6 +245,7 @@ export class LineRow {
   }
 
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _translator = inject(RokuTranslatorService);
   private readonly _reel = viewChild(QuantityReel);
   private readonly _reelEl = viewChild('reel', { read: ElementRef });
 
@@ -333,18 +337,34 @@ export class LineRow {
    *
    * A row built without a catalog keeps the old name: the format and the brand, when
    * it draws them, tell two lines of one name apart.
+   *
+   * The star and the "+N" are in it too. The row is a button with a name of its own,
+   * so the names those two marks carry are never read out.
    */
   accessibleName(): string {
     const line = this.line();
     const shown = this.shown();
+    // The dependencies the pipe takes, so the name follows the locale and the strings.
+    this._translator.locale();
+    this._translator.loaded();
     const parts: (string | null | undefined)[] = [line.content];
     if (line.product === undefined) {
       parts.push(line.detail);
     } else if (shown !== null) {
+      if (shown.favorite) {
+        parts.push(this._translator.t('list.row.favorite'));
+      }
       if (line.named === true) {
         parts.push(shown.name, shown.brandSize);
       }
       parts.push(shown.price);
+      if (shown.others > 0) {
+        parts.push(
+          this._translator.t('list.row.more', undefined, undefined, {
+            count: shown.others,
+          })
+        );
+      }
     }
     parts.push(String(line.quantity));
     return parts
