@@ -281,9 +281,23 @@ describe('AppShellRoutes', () => {
       'auth/callback',
       'auth/forgot-password',
       'auth/reset-password',
+      // Velista 0133: the handoff of a support session, and its end.
+      'auth/impersonate',
+      'auth/support-ended',
     ];
 
-    it('declares all seven, before the front door', () => {
+    it('opens the two pages of a support session to anybody, outside any sheet', () => {
+      // Velista 0133: no session is needed to trade a code, the operator is usually
+      // signed in as themselves, and the ended page is drawn in an ordinary tab.
+      for (const path of ['auth/impersonate', 'auth/support-ended']) {
+        const route = pages.find((page) => page.path === path);
+        expect(route?.canActivate ?? []).toEqual([]);
+        expect(route?.canMatch ?? []).toEqual([]);
+        expect(route?.path?.split('/')).not.toContain(SHEET_SEGMENT);
+      }
+    });
+
+    it('declares all nine, before the front door', () => {
       // The `''` ordering assertion above covers this for the table as a whole. This
       // one names the five, so removing one is a failure rather than a shorter list
       // that still happens to be ordered.
@@ -1396,6 +1410,9 @@ describe('the bottom bar', () => {
     'auth/callback',
     'auth/forgot-password',
     'auth/reset-password',
+    // Velista 0133: the two pages of a support session are dead ends on purpose.
+    'auth/impersonate',
+    'auth/support-ended',
     'join/:code',
     's/:secret',
     'lab/walk',

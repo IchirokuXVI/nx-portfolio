@@ -5,6 +5,7 @@ import { ApiUrl } from './api-url';
 import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
+import { ImpersonationSession } from './auth/impersonation-session';
 import { PendingRecoveryLink } from './auth/pending-recovery-link';
 import { SessionStore } from './auth/session-store';
 import { SessionValidation } from './auth/session-validation';
@@ -266,4 +267,5 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LiveBasketStore,
   StartupProbe,
   SessionValidation,
+  ImpersonationSession,
 ];

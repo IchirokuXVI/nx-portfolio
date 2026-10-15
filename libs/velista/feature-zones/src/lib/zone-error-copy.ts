@@ -56,6 +56,11 @@ export function zoneErrorKey(
   }
 
   switch (error.code) {
+    case 'impersonation_not_allowed':
+      // A support session asked for something only the person may do, here handing
+      // the group to somebody else (backend `0194`).
+      return 'support.refused';
+
     case 'not_found':
       // Core answers not found rather than forbidden to somebody with no membership
       // at all, deliberately: a stranger must not be able to tell an existing group

@@ -439,6 +439,21 @@ $app-content-max: 480px;
   // which it never draws over because no card is up while one is open.
   --app-tour-z: 8;
 
+  // The strip of a support session (velista `0133`): the first thing on every screen
+  // while an operator has the app open as a user. Over **every** cover, the sheet's
+  // scrim (10), the account lost panel (20), the tour (8) and the connection screen
+  // (100), because "End" has to work under each of them.
+  --app-support-strip-z: 200;
+  // One row, a touch target tall, plus the top inset, which the strip takes for the
+  // screen while it is up (see `app-layout.scss`). The bar's reason for its own name
+  // for the inset holds here: nothing redefines it.
+  --app-support-strip-row: var(--app-touch-target);
+  --app-support-strip-safe-top: env(safe-area-inset-top, 0px);
+  // How much of the viewport the strip takes. `0px` while no strip is drawn, so every
+  // rule that subtracts it from `100svh` is the same rule in an ordinary tab. The app
+  // root redefines it while the strip is up, and only there.
+  --app-support-strip-height: 0px;
+
   // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
   // in `_themes.scss`; its geometry is not, and is the same in both.
   //
@@ -454,7 +469,8 @@ $app-content-max: 480px;
   --app-sheet-handle-height: 5px;
   // How far a sheet is allowed to grow before it scrolls inside itself. Anything
   // taller than this stops being a sheet over a page and becomes a page.
-  --app-sheet-max-height: 86svh;
+  // Less the strip of a support session, so a full sheet never reaches under it.
+  --app-sheet-max-height: calc(86svh - var(--app-support-strip-height));
 
   // The ambient glow's geometry, which is theme independent the way the sheet's is:
   // Day paints nothing there, but where it would be painted is the same. The values

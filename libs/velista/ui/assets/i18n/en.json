@@ -2689,5 +2689,29 @@
     "unsaved": {
       "body": "The last part of this walk is only on this phone. We keep trying to save it."
     }
+  },
+  "support": {
+    "strip": {
+      "label": "Support session",
+      "viewingAs": "Viewing as",
+      "leftHoursMinutes": "{{hours}} h {{minutes}} min left",
+      "leftHours": "{{hours}} h left",
+      "leftMinutes": "{{minutes}} min left",
+      "leftUnderMinute": "Less than a minute left",
+      "end": "End"
+    },
+    "handoff": {
+      "working": "Opening the support session",
+      "invalidTitle": "This link no longer works",
+      "invalidBody": "It was already used, or it is too old. Open a new one from the back office.",
+      "failedTitle": "The support session did not open",
+      "failedBody": "Something went wrong. The link may still work.",
+      "retry": "Try again"
+    },
+    "ended": {
+      "title": "This support session has ended",
+      "body": "You can close this tab."
+    },
+    "refused": "This cannot be done in a support session"
   }
 }
