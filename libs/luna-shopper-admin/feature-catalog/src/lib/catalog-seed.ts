@@ -126,9 +126,13 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: 'node/1156230891',
     externalProvider: 'osm',
     footprintM2: null,
-    sections: [],
-    // The one shop with a walk shown to shoppers, whose section list the
-    // map rewrites on every save (backend plan 0168, admin plan 0040).
+    // The names of its sections, in its order (`section-seed.ts`).
+    sections: [
+      { id: 'sec_centro_chilled', name: { en: 'Chilled', es: 'Refrigerados' } },
+      { id: 'sec_centro_offers', name: { en: 'Offers', es: 'Ofertas' } },
+    ],
+    // The one shop with a walk shown to shoppers, whose section order the
+    // map writes on every save (backend plan 0200, section 5).
     hasMap: true,
   },
   {
@@ -149,7 +153,10 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: 'way/48821004',
     externalProvider: 'osm',
     footprintM2: 2400,
-    sections: [],
+    sections: [
+      { id: 'sec_oeste_pantry', name: { en: 'Pantry', es: 'Despensa' } },
+      { id: 'sec_oeste_chilled', name: { en: 'Chilled', es: 'Refrigerados' } },
+    ],
     hasMap: false,
   },
   {

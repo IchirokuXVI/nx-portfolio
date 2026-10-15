@@ -42,10 +42,9 @@ import {
 
 /**
  * A product on the record page, against the in memory gateways (admin plan
- * 0055): the header, the four tabs with their counts, the three sections of
+ * 0055): the header, the three tabs with their counts, the three sections of
  * Details, what the server refuses about the categories, the delete, and a
- * new product. The Where and Sources tabs are here as well, as parts of the
- * record.
+ * new product. The Sources tab is here as well, as a part of the record.
  *
  * The Prices tab and the form that adds a price are in
  * `product-prices-tab.spec.ts`.
@@ -198,21 +197,28 @@ describe('a product, on the record page', () => {
     ).toHaveLength(1);
   });
 
-  it('has four tabs, each at an address under the product', async () => {
+  /** A product has no section panel since admin plan 0063. */
+  it('has three tabs, each at an address under the product', async () => {
     const fixture = await boot('/products/it_milk_1l');
 
     expect(tabs(fixture).map((tab) => tab.label)).toEqual([
       'record.tab.details',
       'catalog.products.tabs.prices',
-      'catalog.products.tabs.where',
       'catalog.products.tabs.sources',
     ]);
     expect(tabs(fixture).map((tab) => tab.path)).toEqual([
       '/products/it_milk_1l/details',
       '/products/it_milk_1l/prices',
-      '/products/it_milk_1l/where',
       '/products/it_milk_1l/sources',
     ]);
+  });
+
+  it('draws no section panel at the address the Where tab had', async () => {
+    const fixture = await boot('/products/it_milk_1l/where');
+
+    expect(
+      fixture.nativeElement.querySelector('lib-item-sections-panel')
+    ).toBeNull();
   });
 
   /** Every address a product had before this plan opens the same thing. */
@@ -220,7 +226,6 @@ describe('a product, on the record page', () => {
     ['/products/it_milk_1l/details', 'lib-record-view'],
     ['/products/it_milk_1l/prices', 'lib-product-prices-tab'],
     ['/products/it_milk_1l/prices/new', 'lib-price-form-page'],
-    ['/products/it_milk_1l/where', 'lib-item-sections-panel'],
     ['/products/it_milk_1l/sources', 'lib-item-source-entries'],
   ])('keeps the address %s', async (address, selector) => {
     const fixture = await boot(address);
@@ -233,13 +238,12 @@ describe('a product, on the record page', () => {
   /** A count is shown only when the gateway gave it: here, both did. */
   it('counts the scopes that price it and the source rows that name it', async () => {
     const fixture = await boot('/products/it_milk_1l');
-    const [details, prices, where, sources] = tabs(fixture);
+    const [details, prices, sources] = tabs(fixture);
 
     expect(prices.count?.()).toBe(2);
     expect(sources.count?.()).toBe(3);
-    // Nothing is counted for the other two.
+    // Nothing is counted for Details.
     expect(details.count).toBeUndefined();
-    expect(where.count?.()).toBeNull();
   });
 
   it('draws Details in three sections, and no tab of the others under it', async () => {
@@ -487,7 +491,7 @@ describe('the Sources tab of a product', () => {
     const fixture = await boot('/products/it_dish_soap/sources');
 
     expect(text(fixture)).toContain('catalog.items.sources.empty');
-    expect(tabs(fixture)[3].count?.()).toBe(0);
+    expect(tabs(fixture)[2].count?.()).toBe(0);
   });
 
   it('keeps the page when the harvester does not answer', async () => {
@@ -508,7 +512,7 @@ describe('the Sources tab of a product', () => {
     ).not.toBeNull();
     // The header still names the product, and the tab shows no number.
     expect(page(fixture).heading()).toBe('Whole milk 1 L');
-    expect(tabs(fixture)[3].count?.()).toBeNull();
+    expect(tabs(fixture)[2].count?.()).toBeNull();
   });
 
   it('maps a source row from the wire and drops one with no id', () => {
@@ -526,15 +530,5 @@ describe('the Sources tab of a product', () => {
       // One row is its own barcode, not a shared one.
       sharedBy: 0,
     });
-  });
-});
-
-describe('the Where it is tab of a product', () => {
-  it('draws where the product is in each chain', async () => {
-    const fixture = await boot('/products/it_milk_1l/where');
-
-    expect(
-      fixture.nativeElement.querySelector('lib-item-sections-panel')
-    ).not.toBeNull();
   });
 });

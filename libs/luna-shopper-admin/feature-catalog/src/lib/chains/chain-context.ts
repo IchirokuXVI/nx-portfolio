@@ -15,7 +15,6 @@ import {
   ResourceChanges,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ShopSections } from '../shop-sections';
 
 /** What the harvester has for a chain. */
 export type ChainSourceState =
@@ -33,9 +32,6 @@ export type ChainSourceState =
  */
 const SCOPE_COUNT_PAGE = 100;
 
-/** The key of the Sections tab of a chain: the `name` of the part. */
-export const CHAIN_SECTIONS_TAB = 'sections';
-
 /** What the tabs of a chain count, by the key of the tab. */
 export type ChainTabCounts = Readonly<Record<string, number | null>>;
 
@@ -51,24 +47,22 @@ export type ChainTabCounts = Readonly<Record<string, number | null>>;
  * holds one chain, the one that is open: {@link of} is the page opening a
  * chain, and everything read for the one before is dropped.
  *
- * **A count is shown only when the gateway gave it.** The section count is
- * the length of a list that is read whole. The scope count is the length of
- * the first page when that page is the last, and nothing otherwise. The shop
- * count is a field of the chain and is not here.
+ * **A count is shown only when the gateway gave it.** The scope count is the
+ * length of the first page when that page is the last, and nothing otherwise.
+ * The shop count is a field of the chain and is not here. A chain has no
+ * sections since backend plan 0200: they belong to its shops.
  *
- * **The counts follow a write.** The page asks {@link of} once for each chain
- * it opens, and not again when a tab adds a section or a scope. So this reads
- * the two counts again when either resource says it was written.
+ * **The count follows a write.** The page asks {@link of} once for each chain
+ * it opens, and not again when a tab adds a scope. So this reads the count
+ * again when the scopes say they were written.
  */
 @Injectable({ providedIn: 'root' })
 export class ChainCounts {
   private readonly _registry = inject(ResourceRegistry);
-  private readonly _sections = inject(ShopSections);
   private readonly _harvest = inject(HARVEST_SERVICE);
   private readonly _changes = inject(ResourceChanges);
 
   private readonly _id = signal<string | null>(null);
-  private readonly _sectionCount = signal<number | null>(null);
   private readonly _scopeCount = signal<number | null>(null);
   private readonly _source = signal<ChainSourceState | null>(null);
 
@@ -81,15 +75,14 @@ export class ChainCounts {
   readonly source = this._source.asReadonly();
 
   constructor() {
-    // A section or a scope was written, so the number beside its tab moved.
-    let counted = this._counted();
+    // A scope was written, so the number beside its tab moved.
+    let counted = this._changes.version('price-scopes');
     effect(() => {
-      const version = this._counted();
+      const version = this._changes.version('price-scopes');
       untracked(() => {
         const id = this._id();
         if (version !== counted && id !== null) {
           counted = version;
-          void this._readSectionCount(id, this._generation);
           void this._readScopeCount(id, this._generation);
         }
       });
@@ -119,11 +112,8 @@ export class ChainCounts {
     this.open(id);
     return computed(() =>
       this._id() === id
-        ? {
-            [CHAIN_SECTIONS_TAB]: this._sectionCount(),
-            'price-scopes': this._scopeCount(),
-          }
-        : { [CHAIN_SECTIONS_TAB]: null, 'price-scopes': null }
+        ? { 'price-scopes': this._scopeCount() }
+        : { 'price-scopes': null }
     );
   };
 
@@ -136,13 +126,11 @@ export class ChainCounts {
   open(id: string): void {
     this._generation += 1;
     this._id.set(id);
-    this._sectionCount.set(null);
     this._scopeCount.set(null);
     this._source.set(null);
 
-    // Each of the three fails by itself: a count that could not be read is a
+    // Each of the two fails by itself: a count that could not be read is a
     // tab without a number, and never a page that will not open.
-    void this._readSectionCount(id, this._generation);
     void this._readScopeCount(id, this._generation);
     void this._readSource(id, this._generation);
   }
@@ -164,26 +152,6 @@ export class ChainCounts {
       defaultPriceScopeId: priceScopeId,
     });
     this._changes.wrote('supermarkets');
-  }
-
-  /** The writes that change a count held here, as one number. */
-  private _counted(): number {
-    return (
-      this._changes.version('sections') + this._changes.version('price-scopes')
-    );
-  }
-
-  private async _readSectionCount(id: string, generation: number) {
-    try {
-      const sections = await this._sections.chainSections(id);
-      if (generation === this._generation) {
-        this._sectionCount.set(sections.length);
-      }
-    } catch {
-      if (generation === this._generation) {
-        this._sectionCount.set(null);
-      }
-    }
   }
 
   private async _readScopeCount(id: string, generation: number) {

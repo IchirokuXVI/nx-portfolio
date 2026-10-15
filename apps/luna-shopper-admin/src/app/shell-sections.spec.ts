@@ -325,7 +325,8 @@ describe('ADMIN_SECTIONS', () => {
     // everything a chain holds under one of them.
     expect(at('supermarkets')).toBe('chains');
     expect(at('locations', chain)).toBe('chains/c1/shops');
-    expect(at('sections', chain)).toBe('chains/c1/sections');
+    // A section belongs to one shop (admin plan 0063).
+    expect(at('sections', shop)).toBe('chains/c1/shops/s1/sections');
     expect(at('price-scopes', chain)).toBe('chains/c1/scopes');
     expect(at('location-items', shop)).toBe('chains/c1/shops/s1/products');
     // With no chain named, each answers the place a chain is picked, so a

@@ -216,8 +216,8 @@
       "categoryInUse": "This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.",
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
-      "sectionOfAnotherChain": "That section belongs to another chain. A shop and a product's pins can only use their own chain's sections. Read the screen again and try once more.",
-      "sectionSlugTaken": "This chain already has a section with that slug. Choose another one.",
+      "sectionOfAnotherShop": "That section belongs to another shop. A shop can only order its own sections. Read the screen again and try once more.",
+      "sectionSlugTaken": "This shop already has a section with that slug. Choose another one.",
       "locationExternalRefTaken": "Another shop already holds that reference. A reference names one shop. Use that shop, or remove the reference from it first.",
       "openRow": "Open the row it names."
     },
@@ -301,38 +301,28 @@
       "one": "section",
       "many": "Shop sections",
       "id": "Identifier",
-      "supermarketId": "Chain",
+      "supermarketLocationId": "Shop",
       "name": "Name",
       "slug": "Slug",
-      "slugHelp": "Lowercase letters, digits and hyphens, unique within the chain. Written once: it cannot be changed after the section is created.",
-      "position": "Position",
-      "positionHelp": "The chain's default order. A shop with no list of its own walks its sections in this order. Leave it empty to add the section after the last one.",
+      "slugHelp": "Lowercase letters, digits and hyphens, unique within the shop. Written once: it cannot be changed after the section is created.",
       "categoryIds": "Categories it holds",
-      "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then only the products pinned to it are in it.",
-      "locationCount": "Shops",
-      "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
-      "filter": {
-        "query": "Name or slug contains"
-      }
+      "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then no product is in it."
     },
     "chains": {
       "deleteBody": "A chain that still holds shops or prices is refused. This cannot be taken back.",
-      "choose": "Choose a chain to see its shops, its sections and its price scopes.",
+      "choose": "Choose a chain to see its shops and its price scopes.",
       "info": {
         "title": "a chain",
-        "holds": "A chain holds its shops, its sections and its price scopes.",
-        "openShop": "Open a shop to set its section order, its products and the scopes that price it."
+        "holds": "A chain holds its shops and its price scopes.",
+        "openShop": "Open a shop to set its sections, its products and the scopes that price it."
       },
       "source": {
         "fetched": "Fetched by the harvester",
         "off": "Not fetched"
-      },
-      "tabs": {
-        "sections": "Sections"
       }
     },
     "shops": {
-      "deleteBody": "Its section order and its single shop price scope are deleted with it. This cannot be taken back.",
+      "deleteBody": "Its sections and its single shop price scope are deleted with it. This cannot be taken back.",
       "choose": "Choose a shop to see its details, its sections and its products.",
       "tabs": {
         "sections": "Sections",
@@ -342,58 +332,36 @@
         "own": "This shop only"
       }
     },
-    "chainSections": {
-      "heading": "Sections of this chain",
-      "add": "Add a section",
-      "empty": "This chain has no sections yet. Its shops show products under their own categories.",
-      "actions": "Actions",
-      "coversAll": "{{name}} (all)",
-      "coversNothing": "Pinned products only",
-      "deleteHeading": "Delete this section?",
-      "deleteBody": "{{name}} leaves every shop's list and every pin. Products pinned only to it go back to being placed by their categories. There is no undo.",
-      "deleteConfirm": "Delete the section"
-    },
     "locationSections": {
       "heading": "Sections in this shop",
-      "fromChain": "This shop has no list of its own, so it has every section of its chain, in the chain's order. Change the list below to give it its own.",
-      "own": "This shop has its own list, in its own order.",
-      "noSections": "This shop's chain has no sections yet. Add them on the chain's Sections tab.",
-      "noneTicked": "Tick at least one section to save a list. To go back to the chain's list, use the chain's default.",
+      "add": "Add a section",
+      "empty": "This shop has no sections yet. Until it has one, its products are shown under their own categories.",
+      "coversAll": "{{name}} (all)",
+      "coversNothing": "Holds no category",
       "up": "Move {{name}} up",
       "down": "Move {{name}} down",
-      "upShort": "Up",
-      "downShort": "Down",
       "save": "Save this order",
       "discard": "Discard",
-      "useChain": "Use the chain's order",
       "saved": "Saved.",
-      "notHere": "Not in this shop",
       "grip": "{{name}}, place {{place}} of {{count}}. Press the up or down arrow key to move it.",
       "movedTo": "{{name}} is now at place {{place}} of {{count}}.",
-      "mapState": "A map writes this list",
+      "deleteNamed": "Delete {{name}}",
+      "deleteHeading": "Delete this section?",
+      "deleteBody": "{{name}} is deleted from this shop and from the shopping lists of the shoppers who shop here. A product it held is then shown in another section that holds its category, or under its own category. There is no undo.",
+      "deleteConfirm": "Delete the section",
+      "mapState": "A map writes this order",
       "info": {
-        "title": "what a map does to this list",
-        "map": "This list follows the shop's map. The next save of the map's walk replaces any change made here."
+        "title": "what a map does to this order",
+        "map": "This order follows the shop's map. The next save of the map's walk puts the sections it names back in the walk's order."
       },
-      "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
+      "mapNotice": "This order follows the shop's map. The next save of the map's walk puts the sections it names back in the walk's order.",
       "mapConfirm": {
-        "heading": "Change a list that follows a map?",
+        "heading": "Change an order that follows a map?",
         "confirm": "Change it anyway"
-      }
-    },
-    "itemSections": {
-      "heading": "Where it is, per chain",
-      "notSold": "No chain sells this product yet, so it is in no shop's sections.",
-      "noSections": "This chain has no sections, so its shops show the product under its own categories.",
-      "pinnedTo": "Pinned to {{sections}}.",
-      "byCategories": "By its categories: in whichever of a shop's sections hold one of them.",
-      "edit": "Change the pins",
-      "pickLegend": "The sections it is in, in this chain",
-      "pickHelp": "Pinned, the product is in these sections and in no other. Tick none to remove the pins.",
-      "save": "Save the pins",
-      "previewAt": "Where shoppers find it at a shop",
+      },
       "preview": {
-        "pinned": "In {{sections}}, because it is pinned there.",
+        "heading": "Where shoppers find a product here",
+        "product": "Product",
         "covered": "In {{sections}}, because the section holds one of its categories.",
         "none": "No section of this shop holds it, so it is shown under its own categories."
       }
@@ -520,7 +488,6 @@
       "deleteBody": "Every price it holds is deleted with it. This cannot be taken back.",
       "tabs": {
         "prices": "Prices",
-        "where": "Where it is",
         "sources": "Sources"
       }
     },
@@ -763,7 +730,7 @@
       "itemBrand": "Brand",
       "supermarketLocationId": "Shop",
       "positionInStore": "Shelf note",
-      "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
+      "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop's Sections tab; this note is the shelf.",
       "available": "Available in this shop",
       "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so."
     },

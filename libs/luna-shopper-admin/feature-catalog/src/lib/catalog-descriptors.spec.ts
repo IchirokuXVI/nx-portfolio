@@ -139,7 +139,7 @@ describe('the resources a chain holds', () => {
     ]);
   });
 
-  it('puts a shop, a section and a scope under a chain, and a product under a shop', () => {
+  it('puts a shop and a scope under a chain, and a section and a product under a shop', () => {
     const chain = {
       resource: 'supermarkets',
       param: 'chainId',
@@ -148,13 +148,15 @@ describe('the resources a chain holds', () => {
 
     expect(SUPERMARKETS.parent).toBeUndefined();
     expect(LOCATIONS.parent).toEqual(chain);
-    expect(SECTIONS.parent).toEqual(chain);
     expect(PRICE_SCOPES.parent).toEqual(chain);
-    expect(LOCATION_ITEMS.parent).toEqual({
+    // A section belongs to one shop (backend plan 0200, admin plan 0063).
+    const shop = {
       resource: 'locations',
       param: 'shopId',
       filter: 'supermarketLocationId',
-    });
+    };
+    expect(SECTIONS.parent).toEqual(shop);
+    expect(LOCATION_ITEMS.parent).toEqual(shop);
   });
 
   /**
@@ -346,7 +348,6 @@ describe('the resources a chain holds', () => {
     it('opens a chain on its shops, with Details last', () => {
       expect(recordTabs(SUPERMARKETS).map((tab) => tab.key)).toEqual([
         'locations',
-        'sections',
         'price-scopes',
         'details',
       ]);
@@ -1267,18 +1268,17 @@ describe('the record of a product', () => {
     ).toBe('LITER');
   });
 
-  it('has Details first, then its prices, where it is and its sources', () => {
+  /** A product has no section panel since admin plan 0063. */
+  it('has Details first, then its prices and its sources', () => {
     expect(recordTabs(ITEMS).map((tab) => tab.key)).toEqual([
       'details',
       'prices',
-      'where',
       'sources',
     ]);
     expect(
       (ITEMS.record?.children ?? []).map((child) => [child.as, child.label])
     ).toEqual([
       ['tab', 'catalog.products.tabs.prices'],
-      ['tab', 'catalog.products.tabs.where'],
       ['tab', 'catalog.products.tabs.sources'],
     ]);
   });
