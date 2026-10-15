@@ -17,6 +17,7 @@ import {
   basketViewActiveCount,
   basketViewChips,
   basketViewRows,
+  categoryParents,
   composeBasketView,
   DEFAULT_BASKET_VIEW_STATE,
   foldForSearch,
@@ -34,6 +35,7 @@ import {
   type BasketViewState,
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { CategoryStore } from '../catalog/category-store';
 import { ShopSectionsStore } from '../shops/shop-sections-store';
 import { BasketStore } from './basket-store';
 import {
@@ -120,6 +122,7 @@ export class BasketViewStore {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _browser = inject(BrowserFacade);
   private readonly _shopSections = inject(ShopSectionsStore);
+  private readonly _categories = inject(CategoryStore);
 
   private readonly _query = signal('');
 
@@ -313,18 +316,33 @@ export class BasketViewStore {
     // The shop's aisles once they have landed (velista `0120`), and null until
     // then, which the pipeline draws by category with nothing waiting.
     sections: this._shopSections.sectionsOf(this.shopAt()?.id ?? null),
+    parents: this._parents(),
   }));
+
+  /**
+   * The names of the tree's roots once it has landed, and null until then
+   * (velista `0138`): the category grouping heads its sections with them, and
+   * draws the rows ungrouped while there is nothing to head them with.
+   */
+  private readonly _parents = computed(() =>
+    this._categories.loaded() ? categoryParents(this._categories.tree()) : null
+  );
 
   /**
    * Whether grouping by category draws the shop's aisles right now (velista
    * `0120`).
    *
    * What the filter sheet's radio and the chip read, so the words Aisle and By
-   * aisle appear in the same frame as the headings and never before them.
+   * aisle appear in the same frame as the headings and never before them. So it is
+   * false while the tree has not landed, too: the pipeline draws the rows ungrouped
+   * then, with no aisle heading for the words to name (velista `0138`).
    */
-  readonly byAisle = computed(() =>
-    basketGroupsByAisle(this.state(), this._context())
-  );
+  readonly byAisle = computed(() => {
+    const context = this._context();
+    return (
+      context.parents !== null && basketGroupsByAisle(this.state(), context)
+    );
+  });
 
   constructor() {
     // Ask for the chosen shop's aisles as soon as it is chosen, rather than when
@@ -334,6 +352,15 @@ export class BasketViewStore {
       const shop = this.shop();
       if (shop !== null) {
         untracked(() => void this._shopSections.ensure(shop));
+      }
+    });
+    // The tree names the parent headings (velista `0138`). Read once per session,
+    // and asked for only when somebody groups by category, which is the one view
+    // that needs it. A failed read is asked again the next time they do, and the
+    // next time a basket opens (see `restore`).
+    effect(() => {
+      if (this.grouping() === 'category') {
+        untracked(() => void this._categories.ensure());
       }
     });
   }
@@ -633,6 +660,8 @@ export class BasketViewStore {
    * the basket behind them is still loading.
    */
   restore(): void {
+    this._askAgainForFailedTree();
+
     const raw = this._browser.readStorage(StorageKeys.basketView);
     const stored = parseBasketViewMemory(raw);
     if (stored === null) {
@@ -659,10 +688,30 @@ export class BasketViewStore {
         ? {}
         : { grouping }),
     }));
+    // Again, for the grouping just restored: the effect may not see it change,
+    // because `leave` put it back to the default in the same stretch.
+    this._askAgainForFailedTree();
 
     if (location !== undefined && this._offersShop(location)) {
       // The read at the remembered shop, which is what prices the rows there.
       void this._basket.readAtShop(location);
+    }
+  }
+
+  /**
+   * Ask again for a tree whose last read failed, when grouping by category
+   * (velista `0138`).
+   *
+   * Called once per basket opened, so a session that lost the read is not
+   * ungrouped until it ends. Not in the effect, which would then ask again on
+   * every failure it caused.
+   */
+  private _askAgainForFailedTree(): void {
+    if (
+      this.grouping() === 'category' &&
+      this._categories.state() === 'failed'
+    ) {
+      void this._categories.ensure();
     }
   }
 
