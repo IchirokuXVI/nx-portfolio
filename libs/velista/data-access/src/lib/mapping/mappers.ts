@@ -370,6 +370,10 @@ export function toLine(raw: unknown): Line | null {
     id,
     listId,
     content: strOr(raw['content'], ''),
+    // Whether a person named the line (backend `0207`). Anything but `false` is
+    // named, which is the safe way: a named line draws what it says, and a server
+    // that predates the flag named every line it made.
+    named: raw['named'] !== false,
     quantity: numOr(raw['quantity'], 1),
     // A set now, where this read a single nullable `itemId` (backend plan 0048,
     // section 1.1). Ids that are not strings are dropped rather than kept as

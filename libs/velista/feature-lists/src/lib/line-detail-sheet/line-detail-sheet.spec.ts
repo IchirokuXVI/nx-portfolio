@@ -79,6 +79,7 @@ function line(overrides: Partial<Line> = {}): Line {
     productGroupId: null,
     groupItemIds: [],
     favoriteItemId: null,
+    named: true,
     preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
@@ -422,8 +423,8 @@ describe('LineDetailSheet', () => {
       ).not.toBeNull();
     });
 
-    it('enables Save only for a change, and never for a blank name', async () => {
-      const { fixture } = await render();
+    it('enables Save only for a change, and never for a blank name on a line with no product', async () => {
+      const { fixture } = await render({ lines: [line({ itemIds: [] })] });
       expect(saveButton(fixture)?.disabled).toBe(true);
 
       type(fixture, 'Oat milk');
@@ -434,6 +435,50 @@ describe('LineDetailSheet', () => {
 
       type(fixture, 'Milk');
       expect(saveButton(fixture)?.disabled).toBe(true);
+    });
+
+    describe('a line with no name of its own (velista 0144)', () => {
+      it('starts with an empty field and the product name as its hint', async () => {
+        const { fixture } = await render({ lines: [line({ named: false })] });
+
+        expect(nameField(fixture)?.value).toBe('');
+        expect(nameField(fixture)?.placeholder).toBe('Whole milk');
+        expect(saveButton(fixture)?.disabled).toBe(true);
+      });
+
+      it('names the line with what was typed', async () => {
+        const { fixture, lines } = await render({
+          lines: [line({ named: false })],
+        });
+
+        type(fixture, 'Milk for the coffee');
+        saveButton(fixture)?.click();
+        await settle(fixture);
+
+        expect(lines.calls).toContainEqual({
+          kind: 'update',
+          lineId: LINE_ID,
+          content: 'Milk for the coffee',
+        });
+      });
+
+      it('takes the name away with an empty save on a named line that holds a product', async () => {
+        const { fixture, lines } = await render();
+
+        type(fixture, '');
+        expect(saveButton(fixture)?.disabled).toBe(false);
+        saveButton(fixture)?.click();
+        await settle(fixture);
+
+        expect(lines.calls).toContainEqual({
+          kind: 'update',
+          lineId: LINE_ID,
+          named: false,
+          content: 'Whole milk',
+        });
+        // The line now has no name of its own, so the field stays empty.
+        expect(nameField(fixture)?.value).toBe('');
+      });
     });
 
     it('sends only what changed', async () => {
@@ -512,9 +557,9 @@ describe('LineDetailSheet', () => {
     it('redraws clean fields from a socket update and leaves edited ones alone', async () => {
       const { fixture, lines } = await render();
 
-      lines.set([line({ content: 'Whole milk', quantity: 4, version: 2 })]);
+      lines.set([line({ content: 'Semi skimmed', quantity: 4, version: 2 })]);
       await settle(fixture);
-      expect(nameField(fixture)?.value).toBe('Whole milk');
+      expect(nameField(fixture)?.value).toBe('Semi skimmed');
       expect(fixture.componentInstance.amount()).toBe(4);
 
       type(fixture, 'Oat milk');

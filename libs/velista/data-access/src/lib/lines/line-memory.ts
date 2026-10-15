@@ -136,7 +136,8 @@ export class LineMemory implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<LineAddResult> {
     this._require(listId, 'WRITE');
 
@@ -149,7 +150,7 @@ export class LineMemory implements LineServiceI {
     );
     if (existing === undefined) {
       return {
-        line: await this.addLine(listId, content, quantity, itemIds),
+        line: await this.addLine(listId, content, quantity, itemIds, named),
         merged: false,
       };
     }
@@ -171,7 +172,8 @@ export class LineMemory implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<Line> {
     const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
@@ -185,6 +187,9 @@ export class LineMemory implements LineServiceI {
       id: newId(),
       listId,
       content,
+      // The two rules of backend `0207`, section 1.2: a line with no product is
+      // named whatever the add says, and an add with no flag names the line.
+      named: named !== false || (itemIds ?? []).length === 0,
       quantity: quantity ?? 1,
       itemIds: [...(itemIds ?? [])],
       // A hand made set. The composer sends the products a group offered rather
@@ -239,6 +244,7 @@ export class LineMemory implements LineServiceI {
     lineId: string,
     changes: {
       content?: string;
+      named?: false;
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
@@ -253,7 +259,11 @@ export class LineMemory implements LineServiceI {
 
     if (!permissions.includes('MANAGE')) {
       if (approved) {
-        if (!permissions.includes('DECIDE') || changes.content !== undefined) {
+        if (
+          !permissions.includes('DECIDE') ||
+          changes.content !== undefined ||
+          changes.named !== undefined
+        ) {
           throw memoryFailure('forbidden', 403);
         }
       } else if (!permissions.includes('WRITE')) {
@@ -315,6 +325,7 @@ export class LineMemory implements LineServiceI {
     const updated = this._patch(lineId, (current) => ({
       ...current,
       content: changes.content ?? current.content,
+      named: namedAfter(current, changes),
       quantity: changes.quantity ?? current.quantity,
       // Undefined leaves the set alone; an empty array clears it to free text.
       itemIds:
@@ -371,11 +382,17 @@ export class LineMemory implements LineServiceI {
   private _merge(
     line: Line,
     other: Line,
-    changes: { content?: string; quantity?: number }
+    changes: {
+      content?: string;
+      named?: false;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
   ): LineUpdateResult {
     const renamed: Line = {
       ...line,
       content: changes.content ?? line.content,
+      named: namedAfter(line, changes),
       quantity: changes.quantity ?? line.quantity,
     };
     const [survivor, absorbed] =
@@ -388,6 +405,8 @@ export class LineMemory implements LineServiceI {
         survivor.quantity + absorbed.quantity
       ),
       itemIds: [...new Set([...survivor.itemIds, ...absorbed.itemIds])],
+      // Named when either line is, as `LineMergeService.merge` decides it.
+      named: survivor.named || absorbed.named,
       approvalStatus:
         survivor.approvalStatus === 'APPROVED' ||
         absorbed.approvalStatus === 'APPROVED'
@@ -978,4 +997,29 @@ function memoryFailure(
     correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
     detail: 'produced by LineMemory, no request was sent',
   });
+}
+
+/**
+ * The flag after an edit, by the two rules of backend `0207`, section 1.2.
+ *
+ * 1. A line with no product is named, whatever the edit says.
+ * 2. A write of `content` with no flag names the line.
+ *
+ * `named: false` takes the name away, with or without `content`.
+ */
+function namedAfter(
+  line: Line,
+  changes: {
+    readonly content?: string;
+    readonly named?: false;
+    readonly itemIds?: readonly string[];
+  }
+): boolean {
+  if ((changes.itemIds ?? line.itemIds).length === 0) {
+    return true;
+  }
+  if (changes.named === false) {
+    return false;
+  }
+  return changes.content !== undefined ? true : line.named;
 }

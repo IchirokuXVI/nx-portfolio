@@ -81,17 +81,17 @@ describe('gatewayErrorKey', () => {
     ]);
   });
 
-  /** The shop section refusals (backend plan 0167, admin plan 0037). */
+  /** The shop section refusals (backend plan 0200, admin plan 0063). */
   it('names each shop section refusal apart', () => {
     expect(
       [
         'section_not_found',
-        'section_of_another_chain',
+        'section_of_another_shop',
         'section_slug_taken',
       ].map((code) => gatewayErrorKey(failure({ code })))
     ).toEqual([
       'resource.error.sectionNotFound',
-      'resource.error.sectionOfAnotherChain',
+      'resource.error.sectionOfAnotherShop',
       'resource.error.sectionSlugTaken',
     ]);
   });

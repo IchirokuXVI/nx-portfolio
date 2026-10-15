@@ -45,6 +45,7 @@ function line(overrides: Partial<Line> = {}): Line {
     productGroupId: null,
     groupItemIds: [],
     favoriteItemId: null,
+    named: true,
     preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',

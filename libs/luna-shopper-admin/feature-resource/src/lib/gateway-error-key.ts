@@ -102,13 +102,13 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       return 'resource.error.categoryInUse';
     case 'category_not_found':
       return 'resource.error.categoryNotFound';
-    // Shop sections (backend plan 0167, admin plan 0037).
+    // The sections of a shop (backend plan 0200, admin plan 0063).
     case 'section_not_found':
       return 'resource.error.sectionNotFound';
-    case 'section_of_another_chain':
-      // A shop's list or a product's pins naming a section of another chain.
-      // The pickers offer only the right chain's, so this is a stale screen.
-      return 'resource.error.sectionOfAnotherChain';
+    case 'section_of_another_shop':
+      // A shop's order naming a section of another shop. The tab offers only
+      // the shop's own, so this is a stale screen.
+      return 'resource.error.sectionOfAnotherShop';
     case 'section_slug_taken':
       return 'resource.error.sectionSlugTaken';
     case 'location_external_ref_taken':

@@ -84,6 +84,7 @@
             (focus)="startEditing()"
             (input)="onNameInput($event)"
             [attr.maxlength]="maxLength"
+            [attr.placeholder]="productName()"
             [readOnly]="saving()"
             [value]="name()"
             autocomplete="off"

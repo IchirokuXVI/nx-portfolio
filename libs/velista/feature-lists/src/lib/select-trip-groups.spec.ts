@@ -31,6 +31,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     id,
     quantity: 0,
     claimed: false,
+    named: true,
     claimedByUserId: null,
     ...overrides,
   } as unknown as Line;

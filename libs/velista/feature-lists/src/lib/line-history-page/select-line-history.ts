@@ -3,6 +3,7 @@ import {
   dayOfMonth,
   formatMinorMoney,
   groupHistoryByMonth,
+  lineName,
   monthName,
   toSettlementRow,
   type CatalogItem,
@@ -80,7 +81,12 @@ export function selectLineHistory(
   }));
 
   return {
-    content: line.content,
+    // The name the line is drawn with (velista `0144`).
+    content: lineName(
+      line,
+      (itemId) => input.itemNameOf(itemId)?.name ?? null,
+      input.locale
+    ).text,
     listName: input.listName,
     scopes,
     scope,

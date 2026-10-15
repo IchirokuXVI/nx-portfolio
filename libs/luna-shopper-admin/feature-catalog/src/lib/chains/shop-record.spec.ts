@@ -374,7 +374,7 @@ describe('a shop, on the record page', () => {
   });
 
   it('counts none for a shop whose read names no section', async () => {
-    const fixture = await boot(`${CENTRO}/details`);
+    const fixture = await boot(`${SIERRA}/details`);
 
     expect(tabs(fixture)[1].count?.()).toBe(0);
   });
@@ -977,7 +977,7 @@ describe('a new shop', () => {
 });
 
 describe('the Sections tab of a shop', () => {
-  it('draws the order panel, given the shop and the chain it reads', async () => {
+  it('draws the sections panel, given the shop and the chain it reads', async () => {
     const fixture = await boot(`${CENTRO}/sections`);
     const panel = fixture.debugElement.query(By.directive(LocationSections))
       .componentInstance as LocationSections;
@@ -1006,6 +1006,59 @@ describe('the Sections tab of a shop', () => {
     await settle(fixture);
 
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A section's form is under its shop (admin plan 0063, section 2): a new
+   * one, and one that exists, each on a record page of its own beside the
+   * shop's.
+   */
+  it('opens the form of a new section under the shop', async () => {
+    const fixture = await boot(`${CENTRO}/sections/new`);
+    const pages = fixture.debugElement
+      .queryAll(By.directive(RecordPage))
+      .map((found) => found.componentInstance as RecordPage);
+    const form = pages[pages.length - 1];
+
+    expect(url()).toBe(`${CENTRO}/sections/new`);
+    expect(form.descriptor.name).toBe('sections');
+    expect(
+      fixture.debugElement.query(By.directive(LocationSections))
+    ).toBeNull();
+  });
+
+  it('opens a section of the shop by its own address', async () => {
+    const fixture = await boot(`${CENTRO}/sections/sec_centro_chilled`);
+    const pages = fixture.debugElement
+      .queryAll(By.directive(RecordPage))
+      .map((found) => found.componentInstance as RecordPage);
+    const section = pages[pages.length - 1];
+
+    expect(url()).toBe(`${CENTRO}/sections/sec_centro_chilled`);
+    expect(section.descriptor.name).toBe('sections');
+    expect(section.heading()).toBe('Chilled');
+  });
+
+  /**
+   * The registry builds the address of a section from the shop and its
+   * chain, which is the link the panel draws on a row and on Add.
+   */
+  it('links Add and each row to the form under the shop', async () => {
+    const fixture = await boot(`${CENTRO}/sections`);
+    const panel = fixture.debugElement.query(By.directive(LocationSections))
+      .componentInstance as LocationSections;
+
+    expect(panel.newLink()).not.toBeNull();
+    expect(
+      (
+        pageElement(fixture).querySelector('[data-add]') as HTMLAnchorElement
+      ).getAttribute('href')
+    ).toBe(`${CENTRO}/sections/new`);
+    expect(
+      (
+        pageElement(fixture).querySelector('[data-open]') as HTMLAnchorElement
+      ).getAttribute('href')
+    ).toBe(`${CENTRO}/sections/sec_centro_chilled`);
   });
 });
 
@@ -1169,18 +1222,24 @@ describe('going from one shop to another', () => {
     expect(tableRows(fixture)[0].textContent).toContain('Whole milk 1 L');
   });
 
-  it('draws the section order of the new shop', async () => {
+  /** Two shops of one chain hold different sections (backend plan 0200). */
+  it('draws the sections of the new shop', async () => {
     const fixture = await boot(`${CENTRO}/sections`, [WIDE]);
     const panel = () =>
       fixture.debugElement.query(By.directive(LocationSections))
         .componentInstance as LocationSections;
-    expect(panel().saved()?.source).toBe('LOCATION');
+    const slugs = () => (panel().saved() ?? []).map((held) => held.slug);
+    expect(slugs()).toEqual(['chilled', 'offers']);
 
     await go(fixture, `${OESTE}/sections`);
 
     expect(panel().locationId()).toBe('loc_cordoba_oeste');
-    expect(panel().saved()?.source).toBe('CHAIN');
+    expect(slugs()).toEqual(['pantry', 'chilled']);
     expect(panel().hasMap()).toBe(false);
+
+    await go(fixture, `${SIERRA}/sections`);
+
+    expect(slugs()).toEqual([]);
   });
 
   it('reads the scopes of the new shop', async () => {

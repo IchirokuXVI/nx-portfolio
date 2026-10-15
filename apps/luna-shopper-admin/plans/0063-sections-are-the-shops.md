@@ -1,3 +1,5 @@
+> **PR:** [#722](https://github.com/IchirokuXVI/nx-portfolio/pull/722)
+
 # 0063: sections are the shop's
 
 > Asked for by the owner on 2026-10-11: "Sections of a shop are almost never the same for
@@ -20,6 +22,55 @@ The back office edits sections on the record of a chain, lets a shop select and 
 and pins products to a section on the record of a product. After this plan a section is
 created, named, given its categories, ordered and deleted on the record of its shop, and
 nowhere else.
+
+## What the build decided
+
+The build of 2026-10-15 settled the points below. None was asked of the owner, so each is a
+choice of the builder that the owner can overturn. Where this section and a later section
+disagree, this section is right.
+
+1. **The preview moved to the sections tab of the shop.** Target 2 removes the section
+   panel of a product, and that panel held the preview (admin plan `0037`, target 4). Target
+   5 and section 2 keep the preview, so it is now under the list of the shop: a product
+   picker over every product, and one sentence. It reads what the server holds, not the
+   order in hand, and it is asked again after a delete.
+2. **The order is held and saved whole.** A move changes nothing on the server until "Save
+   this order", which sends every section of the shop in the order shown in one
+   `PUT locations/:id/sections`. This keeps the bar, the drag, the arrow keys and the phone
+   buttons of the old panel. A delete keeps an order in hand, less the deleted section.
+3. **A row opens the section to be read, not as a form.** The name of the row links to
+   `/chains/{chainId}/shops/{shopId}/sections/{id}`, where Edit turns the page into the form,
+   as every other record page does (admin plan `0053`).
+4. **The form has no order field.** `CreateShopSectionDto` has no `position`, and a new
+   section goes last. `UpdateShopSectionDto` takes one, but the tab owns the order, so the
+   descriptor offers name, slug (on create only) and categories. The `locationCount` column
+   and the search filter left with the chain list, because the route of a shop takes no
+   query.
+5. **The map question stays, for a move only.** A walk writes the order of the sections of
+   its shop (backend plan `0200`, section 5), so the first move of a visit at a shop with a
+   map still asks first. Add, open and delete never ask, because a walk deletes no section.
+   The words now say "order" where they said "list".
+6. **`section_of_another_shop` has its sentence.** The case for `section_of_another_chain`
+   in `gateway-error-key.ts` (`libs/luna-shopper-admin/feature-resource`) became the case for
+   the new code. That file is outside the stated scope. It was the one place the code could
+   get a sentence, and backend `0200` removed the old code from the contract.
+7. **The twin.** Centro has Chilled (a root) then Offers (no category). Oeste has Pantry (a
+   leaf) then its own Chilled, with the same slug. Sierra and the Consum shop have none. The
+   seeded rows of Centro and Oeste name their sections, so the count on the tab is right.
+   The twin keeps the rules of `0200`: a slug unique in its shop, a new section last, a
+   delete that closes the gap, a `PATCH` with `position` that moves, an order that keeps
+   the sections it leaves out after the named ones. It does not rewrite the names on the row
+   of a shop after a write.
+
+What moved, against the names the plan uses:
+
+- `chain-sections.ts`, `item-sections-panel.ts` and `chain-section-view.ts` are deleted. The
+  last one was the stopgap of backend `0200`.
+- `panelErrorKey` moved from `chain-sections.ts` to `shop-sections.ts`, and `previewSentence`
+  from `item-sections-panel.ts` to `location-sections.ts`.
+- `ShopSections` lost `chainSections`, `pinsOf` and `setPins`. `setForLocation` is now
+  `setOrder`, and `remove` is new. `forLocation` answers the sections alone, with no `source`.
+- `ChainCounts` counts no sections, and `CHAIN_SECTIONS_TAB` and `PRODUCT_WHERE_TAB` are gone.
 
 ## Brief for the agent
 
