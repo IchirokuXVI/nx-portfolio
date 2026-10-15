@@ -1043,7 +1043,7 @@ describe('BasketRow: bought outside this shopping list (velista 0142)', () => {
     expect(element(fixture).querySelector('.status')).toBeNull();
     expect(element(fixture).querySelector('lib-quantity-reel')).toBeNull();
     expect(element(fixture).querySelector('.settled-count')).toBeNull();
-    expect(element(fixture).querySelector('.swap')).toBeNull();
+    expect(element(fixture).querySelector('.change-product')).toBeNull();
   });
 
   it('still opens its sheet, named by the row and its words', async () => {

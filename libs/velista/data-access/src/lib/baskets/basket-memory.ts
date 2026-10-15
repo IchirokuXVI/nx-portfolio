@@ -18,6 +18,7 @@ import {
   type BasketPriceScope,
   type BasketProduct,
   type BasketProductAtShop,
+  type BasketProductChangeRequest,
   type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
@@ -1322,6 +1323,62 @@ export class BasketMemory implements BasketServiceI {
 
     line.quantity = body.quantity;
     return this._result([line.id]);
+  }
+
+  /**
+   * Take another product on these lines (backend `0202`, section 3).
+   *
+   * Every standing buy of a named line with another product is replaced by one of
+   * the new product, at the same moment and for the same quantity, so the line
+   * counts as the new product for the rest of the trip. With `keep` the product
+   * joins each line and becomes its favourite. A guest is refused, as the gateway
+   * refuses one, and so is a `keep` on a line the reader may not write.
+   */
+  async changeProduct(
+    _basketId: string,
+    body: BasketProductChangeRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    if (this.me.kind === 'GUEST') {
+      throw this._refuse('forbidden', 403, 'Guests cannot change a product');
+    }
+    const lines = body.lineIds.map((lineId) =>
+      this._lines.find((held) => held.id === lineId && !held.deleted)
+    );
+    if (lines.some((line) => line === undefined)) {
+      throw this._refuse('not_found', 404, 'Row not found');
+    }
+    const held = lines as StoredLine[];
+    if (body.keep && held.some((line) => !this._entry(line).canWrite)) {
+      throw this._refuse('forbidden', 403, 'This list cannot be edited');
+    }
+
+    for (const line of held) {
+      for (const act of this._standing()) {
+        if (
+          act.lineId !== line.id ||
+          act.outcome !== 'BOUGHT' ||
+          act.itemId === body.itemId
+        ) {
+          continue;
+        }
+        act.reverted = true;
+        this._settlements.push({
+          ...act,
+          id: (this._settlementId += 1),
+          itemId: body.itemId,
+          reverted: false,
+        });
+      }
+      if (body.keep) {
+        line.itemIds = line.itemIds.includes(body.itemId)
+          ? line.itemIds
+          : [...line.itemIds, body.itemId];
+        line.favoriteItemId = body.itemId;
+      }
+    }
+
+    return this._result(body.lineIds);
   }
 
   /**

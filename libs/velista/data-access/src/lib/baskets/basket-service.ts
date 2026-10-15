@@ -7,6 +7,7 @@ import type {
   BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
+  BasketProductChangeRequest,
   BasketProductList,
   BasketRenameRequest,
   BasketRevertRequest,
@@ -225,6 +226,20 @@ export interface BasketServiceI {
   setDemand(
     basketId: string,
     body: BasketDemandRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * Take another product on these lines (`POST /v1/baskets/:id/lines/product`,
+   * backend `0202` section 3; velista `0140`, section 4).
+   *
+   * The buys of this trip of every named line take the new product, and with
+   * `keep` the product is added to each line and made its favourite. Account
+   * participants only: a guest is refused with `forbidden`. A line the reader may
+   * not edit refuses a `keep` for the whole request, and nothing is written.
+   */
+  changeProduct(
+    basketId: string,
+    body: BasketProductChangeRequest
   ): Promise<BasketRowResult>;
 
   /**

@@ -99,7 +99,10 @@ import {
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
 import { BasketRow } from '../basket-row/basket-row';
-import { basketGroupScope } from '../swap-sheet/swap';
+import {
+  basketGroupScope,
+  changeableLineIds,
+} from '../change-sheet/change-targets';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
 
@@ -404,7 +407,19 @@ export class BasketPage {
    */
   protected readonly surface = computed(() => {
     const basket = this._store.basket();
-    return basket === null ? null : selectBasketSurface(basket, basket.me);
+    // The rows and the counts the store draws, which a choice held on this
+    // device can have grouped differently from the read (velista `0140`).
+    return basket === null
+      ? null
+      : selectBasketSurface(
+          {
+            ...basket,
+            rows: this._store.rows(),
+            progress: this._store.progress(),
+            pending: this._store.pending(),
+          },
+          basket.me
+        );
   });
   protected readonly busyRows = this._store.busyRows;
   protected readonly participantsById = this._store.participantsById;
@@ -1111,24 +1126,18 @@ export class BasketPage {
   });
 
   /**
-   * Whether a row offers "change product": its product has a group, the basket
-   * is open, and the reader may write **every** list the row stands for. All of
-   * them, because the change is made on each line, and changing some would split
-   * the row in two.
+   * Whether the cheaper mark of a row opens the change sheet for all lists
+   * (velista `0140`, section 1): it is drawn, and the reader may change the
+   * product of one list of the row or more. The sheet then says for how many.
    */
-  protected canSwap(row: BasketRowModel): boolean {
-    if (
-      this.finished() ||
-      row.state === 'REMOVED' ||
-      row.entries.length === 0 ||
-      this._store.me()?.kind === 'GUEST' ||
-      (this._rowProduct(row)?.productGroupId ?? null) === null
-    ) {
-      return false;
-    }
-    const lists = this.lists();
-    return row.entries.every(
-      (entry) => entry.listId !== null && lists.has(entry.listId)
+  protected canChange(row: BasketRowModel): boolean {
+    return (
+      this.groupCheaper(row) &&
+      changeableLineIds(row, {
+        guest: this._store.me()?.kind === 'GUEST',
+        finished: this.finished(),
+        lists: this.lists(),
+      }).length > 0
     );
   }
 
@@ -1145,9 +1154,9 @@ export class BasketPage {
     );
   }
 
-  /** Open the change sheet over this basket, as a row opens the settle sheet. */
-  protected openSwap(row: BasketRowModel): void {
-    void this._router.navigate(sheetSegments('rows', row.rowKey, 'swap'), {
+  /** The change sheet for all lists, over this basket, as a row opens the settle sheet. */
+  protected openChange(row: BasketRowModel): void {
+    void this._router.navigate(sheetSegments('rows', row.rowKey, 'change'), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
     });

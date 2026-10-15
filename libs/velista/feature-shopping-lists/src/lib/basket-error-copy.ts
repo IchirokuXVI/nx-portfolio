@@ -80,7 +80,13 @@ export type BasketOperation =
    * above the field is still naming it, so the sentence has to say the list and
    * not the line.
    */
-  | 'basket.addLine';
+  | 'basket.addLine'
+  /**
+   * Taking another product on a row's lines, from the change sheet (velista
+   * `0140`, section 4). A 403 is the reader's own access to one of those lists
+   * having moved, which is the sentence an add says too.
+   */
+  | 'basket.change';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -190,6 +196,7 @@ export function basketErrorKey(
           // wrong person. A guest reading it has no access to have changed.
           return 'basket.demand.refused';
         case 'basket.addLine':
+        case 'basket.change':
           // The target list stopped being one this reader may write. That **is**
           // their own access, unlike the case above, so it takes the sentence
           // about access having changed.

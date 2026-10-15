@@ -21,7 +21,51 @@ export const CATALOG_PATHS = {
   addListSheet: 'add-list',
   /** `catalog/sheet/added`: the sheet of what this visit added. Over the tab. */
   addedSheet: 'added',
+  /**
+   * `zones/:zoneId/lists/:listId/lines/:lineId/product`: the catalog opened to
+   * choose one product for a line (velista `0140`, section 3; `0146`, section 2).
+   * A page and not a sheet, so it is addressed under the line and not under the
+   * `sheet` marker.
+   */
+  pickOne: 'product',
+  /** `<the catalog page>/supermarket`: its supermarket picker (velista `0124`). */
+  supermarketPicker: 'supermarket',
+  /** `<the catalog page>/categories[/:parentSlug]`: its category picker (`0119`). */
+  categoryPicker: 'categories',
 } as const;
+
+/**
+ * The route data key that opens the catalog page to choose rather than as the tab
+ * (velista `0140`, section 3), and the kind it chooses: `'one'` today. Velista
+ * `0146` adds the kind that chooses a line's set under the same key. The route
+ * says it because the page has no inputs, and the pickers under the page carry it
+ * too, so they know they answer to it.
+ */
+export const CATALOG_PICK_DATA = 'catalogPick';
+
+/**
+ * The URL of the catalog opened to choose one product for a line:
+ * `/{mount}/{locale}/zones/{zoneId}/lists/{listId}/lines/{lineId}/product`.
+ */
+export function productPickPath(
+  locale: string,
+  basePath: string,
+  zoneId: string,
+  listId: string,
+  lineId: string
+): string {
+  return appPath(
+    locale,
+    basePath,
+    'zones',
+    zoneId,
+    'lists',
+    listId,
+    'lines',
+    lineId,
+    CATALOG_PATHS.pickOne
+  );
+}
 
 /** The URL of a product's page: `/{mount}/{locale}/catalog/products/{itemId}`. */
 export function productPagePath(

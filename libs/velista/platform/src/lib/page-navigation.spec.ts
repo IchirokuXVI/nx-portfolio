@@ -80,6 +80,53 @@ describe('PageNavigation', () => {
   });
 });
 
+/** The close of the catalog that chooses (velista `0140`, section 3). */
+describe('PageNavigation.backTo', () => {
+  function atDepth(depth: number) {
+    TestBed.resetTestingModule();
+    const historyGo = jest.fn();
+    const navigateByUrl = jest.fn().mockResolvedValue(true);
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: Router, useValue: { navigateByUrl } },
+        { provide: Location, useValue: { historyGo } },
+        { provide: AppHistory, useValue: { depth: () => depth } },
+      ],
+    });
+    return { pages: TestBed.inject(PageNavigation), historyGo, navigateByUrl };
+  }
+
+  it('walks back past every entry pushed since the screen it names', async () => {
+    const { pages, historyGo, navigateByUrl } = atDepth(3);
+
+    await pages.backTo(0, '/velista/en/shopping-lists/live');
+
+    expect(historyGo).toHaveBeenCalledWith(-3);
+    expect(navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('walks back onto the entry the document loaded on', async () => {
+    const { pages, historyGo } = atDepth(0);
+
+    await pages.backTo(-1, '/velista/en/shopping-lists/live');
+
+    expect(historyGo).toHaveBeenCalledWith(-1);
+  });
+
+  it('walks to the fallback when that screen is not below this one', async () => {
+    // A reload of the page, which starts the count again at the floor.
+    const { pages, historyGo, navigateByUrl } = atDepth(-1);
+
+    await pages.backTo(2, '/velista/en/shopping-lists/live');
+
+    expect(historyGo).not.toHaveBeenCalled();
+    expect(navigateByUrl).toHaveBeenCalledWith(
+      '/velista/en/shopping-lists/live',
+      { replaceUrl: true }
+    );
+  });
+});
+
 /** An entry in the tab's stack: where it points, and the id it was written with. */
 interface Entry {
   id: number;

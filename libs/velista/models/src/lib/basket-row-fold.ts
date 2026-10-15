@@ -102,6 +102,70 @@ export function foldBasketEntries(
 }
 
 /**
+ * Put these lines in the rows of the products they count as now (velista
+ * `0140`, section 4).
+ *
+ * {@link foldBasketEntries} puts an answered line back in the row that held it,
+ * because a write on a row does not change its product. A change of product does,
+ * so the lines are first taken out of their rows and then added again, and the
+ * second fold places each one with `lineProductOf` as an add. It is that function
+ * twice and no rule of its own: a row the lines leave is rebuilt or dropped, and a
+ * line joins the row of its new product or makes one.
+ *
+ * @param named The lines the write named, by default the answered ones. A named
+ *   line that is not in the answer left the basket, as for the fold.
+ */
+export function regroupBasketEntries(
+  rows: readonly BasketRow[],
+  entries: readonly BasketRowEntry[],
+  served: ReadonlySet<string>,
+  named: readonly string[] = entries.map((entry) => entry.lineId)
+): readonly BasketRow[] {
+  if (named.length === 0) {
+    return rows;
+  }
+  const without = foldBasketEntries(rows, [], named, served);
+  return foldBasketEntries(without, entries, named, served);
+}
+
+/**
+ * The rows with the choices this device holds put on them (velista `0140`,
+ * section 4): a product chosen for a line with no buy in this trip yet, which
+ * nothing was sent for.
+ *
+ * A held choice is the product a buy would make the line follow, so it is put on
+ * the entry where the server puts the product of a buy, `tripItemId`, and the
+ * entry is grouped again by the shared rule. Only on this device and only until
+ * the server states a buy of its own: an entry with a `tripItemId` is the
+ * server's answer, and a held choice under it is spent.
+ *
+ * @param held The product held for each line, by line id.
+ */
+export function withHeldChoices(
+  rows: readonly BasketRow[],
+  held: ReadonlyMap<string, string>,
+  served: ReadonlySet<string>
+): readonly BasketRow[] {
+  if (held.size === 0) {
+    return rows;
+  }
+  const moved: BasketRowEntry[] = [];
+  for (const row of rows) {
+    for (const entry of row.entries) {
+      const itemId = held.get(entry.lineId);
+      if (
+        itemId !== undefined &&
+        entry.tripItemId === null &&
+        row.productId !== itemId
+      ) {
+        moved.push({ ...entry, tripItemId: itemId });
+      }
+    }
+  }
+  return regroupBasketEntries(rows, moved, served);
+}
+
+/**
  * A row's numbers, state and last act from its entries, by the shared rule.
  *
  * The note, the change mark and `usual` are kept: they are facts the read states

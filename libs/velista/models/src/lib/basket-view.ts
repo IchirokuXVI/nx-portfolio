@@ -1278,6 +1278,22 @@ export interface BasketDemandRequest {
 }
 
 /**
+ * Take another product on these lines (`POST /v1/baskets/:id/lines/product`,
+ * backend `0202` section 3; velista `0140`, section 4).
+ *
+ * The server rewrites the buys of this trip of every named line, so a buy already
+ * made takes the new product. With `keep` it also adds the product to each line
+ * and makes it the favourite. With no buy and no `keep` it writes nothing, which
+ * is why the page holds that choice on the device instead of sending it.
+ */
+export interface BasketProductChangeRequest {
+  readonly lineIds: readonly string[];
+  readonly itemId: string;
+  /** "Keep it for next time": the product becomes the favourite of each line. */
+  readonly keep: boolean;
+}
+
+/**
  * A new line, added from the basket onto one of its covered lists (velista
  * `0092`, section 7).
  *

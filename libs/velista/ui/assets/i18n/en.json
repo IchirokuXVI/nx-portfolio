@@ -1902,15 +1902,29 @@
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
     },
-    "swap": {
-      "open": "Change product",
-      "openLabel": "Change {{name}} for a similar product",
-      "title": "Change product",
-      "instead": "Instead of {{name}}",
-      "none": "There are no similar products.",
-      "failed": "The change did not save. Try again.",
-      "cancel": "Cancel",
-      "cheaper": "cheaper option"
+    "change": {
+      "one": "Change",
+      "oneLabel": "Change the product for {{name}}",
+      "all": "Change for all lists",
+      "openLabel": "There is a cheaper option than {{name}}. Change the product",
+      "cheaper": "cheaper option",
+      "title": "Change the product",
+      "titleAll_one": "Change the product for 1 list",
+      "titleAll_other": "Change the product for {{count}} lists",
+      "chosenNow": "Chosen now",
+      "notSold": "Not sold here",
+      "catalog": "Look for another one in the catalog",
+      "keep": "Keep it for next time",
+      "use": "Use this product",
+      "useAll_one": "Use it for the list",
+      "useAll_other": "Use it for the {{count}} lists",
+      "failedRead": "The products could not be loaded.",
+      "retry": "Try again",
+      "pickTitle": "Choose a product",
+      "pickClose": "Close without choosing",
+      "pickFor": "For {{list}}",
+      "pickForAll_one": "For 1 list",
+      "pickForAll_other": "For {{count}} lists"
     },
     "map": {
       "openLabel": "Map of {{shop}}"

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Route } from '@angular/router';
 import {
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
   productPagePath,
@@ -599,6 +600,32 @@ describe('AppShellRoutes', () => {
           expect(routeAt(path)?.children).toBeUndefined();
         }
       });
+
+      it('has the catalog that chooses and its two pickers as pages under the line, outside the marker (velista 0140)', () => {
+        // A page cannot take a `sheet` segment, so the catalog that chooses one
+        // product is addressed under the line, at the path velista `0146` gives it.
+        // Its pickers are declared under it, so each comes back to it.
+        const paths = pages.map((route) => route.path);
+        const page = `${linePath}/product`;
+
+        for (const path of [
+          `${page}/categories/:parentSlug`,
+          `${page}/categories`,
+          `${page}/supermarket`,
+          page,
+        ]) {
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(path.split('/')).not.toContain(SHEET_SEGMENT);
+          expect(routeAt(path)?.data).toEqual({
+            [CATALOG_PICK_DATA]: 'one',
+            [NAV_CHROME]: NO_NAV_CHROME,
+          });
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
+      });
     });
 
     it('declares one confirm route per member action, with the action in data', () => {
@@ -875,7 +902,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the ten sheets over the basket, and no units sheet', () => {
+    it('offers the eleven sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -889,8 +916,10 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
-          // Change a row's product for another of its product group.
-          'sheet/rows/:rowKey/swap',
+          // Take another product for one list of a row, or for all of them
+          // (velista `0140`, section 2). The swap sheet went with it.
+          'sheet/rows/:rowKey/change/:lineId',
+          'sheet/rows/:rowKey/change',
           // What changed on the covered lists while somebody was shopping
           // (velista `0093`, section 6). Over both basket routes, because a
           // basket follows its lists whichever way it was opened.
@@ -1032,7 +1061,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(10);
+      expect(sheets).toHaveLength(11);
       for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1241,7 +1270,10 @@ describe('the sheets and their exit animation', () => {
     // `0137` added one more over the line page: what the info button says.
     //
     // `0148` added one over home: a sign in link meeting another account.
-    expect(sheets).toHaveLength(61);
+    //
+    // `0140` took away the swap sheet and added the change sheet twice, for one
+    // list and for all of them, over both baskets: two more.
+    expect(sheets).toHaveLength(63);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1353,6 +1385,12 @@ describe('the bottom bar', () => {
     'shops/:locationId/walks/:walkId/edit',
     // Velista 0126: the same for recording, where Stop is the way out.
     'shops/:locationId/walks/:walkId/record',
+    // Velista 0140: the catalog that chooses, and its two pickers. No bar of tabs
+    // is one of the differences from the tab, and Close is the way out.
+    'zones/:zoneId/lists/:listId/lines/:lineId/product',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/supermarket',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories/:parentSlug',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {

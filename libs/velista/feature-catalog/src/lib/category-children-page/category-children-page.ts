@@ -15,9 +15,10 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CategoryStore } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, categoryName } from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import { categoryName } from '@portfolio/velista/models';
+import { CATALOG_PATHS, PageNavigation } from '@portfolio/velista/platform';
 import { PageHeader } from '@portfolio/velista/ui';
+import { catalogOpenerPath } from '../catalog-opener';
 import { formatCount, visibleBranches } from '../category-choice';
 import {
   CategoryRows,
@@ -74,7 +75,6 @@ export class CategoryChildrenPage {
   private readonly _store = inject(CategoryStore);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _pages = inject(PageNavigation);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -136,7 +136,7 @@ export class CategoryChildrenPage {
             { name: categoryName(root, locale) }
           ),
           itemCount: root.itemCount,
-          link: this._tabPath(locale),
+          link: this._openerPath(),
           queryParams: catalogQueryOf({ ...choice, category: root.slug }),
           current: choice.category === root.slug,
         },
@@ -160,7 +160,7 @@ export class CategoryChildrenPage {
           key: child.slug,
           name: categoryName(child, locale),
           itemCount: child.itemCount,
-          link: this._tabPath(locale),
+          link: this._openerPath(),
           queryParams: catalogQueryOf({ ...choice, category: child.slug }),
           current: choice.category === child.slug,
         },
@@ -178,7 +178,7 @@ export class CategoryChildrenPage {
     untracked(() => {
       void this._router.navigateByUrl(
         this._url(
-          appPath(this._locale(), this._basePath, 'catalog', 'categories')
+          `${catalogOpenerPath(this._route.snapshot, 2)}/${CATALOG_PATHS.categoryPicker}`
         ),
         { replaceUrl: true }
       );
@@ -209,7 +209,7 @@ export class CategoryChildrenPage {
    * it was.
    */
   protected async back(): Promise<void> {
-    await this._pages.back(this._url(this._tabPath(this._locale())));
+    await this._pages.back(this._url(this._openerPath()));
   }
 
   /** This path with the tab's choice, unchanged, in its query. */
@@ -219,8 +219,13 @@ export class CategoryChildrenPage {
     return this._router.serializeUrl(url);
   }
 
-  private _tabPath(locale: string): string {
-    return appPath(locale, this._basePath, 'catalog');
+  /**
+   * The page that opened the picker, two segments above this one
+   * (`categories/:parentSlug`): the tab, or the catalog that chooses (velista
+   * `0140`, review point 2).
+   */
+  private _openerPath(): string {
+    return catalogOpenerPath(this._route.snapshot, 2);
   }
 
   private _translate(locale: string) {

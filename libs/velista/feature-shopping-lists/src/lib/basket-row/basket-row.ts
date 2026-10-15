@@ -378,11 +378,12 @@ export class BasketRow {
   readonly open = output<void>();
 
   /**
-   * Whether the row offers "change product": its product belongs to a product
-   * group and the reader may write every list the row stands for. The page
-   * decides, because it holds the lists and the groups.
+   * Whether the cheaper mark opens the change sheet (velista `0140`, section 1):
+   * another product of the group is cheaper, and the reader may change the
+   * product of one list of the row or more. The page decides, because it holds
+   * the lists and the groups.
    */
-  readonly canSwap = input(false);
+  readonly canChange = input(false);
 
   /**
    * Another product of this product's group is cheaper, by the price per litre
@@ -390,12 +391,12 @@ export class BasketRow {
    */
   readonly groupCheaper = input(false);
 
-  /** "Change product" was pressed. */
-  readonly swap = output<void>();
+  /** The cheaper mark's control was pressed: change the product for all lists. */
+  readonly changeProduct = output<void>();
 
-  /** The change button's accessible name, which names the product. */
-  protected readonly swapLabel = computed(() =>
-    this._translator.t('basket.swap.openLabel', undefined, this._locale(), {
+  /** The control's accessible name, which says why it is there and names the product. */
+  protected readonly changeLabel = computed(() =>
+    this._translator.t('basket.change.openLabel', undefined, this._locale(), {
       name: this.name(),
     })
   );
@@ -403,7 +404,7 @@ export class BasketRow {
   /** The group mark's words, or null. */
   protected readonly groupCaption = computed(() =>
     this.groupCheaper() && this._product() !== null
-      ? this._translator.t('basket.swap.cheaper', undefined, this._locale())
+      ? this._translator.t('basket.change.cheaper', undefined, this._locale())
       : null
   );
 

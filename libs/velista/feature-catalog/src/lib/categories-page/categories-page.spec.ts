@@ -20,6 +20,7 @@ import {
   PageNavigation,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
+import { pathFromRootAt } from '../catalog-route.testing';
 import { CategoriesPage } from './categories-page';
 
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
@@ -32,7 +33,9 @@ async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
 async function render(
   tree: FakeCategoryStore,
   /** What the tab was narrowed by when it opened this page. */
-  query: Record<string, string> = {}
+  query: Record<string, string> = {},
+  /** Where the picker is, which says what opened it. The tab by default. */
+  options: { readonly under?: string } = {}
 ) {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
@@ -45,7 +48,14 @@ async function render(
       provideFakeCategoryStore(tree),
       {
         provide: ActivatedRoute,
-        useValue: { snapshot: { queryParamMap: convertToParamMap(query) } },
+        useValue: {
+          snapshot: {
+            queryParamMap: convertToParamMap(query),
+            pathFromRoot: pathFromRootAt(
+              options.under ?? '/velista/en/catalog/categories'
+            ),
+          },
+        },
       },
       { provide: PageNavigation, useValue: pages },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -141,6 +151,23 @@ describe('CategoriesPage (velista 0119)', () => {
       (fixture.nativeElement as HTMLElement).querySelector('lib-page-header h1')
         ?.textContent
     ).toContain('catalog.categories.title');
+  });
+
+  it('links to the children under the catalog that chooses, and falls back to it (velista 0140)', async () => {
+    const opener = '/velista/en/zones/z1/lists/l1/lines/zl-1/product';
+    const { fixture, pages } = await render(
+      fakeCategoryStore(MEMORY_CATEGORIES),
+      {},
+      { under: `${opener}/categories` }
+    );
+
+    expect(links(fixture)[0]?.getAttribute('href')).toBe(
+      `${opener}/categories/eggs-milk-and-butter`
+    );
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('lib-page-header button.lead')
+      ?.click();
+    expect(pages.back).toHaveBeenCalledWith(opener);
   });
 
   it('goes back one step, with the catalog tab as the fallback', async () => {

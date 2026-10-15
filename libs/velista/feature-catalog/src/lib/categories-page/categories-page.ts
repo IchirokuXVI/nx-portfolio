@@ -11,9 +11,10 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CategoryStore } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, categoryName } from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import { categoryName } from '@portfolio/velista/models';
+import { CATALOG_PATHS, PageNavigation } from '@portfolio/velista/platform';
 import { PageHeader } from '@portfolio/velista/ui';
+import { catalogOpenerPath } from '../catalog-opener';
 import { formatCount, visibleBranches } from '../category-choice';
 import {
   CategoryRows,
@@ -55,14 +56,21 @@ export class CategoriesPage {
   private readonly _store = inject(CategoryStore);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _pages = inject(PageNavigation);
   private readonly _router = inject(Router);
 
   /** The tab's choice as this page was handed it, passed on and never changed. */
+  private readonly _route = inject(ActivatedRoute);
+
   private readonly _query = catalogQueryOf(
-    catalogChoiceOf(inject(ActivatedRoute).snapshot.queryParamMap)
+    catalogChoiceOf(this._route.snapshot.queryParamMap)
   );
+
+  /**
+   * The page that opened the picker, which is the route above it: the tab, or the
+   * catalog that chooses (velista `0140`, review point 2).
+   */
+  private readonly _opener = catalogOpenerPath(this._route.snapshot, 1);
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -81,13 +89,7 @@ export class CategoriesPage {
           key: root.slug,
           name: categoryName(root, locale),
           itemCount: root.itemCount,
-          link: appPath(
-            locale,
-            this._basePath,
-            'catalog',
-            'categories',
-            root.slug
-          ),
+          link: `${this._opener}/${CATALOG_PATHS.categoryPicker}/${root.slug}`,
           queryParams: this._query,
           current: false,
         },
@@ -110,9 +112,7 @@ export class CategoriesPage {
    * it was.
    */
   protected async back(): Promise<void> {
-    const url = this._router.parseUrl(
-      appPath(this._locale(), this._basePath, 'catalog')
-    );
+    const url = this._router.parseUrl(this._opener);
     url.queryParams = this._query;
     await this._pages.back(this._router.serializeUrl(url));
   }

@@ -12,7 +12,7 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -60,6 +60,10 @@ import {
   touchedCaption,
 } from '../basket-labels';
 import { basketPath, settleSheetPath } from '../basket-paths';
+import {
+  changeableLineIds,
+  changeSheetPath,
+} from '../change-sheet/change-targets';
 import { RowEntries, type OtherListsState } from '../row-entries/row-entries';
 
 /**
@@ -172,6 +176,7 @@ export class SettleSheet {
    */
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _sheet = inject(SheetNavigation);
+  private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
@@ -594,6 +599,50 @@ export class SettleSheet {
       itemId,
       state: lists === null ? { state: 'failed' } : { state: 'ready', lists },
     });
+  }
+
+  /**
+   * The lines Change is drawn on (velista `0140`, section 1): those the reader
+   * may edit, on lists they were served, of a row with a product that is not
+   * crossed out. None for a guest or once the trip is over.
+   */
+  protected readonly changeable = computed<ReadonlySet<string>>(() => {
+    const row = this.row();
+    return new Set(
+      row === null
+        ? []
+        : changeableLineIds(row, {
+            guest: this._store.me()?.kind === 'GUEST',
+            finished: this.basketFinished(),
+            lists: this.lists(),
+          })
+    );
+  });
+
+  /** Change on one list: the change sheet, pushed over this one. */
+  protected changeLine(lineId: string): void {
+    this._openChange(lineId);
+  }
+
+  /** "Change for all lists". */
+  protected changeAll(): void {
+    this._openChange(null);
+  }
+
+  private _openChange(lineId: string | null): void {
+    const row = this.row();
+    if (row === null) {
+      return;
+    }
+    void this._router.navigateByUrl(
+      changeSheetPath(
+        this._locale(),
+        this._basePath,
+        this._address(),
+        row.rowKey,
+        lineId
+      )
+    );
   }
 
   /** The read failed and the reader asked again. */

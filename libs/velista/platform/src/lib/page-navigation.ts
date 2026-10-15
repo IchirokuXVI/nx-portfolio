@@ -59,4 +59,27 @@ export class PageNavigation {
 
     await this._router.navigateByUrl(fallbackUrl, { replaceUrl: true });
   }
+
+  /**
+   * Go back to the screen that stood at `depth` (`AppHistory.depth`), past every
+   * entry pushed since (velista `0140`, section 3).
+   *
+   * For a page whose own tools are pages: the catalog that chooses opens its
+   * supermarket and category pickers on top of itself, and they answer onto it, so
+   * by the time its close is pressed there can be several entries of it above the
+   * screen that opened it. One pop would land on one of them.
+   *
+   * It pops only to an entry this document pushed or loaded on, which is what a
+   * `depth` from `AppHistory` is, and only when that entry is below this one.
+   * Otherwise it walks to the fallback, replacing this entry, as {@link back} does.
+   */
+  async backTo(depth: number, fallbackUrl: string): Promise<void> {
+    const steps = this._history.depth() - depth;
+    if (depth >= -1 && steps > 0) {
+      this._location.historyGo(-steps);
+      return;
+    }
+
+    await this._router.navigateByUrl(fallbackUrl, { replaceUrl: true });
+  }
 }

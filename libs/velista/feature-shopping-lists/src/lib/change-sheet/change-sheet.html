@@ -1,0 +1,116 @@
+<!--
+  Change the product (velista 0140, section 2; artboards Change and ChangeAll).
+  The title and what it is for, one list of products with a radio each, the way
+  into the catalog, and at the foot the checkbox and the one button.
+-->
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  [hasFooter]="true"
+  labelledBy="basket-change-title"
+>
+  <h2 class="title" id="basket-change-title">{{ title() }}</h2>
+  @if (subtitle() !== '') {
+    <p class="sub">{{ subtitle() }}</p>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <!-- Rows of the same height, so the list does not move when it lands. -->
+      <div aria-hidden="true" class="choices">
+        @for (bone of skeletonRows; track bone) {
+          <div class="bone">
+            <span class="bone-dot"></span>
+            <span class="bone-text"></span>
+          </div>
+        }
+      </div>
+    }
+    @case ('failed') {
+      <div class="failed" role="alert">
+        <span class="failed-text">{{
+          'basket.change.failedRead' | rokuT
+        }}</span>
+        <button (click)="retry()" class="retry" type="button">
+          {{ 'basket.change.retry' | rokuT }}
+        </button>
+      </div>
+    }
+    @default {
+      <div
+        aria-labelledby="basket-change-title"
+        class="choices"
+        role="radiogroup"
+      >
+        @for (choice of choices(); track choice.itemId) {
+          <lib-radio-row
+            (chosen)="choose(choice.itemId)"
+            [checked]="choice.itemId === selected()"
+            [disabled]="busy()"
+            class="choice"
+            name="basket-change-product"
+          >
+            <span class="text">
+              <span class="name">{{ choice.name }}</span>
+              @switch (choice.caption) {
+                @case ('chosenNow') {
+                  <span class="caption">
+                    {{ 'basket.change.chosenNow' | rokuT }}
+                  </span>
+                }
+                @case ('cheaper') {
+                  <span class="caption">
+                    <em class="cheaper">{{
+                      'basket.change.cheaper' | rokuT
+                    }}</em>
+                  </span>
+                }
+                @case ('notSold') {
+                  <span class="caption">
+                    <em class="not-sold">{{
+                      'basket.change.notSold' | rokuT
+                    }}</em>
+                  </span>
+                }
+              }
+            </span>
+            @if (choice.price; as price) {
+              <span class="price">{{ price }}</span>
+            }
+          </lib-radio-row>
+        }
+      </div>
+    }
+  }
+
+  <!-- A link row after the list, which the mock draws with a lens and a chevron. -->
+  <button
+    (click)="openCatalog()"
+    [disabled]="busy()"
+    class="catalog"
+    type="button"
+  >
+    <lib-search-icon aria-hidden="true" class="catalog-glyph" />
+    <span class="catalog-text">{{ 'basket.change.catalog' | rokuT }}</span>
+    <lib-chevron-right-icon aria-hidden="true" class="catalog-chevron" />
+  </button>
+
+  <div class="footer" sheetFooter>
+    <lib-check-field [(checked)]="keep" [disabled]="busy()" class="keep">
+      {{ 'basket.change.keep' | rokuT }}
+    </lib-check-field>
+
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT }}</p>
+    }
+
+    <button
+      (click)="use()"
+      [disabled]="!changed() || busy()"
+      class="use"
+      type="button"
+    >
+      {{ useLabel() }}
+    </button>
+  </div>
+</lib-sheet-shell>

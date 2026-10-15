@@ -1,3 +1,5 @@
+> **PR:** [#716](https://github.com/IchirokuXVI/nx-portfolio/pull/716)
+
 # 0140: a line takes another product from the shopping list
 
 > Asked for by the owner on 2026-10-11: "Each zone list line will be displayed with a
@@ -57,6 +59,111 @@ section and a later section disagree, this section is right.
    that is off with no buy yet. Core merges the rows, so the client must split a row and
    merge it again by itself. `BasketStore.choose` (`basket-store.ts`) has `rowKey` as its
    key, not a line. State how the store holds a choice for one line.
+
+## What the build decided
+
+The build of 2026-10-14 settled the review above as the owner's brief for the build said,
+and made the choices below. Each is a choice of the builder that the owner can overturn.
+Where this section and a later section disagree, this section is right. Velista `0139`,
+`0142` and backend `0202` were on the base branch.
+
+**The three review points.**
+
+1. **Review point 1: the catalog to choose is the route of velista `0146`.** It is
+   `zones/:zoneId/lists/:listId/lines/:lineId/product`, a page outside the `sheet` marker,
+   declared before the line page. "Change for all lists" opens it for the first line of
+   the change, and the store holds every line the answer is for. The page is
+   `CatalogPage`. The route's data names the kind (`CATALOG_PICK_DATA`, `'one'` today),
+   so velista `0146` adds its kind that chooses a set to the same page. The caller hands
+   over the first search text and the first supermarket in the URL (`q`, `chain`), which
+   is the catalog's own state, and the fallback URL of the close control in the store.
+2. **Review point 2: the pickers return through the route.** The supermarket picker and
+   the two category pages are declared again under the page that chooses
+   (`…/product/supermarket`, `…/product/categories`, `…/product/categories/:parentSlug`).
+   A picker finds the page that opened it by taking its own segments off its route
+   (`catalogOpenerPath`), so the same picker returns to the tab from `catalog/…` and to
+   the page that chooses from `…/product/…`. The catalog tab behaves as before.
+3. **Review point 3: a choice for this trip is held by line, on the device.** It is in
+   `HeldProductChoices`, keyed by basket and line, and not in `BasketStore`: the basket
+   route provides that store and the page clears it from its teardown, and the basket page
+   is gone while the catalog is open. `BasketStore.choose` no longer existed after velista
+   `0139`. `BasketStore.rows` puts each held product on its entry as `tripItemId`, where
+   the server puts the product of a buy, and groups the entries again with
+   `foldBasketEntries` twice: the lines are folded out, then folded in as adds, and each
+   joins the row of `lineProductOf` (`regroupBasketEntries`, `withHeldChoices`). No second
+   grouping rule exists. A held choice under an entry that has a buy of its own is spent.
+
+**The catalog to choose.**
+
+4. **The state of the page is in `ProductPickStore`**: the request of the caller, the
+   product chosen so far and the answer. The page component is destroyed while a picker
+   is open, so the store holds them. The change sheet also keeps its checkbox there, so
+   it comes back as the person left it.
+5. **Close and "Use this product" walk back past every entry the pickers added.** The
+   change sheet records `AppHistory.depth()` before it opens the page, and the page calls
+   the new `PageNavigation.backTo(depth, fallbackUrl)`. A supermarket answer replaces its
+   entry, but a category answer is a link, so one pop would land on an earlier state of
+   the page and not on the sheet. The two additions are in `libs/velista/platform`, which
+   the brief's scope does not name. `no-unguarded-history-back.spec.ts` still passes.
+6. **A reload of the page that chooses has no caller.** It goes to the list of its line,
+   in place of its entry, which is the fallback velista `0146` names for the same page.
+7. **The page opens on the line's own words and the chain of the shop of the read.** The
+   mock shows another search, which is a picture and not a rule.
+8. **The card has a radio mode** (`ProductRow.choice`): the whole card is the label of a
+   native radio at its trailing edge, and the chosen card's edge takes the accent colour
+   beside its radio. The foot is `ChoosingBar`. "Use this product" is disabled until a
+   product is chosen, and the page opens with the product chosen in the change sheet.
+
+**The change sheet.**
+
+9. **The product chosen now is checked when the sheet opens**, as `ChangeAll` draws it.
+   `Change` draws no radio checked, which reads as an oversight of the artboard.
+10. **A product chosen in the catalog is drawn second**, under the one chosen now, so it is
+    in sight when the sheet comes back with it chosen.
+11. **Where the sheet prices.** The read of the basket names one product for each row
+    (backend `0201`, section 3), so the sheet reads the rest itself (`ChangeChoices`):
+    the names, the members of the groups priced at the scopes of the basket, and the
+    offers of each other product kept to those scopes. With a shop, the scopes are the
+    shop's, and a product with no offer there is "Not sold here". Any of the reads failing
+    is the one failed row with a retry.
+12. **What "Use this product" sends.** With the checkbox, one write with `keep: true` for
+    every line. Without it, the lines with a buy in this trip (`tripItemId` on the read)
+    are sent with `keep: false`, and the rest are held on the device. A failed write holds
+    nothing. A refusal draws the page's own words, through a new operation
+    `basket.change` in `basket-error-copy.ts` (403 is "your access changed").
+13. **A held product the read does not name is drawn from what the sheet had** (a
+    `BasketProduct` built from the catalog item and the price the sheet showed), so the row
+    has a name and a price until the first buy. The header counts over the rows the held
+    choices regrouped, with the shared rule: the page hands the store's rows and counts to
+    `selectBasketSurface`, which read the server's before (found in the browser walk, where
+    a split row read "4 to buy" over five rows).
+14. **After a change the sheet goes back to the row's sheet**, which follows its row by any
+    of its lines.
+15. **A sheet with no line to change goes back to the row's sheet** once the basket is read:
+    a guest who reaches the URL, a list the reader may not edit, a crossed out row.
+16. **The title and the line under it are the settle sheet's**, in the display face, so the
+    two sheets read as a pair. The mock draws the sheet titles in the plain face.
+17. **The checkbox and the radio are native controls with their look taken off**
+    (`CheckField`, `RadioRow` in `libs/velista/ui`, and the mixins in `_choice.scss`), with
+    tokens for their sizes. The keyboard and the screen reader get the browser's own
+    behaviour.
+
+**The row and the row sheet.**
+
+18. **Change takes the edge and the surface of the quantity pill**, at the height of a touch
+    target, as the mock draws it. Its accessible name names the list.
+19. **The cheaper mark opens the change sheet for all lists through the row's own control.**
+    A button cannot sit inside the row's button, so the control the row already had beside
+    its body stays, and it is drawn only with the cheaper mark and when one list or more can
+    change. Its accessible name says that a cheaper option exists. The row's inputs are
+    renamed `canChange` and `changeProduct`.
+20. **`SwapSheet`, `swap.ts` and the `basket.swap` strings are removed.** `basketGroupScope`
+    moved to `change-sheet/change-targets.ts`, and the two words the row still uses moved to
+    `basket.change`.
+
+**Left as found.** The production build warns that `app-layout.scss` is 918 bytes over its
+budget of 12 kB. The eight tokens of point 17 are about 300 of those bytes, so the global
+sheet was over before this plan.
 
 ## Brief for the agent
 
@@ -169,7 +276,7 @@ Artboards `Change.dc.html` and `ChangeAll.dc.html`. Routes
      order of velista plan `0137`: the price for each kilo or litre, then the price.
   3. The products the shop of the read does not sell, marked "Not sold here", last. They
      can still be chosen.
-  A member that costs less than the chosen one keeps the words "cheaper option".
+     A member that costs less than the chosen one keeps the words "cheaper option".
 - **"Look for another one in the catalog"**, a link row after the list.
 - **The checkbox "Keep it for next time"**, on when the sheet opens.
 - **The button**: "Use this product", or "Use it for the N lists". It is disabled until

@@ -292,7 +292,7 @@
 
 // "Change product", beside the body: the status control's target and treatment,
 // so the row's two small controls read as one family.
-.swap {
+.change-product {
   @include shared.tap-target;
 
   display: flex;
@@ -324,7 +324,7 @@
   }
 }
 
-.swap-glyph {
+.change-product-glyph {
   font-size: var(--app-icon-md);
 }
 

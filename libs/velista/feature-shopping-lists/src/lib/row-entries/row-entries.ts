@@ -35,6 +35,10 @@ interface DrawnEntry {
   /** Whether the quantity is a control, by the server's `demandEditable`. */
   readonly editable: boolean;
   readonly label: string;
+  /** Change is drawn on this entry (velista `0140`, section 1). */
+  readonly changeable: boolean;
+  /** Change's accessible name, which names the list. */
+  readonly changeLabel: string;
 }
 
 /** One list that does not ask yet, as it is drawn under the disclosure. */
@@ -70,7 +74,12 @@ export type OtherListsState =
  * A tap opens it, and it commits on release. It is drawn only where the server's
  * `demandEditable` allows it, and for a list the reader may not name only when it
  * is the whole row (velista `0092`'s rule for a guest). Elsewhere it is the number.
- * Plan `0140` puts "Change" before it; until then the quantity stands alone.
+ *
+ * ## Change
+ *
+ * Before the quantity, on each entry the sheet names as changeable (velista
+ * `0140`, section 1), and "Change for all lists" at the end of the heading's row
+ * once two entries or more have it. Both only say so: the sheet opens the change.
  *
  * ## Add it to another list
  *
@@ -107,6 +116,18 @@ export class RowEntries {
    */
   readonly others = input<OtherListsState | null>(null);
 
+  /**
+   * The lines whose product the reader may change from here (velista `0140`,
+   * section 1). The sheet decides, because it knows the reader and the row.
+   */
+  readonly changeable = input<ReadonlySet<string>>(new Set());
+
+  /** Change on one entry, by its line. */
+  readonly changed = output<string>();
+
+  /** "Change for all lists". */
+  readonly changedAll = output<void>();
+
   /** One list's ask was moved. */
   readonly demanded = output<{
     readonly lineId: string;
@@ -139,6 +160,13 @@ export class RowEntries {
     this._translator.t('basket.sheet.askedOn', undefined, this._locale(), {
       count: this.row().entries.length,
     })
+  );
+
+  /** "Change for all lists" is drawn when Change is drawn on two entries or more. */
+  protected readonly changesAll = computed(
+    () =>
+      this.row().entries.filter((entry) => this.changeable().has(entry.lineId))
+        .length >= 2
   );
 
   /** Whether the disclosure is drawn: there is a read, and it did not answer none. */
@@ -249,6 +277,15 @@ export class RowEntries {
           : this._translator.t('basket.demand.askLabel', undefined, locale, {
               name: list,
             }),
+      changeable: this.changeable().has(entry.lineId),
+      changeLabel: this._translator.t(
+        'basket.change.oneLabel',
+        undefined,
+        locale,
+        {
+          name: list,
+        }
+      ),
     };
   }
 }

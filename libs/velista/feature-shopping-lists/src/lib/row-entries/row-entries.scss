@@ -9,14 +9,21 @@
   margin-block-start: var(--app-space-3);
 }
 
-// "Asked for on 3 lists". Small, in the secondary colour, sitting on a hairline,
-// in a row tall enough for plan 0140's text action beside it.
-.heading {
+// "Asked for on 3 lists", sitting on a hairline, with "Change for all lists" at
+// the other end of the same row (velista 0140, section 1).
+.head {
   display: flex;
   align-items: center;
+  gap: var(--app-space-3);
   min-block-size: var(--app-touch-target);
-  margin: 0;
   border-block-end: 1px solid var(--app-border-subtle);
+}
+
+// Small, in the secondary colour.
+.heading {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
   font-family: inherit;
   font-size: var(--app-text-sm);
   font-weight: 600;
@@ -71,6 +78,59 @@
 
 .ask-reel {
   flex: none;
+}
+
+// "Change for all lists": a text action, the quiet action colour, as the mock
+// draws it. The heading's whole row is tall enough to be its target.
+.change-all {
+  @include shared.tap-target;
+
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Change, before the quantity: the edge and the surface of the quantity's pill,
+// at the full height of a touch target, as the mock draws it.
+.change {
+  @include shared.tap-target;
+
+  flex: none;
+  padding-inline: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 // A number where the reel would be, for a list whose ask cannot change from here.

@@ -697,6 +697,63 @@ describe('BasketMemory: putting a row off for now', () => {
  * Three refusals and one disappearance, and each of the four is a rule the
  * screen rests on rather than a branch of this fake.
  */
+/** Velista `0140` and backend `0202`, section 3. */
+describe('BasketMemory: a change of product', () => {
+  it('rewrites the buys of the trip, so the line follows the new product', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    await memory.settle(
+      BASKET,
+      { rowKey: milk.rowKey, lineIds: ['zl-1'] },
+      {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: milk.entries[0].left,
+        itemId: milk.productId ?? undefined,
+        allocations: [{ lineId: 'zl-1', quantity: 1 }],
+      }
+    );
+
+    const result = await memory.changeProduct(BASKET, {
+      lineIds: ['zl-1'],
+      itemId: 'item-milk-pascual',
+      keep: false,
+    });
+
+    expect(result.entries[0]).toMatchObject({
+      lineId: 'zl-1',
+      tripItemId: 'item-milk-pascual',
+      bought: 1,
+    });
+  });
+
+  it('makes the product the favourite of each line with keep', async () => {
+    const memory = new BasketMemory();
+
+    const result = await memory.changeProduct(BASKET, {
+      lineIds: ['zl-1'],
+      itemId: 'item-new',
+      keep: true,
+    });
+
+    expect(result.entries[0].favoriteItemId).toBe('item-new');
+    expect(result.entries[0].itemIds).toContain('item-new');
+  });
+
+  it('refuses a line the basket does not cover', async () => {
+    const memory = new BasketMemory();
+    expect(
+      await codeOf(
+        memory.changeProduct(BASKET, {
+          lineIds: ['zl-nope'],
+          itemId: 'item-milk-pascual',
+          keep: false,
+        })
+      )
+    ).toBe('not_found');
+  });
+});
+
 describe('BasketMemory: what a list asks for', () => {
   it('moves one household\u2019s ask and leaves the other alone', async () => {
     const memory = new BasketMemory();

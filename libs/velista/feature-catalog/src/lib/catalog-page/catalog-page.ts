@@ -26,7 +26,10 @@ import {
   CATALOG_BROWSE_SERVICE,
   CatalogAddStore,
   CategoryStore,
+  ProductPickStore,
   type CatalogBrowseServiceI,
+  type ProductPickKind,
+  type ProductPickRequest,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -45,12 +48,15 @@ import {
   appPath,
   BrowserFacade,
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
+  PageNavigation,
   productPagePath,
   sheetSegments,
 } from '@portfolio/velista/platform';
 import {
   AddingBar,
   CatalogSelectors,
+  ChoosingBar,
   CloseIcon,
   OrderMenu,
   PageHeader,
@@ -60,10 +66,12 @@ import {
   productRowView,
   SearchIcon,
   type ProductRowAdd,
+  type ProductRowChoice,
   type ProductRowLineStep,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
+import { routePath } from '../catalog-opener';
 import { categoryChoice } from '../category-choice';
 import { rowAdds } from '../row-adds';
 import {
@@ -149,12 +157,30 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * reset from choosing a supermarket or a category. The text and the order are
  * written in place of the entry as they change, so a pop back onto the tab finds
  * them as well. A visit from the bar opens the tab plain, as before.
+ *
+ * ## The same page opens to choose (velista `0140`, section 3)
+ *
+ * Under `…/lines/:lineId/product` the route's data names a kind
+ * (`CATALOG_PICK_DATA`), and the page chooses one product for a line instead of
+ * adding to a list. Everything above, the tools, the order, the cards, the states,
+ * is the tab's, so a rule of the tab that changes later reaches both. Four things
+ * differ, so nobody takes one for the other: the header closes and says "Choose a
+ * product", the bar of tabs is not drawn (the route's chrome), a bar at the foot
+ * names what the product is for, and nothing on the page adds to a list. A press on
+ * a card chooses it and opens nothing.
+ *
+ * What the caller handed over and the product chosen so far are in
+ * `ProductPickStore`, because the pickers are pages and this component is gone
+ * while one is open. The pickers are declared under this page's route, so they
+ * come back to it. Close and "Use this product" walk back past every entry the
+ * pickers added, to the screen that opened the page.
  */
 @Component({
   selector: 'lib-catalog-page',
   imports: [
     AddingBar,
     CatalogSelectors,
+    ChoosingBar,
     CloseIcon,
     OrderMenu,
     PageHeader,
@@ -184,8 +210,36 @@ export class CatalogPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _categories = inject(CategoryStore);
   private readonly _adds = inject(CatalogAddStore);
+  private readonly _pick = inject(ProductPickStore);
+  private readonly _pages = inject(PageNavigation);
 
   protected readonly skeletonRows = SKELETON_ROWS;
+
+  /**
+   * What the page chooses, by its route, or null for the catalog tab (velista
+   * `0140`, section 3).
+   */
+  protected readonly pickKind: ProductPickKind | null =
+    (this._route.snapshot?.data?.[CATALOG_PICK_DATA] as
+      | ProductPickKind
+      | undefined) ?? null;
+
+  /** The line the route of the catalog that chooses names. */
+  private readonly _pickLineId: string | null =
+    this._route.snapshot?.paramMap?.get('lineId') ?? null;
+
+  /** What the screen that opened the page handed it, for this line, or null. */
+  protected readonly pickRequest = computed<ProductPickRequest | null>(() => {
+    const request = this._pick.request();
+    return this.pickKind !== null &&
+      request !== null &&
+      request.lineId === this._pickLineId
+      ? request
+      : null;
+  });
+
+  /** The product chosen so far in the catalog that chooses. */
+  protected readonly pickChosen = this._pick.chosen;
 
   /** The list the plus adds to, or null for somebody with none to write to. */
   protected readonly addTarget = this._adds.target;
@@ -308,15 +362,8 @@ export class CatalogPage {
    */
   private readonly _categoryPath = computed(() => {
     const choice = this.choice();
-    return choice === null
-      ? appPath(this._locale(), this._basePath, 'catalog', 'categories')
-      : appPath(
-          this._locale(),
-          this._basePath,
-          'catalog',
-          'categories',
-          choice.root.slug
-        );
+    const pickers = `${this._ownPath()}/${CATALOG_PATHS.categoryPicker}`;
+    return choice === null ? pickers : `${pickers}/${choice.root.slug}`;
   });
 
   /**
@@ -459,7 +506,16 @@ export class CatalogPage {
     });
 
     void this._context.load().then((context) => this.context.set(context));
-    void this._adds.ensure();
+    // The catalog that chooses adds to nothing, so it reads no list to add to.
+    if (this.pickKind === null) {
+      void this._adds.ensure();
+    } else if (this.pickRequest() === null) {
+      // Nothing opened it: a reload, or a link. There is no caller to answer, so
+      // the page goes to the list the line is on, in place of this entry.
+      void this._router.navigateByUrl(this._pickFallback(), {
+        replaceUrl: true,
+      });
+    }
 
     // A failed write is said once (section 4.1): the store counts them, and each
     // new one raises the sentence until the next press takes it down.
@@ -473,10 +529,52 @@ export class CatalogPage {
     });
   }
 
-  /** What a row's trailing control draws, or null for a row with no plus. */
+  /**
+   * What a row's trailing control draws, or null for a row with no plus. The
+   * catalog that chooses draws none: nothing on it adds to a list.
+   */
   protected addOf(itemId: string): ProductRowAdd | null {
+    if (this.pickKind !== null) {
+      return null;
+    }
     const adds = this._rowAdds();
     return adds.byItem.get(itemId) ?? adds.plain;
+  }
+
+  /** The radio of a row in the catalog that chooses, or null in the tab. */
+  protected choiceOf(itemId: string): ProductRowChoice | null {
+    return this.pickKind === null
+      ? null
+      : { name: 'catalog-pick', checked: this.pickChosen() === itemId };
+  }
+
+  /** A press on a card in the catalog that chooses: that product is the choice. */
+  protected choose(itemId: string): void {
+    this._pick.choose(itemId);
+  }
+
+  /**
+   * "Use this product": the answer is left for the screen that opened the page,
+   * and the page goes back to it past every entry the pickers added.
+   */
+  protected usePick(): void {
+    const request = this.pickRequest();
+    if (request !== null && this._pick.use()) {
+      void this._pages.backTo(request.returnDepth, request.returnUrl);
+    }
+  }
+
+  /** Close: back to the screen that opened the page, with nothing changed. */
+  protected closePick(): void {
+    const request = this.pickRequest();
+    if (request === null) {
+      void this._router.navigateByUrl(this._pickFallback(), {
+        replaceUrl: true,
+      });
+      return;
+    }
+    this._pick.cancel();
+    void this._pages.backTo(request.returnDepth, request.returnUrl);
   }
 
   /** The plus on a row: one of this product on the chosen list. */
@@ -542,7 +640,7 @@ export class CatalogPage {
    */
   protected openSupermarket(): void {
     const url = this._router.parseUrl(
-      appPath(this._locale(), this._basePath, 'catalog', 'supermarket')
+      `${this._ownPath()}/${CATALOG_PATHS.supermarketPicker}`
     );
     url.queryParams = catalogQueryOf(this._choice());
     void this._router.navigateByUrl(url);
@@ -714,13 +812,36 @@ export class CatalogPage {
     return url;
   }
 
-  private _tabPath(): string {
-    return appPath(this._locale(), this._basePath, 'catalog');
+  /**
+   * This page's own path: the tab's, or in the catalog that chooses the path of
+   * its route, which names the line. The pickers are opened under it and come back
+   * to it, and a cleared chip lands on it.
+   */
+  private _ownPath(): string {
+    return this.pickKind === null
+      ? appPath(this._locale(), this._basePath, CATALOG_PATHS.tab)
+      : routePath(this._route.snapshot);
   }
 
-  /** The tab with this choice in its URL. */
+  /**
+   * Where the catalog that chooses goes with no screen to go back to: the list
+   * its line is on, which is the fallback velista `0146` names for the same page.
+   */
+  private _pickFallback(): string {
+    const params = this._route.snapshot.paramMap;
+    return appPath(
+      this._locale(),
+      this._basePath,
+      'zones',
+      params.get('zoneId') ?? '',
+      'lists',
+      params.get('listId') ?? ''
+    );
+  }
+
+  /** This page with this choice in its URL. */
   private _tabUrl(choice: CatalogChoice) {
-    const url = this._router.parseUrl(this._tabPath());
+    const url = this._router.parseUrl(this._ownPath());
     url.queryParams = catalogQueryOf(choice);
     return url;
   }

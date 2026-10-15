@@ -6,20 +6,13 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import {
-  RokuLocaleStore,
-  RokuTranslatorPipe,
-} from '@portfolio/localization/rokutranslator-angular';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   ShoppingProfileStore,
   ShopStore,
 } from '@portfolio/velista/data-access';
-import {
-  APP_BASE_PATH,
-  OTHER_CHAINS,
-  type FranchiseButton,
-} from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import { OTHER_CHAINS, type FranchiseButton } from '@portfolio/velista/models';
+import { PageNavigation } from '@portfolio/velista/platform';
 import {
   ChainLogo,
   FranchiseButtons,
@@ -28,6 +21,7 @@ import {
   SpinnerIcon,
   type ChainLogoView,
 } from '@portfolio/velista/ui';
+import { catalogOpenerPath } from '../catalog-opener';
 import {
   catalogChoiceOf,
   catalogQueryOf,
@@ -84,8 +78,6 @@ const EVERY_CHAIN: ChainLogoView = { logoUrl: null, name: '', store: true };
 export class CatalogSupermarketPage {
   private readonly _shops = inject(ShopStore);
   private readonly _profiles = inject(ShoppingProfileStore);
-  private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _pages = inject(PageNavigation);
@@ -165,9 +157,13 @@ export class CatalogSupermarketPage {
     );
   }
 
+  /**
+   * The page that opened the picker, which is the route above it: the tab, or the
+   * catalog that chooses (velista `0140`, review point 2).
+   */
   private _catalogUrl(choice: CatalogChoice) {
     const url = this._router.parseUrl(
-      appPath(this._locale(), this._basePath, 'catalog')
+      catalogOpenerPath(this._route.snapshot, 1)
     );
     url.queryParams = catalogQueryOf(choice);
     return url;
