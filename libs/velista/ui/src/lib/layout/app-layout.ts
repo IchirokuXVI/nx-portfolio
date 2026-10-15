@@ -10,6 +10,7 @@ import {
   AppUpdates,
   BackendReadiness,
   ConnectionState,
+  ImpersonationState,
   LiveBasketBadge,
   NavChrome,
   ReloadBlocker,
@@ -27,6 +28,7 @@ import {
 import { TourCard } from '../tour/tour-card';
 import { TourSpotlight } from '../tour/tour-spotlight';
 import { AppNav } from './app-nav';
+import { SupportStrip } from './support-strip';
 
 /**
  * The app's own root. Every route in this app renders inside it.
@@ -67,6 +69,7 @@ import { AppNav } from './app-nav';
     ConnectionLost,
     StartupScreen,
     UpdateScreen,
+    SupportStrip,
   ],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
@@ -74,6 +77,7 @@ import { AppNav } from './app-nav';
   host: {
     '[class]': 'rootClass()',
     '[class.nav-up]': 'navReserved()',
+    '[class.support-up]': 'supportSession() !== null',
   },
 })
 export class AppLayout {
@@ -86,6 +90,13 @@ export class AppLayout {
   private readonly _nav = inject(NavChrome);
   private readonly _badge = inject(LiveBasketBadge);
   private readonly _tour = inject(TourStore);
+  private readonly _impersonation = inject(ImpersonationState);
+
+  /**
+   * The support session this tab holds, or null (velista `0133`). Always null in an
+   * ordinary tab, where nothing below changes at all.
+   */
+  readonly supportSession = this._impersonation.session;
 
   /**
    * Whether to cover the page with the connection screen.
@@ -186,6 +197,11 @@ export class AppLayout {
   readonly tourCard = this._tour.card;
 
   /** Next, or Finish on the last card. */
+  /** "End" on the strip. `data-access` ends the session and leaves the document. */
+  endSupportSession(): void {
+    this._impersonation.end();
+  }
+
   tourNext(): void {
     this._tour.next();
   }

@@ -4,10 +4,12 @@ import {
   DOCUMENT,
   inject,
   Injectable,
+  Injector,
   PLATFORM_ID,
   signal,
   type Signal,
 } from '@angular/core';
+import { ImpersonationState } from './impersonation-state';
 
 /**
  * The one place this app is allowed to touch a browser-only global.
@@ -58,6 +60,8 @@ export class BrowserFacade {
   private readonly _document = inject(DOCUMENT);
   private readonly _destroyRef = inject(DestroyRef);
   private readonly _mediaQueries = new Map<string, Signal<boolean>>();
+  private readonly _injector = inject(Injector);
+  private _tabScoped: boolean | null = null;
 
   constructor() {
     this.isBrowser = isPlatformBrowser(this._platformId);
@@ -185,13 +189,38 @@ export class BrowserFacade {
   }
 
   /**
+   * Whether the persisted keys live in this tab rather than on the origin, which is
+   * the case for the whole life of a document that holds a support session (velista
+   * `0133`, target 2). Then `readStorage`, `writeStorage` and `removeStorage` use
+   * `sessionStorage`, and `watchStorage` hears nothing, so the session of the user and
+   * every key beside it end with the tab, and the account of the operator in
+   * `localStorage` is neither read nor written.
+   *
+   * Resolved lazily and once: `ImpersonationState` reads its marker through this very
+   * facade, so it cannot be injected in the constructor, and its answer never changes.
+   */
+  private get tabScoped(): boolean {
+    this._tabScoped ??= this._injector.get(ImpersonationState).active;
+    return this._tabScoped;
+  }
+
+  /** The store the persisted keys live in: the origin's, or this tab's in a support session. */
+  private _persisted(): Storage | null {
+    const win = this.window;
+    if (!win) {
+      return null;
+    }
+    return this.tabScoped ? win.sessionStorage : win.localStorage;
+  }
+
+  /**
    * Read a persisted value. Returns null when there is no storage *and* when
    * storage throws, which it does in private mode and with site data blocked —
    * a caller must never have to care which.
    */
   readStorage(key: string): string | null {
     try {
-      return this.window?.localStorage.getItem(key) ?? null;
+      return this._persisted()?.getItem(key) ?? null;
     } catch {
       return null;
     }
@@ -200,7 +229,7 @@ export class BrowserFacade {
   /** Persist a value. Silently does nothing when storage is unavailable. */
   writeStorage(key: string, value: string): void {
     try {
-      this.window?.localStorage.setItem(key, value);
+      this._persisted()?.setItem(key, value);
     } catch {
       // Storage full, blocked, or absent. Nothing here is load bearing enough
       // to fail a user action over.
@@ -226,7 +255,11 @@ export class BrowserFacade {
     onChange: (newValue: string | null) => void
   ): () => void {
     const win = this.window;
-    if (!win) {
+    // A tab with a support session keeps its keys to itself, so what another document
+    // writes to `localStorage` is not its business (velista `0133`, target 2). The
+    // operator signing out in another tab must not end the session here, and the
+    // operator's own pair must never be adopted into it.
+    if (!win || this.tabScoped) {
       return () => undefined;
     }
 
@@ -276,10 +309,37 @@ export class BrowserFacade {
     }
   }
 
+  /**
+   * Remove every value stored for this tab whose key passes `match`.
+   *
+   * The end of a support session uses it, and so does the handoff page before it
+   * writes a new one: whatever the last session of this tab left behind must not be
+   * read as the next one's (velista `0133`). A predicate rather than `clear()`,
+   * because mounted in the portfolio the tab's storage is the shell's origin too.
+   */
+  removeSessionStorageWhere(match: (key: string) => boolean): void {
+    try {
+      const store = this.window?.sessionStorage;
+      if (!store) {
+        return;
+      }
+      const keys: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const key = store.key(i);
+        if (key !== null && match(key)) {
+          keys.push(key);
+        }
+      }
+      keys.forEach((key) => store.removeItem(key));
+    } catch {
+      // See writeStorage.
+    }
+  }
+
   /** Remove a persisted value. Silently does nothing when storage is unavailable. */
   removeStorage(key: string): void {
     try {
-      this.window?.localStorage.removeItem(key);
+      this._persisted()?.removeItem(key);
     } catch {
       // See writeStorage.
     }
@@ -306,5 +366,18 @@ export class BrowserFacade {
    */
   reload(): void {
     this.location?.reload();
+  }
+
+  /**
+   * Leave this document for a new one at `url`, with no entry left behind in the
+   * history.
+   *
+   * The handoff page and the end of a support session need it (velista `0133`): every
+   * store reads its storage as the document starts, so a new document is what makes
+   * the app start from the storage of the tab rather than from what it held. A no-op
+   * on the server.
+   */
+  replaceDocument(url: string): void {
+    this.location?.replace(url);
   }
 }

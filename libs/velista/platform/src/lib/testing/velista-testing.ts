@@ -146,6 +146,15 @@ export function fakeBrowserFacade(
     writeSessionStorage: (key: string, value: string) =>
       void session.set(key, value),
     removeSessionStorage: (key: string) => void session.delete(key),
+    removeSessionStorageWhere: (match: (key: string) => boolean) => {
+      for (const key of [...session.keys()]) {
+        if (match(key)) {
+          session.delete(key);
+        }
+      }
+    },
+    // A no-op, like `reload`. A spec about leaving the document passes a mock.
+    replaceDocument: () => undefined,
     // A no-op, like the real facade under a server render. A spec that asserts on a
     // reload passes a jest mock in `overrides`.
     reload: () => undefined,

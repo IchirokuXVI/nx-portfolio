@@ -38,6 +38,7 @@ import {
   DUE_LINE_SERVICE,
   DueLineApi,
   gatewayInterceptor,
+  ImpersonationSession,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
@@ -339,6 +340,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // sit in storage forever, booting every load into a signed-in app whose every
   // request fails, with nothing that ever clears it.
   provideEnvironmentInitializer(() => void inject(SessionValidation)),
+
+  // A support session in this tab (velista `0133`): the strip's name and deadline, the
+  // clock that ends the session, and what "End" does. Nothing injects it, so without
+  // this line the strip would never draw. In an ordinary tab it does nothing.
+  provideEnvironmentInitializer(() => void inject(ImpersonationSession)),
 
   // Start the update schedule (plan 0034, section 4). A listener again, and started
   // the same way and for the same reason: nothing injects it, so without this line

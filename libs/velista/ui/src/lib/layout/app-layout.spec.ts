@@ -6,6 +6,7 @@ import { type AppBrand } from '@portfolio/velista/models';
 import {
   BackendReadiness,
   ConnectionState,
+  ImpersonationState,
   LiveBasketBadge,
   NavChrome,
   provideFakeBrowserFacade,
@@ -683,5 +684,128 @@ describe('AppLayout', () => {
     expect(outletOf(fixture)).not.toBeNull();
     expect(host.querySelector('lib-connection-lost')).toBeNull();
     expect(host.querySelector('lib-startup-screen')).toBeNull();
+  });
+
+  // Velista `0133`: the strip of a support session.
+  describe('the strip of a support session', () => {
+    const view = {
+      username: 'marta_r',
+      until: new Date(Date.now() + 3_600_000),
+    };
+
+    function stateWith(session: typeof view | null) {
+      return {
+        active: session !== null,
+        session: signal(session),
+        end: jest.fn(),
+      };
+    }
+
+    async function withSession(session: typeof view | null): Promise<{
+      fixture: ComponentFixture<AppLayout>;
+      state: ReturnType<typeof stateWith>;
+    }> {
+      const state = stateWith(session);
+      const fixture = await createFixture(
+        {},
+        [],
+        [{ provide: ImpersonationState, useValue: state }]
+      );
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+      return { fixture, state };
+    }
+
+    function stripOf(fixture: ComponentFixture<AppLayout>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-support-strip'
+      );
+    }
+
+    it('is the first thing in the frame, above the main column, while a session holds', async () => {
+      const { fixture } = await withSession(view);
+      const host: HTMLElement = fixture.nativeElement;
+
+      expect(host.firstElementChild).toBe(stripOf(fixture));
+      expect(stripOf(fixture)?.nextElementSibling?.tagName).toBe('MAIN');
+      expect(host.classList).toContain('support-up');
+    });
+
+    it('stays outside the column the tour makes inert', async () => {
+      const { fixture } = await withSession(view);
+      const main = (fixture.nativeElement as HTMLElement).querySelector('main');
+
+      expect(main?.contains(stripOf(fixture))).toBe(false);
+    });
+
+    it('hands End to the session', async () => {
+      const { fixture, state } = await withSession(view);
+
+      stripOf(fixture)?.querySelector('button')?.click();
+      expect(state.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('is absent in an ordinary tab, and the frame is as it was', async () => {
+      // The real state, over a tab with no marker.
+      const fixture = await createFixture();
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+      const host: HTMLElement = fixture.nativeElement;
+
+      expect(TestBed.inject(ImpersonationState).active).toBe(false);
+      expect(stripOf(fixture)).toBeNull();
+      expect(host.classList).not.toContain('support-up');
+      expect(host.firstElementChild?.tagName).toBe('MAIN');
+    });
+
+    // jsdom lays nothing out, so the half a spec can see is the stylesheets.
+    function rules(file: string): string {
+      return readFileSync(resolve(__dirname, file), 'utf8').replace(
+        /\/\/.*$/gm,
+        ''
+      );
+    }
+
+    it('makes the column below it shorter by the strip, and the frame no taller', () => {
+      const layout = rules('app-layout.scss');
+      const strip = rules('support-strip.scss');
+
+      // The frame stays one small viewport, and the strip is an item of it with the
+      // height the app root gives it, so the main column (flex: 1) is 100svh less it.
+      expect(layout).toMatch(/:host\s*\{[^}]*block-size:\s*100svh/);
+      expect(layout).toMatch(
+        /:host\(\.support-up\)\s*\{[^}]*--app-support-strip-height:\s*calc\(\s*var\(--app-support-strip-row\)\s*\+\s*var\(--app-support-strip-safe-top\)\s*\)/
+      );
+      expect(layout).toMatch(/\.app-main\s*\{[^}]*flex:\s*1/);
+      expect(strip).toMatch(/:host\s*\{[^}]*flex:\s*none/);
+      expect(strip).toMatch(
+        /:host\s*\{[^}]*block-size:\s*var\(--app-support-strip-height\)/
+      );
+      expect(strip).not.toMatch(/position:\s*fixed/);
+    });
+
+    it('takes the top inset for the screen while it is up', () => {
+      expect(rules('app-layout.scss')).toMatch(
+        /:host\(\.support-up\)\s*\{[^}]*--app-safe-top:\s*0px/
+      );
+    });
+
+    it('sits over every cover', () => {
+      const semantic = readFileSync(
+        resolve(__dirname, '../styles/_semantic.scss'),
+        'utf8'
+      );
+      const z = (name: string) =>
+        Number(new RegExp(`--app-${name}:\\s*(\\d+)`).exec(semantic)?.[1]);
+      const fixedZ = (file: string) =>
+        Number(/z-index:\s*(\d+)/.exec(rules(file))?.[1]);
+
+      const strip = z('support-strip-z');
+      expect(strip).toBeGreaterThan(z('tour-z'));
+      expect(strip).toBeGreaterThan(z('nav-z'));
+      expect(strip).toBeGreaterThan(fixedZ('../entry/sheet-shell.scss'));
+      expect(strip).toBeGreaterThan(fixedZ('../entry/account-lost-panel.scss'));
+      expect(strip).toBeGreaterThan(fixedZ('../home/state-panels.scss'));
+    });
   });
 });

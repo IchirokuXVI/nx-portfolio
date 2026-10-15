@@ -1,0 +1,380 @@
+import {
+  HttpClient,
+  provideHttpClient,
+  withInterceptors,
+} from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
+import {
+  APP_API_CONFIG,
+  APP_BASE_PATH,
+  APP_VERSION,
+  type SessionTokens,
+} from '@portfolio/velista/models';
+import {
+  AppUpdates,
+  ImpersonationState,
+  provideFakeBrowserFacade,
+  StorageKeys,
+} from '@portfolio/velista/platform';
+import { VELISTA_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
+import { gatewayInterceptor } from '../gateway-interceptor';
+import {
+  IMPERSONATION_END_WAIT_MS,
+  ImpersonationSession,
+} from './impersonation-session';
+import { TokenStore } from './token-store';
+
+const GATEWAY = 'https://gateway.test';
+const ENDED = '/velista/en/auth/support-ended';
+const HOUR_S = 3600;
+
+function jwt(payload: object): string {
+  const encode = (value: object) =>
+    btoa(JSON.stringify(value))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  return `${encode({ alg: 'RS256' })}.${encode(payload)}.sig`;
+}
+
+const nowS = () => Math.floor(Date.now() / 1000);
+
+/** The pair of a support session that ends `untilS` seconds from now. */
+function sessionPair(untilS = 2 * HOUR_S, refreshToken = 'r1'): SessionTokens {
+  return {
+    userId: 'u1',
+    kind: 'REGISTERED',
+    username: 'marta_r',
+    accessToken: jwt({
+      sub: 'u1',
+      exp: nowS() + Math.min(untilS, 900),
+      act: { sub: 'admin', sid: 's1', until: nowS() + untilS },
+    }),
+    refreshToken,
+  };
+}
+
+function ordinaryPair(): SessionTokens {
+  return {
+    userId: 'op',
+    kind: 'REGISTERED',
+    username: 'operator',
+    accessToken: jwt({ sub: 'op', exp: nowS() + 900 }),
+    refreshToken: 'op-refresh',
+  };
+}
+
+interface Setup {
+  readonly support: ImpersonationSession;
+  readonly http: HttpTestingController;
+  readonly state: ImpersonationState;
+  readonly persisted: Map<string, string>;
+  readonly tab: Map<string, string>;
+  readonly replaceDocument: jest.Mock;
+  readonly written: string[];
+}
+
+/**
+ * `tab` stands for `sessionStorage` and `persisted` for whatever the facade's
+ * persisted keys use, which in an active tab is `sessionStorage` too: the facade's own
+ * spec proves that routing, so here the two are kept apart to see who writes where.
+ */
+function setUp(options: {
+  readonly active: boolean;
+  readonly persisted?: Map<string, string>;
+  readonly tab?: Map<string, string>;
+}): Setup {
+  const persisted = options.persisted ?? new Map<string, string>();
+  const tab =
+    options.tab ??
+    new Map<string, string>(
+      options.active ? [[StorageKeys.supportSession, '1']] : []
+    );
+  const replaceDocument = jest.fn();
+  const written: string[] = [];
+
+  TestBed.configureTestingModule({
+    providers: [
+      provideHttpClient(withInterceptors([gatewayInterceptor])),
+      provideHttpClientTesting(),
+      {
+        provide: APP_API_CONFIG,
+        useValue: { gatewayBaseUrl: GATEWAY, realtimeBaseUrl: 'https://rt' },
+      },
+      { provide: RokuTranslatorService, useValue: { getLocale: () => 'en' } },
+      { provide: APP_BASE_PATH, useValue: '/velista' },
+      { provide: APP_VERSION, useValue: '1.0.0' },
+      { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
+      provideFakeBrowserFacade(persisted, {
+        readSessionStorage: (key: string) => tab.get(key) ?? null,
+        writeSessionStorage: (key: string, value: string) => {
+          written.push(key);
+          tab.set(key, value);
+        },
+        removeSessionStorage: (key: string) => void tab.delete(key),
+        removeSessionStorageWhere: (match: (key: string) => boolean) => {
+          [...tab.keys()].filter(match).forEach((key) => tab.delete(key));
+        },
+        replaceDocument,
+      }),
+      ...VELISTA_DATA_ACCESS_PROVIDERS,
+    ],
+  });
+
+  const support = TestBed.inject(ImpersonationSession);
+  TestBed.tick();
+
+  return {
+    support,
+    http: TestBed.inject(HttpTestingController),
+    state: TestBed.inject(ImpersonationState),
+    persisted,
+    tab,
+    replaceDocument,
+    written,
+  };
+}
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe('ImpersonationSession', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe('the handoff', () => {
+    it('trades the code with no token of the operator on the request', async () => {
+      const persisted = new Map([
+        [StorageKeys.session, JSON.stringify(ordinaryPair())],
+      ]);
+      const { support, http } = setUp({ active: false, persisted });
+
+      const answer = support.exchange('the-code');
+      const req = http.expectOne(`${GATEWAY}/v1/auth/impersonation/exchange`);
+      expect(req.request.body).toEqual({ code: 'the-code' });
+      expect(req.request.headers.has('Authorization')).toBe(false);
+      req.flush(sessionPair());
+
+      const outcome = await answer;
+      expect(outcome.state).toBe('opened');
+      http.verify();
+    });
+
+    it('answers invalid for a code the server refuses, whatever the reason', async () => {
+      const { support, http } = setUp({ active: false });
+
+      const answer = support.exchange('old');
+      http
+        .expectOne(`${GATEWAY}/v1/auth/impersonation/exchange`)
+        .flush(
+          { code: 'impersonation_code_invalid' },
+          { status: 400, statusText: 'Bad Request' }
+        );
+
+      expect(await answer).toEqual({ state: 'invalid' });
+    });
+
+    it.each([
+      ['a server error', { code: 'internal' }, 500],
+      ['an answer it cannot read', { nope: true }, 200],
+    ])(
+      'answers failed for %s, since the code may still be good',
+      async (_, body, status) => {
+        const { support, http } = setUp({ active: false });
+
+        const answer = support.exchange('code');
+        http
+          .expectOne(`${GATEWAY}/v1/auth/impersonation/exchange`)
+          .flush(body, { status, statusText: 'x' });
+
+        expect(await answer).toEqual({ state: 'failed' });
+      }
+    );
+
+    it('writes the marker, then the pair, to this tab, and loads home as a new document', () => {
+      const persisted = new Map([
+        [StorageKeys.session, JSON.stringify(ordinaryPair())],
+      ]);
+      const tab = new Map([
+        ['last-list:velista', 'left by the last session'],
+        ['something:shell', 'not ours'],
+      ]);
+      const { support, written, replaceDocument } = setUp({
+        active: false,
+        persisted,
+        tab,
+      });
+      const pair = sessionPair();
+
+      support.begin(pair);
+
+      expect(written).toEqual([
+        StorageKeys.supportSession,
+        StorageKeys.session,
+      ]);
+      expect(JSON.parse(tab.get(StorageKeys.session) ?? '')).toEqual(pair);
+      expect(tab.has('last-list:velista')).toBe(false);
+      expect(tab.get('something:shell')).toBe('not ours');
+      // The operator's account is not touched.
+      expect(JSON.parse(persisted.get(StorageKeys.session) ?? '')).toEqual(
+        ordinaryPair()
+      );
+      expect(replaceDocument).toHaveBeenCalledWith('/velista/en/home');
+    });
+  });
+
+  describe('an ordinary tab', () => {
+    it('draws no strip, sets no clock and leaves the pair alone', () => {
+      jest.useFakeTimers();
+      const persisted = new Map([
+        [StorageKeys.session, JSON.stringify(ordinaryPair())],
+      ]);
+      const { state, replaceDocument } = setUp({ active: false, persisted });
+
+      jest.advanceTimersByTime(3 * HOUR_S * 1000);
+      TestBed.inject(TokenStore).clear();
+      TestBed.tick();
+
+      expect(state.session()).toBeNull();
+      expect(replaceDocument).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a tab that holds a session', () => {
+    function active(pair: SessionTokens | null = sessionPair()) {
+      const persisted = new Map<string, string>(
+        pair === null ? [] : [[StorageKeys.session, JSON.stringify(pair)]]
+      );
+      return setUp({ active: true, persisted });
+    }
+
+    function expectEnded(setup: Setup): void {
+      expect(setup.replaceDocument).toHaveBeenCalledWith(ENDED);
+      expect(setup.tab.has(StorageKeys.supportSession)).toBe(false);
+    }
+
+    it('shows the name from the pair and the deadline from the claim', () => {
+      const pair = sessionPair(HOUR_S);
+      const { state } = active(pair);
+
+      expect(state.session()?.username).toBe('marta_r');
+      expect(state.session()?.until.getTime()).toBe((nowS() + HOUR_S) * 1000);
+    });
+
+    it('ends when the clock reaches the deadline', () => {
+      jest.useFakeTimers();
+      const setup = active(sessionPair(HOUR_S));
+
+      jest.advanceTimersByTime(HOUR_S * 1000 - 1000);
+      expect(setup.replaceDocument).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(2000);
+      expectEnded(setup);
+    });
+
+    it('ends on End, after telling the server', async () => {
+      const setup = active();
+
+      void setup.support.endByHand();
+      const req = setup.http.expectOne(`${GATEWAY}/v1/auth/impersonation/end`);
+      expect(req.request.headers.get('Authorization')).toMatch(/^Bearer /);
+      expect(setup.replaceDocument).not.toHaveBeenCalled();
+      req.flush({ ended: true }, { status: 201, statusText: 'Created' });
+      await settle();
+
+      expectEnded(setup);
+    });
+
+    it('ends on End when the request fails', async () => {
+      const setup = active();
+
+      void setup.support.endByHand();
+      setup.http
+        .expectOne(`${GATEWAY}/v1/auth/impersonation/end`)
+        .flush({ code: 'internal' }, { status: 500, statusText: 'x' });
+      await settle();
+
+      expectEnded(setup);
+    });
+
+    it('ends on End when the server does not answer in time', async () => {
+      jest.useFakeTimers();
+      const setup = active();
+
+      void setup.support.endByHand();
+      setup.http.expectOne(`${GATEWAY}/v1/auth/impersonation/end`);
+      await jest.advanceTimersByTimeAsync(IMPERSONATION_END_WAIT_MS + 10);
+
+      expectEnded(setup);
+    });
+
+    it('reaches End through the strip', async () => {
+      const setup = active();
+
+      setup.state.end();
+      setup.http
+        .expectOne(`${GATEWAY}/v1/auth/impersonation/end`)
+        .flush({ ended: true });
+      await settle();
+
+      expectEnded(setup);
+    });
+
+    it('ends on a 401 impersonation_ended, with no refresh', async () => {
+      const setup = active();
+      const http = TestBed.inject(HttpClient);
+
+      http.get(`${GATEWAY}/v1/zones`).subscribe({ error: () => undefined });
+      setup.http
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'impersonation_ended' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+      await settle();
+
+      setup.http.expectNone(`${GATEWAY}/v1/auth/refresh`);
+      expectEnded(setup);
+    });
+
+    it('ends when the server refuses a refresh', async () => {
+      const setup = active();
+
+      void TestBed.inject(TokenStore).refresh();
+      setup.http
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(
+          { code: 'impersonation_ended' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+      await settle();
+      TestBed.tick();
+
+      expectEnded(setup);
+    });
+
+    it('ends a pair with no act, which is a defect', () => {
+      expectEnded(active(ordinaryPair()));
+    });
+
+    it('ends a tab that started with the marker and no pair', () => {
+      expectEnded(active(null));
+    });
+
+    it('ends once, whatever ends it first', async () => {
+      jest.useFakeTimers();
+      const setup = active(sessionPair(60));
+
+      setup.support.endedByServer();
+      jest.advanceTimersByTime(120_000);
+      setup.support.endedByServer();
+
+      expect(setup.replaceDocument).toHaveBeenCalledTimes(1);
+    });
+  });
+});

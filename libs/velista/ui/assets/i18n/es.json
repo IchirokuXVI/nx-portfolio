@@ -2675,5 +2675,29 @@
     "unsaved": {
       "body": "La última parte de este recorrido solo está en este móvil. Seguimos intentando guardarla."
     }
+  },
+  "support": {
+    "strip": {
+      "label": "Sesión de soporte",
+      "viewingAs": "Viendo como",
+      "leftHoursMinutes": "Quedan {{hours}} h {{minutes}} min",
+      "leftHours": "Quedan {{hours}} h",
+      "leftMinutes": "Quedan {{minutes}} min",
+      "leftUnderMinute": "Queda menos de un minuto",
+      "end": "Terminar"
+    },
+    "handoff": {
+      "working": "Abriendo la sesión de soporte",
+      "invalidTitle": "Este enlace ya no funciona",
+      "invalidBody": "Ya se usó o es demasiado antiguo. Abre uno nuevo desde el panel de administración.",
+      "failedTitle": "La sesión de soporte no se abrió",
+      "failedBody": "El servidor no respondió. Puede que el enlace aún funcione.",
+      "retry": "Reintentar"
+    },
+    "ended": {
+      "title": "Esta sesión de soporte ha terminado",
+      "body": "Puedes cerrar esta pestaña."
+    },
+    "refused": "Esto no se puede hacer en una sesión de soporte"
   }
 }

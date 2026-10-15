@@ -1,6 +1,8 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { BrowserFacade } from './browser-facade';
+import { ImpersonationState } from './impersonation-state';
+import { StorageKeys } from './storage-keys';
 
 describe('BrowserFacade', () => {
   describe('in a browser', () => {
@@ -134,6 +136,94 @@ describe('BrowserFacade', () => {
       // Writing must not throw either — nothing here is worth failing a user
       // action over.
       expect(() => facade.writeStorage('velista-test-key', 'v')).not.toThrow();
+    });
+  });
+
+  // Velista `0133`, target 2: a tab that holds a support session keeps every key to
+  // itself, and an ordinary tab is exactly as it was.
+  describe('the storage of a support session', () => {
+    const KEY = StorageKeys.lastList;
+
+    beforeEach(() => jest.restoreAllMocks());
+
+    afterEach(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+
+    function facadeFor(marked: boolean): BrowserFacade {
+      if (marked) {
+        sessionStorage.setItem(StorageKeys.supportSession, '1');
+      }
+      TestBed.configureTestingModule({});
+      return TestBed.inject(BrowserFacade);
+    }
+
+    it('writes, reads and removes in this tab and leaves the origin alone', () => {
+      localStorage.setItem(KEY, 'the operator');
+      const facade = facadeFor(true);
+
+      expect(facade.readStorage(KEY)).toBeNull();
+
+      facade.writeStorage(KEY, 'the user');
+      expect(sessionStorage.getItem(KEY)).toBe('the user');
+      expect(localStorage.getItem(KEY)).toBe('the operator');
+      expect(facade.readStorage(KEY)).toBe('the user');
+
+      facade.removeStorage(KEY);
+      expect(sessionStorage.getItem(KEY)).toBeNull();
+      expect(localStorage.getItem(KEY)).toBe('the operator');
+    });
+
+    it('never calls back for a write by another document', () => {
+      const facade = facadeFor(true);
+      const heard = jest.fn();
+      facade.watchStorage(StorageKeys.session, heard);
+
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: StorageKeys.session, newValue: 'x' })
+      );
+      window.dispatchEvent(new StorageEvent('storage', { key: null }));
+
+      expect(heard).not.toHaveBeenCalled();
+    });
+
+    it('keeps an ordinary tab on the origin, and hears the other document', () => {
+      const facade = facadeFor(false);
+      const heard = jest.fn();
+      facade.watchStorage(StorageKeys.session, heard);
+
+      facade.writeStorage(KEY, 'value');
+      expect(localStorage.getItem(KEY)).toBe('value');
+      expect(sessionStorage.getItem(KEY)).toBeNull();
+
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: StorageKeys.session, newValue: 'x' })
+      );
+      expect(heard).toHaveBeenCalledWith('x');
+    });
+
+    it('decides once, as the document starts', () => {
+      const facade = facadeFor(false);
+      facade.readStorage(KEY);
+
+      // The handoff page writes the marker into an ordinary document, and leaves it.
+      sessionStorage.setItem(StorageKeys.supportSession, '1');
+      facade.writeStorage(KEY, 'value');
+
+      expect(localStorage.getItem(KEY)).toBe('value');
+      expect(TestBed.inject(ImpersonationState).active).toBe(false);
+    });
+
+    it('removes the keys of this tab that a test names, and no others', () => {
+      const facade = facadeFor(false);
+      sessionStorage.setItem('a:velista', '1');
+      sessionStorage.setItem('b:shell', '1');
+
+      facade.removeSessionStorageWhere((key) => key.endsWith(':velista'));
+
+      expect(sessionStorage.getItem('a:velista')).toBeNull();
+      expect(sessionStorage.getItem('b:shell')).toBe('1');
     });
   });
 

@@ -113,6 +113,18 @@ export const StorageKeys = {
    * for as long as the tab is open.
    */
   updateAttempt: `update-attempt:${APP_KEY}`,
+  /**
+   * That this tab holds a support session: an operator opened the app as a user
+   * (velista `0133`, backend `0194`).
+   *
+   * In `sessionStorage`, and that is the whole design. The marker scopes the session
+   * to one tab: while it is there, `BrowserFacade` keeps every other key of this
+   * object in `sessionStorage` too, so the account of the operator in
+   * `localStorage` is neither read nor written. `ImpersonationState` reads it one
+   * time as the document starts. The handoff page writes it and the end of the
+   * session removes it, and each one then leaves the document behind.
+   */
+  supportSession: `support-session:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
