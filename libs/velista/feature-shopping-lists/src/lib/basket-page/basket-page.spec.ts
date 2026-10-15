@@ -4644,7 +4644,9 @@ describe('the first buy asks where you are', () => {
       ['sheet', 'shop'],
       expect.anything()
     );
-    expect(fixture.debugElement.injector.get(HeldBuy).waiting).toBe(true);
+    // It waits in the page's holder: the release is what writes it.
+    await fixture.debugElement.injector.get(HeldBuy).release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
   });
 
   it('writes the held buy once the answer releases it', async () => {

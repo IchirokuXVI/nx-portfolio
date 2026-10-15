@@ -2365,11 +2365,13 @@ describe('SettleSheet: the first buy asks where you are', () => {
     await gotOne(fixture);
 
     expect(store.settle).not.toHaveBeenCalled();
-    expect(held.waiting).toBe(true);
     expect(sheets.leaveTo).toHaveBeenCalledWith(
       `/velista/en/shopping-lists/${BASKET_ID}/sheet/shop`
     );
     expect(sheets.dismiss).not.toHaveBeenCalled();
+    // It waits in the holder: the release is what writes it.
+    await held.release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
   });
 
   it('writes the held buy on release, with the shop chosen by then', async () => {
@@ -2407,6 +2409,8 @@ describe('SettleSheet: the first buy asks where you are', () => {
     await gotOne(fixture);
 
     expect(store.settle).toHaveBeenCalledTimes(1);
-    expect(held.waiting).toBe(false);
+    // Nothing waits in the holder.
+    await held.release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
   });
 });

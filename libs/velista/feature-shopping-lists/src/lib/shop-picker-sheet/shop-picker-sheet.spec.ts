@@ -1,7 +1,13 @@
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  DefaultUrlSerializer,
+  Router,
+  type UrlTree,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -145,6 +151,21 @@ function render(
     listNames: signal(new Map<string, string>()),
   };
 
+  // The navigation under way when the sheet is torn down, which says whether
+  // the basket stays (velista `0141`). Null is a teardown outside a navigation.
+  const serializer = new DefaultUrlSerializer();
+  const router = {
+    navigate: jest.fn(),
+    navigation: null as { readonly finalUrl: UrlTree } | null,
+    getCurrentNavigation() {
+      return this.navigation;
+    },
+    serializeUrl: (tree: UrlTree) => serializer.serialize(tree),
+    navigatingTo(url: string) {
+      this.navigation = { finalUrl: serializer.parse(url) };
+    },
+  };
+
   const paramMap = convertToParamMap({ basketId: BASKET_ID });
   TestBed.configureTestingModule({
     imports: [ShopPickerSheet, RokuTranslatorTestingModule.forTesting()],
@@ -159,7 +180,7 @@ function render(
       provideFakeBrowserFacade(options.storage ?? new Map()),
       HeldBuy,
       { provide: SheetNavigation, useValue: sheets },
-      { provide: Router, useValue: { navigate: jest.fn() } },
+      { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
@@ -187,6 +208,7 @@ function render(
     view: TestBed.inject(BasketViewStore),
     notices: TestBed.inject(ShopPickNotices),
     held: TestBed.inject(HeldBuy),
+    router,
   };
 }
 
@@ -961,6 +983,40 @@ describe('ShopPickerSheet, asking at the first buy', () => {
       expect(buy.written).toBe(1);
     });
 
+    it('a back gesture onto a URL of the basket still answers for the trip', async () => {
+      const { fixture, view, held, router } = render(OWNER_SCOPES, {
+        asking: true,
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      router.navigatingTo(`${BASKET_URL}?q=milk`);
+      fixture.destroy();
+      await Promise.resolve();
+
+      expect(view.asksForShop()).toBe(false);
+      expect(buy.written).toBe(1);
+    });
+
+    it.each([
+      ['a page outside the basket', '/en/shops/near-1'],
+      ['another basket', '/en/shopping-lists/another'],
+      ['a basket whose id starts the same', `${BASKET_URL}0`],
+    ])('leaving for %s answers nothing and drops the buy', async (_, url) => {
+      const { fixture, view, held, router } = render(OWNER_SCOPES, {
+        asking: true,
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      router.navigatingTo(url);
+      fixture.destroy();
+      await held.release();
+
+      expect(view.asksForShop()).toBe(true);
+      expect(buy.written).toBe(0);
+    });
+
     it('writes the buy once, whichever answer came first', async () => {
       const { fixture, held } = render(OWNER_SCOPES, { asking: true });
       const buy = holdBuy(held);
@@ -993,11 +1049,10 @@ describe('ShopPickerSheet, asking at the first buy', () => {
   });
 
   it('answers a cold load with no buy waiting, and only chooses the shop', async () => {
-    const { fixture, view, held, sheets } = render(OWNER_SCOPES, {
+    const { fixture, view, sheets } = render(OWNER_SCOPES, {
       asking: true,
     });
     await settle(fixture);
-    expect(held.waiting).toBe(false);
     tapChain(fixture, 0);
 
     fixture.debugElement
@@ -1007,6 +1062,33 @@ describe('ShopPickerSheet, asking at the first buy', () => {
 
     expect(view.shop()).toBe('loc-barcelona');
     expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+  });
+
+  it('draws no button to a shop’s own page, which would leave the basket', async () => {
+    const { fixture } = render(OWNER_SCOPES, {
+      asking: true,
+      memory: nearby(),
+      reader: granted(),
+    });
+    await settle(fixture);
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelectorAll('.near-region .pick').length).toBe(2);
+    expect(element.querySelector('.pick-about')).toBeNull();
+
+    tapChain(fixture, 0);
+    expect(element.querySelectorAll('lib-shop-list .pick').length).toBe(2);
+    expect(element.querySelector('.pick-about')).toBeNull();
+  });
+
+  it('keeps the button to a shop’s own page on the filter’s own picker', async () => {
+    const { fixture } = render(OWNER_SCOPES);
+    await settle(fixture);
+    tapChain(fixture, 0);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.pick-about')
+    ).not.toBeNull();
   });
 
   it('never draws the question on the filter’s own picker', async () => {

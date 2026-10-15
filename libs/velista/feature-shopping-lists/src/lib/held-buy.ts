@@ -9,18 +9,14 @@ import { Injectable } from '@angular/core';
  * not its body: the body names the shop, and the shop is what the answer decides,
  * so each write works its body out when it is released.
  *
- * **A buy is never lost.** Every way out of the question releases what waits:
- * a shop, "No shop", "Don't ask again", the cross, the scrim, Escape and the back
- * gesture, which only destroys the sheet.
+ * **A buy is never lost while the basket stays.** Every way out of the question
+ * back to the basket releases what waits: a shop, "No shop", "Don't ask again",
+ * the cross, the scrim, Escape and the back gesture, which only destroys the
+ * sheet. Leaving the basket itself is not an answer, and drops it.
  */
 @Injectable()
 export class HeldBuy {
   private _writes: (() => Promise<void>)[] = [];
-
-  /** Whether a buy is waiting for the answer. */
-  get waiting(): boolean {
-    return this._writes.length > 0;
-  }
 
   /**
    * Keep a write until the answer comes. A second press while the question is
@@ -37,5 +33,14 @@ export class HeldBuy {
     for (const write of writes) {
       await write();
     }
+  }
+
+  /**
+   * Forget what waits, unwritten. Only for the basket being left while the
+   * question is open: the page lets the basket go as it leaves, so a write
+   * released then would reach a basket no longer held (velista `0141`).
+   */
+  drop(): void {
+    this._writes = [];
   }
 }

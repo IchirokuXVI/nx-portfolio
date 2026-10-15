@@ -265,6 +265,18 @@ describe('ShopList, the pick row', () => {
     ).toBe(false);
   });
 
+  /** Velista `0141`: the question at the first buy never leaves the basket. */
+  it('draws no button to the shop’s page when told not to, and the words take its room', async () => {
+    const fixture = await renderRow(row, false);
+    fixture.componentRef.setInput('showAbout', false);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('.pick-about')).toBeNull();
+    expect(element.querySelector('.pick.no-about')).not.toBeNull();
+    expect(element.querySelector('.pick-radio')).not.toBeNull();
+  });
+
   it('draws no button on the rows that ask about exclusion', async () => {
     const fixture = await render({ mode: 'exclude' });
 

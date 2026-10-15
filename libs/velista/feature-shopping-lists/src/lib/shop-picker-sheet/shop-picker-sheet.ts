@@ -8,7 +8,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -175,6 +175,7 @@ export class ShopPickerSheet {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _held = inject(HeldBuy);
   private readonly _reader = inject<GeolocationReaderI>(GEOLOCATION_READER);
+  private readonly _router = inject(Router);
 
   /** Whether this is the question at the first buy (velista `0141`). */
   protected readonly asking =
@@ -216,14 +217,21 @@ export class ShopPickerSheet {
       untracked(() => void this._lookIfAllowed(basketId));
     });
 
-    // Any way out that did not answer is an answer for the trip with no shop, the
-    // back gesture included, which only destroys this sheet. The buy is written.
+    // Any way out to the basket that did not answer is an answer for the trip
+    // with no shop, the back gesture included, which only destroys this sheet.
+    // The buy is written. A way out that leaves the basket itself answers
+    // nothing, and the buy is dropped: the page lets the basket go as it leaves.
     inject(DestroyRef).onDestroy(() => {
-      if (this.asking && !this._answered) {
-        this._answered = true;
-        this._view.answerShopForTrip();
-        void this._held.release();
+      if (!this.asking || this._answered) {
+        return;
       }
+      this._answered = true;
+      if (this._leavesBasket()) {
+        this._held.drop();
+        return;
+      }
+      this._view.answerShopForTrip();
+      void this._held.release();
     });
   }
 
@@ -650,6 +658,28 @@ export class ShopPickerSheet {
       basketPath(this._locale(), this._basePath, this._address())
     );
     void this._held.release();
+  }
+
+  /**
+   * Whether the navigation that is destroying this sheet leaves the basket under
+   * it: a URL that is neither the basket nor one of its sheets, another basket
+   * included. A teardown outside a navigation counts as staying, which is the
+   * dismissal it always was.
+   */
+  private _leavesBasket(): boolean {
+    const navigation = this._router.getCurrentNavigation();
+    if (navigation === null) {
+      return false;
+    }
+    const address = this._address();
+    if (address === null) {
+      return true;
+    }
+    const basket = basketPath(this._locale(), this._basePath, address);
+    const target = this._router
+      .serializeUrl(navigation.finalUrl ?? navigation.extractedUrl)
+      .split(/[?#]/)[0];
+    return target !== basket && !target.startsWith(`${basket}/`);
   }
 
   private _filterUrl(): string {

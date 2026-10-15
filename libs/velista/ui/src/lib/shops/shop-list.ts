@@ -202,6 +202,13 @@ export class ShopList {
   readonly pickChecked = input(false);
 
   /**
+   * Whether a pick row draws its round button to the shop's own page (velista
+   * `0121`). Off only under the question at the first buy (velista `0141`): the
+   * shop's page leaves the basket, and a buy waits there for the answer.
+   */
+  readonly showAbout = input(true);
+
+  /**
    * A row's checkbox was tapped under `exclude`.
    *
    * Named `toggled` and not `toggle`, which is a DOM event a `<details>` fires:

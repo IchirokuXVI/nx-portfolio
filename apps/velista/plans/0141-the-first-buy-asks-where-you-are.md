@@ -98,9 +98,10 @@ says.
     filter to go back to. On a chain's screen the chevron still goes back to the chains.
 14. **The foot is the sheet shell's footer**, which already draws the hairline and no
     container. The sentence is the plan's, word for word.
-15. **Every way out answers.** The cross, the scrim and Escape go through `close()`. The back
-    gesture only destroys the sheet, so its teardown records the trip answer and releases the
-    buy when nothing else answered first. A buy is written once, whichever came first.
+15. **Every way out to the basket answers.** The cross, the scrim and Escape go through
+    `close()`. The back gesture only destroys the sheet, so its teardown records the trip
+    answer and releases the buy when nothing else answered first. A buy is written once,
+    whichever came first.
 16. **A cold load of `sheet/shop` draws the question**, "No shop" and the foot included, and
     an answer there keeps what it keeps (the shop, the trip answer or the flag) and writes no
     buy, because none waits.
@@ -117,9 +118,35 @@ says.
     leaves it.
 20. **The e2e suite sets "Don't ask again" in its setup**: `storageState` in
     `apps/velista-luna-e2e/playwright.config.ts`, and the same state stated in
-    `newVisitor`. Its specs buy with no shop, and the question is the browser walk's to
-    prove. The suite stays at 8 specs. The runner's `browser.newContext()` applies the
-    config's storage state, so the walk passed an empty one to see the question.
+    `newVisitor`. Its specs buy with no shop. One buy meets the question: step 3 of
+    `member.spec.ts` clears the flag, buys a row from its circle, answers "No shop", checks
+    that the buy landed, and puts the flag back. The suite stays at 8 specs. The runner's
+    `browser.newContext()` applies the config's storage state, so the walk passed an empty
+    one to see the question.
+21. **The question draws no button to a shop's own page.** That button opens `shops/:id`,
+    which leaves the basket. `ShopList` and `ShopPicker` take `showAbout`, true by default,
+    and only the question turns it off. The words of the row take the room the button had.
+22. **Leaving the basket while the question is open answers nothing, and drops the buy.** With
+    the button gone, the way left is the browser itself: a jump of two entries in the
+    history, an address typed, or a link to another basket. The teardown reads the
+    navigation that destroys the sheet. When its URL is the basket or one of its sheets, it
+    is the back gesture of point 15. Otherwise no trip answer is kept and the held buy is
+    dropped, unwritten. The page lets the basket go as it leaves (`BasketStore.leave`), so a
+    write released then would reach a basket no longer held, and on another basket it would
+    name a row of the first. The press is a buy the person never confirmed a place for, on a
+    screen they left, and a reload loses it in the same way. The constraint "the buy is
+    never lost" holds for every way out of the sheet that stays on the basket.
+23. **A shop chosen in the question regroups the list first, and the buy follows.** Section 3
+    says the opposite order. `pickShop` calls `setShop` and only then releases the held
+    write, because the write builds its body when it is released and the body has to name
+    that shop. `setShop` is also what regroups the list by the sections of the shop (plan
+    `0138`), so the list regroups a moment before the buy lands. The buy still lands on the
+    row that was pressed, because the write names its row key from the press.
+24. **A held buy uses the numbers captured at the press.** The circle and the reel send the
+    `from` that the row showed when it was pressed. A patch of `0143` that moves the row
+    while the question is open makes that `from` stale, and the server refuses the write.
+    Nothing tells the person: no message is drawn for it. The window is the time the
+    question is open, and the row is left unbought, so the person can press it again.
 
 **The browser walk.** At 390 pixels, in English and in Spanish, on a Luna slot with the
 Valencia Colón shop given coordinates by SQL (the demo world has none) and a throwaway spec:

@@ -42,12 +42,14 @@ export const GATEWAY_URL =
  * answer. The key is `StorageKeys.shopAskOff` in `libs/velista/platform`, written
  * out because this file cannot import an Angular library.
  */
+export const SHOP_ASK_OFF_KEY = 'shop-ask-off:velista';
+
 export const SHOP_ASK_OFF_STATE = {
   cookies: [],
   origins: [
     {
       origin: originOf(VELISTA_BASE_URL),
-      localStorage: [{ name: 'shop-ask-off:velista', value: 'true' }],
+      localStorage: [{ name: SHOP_ASK_OFF_KEY, value: 'true' }],
     },
   ],
 };

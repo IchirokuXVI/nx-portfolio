@@ -73,7 +73,8 @@
   <!--
     The body every shop picker draws (velista 0124): the recent shops, the search
     and the chain buttons at the root, or one chain's shops once it is open. The
-    question adds "No shop", and lets the shop it selected answer one press.
+    question adds "No shop", lets the shop it selected answer one press, and draws
+    no button to a shop's own page, which would leave the basket with a buy waiting.
   -->
   <lib-shop-picker
     (about)="openShop($event)"
@@ -93,6 +94,7 @@
     [pickedId]="pickedId()"
     [query]="typed()"
     [recent]="recent()"
+    [showAbout]="!asking"
     fieldId="basket-shop-search"
   />
 

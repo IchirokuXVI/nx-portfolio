@@ -83,6 +83,9 @@ export const LEGACY_SHOP_KEY = 'shop';
  */
 export type RememberedProperty = Exclude<keyof BasketViewMemory, 'version'>;
 
+/** One trip: how long a chosen shop, and an answer about the shop, are kept. */
+const TRIP_MS = 2 * 60 * 60 * 1000;
+
 /**
  * How long each property is worth keeping, and **the only place the numbers live.**
  *
@@ -91,9 +94,6 @@ export type RememberedProperty = Exclude<keyof BasketViewMemory, 'version'>;
  * for the shop. Null is "for ever": an order and a grouping are how somebody reads a
  * list, and that does not go stale.
  */
-/** One trip: how long a chosen shop, and an answer about the shop, are kept. */
-const TRIP_MS = 2 * 60 * 60 * 1000;
-
 export const BASKET_VIEW_LIFETIME_MS: Readonly<
   Record<RememberedProperty, ViewLifetime>
 > = {

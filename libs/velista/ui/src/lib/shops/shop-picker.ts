@@ -177,6 +177,13 @@ export class ShopPicker {
    */
   readonly offerNoShop = input(false);
 
+  /**
+   * Whether the shop rows draw their round button to the shop's own page. Off
+   * under the question at the first buy (velista `0141`), where leaving for that
+   * page would leave the basket with a buy waiting. See `ShopList.showAbout`.
+   */
+  readonly showAbout = input(true);
+
   /** Something was typed. The container decides what it matches. */
   readonly queried = output<string>();
 

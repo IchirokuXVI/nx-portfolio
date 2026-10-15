@@ -64,6 +64,7 @@
               [mode]="'pick'"
               [pickChecked]="pickChecked()"
               [pickedId]="pickedId()"
+              [showAbout]="showAbout()"
               groupName="shop-pick-near"
             />
           }
@@ -93,12 +94,6 @@
 
 @if (openKey() === null) {
   <!--
-    The shops this person bought at recently, newest first (velista 0103), which
-    are also the usual shops (0124). Not drawn when there are none, never for a
-    guest, whom nobody asks, and gone while a search is typed, when the matches are
-    the whole answer.
-  -->
-  <!--
     "No shop" (velista 0141), a row of its own under the shops near the device,
     where the question at the first buy offers it. The filter offers no shop with
     its own row, so it never sets this. Gone while a search is typed.
@@ -125,6 +120,12 @@
     </div>
   }
 
+  <!--
+    The shops this person bought at recently, newest first (velista 0103), which
+    are also the usual shops (0124). Not drawn when there are none, never for a
+    guest, whom nobody asks, and gone while a search is typed, when the matches are
+    the whole answer.
+  -->
   @if (!searching()) {
     @if (recentGroups().length > 0) {
       <section class="section">
@@ -143,6 +144,7 @@
           [mode]="'pick'"
           [pickChecked]="pickChecked()"
           [pickedId]="pickedId()"
+          [showAbout]="showAbout()"
           groupName="shop-pick-recent"
         />
       </section>
@@ -208,6 +210,7 @@
         [mode]="'pick'"
         [pickChecked]="pickChecked()"
         [pickedId]="pickedId()"
+        [showAbout]="showAbout()"
       />
     }
   } @else {
@@ -238,6 +241,7 @@
       [mode]="'pick'"
       [pickChecked]="pickChecked()"
       [pickedId]="pickedId()"
+      [showAbout]="showAbout()"
       class="chain-shops"
     />
   }
