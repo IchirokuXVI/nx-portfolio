@@ -132,6 +132,17 @@ export const COMPASS_TURN_LIMIT_DEGREES = 30;
  */
 export const GYRO_HEARD_MS = 1_000;
 
+/**
+ * A gyro silent for this long can come back with another zero, so its old
+ * readings are thrown away. Plan 0005, "What the build decided" item 8. It is
+ * the 3 s after which the orientation stream of velista falls back from the
+ * sensor to the events (`SILENCE_MS` in
+ * `libs/velista/platform/src/lib/sensors/orientation-stream.ts`), which this
+ * framework free library cannot import. A shorter silence keeps the zero, so
+ * the turn rule still compares with the readings from before it.
+ */
+export const GYRO_NEW_ZERO_MS = 3_000;
+
 /** One camera pose: the pose stream row of plan 0002 plus whether it is tracked. */
 export interface PoseSample {
   t: number;
@@ -217,6 +228,15 @@ export interface TrackingState {
    * pose came with the gyro heard in those 2 s.
    */
   gyroOffset?: number;
+  /**
+   * True from a confirm made before the turn rule judged the frame that came
+   * back until the rule has answered (or cannot any more, because the gyro
+   * stayed silent for 3 s). While it is true the host keeps the loss point and
+   * the points kept since the return: a `turned` stop then carries
+   * `unconfirmedDropped`, and those points are dropped. Plan 0005, "What the
+   * build decided" item 5.
+   */
+  awaitingTurnJudgement: boolean;
   /** True after `discard`: the walk stopped, and the guard reads nothing more. */
   ended: boolean;
 }
@@ -251,7 +271,9 @@ export type TrackingEvent =
        * since an automatic resume that nobody confirmed. They may be in a
        * moved frame (a `frame-moved` stop during an automatic resume is
        * exactly that), so the host drops them and saves the walk only up to
-       * the loss. Absent when there is nothing unconfirmed to drop.
+       * the loss. A `turned` stop while `awaitingTurnJudgement` carries it
+       * too: the confirm came before the frame was judged, so it did not
+       * vouch for the frame. Absent when there is nothing unconfirmed to drop.
        */
       unconfirmedDropped?: true;
     }
@@ -442,6 +464,11 @@ export function createTrackingGuard(
    * still compares the returned frame with them.
    */
   let turnJudged = false;
+  /**
+   * A confirm came before the turn rule judged the frame, so the points kept
+   * since the return are still unconfirmed for the turn rule.
+   */
+  let awaitingJudgement = false;
   /** The first gyro sample since the guard started or the gyro fell silent. */
   let gyroFrom: number | undefined;
   let gyroOffset: number | undefined;
@@ -477,8 +504,10 @@ export function createTrackingGuard(
     if (stopped !== undefined) return;
     stopped = reason;
     automaticResume = false;
-    const dropped = unconfirmed;
+    const dropped =
+      unconfirmed || (why.cause === 'turned' && awaitingJudgement);
     unconfirmed = false;
+    awaitingJudgement = false;
     emit(out, {
       t,
       kind: 'stopped',
@@ -496,6 +525,9 @@ export function createTrackingGuard(
     lastTracked = undefined;
     trackedFrom = undefined;
     turnJudged = false;
+    // The frame that comes back is judged afresh, so a turn that was still
+    // reported before the loss can fire again.
+    turnFired = false;
     emit(out, { t, kind: 'lost', cause: why });
   }
 
@@ -554,6 +586,11 @@ export function createTrackingGuard(
   function turnRule(out: TrackingEvent[], sample: PoseSample): void {
     if (gyro === undefined || !gyroHeard(sample.t)) {
       gyroOffset = undefined;
+      // A gyro silent this long comes back with readings thrown away, so the
+      // frame from before the loss can no longer be judged.
+      if (gyroAt === undefined || sample.t - gyroAt >= GYRO_NEW_ZERO_MS) {
+        awaitingJudgement = false;
+      }
       return;
     }
     cameraGyro.push({
@@ -577,6 +614,7 @@ export function createTrackingGuard(
       frameMoved(out, sample.t, 'turned', { turn });
     }
     turnFired = turning;
+    awaitingJudgement = false;
   }
 
   /**
@@ -623,6 +661,9 @@ export function createTrackingGuard(
       // The gyro watches the camera frame, so a compass that disagrees alone
       // is a bent compass: a notice, and the walk goes on.
       if (kind !== 'good') return;
+      // A confirm before the turn rule answered: the frame is still in doubt,
+      // so the notice waits for the rule.
+      if (awaitingJudgement) return;
       if (disagrees && !compassDisturbed) {
         compassDisturbed = true;
         emit(out, { t: sample.t, kind: 'compass-disturbed', drift });
@@ -694,13 +735,15 @@ export function createTrackingGuard(
       const out: TrackingEvent[] = [];
       if (ended) return out;
       since ??= sample.t;
-      if (!gyroHeard(sample.t)) {
-        // A gyro heard again can have another zero: the browser may have
-        // fallen back to another stream. Its old readings compare with
+      if (gyroAt === undefined || sample.t - gyroAt >= GYRO_NEW_ZERO_MS) {
+        // A gyro heard again after 3 s can have another zero: the browser may
+        // have fallen back to another stream. Its old readings compare with
         // nothing, so the rules start over from it.
         cameraGyro = [];
         compassGyro = [];
         turnFired = false;
+        turnJudged = false;
+        awaitingJudgement = false;
         gyroFrom = sample.t;
       }
       gyro = compassHeading(sample);
@@ -724,9 +767,13 @@ export function createTrackingGuard(
       // the same turn again. Before that (a confirm during an automatic
       // resume) the readings from before the loss stay, and the rule still
       // compares the returned frame with them.
+      // That confirm does not vouch for the frame either, so a `turned` stop
+      // until the rule answers still drops the points since the return.
       if (turnJudged) {
         cameraGyro = cameraGyro.filter((r) => r.t > t);
         turnFired = false;
+      } else if (trackedFrom !== undefined && gyroHeard(t)) {
+        awaitingJudgement = true;
       }
       emit(out, { t, kind: 'confirmed' });
       return out;
@@ -738,6 +785,7 @@ export function createTrackingGuard(
       ended = true;
       automaticResume = false;
       unconfirmed = false;
+      awaitingJudgement = false;
       emit(out, { t, kind: 'discarded' });
       return out;
     },
@@ -753,6 +801,7 @@ export function createTrackingGuard(
         ...(offset === undefined ? {} : { offset }),
         compassDisturbed,
         ...(gyroOffset === undefined ? {} : { gyroOffset }),
+        awaitingTurnJudgement: awaitingJudgement,
         ended,
       };
     },

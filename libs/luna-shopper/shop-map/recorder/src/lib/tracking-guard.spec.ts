@@ -326,9 +326,10 @@ describe('the tracking guard over the second El Jamón walk', () => {
 
   // Velista confirms during an automatic resume, as soon as poses come back
   // and before any stop. Such a confirm must not hide the flip from the turn
-  // rule, which answers at 923.9 s against the readings from before the loss.
+  // rule, which answers at 923.9 s against the readings from before the loss,
+  // and it does not vouch for the points kept in the flipped frame either.
   it.each([922_360, 923_000, 923_700])(
-    'still stops for the turned frame when the automatic resume is confirmed at %d ms',
+    'still stops for the turned frame, and drops the points since the return, when the automatic resume is confirmed at %d ms',
     (at) => {
       let confirmed = false;
       const guard = replay(
@@ -343,16 +344,29 @@ describe('the tracking guard over the second El Jamón walk', () => {
               automaticResume: true,
             });
             g.confirm(t);
+            expect(g.state()).toMatchObject({
+              kind: 'good',
+              awaitingTurnJudgement: true,
+            });
           }
         }
       );
       const events = guard.events();
       expect(events.some((e) => e.kind === 'confirmed')).toBe(true);
       const stop = first(events, (x) => x.kind === 'stopped');
-      expect(stop).toMatchObject({ reason: 'frame-moved', cause: 'turned' });
+      expect(stop).toMatchObject({
+        reason: 'frame-moved',
+        cause: 'turned',
+        unconfirmedDropped: true,
+      });
       expect(seconds(stop) - 922.0).toBeLessThanOrEqual(2.0);
       if (stop.kind !== 'stopped') throw new Error('not stopped');
       expect(Math.abs(stop.degrees ?? 0)).toBeGreaterThan(140);
+      // The compass notice waits for the turn rule, which stops the walk.
+      expect(
+        events.filter((e) => e.t <= stop.t && e.kind.startsWith('compass-'))
+      ).toEqual([]);
+      expect(guard.state().awaitingTurnJudgement).toBe(false);
     }
   );
 
@@ -758,10 +772,10 @@ describe('the rules, one at a time', () => {
     it('starts over when the gyro is heard again with another zero', () => {
       const s = steady();
       for (let t = 0; t < 20_000; t += 100) expect(s.withGyro(t)).toEqual([]);
-      // The gyro falls silent for 2 s, then comes back 100 degrees away, as
+      // The gyro falls silent for 3 s, then comes back 100 degrees away, as
       // when the browser falls back to another stream with another zero.
-      for (let t = 20_000; t < 22_000; t += 100) expect(s.at(t)).toEqual([]);
-      for (let t = 22_000; t < 40_000; t += 100) {
+      for (let t = 20_000; t < 23_000; t += 100) expect(s.at(t)).toEqual([]);
+      for (let t = 23_000; t < 40_000; t += 100) {
         expect(s.withGyro(t, 0, 0, 0, 0, 100)).toEqual([]);
       }
       expect(s.guard.state()).toMatchObject({ kind: 'good' });
@@ -773,6 +787,94 @@ describe('the rules, one at a time', () => {
       expect(out.map((e) => [e.kind, 'cause' in e ? e.cause : ''])).toEqual([
         ['suspect', 'turned'],
         ['stopped', 'turned'],
+      ]);
+    });
+
+    it('still stops a frame that turned during a 2 s gyro silence', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) expect(s.withGyro(t)).toEqual([]);
+      // The gyro falls silent at 20 s and tracking is lost; poses come back
+      // at 21 s in a frame turned by 90 degrees, and the gyro at 22 s with
+      // the same zero, which a silence short of 3 s keeps.
+      s.guard.pushPose({ ...facing(20_000, 0), tracked: false });
+      for (let t = 20_100; t < 21_000; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+      }
+      const out: TrackingEvent[] = [];
+      for (let t = 21_000; t < 22_000; t += 100) {
+        out.push(...s.at(t, 90, 0, 0, 0));
+      }
+      for (let t = 22_000; t <= 25_000; t += 100) {
+        out.push(...s.withGyro(t, 90, 0, 0, 0, 0));
+      }
+      expect(
+        out.map((e) => [e.t, e.kind, 'cause' in e ? e.cause : ''])
+      ).toEqual([
+        [21_000, 'suspect', 'returned'],
+        [22_800, 'suspect', 'turned'],
+        [22_800, 'stopped', 'turned'],
+      ]);
+      expect(out[2]).toMatchObject({ unconfirmedDropped: true });
+    });
+
+    it('fires the turn rule again for a frame that is still turned after a loss', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) s.withGyro(t);
+      // The frame turns by 70 degrees: a stop that nobody answers.
+      for (let t = 20_000; t < 22_000; t += 100) s.withGyro(t, 70, 0, 0, 0, 0);
+      expect(s.guard.state()).toMatchObject({ stopped: 'frame-moved' });
+      // A loss, poses back in the same turned frame, and a confirm at once.
+      s.guard.pushPose({ ...facing(22_000, 70), tracked: false });
+      for (let t = 22_100; t < 23_000; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+        s.guard.pushGyro(compassAt(t, 0));
+      }
+      s.withGyro(23_000, 70, 0, 0, 0, 0);
+      s.guard.confirm(23_050);
+      const out: TrackingEvent[] = [];
+      for (let t = 23_100; t <= 26_000; t += 100) {
+        out.push(...s.withGyro(t, 70, 0, 0, 0, 0));
+      }
+      expect(out).toMatchObject([
+        { t: 24_800, kind: 'suspect', cause: 'turned' },
+        {
+          t: 24_800,
+          kind: 'stopped',
+          cause: 'turned',
+          unconfirmedDropped: true,
+        },
+      ]);
+    });
+
+    it('holds the compass notice after an early confirm until the turn rule answers', () => {
+      const s = steady();
+      for (let t = 0; t <= 10_000; t += 100) s.withGyro(t);
+      // A 2.8 s loss; poses come back turned by 50 degrees, under the turn
+      // limit, so the compass reads 50 degrees off the baseline.
+      s.guard.pushPose({ ...facing(10_100, 0), tracked: false });
+      for (let t = 10_200; t < 12_900; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+        s.guard.pushGyro(compassAt(t, 0));
+      }
+      const out: TrackingEvent[] = [];
+      const waiting = new Map<number, boolean>();
+      for (let t = 12_900; t <= 16_000; t += 100) {
+        out.push(...s.withGyro(t, 50, 0, 0, 0, 0));
+        if (t === 13_000) out.push(...s.guard.confirm(t));
+        if (t === 14_600 || t === 14_700) {
+          waiting.set(t, s.guard.state().awaitingTurnJudgement);
+        }
+      }
+      // The 5 s median leaves the baseline before 14.7 s; the notice waits
+      // for the rule's answer, 1.8 s after the return.
+      expect(out.map((e) => [e.t, e.kind])).toEqual([
+        [12_900, 'suspect'],
+        [13_000, 'confirmed'],
+        [14_700, 'compass-disturbed'],
+      ]);
+      expect([...waiting]).toEqual([
+        [14_600, true],
+        [14_700, false],
       ]);
     });
 

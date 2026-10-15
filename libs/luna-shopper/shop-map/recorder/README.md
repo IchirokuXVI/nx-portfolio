@@ -212,7 +212,16 @@ gyro heard, the guard answers:
 
 No `compass-disturbed` appears in it. A confirm during the automatic resume, before the
 turn rule answers, does not hide the flip: the rule keeps the samples from before the
-loss until it has judged the returned frame, and the walk still stops at 923.9 s.
+loss until it has judged the returned frame, and the walk still stops at 923.9 s. That
+confirm does not vouch for the frame either. Until the rule answers,
+`state().awaitingTurnJudgement` is true, no compass notice is emitted, and a `turned`
+stop carries `unconfirmedDropped`.
+
+**The host contract.** The host keeps its loss point and the points kept since the
+return until the guard has judged the frame, which is when `awaitingTurnJudgement` is
+false again, and not only until the confirm. A `turned` stop with `unconfirmedDropped`
+then drops those points, and the walk is saved up to the loss. No point recorded in a
+turned frame thus stays in the walk.
 
 The bent compass fixture
 (`src/__fixtures__/tracking/bent-compass.synthetic.tracking.json`, written by the
