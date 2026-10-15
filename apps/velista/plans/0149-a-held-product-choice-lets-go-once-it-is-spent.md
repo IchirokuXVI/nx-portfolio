@@ -122,3 +122,24 @@ choice for the product the line already has are released. Change nothing a perso
 - **A line the read no longer names is released.** The choice could only come back into use
   if the same line id reappeared, and a line that leaves a covered list and comes back is a
   new decision for the person.
+
+## What the build decided
+
+- **The method is `retain(basketId, keep)`**, as the brief suggested. It collects the
+  refused lines and hands them to the existing `release`, so a call that keeps every line
+  writes nothing, and a basket left with no lines is dropped by the same `_update` that
+  `release` uses.
+- **The prune is one private helper, `_pruneHeld(basket)`**, called right after
+  `_basket.set` in `_read`, `_fold` and `_regroup`. It returns at once when nothing is held
+  on that basket, so a basket with no choices pays one map lookup for each store.
+- **A line with entries in two rows counts as spent when any of them has a buy.** The brief
+  names one entry for each line. If a read ever names a line twice, a buy on either entry
+  means the server answers that line, so the choice is released.
+- **The return to the read's own product is checked after the write.** In
+  `changeProduct`, the kept lines are compared with the basket as it stands after
+  `_regroup`, which leaves kept lines where they were. A kept line that matches is released
+  (it may hold an earlier choice), and the rest are held as before.
+- **One new spec could not fail before the change.** "A held line whose read entry is still
+  unbought stays held across a refresh" guards the prune against releasing too much. Before
+  the change nothing was ever released, so it passed then too. The other five new specs
+  failed on the old code.
