@@ -183,9 +183,11 @@ export const gatewayValidationSchema = Joi.object({
   // OAuth variables unset still boots with nothing to configure.
   //
   // A `{locale}` placeholder is substituted with the locale the flow started in;
-  // with no placeholder the locale is appended as the first path segment. The
-  // placeholder exists because this frontend mounts the app under a path that
-  // comes *after* the locale (`/{locale}/velista`), which a plain prefix cannot
+  // with no placeholder the locale is appended as the first path segment. Every
+  // environment points this at velista on its own origin, where the mount is
+  // empty and the locale is the first segment (`https://velista.app/{locale}`,
+  // `http://localhost:4205/{locale}` on dev slot 0). The placeholder stays for a
+  // base URL whose path continues after the locale, which a plain prefix cannot
   // express.
   APP_BASE_URL: appBaseUrl
     .allow('')

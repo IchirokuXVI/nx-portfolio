@@ -451,18 +451,29 @@ Two consequences, and they pull in opposite directions:
 
   The gateway appends `auth/callback` or `auth/impersonate` to the first. The
   front end slot is decided in this order, first match wins:
-  1. `--app-slot <n>`, which is then recorded and kept across re-runs;
-  2. the front end slot of **this same worktree**, when its velista points at
-     this backend (`NG_BACKEND_SLOT` in `tools/dev/.env.ng-slot`);
-  3. the lowest front end slot of any worktree whose velista points at this
-     backend;
-  4. the front end slot with this backend's number, so slot 4's links name
+  1. `--app-slot <n>`, which is then recorded (`LUNA_APP_SLOT_CHOSEN=1` in
+     `.env.slot`) and kept across re-runs. `--app-slot auto` clears it;
+  2. backend slot 0 always names front end slot 0. Slot 0 is the developer's,
+     and a worker that found no gateway records `NG_BACKEND_SLOT=0`, so the
+     pairing rules below would otherwise move slot 0's links to a worker;
+  3. the front end slot of **this same worktree**, when its velista points at
+     this backend (`NG_BACKEND_SLOT` in `tools/dev/.env.ng-slot`) and its port
+     listens;
+  4. the lowest front end slot of any worktree whose velista points at this
+     backend and listens. A claim whose server is down (after
+     `ng-slot --down --keep-slot`, or a dev server that died) is skipped;
+  5. the front end slot with this backend's number, so slot 4's links name
      velista on 42305 and never slot 0's 4205.
 
-  Rules 2 to 4 are worked out again on every `--up` and `--restart`. A front end
-  that pairs with a backend already up is followed after
-  `--restart --services gateway,auth`. Only these round trips are affected by
-  getting it wrong; ordinary API calls from any slot work regardless.
+  Rules 2 to 5 are worked out again on every `--up` and `--restart`, and so is
+  a `.env.slot` written before `LUNA_APP_SLOT_CHOSEN` existed. A front end that
+  pairs with a backend already up is followed after `--restart`. When the links
+  move, `--restart` restarts gateway and auth as well, even under
+  `--services core`, because those two hold the links and a running service
+  never rereads its `.env`. `--restart --reset-env` is refused: reset with
+  `luna-slot.sh <slot> --reset-env`, then restart. Only these round trips are
+  affected by getting it wrong; ordinary API calls from any slot work
+  regardless.
 
 ```sh
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1 --app-slot 5
