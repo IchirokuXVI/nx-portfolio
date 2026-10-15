@@ -570,8 +570,9 @@ export class BasketMemory implements BasketServiceI {
    * Whether the reader is served the covered lists' names.
    *
    * Public and mutable so a spec, or a developer poking at the screen, can look at
-   * the guest's view and the owner's without a second fake. It replaced
-   * `seesZoneData`, which was one flag for a question that is now per entry.
+   * the guest's view and the owner's without a second fake. It replaced the old
+   * all or nothing flag, one for the whole basket, for a question that is now per
+   * entry.
    */
   servesLists = true;
 

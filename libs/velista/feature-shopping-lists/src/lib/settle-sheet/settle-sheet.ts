@@ -780,7 +780,7 @@ export class SettleSheet {
    * A guest never, because a guest is served no list at all. Nobody once the trip is
    * finished, like every other control here.
    *
-   * It replaced a `seesZoneData` read, which was one flag for the whole basket: a
+   * It replaced a read of the old all or nothing flag, one for the whole basket: a
    * reader who could write four of five covered lists was refused the field on every
    * row, including the four rows they could rename. The question is per row now
    * because the data is.
@@ -1470,8 +1470,14 @@ export class SettleSheet {
 
     const rowKey = this._rowKey;
     const store = this._store;
-    this._held.hold(async () => {
-      await store.settle(rowKey, body());
+    const held = this._held;
+    held.hold(async () => {
+      // The `from` in the body is the press's. A patch that moved or re-keyed the
+      // row while the question was open makes the server refuse it, and the page
+      // says so on the row, as this sheet would have.
+      if ((await store.settle(rowKey, body())) === null) {
+        held.refused(rowKey);
+      }
     });
     // Marked first, so the effect that closes this sheet for a row gone cannot
     // dismiss it a second time on the way out.

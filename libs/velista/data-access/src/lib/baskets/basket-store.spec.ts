@@ -357,6 +357,49 @@ describe('BasketStore', () => {
       // they still hold might let them back in.
       expect(sessions.read('basket-saturday')).toBeNull();
     });
+
+    /**
+     * A guest revoked with the link's cascade: their tap and the read their own
+     * removal's event asked for (`basket.participantLeft`) both come back 401, in
+     * either order. The first drops the credential, so the second finds none, and
+     * it must not read that as a stranger who never joined: the screen said "You
+     * are no longer on this list" and has to keep saying it.
+     */
+    it.each([
+      ['the tap, then the read', ['settle', 'read']],
+      ['the read, then the tap', ['read', 'settle']],
+    ])('stays revoked on a second 401: %s', async (_, order) => {
+      const sessions = new FakeSessions();
+      sessions.seed('basket-saturday');
+      let revoked = false;
+      const memory = new BasketMemory();
+      const { store } = build(
+        {
+          getBasket: () =>
+            revoked ? Promise.reject(unauthorized()) : memory.getBasket(),
+          settle: () => Promise.reject(unauthorized()),
+        },
+        sessions
+      );
+      await store.open('basket-saturday');
+      const rowKey = store.rows()[0].rowKey;
+      revoked = true;
+
+      for (const step of order) {
+        if (step === 'settle') {
+          await store.settle(rowKey, {
+            outcome: 'BOUGHT',
+            quantity: 1,
+            from: 1,
+          });
+        } else {
+          await store.refresh();
+        }
+        expect(store.state()).toBe('revoked');
+      }
+      expect(store.accessEnded()).not.toBeNull();
+      expect(sessions.read('basket-saturday')).toBeNull();
+    });
   });
 
   describe('a failure that is not a 401', () => {

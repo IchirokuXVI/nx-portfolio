@@ -156,6 +156,10 @@ opened and the page made no position read at all. "No shop" wrote the buy with t
 price and no shop or chain. The next buy of that trip did not ask. "Don't ask again" stopped
 the question on the trip after. The filter still chose a shop.
 
+**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** Point 24 is no longer silent. A held buy that the server
+refuses, from the circle, the reel, "Got all" or "They had none", draws the settle failure on
+its row through `HeldBuy.refused`, and the row is found again by the key of the press.
+
 ## Brief for the agent
 
 ### Objective

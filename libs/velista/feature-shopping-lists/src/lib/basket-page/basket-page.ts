@@ -338,10 +338,7 @@ export class BasketPage {
    */
   protected rowSection(row: BasketRowModel): string | null {
     const shop = this.mapShop();
-    if (
-      shop === null ||
-      (this._view.grouping() === 'category' && this._view.byAisle())
-    ) {
+    if (shop === null || this._view.drawnByAisle()) {
       return null;
     }
     const sections = this._shopSections.sectionsOf(shop.id) ?? [];
@@ -933,6 +930,10 @@ export class BasketPage {
   );
 
   constructor() {
+    // A held buy outlives the sheet that pressed it, so a refusal is said here, on
+    // the row (velista `0141`).
+    this._held.reportTo((rowKey) => this._reportSettle(rowKey));
+
     // Whether the shop the basket is read at has a map, read once per shop per
     // session, so the Map button can appear (velista `0121`, target 5).
     effect(() => {
@@ -1185,15 +1186,18 @@ export class BasketPage {
    * exactly as it does when the sheet sends the same body.
    */
   protected settleRow(row: BasketRowModel): void {
-    this._buy(() =>
-      this._toggle(row, () =>
-        this._store.settle(row.rowKey, {
-          outcome: 'BOUGHT',
-          quantity: row.left,
-          from: row.left,
-          ...this._settleAt(row),
-        })
-      )
+    const send = () =>
+      this._store.settle(row.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: row.left,
+        from: row.left,
+        ...this._settleAt(row),
+      });
+    this._buy(
+      () => this._toggle(row, send),
+      // Held, the press's numbers can go stale under the question, and the row
+      // would stay unbought with nothing said (velista `0141`).
+      () => this._toggle(row, send, () => this._held.refused(row.rowKey))
     );
   }
 
@@ -1209,12 +1213,15 @@ export class BasketPage {
    * names the shop, so it is worked out when the answer releases it, and a shop
    * chosen there is the shop this buy records.
    */
-  private _buy(write: () => Promise<void>): void {
+  private _buy(
+    write: () => Promise<void>,
+    heldWrite: () => Promise<void> = write
+  ): void {
     if (!this._view.asksForShop()) {
       void write();
       return;
     }
-    this._held.hold(write);
+    this._held.hold(heldWrite);
     void this._router.navigate(sheetSegments(...SHOP_ASK_SEGMENTS), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
@@ -1271,13 +1278,20 @@ export class BasketPage {
    * A failure needs no branch here. It has already moved `BasketStore.state` or is a
    * transient the next refresh resolves, and the row is drawn from the store either
    * way; the sheet is where a failure gets a sentence, and the person opens it.
+   * `refused` is for a held buy only (velista `0141`): its numbers are the press's,
+   * so a refusal there is the window the question was open, and the row says so.
    */
   private async _toggle(
     row: BasketRowModel,
-    write: () => Promise<{ skippedCount: number } | null>
+    write: () => Promise<{ skippedCount: number } | null>,
+    refused: () => void = () => undefined
   ): Promise<void> {
     const result = await write();
-    if (result !== null && result.skippedCount > 0) {
+    if (result === null) {
+      refused();
+      return;
+    }
+    if (result.skippedCount > 0) {
       this.openRow(row);
     }
   }
@@ -1431,7 +1445,27 @@ export class BasketPage {
     const found = this._store.rowFor(row.rowKey);
     const count = (found ?? row).left;
 
-    this._notice.set({ rowKey: row.rowKey, key, count });
+    // On the row as it now stands, so a re-keyed row draws it (velista `0141`).
+    this._notice.set({ rowKey: (found ?? row).rowKey, key, count });
+    this._say(this._translator.t(key, undefined, this._locale(), { count }));
+  }
+
+  /**
+   * Say that a held buy was refused, on its row (velista `0141`).
+   *
+   * The settle sheet drew this sentence before the hold. A held buy outlives the
+   * sheet, which the question replaced, so the row says it instead, as it does for
+   * a refused reel. The row is found again by the key of the press, because a
+   * patch can have re-keyed it while the question was open.
+   */
+  private _reportSettle(rowKey: string): void {
+    const key = basketErrorKey(this._store.error(), 'basket.settle');
+    const found = this._store.rowFor(rowKey);
+    const count = found?.left ?? 0;
+
+    if (found !== null) {
+      this._notice.set({ rowKey: found.rowKey, key, count });
+    }
     this._say(this._translator.t(key, undefined, this._locale(), { count }));
   }
 

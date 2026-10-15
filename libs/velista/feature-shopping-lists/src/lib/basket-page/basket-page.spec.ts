@@ -4680,6 +4680,107 @@ describe('the first buy asks where you are', () => {
     expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 4, 3, {});
   });
 
+  /**
+   * A held buy keeps the `from` and the row key of the press. A patch that moves
+   * or re-keys the row while the question is open makes the server refuse it, and
+   * the row stays unbought. The row says so, on the row as it now stands.
+   */
+  describe('a held buy the server refuses', () => {
+    const stale = () =>
+      new GatewayError({
+        code: 'stale_quantity' as ErrorCode,
+        status: 409,
+        correlationId: 'ref-held',
+      });
+    // Milk under a new anchor: the old key is now one of its entries' line ids.
+    const rekeyed = () =>
+      line('Milk', {
+        rowKey: 'row-Milk-2',
+        left: 3,
+        entries: [entry(null, 'row-Milk', 3, { content: 'Milk' })],
+      });
+
+    function refuseWith(store: FakeStore, write: jest.Mock): void {
+      write.mockImplementation(() => {
+        store.error.set(stale());
+        store.rows.set([rekeyed()]);
+        return Promise.resolve(null);
+      });
+    }
+
+    it('says so on the row after the circle', async () => {
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      refuseWith(store, store.settle);
+
+      firstRow(fixture).settle.emit();
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
+      expect(firstRow(fixture).notice()).toMatchObject({
+        key: 'basket.error.staleLine',
+        count: 3,
+      });
+    });
+
+    it('says so on the row after the reel', async () => {
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      refuseWith(store, store.setLeft);
+
+      firstRow(fixture).left.emit({ from: 5, to: 2 });
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
+      expect(firstRow(fixture).notice()?.key).toBe('basket.error.staleLine');
+    });
+
+    it('says so on the row for a buy the settle sheet held', async () => {
+      // The sheet is gone once the question replaced it, so it hands the
+      // refusal to the holder, which the page answers.
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      store.error.set(stale());
+      store.rows.set([rekeyed()]);
+      fixture.detectChanges();
+
+      fixture.debugElement.injector.get(HeldBuy).refused('row-Milk');
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).notice()).toMatchObject({
+        key: 'basket.error.staleLine',
+        count: 3,
+      });
+      expect(query(fixture, '.said')?.textContent).toContain(
+        'basket.error.staleLine'
+      );
+    });
+
+    it('says nothing when the held buy lands', async () => {
+      const { fixture } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+
+      firstRow(fixture).settle.emit();
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).notice()).toBeNull();
+    });
+  });
+
   it('does not ask once the trip answered, and writes at once', async () => {
     const { fixture, store } = await render({
       lines: [milk()],

@@ -48,9 +48,9 @@ import type { LocalizedName } from './shopping-profile';
  * {@link Basket.lists} holds the covered lists this reader holds `WRITE` on, and
  * no others: empty for a guest, and their own for a registered co shopper. An
  * entry whose {@link BasketRowEntry.listId} is `null` belongs to a list this
- * reader was not served, so the client knows how much and never where. There is
- * no `seesZoneData` flag any more, because the question it answered is now asked
- * per entry and answered by the data itself.
+ * reader was not served, so the client knows how much and never where. No flag
+ * for the whole basket answers it any more, because the question is now asked per
+ * entry and answered by the data itself.
  */
 
 /**
@@ -1020,10 +1020,10 @@ export interface Basket {
   /**
    * The covered lists this reader writes themselves, and no others.
    *
-   * What replaced `seesZoneData`, `sources` and `listNames` at once. "May this
-   * reader be offered the grouping by list" is `lists.length > 0`; "may this
-   * entry be named" is `entry.listId !== null`; and the heading's words are this
-   * ref's `name`. One collection answers all three, so they cannot disagree.
+   * What replaced the old all or nothing flag, `sources` and `listNames` at once.
+   * "May this reader be offered the grouping by list" is `lists.length > 0`; "may
+   * this entry be named" is `entry.listId !== null`; and the heading's words are
+   * this ref's `name`. One collection answers all three, so they cannot disagree.
    */
   readonly lists: readonly BasketListRef[];
   readonly participants: readonly BasketParticipant[];

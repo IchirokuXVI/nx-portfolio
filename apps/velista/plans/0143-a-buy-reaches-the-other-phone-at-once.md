@@ -182,6 +182,12 @@ second marks the first frame that draws the new number. "Before" is `dev` at `cd
 (`basket-view-memory.ts`) and the three of `velista/feature-shopping-lists`
 (`basket-page.spec.ts`) were on `dev` before this plan.
 
+**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** A guest revoked with the cascade could see the join
+screen. Their tap and the rows read that an event of the cascade asked for both came back 401,
+and the second found the credential already dropped and read as a stranger. `BasketStore`
+now stays revoked, and step 7 of `guest.spec.ts` also accepts the event coming first, which
+takes the row's button away before the tap.
+
 ## Brief for the agent
 
 ### Objective

@@ -83,6 +83,9 @@ Point 1 is a decision of the owner.
     `FINISHED_BASKET_ROWS_SQL` is gone. No wire shape changed. The contract comments say
     that a row is one product.
 
+17. **The velista copies were changed after the build** ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)). Their comments name the old
+    all or nothing flag, and the people sheet spec fixture no longer sets it.
+
 ## Brief for the agent
 
 ### Objective

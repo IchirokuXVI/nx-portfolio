@@ -17,6 +17,25 @@ import { Injectable } from '@angular/core';
 @Injectable()
 export class HeldBuy {
   private _writes: (() => Promise<void>)[] = [];
+  private _report: ((rowKey: string) => void) | null = null;
+
+  /**
+   * Who says a refused held buy out loud: the basket page, which outlives the
+   * sheet that pressed it.
+   */
+  reportTo(report: (rowKey: string) => void): void {
+    this._report = report;
+  }
+
+  /**
+   * A held buy the server refused. Its `from` and row key are the ones of the
+   * press, so a patch that moved or re-keyed the row while the question was open
+   * makes the server refuse it, and the row is left unbought. This says so on
+   * the row, with the sentence the settle sheet drew before the hold.
+   */
+  refused(rowKey: string): void {
+    this._report?.(rowKey);
+  }
 
   /**
    * Keep a write until the answer comes. A second press while the question is
