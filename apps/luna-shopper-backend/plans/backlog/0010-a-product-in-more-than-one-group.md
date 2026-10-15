@@ -1,6 +1,9 @@
 # 0010 (backlog) A product in more than one group
 
-> **Status: backlog. Not scheduled for development.**
+> **Status: dropped on 2026-09-25 by plan [`0048`](../0048-catalog-search-and-product-groups.md).**
+> A product sits in at most one group, and a product that belongs to several things belongs to
+> several categories. Nothing in this plan is to be built.
+>
 > Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
 > nothing in them has been built. They carry their own numbering starting at `0001`, separate
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next

@@ -1,20 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  BasketKind,
   BASKET_LIMITS,
   BASKET_SHARING_LIMITS,
+  BasketKind,
   BasketStatus,
   isOpenBasket,
   RealtimeEvent,
+  type BasketHeaderView,
+  type BasketIdRequest,
+  type BasketPage,
+  type BasketProgress,
+  type BasketRunResult,
+  type BasketSourceInput,
   type BasketSourceView,
   type BasketUpdatedEvent,
   type CreateBasketRequest,
-  type BasketIdRequest,
-  type BasketPage,
-  type BasketRunResult,
-  type BasketSourceInput,
-  type BasketHeaderView,
   type ListBasketsRequest,
   type ListSharedBasketsRequest,
   type SharedBasketCorePage,
@@ -28,11 +29,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
-import {
-  BasketSource,
-  Basket,
-  BasketParticipant,
-} from '../entities';
+import { Basket, BasketParticipant, BasketSource } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
   announceTripsChanged,
@@ -42,25 +39,17 @@ import {
 import { ProfileService } from '../profiles/profile.service';
 // A value import, never a `type` one: a `type` import on a constructor
 // dependency erases the token Nest resolves it by.
-import { BasketTripRowsService } from './basket-trip-rows.service';
 import { BasketMembersService } from './basket-members.service';
-import {
-  SHARED_BASKETS_SQL,
-  type SharedBasketRow,
-} from './basket-members.sql';
+import { SHARED_BASKETS_SQL, type SharedBasketRow } from './basket-members.sql';
+import { BasketTripRowsService } from './basket-trip-rows.service';
 import {
   NO_GENERATED_LINE_COUNTS,
-  toBasketSourceView,
-  toBasketHistoryView,
   toBasketHeaderView,
+  toBasketHistoryView,
+  toBasketSourceView,
   type BasketLineCounts,
 } from './basket.mappers';
-import {
-  FINISHED_BASKET_COUNTS_SQL,
-  WRITABLE_LISTS_SQL,
-  type BasketCountsRow,
-  type WritableListRow,
-} from './basket.sql';
+import { WRITABLE_LISTS_SQL, type WritableListRow } from './basket.sql';
 import { LineClaimService } from './line-claim.service';
 // A value import, never a `type` one: a `type` import on a constructor
 // dependency erases its DI token and only booting catches it.
@@ -172,9 +161,7 @@ export class BasketService {
    * Regeneration produces a **new** basket rather than mutating an old one, which
    * is what makes the history in section 7 an actual history.
    */
-  async create(
-    req: CreateBasketRequest
-  ): Promise<BasketRunResult> {
+  async create(req: CreateBasketRequest): Promise<BasketRunResult> {
     if (req.idempotencyKey) {
       const existing = await this.lists.findOne({
         where: { ownerUserId: req.userId, idempotencyKey: req.idempotencyKey },
@@ -216,11 +203,7 @@ export class BasketService {
       invited
     );
     const view = await this.viewFor(saved);
-    this.events.emitToUsers(
-      RealtimeEvent.BasketCreated,
-      [req.userId],
-      view
-    );
+    this.events.emitToUsers(RealtimeEvent.BasketCreated, [req.userId], view);
     // After the write commits, so nobody is told of a basket that was not made.
     for (const participant of invited) {
       this.members.announceLive(saved.id, participant);
@@ -501,10 +484,7 @@ export class BasketService {
     const counts = await this.countsFor(page);
     return {
       items: page.map((row) =>
-        toBasketHistoryView(
-          row,
-          counts.get(row.id) ?? NO_GENERATED_LINE_COUNTS
-        )
+        toBasketHistoryView(row, counts.get(row.id) ?? NO_GENERATED_LINE_COUNTS)
       ),
       nextCursor:
         rows.length > limit && page.length > 0
@@ -590,9 +570,13 @@ export class BasketService {
    * **Two reads, split on the status**, because the two kinds of basket keep
    * their numbers in different places since plan 0135. A basket that is not
    * `OPEN` has its ask frozen in `basket_trip_rows`, so a whole page of them is
-   * one aggregate. An `OPEN` basket has nothing written down at all: its rows
+   * three queries. An `OPEN` basket has nothing written down at all: its rows
    * are a view of the lists it covers, recomputed on every request, and the only
    * honest way to count them is to compose them.
+   *
+   * **Both count products** (plan 0209, section 1.2). Both halves group lines
+   * into rows with the code the screen runs, so a card and the screen of one
+   * basket show one number.
    *
    * **So an open basket costs a read of its own, and that is acceptable.** The
    * sweep finishes a basket a fixed time after it was generated, so a page holds
@@ -616,35 +600,15 @@ export class BasketService {
     const open = baskets.filter(
       (basket) => basket.status === BasketStatus.OPEN
     );
-    const finishedIds = baskets
-      .filter((basket) => basket.status !== BasketStatus.OPEN)
-      .map((basket) => basket.id);
-
-    if (finishedIds.length > 0) {
-      const rows = await this.lists.query<BasketCountsRow[]>(
-        FINISHED_BASKET_COUNTS_SQL,
-        [finishedIds]
-      );
-      for (const row of rows) {
-        counts.set(row.basketId, {
-          lineCount: row.lineCount,
-          settledLineCount: row.settledLineCount,
-          boughtLineCount: row.boughtLineCount,
-          notAvailableLineCount: row.notAvailableLineCount,
-        });
-      }
+    const finished = await this.basketRead.finishedProgressOf(
+      baskets.filter((basket) => basket.status !== BasketStatus.OPEN)
+    );
+    for (const [basketId, progress] of finished) {
+      counts.set(basketId, countsOf(progress));
     }
 
     for (const basket of open) {
-      const progress = await this.basketRead.progressOf(basket);
-      counts.set(basket.id, {
-        lineCount: progress.total,
-        // Still the sum of the two, as plan 0053 defined it: a line the shop
-        // did not have has nothing left to do on it either.
-        settledLineCount: progress.done + progress.unavailable,
-        boughtLineCount: progress.done,
-        notAvailableLineCount: progress.unavailable,
-      });
+      counts.set(basket.id, countsOf(await this.basketRead.progressOf(basket)));
     }
     return counts;
   }
@@ -916,6 +880,21 @@ interface InvitedMember {
  * draw from contributes nothing, silently, because that is the same thing as the
  * list having been taken away between two runs.
  */
+/**
+ * The four numbers a history row shows, from the progress of a basket (plan
+ * 0136, section 7.4). `settledLineCount` is still the sum of the two, as plan
+ * 0053 defined it: a line the shop did not have has nothing left to do on it
+ * either. The names say lines, and since plan 0201 they count products.
+ */
+function countsOf(progress: BasketProgress): BasketLineCounts {
+  return {
+    lineCount: progress.total,
+    settledLineCount: progress.done + progress.unavailable,
+    boughtLineCount: progress.done,
+    notAvailableLineCount: progress.unavailable,
+  };
+}
+
 function narrow(
   writable: WritableListRow[],
   sources: { zoneId: string; listId?: string | null }[]
@@ -944,9 +923,7 @@ function narrow(
  * either side of a status change would then fire for a basket that never
  * changes status. It is the TypeScript half of `OPEN_GENERATED_BASKET`.
  */
-function isTripInProgress(
-  basket: Pick<Basket, 'kind' | 'status'>
-): boolean {
+function isTripInProgress(basket: Pick<Basket, 'kind' | 'status'>): boolean {
   return basket.kind === BasketKind.GENERATED && isOpenBasket(basket.status);
 }
 
@@ -1094,9 +1071,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * precision, where a millisecond `Date` would repeat the boundary row.
  */
 function encodeSharedCursor(basketId: string): string {
-  return Buffer.from(JSON.stringify({ id: basketId })).toString(
-    'base64url'
-  );
+  return Buffer.from(JSON.stringify({ id: basketId })).toString('base64url');
 }
 
 /**

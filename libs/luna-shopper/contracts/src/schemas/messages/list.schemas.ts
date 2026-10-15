@@ -609,6 +609,9 @@ const updateLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
+    // The quantity the client saw (plan 0209, section 2.2). Optional: absent,
+    // the edit writes what it was given.
+    from: integer({ minimum: LINE_QUANTITY_MIN, maximum: LINE_QUANTITY_MAX }),
     // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
     //
     // The **ceiling** and not the cap (plan 0070, section 7.2). A subscribed line

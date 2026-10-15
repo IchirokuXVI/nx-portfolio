@@ -218,6 +218,12 @@ interface LineEdit {
    * operator's colliding rename is refused rather than merged or duplicated.
    */
   confirmMerge?: boolean;
+  /**
+   * The quantity the client saw (plan 0209, section 2.2). When present, the
+   * quantity of the line as the lock reads it must equal it, or the edit is
+   * refused with `stale_quantity`. The operator path never names it.
+   */
+  from?: number;
 }
 
 /**
@@ -266,6 +272,23 @@ function movesQuantityAlone(req: LineEdit): boolean {
     req.preferredSupermarketId === undefined &&
     req.named === undefined
   );
+}
+
+/**
+ * The `from` bargain of an edit (plan 0209, section 2.2), asked of the row the
+ * lock read and never of the caller's.
+ *
+ * The refusal is the one the basket's demand route answers for a stale `from`
+ * (`addQuantity` with `expect`), word for word: a client reads both the same
+ * way. Absent, the edit writes the value it was given, as it always did.
+ */
+function assertFrom(req: LineEdit, line: ListLine): void {
+  if (req.from !== undefined && line.quantity !== req.from) {
+    throw new StaleQuantityException(
+      'Somebody else changed this while you were looking at it',
+      { messageArgs: { current: line.quantity } }
+    );
+  }
 }
 
 /** What a write inside a transaction leaves in the trail, or nothing. */
@@ -1254,6 +1277,24 @@ export class LineService {
   }
 
   /**
+   * One line, read under `pessimistic_write` in the caller's transaction (plan
+   * 0209, section 2.1). A miss means it was deleted after the read outside.
+   */
+  private async lockLine(
+    manager: EntityManager,
+    lineId: string
+  ): Promise<ListLine> {
+    const line = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!line) {
+      throw new NotFoundException('Line not found');
+    }
+    return line;
+  }
+
+  /**
    * The line each of these names would merge into, locked and ready to be
    * raised (plan 0091, sections 1 and 3.1).
    *
@@ -1648,19 +1689,42 @@ export class LineService {
       );
     }
 
-    const prepared = await this.prepareEdit(line, list, req, permissions);
-
     // **One transaction for both shapes of edit, since plan 0138.** The set and
     // the line have to move together, or a stored hash outlives the rows it
     // summarises; the change and the line have to move together for the reason
     // the recorder gives about itself. The second applies to a quantity only
     // edit as much as to a product one, so the path that used to save the row on
     // its own is gone.
+    //
+    // **The line is read again under the lock** (plan 0209, section 2.1), as
+    // `applyRename` and `addQuantity` read it. The object read before the
+    // transaction answered the access check and nothing else: a settle that
+    // landed after that read would otherwise be overwritten by a save of the
+    // row as it stood before the purchase.
     return this.announce(
       list,
-      await writer.transaction((manager, record) =>
-        this.writePreparedEdit(manager, line, list, prepared, actor, record)
-      ),
+      await writer.transaction(async (manager, record) => {
+        const locked = await this.lockLine(manager, line.id);
+        // Asked again of the row the lock read, since its approval may have
+        // moved since the check outside.
+        this.authorizeEdit(req, locked, permissions);
+        assertFrom(req, locked);
+        const prepared = await this.prepareEdit(
+          locked,
+          list,
+          req,
+          permissions,
+          manager
+        );
+        return this.writePreparedEdit(
+          manager,
+          locked,
+          list,
+          prepared,
+          actor,
+          record
+        );
+      }),
       // The quantity alone moved, so the baskets are sent the numbers and do
       // not read again (plan 0204, section 3). A name, a product set, a
       // favourite or a chain is something a room must not carry or core does
@@ -1885,6 +1949,9 @@ export class LineService {
         // Asked again of the row as it stands under the lock, since its approval
         // may have moved since the check outside.
         this.authorizeEdit(req, line, permissions);
+        // The quantity the client saw, against the row the lock read (plan
+        // 0209, section 2.2).
+        assertFrom(req, line);
         // The row as the lock read it, which is what the change compares against:
         // the object outside this transaction was read before anybody else's
         // write could have landed on it.
@@ -2512,11 +2579,12 @@ export class LineService {
    *
    * ## The read is inside the write
    *
-   * `update` needs no lock because the value it writes is one the caller chose. A
-   * delta is computed from what the row says, so a concurrent write between the
-   * read and the write is an update that vanishes with nothing logged and nothing
-   * errored, which is what the API forced on every caller that wanted "two more"
-   * and had to fetch, compute and `PATCH` to get it (section 2).
+   * A delta is computed from what the row says, so a concurrent write between
+   * the read and the write is an update that vanishes with nothing logged and
+   * nothing errored, which is what the API forced on every caller that wanted
+   * "two more" and had to fetch, compute and `PATCH` to get it (section 2). So
+   * the row is read under the lock it is written with, as `update` also reads
+   * it since plan 0209.
    *
    * ## A negative delta is allowed
    *
@@ -2678,11 +2746,12 @@ export class LineService {
   /**
    * The write half of an edit, in whatever transaction its caller opened.
    *
-   * It never opens one of its own, because the two callers need different ones:
-   * {@link update} opens one only when it is also rewriting the product set, and
-   * {@link addQuantity} is already inside one because a delta has to read under
-   * the lock it writes with. The event is returned rather than emitted, so the
-   * caller announces it after its commit, as everywhere else here.
+   * It never opens one of its own, because every caller already holds one:
+   * {@link update} opens one for every edit since plan 0138 and reads the line
+   * under its lock since plan 0209, and {@link addQuantity} reads under the lock
+   * it writes with because a delta is computed from the row. The event is
+   * returned rather than emitted, so the caller announces it after its commit,
+   * as everywhere else here.
    *
    * `record` is how an operator's edit leaves a trail without this method having
    * to know whose edit it is: the row is saved through the caller's manager

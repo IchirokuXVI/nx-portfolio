@@ -508,7 +508,7 @@ export class LinesController {
    */
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
-  @ApiProblemResponses({ body: true, lineMerge: true })
+  @ApiProblemResponses({ body: true, lineMerge: true, staleQuantity: true })
   update(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -519,6 +519,9 @@ export class LinesController {
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
+      // The quantity the client saw (plan 0209), checked in core under the
+      // lock of the write.
+      from: dto.from,
       itemIds: dto.itemIds,
       adoptItemIds: dto.adoptItemIds,
       // Passed as they arrived (plan 0199): null clears, and an absent key is

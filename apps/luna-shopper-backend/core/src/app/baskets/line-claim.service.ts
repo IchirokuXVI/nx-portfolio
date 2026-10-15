@@ -10,7 +10,7 @@ import { DataSource, type EntityManager } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
-  BASKET_CLAIMED_LINES_SQL,
+  BASKET_ZONE_LINES_SQL,
   readLineClaims,
   type ZoneLineClaimRef,
 } from './line-claim.sql';
@@ -101,7 +101,7 @@ export class LineClaimService {
     manager?: EntityManager
   ): Promise<ZoneLineClaimRef[]> {
     const runner = manager ?? this.dataSource;
-    return (await runner.query(BASKET_CLAIMED_LINES_SQL, [
+    return (await runner.query(BASKET_ZONE_LINES_SQL, [
       basketId,
     ])) as ZoneLineClaimRef[];
   }

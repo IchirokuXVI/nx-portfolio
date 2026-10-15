@@ -386,15 +386,9 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
     // The baskets (plan 0139, section 1). The fourth audience, and the one whose
     // members are participants rather than users, which is the only address that
-    // can reach a guest at all.
-    //
-    // **Both names are read, for one release.** Core writes `basketIds` alone
-    // since plan 0139, and `basketId` is what every envelope written
-    // before that deploy carries. Staging deploys only the affected services and
-    // the durable consumer replays what the stream still holds, so an envelope of
-    // either shape can arrive here at any moment in the window. Reading only the
-    // new name would turn one of them into an envelope addressed to nobody, which
-    // is dropped as a fault. Plan 0144 removes the second branch.
+    // can reach a guest at all. Core writes `basketIds`, and that is the one name
+    // read (`basketsOf`): plan 0144 removed the single name of the release
+    // before it.
     for (const basketId of basketsOf(envelope)) {
       rooms.push(basketRoom(basketId));
     }

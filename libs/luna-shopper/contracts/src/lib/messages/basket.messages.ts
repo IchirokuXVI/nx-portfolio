@@ -702,7 +702,11 @@ export interface SettleBasketRowRequest {
    */
   lineIds: string[];
   outcome: SettlementOutcome;
-  /** Required for `BOUGHT`, refused for `NOT_AVAILABLE`. */
+  /**
+   * How many were bought, a whole number from 1. Absent on a `BOUGHT`, the
+   * settle buys what the named lines still ask for. Ignored on a
+   * `NOT_AVAILABLE`, which records no units.
+   */
   quantity?: number;
   /**
    * The sum of `left` over the named lines as the client drew them. Refused

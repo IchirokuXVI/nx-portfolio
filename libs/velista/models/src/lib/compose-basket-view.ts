@@ -13,9 +13,8 @@ import type {
 import { basketRowPick, basketShelfMark, isCrossedOutRow } from './basket-view';
 import { catalogName } from './catalog-browse';
 import type { BasketRowState } from './enums';
-import { categoryName, type ProductCategory } from './product-category';
 import type { ShopSection } from './shop-section';
-import { inLocale } from './shopping-profile';
+import { inLocale, type LocalizedName } from './shopping-profile';
 
 /**
  * How the basket's lines are ordered (velista `0075`, section 2).
@@ -153,6 +152,17 @@ export interface BasketViewContext {
    * category grouping exactly as it was before. See {@link basketGroupsByAisle}.
    */
   readonly sections: readonly ShopSection[] | null;
+  /**
+   * The name of every root of the category tree, by the root's id, or null while the
+   * tree has not been read (velista `0138`).
+   *
+   * The headings of the category grouping are these roots: a product carries its
+   * leaves, each with the `ProductCategory.parentId` of its root and no name
+   * for it, so the names arrive here like the sections do and the pipeline reads no
+   * store. Null makes the category grouping draw the rows ungrouped until the tree
+   * lands, so a page never draws leaf headings first and parent headings after.
+   */
+  readonly parents: ReadonlyMap<string, LocalizedName> | null;
 }
 
 /**
@@ -758,9 +768,14 @@ function groupRows(
   notes: RowNotes
 ): readonly BasketViewSection[] {
   if (state.grouping === 'category') {
+    // Until the tree lands there is no parent to name, and a leaf heading drawn
+    // now would be replaced by its parent a moment later (velista `0138`).
+    if (context.parents === null) {
+      return ungrouped(rows, notes);
+    }
     return basketGroupsByAisle(state, context)
-      ? byAisle(rows, context, context.sections ?? [], notes)
-      : byCategory(rows, context, notes);
+      ? byAisle(rows, context, context.sections ?? [], context.parents, notes)
+      : byCategory(rows, context, context.parents, notes);
   }
   if (state.grouping === 'list') {
     return byList(rows, context, notes);
@@ -783,25 +798,30 @@ function ungrouped(
 }
 
 /**
- * The aisle view: every row under each of its product's categories (`0077`,
- * section 3).
+ * The aisle view: every row under the parent of each of its product's categories
+ * (`0077`, section 3; velista `0138`).
+ *
+ * ## A heading is a root, never a leaf
+ *
+ * The leaves are too fine to group by: a shopping list of a hundred lines drew most
+ * headings over one or two rows. So a section is keyed on the id of the **root** a
+ * leaf sits under (`ProductCategory.parentId`) and headed by the root's name
+ * from {@link BasketViewContext.parents}, also when a root holds one row. A product
+ * with two leaves under one root is one row under it, and a product with leaves
+ * under two roots is drawn under both, which the owner decided (`0138`).
  *
  * ## Sections take the order of their first row
  *
- * A category is created the first time a row lands in it and the sections come out
+ * A root is created the first time a row lands in it and the sections come out
  * in that order, which is the whole ordering rule and it needs no second one. Under
  * "The way you shop" the aisles then order the categories, which is the point of
  * that order; under A to Z the sections follow their first row's name, which reads
  * as alphabetical enough. The tree's order is deliberately **not** used here (velista
  * `0118`): the shopper's walk is the better order, and it is the one `0077` chose.
  *
- * A section is keyed on the category's id and headed by its name in the reader's
- * language. "Not yet categorised" is a leaf like any other and takes its place by
- * the same rule.
- *
  * ## A row can be in two places
  *
- * {@link BasketProduct.categories} is a list, so a product carrying two puts its
+ * {@link BasketProduct.categories} is a list, so a product under two roots puts its
  * row under two headings. `basketViewRows` counts it once, which is what keeps the
  * sheet's button from reporting more rows than the basket has.
  *
@@ -810,46 +830,54 @@ function ungrouped(
  * It holds every row with no resolved product: something somebody typed in an
  * aisle, and a row whose product the catalog can no longer name because the basket
  * has outlived it. Both are things to buy and neither has an aisle, so the heading
- * says why rather than inventing one. A product whose categories none could be read
- * joins them, which the server's "never empty" makes a defence rather than a state.
+ * says why rather than inventing one. A product none of whose roots the tree knows
+ * joins them: no category could be read, or each names a root the tree no longer
+ * holds. A product with one known root and one stale root is drawn under the known
+ * one only.
  */
 function byCategory(
   rows: readonly BasketRow[],
   context: BasketViewContext,
+  parents: ReadonlyMap<string, LocalizedName>,
   notes: RowNotes
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first row's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
-  const aisles = new Map<
+  const roots = new Map<
     string,
-    { readonly category: ProductCategory; readonly rows: BasketRow[] }
+    { readonly name: LocalizedName; readonly rows: BasketRow[] }
   >();
   const noCategory: BasketRow[] = [];
 
   for (const row of rows) {
     const product = basketRowPick(row, context.products);
-    if (product === undefined || product.categories.length === 0) {
-      noCategory.push(row);
-      continue;
-    }
-
-    for (const category of product.categories) {
-      const held = aisles.get(category.id);
+    let placed = false;
+    for (const category of product?.categories ?? []) {
+      const name = parents.get(category.parentId);
+      if (name === undefined) {
+        // A root the tree does not hold: a stale id, which names nothing.
+        continue;
+      }
+      placed = true;
+      const held = roots.get(category.parentId);
       if (held === undefined) {
-        aisles.set(category.id, { category, rows: [row] });
+        roots.set(category.parentId, { name, rows: [row] });
       } else if (!held.rows.includes(row)) {
-        // A product listing one category twice is still one row under it.
+        // Two leaves of one root, or one leaf listed twice: one row under it.
         held.rows.push(row);
       }
+    }
+    if (!placed) {
+      noCategory.push(row);
     }
   }
 
   const sections: BasketViewSection[] = [];
-  for (const [id, held] of aisles) {
+  for (const [id, held] of roots) {
     sections.push(
       section(
         `category:${id}`,
-        { kind: 'text', text: categoryName(held.category, context.locale) },
+        { kind: 'text', text: catalogName(held.name, context.locale) },
         null,
         rowsOf(held.rows, notes),
         true
@@ -918,9 +946,11 @@ export function basketGroupsByAisle(
  *    section its product names, so a frozen pizza in Pizzas and in Frozen is drawn
  *    in both and is still one line: settling either copy settles the row, and
  *    `basketViewRows` counts it once.
- * 2. **The categories of the products no section holds**, built by
+ * 2. **The parent categories of the products no section holds**, built by
  *    {@link byCategory} exactly as it builds them without a shop, first row's
- *    place and data names. The first of them carries the band.
+ *    place and data names. The first of them carries the band. A parent heading
+ *    here holds only the rows the sections left out, also when a sibling leaf of
+ *    the same parent is in a section (velista `0138`, section 2).
  * 3. **"No category"**, last, as ever.
  *
  * A section id the shop's list does not name is ignored, and a product left with no
@@ -934,6 +964,7 @@ function byAisle(
   rows: readonly BasketRow[],
   context: BasketViewContext,
   shopSections: readonly ShopSection[],
+  parents: ReadonlyMap<string, LocalizedName>,
   notes: RowNotes
 ): readonly BasketViewSection[] {
   const held = new Map<string, BasketRow[]>(
@@ -978,7 +1009,7 @@ function byAisle(
     );
   }
 
-  const rest = byCategory(uncovered, context, notes);
+  const rest = byCategory(uncovered, context, parents, notes);
   const first = rest[0];
   if (
     sections.length > 0 &&
