@@ -10,7 +10,9 @@ inside `src/`, because velista compiles it under Angular.
   walk file, every positioning mode as a pure function over it, the metrics and the
   GeoJSON file on disk.
 - Recorder plan 0003 (`plans/0003-camera-tracking-and-its-guards.md`): the tracking
-  guard, `keepPathPoint` and `alignSession`. See the last section.
+  guard, `keepPathPoint` and `alignSession`. See the section on it.
+- Recorder plan 0005 (`plans/0005-a-bent-compass-does-not-stop-a-walk.md`): the guard
+  hears the gyro, so a bent compass is a notice and not a stop. See the last section.
 
 ```sh
 npx nx test luna-shopper/shop-map/recorder
@@ -126,13 +128,13 @@ committed. Never edit the fixture by hand. Recut it.
 
 Over the fixture, left alone, the guard answers:
 
-| Time | Event |
-| ---- | ----- |
-| 62.0 s | baseline 316.6 degrees (compass minus camera heading) |
-| 920.5 s | `lost`, the pose is not tracked |
-| 922.0 s | `suspect`, poses returned, automatic resume |
-| 923.8 s | `suspect` by the heading rule (drift 162 degrees), and a `frame-moved` stop that drops the unconfirmed segment |
-| 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame |
+| Time     | Event                                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| 62.0 s   | baseline 316.6 degrees (compass minus camera heading)                                                          |
+| 920.5 s  | `lost`, the pose is not tracked                                                                                |
+| 922.0 s  | `suspect`, poses returned, automatic resume                                                                    |
+| 923.8 s  | `suspect` by the heading rule (drift 162 degrees), and a `frame-moved` stop that drops the unconfirmed segment |
+| 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame                                                                |
 
 These are the choices the guard makes where the plan says nothing.
 
@@ -173,3 +175,45 @@ These are the choices the guard makes where the plan says nothing.
     leaves `good` before the baseline is known, the samples learned so far are thrown
     away and the next `good` stretch starts again from zero, because tracking that comes
     back after a loss can be in another frame. Lost and suspect time never counts.
+
+## Plan 0005: the gyro, and a bent compass
+
+`pushGyro` feeds the `game` stream (gyroscope and accelerometer, no magnetometer) with
+the shape of a compass sample. While its last sample is less than 1 s old the gyro is
+heard, and the guard changes in three ways:
+
+- **The turn rule.** The median of camera minus gyro heading over the last 2 s is
+  compared with the median over the 10 s before them. More than 60 degrees apart is a
+  camera frame that turned: `suspect` with the cause `turned` and a `frame-moved` stop.
+  After a loss the rule waits 1.8 s of poses.
+- **A bent compass is a notice.** Compass minus camera heading more than 45 degrees
+  from the baseline, while tracking is `good`, emits `compass-disturbed`, and
+  `compass-settled` when the 5 s median is back inside. `state().compassDisturbed`
+  says which, and the walk goes on. A compass sample that turns more than 30 degrees
+  against the gyro is left out of the baseline.
+- **`state().gyroOffset`** is camera minus gyro heading over the last 2 s, and
+  `alignSession({ mark, standingAt, rotation })` takes a rotation worked out from it in
+  place of the compass pair.
+
+While the gyro is not heard the compass rule of plan 0003 stops the walk as before. Each
+`stopped` event names its `cause` (`lost`, `jump`, `turned`, `heading`) and the number
+that crossed the limit, `degrees` or `metres`.
+
+The El Jamón fixture is cut again with the `game` stream. Over it, left alone with the
+gyro heard, the guard answers:
+
+| Time     | Event                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 920.5 s  | `lost`, the pose is not tracked                                                                                                 |
+| 922.0 s  | `suspect`, poses returned, automatic resume                                                                                     |
+| 923.9 s  | `suspect` by the turn rule (148.4 degrees), and a `frame-moved` stop with the cause `turned` that drops the unconfirmed segment |
+| 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame                                                                                 |
+| 1014.3 s | `suspect` by the turn rule (149.4 degrees): the jump turned the frame back, and the stop already waits                          |
+
+No `compass-disturbed` appears in it. The bent compass fixture
+(`src/__fixtures__/tracking/bent-compass.synthetic.tracking.json`, written by the
+`synthesize-bent-compass` target) is **synthetic**: no recording of the freezer aisles
+exists yet. Its compass swings 90 degrees for 14 s; the guard answers one
+`compass-disturbed` at 12.0 s and one `compass-settled` at 23.0 s with the gyro, and one
+`heading` stop at 12.0 s without it. The plan's section "What the build decided" holds
+the measurements behind the limits.

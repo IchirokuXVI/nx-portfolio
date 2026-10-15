@@ -18,37 +18,55 @@ import {
 } from './tracking-guard';
 
 /**
- * The fixture of plan 0003, cut from the second El Jamón walk by
- * `tools/cut-tracking-fixture.ts`. ARCore wrote its tracking state as
- * events rather than per pose, so a `tracking-lost` event is replayed as an
- * untracked pose at its time, which is what a host reading the state per
- * frame would push.
+ * A window of a tracking fixture. `game` is the gyro stream, cut since
+ * recorder plan 0005.
  */
 interface Window {
   from: number;
   to: number;
   pose: number[][];
   absolute: number[][];
+  game: number[][];
   events: { t: number; kind: string }[];
 }
-const FIXTURE = JSON.parse(
-  readFileSync(
-    join(
-      __dirname,
-      '..',
-      '__fixtures__',
-      'tracking',
-      'el-jamon-2.tracking.json'
-    ),
-    'utf8'
-  )
-) as { windows: { baseline: Window; incident: Window } };
+
+function fixture<T>(name: string): T {
+  return JSON.parse(
+    readFileSync(
+      join(__dirname, '..', '__fixtures__', 'tracking', name),
+      'utf8'
+    )
+  ) as T;
+}
+
+/**
+ * The fixture of plans 0003 and 0005, cut from the second El Jamón walk by
+ * `tools/cut-tracking-fixture.ts`. ARCore wrote its tracking state as
+ * events rather than per pose, so a `tracking-lost` event is replayed as an
+ * untracked pose at its time, which is what a host reading the state per
+ * frame would push.
+ */
+const EL_JAMON = fixture<{ windows: { baseline: Window; incident: Window } }>(
+  'el-jamon-2.tracking.json'
+);
+
+/**
+ * The SYNTHETIC bent compass of plan 0005 section 5, written by
+ * `tools/synthesize-bent-compass.ts`. No recording of the freezer aisles
+ * exists yet; the owner's walk lab recording replaces it.
+ */
+const BENT_COMPASS = fixture<{
+  synthetic: true;
+  source: { baseline: number };
+  windows: { walk: Window };
+}>('bent-compass.synthetic.tracking.json');
 
 type Row =
   | { t: number; order: 0; pose: PoseSample }
-  | { t: number; order: 1; compass: CompassSample };
+  | { t: number; order: 1; compass: CompassSample }
+  | { t: number; order: 2; gyro: CompassSample };
 
-function rowsOf(w: Window): Row[] {
+function rowsOf(w: Window, gyro: boolean): Row[] {
   const rows: Row[] = [];
   for (const [t, x, y, z, qx, qy, qz, qw] of w.pose) {
     rows.push({
@@ -60,6 +78,11 @@ function rowsOf(w: Window): Row[] {
   for (const [t, qx, qy, qz, qw] of w.absolute) {
     rows.push({ t, order: 1, compass: { t, qx, qy, qz, qw } });
   }
+  if (gyro) {
+    for (const [t, qx, qy, qz, qw] of w.game) {
+      rows.push({ t, order: 2, gyro: { t, qx, qy, qz, qw } });
+    }
+  }
   for (const e of w.events) {
     if (e.kind !== 'tracking-lost') continue;
     const pose = { t: e.t, x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1 };
@@ -68,16 +91,21 @@ function rowsOf(w: Window): Row[] {
   return rows.sort((a, b) => a.t - b.t || a.order - b.order);
 }
 
-/** Replays a window. `answer` plays the person, called before each row. */
+/**
+ * Replays a window, with its gyro stream unless `gyro` is false. `answer`
+ * plays the person, called before each row.
+ */
 function replay(
   guard: TrackingGuard,
   w: Window,
-  answer: (t: number, g: TrackingGuard) => void = () => undefined
+  answer: (t: number, g: TrackingGuard) => void = () => undefined,
+  gyro = true
 ): TrackingGuard {
-  for (const row of rowsOf(w)) {
+  for (const row of rowsOf(w, gyro)) {
     answer(row.t, guard);
     if (row.order === 0) guard.pushPose(row.pose);
-    else guard.pushCompass(row.compass);
+    else if (row.order === 1) guard.pushCompass(row.compass);
+    else guard.pushGyro(row.gyro);
   }
   return guard;
 }
@@ -93,8 +121,11 @@ function first(
 
 const seconds = (e: TrackingEvent) => e.t / 1000;
 
+const kinds = (events: readonly TrackingEvent[]) =>
+  events.map((x) => [x.kind, 'cause' in x ? x.cause : '']);
+
 describe('the tracking guard over the second El Jamón walk', () => {
-  const learned = replay(createTrackingGuard(), FIXTURE.windows.baseline);
+  const learned = replay(createTrackingGuard(), EL_JAMON.windows.baseline);
   const baseline = learned.state().baseline as number;
 
   it('learns a baseline from the first 60 s and stays good for two minutes', () => {
@@ -103,13 +134,26 @@ describe('the tracking guard over the second El Jamón walk', () => {
     expect(seconds(e)).toBeLessThan(63);
     expect(baseline).toBeCloseTo(316.6, 1);
     expect(learned.events().map((x) => x.kind)).toEqual(['baseline']);
-    expect(learned.state().kind).toBe('good');
+    expect(learned.state()).toMatchObject({
+      kind: 'good',
+      compassDisturbed: false,
+    });
   });
 
-  describe('left alone, with nobody answering', () => {
+  it('learns the same baseline without the gyro', () => {
+    const g = replay(
+      createTrackingGuard(),
+      EL_JAMON.windows.baseline,
+      undefined,
+      false
+    );
+    expect(g.state().baseline).toBeCloseTo(baseline, 6);
+  });
+
+  describe('with the gyro heard, left alone (plan 0005)', () => {
     const guard = replay(
       createTrackingGuard({ baseline }),
-      FIXTURE.windows.incident
+      EL_JAMON.windows.incident
     );
     const events = guard.events();
 
@@ -125,20 +169,24 @@ describe('the tracking guard over the second El Jamón walk', () => {
       expect(seconds(e)).toBeCloseTo(922.0, 1);
     });
 
-    it('stops the walk for the flipped frame within 5 s of 922.0 s', () => {
-      const heading = first(
+    it('stops the walk because the frame turned, within 2 s of 922.0 s', () => {
+      const turned = first(
         events,
-        (x) => x.kind === 'suspect' && x.cause === 'heading'
+        (x) => x.kind === 'suspect' && x.cause === 'turned'
       );
       const stop = first(events, (x) => x.kind === 'stopped');
-      expect(stop).toMatchObject({ reason: 'frame-moved' });
-      expect(stop.t).toBe(heading.t);
-      // The points kept since 922.0 s are in the flipped frame.
-      expect(stop).toMatchObject({ unconfirmedDropped: true });
-      expect(seconds(stop) - 922.0).toBeGreaterThan(0);
-      expect(seconds(stop) - 922.0).toBeLessThan(5);
-      if (heading.kind !== 'suspect') throw new Error('not suspect');
-      expect(Math.abs(heading.drift ?? 0)).toBeGreaterThan(150);
+      expect(stop.t).toBe(turned.t);
+      expect(seconds(turned) - 922.0).toBeGreaterThan(0);
+      expect(seconds(turned) - 922.0).toBeLessThanOrEqual(2.0);
+      if (stop.kind !== 'stopped') throw new Error('not stopped');
+      expect(stop).toMatchObject({
+        reason: 'frame-moved',
+        cause: 'turned',
+        unconfirmedDropped: true,
+      });
+      // The flip of 2026-09-29 was 158.5 degrees; the medians read 148.
+      expect(Math.abs(stop.degrees ?? 0)).toBeGreaterThan(140);
+      expect(stop.metres).toBeUndefined();
     });
 
     it('sees the frame jump 28.8 m at 1013.4 s', () => {
@@ -151,12 +199,76 @@ describe('the tracking guard over the second El Jamón walk', () => {
       expect(e.metres).toBeCloseTo(28.8, 1);
     });
 
+    it('sees no bent compass anywhere, and stops only once', () => {
+      expect(
+        guard
+          .events()
+          .filter((x) => x.kind.startsWith('compass-'))
+          .map((x) => x.kind)
+      ).toEqual([]);
+      // The jump back onto the old map turns the frame back as well, which
+      // the turn rule sees once the 2 s median holds the new frame.
+      expect(kinds(events)).toEqual([
+        ['lost', 'emulated'],
+        ['suspect', 'returned'],
+        ['suspect', 'turned'],
+        ['stopped', 'turned'],
+        ['suspect', 'jump'],
+        ['suspect', 'turned'],
+      ]);
+      expect(guard.state()).toMatchObject({
+        kind: 'suspect',
+        automaticResume: false,
+        stopped: 'frame-moved',
+        compassDisturbed: false,
+      });
+    });
+
+    it('also replays the baseline window with no stop and no notice', () => {
+      expect(
+        replay(createTrackingGuard({ baseline }), EL_JAMON.windows.baseline)
+          .events()
+          .map((x) => x.kind)
+      ).toEqual([]);
+    });
+  });
+
+  describe('without the gyro, left alone (plan 0003, as before)', () => {
+    const guard = replay(
+      createTrackingGuard({ baseline }),
+      EL_JAMON.windows.incident,
+      undefined,
+      false
+    );
+    const events = guard.events();
+
+    it('stops the walk for the flipped frame by the compass, within 5 s of 922.0 s', () => {
+      const heading = first(
+        events,
+        (x) => x.kind === 'suspect' && x.cause === 'heading'
+      );
+      const stop = first(events, (x) => x.kind === 'stopped');
+      expect(stop).toMatchObject({
+        reason: 'frame-moved',
+        cause: 'heading',
+        unconfirmedDropped: true,
+      });
+      expect(stop.t).toBe(heading.t);
+      expect(seconds(stop) - 922.0).toBeGreaterThan(0);
+      expect(seconds(stop) - 922.0).toBeLessThan(5);
+      if (heading.kind !== 'suspect' || stop.kind !== 'stopped') {
+        throw new Error('not suspect and stopped');
+      }
+      expect(Math.abs(heading.drift ?? 0)).toBeGreaterThan(150);
+      expect(stop.degrees).toBe(heading.drift);
+    });
+
     it('decides nothing else, and stops only once', () => {
-      expect(events.map((x) => [x.kind, 'cause' in x ? x.cause : ''])).toEqual([
+      expect(kinds(events)).toEqual([
         ['lost', 'emulated'],
         ['suspect', 'returned'],
         ['suspect', 'heading'],
-        ['stopped', ''],
+        ['stopped', 'heading'],
         ['suspect', 'jump'],
       ]);
       expect(guard.state()).toMatchObject({
@@ -167,11 +279,35 @@ describe('the tracking guard over the second El Jamón walk', () => {
     });
   });
 
-  it('suspects again at the next pose when somebody confirms the flipped frame', () => {
+  it('suspects again at the next pose when somebody confirms the flipped frame without a gyro', () => {
     let confirmed = false;
     const guard = replay(
       createTrackingGuard({ baseline }),
-      FIXTURE.windows.incident,
+      EL_JAMON.windows.incident,
+      (t, g) => {
+        if (!confirmed && t >= 930_000) {
+          confirmed = true;
+          g.confirm(t);
+        }
+      },
+      false
+    );
+    const after = guard.events().filter((e) => e.t >= 930_000);
+    expect(after[0].kind).toBe('confirmed');
+    expect(after[1]).toMatchObject({ kind: 'suspect', cause: 'heading' });
+    expect(after[2]).toMatchObject({
+      kind: 'stopped',
+      reason: 'frame-moved',
+      cause: 'heading',
+    });
+    expect(after[1].t - after[0].t).toBeLessThan(200);
+  });
+
+  it('takes a confirmed flipped frame as the frame, and the compass as bent, with the gyro', () => {
+    let confirmed = false;
+    const guard = replay(
+      createTrackingGuard({ baseline }),
+      EL_JAMON.windows.incident,
       (t, g) => {
         if (!confirmed && t >= 930_000) {
           confirmed = true;
@@ -181,33 +317,39 @@ describe('the tracking guard over the second El Jamón walk', () => {
     );
     const after = guard.events().filter((e) => e.t >= 930_000);
     expect(after[0].kind).toBe('confirmed');
-    expect(after[1]).toMatchObject({ kind: 'suspect', cause: 'heading' });
-    expect(after[2]).toMatchObject({ kind: 'stopped', reason: 'frame-moved' });
+    expect(after[1]).toMatchObject({ kind: 'compass-disturbed' });
     expect(after[1].t - after[0].t).toBeLessThan(200);
+    expect(after.some((e) => e.kind === 'stopped' && e.t < 1_013_000)).toBe(
+      false
+    );
   });
 
-  it('stays good once confirmed after the frame jumped back onto the walk', () => {
-    let confirmed = false;
-    const guard = replay(
-      createTrackingGuard({ baseline }),
-      FIXTURE.windows.incident,
-      (t, g) => {
-        if (!confirmed && t >= 1_020_000) {
-          confirmed = true;
-          g.confirm(t);
-        }
-      }
-    );
-    const after = guard.events().filter((e) => e.t >= 1_020_000);
-    expect(after.map((e) => e.kind)).toEqual(['confirmed']);
-    expect(guard.state().kind).toBe('good');
-  });
+  it.each([true, false])(
+    'stays good once confirmed after the frame jumped back onto the walk (gyro %s)',
+    (gyro) => {
+      let confirmed = false;
+      const guard = replay(
+        createTrackingGuard({ baseline }),
+        EL_JAMON.windows.incident,
+        (t, g) => {
+          if (!confirmed && t >= 1_020_000) {
+            confirmed = true;
+            g.confirm(t);
+          }
+        },
+        gyro
+      );
+      const after = guard.events().filter((e) => e.t >= 1_020_000);
+      expect(after.map((e) => e.kind)).toEqual(['confirmed']);
+      expect(guard.state().kind).toBe('good');
+    }
+  );
 
   it('keeps no path point once the walk stopped, and ends on discard', () => {
     let discarded = false;
     const guard = replay(
       createTrackingGuard({ baseline }),
-      FIXTURE.windows.incident,
+      EL_JAMON.windows.incident,
       (t, g) => {
         if (!discarded && t >= 930_000) {
           discarded = true;
@@ -218,6 +360,68 @@ describe('the tracking guard over the second El Jamón walk', () => {
     );
     expect(guard.state().ended).toBe(true);
     expect(guard.events().at(-1)?.kind).toBe('discarded');
+  });
+});
+
+describe('the SYNTHETIC bent compass of plan 0005 section 5', () => {
+  // Made up until the walk lab recording of the freezer aisles exists.
+  const w = BENT_COMPASS.windows.walk;
+  const baseline = BENT_COMPASS.source.baseline;
+
+  it('is marked synthetic', () => {
+    expect(BENT_COMPASS.synthetic).toBe(true);
+  });
+
+  it('with the gyro: one notice, one settle, and no stop', () => {
+    const guard = replay(createTrackingGuard({ baseline }), w);
+    const events = guard.events();
+    expect(events.map((e) => e.kind)).toEqual([
+      'compass-disturbed',
+      'compass-settled',
+    ]);
+    const [disturbed, settled] = events;
+    if (disturbed.kind !== 'compass-disturbed') throw new Error('not bent');
+    expect(Math.abs(disturbed.drift)).toBeGreaterThan(45);
+    // The swing starts at 8 s, and the 5 s median follows it.
+    expect(seconds(disturbed)).toBeGreaterThan(8);
+    expect(seconds(settled)).toBeGreaterThan(seconds(disturbed));
+    expect(guard.state()).toMatchObject({
+      kind: 'good',
+      compassDisturbed: false,
+    });
+  });
+
+  it('reads compassDisturbed while the compass is bent', () => {
+    const states = new Map<number, boolean>();
+    replay(createTrackingGuard({ baseline }), w, (t, g) => {
+      if (t === 5_000 || t === 15_000) {
+        states.set(t, g.state().compassDisturbed);
+      }
+    });
+    expect([...states]).toEqual([
+      [5_000, false],
+      [15_000, true],
+    ]);
+  });
+
+  it('without the gyro: one stop with the cause heading', () => {
+    const guard = replay(
+      createTrackingGuard({ baseline }),
+      w,
+      undefined,
+      false
+    );
+    const stops = guard.events().filter((e) => e.kind === 'stopped');
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toMatchObject({
+      reason: 'frame-moved',
+      cause: 'heading',
+    });
+    if (stops[0].kind !== 'stopped') throw new Error('not stopped');
+    expect(Math.abs(stops[0].degrees ?? 0)).toBeGreaterThan(45);
+    expect(guard.events().some((e) => e.kind.startsWith('compass-'))).toBe(
+      false
+    );
   });
 });
 
@@ -239,7 +443,7 @@ function facing(t: number, heading: number, x = 0, z = 0): PoseSample {
   };
 }
 
-/** A flat phone's compass sample pointing at `bearing` degrees from north. */
+/** A flat phone's compass (or gyro) sample pointing at `bearing` degrees. */
 function compassAt(t: number, bearing: number): CompassSample {
   // Device +y at north turned clockwise from above is a negative turn about +z.
   const a = -(bearing * Math.PI) / 180 / 2;
@@ -277,12 +481,28 @@ describe('the headings', () => {
 });
 
 describe('the rules, one at a time', () => {
-  /** A guard with baseline 0 and a camera and compass that agree. */
+  /**
+   * A guard with baseline 0 and a camera and compass that agree. With
+   * `gyro`, a gyro whose heading is `gyro` (the camera's by default) is fed
+   * before each pose.
+   */
   function steady(guard = createTrackingGuard({ baseline: 0 })) {
     return {
       guard,
       at(t: number, heading = 0, x = 0, z = 0, compass = heading) {
         guard.pushCompass(compassAt(t, compass));
+        return guard.pushPose(facing(t, heading, x, z));
+      },
+      withGyro(
+        t: number,
+        heading = 0,
+        x = 0,
+        z = 0,
+        compass = heading,
+        gyro = heading
+      ) {
+        guard.pushCompass(compassAt(t, compass));
+        guard.pushGyro(compassAt(t, gyro));
         return guard.pushPose(facing(t, heading, x, z));
       },
     };
@@ -297,13 +517,21 @@ describe('the rules, one at a time', () => {
     expect(lost).toEqual([{ t: 1500, kind: 'lost', cause: 'no-pose' }]);
   });
 
+  it('runs the clock on gyro samples too', () => {
+    const s = steady();
+    for (let t = 0; t <= 1000; t += 100) s.withGyro(t);
+    expect(s.guard.pushGyro(compassAt(1600, 0))).toEqual([
+      { t: 1500, kind: 'lost', cause: 'no-pose' },
+    ]);
+  });
+
   it('stops the walk when tracking stays lost for 3 s, and resumes only by hand', () => {
     const s = steady();
     s.at(0);
     s.guard.pushPose({ ...facing(100, 0), tracked: false });
     expect(s.guard.pushCompass(compassAt(3000, 0))).toEqual([]);
     expect(s.guard.pushCompass(compassAt(3100, 0))).toEqual([
-      { t: 3100, kind: 'stopped', reason: 'tracking-lost' },
+      { t: 3100, kind: 'stopped', reason: 'tracking-lost', cause: 'lost' },
     ]);
     const back = s.at(4000);
     expect(back).toEqual([
@@ -327,6 +555,7 @@ describe('the rules, one at a time', () => {
         t: 4600,
         kind: 'stopped',
         reason: 'tracking-lost',
+        cause: 'lost',
         unconfirmedDropped: true,
       },
     ]);
@@ -347,7 +576,13 @@ describe('the rules, one at a time', () => {
         automaticResume: false,
         metres: 2.5,
       },
-      { t: 1800, kind: 'stopped', reason: 'frame-moved' },
+      {
+        t: 1800,
+        kind: 'stopped',
+        reason: 'frame-moved',
+        cause: 'jump',
+        metres: 2.5,
+      },
     ]);
   });
 
@@ -415,6 +650,139 @@ describe('the rules, one at a time', () => {
     expect(s.guard.state()).toMatchObject({ kind: 'good' });
     expect(s.guard.state().offset).toBeCloseTo(40, 6);
   });
+
+  describe('with the gyro (plan 0005)', () => {
+    it('stops for a camera frame that turns more than 60 degrees against the gyro', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) expect(s.withGyro(t)).toEqual([]);
+      // The camera frame turns by 70 degrees with no loss; the phone does not.
+      const out: TrackingEvent[] = [];
+      for (let t = 20_000; t <= 24_000; t += 100) {
+        out.push(...s.withGyro(t, 70, 0, 0, 0, 0));
+      }
+      expect(out.map((e) => [e.kind, 'cause' in e ? e.cause : ''])).toEqual([
+        ['suspect', 'turned'],
+        ['stopped', 'turned'],
+      ]);
+      const [, stop] = out;
+      if (stop.kind !== 'stopped') throw new Error('not stopped');
+      expect(stop.degrees).toBeCloseTo(70, 6);
+      expect(stop.reason).toBe('frame-moved');
+      // The 2 s median holds the new frame once more than half of it does.
+      expect(stop.t).toBe(21_000);
+    });
+
+    it('lets the walk go on for a turn under 60 degrees, and calls the compass bent', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) s.withGyro(t);
+      const out: TrackingEvent[] = [];
+      for (let t = 20_000; t <= 34_000; t += 100) {
+        out.push(...s.withGyro(t, 55, 0, 0, 0, 0));
+      }
+      expect(out.map((e) => e.kind)).toEqual(['compass-disturbed']);
+      expect(s.guard.state()).toMatchObject({
+        kind: 'good',
+        compassDisturbed: true,
+      });
+    });
+
+    it('waits 1.8 s of poses after a loss before it answers', () => {
+      const s = steady();
+      for (let t = 0; t < 10_000; t += 100) s.withGyro(t);
+      s.guard.pushPose({ ...facing(10_000, 0), tracked: false });
+      const out: TrackingEvent[] = [];
+      for (let t = 10_100; t < 11_000; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+        s.guard.pushGyro(compassAt(t, 0));
+      }
+      // Poses return at 11 s in a frame turned by 90 degrees.
+      for (let t = 11_000; t <= 14_000; t += 100) {
+        out.push(...s.withGyro(t, 90, 0, 0, 0, 0));
+      }
+      expect(
+        out.map((e) => [e.t, e.kind, 'cause' in e ? e.cause : ''])
+      ).toEqual([
+        [11_000, 'suspect', 'returned'],
+        [12_800, 'suspect', 'turned'],
+        [12_800, 'stopped', 'turned'],
+      ]);
+      expect(out[2]).toMatchObject({ unconfirmedDropped: true });
+    });
+
+    it('does not report a confirmed turn again', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) s.withGyro(t);
+      for (let t = 20_000; t <= 21_000; t += 100)
+        s.withGyro(t, 70, 0, 0, 70, 0);
+      expect(s.guard.state()).toMatchObject({ cause: 'turned' });
+      s.guard.confirm(21_050);
+      const out: TrackingEvent[] = [];
+      for (let t = 21_100; t <= 40_000; t += 100) {
+        out.push(...s.withGyro(t, 70, 0, 0, 70, 0));
+      }
+      expect(out).toEqual([]);
+    });
+
+    it('stops by the compass rule once the gyro falls silent for 1 s', () => {
+      const s = steady();
+      for (let t = 0; t < 5_000; t += 100) s.withGyro(t);
+      // The gyro is heard: a bent compass is a notice.
+      const bent: TrackingEvent[] = [];
+      for (let t = 5_000; t < 10_000; t += 100) {
+        bent.push(...s.withGyro(t, 0, 0, 0, 90));
+      }
+      expect(bent.map((e) => e.kind)).toEqual(['compass-disturbed']);
+      // Its last sample is at 9.9 s; at 10.9 s it is no longer heard.
+      for (let t = 10_000; t <= 10_800; t += 100) {
+        expect(s.at(t, 0, 0, 0, 90)).toEqual([]);
+      }
+      expect(s.at(10_900, 0, 0, 0, 90)).toMatchObject([
+        { kind: 'suspect', cause: 'heading' },
+        { kind: 'stopped', reason: 'frame-moved', cause: 'heading' },
+      ]);
+    });
+
+    it('settles when the 5 s median is back inside the limit', () => {
+      const s = steady();
+      const out: TrackingEvent[] = [];
+      for (let t = 0; t < 10_000; t += 100)
+        out.push(...s.withGyro(t, 0, 0, 0, 90));
+      for (let t = 10_000; t < 20_000; t += 100) out.push(...s.withGyro(t));
+      // Bent from the first pose; settled once most of the 5 s window is not.
+      expect(out.map((e) => [e.t, e.kind])).toEqual([
+        [0, 'compass-disturbed'],
+        [12_400, 'compass-settled'],
+      ]);
+      expect(s.guard.state().compassDisturbed).toBe(false);
+    });
+
+    it('answers the gyro offset over the last 2 s, and none once the gyro is silent', () => {
+      const s = steady();
+      for (let t = 0; t <= 3_000; t += 100) s.withGyro(t, 40, 0, 0, 40, 10);
+      expect(s.guard.state().gyroOffset).toBeCloseTo(30, 6);
+      s.at(4_100, 40);
+      expect(s.guard.state().gyroOffset).toBeUndefined();
+    });
+
+    it('leaves the compass out of the baseline while it turns and the phone does not', () => {
+      /** A compass offset that wanders by 10 degrees, bent by 90 from 20 s to 30 s. */
+      const compass = (t: number) =>
+        (t >= 20_000 && t < 30_000 ? 90 : 0) + (((t / 100) % 21) - 10);
+      const learn = (gyro: boolean) => {
+        const guard = createTrackingGuard();
+        for (let t = 0; t <= 61_000; t += 100) {
+          guard.pushCompass(compassAt(t, compass(t)));
+          if (gyro) guard.pushGyro(compassAt(t, 0));
+          guard.pushPose(facing(t, 0));
+        }
+        return wrapDegrees(guard.state().baseline as number);
+      };
+      const without = learn(false);
+      const heard = learn(true);
+      expect(Math.abs(heard)).toBeLessThan(Math.abs(without));
+      expect(Math.abs(heard)).toBeLessThan(1);
+    });
+  });
 });
 
 describe('keepPathPoint', () => {
@@ -472,5 +840,27 @@ describe('alignSession', () => {
     expect(mapPoint(aligned).y).toBeCloseTo(5, 6);
     expect(wrapDegrees(cameraHeading(aligned) - 90)).toBeCloseTo(0, 6);
     expect(aligned.y).toBe(pose.y);
+  });
+
+  it('takes a rotation from the gyro offsets in place of the compass (plan 0005)', () => {
+    // The stopped session already had a rotation of 15 degrees, and its
+    // gyro offset at the stop was 40. The new session reads 110 against the
+    // same gyro, so what the old frame read as 20 degrees it reads as 90.
+    const oldRotation = 15;
+    const rotation = 40 - 110 + oldRotation;
+    const pose = facing(0, 90, 3, -1);
+    const t = alignSession({
+      mark: { x: -2, y: 5, heading: 90 },
+      standingAt: mapPoint(pose),
+      rotation,
+    });
+    expect(t.rotation).toBeCloseTo(305, 6);
+    const aligned = alignPose(t, pose);
+    expect(mapPoint(aligned).x).toBeCloseTo(-1.5, 6);
+    expect(mapPoint(aligned).y).toBeCloseTo(5, 6);
+    // The old session saw this way as 20 degrees, plus its own rotation.
+    expect(
+      wrapDegrees(cameraHeading(aligned) - (20 + oldRotation))
+    ).toBeCloseTo(0, 6);
   });
 });

@@ -81,10 +81,21 @@ export const RESUME_BACK_METRES = 0.5;
 
 /**
  * The `now` window of the turn rule: the median of camera minus gyro heading
- * over the last 2 s. Plan 0005 section 1. It is also how long the rule waits
- * for poses after a loss, and the window of `state().gyroOffset` (section 4).
+ * over the last 2 s. Plan 0005 section 1. It is also the window of
+ * `state().gyroOffset` (section 4).
  */
 export const TURN_NOW_MS = 2_000;
+
+/**
+ * How long the turn rule waits for tracked poses after a loss (or after the
+ * guard starts) before it answers. Plan 0005 section 1, shortened from 2 s by
+ * the owner (2026-10-15) so the flip is caught within 2 s of its return. On
+ * 2026-09-29 poses came back at 922.0 s: a 2 s wait answered at 924.04 s at
+ * 30 Hz and 924.10 s in the 10 Hz fixture, where poses come 100 to 133 ms
+ * apart. With 1.8 s both answer before 924.0 s, and the `now` window still
+ * holds only poses from after the return.
+ */
+export const TURN_WAIT_AFTER_LOSS_MS = 1_800;
 
 /**
  * The `before` window of the turn rule: the 10 s that end where `now`
@@ -95,13 +106,23 @@ export const TURN_NOW_MS = 2_000;
 export const TURN_BEFORE_MS = 10_000;
 
 /**
- * How far `now` may be from `before`. Plan 0005 section 1. On 2026-09-29
- * camera minus gyro heading stepped by 158.5 degrees when the camera came
- * back in a rotated frame, and the gyro's drift moves both medians together
- * by a few degrees. The same limit tells a compass that turns while the phone
- * does not (compass minus gyro heading) in plan 0005 section 2.
+ * How far `now` may be from `before`. Plan 0005 section 1, raised from 30 by
+ * the owner (2026-10-15). The `game` stream misses part of every turn, so on
+ * the whole 2026-09-29 walk, away from the flip and the jump, the rule's
+ * number was 4.7 degrees at p50, 24.3 at p95, 35.4 at p99 and 45.6 at most:
+ * 30 was crossed 9 times, 45 once and 60 never. The flip measured 148.2
+ * degrees at 924.1 s and the frame jumping back 75.1 at 1014.4 s.
  */
-export const TURN_LIMIT_DEGREES = 30;
+export const TURN_LIMIT_DEGREES = 60;
+
+/**
+ * Plan 0005 section 2: a compass sample is left out of the baseline while
+ * compass minus gyro heading over the last 2 s is more than this from the
+ * 10 s before them. Its own constant by the owner's decision (2026-10-15).
+ * On the whole 2026-09-29 walk that number crossed 30 degrees 18 times while
+ * walking (51.0 at most), which only leaves those samples out.
+ */
+export const COMPASS_TURN_LIMIT_DEGREES = 30;
 
 /**
  * The gyro is heard while its last sample is younger than this. Plan 0005
@@ -517,7 +538,7 @@ export function createTrackingGuard(
   /**
    * Plan 0005 section 1: camera minus gyro heading over the last 2 s against
    * the 10 s before them. Only tracked poses count, so after a loss `before`
-   * is still the frame from before it, and the rule waits for 2 s of poses.
+   * is still the frame from before it, and the rule waits 1.8 s of poses.
    */
   function turnRule(out: TrackingEvent[], sample: PoseSample): void {
     if (gyro === undefined || !gyroHeard(sample.t)) {
@@ -534,7 +555,8 @@ export function createTrackingGuard(
     const { now, turn } = nowAndBefore(cameraGyro, sample.t);
     gyroOffset = now;
     const answers =
-      trackedFrom !== undefined && sample.t - trackedFrom >= TURN_NOW_MS;
+      trackedFrom !== undefined &&
+      sample.t - trackedFrom >= TURN_WAIT_AFTER_LOSS_MS;
     if (!answers || turn === undefined) return;
     const turning = Math.abs(turn) > TURN_LIMIT_DEGREES;
     if (turning && !turnFired) {
@@ -557,7 +579,7 @@ export function createTrackingGuard(
       (r) => r.t > t - TURN_NOW_MS - TURN_BEFORE_MS
     );
     const { turn } = nowAndBefore(compassGyro, t);
-    return turn !== undefined && Math.abs(turn) > TURN_LIMIT_DEGREES;
+    return turn !== undefined && Math.abs(turn) > COMPASS_TURN_LIMIT_DEGREES;
   }
 
   function heading(out: TrackingEvent[], sample: PoseSample): void {

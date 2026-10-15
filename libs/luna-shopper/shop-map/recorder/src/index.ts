@@ -39,8 +39,11 @@ export {
 export type { WalkFileErrorCode, WalkImport } from './lib/walk-import';
 
 // Recorder plan 0003: camera tracking and its guards.
+// Recorder plan 0005 adds the gyro: pushGyro, the turn rule and the notices.
 export {
   BASELINE_MS,
+  COMPASS_TURN_LIMIT_DEGREES,
+  GYRO_HEARD_MS,
   HEADING_LIMIT_DEGREES,
   HEADING_WINDOW_MS,
   JUMP_METRES,
@@ -49,6 +52,10 @@ export {
   PATH_STEP_MS,
   RESUME_BACK_METRES,
   STOP_AFTER_LOST_MS,
+  TURN_BEFORE_MS,
+  TURN_LIMIT_DEGREES,
+  TURN_NOW_MS,
+  TURN_WAIT_AFTER_LOSS_MS,
   alignPose,
   alignSession,
   applyRigid,
@@ -61,8 +68,11 @@ export {
   wrapDegrees,
 } from './lib/tracking-guard';
 export type {
+  AlignSessionByCompass,
+  AlignSessionByRotation,
   AlignSessionInput,
   CompassSample,
+  GyroSample,
   PathPoint,
   PoseSample,
   RigidTransform,
@@ -72,5 +82,6 @@ export type {
   TrackingGuardOptions,
   TrackingState,
   TrackingStateKind,
+  TrackingStopCause,
   TrackingStopReason,
 } from './lib/tracking-guard';

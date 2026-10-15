@@ -172,3 +172,96 @@ the 30 and 45 degree limits if it disagrees with them.
 - The log's new event: backend `0197`.
 - Positioning by Wi-Fi access points. A browser has no API for it.
 - Relocalizing against a saved camera map.
+
+## What the build decided
+
+### The owner's decisions (2026-10-15)
+
+The build stopped at an action boundary and asked. The owner answered three questions.
+
+1. **The turn limit is 60 degrees, not 30** (`TURN_LIMIT_DEGREES`). The premise of
+   section 1 does not hold on the walk of 2026-09-29: the `game` stream misses part of
+   every turn, it does not only drift slowly. At 909 to 916 s the phone turns about 185
+   degrees, and camera minus gyro heading steps by about 38 degrees and stays there,
+   while compass minus camera moves by about 5. Over the whole 18 minute walk at full
+   rate, leaving out 918 to 936 s and 1011 to 1027 s (the flip and the jump), the rule's
+   number (`now` minus `before`) was:
+
+   | p50 | p95  | p99  | max  |
+   | --- | ---- | ---- | ---- |
+   | 4.7 | 24.3 | 35.4 | 45.6 |
+
+   | Limit | Times crossed while walking                                                |
+   | ----- | -------------------------------------------------------------------------- |
+   | 30    | 9 (183.6, 287.8, 323.7, 709.1, 747.4, 916.3, 998.3, 1080.7 s and one more) |
+   | 45    | 1                                                                          |
+   | 60    | 0                                                                          |
+   | 90    | 0                                                                          |
+
+   The flip measured 148.2 degrees at 924.1 s and the frame jumping back 75.1 degrees
+   at 1014.4 s. With 30, the cut fixture already stops at 915.6 s, before the loss.
+   So a walk goes on while the camera and the gyro disagree by less than 60 degrees.
+
+2. **The baseline exclusion of section 2 keeps 30 degrees, as its own constant**
+   (`COMPASS_TURN_LIMIT_DEGREES`). Compass minus gyro heading crossed 30 degrees 18
+   times while walking (51.0 at most), which only leaves those samples out of the
+   baseline.
+3. **Target 8 keeps its 2 s.** A 2 s wait after a loss answers at 924.04 s at full rate
+   and 924.10 s in the 10 Hz fixture, after poses came back at 922.0023 s. The wait is
+   therefore `TURN_WAIT_AFTER_LOSS_MS` = 1.8 s, and the rest of section 1 stays: the
+   `now` window is still 2 s and holds only poses from after the return. The rule
+   answers at 923.84 s at full rate (measured, the walk is not committed) and at
+   923.90 s in the fixture (asserted at 2.0 s or less).
+
+### Choices of the build
+
+4. **The compass is judged only while tracking is `good`.** During `lost` and
+   `suspect` the camera frame is itself in doubt, so no `compass-disturbed` or
+   `compass-settled` is emitted then, and `compassDisturbed` keeps its last value. This
+   is what keeps the fixture free of notices while the walk waits after the turn stop.
+5. **A confirm clears the turn rule's samples from before it.** The person vouched for
+   the frame they stand in, so the rule measures from it and does not report the same
+   turn again. A confirmed flipped frame therefore makes the compass read as bent
+   (`compass-disturbed`) while the gyro is heard. Without a gyro, plan 0003 holds: the
+   heading rule fires again at the next pose.
+6. **The turn rule fires again while `suspect`**, as the other rules do (plan 0003
+   README item 5). In the fixture it does so at 1014.3 s, when the jump turns the frame
+   back. The stop already waits, so there is one stop.
+7. **The rule also waits 1.8 s of poses at the start** of a guard, and it answers
+   nothing while `before` is empty.
+8. **The gyro silent rule.** While the gyro is not heard, a compass that already
+   disagrees stops the walk at the first pose, also when a notice was emitted for it
+   while the gyro was heard. A stream that falls silent in a bent spot thus stops.
+9. **`stopped` carries `cause` and one number.** `degrees` for `turned` and `heading`
+   (the `turn` or `drift` of the suspect), `metres` for `jump`, and no number for
+   `lost`: its limit is the fixed 3 s, and backend `0197` stores only degrees and metres.
+   The suspect for `turned` carries the angle as `turn`, beside `drift` and `metres`.
+10. **The events' numbers** are named `drift` on `compass-disturbed` and
+    `compass-settled`, as on the heading suspect. Velista `0136` maps them to the log's
+    `degrees`.
+11. **`GyroSample` is the compass sample's type**, and the gyro heading is
+    `compassHeading`, which is `forwardBearing` in degrees.
+12. **`gyroOffset`** is absent while no tracked pose came with the gyro heard in the
+    last 2 s. A `gyroOffset` read from a guard fed aligned poses already holds that
+    session's rotation, which the doc comment of `AlignSessionByRotation` says.
+13. **The synthetic fixture** is `bent-compass.synthetic.tracking.json`, written by the
+    new `synthesize-bent-compass` target (`tools/synthesize-bent-compass.ts`), with
+    `synthetic: true` in the file. The camera faces map +y upright; the compass and the
+    gyro read a phone held flat, as the guard's specs do, because the guard only
+    compares headings. The gyro drifts 0.33 degrees per second. The baseline (300) is
+    in the file, because 30 s cannot learn one.
+14. **`cut-tracking-fixture`** now keeps the `game` stream. The recut added only the
+    `game` rows: every pose, compass and event row is unchanged.
+
+### Where the facts moved since the plan
+
+Nothing moved. `src/lib/tracking-guard.ts`, its spec and
+`libs/velista/platform/src/lib/sensors/orientation-stream.ts` are where the plan names
+them. Backend `0197` is built (PR #698) and its `guard` event fits the causes here;
+velista `0136` is not built.
+
+### Not done
+
+The real freezer aisle recording of section 5: the owner has not supplied it. When it
+arrives it replaces the synthetic fixture, and its numbers may move the 45, 60 and 30
+degree limits.
