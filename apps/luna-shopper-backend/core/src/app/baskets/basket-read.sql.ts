@@ -217,6 +217,64 @@ export const COVERED_LINES_SQL = coveredLinesSql('ALL');
 /** The lines a write named, of those the basket shows. `$6` is their ids. */
 export const COVERED_LINES_BY_ID_SQL = coveredLinesSql('LINES');
 
+/**
+ * The lines a **finished** trip asked for, as it asked them (plan 0209,
+ * section 1.1). `$1` is the basket ids.
+ *
+ * The same row as {@link COVERED_LINES_SQL}, read from `basket_trip_rows`, which
+ * the finish wrote, and not from the lists as they stand now. So a finished
+ * basket's numbers stop when it finishes:
+ *
+ * - **`quantity` is what is still left of `asked`** after this basket's
+ *   purchases, never below zero. The read adds the purchases back, so a row
+ *   asks exactly what the trip row says. A line the household raised or
+ *   lowered afterwards does not move it.
+ * - **A list the owner lost is still read.** The trip happened, and the trips
+ *   read of `lists/trips/basket-asked.sql.ts` answers its frozen rows with no
+ *   access check either. The redaction of the reader is applied afterwards, as
+ *   on an open basket.
+ * - **A line deleted after the finish is still read.** Its row stays in
+ *   `list_lines` (plan 0132), so its name is still there to draw.
+ *
+ * The name, the products and the favourite are today's: only the numbers are
+ * frozen (plan 0209, section 1.1, "what stays live").
+ *
+ * The purchases are this basket's standing buys, the definition every reader
+ * of a trip uses. Ordered by basket, then by `("createdAt", id)` as the covered
+ * lines are, so the first line of a group is its anchor on both reads.
+ */
+export const FROZEN_LINES_SQL = `
+  SELECT
+    r."basketId" AS "basketId",
+    ll.id AS "id",
+    r."listId" AS "listId",
+    ll.content AS "content",
+    GREATEST(r."asked" - b."bought", 0)::int AS "quantity",
+    ll.version AS "version",
+    ll."itemSetHash" AS "itemSetHash",
+    ll."favoriteItemId" AS "favoriteItemId",
+    ll."approvalStatus" AS "approvalStatus",
+    ll."createdAt" AS "createdAt"
+  FROM "basket_trip_rows" r
+  JOIN "list_lines" ll ON ll.id = r."lineId"
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(
+             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
+           )::int AS "bought"
+    FROM "line_settlements" s
+    WHERE s."basketId" = r."basketId"
+      AND s."lineId" = r."lineId"
+      AND s."revertedAt" IS NULL
+  ) b ON TRUE
+  WHERE r."basketId" = ANY($1::uuid[])
+  ORDER BY r."basketId", ll."createdAt", ll.id
+`;
+
+/** One row of {@link FROZEN_LINES_SQL}: a covered line, and its basket. */
+export interface FrozenLineRow extends CoveredLineRow {
+  basketId: string;
+}
+
 /** One row of {@link COVERED_LINES_SQL}: one covered list line. */
 export interface CoveredLineRow {
   id: string;
@@ -293,6 +351,40 @@ export const BASKET_SETTLEMENTS_SQL = `
     AND ($3::timestamptz IS NULL OR s."settledAt" >= $3::timestamptz)
   ORDER BY s."lineId", s."settledAt", s.id
 `;
+
+/**
+ * The standing purchases of several finished baskets, for their history counts
+ * (plan 0209, section 1.2). `$1` is the basket ids, `$2` the skip window in
+ * milliseconds.
+ *
+ * {@link BASKET_SETTLEMENTS_SQL} for a page of baskets at once, with the basket
+ * beside each row. A finished basket is a `GENERATED` one, so every standing
+ * purchase it made is in scope and there is no lower bound. The lines are not
+ * narrowed: a purchase of a line with no trip row joins no entry and counts
+ * nowhere, as on the screen.
+ */
+export const BASKETS_SETTLEMENTS_SQL = `
+  SELECT
+    s."basketId" AS "basketId",
+    s.id AS "id",
+    s."lineId" AS "lineId",
+    s."outcome"::text AS "outcome",
+    s.quantity AS "quantity",
+    s."settledAt" AS "settledAt",
+    s."settledByParticipantId" AS "settledByParticipantId",
+    s."itemId" AS "itemId",
+    (s."settledAt" > now() - ($2::double precision * interval '1 millisecond'))
+      AS "fresh"
+  FROM "line_settlements" s
+  WHERE s."basketId" = ANY($1::uuid[])
+    AND s."revertedAt" IS NULL
+  ORDER BY s."basketId", s."lineId", s."settledAt", s.id
+`;
+
+/** One row of {@link BASKETS_SETTLEMENTS_SQL}. */
+export interface BasketsSettlementRow extends BasketSettlementRow {
+  basketId: string;
+}
 
 /** One row of {@link BASKET_SETTLEMENTS_SQL}: one standing purchase in scope. */
 export interface BasketSettlementRow {

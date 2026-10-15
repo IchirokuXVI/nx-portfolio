@@ -18,6 +18,59 @@
 > `libs/luna-shopper/contracts/src/schemas/events/realtime.schemas.ts` and
 > `contracts/src/schemas/asyncapi.ts`.
 
+## What the build decided
+
+The build of 2026-10-15 settled the points below. Each one is a choice of the builder that the
+owner can overturn. Where this section and a later section disagree, this section is right. The
+base was `dev` at `f7c49941`.
+
+**One point waits for the owner (point 1).**
+
+1. **A line deleted after the finish is drawn, and the trips read does not draw it.** Section
+   1.1 says the deleted line is drawn and asks to match the trips read, and section 7 tests it
+   drawn. The trips read (`lists/trips/trips.sql.ts`, `basketRowsCte`) joins `list_lines` with
+   `"deletedAt" IS NULL`, so a finished trip drops a line deleted after it (plan `0132`). The
+   two cannot be matched. The build draws it, which is what the history count of a finished
+   basket already did (`FINISHED_BASKET_COUNTS_SQL` read no `list_lines`) and what the admin
+   detail still does (`FINISHED_BASKET_ROWS_SQL`). To match the trips read instead is one
+   predicate in `FROZEN_LINES_SQL`. A list the owner lost is drawn on both reads.
+2. **The frozen read is one statement for any number of baskets.** `FROZEN_LINES_SQL` takes
+   basket ids, so the screen asks it for one basket and the history for a page.
+3. **The history count is computed in TypeScript and not in SQL.** Section 1.2 says to read the
+   rule of a row from `groupEntries` and not to write a second one, and SQL cannot call it.
+   `FINISHED_BASKET_COUNTS_SQL` is removed. `BasketReadService.finishedProgressOf` reads the
+   frozen lines, their products and the purchases for a whole page in three queries
+   (`BASKETS_SETTLEMENTS_SQL` is the purchases of several baskets), groups them with no picks
+   and counts with `progressOf`. The admin list and detail take the same count, because they
+   ask `BasketService.countsFor`.
+4. **The count does not apply the cap of 1,000 rows.** The screen cuts after the walk order, and
+   the history reads no walk order. The two differ only above 1,000 rows.
+5. **A finished basket reads no change marks**, so its `unseenChangeCount` is 0 and its
+   `newestUnseenChangeId` is null. Before this plan it counted the changes of its lists after the
+   finish.
+6. **The full read with picks can group one line differently from the count**, the case plan
+   `0201` point 1 already names. The count takes no picks.
+7. **The edit authorizes again under the lock**, as `applyRename` does, because the approval of
+   the line can move between the two reads.
+8. **A rename checks `from` too.** It takes the same lock, so a rename that also sends a
+   quantity is refused the same way.
+9. **`from` is checked whenever it is present**, also on an edit that sends no `quantity`.
+10. **`PATCH /v1/lines/:id` documents `409 stale_quantity`.** The error code exists already.
+11. **One payload schema was already there.** `event/BasketLinesChangedEvent` was written by
+    plan `0204`. The build added `event/BasketUpdatedEvent` and two envelopes,
+    `event/DomainEvent/basket.linesChanged` and `event/DomainEvent/basket.updated`, whose
+    `payload` is a `ref` to those schemas. The envelope schema of every other event keeps
+    `payload` as anything.
+12. **`list-names.ts` has no caller.** `namesOfLists` is called by nothing on this base. The
+    build corrected its comment and kept it.
+13. **`BASKET_CLAIMED_LINES_SQL` is now `BASKET_ZONE_LINES_SQL`.**
+14. **The velista copies of `seesZoneData`** (`libs/velista/...`, five places, comments and one
+    spec fixture) are not changed, because the action boundaries leave velista alone.
+15. **Plan `0087` is built in part.** The header names what `0182` built and what it did not:
+    D7, D8, D10, D11, the views of section 9 and the relation of section 3.2.
+16. **Prettier reordered the imports** of some files whose comments this plan corrects. Those
+    files were not formatted on `dev`.
+
 ## Brief for the agent
 
 ### Objective

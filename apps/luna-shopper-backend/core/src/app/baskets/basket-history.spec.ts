@@ -8,7 +8,6 @@ import type { Basket } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
 import { BasketService } from './basket.service';
-import { FINISHED_BASKET_COUNTS_SQL } from './basket.sql';
 import { fakeLineClaims } from './line-claims.fake';
 
 /**
@@ -22,36 +21,25 @@ import { fakeLineClaims } from './line-claims.fake';
  * two, because `NOT_AVAILABLE` closes a line's outstanding amount exactly as a
  * purchase does.
  *
- * The counts query is faked by matching on the SQL constant itself rather than on
- * a string, as the run spec beside this one does: a rewritten query shows up here
- * as an unmocked read rather than as a test that keeps passing about nothing.
- *
  * Since plan 0136 the numbers come from one of two places, so every basket here
  * says which. A basket that is over answers from `basket_trip_rows` through
- * {@link FINISHED_BASKET_COUNTS_SQL}, for a whole page at once; an `OPEN` one has
- * nothing written down and is composed by `BasketReadService`, one read each.
- * The default status is `FINISHED`, because that is the half the counts query is
- * about.
+ * `BasketReadService.finishedProgressOf`, for a whole page at once; an `OPEN`
+ * one has nothing written down and is composed by `BasketReadService`, one read
+ * each. Both count products since plan 0209, section 1.2, so both are faked
+ * here as a progress. The default status is `FINISHED`.
  */
 
 const OWNER = 'u-owner';
 
-interface CountsSeed {
-  basketId: string;
-  lineCount: number;
-  settledLineCount: number;
-  boughtLineCount: number;
-  notAvailableLineCount: number;
-}
-
 function build(options: {
   baskets?: { id: string; status?: BasketStatus }[];
-  counts?: CountsSeed[];
+  /** What `BasketReadService.finishedProgressOf` answers, per finished basket. */
+  finished?: Record<string, BasketProgress>;
   /** What `BasketReadService.progressOf` answers, per open basket. */
   progress?: Record<string, BasketProgress>;
 }) {
   const baskets = options.baskets ?? [{ id: 'gl-1' }];
-  const counts = options.counts ?? [];
+  const finished = options.finished ?? {};
   const progress = options.progress ?? {};
 
   const rows = baskets.map((basket, index) => ({
@@ -76,15 +64,21 @@ function build(options: {
     createQueryBuilder: () => qb,
     query: async (sql: string) => {
       queries.push(sql);
-      if (sql === FINISHED_BASKET_COUNTS_SQL) {
-        return counts;
-      }
       throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
     },
   } as never;
 
   const read: string[] = [];
+  const finishedReads: string[][] = [];
   const basketRead = {
+    finishedProgressOf: async (page: readonly Basket[]) => {
+      finishedReads.push(page.map((basket) => basket.id));
+      return new Map(
+        page
+          .filter((basket) => finished[basket.id])
+          .map((basket) => [basket.id, finished[basket.id]])
+      );
+    },
     progressOf: async (basket: Basket) => {
       read.push(basket.id);
       return (
@@ -107,22 +101,14 @@ function build(options: {
     basketRead
   );
 
-  return { service, queries, read };
+  return { service, queries, read, finishedReads };
 }
 
 describe('what a run finished, on a history row (plan 0053, section 2)', () => {
   it('distinguishes what was bought from what the shop did not have', async () => {
     const { service } = build({
       baskets: [{ id: 'gl-1' }],
-      counts: [
-        {
-          basketId: 'gl-1',
-          lineCount: 4,
-          settledLineCount: 4,
-          boughtLineCount: 3,
-          notAvailableLineCount: 1,
-        },
-      ],
+      finished: { 'gl-1': { total: 4, done: 3, unavailable: 1, pending: 0 } },
     });
 
     const page = await service.listMine({ userId: OWNER });
@@ -136,15 +122,7 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
 
   it('leaves `settledLineCount` meaning every finished line, whatever finished it', async () => {
     const { service } = build({
-      counts: [
-        {
-          basketId: 'gl-1',
-          lineCount: 4,
-          settledLineCount: 4,
-          boughtLineCount: 3,
-          notAvailableLineCount: 1,
-        },
-      ],
+      finished: { 'gl-1': { total: 4, done: 3, unavailable: 1, pending: 0 } },
     });
 
     const [row] = (await service.listMine({ userId: OWNER })).items;
@@ -159,15 +137,7 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
 
   it('counts an unfinished line in neither outcome', async () => {
     const { service } = build({
-      counts: [
-        {
-          basketId: 'gl-1',
-          lineCount: 3,
-          settledLineCount: 1,
-          boughtLineCount: 1,
-          notAvailableLineCount: 0,
-        },
-      ],
+      finished: { 'gl-1': { total: 3, done: 1, unavailable: 0, pending: 2 } },
     });
 
     const [row] = (await service.listMine({ userId: OWNER })).items;
@@ -183,17 +153,8 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
   it('answers zeros for a basket with no lines rather than leaving it out', async () => {
     const { service } = build({
       baskets: [{ id: 'gl-1' }, { id: 'gl-empty' }],
-      // `GROUP BY` produces no row for an empty group, which is what the default
-      // in the service is for.
-      counts: [
-        {
-          basketId: 'gl-1',
-          lineCount: 1,
-          settledLineCount: 0,
-          boughtLineCount: 0,
-          notAvailableLineCount: 0,
-        },
-      ],
+      // A basket the read does not answer gets the default in the service.
+      finished: { 'gl-1': { total: 1, done: 0, unavailable: 0, pending: 1 } },
     });
 
     const page = await service.listMine({ userId: OWNER });
@@ -208,17 +169,17 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
     });
   });
 
-  it('reads the counts of a whole page of finished baskets in one query', async () => {
-    const { service, queries, read } = build({
+  it('reads the counts of a whole page of finished baskets in one call', async () => {
+    const { service, queries, read, finishedReads } = build({
       baskets: [{ id: 'gl-1' }, { id: 'gl-2' }, { id: 'gl-3' }],
-      counts: [],
     });
 
     await service.listMine({ userId: OWNER });
 
     // A page of trips that read every line of every trip to render a date and a
     // number is the read that would eventually need fixing.
-    expect(queries).toEqual([FINISHED_BASKET_COUNTS_SQL]);
+    expect(finishedReads).toEqual([['gl-1', 'gl-2', 'gl-3']]);
+    expect(queries).toEqual([]);
     expect(read).toEqual([]);
   });
 
@@ -247,20 +208,14 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
   });
 
   it('splits one page between the two reads', async () => {
-    const { service, queries, read } = build({
+    const { service, finishedReads, read } = build({
       baskets: [
         { id: 'gl-open', status: BasketStatus.OPEN },
         { id: 'gl-done' },
       ],
-      counts: [
-        {
-          basketId: 'gl-done',
-          lineCount: 2,
-          settledLineCount: 2,
-          boughtLineCount: 2,
-          notAvailableLineCount: 0,
-        },
-      ],
+      finished: {
+        'gl-done': { total: 2, done: 2, unavailable: 0, pending: 0 },
+      },
       progress: {
         'gl-open': { done: 0, unavailable: 0, total: 7, pending: 7 },
       },
@@ -268,13 +223,13 @@ describe('what a run finished, on a history row (plan 0053, section 2)', () => {
 
     const page = await service.listMine({ userId: OWNER });
 
-    expect(queries).toEqual([FINISHED_BASKET_COUNTS_SQL]);
+    expect(finishedReads).toEqual([['gl-done']]);
     expect(read).toEqual(['gl-open']);
     expect(page.items.map((item) => item.lineCount)).toEqual([7, 2]);
   });
 
   it('reports nobody present, since core cannot see the presence store', async () => {
-    const { service } = build({ counts: [] });
+    const { service } = build({});
 
     // The count is real and it is filled in at the gateway, which is the one
     // service that answers this read and can reach Redis. Core answering a

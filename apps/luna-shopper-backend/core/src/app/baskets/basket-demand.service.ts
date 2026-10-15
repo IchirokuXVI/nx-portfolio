@@ -45,11 +45,12 @@ import {
  * of the write here would be a second place for plan 0037's approval and plan
  * 0076's reversion to be implemented, and the two would drift.
  *
- * **`addQuantity` and not `update`.** `update` with a quantity alone saves the
- * row it read outside any lock, so a quantity edit that raced a settle would
- * overwrite the decrement. `addQuantity` reads under `pessimistic_write`, and
- * plan 0136 adds `expect` to it so the `from` bargain is checked against that
- * same locked read.
+ * **`addQuantity` with `expect`.** A shopper moving a household's demand acts
+ * on a number they were shown, so the write is a delta from `from` and refuses
+ * when the line no longer holds `from`. `addQuantity` reads under
+ * `pessimistic_write`, and plan 0136 adds `expect` to it so the `from` bargain
+ * is checked against that same locked read: a settle that landed in between
+ * refuses the gesture rather than moving the line to a number nobody meant.
  *
  * ## It names its line, and the line can be at zero (plan 0201)
  *

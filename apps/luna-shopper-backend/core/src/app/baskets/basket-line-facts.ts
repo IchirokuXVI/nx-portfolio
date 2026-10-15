@@ -1,11 +1,14 @@
 import {
   BasketKind,
+  BasketStatus,
+  isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
   type SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import {
   BASKET_SESSION_LOOKBACK_MS,
   BASKET_SESSION_SQL,
+  FROZEN_LINES_SQL,
   STANDING_SKIPS_SQL,
   type BasketElsewhereRow,
   type BasketLineSkipRow,
@@ -13,6 +16,7 @@ import {
   type BasketSettlementRow,
   type CoveredLineItemRow,
   type CoveredLineRow,
+  type FrozenLineRow,
 } from './basket-read.sql';
 import {
   tripItemIdOf,
@@ -67,6 +71,46 @@ export async function basketScopeOf(
   return session
     ? { startedAt: session.startedAt, enabled: true }
     : { startedAt: null, enabled: false };
+}
+
+/**
+ * Whether a basket's lines are read from what it asked when it finished (plan
+ * 0209, section 1.1).
+ *
+ * A `GENERATED` basket that is not open: its finish wrote `basket_trip_rows`
+ * in the transaction of the status change, and those rows exist exactly while
+ * it is not open (plan 0135). A `LIVE` basket never finishes and is never
+ * frozen.
+ */
+export function isFrozenBasket(basket: {
+  kind: BasketKind;
+  status: BasketStatus;
+}): boolean {
+  return basket.kind === BasketKind.GENERATED && !isOpenBasket(basket.status);
+}
+
+/**
+ * The lines finished baskets asked for, by basket, each in the order of
+ * `COVERED_LINES_SQL` (plan 0209, sections 1.1 and 1.2). One query for any
+ * number of baskets, so a page of history costs one read and not one each.
+ */
+export async function frozenLinesOf(
+  runner: BasketQueryRunner,
+  basketIds: readonly string[]
+): Promise<Map<string, CoveredLineRow[]>> {
+  const byBasket = new Map<string, CoveredLineRow[]>(
+    basketIds.map((id) => [id, []])
+  );
+  if (basketIds.length === 0) {
+    return byBasket;
+  }
+  const rows = await runner.query<FrozenLineRow[]>(FROZEN_LINES_SQL, [
+    [...basketIds],
+  ]);
+  for (const { basketId, ...line } of rows) {
+    byBasket.get(basketId)?.push(line);
+  }
+  return byBasket;
 }
 
 /**
