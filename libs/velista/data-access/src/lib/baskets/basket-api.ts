@@ -442,6 +442,10 @@ export class BasketApi implements BasketServiceI {
     };
     if (body.itemIds !== undefined && body.itemIds.length > 0) {
       request['itemIds'] = [...body.itemIds];
+      // Only with a product, and only ever `false` (backend `0207`).
+      if (body.named === false) {
+        request['named'] = false;
+      }
     }
 
     const answer = await firstValueFrom(

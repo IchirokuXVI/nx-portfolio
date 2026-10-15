@@ -72,6 +72,7 @@ function line(overrides: Partial<Line> = {}): Line {
     boughtCount: 12,
     lastSettlementOutcome: null,
     claimed: false,
+    named: true,
     claimedByUserId: null,
     createdByUserId: ME,
     approvedByUserId: ME,
@@ -277,6 +278,43 @@ describe('LinePage', () => {
     ).toBe('Shampoo');
     expect(textOf(fixture)).toContain('list.page.where');
     expect(textOf(fixture)).toContain('list.page.addedBy');
+  });
+
+  describe('a line with no name of its own (velista 0144, section 5)', () => {
+    const addName = (fixture: ComponentFixture<LinePage>) =>
+      fixture.nativeElement.querySelector('.add-name') as HTMLButtonElement | null;
+
+    it('is titled with its product and offers Add a name, which opens the name sheet', async () => {
+      const { fixture, router } = await render({
+        lines: [line({ named: false })],
+      });
+
+      expect(
+        fixture.nativeElement.querySelector('h1')?.textContent?.trim()
+      ).toBe('Shampoo for normal hair');
+      expect(addName(fixture)?.textContent).toContain('list.page.addName');
+
+      addName(fixture)?.click();
+      await drain(fixture);
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        LINE_URL + '/sheet/name'
+      );
+    });
+
+    it('draws no Add a name for a named line', async () => {
+      const { fixture } = await render();
+
+      expect(addName(fixture)).toBeNull();
+    });
+
+    it('draws no Add a name for a reader who may not rename it', async () => {
+      const { fixture } = await render({
+        lines: [line({ named: false })],
+        permissions: READER,
+      });
+
+      expect(addName(fixture)).toBeNull();
+    });
   });
 
   describe('the number', () => {

@@ -10,45 +10,20 @@ import {
   RECORD_CONTEXT,
   ResourceChanges,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ChainSections } from '../chain-sections';
 import { LocationSections } from '../location-sections';
 
 /**
- * The Sections tab of a chain (admin plan 0042, target 6): the chain's
- * sections panel, given the chain the page is about.
+ * The Sections tab of a shop (admin plan 0063): the one place a section of
+ * the shop is added, opened, ordered and deleted.
  *
- * A component of its own because a route draws a component, and the panel
- * takes its chain as an input. It is a part of the chain's record (admin
- * plan 0056, section 3.1), so it learns the chain from `RECORD_CONTEXT` and
- * never from the address. The page builds it again for another chain.
- */
-@Component({
-  selector: 'lib-chain-sections-tab',
-  imports: [ChainSections],
-  template: ` <lib-chain-sections [supermarketId]="chainId" /> `,
-  styles: `
-    :host {
-      display: block;
-    }
-  `,
-  changeDetection: ChangeDetectionStrategy.OnPush,
-})
-export class ChainSectionsTab {
-  readonly chainId = inject(RECORD_CONTEXT).id;
-}
-
-/**
- * The Sections tab of a shop (admin plan 0042, target 5): the order the shop
- * walks its sections in.
+ * The panel needs the shop's chain, which is part of the address of a
+ * section, and whether a map writes the order. Both are on the shop the page
+ * already read. Until that read answers there is nothing to draw.
  *
- * The panel needs the shop's chain and whether a map writes the list, and both
- * are on the shop the page already read. Until that read answers there is
- * nothing to order.
- *
- * **The count beside the tab is the shop's own list of sections**, so a save
- * of the order reads the shop again. The page does not: it reads again for
- * its own resource and for the lists it holds, and the order of a shop is
- * neither.
+ * **The count beside the tab is the shop's own list of section names**, so a
+ * write of a section or of the order reads the shop again. The page does not:
+ * it reads again for its own resource and for the lists it holds, and the
+ * sections of a shop are neither.
  */
 @Component({
   selector: 'lib-shop-sections-tab',
@@ -82,9 +57,11 @@ export class ShopSectionsTab {
 
   constructor() {
     const changes = inject(ResourceChanges);
-    let seen = changes.version('location-sections');
+    const written = () =>
+      changes.version('location-sections') + changes.version('sections');
+    let seen = written();
     effect(() => {
-      const version = changes.version('location-sections');
+      const version = written();
       untracked(() => {
         if (version !== seen) {
           seen = version;

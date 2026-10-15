@@ -40,6 +40,12 @@ export interface LineComposerSubmit {
   readonly quantity: number;
   readonly itemIds?: readonly string[];
   /**
+   * `false` for a card that was chosen: `content` is then the name of the product
+   * or the group, and nobody typed it (velista `0144`, section 3). Absent for typed
+   * text, which names the line.
+   */
+  readonly named?: false;
+  /**
    * The button that sent it, the plus or a card's add button. Only a composer with
    * `holdOnSend` on names it, for the container to hold a picker against.
    */
@@ -407,7 +413,9 @@ export class LineComposer {
     const itemIds =
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
 
-    this._send(content, itemIds, anchor);
+    // The card's name is still sent, because the server needs a name and the
+    // catalog reads it, but the line is not named after it.
+    this._send(content, itemIds, anchor, false);
   }
 
   /** The one button, pressed. */
@@ -672,13 +680,16 @@ export class LineComposer {
   private _send(
     content: string,
     itemIds: readonly string[] | undefined,
-    anchor: HTMLElement | undefined
+    anchor: HTMLElement | undefined,
+    named?: false
   ): void {
     const hold = this.holdOnSend();
+    const products = itemIds !== undefined && itemIds.length > 0;
     this.submitted.emit({
       content,
       quantity: this.quantity(),
-      ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
+      ...(products ? { itemIds } : {}),
+      ...(products && named === false ? { named } : {}),
       ...(hold && anchor !== undefined ? { anchor } : {}),
     });
 

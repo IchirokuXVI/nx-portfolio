@@ -669,3 +669,52 @@ describe('LineMemory refuses what the server would refuse', () => {
     expect(await codeOf(lines.listLines('list-nowhere'))).toBe('not_found');
   });
 });
+
+describe('LineMemory keeps the two rules of backend 0207 (velista 0144)', () => {
+  it('names a line added with no flag, and keeps false only with a product', async () => {
+    const { lines } = await build();
+
+    expect((await lines.addLine(OWNED_LIST, 'Paella rice', 1)).named).toBe(
+      true
+    );
+    expect(
+      (await lines.addLine(OWNED_LIST, 'Arroz', 1, ['item-rice'], false)).named
+    ).toBe(false);
+    // Rule 1: a line with no product is named, whatever the add says.
+    expect(
+      (await lines.addLine(OWNED_LIST, 'Saffron', 1, [], false)).named
+    ).toBe(true);
+  });
+
+  it('names a line on a write of its words, and takes the name away on request', async () => {
+    const { lines } = await build();
+    const made = await lines.addLine(
+      OWNED_LIST,
+      'Arroz',
+      1,
+      ['item-rice'],
+      false
+    );
+
+    // Rule 2: words with no flag name the line.
+    const renamed = await lines.updateLine(made.id, {
+      content: 'Rice for paella',
+    });
+    expect(renamed.line.named).toBe(true);
+
+    const cleared = await lines.updateLine(made.id, {
+      named: false,
+      content: 'Arroz',
+    });
+    expect(cleared.line).toMatchObject({ named: false, content: 'Arroz' });
+
+    // The flag alone leaves the words as they are.
+    await lines.updateLine(made.id, { content: 'Rice' });
+    const flagOnly = await lines.updateLine(made.id, { named: false });
+    expect(flagOnly.line).toMatchObject({ named: false, content: 'Rice' });
+
+    // Rule 1: emptying the products names the line.
+    const freed = await lines.updateLine(made.id, { itemIds: [] });
+    expect(freed.line.named).toBe(true);
+  });
+});

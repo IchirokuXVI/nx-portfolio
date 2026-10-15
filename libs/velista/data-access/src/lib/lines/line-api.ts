@@ -81,12 +81,19 @@ export class LineApi implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<Line> {
     // Only the line is read here, because the store upserts by id, so a merge
     // lands on the screen as the existing row moving rather than a new row
     // appearing.
-    const result = await this.addLineResult(listId, content, quantity, itemIds);
+    const result = await this.addLineResult(
+      listId,
+      content,
+      quantity,
+      itemIds,
+      named
+    );
     return result.line;
   }
 
@@ -94,7 +101,8 @@ export class LineApi implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<LineAddResult> {
     // Built as the request type rather than spread from anything, because the
     // gateway's pipe runs with `forbidNonWhitelisted` and an unexpected property is a
@@ -108,6 +116,11 @@ export class LineApi implements LineServiceI {
       content,
       ...(quantity === undefined ? {} : { quantity }),
       ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
+      // Only ever `false` on the wire, and only with a product: typed text says
+      // nothing, and the server's default names it (backend `0207`).
+      ...(named === false && itemIds !== undefined && itemIds.length > 0
+        ? { named }
+        : {}),
     };
 
     const body = await firstValueFrom(
@@ -129,6 +142,7 @@ export class LineApi implements LineServiceI {
     lineId: string,
     changes: {
       content?: string;
+      named?: false;
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
@@ -140,6 +154,11 @@ export class LineApi implements LineServiceI {
     const request: UpdateLineRequest = {};
     if (changes.content !== undefined) {
       (request as { content?: string }).content = changes.content;
+    }
+    // Only ever `false`: a write of `content` with no flag names the line, so a
+    // name is given by sending it and taken away by saying so (backend `0207`).
+    if (changes.named === false) {
+      (request as { named?: false }).named = false;
     }
     if (changes.quantity !== undefined) {
       (request as { quantity?: number }).quantity = changes.quantity;

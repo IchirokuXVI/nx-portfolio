@@ -33,6 +33,7 @@ function line(overrides: Partial<Line> = {}): Line {
     boughtCount: 0,
     lastSettlementOutcome: null,
     claimed: false,
+    named: true,
     claimedByUserId: null,
     createdByUserId: ME,
     approvedByUserId: ME,

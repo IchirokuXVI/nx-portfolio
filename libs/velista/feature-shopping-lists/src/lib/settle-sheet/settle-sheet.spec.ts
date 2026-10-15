@@ -2038,6 +2038,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         content: 'Whole milk',
         quantity: 1,
         itemIds: [MILK.id],
+        named: false,
       });
       expect(disclosure(fixture)).toBeNull();
     });

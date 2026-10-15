@@ -259,6 +259,30 @@ describe('LineComposer, one slot and the empty field decides', () => {
 
       expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
     });
+
+    it('sends a chosen card as not named, with the product name as its words (velista 0144)', async () => {
+      const { fixture } = await render();
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+
+      fixture.componentInstance.choose(OAT, document.createElement('button'));
+      fixture.detectChanges();
+      type(fixture, 'oat');
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+
+      expect(added).toEqual([
+        {
+          content: expect.any(String),
+          quantity: 1,
+          itemIds: ['item-oat'],
+          named: false,
+        },
+        // Typed text says nothing, and the server names the line.
+        { content: 'oat', quantity: 1 },
+      ]);
+    });
   });
 
   /**

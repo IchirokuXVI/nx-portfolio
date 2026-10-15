@@ -2,6 +2,7 @@ import {
   ESTIMATE_MIN_PURCHASES,
   ESTIMATE_ROUGH_TO,
   inLocale,
+  lineName,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -96,7 +97,12 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
 
   return {
     lineId: line.id,
-    content: line.content,
+    // The name the line is drawn with (velista `0144`).
+    content: lineName(
+      line,
+      (itemId) => input.itemNameOf(itemId)?.name ?? null,
+      input.locale
+    ).text,
     quantity: line.quantity,
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,

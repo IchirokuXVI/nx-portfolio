@@ -25,6 +25,7 @@ import {
   type ChainLogoView,
 } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { watchLineName } from '../line-page/line-name';
 import { LineProductPrices } from '../line-page/line-product-prices';
 import { lineUrls } from '../line-page/line-urls';
 import { listErrorKey } from '../list-error-copy';
@@ -92,7 +93,9 @@ export class LineSupermarketSheet {
       .find((line) => line.id === this._urls.lineId())
   );
 
-  readonly lineName = computed(() => this._line()?.content ?? '');
+  private readonly _name = watchLineName(() => this._line());
+
+  readonly lineName = computed(() => this._name()?.text ?? '');
 
   readonly listName = computed(
     () =>

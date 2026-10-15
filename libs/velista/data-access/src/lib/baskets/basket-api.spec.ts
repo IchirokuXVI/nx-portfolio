@@ -440,6 +440,27 @@ describe('BasketApi, the writes on a row', () => {
     await done;
   });
 
+  it('sends a card as not named, and only with its products (velista 0144)', async () => {
+    const done = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+      named: false,
+    });
+    const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+
+    expect(req.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+      named: false,
+    });
+    req.flush(ANSWER);
+    await done;
+  });
+
   it('names the lines of the row on a settle and on a revert', async () => {
     const settled = api.settle(BASKET, TARGET, {
       outcome: 'BOUGHT',

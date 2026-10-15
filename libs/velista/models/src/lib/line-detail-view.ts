@@ -377,7 +377,13 @@ export interface LineSupermarketVm {
  */
 export interface LinePageVm {
   readonly lineId: string;
+  /** The name the line is drawn with ({@link lineName}), not always its `content`. */
   readonly content: string;
+  /**
+   * Whether the page offers "Add a name" (velista `0144`, section 5): a line that
+   * is not named, for a reader who may rename it.
+   */
+  readonly canAddName: boolean;
   readonly quantity: number;
   /** "On Weekly shop, in Home", as parts, so the copy can order them. */
   readonly listName: string | null;

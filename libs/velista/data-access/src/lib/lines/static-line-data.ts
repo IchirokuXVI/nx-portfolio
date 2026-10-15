@@ -197,6 +197,8 @@ function line(
     id,
     listId,
     content,
+    // Typed by a person, like every line of the fixture.
+    named: true,
     quantity,
     position,
     // Free text, which is what most lines are and stays first class (section 6).

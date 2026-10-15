@@ -49,6 +49,7 @@ import { linePageStatus, loadLineContext } from '../line-page/line-context';
 import { lineUrls } from '../line-page/line-urls';
 import { selectAbilities } from '../select-list-state';
 import { selectLineProducts } from './select-line-products';
+import { watchLineName } from '../line-page/line-name';
 
 /** Products of one line that share a product group. */
 interface LineProductGroup {
@@ -189,10 +190,12 @@ export class LineProductsPage {
     });
   });
 
+  private readonly _name = watchLineName(() => this._line());
+
   readonly title = computed(() => {
     const locale = this._localeStore.locale();
     this._translator.loaded();
-    const name = this._line()?.content ?? '';
+    const name = this._name()?.text ?? '';
     return name === ''
       ? this._translator.t('list.products.titlePlain', undefined, locale)
       : this._translator.t('list.products.title', undefined, locale, { name });
