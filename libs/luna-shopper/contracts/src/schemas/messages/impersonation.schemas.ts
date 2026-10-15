@@ -5,6 +5,7 @@ import {
 } from '../../lib/messages/impersonation.messages';
 import {
   boolean,
+  integer,
   JsonSchema,
   nonEmptyString,
   object,
@@ -69,19 +70,21 @@ const startRequest = object(
 const sessionTimes = {
   sessionId: nonEmptyString(),
   codeExpiresAt: string({ format: 'date-time' }),
+  // A duration, so a client counts it on its own clock (admin plan 0062).
+  codeTtlMs: integer({ minimum: 1 }),
   expiresAt: string({ format: 'date-time' }),
 };
 
 const startResult = object(
   IMPERSONATION_SCHEMA_IDS.startResult,
   { ...sessionTimes, code: nonEmptyString() },
-  ['sessionId', 'code', 'codeExpiresAt', 'expiresAt']
+  ['sessionId', 'code', 'codeExpiresAt', 'codeTtlMs', 'expiresAt']
 );
 
 const startView = object(
   IMPERSONATION_SCHEMA_IDS.startView,
   { ...sessionTimes, url: nonEmptyString() },
-  ['sessionId', 'url', 'codeExpiresAt', 'expiresAt']
+  ['sessionId', 'url', 'codeExpiresAt', 'codeTtlMs', 'expiresAt']
 );
 
 const exchangeRequest = object(

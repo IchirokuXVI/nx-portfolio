@@ -358,7 +358,7 @@ export class BasketReadService {
    * its first product here. The full read can group that one line differently.
    */
   async progressOf(basket: Basket): Promise<BasketProgress> {
-    return progressOf(await this.openRows(basket));
+    return progressOf(await this.unredactedRows(basket));
   }
 
   /**
@@ -417,8 +417,14 @@ export class BasketReadService {
     return progress;
   }
 
-  /** The rows of an open basket, unredacted, for a caller that is not a reader. */
-  async openRows(basket: Basket): Promise<BasketRowView[]> {
+  /**
+   * The rows of a basket, unredacted, for a caller that is not a reader.
+   *
+   * A finished trip answers its frozen rows, grouped by product as the screen
+   * groups them, so the admin detail draws the rows its count counts (plan
+   * 0209, section 1.2).
+   */
+  async unredactedRows(basket: Basket): Promise<BasketRowView[]> {
     const covered = await this.coverage.listsOf(basket);
     const listIds = covered.map((row) => row.listId);
     const { rows } = await this.rowsOf(

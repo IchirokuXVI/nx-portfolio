@@ -343,6 +343,7 @@
       "save": "Save this order",
       "discard": "Discard",
       "saved": "Saved.",
+      "rereadFailed": "Done. The sections could not be read again, so this list may be out of date.",
       "grip": "{{name}}, place {{place}} of {{count}}. Press the up or down arrow key to move it.",
       "movedTo": "{{name}} is now at place {{place}} of {{count}}.",
       "deleteNamed": "Delete {{name}}",

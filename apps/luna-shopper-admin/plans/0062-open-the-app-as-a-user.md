@@ -79,6 +79,12 @@ disagree, this section is right.
     that draws the actions of a person would have to provide it, so it stays where it is.
     An answer that arrives after another operator signed in is dropped, so it cannot hide
     the action from that operator.
+15. **The lifetime now comes from the answer** (follow up PR [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). The start
+    answer carries `codeTtlMs`, which is `IMPERSONATION_CODE_TTL_MS` of auth passed through
+    by the gateway, and the panel counts the arrival plus that value.
+    `IMPERSONATION_CODE_LIFETIME_MS` is gone. An answer with no usable `codeTtlMs`, from a
+    gateway older than the field, reads as 60 seconds (`FALLBACK_CODE_TTL_MS`). The rest of
+    point 10 holds.
 
 ## Brief for the agent
 
