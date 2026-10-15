@@ -1,3 +1,5 @@
+> **PR:** [#728](https://github.com/IchirokuXVI/nx-portfolio/pull/728)
+
 # 0141: the first buy asks where you are
 
 > Asked for by the owner on 2026-10-11: "When you start buying, you will get a prompt
