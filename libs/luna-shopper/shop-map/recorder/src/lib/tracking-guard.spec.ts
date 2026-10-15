@@ -324,6 +324,38 @@ describe('the tracking guard over the second El Jamón walk', () => {
     );
   });
 
+  // Velista confirms during an automatic resume, as soon as poses come back
+  // and before any stop. Such a confirm must not hide the flip from the turn
+  // rule, which answers at 923.9 s against the readings from before the loss.
+  it.each([922_360, 923_000, 923_700])(
+    'still stops for the turned frame when the automatic resume is confirmed at %d ms',
+    (at) => {
+      let confirmed = false;
+      const guard = replay(
+        createTrackingGuard({ baseline }),
+        EL_JAMON.windows.incident,
+        (t, g) => {
+          if (!confirmed && t >= at) {
+            confirmed = true;
+            expect(g.state()).toMatchObject({
+              kind: 'suspect',
+              cause: 'returned',
+              automaticResume: true,
+            });
+            g.confirm(t);
+          }
+        }
+      );
+      const events = guard.events();
+      expect(events.some((e) => e.kind === 'confirmed')).toBe(true);
+      const stop = first(events, (x) => x.kind === 'stopped');
+      expect(stop).toMatchObject({ reason: 'frame-moved', cause: 'turned' });
+      expect(seconds(stop) - 922.0).toBeLessThanOrEqual(2.0);
+      if (stop.kind !== 'stopped') throw new Error('not stopped');
+      expect(Math.abs(stop.degrees ?? 0)).toBeGreaterThan(140);
+    }
+  );
+
   it.each([true, false])(
     'stays good once confirmed after the frame jumped back onto the walk (gyro %s)',
     (gyro) => {
@@ -721,6 +753,27 @@ describe('the rules, one at a time', () => {
         out.push(...s.withGyro(t, 70, 0, 0, 70, 0));
       }
       expect(out).toEqual([]);
+    });
+
+    it('starts over when the gyro is heard again with another zero', () => {
+      const s = steady();
+      for (let t = 0; t < 20_000; t += 100) expect(s.withGyro(t)).toEqual([]);
+      // The gyro falls silent for 2 s, then comes back 100 degrees away, as
+      // when the browser falls back to another stream with another zero.
+      for (let t = 20_000; t < 22_000; t += 100) expect(s.at(t)).toEqual([]);
+      for (let t = 22_000; t < 40_000; t += 100) {
+        expect(s.withGyro(t, 0, 0, 0, 0, 100)).toEqual([]);
+      }
+      expect(s.guard.state()).toMatchObject({ kind: 'good' });
+      // A frame that turns against the new zero is still caught.
+      const out: TrackingEvent[] = [];
+      for (let t = 40_000; t <= 44_000; t += 100) {
+        out.push(...s.withGyro(t, 70, 0, 0, 0, 100));
+      }
+      expect(out.map((e) => [e.kind, 'cause' in e ? e.cause : ''])).toEqual([
+        ['suspect', 'turned'],
+        ['stopped', 'turned'],
+      ]);
     });
 
     it('stops by the compass rule once the gyro falls silent for 1 s', () => {

@@ -436,6 +436,14 @@ export function createTrackingGuard(
   let trackedFrom: number | undefined;
   /** The turn rule fired, and `now` is still far from `before`. */
   let turnFired = false;
+  /**
+   * The turn rule has answered for the frame tracked since `trackedFrom`. A
+   * confirm before that keeps the readings from before the loss, so the rule
+   * still compares the returned frame with them.
+   */
+  let turnJudged = false;
+  /** The first gyro sample since the guard started or the gyro fell silent. */
+  let gyroFrom: number | undefined;
   let gyroOffset: number | undefined;
   let compassDisturbed = false;
   const log: TrackingEvent[] = [];
@@ -487,6 +495,7 @@ export function createTrackingGuard(
     lostFrom = t;
     lastTracked = undefined;
     trackedFrom = undefined;
+    turnJudged = false;
     emit(out, { t, kind: 'lost', cause: why });
   }
 
@@ -538,7 +547,9 @@ export function createTrackingGuard(
   /**
    * Plan 0005 section 1: camera minus gyro heading over the last 2 s against
    * the 10 s before them. Only tracked poses count, so after a loss `before`
-   * is still the frame from before it, and the rule waits 1.8 s of poses.
+   * is still the frame from before it, and the rule waits 1.8 s of poses. It
+   * waits as long after the gyro is heard again, because a gyro that comes
+   * back can have another zero.
    */
   function turnRule(out: TrackingEvent[], sample: PoseSample): void {
     if (gyro === undefined || !gyroHeard(sample.t)) {
@@ -556,8 +567,11 @@ export function createTrackingGuard(
     gyroOffset = now;
     const answers =
       trackedFrom !== undefined &&
-      sample.t - trackedFrom >= TURN_WAIT_AFTER_LOSS_MS;
+      sample.t - trackedFrom >= TURN_WAIT_AFTER_LOSS_MS &&
+      gyroFrom !== undefined &&
+      sample.t - gyroFrom >= TURN_WAIT_AFTER_LOSS_MS;
     if (!answers || turn === undefined) return;
+    turnJudged = true;
     const turning = Math.abs(turn) > TURN_LIMIT_DEGREES;
     if (turning && !turnFired) {
       frameMoved(out, sample.t, 'turned', { turn });
@@ -680,6 +694,15 @@ export function createTrackingGuard(
       const out: TrackingEvent[] = [];
       if (ended) return out;
       since ??= sample.t;
+      if (!gyroHeard(sample.t)) {
+        // A gyro heard again can have another zero: the browser may have
+        // fallen back to another stream. Its old readings compare with
+        // nothing, so the rules start over from it.
+        cameraGyro = [];
+        compassGyro = [];
+        turnFired = false;
+        gyroFrom = sample.t;
+      }
       gyro = compassHeading(sample);
       gyroAt = sample.t;
       clock(out, sample.t);
@@ -696,10 +719,15 @@ export function createTrackingGuard(
       stopped = undefined;
       // A compass that still disagrees fires again on the next pose.
       headingFired = false;
-      // The person vouched for the frame they stand in, so the turn rule
-      // measures from it rather than reporting the same turn again.
-      cameraGyro = cameraGyro.filter((r) => r.t > t);
-      turnFired = false;
+      // Once the turn rule has judged the frame the person stands in, they
+      // vouched for it, so the rule measures from it rather than reporting
+      // the same turn again. Before that (a confirm during an automatic
+      // resume) the readings from before the loss stay, and the rule still
+      // compares the returned frame with them.
+      if (turnJudged) {
+        cameraGyro = cameraGyro.filter((r) => r.t > t);
+        turnFired = false;
+      }
       emit(out, { t, kind: 'confirmed' });
       return out;
     },

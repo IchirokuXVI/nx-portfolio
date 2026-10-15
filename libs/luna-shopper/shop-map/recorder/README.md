@@ -210,7 +210,11 @@ gyro heard, the guard answers:
 | 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame                                                                                 |
 | 1014.3 s | `suspect` by the turn rule (149.4 degrees): the jump turned the frame back, and the stop already waits                          |
 
-No `compass-disturbed` appears in it. The bent compass fixture
+No `compass-disturbed` appears in it. A confirm during the automatic resume, before the
+turn rule answers, does not hide the flip: the rule keeps the samples from before the
+loss until it has judged the returned frame, and the walk still stops at 923.9 s.
+
+The bent compass fixture
 (`src/__fixtures__/tracking/bent-compass.synthetic.tracking.json`, written by the
 `synthesize-bent-compass` target) is **synthetic**: no recording of the freezer aisles
 exists yet. Its compass swings 90 degrees for 14 s; the guard answers one

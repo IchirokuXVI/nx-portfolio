@@ -203,6 +203,9 @@ The build stopped at an action boundary and asked. The owner answered three ques
    The flip measured 148.2 degrees at 924.1 s and the frame jumping back 75.1 degrees
    at 1014.4 s. With 30, the cut fixture already stops at 915.6 s, before the loss.
    So a walk goes on while the camera and the gyro disagree by less than 60 degrees.
+   With the gyro heard, a frame that comes back from a loss turned by 45 to 60 degrees
+   thus passes with only a `compass-disturbed` notice, because the compass rule no
+   longer stops a walk then.
 
 2. **The baseline exclusion of section 2 keeps 30 degrees, as its own constant**
    (`COMPASS_TURN_LIMIT_DEGREES`). Compass minus gyro heading crossed 30 degrees 18
@@ -221,11 +224,18 @@ The build stopped at an action boundary and asked. The owner answered three ques
    `suspect` the camera frame is itself in doubt, so no `compass-disturbed` or
    `compass-settled` is emitted then, and `compassDisturbed` keeps its last value. This
    is what keeps the fixture free of notices while the walk waits after the turn stop.
-5. **A confirm clears the turn rule's samples from before it.** The person vouched for
-   the frame they stand in, so the rule measures from it and does not report the same
-   turn again. A confirmed flipped frame therefore makes the compass read as bent
-   (`compass-disturbed`) while the gyro is heard. Without a gyro, plan 0003 holds: the
-   heading rule fires again at the next pose.
+5. **A confirm clears the turn rule's samples only once the rule has judged the
+   frame.** After a loss the rule answers 1.8 s after poses return. A confirm after that
+   answer (or with no loss since the guard started) clears the samples from before it:
+   the person vouched for the frame they stand in, so the rule measures from it and does
+   not report the same turn again. A confirmed flipped frame therefore makes the compass
+   read as bent (`compass-disturbed`) while the gyro is heard. A confirm before that
+   answer, which is what velista sends during an automatic resume, keeps the samples
+   from before the loss, so the rule still compares the returned frame with them. On the
+   El Jamón fixture a confirm at 922.37, 923.00 or 923.71 s still ends in a `turned`
+   stop of 148.4 degrees at 923.90 s; the stop has no `unconfirmedDropped`, because the
+   person confirmed the segment, and a `compass-disturbed` comes 0.13 s before it.
+   Without a gyro, plan 0003 holds: the heading rule fires again at the next pose.
 6. **The turn rule fires again while `suspect`**, as the other rules do (plan 0003
    README item 5). In the fixture it does so at 1014.3 s, when the jump turns the frame
    back. The stop already waits, so there is one stop.
@@ -234,6 +244,10 @@ The build stopped at an action boundary and asked. The owner answered three ques
 8. **The gyro silent rule.** While the gyro is not heard, a compass that already
    disagrees stops the walk at the first pose, also when a notice was emitted for it
    while the gyro was heard. A stream that falls silent in a bent spot thus stops.
+   When the gyro is heard again after a silence, its samples are thrown away and the
+   turn rule waits 1.8 s again, as after a loss: the browser can fall back from one
+   orientation stream to another with another zero (`orientation-stream.ts`), and camera
+   minus gyro heading would step by that difference and read as a turn.
 9. **`stopped` carries `cause` and one number.** `degrees` for `turned` and `heading`
    (the `turn` or `drift` of the suspect), `metres` for `jump`, and no number for
    `lost`: its limit is the fixed 3 s, and backend `0197` stores only degrees and metres.
