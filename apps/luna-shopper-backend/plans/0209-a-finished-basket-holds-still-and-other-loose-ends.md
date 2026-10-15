@@ -74,6 +74,9 @@ Point 1 is a decision of the owner.
 16. **Prettier reordered the imports** of some files whose comments this plan corrects. Those
     files were not formatted on `dev`.
 
+17. **The velista copies were changed after the build** ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)). Their comments name the old
+    all or nothing flag, and the people sheet spec fixture no longer sets it.
+
 ## Brief for the agent
 
 ### Objective

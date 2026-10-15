@@ -190,3 +190,7 @@ below is a choice of the builder that the owner can overturn.
 The browser walk of 2026-10-15 (390 pixels, English and Spanish, 31 rows under nine parents,
 and Mercadona Colón with two sections of its own) is a private artifact:
 https://claude.ai/artifact/6CdwhY1HnYGuHZEsVaYXDd
+
+**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** `byAisle` waits for the tree only under the category
+grouping. Under the default grouping the radio said Category until the tree loaded, and then
+Aisle under the finger.

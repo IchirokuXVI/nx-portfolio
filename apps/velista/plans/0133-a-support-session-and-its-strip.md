@@ -174,6 +174,10 @@ nothing there either. `google/state` has no caller in velista.
 before the mount, and on slot 4 it named port 4200. The link the gateway builds on a slot
 thus does not open velista. The walk replaced the origin and the path and kept the code.
 
+**Fixed after the build ([#730](https://github.com/IchirokuXVI/nx-portfolio/pull/730)).** The spec "shows the name from the pair and the deadline
+from the claim" read the clock twice on real timers and was a second off under load. It now
+holds the clock still, and `sessionPair` reads the clock once.
+
 ## Brief for the agent
 
 ### Objective
