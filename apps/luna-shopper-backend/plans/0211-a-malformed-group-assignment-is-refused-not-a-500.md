@@ -115,3 +115,46 @@ nothing written, instead of throwing inside catalog.
 - **`MALFORMED_OPERATION` and not a new code.** Its meaning, "the operation names neither of
   two required alternatives, or both", is the nearest the contract has, and a missing
   required field is the same kind of fault.
+
+## What the build decided
+
+- **One reader in front of the shape pass.** `missingField(operation: unknown)` reads the
+  operation as a plain record and returns the sentence for the first required field it
+  lacks, or null. `checkShape` calls it first for each operation and returns on a refusal,
+  so the duplicate, slug and alternative checks never read a missing field and a refused
+  operation carries exactly one error.
+- **Each sentence names the field.** `A createGroup operation needs slug.`,
+  `An assignItem operation needs expect.`, `op must be createGroup or assignItem.` The
+  specs assert the field name is in the detail.
+- **Present means a non empty string** for `ref`, `slug`, `referenceUnit` and `itemId`,
+  because the contract says `nonEmptyString`. `name` and `expect` must be objects.
+  `expect.productGroupId` must be a string or `null`; any other type is refused like
+  `undefined`, since the contract allows nothing else. The value of `referenceUnit` is not
+  checked against `UnitOfMeasure`: that is a wrong value, not a missing field, and it was
+  out of the plan.
+- **The outcome echoes a missing `ref` or `itemId` as `null`**, not `undefined, so the
+  refused file still matches the outcome schema. An unknown `op` is echoed as sent.
+- **The specs feed the malformed operations through one cast in the spec helper**, because
+  the point is input the type forbids. The service itself casts nothing away.
+
+### The sibling handlers
+
+- **Catalog has no other bulk handler of this pattern.** `ItemService.createMany`,
+  `updateMany` and `teachEans` take one kind of entry, not a union of operations, and have
+  no shape pass. They were left alone.
+- **The entry decisions route of plan 0100 has the same defect, in harvester.**
+  `SourceEntryBatchService` (`harvester/src/app/harvest/source-entry-batch.service.ts`)
+  has the same `checkShape` and reads `operation.expect.status` and
+  `operation.expect.lastSeenAt` (`:495`, `:505`) with nothing checking that `expect` is
+  there. It is another service, so this plan does not touch it. It wants its own plan.
+
+### Evidence
+
+- Six new cases in `product-group-assignment.service.spec.ts` failed against the old
+  service and pass now; the `expect: { productGroupId: null }` case applies before and
+  after.
+- `npx nx run-many -t lint test -p luna-shopper-backend-catalog luna-shopper-backend-gateway`
+  passes except `openapi-document.spec.ts` on this Windows checkout, whose working copy of
+  `openapi.json` is CRLF (`core.autocrlf=true`). `npx nx run luna-shopper-backend-gateway:openapi`
+  writes a file byte identical to the committed blob, and the spec passes on that file.
+- No ephemeral slot was run: the specs left no doubt.
