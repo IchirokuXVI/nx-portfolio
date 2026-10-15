@@ -1,3 +1,5 @@
+> **PR:** [#726](https://github.com/IchirokuXVI/nx-portfolio/pull/726)
+
 # 0005: a bent compass does not stop a walk
 
 > Fifth plan of the recorder library. It changes the tracking guard of `0003`.
