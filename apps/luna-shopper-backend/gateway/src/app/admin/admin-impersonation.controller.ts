@@ -134,6 +134,7 @@ export class AdminImpersonationController {
         code: session.code,
       }),
       codeExpiresAt: session.codeExpiresAt,
+      codeTtlMs: session.codeTtlMs,
       expiresAt: session.expiresAt,
     };
   }

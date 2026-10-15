@@ -31,6 +31,7 @@ import {
 } from '@portfolio/luna-shopper-admin/ui';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import {
+  isRefusal,
   panelErrorKey,
   ShopSections,
   type ItemSectionsAt,
@@ -274,6 +275,15 @@ export function previewSentence(
 
         @if (saveErrorKey(); as key) {
           <p class="failure" role="alert">{{ key | rokuT }}</p>
+        }
+        @if (rereadErrorKey(); as key) {
+          <div class="failure" role="alert" data-reread-failed>
+            <p>{{ 'catalog.locationSections.rereadFailed' | rokuT }}</p>
+            <p>{{ key | rokuT }}</p>
+            <button (click)="reload()" type="button">
+              {{ 'resource.action.retry' | rokuT }}
+            </button>
+          </div>
         }
         @if (savedNow()) {
           <p class="muted" role="status">
@@ -719,6 +729,11 @@ export class LocationSections {
   readonly busy = signal(false);
   readonly readErrorKey = signal<string | null>(null);
   readonly saveErrorKey = signal<string | null>(null);
+  /**
+   * Why the list could not be read again after a write that was done, or
+   * `null`. Apart from `saveErrorKey`, because the write itself succeeded.
+   */
+  readonly rereadErrorKey = signal<string | null>(null);
   /** Whether the last act was a successful save, for the status line. */
   readonly savedNow = signal(false);
 
@@ -895,47 +910,98 @@ export class LocationSections {
     this.order.set(this._savedOrder());
   }
 
-  /** Every section, in the order shown, in one request. */
+  /**
+   * Every section, in the order shown, in one request.
+   *
+   * The answer belongs to the shop it was asked for. If the operator picked
+   * another shop while it ran, the answer is dropped and only the note to the
+   * page above stays, because the write did happen.
+   */
   async save(): Promise<void> {
+    const generation = this._generation;
+    const locationId = this.locationId();
+    const held = this.order();
     this.busy.set(true);
     this.saveErrorKey.set(null);
+    this.rereadErrorKey.set(null);
     this.savedNow.set(false);
     try {
-      const answer = await this._sections.setOrder(
-        this.locationId(),
-        this.order()
-      );
-      this._hold(answer);
-      this.savedNow.set(true);
+      const answer = await this._sections.setOrder(locationId, held);
       // The shop's own row carries its section names in this order.
       this._changes.wrote('location-sections');
+      if (generation !== this._generation) {
+        return;
+      }
+      this._hold(answer);
+      this.savedNow.set(true);
     } catch (error) {
+      if (generation !== this._generation) {
+        return;
+      }
       // The order stays, so a refusal costs a retry and not the work.
       this.saveErrorKey.set(panelErrorKey(error));
+      if (isRefusal(error, 'section_not_found')) {
+        // Another operator deleted a section of the order held here. The
+        // list is read again, keeping the order less that section, so a
+        // retry sends sections that exist.
+        await this._read(locationId, held);
+      }
     } finally {
       this.busy.set(false);
     }
   }
 
+  /**
+   * Delete one section, then read the list again.
+   *
+   * **The delete is done once `remove` answers.** A read after it that fails
+   * does not undo that: the row goes from the list held here, the page above
+   * and the preview are told, and the failed read is said on its own.
+   */
   async confirmDelete(section: ShopSection): Promise<void> {
+    const generation = this._generation;
+    const locationId = this.locationId();
     this.removing.set(true);
     this.saveErrorKey.set(null);
+    this.rereadErrorKey.set(null);
     this.savedNow.set(false);
     try {
       await this._sections.remove(section.id);
-      this.deleting.set(null);
-      // An order being changed keeps its changes, less the section.
-      const held = this.order().filter((id) => id !== section.id);
-      const answer = await this._sections.forLocation(this.locationId());
-      this._hold(answer, held);
-      this._changes.wrote('sections');
-      await this._previewAgain();
     } catch (error) {
-      this.deleting.set(null);
-      this.saveErrorKey.set(panelErrorKey(error));
+      if (generation === this._generation) {
+        this.deleting.set(null);
+        this.saveErrorKey.set(panelErrorKey(error));
+      }
+      this.removing.set(false);
+      return;
+    }
+    this._changes.wrote('sections');
+    if (generation !== this._generation) {
+      this.removing.set(false);
+      return;
+    }
+    this.deleting.set(null);
+    // An order being changed keeps its changes, less the section.
+    const held = this.order().filter((id) => id !== section.id);
+    try {
+      const answer = await this._sections.forLocation(locationId);
+      if (generation !== this._generation) {
+        return;
+      }
+      this._hold(answer, held);
+    } catch (error) {
+      if (generation !== this._generation) {
+        return;
+      }
+      this._hold(
+        (this.saved() ?? []).filter((kept) => kept.id !== section.id),
+        held
+      );
+      this.rereadErrorKey.set(panelErrorKey(error));
     } finally {
       this.removing.set(false);
     }
+    await this._previewAgain();
   }
 
   /** A product was picked for the preview, or cleared. */
@@ -1017,7 +1083,14 @@ export class LocationSections {
     this._nameCategories(sections.flatMap((section) => section.categoryIds));
   }
 
-  private async _read(locationId: string): Promise<void> {
+  /**
+   * Read the shop's sections. `order`, when given, is an order being changed
+   * that should survive the read, as {@link _hold} keeps it.
+   */
+  private async _read(
+    locationId: string,
+    order?: readonly string[]
+  ): Promise<void> {
     this._generation += 1;
     const generation = this._generation;
     this.loading.set(true);
@@ -1028,7 +1101,8 @@ export class LocationSections {
       if (generation !== this._generation) {
         return;
       }
-      this._hold(sections);
+      this.rereadErrorKey.set(null);
+      this._hold(sections, order);
     } catch (error) {
       if (generation === this._generation) {
         this.readErrorKey.set(panelErrorKey(error));

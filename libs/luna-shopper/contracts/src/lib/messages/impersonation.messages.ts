@@ -53,6 +53,12 @@ export interface StartImpersonationResult {
   sessionId: string;
   code: string;
   codeExpiresAt: string;
+  /**
+   * How long the code is good for from its start, in milliseconds: auth's own
+   * `IMPERSONATION_CODE_TTL_MS`. A duration and not a moment, so a client can
+   * count it from the arrival of the answer on its own clock.
+   */
+  codeTtlMs: number;
   expiresAt: string;
 }
 
@@ -65,6 +71,8 @@ export interface StartImpersonationView {
   sessionId: string;
   url: string;
   codeExpiresAt: string;
+  /** As {@link StartImpersonationResult.codeTtlMs}, passed through. */
+  codeTtlMs: number;
   expiresAt: string;
 }
 

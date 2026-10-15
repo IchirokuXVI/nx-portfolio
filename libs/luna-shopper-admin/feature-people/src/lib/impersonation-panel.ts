@@ -32,14 +32,6 @@ export const IMPERSONATION_NOTE_MAX = 500;
 /** How often the time left on the link is said again. */
 const TICK_MS = 1000;
 
-/**
- * How long a handoff code is good for, from its start: the
- * `IMPERSONATION_CODE_TTL_MS` of backend plan 0194. The link counts down from
- * the arrival of the answer by this much, so a browser clock that is wrong
- * does not change the time left (see "What the build decided").
- */
-export const IMPERSONATION_CODE_LIFETIME_MS = 60 * 1000;
-
 /** What the dialog keeps of an answer once it arrived. Not the address. */
 interface Started {
   /** When the session ends, as the gateway said it. */
@@ -452,9 +444,10 @@ export class ImpersonationPanel implements OnDestroy {
   }
 
   /**
-   * Hold the address in `link` alone, and the rest without it. The minute is
-   * counted from now, on this clock, and not from `codeExpiresAt`, which is a
-   * time on the clock of the server.
+   * Hold the address in `link` alone, and the rest without it. The life of
+   * the code is the `codeTtlMs` of the answer, counted from now, on this
+   * clock, and not from `codeExpiresAt`, which is a time on the clock of the
+   * server. A browser clock that is wrong thus does not change the time left.
    */
   private _keep(session: ImpersonationSession): void {
     const now = Date.now();
@@ -462,7 +455,7 @@ export class ImpersonationPanel implements OnDestroy {
     this.link.set(session.url);
     this._started.set({
       expiresAt: session.expiresAt,
-      deadline: now + IMPERSONATION_CODE_LIFETIME_MS,
+      deadline: now + session.codeTtlMs,
     });
     this._startClock();
   }

@@ -87,7 +87,7 @@ function build(basket: Basket, open: Partial<BasketRowView>[] = []) {
     countsFor: async () => new Map([[BASKET, { lineCount: 2 }]]),
   } as unknown as BasketService;
   const basketRead = {
-    openRows: async () => open,
+    unredactedRows: async () => open,
   } as unknown as BasketReadService;
   const service = new AdminListService(
     {} as never,
@@ -164,22 +164,39 @@ describe('AdminListService.getBasket: settlements (plan 0160)', () => {
     expect(bread.settlements).toEqual([]);
   });
 
-  it('puts a finished basket settlements on the frozen row of their line', async () => {
-    const { service, query } = build(basketRow(BasketStatus.FINISHED));
-    query
-      .mockResolvedValueOnce([
-        { lineId: 'l1', content: 'Leche', asked: 2, bought: 1 },
-        { lineId: 'l3', content: 'Pan', asked: 1, bought: 0 },
-      ])
-      .mockResolvedValueOnce([
-        settlement('s1', 'l1', '2026-09-20T09:00:00.000Z'),
-        settlement('s3', 'l3', '2026-09-20T09:10:00.000Z', {
-          outcome: SettlementOutcome.NOT_AVAILABLE,
-          quantity: 0,
-          pricePaidCents: null,
-          pricePaidCurrency: null,
-        }),
-      ]);
+  it('reads a finished basket through the same rows, one per product (plan 0209)', async () => {
+    // The read answers the frozen rows, grouped by product: two lines of one
+    // product are one row, as the count counts them.
+    const { service, query } = build(basketRow(BasketStatus.FINISHED), [
+      {
+        rowKey: 'l1',
+        content: 'Leche',
+        left: 1,
+        bought: 1,
+        asked: 2,
+        entries: [
+          { lineId: 'l1' } as BasketRowView['entries'][number],
+          { lineId: 'l2' } as BasketRowView['entries'][number],
+        ],
+      },
+      {
+        rowKey: 'l3',
+        content: 'Pan',
+        left: 1,
+        bought: 0,
+        asked: 1,
+        entries: [{ lineId: 'l3' } as BasketRowView['entries'][number]],
+      },
+    ]);
+    query.mockResolvedValueOnce([
+      settlement('s1', 'l2', '2026-09-20T09:00:00.000Z'),
+      settlement('s3', 'l3', '2026-09-20T09:10:00.000Z', {
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+        quantity: 0,
+        pricePaidCents: null,
+        pricePaidCurrency: null,
+      }),
+    ]);
 
     const detail = await service.getBasket({
       userId: 'a1',
@@ -187,7 +204,9 @@ describe('AdminListService.getBasket: settlements (plan 0160)', () => {
       basketId: BASKET,
     });
 
-    expect(query.mock.calls[1][1]).toEqual([BASKET, ['l1', 'l3']]);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][1]).toEqual([BASKET, ['l1', 'l2', 'l3']]);
+    expect(detail.lineCount).toBe(detail.lines.length);
     expect(detail.lines.map((row) => row.settlements.map((s) => s.id))).toEqual(
       [['s1'], ['s3']]
     );

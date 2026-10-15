@@ -307,6 +307,8 @@ admin `0062` read this section as the contract where it differs from the target 
   and closes on the event as well as at `until`.
 - **Five subjects, not four.** `auth.impersonation.status`, `.start`, `.exchange`,
   `.end`, and `.check`, which has no route.
+- **The start answers `codeTtlMs` too** (follow up PR [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)): the lifetime of the
+  code in milliseconds, `IMPERSONATION_CODE_TTL_MS`, so the back office holds no copy of it.
 
 Two things for the plans that follow:
 

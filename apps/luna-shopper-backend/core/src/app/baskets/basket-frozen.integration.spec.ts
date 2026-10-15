@@ -16,6 +16,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { AdminListService } from '../admin/admin-list.service';
 import { CoreAuditService } from '../audit/core-audit.service';
 import {
   Basket,
@@ -412,6 +413,50 @@ describeIntegration('a finished basket holds still (real Postgres)', () => {
         boughtLineCount: screen.progress.done,
         notAvailableLineCount: screen.progress.unavailable,
       });
+    });
+  });
+
+  describe('the admin detail (plan 0209, section 1.2)', () => {
+    it('shows as many rows as it counts, one per product', async () => {
+      const product = randomUUID();
+      const flat = await list(ids.home, 'Flat admin');
+      const parents = await list(ids.home, 'Parents admin');
+      const flatMilk = await line(flat, 'Milk admin flat', 2, [product]);
+      const parentsMilk = await line(parents, 'Milk admin parents', 1, [
+        product,
+      ]);
+      await line(flat, 'Soap admin', 1);
+      const held = await basket(flat, parents);
+      await buy(held, parentsMilk, 1);
+
+      const finished = await finish(held);
+      const admin = new AdminListService(
+        {} as never,
+        {} as never,
+        dataSource.getRepository(Basket),
+        dataSource.getRepository(BasketSource),
+        { requireAdmin: async () => 'a1' } as never,
+        {} as never,
+        {} as never,
+        history,
+        read
+      );
+      const detail = await admin.getBasket({
+        userId: 'a1',
+        adminToken: 't',
+        basketId: finished.id,
+      });
+
+      expect(detail.lineCount).toBe(2);
+      expect(detail.lines).toHaveLength(detail.lineCount);
+      const milk = detail.lines.find((row) =>
+        [flatMilk.id, parentsMilk.id].includes(row.rowKey)
+      );
+      // Both lines of the product, on one row, with the buy of either.
+      expect(milk).toMatchObject({ asked: 3, bought: 1, left: 2 });
+      expect(milk?.settlements.map((row) => row.lineId)).toEqual([
+        parentsMilk.id,
+      ]);
     });
   });
 

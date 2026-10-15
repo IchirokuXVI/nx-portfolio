@@ -24,6 +24,7 @@ const STARTED = {
   sessionId: 's1',
   code: 'raw-code_-123',
   codeExpiresAt: '2026-10-13T10:01:00.000Z',
+  codeTtlMs: 60_000,
   expiresAt: '2026-10-13T12:00:00.000Z',
 };
 
@@ -78,6 +79,8 @@ describe('the operator half of a support session', () => {
       sessionId: 's1',
       url: 'https://velista.app/es/auth/impersonate#code=raw-code_-123',
       codeExpiresAt: STARTED.codeExpiresAt,
+      // Passed through from auth, so the gateway holds no copy either.
+      codeTtlMs: STARTED.codeTtlMs,
       expiresAt: STARTED.expiresAt,
     });
     const url = new URL(view.url);

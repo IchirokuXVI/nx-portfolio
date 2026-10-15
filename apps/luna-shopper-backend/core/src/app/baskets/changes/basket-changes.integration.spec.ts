@@ -41,6 +41,7 @@ import { BasketRevertService } from '../basket-revert.service';
 import { BasketRowResolver } from '../basket-row-resolver';
 import { BasketSettleService } from '../basket-settle.service';
 import { BasketSkipService } from '../basket-skip.service';
+import { BASKET_TRIP_ROWS_FREEZE_SQL } from '../basket-trip-rows.sql';
 import { BasketWriteContext } from '../basket-write.context';
 import { BasketChangesService } from './basket-changes.service';
 import { BasketMarksReader } from './basket-marks.reader';
@@ -1031,6 +1032,60 @@ describeIntegration(
             .find({ where: { listId } })
         ).toEqual([]);
         expect((await view(held, participantId)).rows[0].mark).toBeNull();
+      });
+    });
+
+    // --- a finished trip (plan 0209, decision 5) ------------------------------
+
+    describe('a finished basket', () => {
+      it('answers no marks on any route, as the full read does', async () => {
+        const listId = await list('Finished');
+        const milk = await line(listId, 'Milk');
+        const { basket: held, participantId } = await basket([listId]);
+        const changed = await change(listId, milk.id, { ago: '10 minutes' });
+        // Open, the change is a mark on every route.
+        expect(
+          (await changes.marksOf({ basketId: held.id, participantId }))
+            .unseenChangeCount
+        ).toBe(1);
+
+        // The finish as `BasketService.update` writes it: the status and the
+        // frozen rows, in one transaction.
+        await dataSource.transaction(async (manager) => {
+          await manager.update(
+            Basket,
+            { id: held.id },
+            { status: BasketStatus.FINISHED }
+          );
+          await manager.query(BASKET_TRIP_ROWS_FREEZE_SQL, [held.id]);
+        });
+        const finished = await dataSource
+          .getRepository(Basket)
+          .findOneByOrFail({ id: held.id });
+
+        const drawn = await view(finished, participantId);
+        const marked = await changes.marksOf({
+          basketId: held.id,
+          participantId,
+        });
+        const page = await changes.list({ basketId: held.id, participantId });
+        const acknowledged = await changes.acknowledge({
+          basketId: held.id,
+          participantId,
+          through: changed,
+        });
+
+        expect(drawn.unseenChangeCount).toBe(0);
+        expect(marked).toEqual({
+          unseenChangeCount: 0,
+          newestUnseenChangeId: null,
+          lines: [],
+        });
+        // Still a history, with nothing on it unseen.
+        expect(page.items.map((item) => [item.id, item.unseen])).toEqual([
+          [changed, false],
+        ]);
+        expect(acknowledged.unseenChangeCount).toBe(0);
       });
     });
 

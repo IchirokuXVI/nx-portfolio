@@ -183,6 +183,7 @@ describe('DirectoryApi', () => {
       sessionId: 's-1',
       url: 'https://staging.velista.app/en/auth/impersonate#code=c',
       codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      codeTtlMs: 45_000,
       expiresAt: '2026-10-15T21:30:00.000Z',
       code: 'never-passed-through',
     });
@@ -191,10 +192,37 @@ describe('DirectoryApi', () => {
       sessionId: 's-1',
       url: 'https://staging.velista.app/en/auth/impersonate#code=c',
       codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      codeTtlMs: 45_000,
       expiresAt: '2026-10-15T21:30:00.000Z',
     });
     http.verify();
   });
+
+  it.each([
+    ['absent', undefined],
+    ['not a number', '60000'],
+    ['zero', 0],
+    ['not whole', 1.5],
+  ])(
+    'reads a code lifetime that is %s as sixty seconds, for an older gateway',
+    async (_case, codeTtlMs) => {
+      const { directory, http } = setUp();
+
+      const done = directory.startImpersonation(USER, { reason: 'TESTING' });
+      http
+        .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`)
+        .flush({
+          sessionId: 's-1',
+          url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+          codeExpiresAt: '2026-10-15T19:31:00.000Z',
+          codeTtlMs,
+          expiresAt: '2026-10-15T21:30:00.000Z',
+        });
+
+      await expect(done).resolves.toMatchObject({ codeTtlMs: 60_000 });
+      http.verify();
+    }
+  );
 
   it('refuses a session answer whose link is not a web address', async () => {
     const { directory, http } = setUp();

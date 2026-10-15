@@ -44136,6 +44136,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "codeTtlMs": {
+            "type": "integer",
+            "minimum": 1
+          },
           "expiresAt": {
             "type": "string",
             "format": "date-time"
@@ -44149,6 +44153,7 @@
           "sessionId",
           "url",
           "codeExpiresAt",
+          "codeTtlMs",
           "expiresAt"
         ],
         "additionalProperties": false

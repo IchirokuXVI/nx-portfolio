@@ -56,7 +56,7 @@ import { CorePlatformAdminService } from './platform-admin.service';
     ListsModule,
     AccountModule,
     // For the two reads a basket's numbers now come from (plan 0136, section
-    // 7.5): `BasketService.countsFor` and `BasketReadService.openRows`.
+    // 7.5): `BasketService.countsFor` and `BasketReadService.unredactedRows`.
     // A basket is a view of its lists, so the back office cannot count one by
     // reading rows of its own any more.
     BasketsModule,

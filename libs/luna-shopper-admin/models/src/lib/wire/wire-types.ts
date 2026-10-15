@@ -4986,6 +4986,7 @@ export type ImpersonationImpersonationStatusView = {
 export type ImpersonationStartImpersonationView = {
   sessionId: string;
   codeExpiresAt: string;
+  codeTtlMs: number;
   expiresAt: string;
   url: string;
 };
