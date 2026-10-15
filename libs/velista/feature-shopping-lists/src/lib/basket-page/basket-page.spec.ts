@@ -19,15 +19,19 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  fakeCategoryStore,
   fakeGroupMembers,
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  MEMORY_CATEGORIES,
   MEMORY_SHOP_MAPS,
+  provideFakeCategoryStore,
   provideFakeGroupMembers,
   provideFakeShopDetailStore,
   provideFakeShopSectionsStore,
   SessionStore,
+  type FakeCategoryStore,
   type FakeGroupMembers,
   type FakeShopDetailStore,
   type FakeShopSectionsStore,
@@ -45,6 +49,7 @@ import type {
   BasketShop,
   CatalogItem,
   CatalogSuggestion,
+  CategoryNode,
   ErrorCode,
 } from '@portfolio/velista/models';
 import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
@@ -162,6 +167,28 @@ interface FakeStore {
   readonly addLine: jest.Mock;
 }
 
+/**
+ * The tree the page names its parent headings from (velista `0138`): the memory
+ * slice, and the roots the fixtures here put their leaves under.
+ */
+const PAGE_TREE: readonly CategoryNode[] = [
+  ...MEMORY_CATEGORIES,
+  ...[
+    ['cat-root', 'Groceries'],
+    ['cat-other', 'Other'],
+    ['cat-fruit-and-vegetables', 'Fruit and vegetables'],
+  ].map(
+    ([id, en], position): CategoryNode => ({
+      id,
+      parentId: null,
+      slug: id.slice('cat-'.length),
+      name: { en, es: en },
+      position: 100 + position,
+      itemCount: 0,
+    })
+  ),
+];
+
 interface Options {
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
@@ -236,6 +263,8 @@ interface Options {
   readonly readAtShop?: BasketShop;
   /** The shops' aisles already read, or none (velista `0120`). */
   readonly shopSections?: FakeShopSectionsStore;
+  /** The category tree, landed with {@link PAGE_TREE} unless a test says (`0138`). */
+  readonly categories?: FakeCategoryStore;
   readonly shopDetails?: FakeShopDetailStore;
 }
 
@@ -714,6 +743,9 @@ async function render(options: Options = {}): Promise<{
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
+      ),
+      provideFakeCategoryStore(
+        options.categories ?? fakeCategoryStore(PAGE_TREE)
       ),
       provideFakeShopDetailStore(options.shopDetails ?? fakeShopDetailStore()),
     ],
@@ -2356,12 +2388,12 @@ describe('searching the basket', () => {
     it('heads each aisle with an h2 carrying the name and the count together', async () => {
       const { fixture } = await renderGrouped('category');
 
-      const [milk] = headings(fixture);
-      expect(milk.tagName).toBe('H2');
+      const [dairy] = headings(fixture);
+      expect(dairy.tagName).toBe('H2');
       // One accessible name, because a reader moving by heading hears the `h2` and
       // nothing else inside it (section 6). The visible spans are `aria-hidden`.
-      expect(milk.getAttribute('aria-label')).toBe(
-        'Milk, basket.group.progress'
+      expect(dairy.getAttribute('aria-label')).toBe(
+        'Eggs, milk, and butter, basket.group.progress'
       );
     });
 
@@ -2416,7 +2448,7 @@ describe('searching the basket', () => {
       // Two keys, as the page's own sentence keeps them apart: a shop that had none
       // is not shopping done.
       expect(headings(fixture)[0].getAttribute('aria-label')).toBe(
-        'Milk, basket.group.progress · basket.group.unavailable'
+        'Eggs, milk, and butter, basket.group.progress · basket.group.unavailable'
       );
     });
 
@@ -3853,6 +3885,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
     id: string,
     name: string,
     category: string,
+    parent: string,
     sectionIds: readonly string[]
   ): BasketProduct {
     return {
@@ -3869,7 +3902,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
       categories: [
         {
           id: `cat-${category}`,
-          parentId: 'cat-root',
+          parentId: `cat-${parent}`,
           slug: category,
           name: { en: category, es: category },
         },
@@ -3881,10 +3914,18 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   const PRODUCTS = new Map([
     [
       'i-pizza',
-      item('i-pizza', 'Pizza', 'frozen-pizzas', ['sec-frozen', 'sec-pizzas']),
+      item('i-pizza', 'Pizza', 'frozen-pizzas', 'prepared-meals-and-pizzas', [
+        'sec-frozen',
+        'sec-pizzas',
+      ]),
     ],
-    ['i-apple', item('i-apple', 'Apple', 'apples-and-pears', ['sec-fruit'])],
-    ['i-oil', item('i-oil', 'Olive oil', 'oils', [])],
+    [
+      'i-apple',
+      item('i-apple', 'Apple', 'apples-and-pears', 'fruit-and-vegetables', [
+        'sec-fruit',
+      ]),
+    ],
+    ['i-oil', item('i-oil', 'Olive oil', 'oils', 'oils-sauces-and-spices', [])],
   ]);
 
   const LINES = [
@@ -3896,7 +3937,6 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   function section(id: string, name: string) {
     return {
       id,
-      supermarketId: 'sm-merca',
       slug: id,
       name: { en: name, es: name },
       position: 0,
@@ -3936,11 +3976,18 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   it('draws the shop’s aisles in its order, a row in two of them in both, then the band and the rest', async () => {
     const { fixture } = await atMercadona();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
+    expect(headings(fixture)).toEqual([
+      'Fruit',
+      'Pizzas',
+      'Frozen',
+      'Oils, sauces and spices',
+    ]);
     const band = query(fixture, '.uncovered-band');
     expect(band?.textContent).toContain('basket.group.uncovered');
-    // The band sits between the last aisle and the first category, in document order.
-    expect(band?.nextElementSibling?.textContent).toContain('oils');
+    // The band sits between the last aisle and the first parent, in document order.
+    expect(band?.nextElementSibling?.textContent).toContain(
+      'Oils, sauces and spices'
+    );
     // A paragraph, not a heading: moving by heading reads one flat run of groups.
     expect(band?.querySelector('h1, h2, h3')).toBeNull();
   });
@@ -3949,16 +3996,45 @@ describe('BasketPage: the aisles of the shop you are in', () => {
     const { fixture, shopSections } = await atMercadona(false);
 
     expect(headings(fixture)).toEqual([
-      'oils',
-      'frozen-pizzas',
-      'apples-and-pears',
+      'Oils, sauces and spices',
+      'Prepared meals and pizzas',
+      'Fruit and vegetables',
     ]);
     expect(query(fixture, '.uncovered-band')).toBeNull();
 
     shopSections.land('loc-mayor', WALK);
     fixture.detectChanges();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
+    expect(headings(fixture)).toEqual([
+      'Fruit',
+      'Pizzas',
+      'Frozen',
+      'Oils, sauces and spices',
+    ]);
+  });
+
+  it('draws the rows with no heading until the tree lands, then the parents', async () => {
+    const categories = fakeCategoryStore();
+    const rendered = await render({
+      lines: LINES,
+      products: PRODUCTS,
+      readAtShop: MERCADONA,
+      categories,
+    });
+    TestBed.inject(BasketViewStore).setGrouping('category');
+    rendered.fixture.detectChanges();
+
+    expect(headings(rendered.fixture)).toEqual([]);
+    expect(rendered.fixture.nativeElement.textContent).toContain('Olive oil');
+
+    categories.land(PAGE_TREE);
+    rendered.fixture.detectChanges();
+
+    expect(headings(rendered.fixture)).toEqual([
+      'Oils, sauces and spices',
+      'Prepared meals and pizzas',
+      'Fruit and vegetables',
+    ]);
   });
 
   it('opens the explanation from the info control, and closes it on a second press', async () => {
@@ -4064,7 +4140,6 @@ describe('BasketPage: the map of the shop you are in', () => {
       'loc-jamon': [
         {
           id: 'sec-dairy',
-          supermarketId: 'sm-jamon',
           slug: 'dairy',
           name: { en: 'Dairy', es: 'Lácteos' },
           position: 0,

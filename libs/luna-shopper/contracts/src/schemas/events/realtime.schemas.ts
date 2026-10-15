@@ -9,9 +9,11 @@ import {
   JsonSchema,
   nonEmptyString,
   object,
+  ref,
   schemaId,
   string,
 } from '../builders';
+import { BASKET_SCHEMA_IDS } from '../messages/basket.schemas';
 import { REALTIME_SCHEMA_IDS } from '../messages/realtime.schemas';
 
 /**
@@ -22,6 +24,8 @@ import { REALTIME_SCHEMA_IDS } from '../messages/realtime.schemas';
  */
 export const DOMAIN_EVENT_SCHEMA_IDS = {
   domainEventEnvelope: schemaId('event/DomainEvent'),
+  basketLinesChangedEnvelope: schemaId('event/DomainEvent/basket.linesChanged'),
+  basketUpdatedEnvelope: schemaId('event/DomainEvent/basket.updated'),
 } as const;
 
 /**
@@ -31,27 +35,58 @@ export const DOMAIN_EVENT_SCHEMA_IDS = {
  * which drops an unaddressed event as a fault, rather than by a schema keyword
  * that would say it less clearly than the code that acts on it.
  */
-const domainEventEnvelope = object(
+function envelopeOf(id: string, payload: JsonSchema): JsonSchema {
+  return object(
+    id,
+    {
+      event: nonEmptyString(),
+      eventId: nonEmptyString(),
+      zoneId: nonEmptyString(),
+      listId: string(),
+      userIds: array(nonEmptyString()),
+      // The basket audience (plan 0139, section 1).
+      basketIds: array(nonEmptyString()),
+      payload,
+    },
+    ['event', 'eventId', 'payload']
+  );
+}
+
+/**
+ * The envelope of every event whose payload has no type in
+ * `contracts/src/lib/events` to write a schema from.
+ */
+const domainEventEnvelope = envelopeOf(
   DOMAIN_EVENT_SCHEMA_IDS.domainEventEnvelope,
-  {
-    event: nonEmptyString(),
-    eventId: nonEmptyString(),
-    zoneId: nonEmptyString(),
-    listId: string(),
-    userIds: array(nonEmptyString()),
-    // The basket audience, in both of its names (plan 0139, section 1). Core
-    // writes `basketIds` alone; `basketId` is declared because the
-    // consumer still reads it for one release and `object` defaults
-    // `additionalProperties` to false, so a replayed envelope validated strictly
-    // would be rejected for carrying the field it was written with.
-    basketIds: array(nonEmptyString()),
-    basketId: nonEmptyString(),
-    payload: any(),
-  },
-  ['event', 'eventId', 'payload']
+  any()
 );
 
-export const realtimeEventSchemas: JsonSchema[] = [domainEventEnvelope];
+/**
+ * The two basket events, each with its own payload (plan 0209, section 3.3).
+ * A basket room holds guests, so what these payloads may carry is a rule, and
+ * a schema states it.
+ */
+const basketLinesChangedEnvelope = envelopeOf(
+  DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope,
+  ref(BASKET_SCHEMA_IDS.linesChangedEvent)
+);
+const basketUpdatedEnvelope = envelopeOf(
+  DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope,
+  ref(BASKET_SCHEMA_IDS.updatedEvent)
+);
+
+export const realtimeEventSchemas: JsonSchema[] = [
+  domainEventEnvelope,
+  basketLinesChangedEnvelope,
+  basketUpdatedEnvelope,
+];
+
+/** The envelopes that name their payload, by event. Every other event is `any`. */
+const TYPED_ENVELOPES: Partial<Record<RealtimeEvent, string>> = {
+  [RealtimeEvent.BasketLinesChanged]:
+    DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope,
+  [RealtimeEvent.BasketUpdated]: DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope,
+};
 
 /**
  * subject -> payload schema id (domain events + the two presence events).
@@ -67,7 +102,7 @@ export const domainEventContracts: Record<string, string> = {
   ...Object.fromEntries(
     DOMAIN_EVENT_SUBJECTS.map((e) => [
       domainEventSubject(e),
-      DOMAIN_EVENT_SCHEMA_IDS.domainEventEnvelope,
+      TYPED_ENVELOPES[e] ?? DOMAIN_EVENT_SCHEMA_IDS.domainEventEnvelope,
     ])
   ),
   [RealtimeEvent.PresenceZoneUpdated]: REALTIME_SCHEMA_IDS.zonePresence,
@@ -75,6 +110,5 @@ export const domainEventContracts: Record<string, string> = {
   // Like the two above, computed by the realtime service rather than published
   // by a domain one, so it is mapped here explicitly instead of arriving through
   // DOMAIN_EVENT_SUBJECTS (plan 0051, section 7).
-  [RealtimeEvent.PresenceBasketUpdated]:
-    REALTIME_SCHEMA_IDS.basketPresence,
+  [RealtimeEvent.PresenceBasketUpdated]: REALTIME_SCHEMA_IDS.basketPresence,
 };

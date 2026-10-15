@@ -83,7 +83,7 @@ export class ShopSectionsStore {
       answer = null;
     }
     if (answer !== null) {
-      this.prime(locationId, answer.sections);
+      this.prime(locationId, answer);
     }
   }
 }

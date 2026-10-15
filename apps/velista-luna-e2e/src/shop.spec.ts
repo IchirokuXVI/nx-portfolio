@@ -154,11 +154,12 @@ test.describe('one trip, by the owner', () => {
         page.locator('section.group h2.group-title').first()
       ).toBeVisible();
 
-      // The Milk row means the seeded milk, so it sits under that product's first
-      // category, headed by the category's own name (velista 0118). Both halves
-      // come from the seed: the leaf the demo world files milk under, and the
-      // name the catalog seeded that leaf with. No translation key is involved.
-      const milkAisle = await seededCategoryName(alice, ITEM_MILK_ID, 'en');
+      // The Milk row means the seeded milk, so it sits under the parent of that
+      // product's first category, headed by the parent's own name (velista 0118,
+      // 0138). Both halves come from the seed: the leaf the demo world files milk
+      // under, and the name the catalog seeded its parent with. No translation key
+      // is involved.
+      const milkAisle = await seededParentName(alice, ITEM_MILK_ID, 'en');
       await expect(
         page
           .locator('section.group', { has: row(page, 'Milk') })
@@ -383,14 +384,15 @@ test.describe('one trip, by the owner', () => {
 });
 
 /**
- * The name the seed gave a seeded product's first category, in one language.
+ * The name the seed gave the parent of a seeded product's first category, in one
+ * language: the basket heads its category groups with the parent (velista 0138).
  *
  * The demo world files each product under leaf slugs (backend plan 0166), and the
  * catalog seed writes the tree those slugs name. The name is read back from the
  * tree the gateway serves, by the slug the demo world names, so a change to the
  * seeded taxonomy moves this expectation with it rather than breaking it.
  */
-async function seededCategoryName(
+async function seededParentName(
   s: Session,
   itemId: string,
   locale: 'en' | 'es'
@@ -402,9 +404,17 @@ async function seededCategoryName(
   }
 
   const tree = await s.get<{
-    categories: { slug: string; name: { en?: string; es?: string } }[];
+    categories: {
+      id: string;
+      parentId: string | null;
+      slug: string;
+      name: { en?: string; es?: string };
+    }[];
   }>('/v1/catalog/categories');
-  const name = tree.categories.find((one) => one.slug === slug)?.name[locale];
+  const leaf = tree.categories.find((one) => one.slug === slug);
+  const name = tree.categories.find((one) => one.id === leaf?.parentId)?.name[
+    locale
+  ];
   if (name === undefined || name === '') {
     throw new Error(`the catalog names no ${locale} category ${slug}`);
   }

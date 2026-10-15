@@ -342,12 +342,7 @@ export interface BasketUpdatedEvent {
   basketId: string;
   kind: BasketKind;
   name: string | null;
-  /**
-   * The plan writes this field's type as `BasketStatus`. The enum is called
-   * {@link BasketStatus} today and renaming it is plan 0144's, along with
-   * the rooms and the remaining `basket.*` names, so this is the one name
-   * it has rather than a second one.
-   */
+  /** {@link BasketStatus}, the name plan 0144 gave the enum. */
   status: BasketStatus;
 }
 

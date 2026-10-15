@@ -59,6 +59,7 @@ export const BASKET_SCHEMA_IDS = {
   entryAct: schemaId('basket/BasketEntryAct'),
   entryPatch: schemaId('basket/BasketEntryPatch'),
   linesChangedEvent: schemaId('event/BasketLinesChangedEvent'),
+  updatedEvent: schemaId('event/BasketUpdatedEvent'),
   rowView: schemaId('basket/BasketRowView'),
   // Where a row is usually bought, at the read's chain (plan 0165).
   rowUsualState: schemaId('enums/BasketRowUsualState'),
@@ -271,6 +272,21 @@ const linesChangedEvent = object(
     marksMoved: boolean(),
   },
   ['lineIds']
+);
+
+/**
+ * The payload of `basket.updated` (plan 0139, section 4): the four fields a
+ * guest already reads on the basket itself, and nothing that names a source.
+ */
+const updatedEvent = object(
+  BASKET_SCHEMA_IDS.updatedEvent,
+  {
+    basketId: nonEmptyString(),
+    kind: ref(BASKET_SCHEMA_IDS.basketKind),
+    name: nullableString(),
+    status: ref(BASKET_SCHEMA_IDS.basketStatus),
+  },
+  ['basketId', 'kind', 'name', 'status']
 );
 
 const rowView = object(
@@ -919,7 +935,6 @@ const createRequest = object(
       type: ['string', 'null'],
       maxLength: BASKET_LIMITS.nameMaxLength,
     },
-    defaultTargetListId: nullableString(),
     idempotencyKey: nonEmptyString(),
     // The people to share the basket with as it is created (plan 0114, section 4).
     memberUserIds: {
@@ -973,7 +988,6 @@ const updateRequest = object(
       maxLength: BASKET_LIMITS.nameMaxLength,
     },
     status: ref(BASKET_SCHEMA_IDS.basketStatus),
-    defaultTargetListId: nullableString(),
   },
   ['userId', 'basketId']
 );
@@ -990,6 +1004,7 @@ export const basketSchemas: JsonSchema[] = [
   rowEntryView,
   entryPatch,
   linesChangedEvent,
+  updatedEvent,
   rowView,
   progress,
   view,

@@ -9,6 +9,7 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   SHOP_FINDER_SERVICE,
   ShopFinderMemory,
@@ -145,6 +146,7 @@ function render(
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      provideFakeCategoryStore(),
       provideFakeShopSectionsStore(),
       { provide: SHOP_FINDER_SERVICE, useValue: memory },
       provideFakeGeolocationReader(reader),
