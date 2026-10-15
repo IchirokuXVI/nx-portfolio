@@ -6,8 +6,13 @@
  * host (velista `0126`) owns the WebXR session and the compass listener, and
  * feeds their samples in here one at a time.
  *
+ * Recorder plan 0005 adds a third heading, the gyroscope's (the `game`
+ * stream). Magnets do not bend it, so while it is heard a camera frame that
+ * turned is told apart from a compass that turned: the first stops the walk,
+ * the second is only a notice.
+ *
  * Conventions:
- * - `t` is milliseconds on one clock shared by both streams.
+ * - `t` is milliseconds on one clock shared by all three streams.
  * - The map frame is the camera's: map `x` is the camera's `x` and map `y` is
  *   the camera's `z`, with the camera's `y` (up) ignored.
  * - A heading is degrees in [0, 360), 0 along map `+y` and clockwise as seen
@@ -74,6 +79,38 @@ export const PATH_STEP_MS = 1_000;
 /** A resume stands this far behind the mark it picked. Plan 0003 section 3. */
 export const RESUME_BACK_METRES = 0.5;
 
+/**
+ * The `now` window of the turn rule: the median of camera minus gyro heading
+ * over the last 2 s. Plan 0005 section 1. It is also how long the rule waits
+ * for poses after a loss, and the window of `state().gyroOffset` (section 4).
+ */
+export const TURN_NOW_MS = 2_000;
+
+/**
+ * The `before` window of the turn rule: the 10 s that end where `now`
+ * starts. Plan 0005 section 1. On 2026-09-28 the `game` yaw drifted about
+ * 100 degrees in 5 minutes against `absolute` (0.33 degrees per second), so
+ * across both windows the gyro moves 4 degrees at most.
+ */
+export const TURN_BEFORE_MS = 10_000;
+
+/**
+ * How far `now` may be from `before`. Plan 0005 section 1. On 2026-09-29
+ * camera minus gyro heading stepped by 158.5 degrees when the camera came
+ * back in a rotated frame, and the gyro's drift moves both medians together
+ * by a few degrees. The same limit tells a compass that turns while the phone
+ * does not (compass minus gyro heading) in plan 0005 section 2.
+ */
+export const TURN_LIMIT_DEGREES = 30;
+
+/**
+ * The gyro is heard while its last sample is younger than this. Plan 0005
+ * section 3. On 2026-09-29 the `game` stream of the Pixel 10a reported every
+ * 15 ms and never left a gap longer than 25 ms in 18 minutes (100 ms in the
+ * cut fixture), so a second without one is a stream that fell silent.
+ */
+export const GYRO_HEARD_MS = 1_000;
+
 /** One camera pose: the pose stream row of plan 0002 plus whether it is tracked. */
 export interface PoseSample {
   t: number;
@@ -101,13 +138,30 @@ export interface CompassSample {
   qw: number;
 }
 
+/**
+ * One gyro sample: the `game` stream row of plan 0002 (gyroscope and
+ * accelerometer, no magnetometer). The same shape as a compass sample, and
+ * its heading is read the same way, by `forwardBearing`. Plan 0005.
+ */
+export type GyroSample = CompassSample;
+
 export type TrackingStateKind = 'good' | 'lost' | 'suspect';
 
 /** The `reason` of the walk log's `stopped` entry that a guard stop writes. */
 export type TrackingStopReason = 'tracking-lost' | 'frame-moved';
 
-/** Why the guard entered `suspect`. */
-export type SuspectCause = 'returned' | 'heading' | 'jump';
+/**
+ * Why the guard entered `suspect`. `turned` is the turn rule of plan 0005:
+ * the camera frame turned against the gyro.
+ */
+export type SuspectCause = 'returned' | 'heading' | 'jump' | 'turned';
+
+/**
+ * The rule behind a stop, plan 0005 target 7: `lost` is the 3 s clock rule,
+ * `jump` the 2 m rule, `turned` the turn rule, and `heading` the compass rule
+ * of plan 0003, which stops a walk only while the gyro is not heard.
+ */
+export type TrackingStopCause = 'lost' | 'jump' | 'turned' | 'heading';
 
 export interface TrackingState {
   kind: TrackingStateKind;
@@ -129,6 +183,19 @@ export interface TrackingState {
   baseline?: number;
   /** The circular median of compass minus camera heading over the last 5 s. */
   offset?: number;
+  /**
+   * True from `compass-disturbed` to `compass-settled`: the compass is bent
+   * now, and a resume must not be turned by it. Plan 0005 section 2. It is
+   * judged only while tracking is `good` and the gyro is heard, and keeps its
+   * last value otherwise.
+   */
+  compassDisturbed: boolean;
+  /**
+   * The circular median of camera minus gyro heading over the last 2 s of
+   * tracked poses, in degrees. Plan 0005 section 4. Absent while no tracked
+   * pose came with the gyro heard in those 2 s.
+   */
+  gyroOffset?: number;
   /** True after `discard`: the walk stopped, and the guard reads nothing more. */
   ended: boolean;
 }
@@ -145,11 +212,19 @@ export type TrackingEvent =
       metres?: number;
       /** For `heading`: the 5 s median minus the baseline, in (−180, 180]. */
       drift?: number;
+      /** For `turned`: the 2 s median minus the 10 s before it, in (−180, 180]. */
+      turn?: number;
     }
   | {
       t: number;
       kind: 'stopped';
       reason: TrackingStopReason;
+      /** The rule that stopped the walk. Plan 0005 target 7. */
+      cause: TrackingStopCause;
+      /** For `turned` and `heading`: the angle that crossed the limit, in (−180, 180]. */
+      degrees?: number;
+      /** For `jump`: how far the frame moved. */
+      metres?: number;
       /**
        * True when the stop ends an unconfirmed segment: path points kept
        * since an automatic resume that nobody confirmed. They may be in a
@@ -158,6 +233,24 @@ export type TrackingEvent =
        * the loss. Absent when there is nothing unconfirmed to drop.
        */
       unconfirmedDropped?: true;
+    }
+  | {
+      t: number;
+      /**
+       * Compass minus camera heading left the baseline by more than 45
+       * degrees while the gyro saw the camera frame hold: the compass is
+       * bent, and the walk goes on. Plan 0005 section 2.
+       */
+      kind: 'compass-disturbed';
+      /** The 5 s median minus the baseline, in (−180, 180]. */
+      drift: number;
+    }
+  | {
+      t: number;
+      /** The 5 s median is back inside the limit. Plan 0005 section 2. */
+      kind: 'compass-settled';
+      /** The 5 s median minus the baseline, in (−180, 180]. */
+      drift: number;
     }
   | { t: number; kind: 'baseline'; degrees: number }
   | { t: number; kind: 'confirmed' }
@@ -173,6 +266,8 @@ export interface TrackingGuard {
   pushPose(sample: PoseSample): TrackingEvent[];
   /** Feeds one compass sample. Answers what it decided, usually nothing. */
   pushCompass(sample: CompassSample): TrackingEvent[];
+  /** Feeds one gyro sample. Answers what it decided, usually nothing. Plan 0005. */
+  pushGyro(sample: GyroSample): TrackingEvent[];
   /** The person said the unconfirmed path is right: back to `good`. */
   confirm(t: number): TrackingEvent[];
   /** The person said "No, stop here": the walk stops at the problem. */
@@ -246,12 +341,43 @@ export function cameraHeading(
   return normalizeDegrees((Math.atan2(-f[0], f[2]) * 180) / Math.PI);
 }
 
-/** The compass bearing of where the phone points, degrees clockwise from north. */
+/**
+ * The bearing of where the phone points, degrees clockwise. For a compass
+ * sample it is from north; for a gyro sample it is from wherever the `game`
+ * stream put its zero, which only differences use.
+ */
 export function compassHeading(
   sample: Pick<CompassSample, 'qx' | 'qy' | 'qz' | 'qw'>
 ): number {
   const bearing = forwardBearing([sample.qx, sample.qy, sample.qz, sample.qw]);
   return normalizeDegrees((bearing * 180) / Math.PI);
+}
+
+/** A timed angle in degrees. */
+interface Reading {
+  t: number;
+  offset: number;
+}
+
+/**
+ * The circular medians of the `now` window (the last 2 s up to `t`) and the
+ * `before` window (the 10 s that end where `now` starts), and their difference
+ * in (−180, 180]. Plan 0005 sections 1 and 2.
+ */
+function nowAndBefore(
+  readings: readonly Reading[],
+  t: number
+): { now?: number; before?: number; turn?: number } {
+  const split = t - TURN_NOW_MS;
+  const from = split - TURN_BEFORE_MS;
+  const now = circularMedian(
+    readings.filter((r) => r.t > split).map((r) => r.offset)
+  );
+  const before = circularMedian(
+    readings.filter((r) => r.t > from && r.t <= split).map((r) => r.offset)
+  );
+  if (now === undefined || before === undefined) return { now, before };
+  return { now, before, turn: wrapDegrees(now - before) };
 }
 
 export function createTrackingGuard(
@@ -271,17 +397,35 @@ export function createTrackingGuard(
   let lastTracked: PoseSample | undefined;
   let lostFrom: number | undefined;
   let compass: number | undefined;
-  let window: { t: number; offset: number }[] = [];
+  let window: Reading[] = [];
   let offset: number | undefined;
-  let learning: { t: number; offset: number }[] = [];
-  let disagreeing = false;
+  let learning: Reading[] = [];
+  /** The heading rule of plan 0003 fired, and the compass still disagrees. */
+  let headingFired = false;
   /** An automatic resume kept points that nobody has confirmed yet. */
   let unconfirmed = false;
+
+  let gyro: number | undefined;
+  let gyroAt: number | undefined;
+  /** Camera minus gyro heading of each tracked pose, for the turn rule. */
+  let cameraGyro: Reading[] = [];
+  /** Compass minus gyro heading of each tracked pose, for the baseline. */
+  let compassGyro: Reading[] = [];
+  /** The first tracked pose since the guard started or tracking was lost. */
+  let trackedFrom: number | undefined;
+  /** The turn rule fired, and `now` is still far from `before`. */
+  let turnFired = false;
+  let gyroOffset: number | undefined;
+  let compassDisturbed = false;
   const log: TrackingEvent[] = [];
 
   function emit(out: TrackingEvent[], e: TrackingEvent): void {
     out.push(e);
     log.push(e);
+  }
+
+  function gyroHeard(t: number): boolean {
+    return gyroAt !== undefined && t - gyroAt < GYRO_HEARD_MS;
   }
 
   function enter(next: TrackingStateKind, t: number): void {
@@ -295,7 +439,12 @@ export function createTrackingGuard(
     kind = next;
   }
 
-  function stop(out: TrackingEvent[], t: number, reason: TrackingStopReason) {
+  function stop(
+    out: TrackingEvent[],
+    t: number,
+    reason: TrackingStopReason,
+    why: { cause: TrackingStopCause; degrees?: number; metres?: number }
+  ) {
     if (stopped !== undefined) return;
     stopped = reason;
     automaticResume = false;
@@ -305,6 +454,7 @@ export function createTrackingGuard(
       t,
       kind: 'stopped',
       reason,
+      ...why,
       ...(dropped ? { unconfirmedDropped: true as const } : {}),
     });
   }
@@ -315,6 +465,7 @@ export function createTrackingGuard(
     automaticResume = false;
     lostFrom = t;
     lastTracked = undefined;
+    trackedFrom = undefined;
     emit(out, { t, kind: 'lost', cause: why });
   }
 
@@ -332,16 +483,18 @@ export function createTrackingGuard(
       lostFrom !== undefined &&
       t - lostFrom >= STOP_AFTER_LOST_MS
     ) {
-      stop(out, lostFrom + STOP_AFTER_LOST_MS, 'tracking-lost');
+      stop(out, lostFrom + STOP_AFTER_LOST_MS, 'tracking-lost', {
+        cause: 'lost',
+      });
     }
   }
 
-  /** The heading and jump rules: the frame moved. */
+  /** The heading, jump and turn rules: the frame moved. */
   function frameMoved(
     out: TrackingEvent[],
     t: number,
-    rule: 'heading' | 'jump',
-    detail: { metres?: number; drift?: number }
+    rule: 'heading' | 'jump' | 'turned',
+    detail: { metres?: number; drift?: number; turn?: number }
   ): void {
     enter('suspect', t);
     cause = rule;
@@ -353,10 +506,62 @@ export function createTrackingGuard(
       automaticResume: resuming,
       ...detail,
     });
-    stop(out, t, 'frame-moved');
+    stop(out, t, 'frame-moved', {
+      cause: rule,
+      ...(detail.metres === undefined ? {} : { metres: detail.metres }),
+      ...(detail.drift === undefined ? {} : { degrees: detail.drift }),
+      ...(detail.turn === undefined ? {} : { degrees: detail.turn }),
+    });
+  }
+
+  /**
+   * Plan 0005 section 1: camera minus gyro heading over the last 2 s against
+   * the 10 s before them. Only tracked poses count, so after a loss `before`
+   * is still the frame from before it, and the rule waits for 2 s of poses.
+   */
+  function turnRule(out: TrackingEvent[], sample: PoseSample): void {
+    if (gyro === undefined || !gyroHeard(sample.t)) {
+      gyroOffset = undefined;
+      return;
+    }
+    cameraGyro.push({
+      t: sample.t,
+      offset: normalizeDegrees(cameraHeading(sample) - gyro),
+    });
+    cameraGyro = cameraGyro.filter(
+      (r) => r.t > sample.t - TURN_NOW_MS - TURN_BEFORE_MS
+    );
+    const { now, turn } = nowAndBefore(cameraGyro, sample.t);
+    gyroOffset = now;
+    const answers =
+      trackedFrom !== undefined && sample.t - trackedFrom >= TURN_NOW_MS;
+    if (!answers || turn === undefined) return;
+    const turning = Math.abs(turn) > TURN_LIMIT_DEGREES;
+    if (turning && !turnFired) {
+      frameMoved(out, sample.t, 'turned', { turn });
+    }
+    turnFired = turning;
+  }
+
+  /**
+   * Plan 0005 section 2: the compass is turning while the phone does not,
+   * when compass minus gyro heading over the last 2 s is far from the 10 s
+   * before them. Such a sample is left out of the baseline.
+   */
+  function compassTurning(t: number): boolean {
+    if (compass === undefined || gyro === undefined || !gyroHeard(t)) {
+      return false;
+    }
+    compassGyro.push({ t, offset: normalizeDegrees(compass - gyro) });
+    compassGyro = compassGyro.filter(
+      (r) => r.t > t - TURN_NOW_MS - TURN_BEFORE_MS
+    );
+    const { turn } = nowAndBefore(compassGyro, t);
+    return turn !== undefined && Math.abs(turn) > TURN_LIMIT_DEGREES;
   }
 
   function heading(out: TrackingEvent[], sample: PoseSample): void {
+    const bending = compassTurning(sample.t);
     if (compass === undefined) return;
     const o = normalizeDegrees(compass - cameraHeading(sample));
     window.push({ t: sample.t, offset: o });
@@ -364,8 +569,8 @@ export function createTrackingGuard(
     offset = circularMedian(window.map((p) => p.offset));
 
     if (baseline === undefined && kind === 'good') {
-      learning.push({ t: sample.t, offset: o });
-      if (sample.t - learning[0].t >= BASELINE_MS) {
+      if (!bending) learning.push({ t: sample.t, offset: o });
+      if (learning.length > 0 && sample.t - learning[0].t >= BASELINE_MS) {
         baseline = circularMedian(learning.map((p) => p.offset));
         learning = [];
         if (baseline !== undefined) {
@@ -376,10 +581,27 @@ export function createTrackingGuard(
     if (baseline === undefined || offset === undefined) return;
     const drift = wrapDegrees(offset - baseline);
     const disagrees = Math.abs(drift) > HEADING_LIMIT_DEGREES;
-    if (disagrees && !disagreeing) {
+    if (!disagrees) headingFired = false;
+
+    if (gyroHeard(sample.t)) {
+      // The gyro watches the camera frame, so a compass that disagrees alone
+      // is a bent compass: a notice, and the walk goes on.
+      if (kind !== 'good') return;
+      if (disagrees && !compassDisturbed) {
+        compassDisturbed = true;
+        emit(out, { t: sample.t, kind: 'compass-disturbed', drift });
+      } else if (!disagrees && compassDisturbed) {
+        compassDisturbed = false;
+        emit(out, { t: sample.t, kind: 'compass-settled', drift });
+      }
+      return;
+    }
+    // No gyro: the compass rule of plan 0003 stops the walk, because a
+    // flipped frame that nobody catches draws a wrong map (plan 0005 section 3).
+    if (disagrees && !headingFired) {
+      headingFired = true;
       frameMoved(out, sample.t, 'heading', { drift });
     }
-    disagreeing = disagrees;
   }
 
   return {
@@ -393,6 +615,7 @@ export function createTrackingGuard(
         clock(out, sample.t);
         return out;
       }
+      trackedFrom ??= sample.t;
       if (kind === 'lost') {
         enter('suspect', sample.t);
         cause = 'returned';
@@ -417,6 +640,7 @@ export function createTrackingGuard(
         }
       }
       lastTracked = sample;
+      turnRule(out, sample);
       heading(out, sample);
       return out;
     },
@@ -430,6 +654,16 @@ export function createTrackingGuard(
       return out;
     },
 
+    pushGyro(sample) {
+      const out: TrackingEvent[] = [];
+      if (ended) return out;
+      since ??= sample.t;
+      gyro = compassHeading(sample);
+      gyroAt = sample.t;
+      clock(out, sample.t);
+      return out;
+    },
+
     confirm(t) {
       const out: TrackingEvent[] = [];
       if (ended || kind !== 'suspect') return out;
@@ -439,7 +673,11 @@ export function createTrackingGuard(
       unconfirmed = false;
       stopped = undefined;
       // A compass that still disagrees fires again on the next pose.
-      disagreeing = false;
+      headingFired = false;
+      // The person vouched for the frame they stand in, so the turn rule
+      // measures from it rather than reporting the same turn again.
+      cameraGyro = cameraGyro.filter((r) => r.t > t);
+      turnFired = false;
       emit(out, { t, kind: 'confirmed' });
       return out;
     },
@@ -463,6 +701,8 @@ export function createTrackingGuard(
         ...(stopped === undefined ? {} : { stopped }),
         ...(baseline === undefined ? {} : { baseline }),
         ...(offset === undefined ? {} : { offset }),
+        compassDisturbed,
+        ...(gyroOffset === undefined ? {} : { gyroOffset }),
         ended,
       };
     },
@@ -512,24 +752,51 @@ export interface RigidTransform {
   y: number;
 }
 
-export interface AlignSessionInput {
+/** Where the person resumes: the mark they picked, and where they stand. */
+interface AlignSessionPlace {
   /** The mark the person picked, in the walk's frame. `MapMark` fits. */
   mark: { x: number; y: number; heading: number };
   /** Where the person stands, in the new session's map frame (`mapPoint`). */
   standingAt: { x: number; y: number };
+}
+
+/**
+ * The rotation from the compass, plan 0003 section 3: the new session's
+ * compass offset against the walk's baseline.
+ */
+export interface AlignSessionByCompass extends AlignSessionPlace {
   /** The new session's compass minus camera heading (`state().offset`). */
   compassOffset: number;
   /** The walk's baseline (`state().baseline` of the first session). */
   baseline: number;
+  rotation?: never;
 }
 
 /**
+ * The rotation given as it is, plan 0005 section 4. From the gyro it is the
+ * stopped session's `gyroOffset` minus the new session's, added to the
+ * rotation the stopped session already had. A `gyroOffset` read from a guard
+ * fed aligned poses already holds that session's rotation.
+ */
+export interface AlignSessionByRotation extends AlignSessionPlace {
+  /** Degrees added to a new session's heading to give the walk's heading. */
+  rotation: number;
+  compassOffset?: never;
+  baseline?: never;
+}
+
+export type AlignSessionInput = AlignSessionByCompass | AlignSessionByRotation;
+
+/**
  * Plan 0003 section 3. The rotation is the new session's compass offset minus
- * the walk's baseline, and the translation puts the person on the mark moved
- * 0.5 m back along its heading.
+ * the walk's baseline, or the `rotation` passed in its place (plan 0005
+ * section 4), and the translation puts the person on the mark moved 0.5 m
+ * back along its heading.
  */
 export function alignSession(input: AlignSessionInput): RigidTransform {
-  const rotation = normalizeDegrees(input.compassOffset - input.baseline);
+  const rotation = normalizeDegrees(
+    input.rotation ?? input.compassOffset - input.baseline
+  );
   const h = (input.mark.heading * Math.PI) / 180;
   const target = {
     x: input.mark.x + RESUME_BACK_METRES * Math.sin(h),
