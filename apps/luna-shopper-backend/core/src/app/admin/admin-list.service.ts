@@ -520,8 +520,8 @@ export class AdminListService {
    * `basket_trip_rows`, which its finish froze, against the settlements standing
    * under its own id.
    *
-   * The field is still called `lines`, because the route is, and renaming a wire
-   * field is plan 0144's.
+   * The field is still called `lines`. Plan 0144 renamed the generated list to
+   * the basket and left this wire field as it was.
    */
   async getBasket(req: GetAdminBasketRequest): Promise<AdminBasketDetailView> {
     await this.gate.requireAdmin(req);

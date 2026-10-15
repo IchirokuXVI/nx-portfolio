@@ -1,3 +1,5 @@
+> **PR:** [#721](https://github.com/IchirokuXVI/nx-portfolio/pull/721)
+
 # 0138: the shopping list groups by parent category
 
 > Asked for by the owner on 2026-10-11: "The basket list won't be grouped by the child
@@ -146,3 +148,45 @@ After backend plan `0200`:
 
 Rows that are products (plan `0139`), and a rule that draws a product under one parent
 only, which the owner left for later.
+
+## What the build decided
+
+The build of 2026-10-15 built both stages. Backend `0200` was on `dev` (PR #707). Each point
+below is a choice of the builder that the owner can overturn.
+
+1. **The parents arrive as `BasketViewContext.parents`**, a map from the id of a root to its
+   `LocalizedName`, built by `categoryParents(tree)` in `product-category.ts`. The name stays a
+   pair, so the pipeline resolves it with the reader's locale like every other heading.
+2. **The tree is asked for only when somebody groups by category.** `BasketViewStore` calls
+   `CategoryStore.ensure()` from an effect on the grouping. A failed read is asked again the
+   next time the grouping changes to category, and each time a basket opens while the grouping
+   is category (`BasketViewStore.restore`). The retry is not in the effect, so a failure never
+   asks again by itself, and no loop is possible.
+3. **Until the tree lands, the whole category grouping is drawn ungrouped**, the aisles of a
+   shop included. The aisles do not need the tree, but drawing them with the rest ungrouped
+   below them would be a second interim layout. The tree is read once per session, so this is
+   one short wait per session. A tree that failed to load draws the list ungrouped until the
+   next basket opens (decision 2). `BasketViewStore.byAisle` is false for the same time, so the
+   chip, the radio of the filter sheet and the section name on each row say "category" while
+   no aisle heading is drawn.
+4. **A product with one known root and one stale root is drawn under the known one only.** It
+   goes under "No category" only when none of its roots is in the tree.
+5. **Stage 2 removed the `ShopSections` wrapper too.** With `source` gone it held one field, so
+   `ShopSectionsServiceI.sections` answers `readonly ShopSection[] | null` and the mapper
+   `toShopSections` answers the list. An older answer that still carries `source` or
+   `supermarketId` is read and those fields are dropped.
+6. **"A shop with no sections groups by parent category with no band"** needed no new code:
+   `basketGroupsByAisle` was already false for an empty list. A spec states it.
+7. **The shop picker (plan `0124`) needed no change.** Its names come from
+   `toShopSectionNames`, which reads `section.namesForLocations`, and backend `0200` already
+   reads that from the shop's own sections.
+8. **Outside the stated scope:** `apps/velista-luna-e2e/src/shop.spec.ts` expected the leaf
+   name over the Milk row. Its helper now reads the parent's name from the tree. Five sheet
+   specs of `feature-shopping-lists` provide the fake `CategoryStore`, because
+   `BasketViewStore` injects it.
+9. **No UI change.** The heading markup, the band and the progress are as they were. Only the
+   words in a heading changed.
+
+The browser walk of 2026-10-15 (390 pixels, English and Spanish, 31 rows under nine parents,
+and Mercadona Colón with two sections of its own) is a private artifact:
+https://claude.ai/artifact/6CdwhY1HnYGuHZEsVaYXDd

@@ -750,6 +750,14 @@ export interface UpdateLineRequest {
   content?: string;
   quantity?: number;
   /**
+   * The quantity the client saw (plan 0209, section 2.2). When present, the
+   * line must still hold it when the edit reads the line under its lock, or
+   * the edit is refused with `stale_quantity` and writes nothing, as the
+   * basket's demand route refuses a stale `from`. Absent, the edit writes
+   * what it was given.
+   */
+  from?: number;
+  /**
    * Replace the line's product set (plan 0048, section 1.1). An empty array
    * clears it and returns the line to free text.
    *

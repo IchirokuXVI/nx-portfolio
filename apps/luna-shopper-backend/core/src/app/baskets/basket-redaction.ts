@@ -6,8 +6,9 @@ import type { BasketParticipant } from '../entities';
  *
  * ## What it replaces, and why the old rule could not survive
  *
- * `seesZoneData` was all or nothing: a reader who held `WRITE` on **every** list
- * the run drew from saw all the zone data, and anybody else saw none. It had a
+ * The flag it replaced was all or nothing: a reader who held `WRITE` on
+ * **every** list the run drew from saw all the zone data, and anybody else saw
+ * none. It had a
  * known cliff, one list where they held only `READ` collapsed the whole view,
  * and plan 0051 section 11 already recorded the per list answer as the eventual
  * target.

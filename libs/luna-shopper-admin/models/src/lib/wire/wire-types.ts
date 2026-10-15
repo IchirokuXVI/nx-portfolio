@@ -1201,6 +1201,7 @@ export type UpdateItemsDto = {
 export type UpdateLineDto = {
   content?: string;
   quantity?: number;
+  from?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
   favoriteItemId?: string | null;

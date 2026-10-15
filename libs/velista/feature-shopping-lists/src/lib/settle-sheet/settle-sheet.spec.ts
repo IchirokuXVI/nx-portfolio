@@ -11,6 +11,7 @@ import {
   BasketViewStore,
   GatewayError,
   LINE_SERVICE,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
@@ -388,6 +389,7 @@ async function render(world: World = {}) {
       // supplies. The sheet asks it one thing, which shop the screen is pricing
       // at, and the honest answer for a spec that has not chosen one is its own.
       BasketViewStore,
+      provideFakeCategoryStore(),
       provideFakeShopSectionsStore(),
       { provide: LINE_SERVICE, useValue: lineService },
       // The reader's own account name, which the sheet uses for their own row in the

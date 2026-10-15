@@ -102,13 +102,17 @@ export const LINE_CLAIMS_SQL = `
 `;
 
 /**
- * The zone lines one basket covers and could be claiming. `$1` is the basket.
+ * The zone lines one generated basket covers, and so could be claiming. `$1` is
+ * the basket.
  *
- * One read where there were two (plan 0136, section 7.1). `BASKET_CLAIMED_LINES_SQL`
- * asked the basket's own lines and `BASKET_LINE_CLAIMED_LINES_SQL` asked one of
- * them; a basket has neither any more, so the narrow twin has nothing left to be
- * narrow about and the only question that survives is this one, asked by create,
- * finish, reopen and delete to say which lines to announce.
+ * No claim is stored: a line is claimed while an open trip covers it (plan
+ * 0136, section 7.3), so this lists candidates and claims nothing. It was named
+ * `BASKET_CLAIMED_LINES_SQL` until plan 0209, after the basket lines it asked
+ * before plan 0136. One read where there were two (plan 0136, section 7.1): a
+ * basket has no lines of its own any more, so the narrow twin that asked one of
+ * them has nothing left to be narrow about, and the only question that survives
+ * is this one, asked by create, finish, reopen and delete to say which lines to
+ * announce.
  *
  * It asks the basket rather than the lines, which is the shape the release
  * already has: a basket is finished or deleted as a whole, and the rooms that
@@ -126,7 +130,7 @@ export const LINE_CLAIMS_SQL = `
  * for the reason the claim gives: the permanent basket claims nothing, so it has
  * nothing to release.
  */
-export const BASKET_CLAIMED_LINES_SQL = `
+export const BASKET_ZONE_LINES_SQL = `
   SELECT DISTINCT
          sl."zoneId" AS "zoneId",
          sl.id AS "listId",
@@ -151,7 +155,7 @@ interface LineClaimRow {
   ownerUserId: string;
 }
 
-/** One row of {@link BASKET_CLAIMED_LINES_SQL}: a ref plus the room it goes to. */
+/** One row of {@link BASKET_ZONE_LINES_SQL}: a ref plus the room it goes to. */
 export interface ZoneLineClaimRef extends LineClaimRef {
   zoneId: string;
 }

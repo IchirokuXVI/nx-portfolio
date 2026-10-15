@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import type { ShopSection, ShopSections } from '@portfolio/velista/models';
+import type { ShopSection } from '@portfolio/velista/models';
 import type { ShopSectionsServiceI } from './shop-sections-service';
 
 /**
@@ -15,7 +15,6 @@ export const MEMORY_SHOP_SECTIONS: Readonly<
   'loc-tejares': [
     {
       id: 'sec-mercadona-eggs',
-      supermarketId: 'sm-mercadona',
       slug: 'eggs',
       name: { en: 'Eggs', es: 'Huevos' },
       position: 0,
@@ -50,14 +49,11 @@ export class ShopSectionsMemory implements ShopSectionsServiceI {
   /** Set to make every read fail, as a gateway that does not answer would. */
   failing = false;
 
-  async sections(locationId: string): Promise<ShopSections | null> {
+  async sections(locationId: string): Promise<readonly ShopSection[] | null> {
     this.asked.push(locationId);
     if (this.failing) {
       return null;
     }
-    return {
-      sections: MEMORY_SHOP_SECTIONS[locationId] ?? [],
-      source: 'CHAIN',
-    };
+    return MEMORY_SHOP_SECTIONS[locationId] ?? [];
   }
 }

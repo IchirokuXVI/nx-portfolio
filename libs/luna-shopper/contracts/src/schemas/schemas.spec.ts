@@ -34,14 +34,14 @@ import {
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../lib/messages/harvest.messages';
 import {
+  IMPERSONATION_EVENTS,
+  IMPERSONATION_PATTERNS,
+} from '../lib/messages/impersonation.messages';
+import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
 } from '../lib/messages/list.messages';
-import {
-  IMPERSONATION_EVENTS,
-  IMPERSONATION_PATTERNS,
-} from '../lib/messages/impersonation.messages';
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
@@ -51,6 +51,8 @@ import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
 } from '../lib/messages/zone.messages';
+import { buildAsyncApiDocument } from './asyncapi';
+import { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
 import {
   AUTH_SCHEMA_IDS,
   createContractsAjv,
@@ -2786,5 +2788,160 @@ describe('what a shop picker row needs (plan 0170)', () => {
     expect(answer([shop])).toBe(true);
     expect(answer([noSections])).toBe(false);
     expect(answer([noLogo])).toBe(false);
+  });
+});
+
+/** Every `$ref` anywhere under a value, depth first. */
+function refsIn(value: unknown, into: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      refsIn(item, into);
+    }
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, inner] of Object.entries(value)) {
+      if (key === '$ref' && typeof inner === 'string') {
+        into.push(inner);
+      } else {
+        refsIn(inner, into);
+      }
+    }
+  }
+  return into;
+}
+
+describe('the AsyncAPI document (plan 0209, section 3.3)', () => {
+  const document = buildAsyncApiDocument() as {
+    channels: Record<string, { subscribe?: { message: { payload: unknown } } }>;
+    components: { schemas: Record<string, unknown> };
+  };
+
+  it('resolves every $ref it holds to one of its own schemas', () => {
+    const refs = refsIn(document);
+    expect(refs.length).toBeGreaterThan(0);
+    const missing = [...new Set(refs)].filter(
+      (ref) => !(ref in document.components.schemas)
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('names the payload of each basket event, and of no other event', () => {
+    const payloadOf = (event: string) =>
+      document.channels[event]?.subscribe?.message.payload;
+    expect(payloadOf(RealtimeEvent.BasketLinesChanged)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope,
+    });
+    expect(payloadOf(RealtimeEvent.BasketUpdated)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope,
+    });
+    // Each envelope's payload is the event's own schema.
+    const envelopePayload = (id: string) =>
+      (
+        document.components.schemas[id] as {
+          properties: { payload: unknown };
+        }
+      ).properties.payload;
+    expect(
+      envelopePayload(DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope)
+    ).toEqual({ $ref: BASKET_SCHEMA_IDS.linesChangedEvent });
+    expect(
+      envelopePayload(DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope)
+    ).toEqual({ $ref: BASKET_SCHEMA_IDS.updatedEvent });
+    // Every other domain event still has a payload of any shape.
+    expect(payloadOf(RealtimeEvent.LineAdded)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.domainEventEnvelope,
+    });
+  });
+
+  it('checks the payload of a basket event against its schema', () => {
+    const envelope = {
+      event: RealtimeEvent.BasketUpdated,
+      eventId: 'e-1',
+      userIds: ['u-1'],
+      basketIds: ['b-1'],
+      payload: {
+        basketId: 'b-1',
+        kind: 'GENERATED',
+        name: null,
+        status: 'FINISHED',
+      },
+    };
+    expect(validateEvent(RealtimeEvent.BasketUpdated, envelope).valid).toBe(
+      true
+    );
+    // The header of a basket names its sources, which a guest may not see.
+    expect(
+      validateEvent(RealtimeEvent.BasketUpdated, {
+        ...envelope,
+        payload: { ...envelope.payload, sources: [] },
+      }).valid
+    ).toBe(false);
+    expect(
+      validateEvent(RealtimeEvent.BasketLinesChanged, {
+        ...envelope,
+        event: RealtimeEvent.BasketLinesChanged,
+        payload: { lineIds: ['l-1'], marksMoved: true },
+      }).valid
+    ).toBe(true);
+    expect(
+      validateEvent(RealtimeEvent.BasketLinesChanged, {
+        ...envelope,
+        event: RealtimeEvent.BasketLinesChanged,
+        payload: { lineIds: ['l-1'], listId: 'list-1' },
+      }).valid
+    ).toBe(false);
+  });
+
+  it('no longer declares the single basketId on the envelope', () => {
+    expect(
+      validateEvent(RealtimeEvent.LineAdded, {
+        event: RealtimeEvent.LineAdded,
+        eventId: 'e-1',
+        basketId: 'b-1',
+        payload: {},
+      }).valid
+    ).toBe(false);
+  });
+});
+
+describe('a basket request carries no default target list (plan 0209, section 3.1)', () => {
+  it('refuses defaultTargetListId on basket.create and basket.update', () => {
+    expect(validateMessageRequest('basket.create', { userId: 'u' }).valid).toBe(
+      true
+    );
+    expect(
+      validateMessageRequest('basket.create', {
+        userId: 'u',
+        defaultTargetListId: null,
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageRequest('basket.update', {
+        userId: 'u',
+        basketId: 'b',
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('basket.update', {
+        userId: 'u',
+        basketId: 'b',
+        defaultTargetListId: 'l',
+      }).valid
+    ).toBe(false);
+  });
+});
+
+describe('a line edit may say what it saw (plan 0209, section 2.2)', () => {
+  it('takes an optional whole number from 0', () => {
+    const edit = { userId: 'u', lineId: 'l', quantity: 3 };
+    expect(validateMessageRequest('line.update', edit).valid).toBe(true);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: 0 }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: -1 }).valid
+    ).toBe(false);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: 1.5 }).valid
+    ).toBe(false);
   });
 });
