@@ -9,6 +9,7 @@ export * from './lib/app-version';
 export * from './lib/assistant';
 export * from './lib/attribution';
 export * from './lib/basket-changes';
+export * from './lib/basket-patch';
 export * from './lib/basket-row-fold';
 export * from './lib/basket-search';
 export * from './lib/basket-summary';

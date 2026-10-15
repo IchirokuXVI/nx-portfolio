@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
+  basketEntryPatchOf,
   isOpenBasket,
   LINK_VISIT_HOURS,
   type Basket,
@@ -14,6 +15,7 @@ import {
   type BasketEntryAct,
   type BasketLinkPreview,
   type BasketListRef,
+  type BasketMarks,
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
@@ -38,10 +40,12 @@ import {
   type LiveBasketSummary,
   type ProductOffer,
 } from '@portfolio/velista/models';
+import { Subject } from 'rxjs';
 import { CatalogMemory } from '../catalog/catalog-memory';
 import { memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import type { BasketChangeContext } from '../mapping/basket-change-mappers';
+import type { RealtimeEvent } from '../realtime/realtime-events';
 import { memorySectionIdsAt } from '../shops/shop-sections-memory';
 import type { BasketServiceI } from './basket-service';
 
@@ -768,7 +772,9 @@ export class BasketMemory implements BasketServiceI {
       at: this.now(),
     });
     line.quantity = Math.max(0, line.quantity - quantity);
+    this._moved(lineId);
     this._recordBuy('BOUGHT', line, before, origin);
+    this._announce([lineId], true);
   }
 
   /**
@@ -803,8 +809,60 @@ export class BasketMemory implements BasketServiceI {
     purchase.quantity -= units;
     this._elsewhere = this._elsewhere.filter((held) => held.quantity > 0);
     line.quantity += units;
+    this._moved(lineId);
     this._recordBuy('BUY_REVERTED', line, before, origin);
+    this._announce([lineId], true);
   }
+
+  // --- The basket's room -----------------------------------------------------
+
+  /**
+   * What the server announces to this basket's room after a write (backend
+   * `0204`; velista `0143`, section 7): `basket.linesChanged`, with the state of
+   * each line for the writes that only move numbers, and the ids alone for the
+   * rest. Nothing subscribes in the running app, where the room is a socket. A
+   * spec hands these to the store as its socket would.
+   */
+  readonly events = new Subject<
+    Extract<RealtimeEvent, { type: 'basket.linesChanged' }>
+  >();
+
+  /**
+   * The patch of each named line as this basket reads it now, or the ids alone.
+   * A line no row holds any more has no patch, which the client reads as a line
+   * that left the basket.
+   */
+  private _announce(
+    lineIds: readonly string[],
+    marksMoved: boolean,
+    withEntries = true
+  ): void {
+    const held = new Map(
+      this._rows()
+        .flatMap((row) => row.entries)
+        .map((entry) => [entry.lineId, entry])
+    );
+    const entries = withEntries
+      ? lineIds.flatMap((lineId) => {
+          const entry = held.get(lineId);
+          return entry === undefined ? [] : [basketEntryPatchOf(entry)];
+        })
+      : null;
+    this.events.next({
+      type: 'basket.linesChanged',
+      lineIds: [...lineIds],
+      entries,
+      marksMoved,
+    });
+  }
+
+  /** `list_lines.version` rises: the line itself was written. */
+  private _moved(lineId: string): void {
+    this._versions.set(lineId, (this._versions.get(lineId) ?? 1) + 1);
+  }
+
+  /** The version of each line, from 1. See {@link _moved}. */
+  private readonly _versions = new Map<string, number>();
 
   /** A buy or a revert made outside this basket, newest first in the log. */
   private _recordBuy(
@@ -1116,6 +1174,40 @@ export class BasketMemory implements BasketServiceI {
     };
   }
 
+  /** The full read without the catalog half, as backend `0205` answers it. */
+  async getBasketRows(basketId: string, locationId?: string): Promise<Basket> {
+    const basket = await this.getBasket(basketId, locationId);
+    return { ...basket, products: new Map(), scopes: new Map(), shop: null };
+  }
+
+  /**
+   * The marks of each covered line and the banner's numbers (backend `0204`,
+   * section 6). A line takes `ADDED` when an unseen change added it, and
+   * `CHANGED` for any other unseen change. A removed line is not here.
+   */
+  async getMarks(): Promise<BasketMarks> {
+    const unseen = this._unseen();
+    const covered = new Set(
+      this._rows()
+        .flatMap((row) => row.entries)
+        .map((entry) => entry.lineId)
+    );
+    const lines = new Map<string, BasketChangeMark>();
+    for (const change of unseen) {
+      if (!covered.has(change.lineId)) {
+        continue;
+      }
+      if (change.kind === 'ADDED' || !lines.has(change.lineId)) {
+        lines.set(change.lineId, change.kind === 'ADDED' ? 'ADDED' : 'CHANGED');
+      }
+    }
+    return {
+      unseenChangeCount: Math.min(unseen.length, 99),
+      newestUnseenChangeId: unseen[0]?.id ?? null,
+      lines,
+    };
+  }
+
   async getLiveSummary(): Promise<LiveBasketSummary> {
     const rows = this._rows();
     return {
@@ -1138,6 +1230,7 @@ export class BasketMemory implements BasketServiceI {
       // A close holds no units and names no entry: the shop had none of it, for
       // everybody who asked.
       this._write(row.entries[0]?.lineId ?? target.rowKey, 'NOT_AVAILABLE', 0);
+      this._announce(target.lineIds, true);
       return this._result(target.lineIds);
     }
 
@@ -1169,6 +1262,7 @@ export class BasketMemory implements BasketServiceI {
       }
     }
 
+    this._announce(target.lineIds, true);
     return this._result(target.lineIds);
   }
 
@@ -1191,6 +1285,7 @@ export class BasketMemory implements BasketServiceI {
         throw this._refuse('validation_failed', 400, 'Nothing to take back');
       }
       close.reverted = true;
+      this._announce(target.lineIds, true);
       return this._result(target.lineIds);
     }
 
@@ -1211,6 +1306,7 @@ export class BasketMemory implements BasketServiceI {
       if (left <= 0) {
         break;
       }
+      this._moved(act.lineId);
       if (act.quantity <= left) {
         left -= act.quantity;
         act.reverted = true;
@@ -1231,6 +1327,7 @@ export class BasketMemory implements BasketServiceI {
       left = 0;
     }
 
+    this._announce(target.lineIds, true);
     return this._result(target.lineIds);
   }
 
@@ -1263,6 +1360,8 @@ export class BasketMemory implements BasketServiceI {
       line.skippedAt = at;
     }
 
+    // A skip moves no version (backend `0204`, review point 1).
+    this._announce(target.lineIds, false);
     return this._result(target.lineIds);
   }
 
@@ -1277,6 +1376,7 @@ export class BasketMemory implements BasketServiceI {
       line.skippedAt = null;
     }
 
+    this._announce(target.lineIds, false);
     return this._result(target.lineIds);
   }
 
@@ -1322,6 +1422,8 @@ export class BasketMemory implements BasketServiceI {
     this._requireFrom(body.from, entry.left);
 
     line.quantity = body.quantity;
+    this._moved(line.id);
+    this._announce([line.id], true);
     return this._result([line.id]);
   }
 
@@ -1375,9 +1477,12 @@ export class BasketMemory implements BasketServiceI {
           ? line.itemIds
           : [...line.itemIds, body.itemId];
         line.favoriteItemId = body.itemId;
+        this._moved(line.id);
       }
     }
 
+    // A change of product moves a line between rows, so it sends the ids alone.
+    this._announce(body.lineIds, true, false);
     return this._result(body.lineIds);
   }
 
@@ -1465,6 +1570,8 @@ export class BasketMemory implements BasketServiceI {
 
     if (held !== undefined) {
       held.quantity += quantity;
+      this._moved(held.id);
+      this._announce([held.id], true, false);
       return this._result([held.id]);
     }
 
@@ -1482,6 +1589,7 @@ export class BasketMemory implements BasketServiceI {
       skippedAt: null,
     };
     this._lines.push(line);
+    this._announce([line.id], true, false);
     return this._result([line.id]);
   }
 
@@ -1528,9 +1636,12 @@ export class BasketMemory implements BasketServiceI {
     for (const line of this._lines) {
       if (named.has(line.id)) {
         line.content = content;
+        this._moved(line.id);
       }
     }
 
+    // A rename can merge rows, so it sends the ids alone.
+    this._announce(target.lineIds, true, false);
     return this._result(target.lineIds);
   }
 
@@ -2076,6 +2187,7 @@ export class BasketMemory implements BasketServiceI {
       skipped: skipStands && line.quantity > 0,
       closed: newest?.outcome === 'NOT_AVAILABLE',
       act: this._actOf(line, newest),
+      version: this._versions.get(line.id) ?? 1,
       left: line.quantity,
       bought,
       asked: bought + line.quantity,
@@ -2331,6 +2443,7 @@ export class BasketMemory implements BasketServiceI {
         // never below zero: buying three of a line that says two is allowed, and
         // the extra unit is recorded rather than subtracted twice.
         line.quantity = Math.max(0, line.quantity - quantity);
+        this._moved(lineId);
       }
     }
   }

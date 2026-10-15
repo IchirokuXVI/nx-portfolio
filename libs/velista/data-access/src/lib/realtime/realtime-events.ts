@@ -1,8 +1,9 @@
 import type {
+  BasketEntryPatch,
   BasketParticipant,
   BasketPresenceEntry,
-  Comment,
   BasketSummary,
+  Comment,
   Line,
   LineSettlement,
   ListPermission,
@@ -282,20 +283,22 @@ export type RealtimeEvent =
        * privileged view there is (backend `0130`, section 6): the ids of the list
        * lines that moved, which name no household and no quantity.
        *
-       * So **the store never merges it**. It reads the basket again, coalesced,
-       * which is the only honest thing a reader holding ids can do.
+       * Since backend `0204` an envelope addressed to one basket can carry the
+       * state of each line as that basket reads it (`entries`), with no list, no
+       * name and no household, and the store applies it with no request
+       * (velista `0143`). Without them it reads the basket again.
        */
       readonly type: 'basket.linesChanged';
-      /**
-       * Which lines moved.
-       *
-       * Read but not acted on line by line: the store reads the whole basket,
-       * because a line id does not say which row holds it and a row is a group
-       * the server computes. It is kept because it is what the event is, and a
-       * future plan that wants to know whether this reader's own row moved has
-       * it without a wire change.
-       */
+      /** Which lines moved. Empty means the coverage moved, which only a read answers. */
       readonly lineIds: readonly string[];
+      /**
+       * The state of each line of {@link lineIds}, or null. A line with no patch
+       * left the basket. Null when the wire has none, **or when any one of them
+       * is malformed**: a patch half read is no patch, and the store reads.
+       */
+      readonly entries: readonly BasketEntryPatch[] | null;
+      /** The write recorded a change this basket is shown, so its marks moved. */
+      readonly marksMoved: boolean;
     }
   | {
       /**
@@ -309,9 +312,7 @@ export type RealtimeEvent =
        * The payload is the bare participant view, with no basket id on it, and it
        * needs none: it arrives only on a connection pinned to one basket.
        */
-      readonly type:
-        | 'basket.participantJoined'
-        | 'basket.participantLeft';
+      readonly type: 'basket.participantJoined' | 'basket.participantLeft';
       readonly participant: BasketParticipant;
     }
   | {

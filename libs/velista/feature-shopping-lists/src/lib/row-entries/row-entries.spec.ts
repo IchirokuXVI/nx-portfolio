@@ -46,6 +46,7 @@ function entry(over: Partial<BasketRowEntry> = {}): BasketRowEntry {
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
     ...over,
   };
 }

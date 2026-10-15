@@ -82,6 +82,7 @@ function entry(listId: string | null, lineId: string): BasketRowEntry {
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
   };
 }
 

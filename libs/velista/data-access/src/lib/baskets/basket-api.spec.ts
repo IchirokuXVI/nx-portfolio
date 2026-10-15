@@ -217,6 +217,7 @@ describe('BasketApi, the writes on a row', () => {
         state: 'SKIPPED',
         approvalStatus: 'APPROVED',
         demandEditable: true,
+        version: 1,
       },
     ],
     progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
@@ -618,6 +619,50 @@ describe('BasketApi, the writes on a row', () => {
       expect(req.request.params.get('locationId')).toBe('loc-merca');
       req.flush(BODY);
       await done;
+    });
+
+    /** Velista `0143`, section 5: the rows read of backend `0205`. */
+    it('reads the rows alone at the shop of the full read', async () => {
+      const done = api.getBasketRows(BASKET, 'loc-merca');
+      const req = httpMock.expectOne(
+        (candidate) => candidate.url === `${GATEWAY}/v1/baskets/${BASKET}/rows`
+      );
+      expect(req.request.method).toBe('GET');
+      expect(req.request.params.get('locationId')).toBe('loc-merca');
+      req.flush(BODY);
+      const basket = await done;
+      expect(basket.products.size).toBe(0);
+      expect(basket.id).toBe(BASKET);
+    });
+  });
+
+  /** Velista `0143`, section 4. */
+  describe('the marks read', () => {
+    it('reads the marks of each line and the banner', async () => {
+      const done = api.getMarks(BASKET);
+      httpMock
+        .expectOne(`${GATEWAY}/v1/baskets/${BASKET}/changes/marks`)
+        .flush({
+          unseenChangeCount: 2,
+          newestUnseenChangeId: 'chg-9',
+          lines: [
+            { lineId: 'zl-1', mark: 'ADDED' },
+            { lineId: 'zl-2', mark: 'SOMETHING_NEW' },
+          ],
+        });
+      expect(await done).toEqual({
+        unseenChangeCount: 2,
+        newestUnseenChangeId: 'chg-9',
+        lines: new Map([['zl-1', 'ADDED']]),
+      });
+    });
+
+    it('refuses a body it cannot read', async () => {
+      const done = api.getMarks(BASKET);
+      httpMock
+        .expectOne(`${GATEWAY}/v1/baskets/${BASKET}/changes/marks`)
+        .flush({ lines: 'none' });
+      await expect(done).rejects.toBeTruthy();
     });
   });
 });

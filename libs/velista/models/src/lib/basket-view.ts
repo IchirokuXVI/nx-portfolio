@@ -555,6 +555,13 @@ export interface BasketRowEntry {
    * compared with this device's clock.
    */
   readonly act: BasketEntryAct | null;
+  /**
+   * `list_lines.version` as the server last stated it (backend `0204`, section
+   * 5). Kept to drop a patch older than the entry (velista `0143`, section 2). It
+   * does not rise on a skip or on "they had none", so two states of one entry
+   * can carry one version.
+   */
+  readonly version: number;
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
