@@ -236,6 +236,8 @@ fixture that recorder `0005` section 5 asks for.
   `velista/data-access` and `velista/feature-walk-lab`: green (three warnings from before
   this plan). `npx nx build velista`: green.
 - `velista-luna-e2e` on Luna slot 4 started with `LUNA_REFERENCE_SEED=0`: 8 of 8 pass.
+  After the review fixes (items 11 and 12, the read mapper, the wrapped degrees), on Luna
+  slot 2 started the same way: 8 of 8 pass.
 - **Browser walk** of `?fakeWalk=4` at 390 px on that slot. The log read back holds
   `compass-disturbed` at 76.1 s (46.6 degrees) and `compass-settled` at 87.1 s, with no
   stop and no tone between them. It holds a `lost` event at each of the three losses, and
