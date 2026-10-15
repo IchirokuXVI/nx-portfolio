@@ -774,6 +774,41 @@ describe('the Sections tab of a shop', () => {
     expect(panel.removing()).toBe(false);
   });
 
+  it('closes the delete dialog of a shop left while the delete ran', async () => {
+    const { panel, pick } = await bareShop('loc_cordoba_oeste');
+    const service = TestBed.inject(ShopSections);
+    const settlers: { done: () => void; fail: (error: unknown) => void }[] = [];
+    jest.spyOn(service, 'remove').mockImplementation(
+      () =>
+        new Promise<void>((done, fail) => {
+          settlers.push({ done, fail });
+        })
+    );
+
+    // The delete is answered after another shop was picked.
+    let section = panel.rows()[0].section;
+    panel.deleting.set(section);
+    let deleting = panel.confirmDelete(section);
+    await pick('loc_cordoba_centro');
+    settlers[0].done();
+    await deleting;
+
+    expect(panel.deleting()).toBeNull();
+    expect(panel.removing()).toBe(false);
+
+    // The delete is refused after another shop was picked.
+    section = panel.rows()[0].section;
+    panel.deleting.set(section);
+    deleting = panel.confirmDelete(section);
+    await pick('loc_cordoba_oeste');
+    settlers[1].fail(refusal('section_not_found', 404));
+    await deleting;
+
+    expect(panel.deleting()).toBeNull();
+    expect(panel.removing()).toBe(false);
+    expect(panel.saveErrorKey()).toBeNull();
+  });
+
   it('reads the list again when a saved order names a section deleted since, keeping the order', async () => {
     const { fixture, panel } = await openShop('loc_cordoba_oeste');
     const gateway = TestBed.inject(RESOURCE_GATEWAYS).for(sectionSource());
@@ -831,6 +866,41 @@ describe('the Sections tab of a shop', () => {
     expect(
       fixture.nativeElement.querySelector('[data-reread-failed]')?.textContent
     ).toContain('catalog.locationSections.rereadFailed');
+  });
+
+  it('keeps an order in hand when the failed read after a delete is retried', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro', [PHONE]);
+    panel.mapEditAccepted.set(true);
+    const gateway = TestBed.inject(RESOURCE_GATEWAYS).for(sectionSource());
+    await gateway.create({
+      supermarketLocationId: 'loc_cordoba_centro',
+      slug: 'bakery',
+      name: { en: 'Bakery', es: 'Panadería' },
+      categoryIds: [],
+    });
+    await panel.reload();
+    const bakery = panel.rows()[2].section.id;
+    panel.move(bakery, -1);
+    panel.move(bakery, -1);
+    jest
+      .spyOn(TestBed.inject(ShopSections), 'forLocation')
+      .mockRejectedValueOnce(refusal('unavailable', 503));
+
+    await panel.confirmDelete(panel.rows()[2].section);
+    await settle(fixture);
+    expect(panel.order()).toEqual([bakery, CENTRO_CHILLED]);
+
+    (
+      fixture.nativeElement.querySelector(
+        '[data-reread-failed] button'
+      ) as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(panel.rereadErrorKey()).toBeNull();
+    expect(idsOf(panel.saved() ?? [])).toEqual([CENTRO_CHILLED, bakery]);
+    expect(panel.order()).toEqual([bakery, CENTRO_CHILLED]);
+    expect(panel.dirty()).toBe(true);
   });
 
   it('says why a preview could not be read', async () => {

@@ -280,7 +280,7 @@ export function previewSentence(
           <div class="failure" role="alert" data-reread-failed>
             <p>{{ 'catalog.locationSections.rereadFailed' | rokuT }}</p>
             <p>{{ key | rokuT }}</p>
-            <button (click)="reload()" type="button">
+            <button (click)="reread()" type="button">
               {{ 'resource.action.retry' | rokuT }}
             </button>
           </div>
@@ -835,6 +835,11 @@ export class LocationSections {
     return this._read(this.locationId());
   }
 
+  /** Read the list again, keeping an order being changed. */
+  reread(): Promise<void> {
+    return this._read(this.locationId(), this.order());
+  }
+
   move(id: string, step: -1 | 1): void {
     if (this._needsMapConsent(() => this.move(id, step))) {
       return;
@@ -969,14 +974,16 @@ export class LocationSections {
       await this._sections.remove(section.id);
     } catch (error) {
       if (generation === this._generation) {
-        this.deleting.set(null);
         this.saveErrorKey.set(panelErrorKey(error));
       }
+      // The dialog names a section of the shop it was opened over.
+      this.deleting.set(null);
       this.removing.set(false);
       return;
     }
     this._changes.wrote('sections');
     if (generation !== this._generation) {
+      this.deleting.set(null);
       this.removing.set(false);
       return;
     }

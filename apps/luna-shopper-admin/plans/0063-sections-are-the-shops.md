@@ -71,7 +71,8 @@ disagree, this section is right.
 10. **A delete is done once `remove` answers** (follow up PR [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). If the read
     after it fails, the row leaves the list held here, the page above and the preview are
     told, and the failed read is said on its own under the list
-    (`catalog.locationSections.rereadFailed`, with Retry).
+    (`catalog.locationSections.rereadFailed`, with Retry). Retry reads the list again and
+    keeps the order in hand, as the read after `section_not_found` does.
 
 What moved, against the names the plan uses:
 
