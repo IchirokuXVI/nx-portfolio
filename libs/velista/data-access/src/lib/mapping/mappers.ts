@@ -804,6 +804,23 @@ export function toCatalogSuggestions(
 }
 
 /**
+ * From `catalog.ItemLookupResponse` (`POST /v1/catalog/items/lookup`), or null
+ * for a body that is not one.
+ *
+ * Asked with `prices: true` (backend `0207`), the answer names the chain of each
+ * scope its offers quote in `scopes`, the map the suggest answer carries, so each
+ * item's offers become its `chainPrices` here (velista `0145`, section 7). Without
+ * it there is no map and `chainPrices` is empty.
+ */
+export function toItemLookup(body: unknown): readonly CatalogItem[] | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const chains = toScopeChains(body['scopes']);
+  return mapArray(body['items'], (raw) => toCatalogItem(raw, chains));
+}
+
+/**
  * From `catalog.CatalogSuggestion` (backend plan 0048, section 3).
  *
  * The wire shape is `{ kind, group, item }` with both halves nullable, which

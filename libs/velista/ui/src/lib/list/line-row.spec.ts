@@ -3,6 +3,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   QUANTITY_REEL_CLICK_SHIELD_MS,
   QUANTITY_REEL_IDLE_MS,
+  type LineRowShownProduct,
   type LineRowVm,
 } from '@portfolio/velista/models';
 import { LineRow } from './line-row';
@@ -61,6 +62,41 @@ async function render(
 
 function row(fixture: ComponentFixture<LineRow>): HTMLElement {
   return fixture.nativeElement.querySelector('.row') as HTMLElement;
+}
+
+/** The product a row shows, as `selectListState` builds it (velista `0145`). */
+function shown(
+  overrides: Partial<LineRowShownProduct> = {}
+): LineRowShownProduct {
+  return {
+    kind: 'shown',
+    itemId: 'milk',
+    name: 'Leche semidesnatada',
+    brandSize: 'Hacendado · 1 L',
+    imageUrl: null,
+    favorite: false,
+    others: 0,
+    price: '0,92 €',
+    ...overrides,
+  };
+}
+
+function query(
+  fixture: ComponentFixture<LineRow>,
+  selector: string
+): Element | null {
+  return (fixture.nativeElement as HTMLElement).querySelector(selector);
+}
+
+function text(fixture: ComponentFixture<LineRow>, selector: string): string {
+  return query(fixture, selector)?.textContent?.trim() ?? '';
+}
+
+/** The status words the row draws, as the testing translator renders them. */
+function statusWords(fixture: ComponentFixture<LineRow>): string[] {
+  return [
+    ...(fixture.nativeElement as HTMLElement).querySelectorAll('[data-status]'),
+  ].map((word) => word.textContent?.trim() ?? '');
 }
 
 function reel(fixture: ComponentFixture<LineRow>): HTMLElement | null {
@@ -154,28 +190,40 @@ describe('LineRow', () => {
       expect(row(fixture).getAttribute('aria-label')).toBe('Milk, 1');
     });
 
-    it('draws the format and the brand under the name, and says them', async () => {
+    it('draws the detail of a row built without a catalog on line 2, and says it', async () => {
       const fixture = await render(
         vm({ content: 'Milk', quantity: 2, detail: '1 L · Oatly' })
       );
-      const host = fixture.nativeElement as HTMLElement;
 
-      // What tells this Milk from another Milk on the same list, to a reader who
-      // sees the row and to one who hears it.
-      expect(host.querySelector('.detail')?.textContent?.trim()).toBe(
-        '1 L · Oatly'
-      );
+      expect(text(fixture, '.line-2 .brand-size')).toBe('1 L · Oatly');
       expect(row(fixture).getAttribute('aria-label')).toBe(
         'Milk, 1 L · Oatly, 2'
       );
     });
 
-    it('draws no detail line on a row that has none', async () => {
-      const fixture = await render(vm({ detail: null }));
+    it('says the product, its brand and size, and the price of a named line (velista 0145)', async () => {
+      const fixture = await render(
+        vm({ content: 'Leche', named: true, quantity: 6, product: shown() })
+      );
 
-      expect(
-        (fixture.nativeElement as HTMLElement).querySelector('.detail')
-      ).toBeNull();
+      expect(row(fixture).getAttribute('aria-label')).toBe(
+        'Leche, Leche semidesnatada, Hacendado · 1 L, 0,92 €, 6'
+      );
+    });
+
+    it('says only the name and the price of a line that is not named', async () => {
+      const fixture = await render(
+        vm({
+          content: 'Leche semidesnatada',
+          named: false,
+          quantity: 6,
+          product: shown(),
+        })
+      );
+
+      expect(row(fixture).getAttribute('aria-label')).toBe(
+        'Leche semidesnatada, 0,92 €, 6'
+      );
     });
 
     it('says zero rather than dropping it', async () => {
@@ -196,9 +244,8 @@ describe('LineRow', () => {
 
       expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 0');
       // Both are descriptions instead, which is where a screen reader user can reach
-      // them on demand rather than having them read out on every focus (section 7).
-      const describedBy = row(fixture).getAttribute('aria-describedby') ?? '';
-      expect(describedBy.split(' ')).toEqual(['ind-ln-1', 'cap-ln-1']);
+      // them on demand rather than having them read out on every focus.
+      expect(row(fixture).getAttribute('aria-describedby')).toBe('st-ln-1');
     });
 
     it('describes nothing when there is nothing to describe', async () => {
@@ -208,52 +255,236 @@ describe('LineRow', () => {
     });
   });
 
-  /** Section 3.3, and the one case that proves they are a list and not a value. */
-  describe('the three indicators', () => {
+  /** Velista 0145, section 4: one word on the row, every word for a screen reader. */
+  describe('the status word', () => {
     it('draws nothing at all on an ordinary row', async () => {
       const fixture = await render(vm());
 
-      expect(fixture.nativeElement.querySelector('.indicators')).toBeNull();
+      expect(statusWords(fixture)).toEqual([]);
     });
 
     it('draws nothing on a line at zero that has never been bought', async () => {
       // The never wanted case: somebody typed it and it has not been needed yet.
-      // It looks exactly like a settled line to anything testing the quantity alone,
-      // which is the whole reason the container is given a count to derive from.
       const fixture = await render(
         vm({ quantity: 0, settled: false, indicators: [] })
       );
 
-      expect(fixture.nativeElement.querySelector('.indicators')).toBeNull();
+      expect(statusWords(fixture)).toEqual([]);
     });
 
-    it('draws two at once when two are true', async () => {
+    it('draws one word, the first of section 4, and describes them all', async () => {
       const fixture = await render(
-        vm({ indicators: ['notAvailable', 'claimed'], claimedBy: 'Ana' })
+        vm({
+          approvalStatus: 'PENDING',
+          captionKey: 'list.line.awaitingApproval',
+          indicators: ['notAvailable', 'claimed'],
+          claimedBy: 'Ana',
+        })
       );
 
-      const drawn = [
-        ...fixture.nativeElement.querySelectorAll('.indicator'),
-      ] as HTMLElement[];
-      expect(drawn).toHaveLength(2);
-      expect(drawn[0].classList.contains('indicator-notAvailable')).toBe(true);
-      expect(drawn[1].classList.contains('indicator-claimed')).toBe(true);
+      expect(statusWords(fixture)).toEqual(['list.line.awaitingApproval']);
+      const described = text(fixture, '#st-ln-1');
+      expect(described.indexOf('awaitingApproval')).toBeLessThan(
+        described.indexOf('claimedBy')
+      );
+      expect(described.indexOf('claimedBy')).toBeLessThan(
+        described.indexOf('notAvailable')
+      );
+    });
+
+    it('puts somebody buying it before not available, and that before bought', async () => {
+      const fixture = await render(
+        vm({
+          indicators: ['bought', 'notAvailable', 'claimed'],
+          claimedBy: 'Ana',
+        })
+      );
+
+      expect(statusWords(fixture)).toEqual(['line.indicator.claimedBy']);
     });
 
     it('names whoever is buying it, and says somebody when it cannot', async () => {
       const named = await render(
         vm({ indicators: ['claimed'], claimedBy: 'Ana' })
       );
-      expect(
-        named.nativeElement.querySelector('.indicator-claimed')?.textContent
-      ).toContain('claimedBy');
+      expect(statusWords(named)).toEqual(['line.indicator.claimedBy']);
 
       const anonymous = await render(
         vm({ indicators: ['claimed'], claimedBy: null })
       );
+      expect(statusWords(anonymous)).toEqual(['line.indicator.claimed']);
+    });
+
+    it('ends line 2, so a row has no third line', async () => {
+      const fixture = await render(
+        vm({ indicators: ['bought'], settled: true, product: shown() })
+      );
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelector('.line-2 [data-status]')).not.toBeNull();
       expect(
-        anonymous.nativeElement.querySelector('.indicator-claimed')?.textContent
-      ).toContain('claimed');
+        host.querySelectorAll('.body > :not(.visually-hidden)')
+      ).toHaveLength(2);
+    });
+  });
+
+  /** Velista 0145, section 3: a picture and two lines. */
+  describe('the two lines', () => {
+    it('draws a named line: its name in the heavier weight, the price, then the product', async () => {
+      const fixture = await render(
+        vm({ content: 'Leche', named: true, product: shown() })
+      );
+
+      expect(text(fixture, '.line-1 .content')).toBe('Leche');
+      expect(query(fixture, '.content.own')).not.toBeNull();
+      expect(text(fixture, '.line-1 .price')).toBe('0,92 €');
+      expect(text(fixture, '.line-2 .product-name')).toBe(
+        'Leche semidesnatada'
+      );
+      expect(text(fixture, '.line-2 .brand-size')).toBe('Hacendado · 1 L');
+    });
+
+    it('draws a line that is not named: the product name as its name, the brand and size alone', async () => {
+      const fixture = await render(
+        vm({
+          content: 'Tomate frito',
+          named: false,
+          product: shown({
+            name: 'Tomate frito',
+            brandSize: 'Hacendado · 400 g',
+          }),
+        })
+      );
+
+      expect(query(fixture, '.content.own')).toBeNull();
+      expect(query(fixture, '.line-2 .product-name')).toBeNull();
+      expect(text(fixture, '.line-2 .brand-size')).toBe('Hacendado · 400 g');
+    });
+
+    it('says No price for a product with none', async () => {
+      const fixture = await render(vm({ product: shown({ price: null }) }));
+
+      expect(text(fixture, '.line-1 .price.none')).toBe('list.row.noPrice');
+    });
+
+    it('draws the star of the favourite with a name of its own', async () => {
+      const fixture = await render(
+        vm({ named: true, product: shown({ favorite: true }) })
+      );
+
+      expect(query(fixture, '.favorite')?.getAttribute('aria-label')).toBe(
+        'list.row.favorite'
+      );
+      expect(query(fixture, '.favorite lib-star-filled-icon')).not.toBeNull();
+    });
+
+    it('says how many more products will do, in words as well', async () => {
+      const fixture = await render(vm({ product: shown({ others: 2 }) }));
+
+      expect(text(fixture, '.more')).toBe('+2');
+      expect(query(fixture, '.more')?.getAttribute('aria-label')).toBe(
+        'list.row.more'
+      );
+    });
+
+    it('draws no "+N" on a line with one product', async () => {
+      const fixture = await render(vm({ product: shown({ others: 0 }) }));
+
+      expect(query(fixture, '.more')).toBeNull();
+    });
+
+    it('draws the photo, and the product icon with none', async () => {
+      const photo = await render(
+        vm({ product: shown({ imageUrl: 'https://img.example/1.jpg' }) })
+      );
+      expect(query(photo, 'lib-product-picture img')).not.toBeNull();
+
+      const none = await render(vm({ product: shown({ imageUrl: null }) }));
+      expect(
+        query(none, 'lib-product-picture lib-product-icon')
+      ).not.toBeNull();
+    });
+
+    it('draws bones for the picture and line 2 while the product loads, and keeps the name', async () => {
+      const fixture = await render(
+        vm({ content: 'Leche', named: true, product: { kind: 'loading' } })
+      );
+
+      expect(text(fixture, '.line-1 .content')).toBe('Leche');
+      expect(query(fixture, '.picture.bone')).not.toBeNull();
+      expect(query(fixture, '.line-2 .line-bone')).not.toBeNull();
+    });
+
+    it('draws the name and no product when the products did not load', async () => {
+      const fixture = await render(
+        vm({ content: 'Leche', product: { kind: 'unread' } })
+      );
+
+      expect(text(fixture, '.line-1 .content')).toBe('Leche');
+      expect(query(fixture, '.price')).toBeNull();
+      expect(query(fixture, '.choose')).toBeNull();
+    });
+  });
+
+  /** Velista 0145, section 5. */
+  describe('a row with no product', () => {
+    it('asks for one with the plus and the words, two buttons for one action', async () => {
+      const fixture = await render(
+        vm({
+          content: 'Pan de molde',
+          product: { kind: 'none', canChoose: true },
+        })
+      );
+      const chosen: string[] = [];
+      fixture.componentInstance.chooseProduct.subscribe((id) =>
+        chosen.push(id)
+      );
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      const plus = query(fixture, 'button.choose') as HTMLButtonElement;
+      expect(plus.getAttribute('aria-label')).toBe('list.row.chooseFor');
+      plus.click();
+      (query(fixture, 'button.ask') as HTMLButtonElement).click();
+
+      expect(text(fixture, 'button.ask')).toBe('list.row.choose');
+      expect(chosen).toEqual(['ln-1', 'ln-1']);
+      // Neither opens the line under it.
+      expect(opened).toEqual([]);
+    });
+
+    it('does not open the line on Enter in either button', async () => {
+      const fixture = await render(
+        vm({ product: { kind: 'none', canChoose: true } })
+      );
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      query(fixture, 'button.ask')?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
+
+      expect(opened).toEqual([]);
+    });
+
+    it('says No product to a reader who may not change the line, with no button', async () => {
+      const fixture = await render(
+        vm({ product: { kind: 'none', canChoose: false } })
+      );
+
+      expect(query(fixture, 'button.choose')).toBeNull();
+      expect(query(fixture, 'button.ask')).toBeNull();
+      expect(text(fixture, '.no-product')).toBe('list.row.noProduct');
+      expect(query(fixture, 'lib-product-picture')).not.toBeNull();
+    });
+
+    it('offers no choice in reorder mode', async () => {
+      const fixture = await render(
+        vm({ product: { kind: 'none', canChoose: true } }),
+        { reordering: true }
+      );
+
+      expect(query(fixture, 'button.choose')).toBeNull();
     });
   });
 

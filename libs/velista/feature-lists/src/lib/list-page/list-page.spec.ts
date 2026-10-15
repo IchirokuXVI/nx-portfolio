@@ -22,6 +22,7 @@ import {
   fakeZoneStore,
   GatewayError,
   ListViewStore,
+  ProductPickStore,
   provideFakeCategoryStore,
   provideFakeItemNames,
   provideFakeLineStore,
@@ -190,6 +191,8 @@ interface Options {
   readonly line?: string;
   /** The products the catalog can name, for the category view (velista `0082`). */
   readonly items?: readonly CatalogItem[];
+  /** Products whose read failed (velista `0145`, section 7). */
+  readonly failedItems?: readonly string[];
   /** The first page of trips, or a failure (velista `0088`). None by default. */
   readonly trips?: TripPage | 'fail';
   /** Each trip's rows, by trip id. */
@@ -243,7 +246,10 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
-  const itemNames = fakeItemNames({ items: options.items ?? [] });
+  const itemNames = fakeItemNames({
+    items: options.items ?? [],
+    failed: options.failedItems ?? [],
+  });
   const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
   const tripCalls = { heads: 0, rows: [] as string[] };
@@ -280,6 +286,9 @@ async function render(options: Options = {}): Promise<{
       extras,
     })),
     serializeUrl: jest.fn(() => '/velista/en/zones/z/lists/l'),
+    // What the row's choice of a product builds its URL with (velista `0145`).
+    parseUrl: jest.fn((url: string) => ({ url, queryParams: {} })),
+    url: '/velista/en/zones/z/lists/l',
   };
   const activatedRoute = route(
     options.line,
@@ -307,6 +316,8 @@ async function render(options: Options = {}): Promise<{
       // app's, answered here by the spec.
       { provide: DUE_LINE_SERVICE, useValue: dueService },
       provideFakeItemNames(itemNames),
+      // The catalog opened to choose a product from a row (velista `0145`).
+      ProductPickStore,
       // The tree has not landed, so the category view is in first appearance order
       // and named from the products (velista `0118`).
       provideFakeCategoryStore(),
@@ -1443,22 +1454,41 @@ describe('ListPage: searching and viewing one category', () => {
     expect(filterAction(fixture)).toBeNull();
   });
 
-  it('asks for the products of the loaded lines, and for new ones as lines arrive', async () => {
+  it('reads the products of the loaded lines with their prices, and only new ones as lines arrive', async () => {
     const { fixture, lines, itemNames } = await render({
       lines: LINES,
       items: ITEMS,
     });
 
-    expect(itemNames.asked.flat()).toEqual(
-      expect.arrayContaining(['milk', 'carrot'])
-    );
+    expect(itemNames.refreshed).toEqual([['milk', 'carrot']]);
 
     // A line arriving, which is the same signal a socket event writes.
     await lines.addLine(LIST_ID, 'Pan', 1, ME, {}, ['bread']);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(itemNames.asked[itemNames.asked.length - 1]).toContain('bread');
+    expect(itemNames.refreshed).toEqual([['milk', 'carrot'], ['bread']]);
+  });
+
+  it('reads every product again once the socket comes back (velista 0145)', async () => {
+    const { fixture, realtime, itemNames } = await render({
+      lines: LINES,
+      items: ITEMS,
+    });
+
+    realtime.setConnected(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(itemNames.refreshed).toHaveLength(1);
+
+    realtime.setConnected(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(itemNames.refreshed).toEqual([
+      ['milk', 'carrot'],
+      ['milk', 'carrot'],
+    ]);
   });
 
   it('counts A to Z and a picked category on the filter badge', async () => {
@@ -2501,5 +2531,92 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     expect(fixture.componentInstance.productLink()('item-oat')).toMatch(
       /\/catalog\/products\/item-oat$/
     );
+  });
+});
+
+describe('ListPage: a row with no product (velista 0145)', () => {
+  it('opens the catalog that chooses one product for the line, on its name', async () => {
+    const { fixture, router } = await render({
+      lines: [line('ln-bread', { content: 'Pan de molde', itemIds: [] })],
+    });
+    const pick = TestBed.inject(ProductPickStore);
+
+    const plus = (fixture.nativeElement as HTMLElement).querySelector(
+      'lib-line-row button.choose'
+    ) as HTMLButtonElement;
+    plus.click();
+    fixture.detectChanges();
+
+    expect(pick.request()).toEqual(
+      expect.objectContaining({
+        kind: 'one',
+        lineId: 'ln-bread',
+        chosenId: null,
+      })
+    );
+    const [target] = router.navigateByUrl.mock.calls.at(-1) ?? [];
+    expect((target as { url: string }).url).toMatch(
+      /\/zones\/[^/]+\/lists\/[^/]+\/lines\/ln-bread\/product$/
+    );
+    expect((target as { queryParams: unknown }).queryParams).toEqual({
+      q: 'Pan de molde',
+    });
+  });
+
+  it('gives the line the product chosen, once it is back', async () => {
+    const { fixture, lines } = await render({
+      lines: [
+        line('ln-bread', {
+          content: 'Pan de molde',
+          itemIds: [],
+          groupItemIds: [],
+        }),
+      ],
+    });
+    const pick = TestBed.inject(ProductPickStore);
+
+    fixture.componentInstance.chooseProduct('ln-bread');
+    pick.choose('item-bread');
+    pick.use();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(lines.calls).toContainEqual(
+      expect.objectContaining({
+        kind: 'update',
+        lineId: 'ln-bread',
+        itemIds: ['item-bread'],
+      })
+    );
+    expect(pick.answer()).toBeNull();
+  });
+
+  it('writes nothing when the catalog was closed', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-bread', { itemIds: [] })],
+    });
+    const pick = TestBed.inject(ProductPickStore);
+
+    fixture.componentInstance.chooseProduct('ln-bread');
+    pick.cancel();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(lines.calls.some((call) => call.kind === 'update')).toBe(false);
+  });
+
+  it('says once that the products did not load, with a retry', async () => {
+    const { fixture, itemNames } = await render({
+      lines: [line('ln-milk', { itemIds: ['milk'] })],
+      failedItems: ['milk'],
+    });
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelectorAll('.products-failed')).toHaveLength(1);
+    (
+      host.querySelector('.products-failed button') as HTMLButtonElement
+    ).click();
+
+    expect(itemNames.refreshed.at(-1)).toEqual(['milk']);
   });
 });

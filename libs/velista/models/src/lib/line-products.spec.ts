@@ -2,10 +2,14 @@ import type { ProductShopPrice } from './catalog-browse';
 import type { ProductOffer } from './domain';
 import {
   favoriteFirst,
+  itemShopPrices,
   LINE_PRICED_PRODUCTS_MAX,
+  lineCardOrder,
   lineProductPrices,
-  orderLineCards,
+  lineShownProduct,
   lineSupermarketRows,
+  listCost,
+  orderLineCards,
   type LineProductPriceRead,
 } from './line-products';
 
@@ -124,8 +128,14 @@ describe('lineProductPrices', () => {
     const prices = lineProductPrices(
       ['a', 'b', 'c'],
       reads({
-        a: [row(MERCADONA, 'priced', 2.15, 5.38), row(CARREFOUR, 'priced', 2.6, 6.5)],
-        b: [row(MERCADONA, 'priced', 3, 9), row(CARREFOUR, 'priced', 3.45, 8.96)],
+        a: [
+          row(MERCADONA, 'priced', 2.15, 5.38),
+          row(CARREFOUR, 'priced', 2.6, 6.5),
+        ],
+        b: [
+          row(MERCADONA, 'priced', 3, 9),
+          row(CARREFOUR, 'priced', 3.45, 8.96),
+        ],
         c: [row(MERCADONA, 'priced', 4, 11), row(CARREFOUR, 'notSold')],
       }),
       CARREFOUR
@@ -257,6 +267,173 @@ describe('orderLineCards', () => {
   });
 });
 
+describe('lineShownProduct (velista 0145, section 2)', () => {
+  const line = (
+    itemIds: readonly string[],
+    favoriteItemId: string | null = null,
+    preferredSupermarketId: string | null = null
+  ) => ({ itemIds, favoriteItemId, preferredSupermarketId });
+
+  it('shows the favourite with a price', () => {
+    const shown = lineShownProduct(
+      line(['cheap', 'fav'], 'fav'),
+      reads({
+        cheap: [row(MERCADONA, 'priced', 1, 1)],
+        fav: [row(MERCADONA, 'priced', 3, 3)],
+      })
+    );
+
+    expect(shown?.itemId).toBe('fav');
+    expect(shown?.offer?.price).toBe(3);
+  });
+
+  it('shows the favourite with no price', () => {
+    const shown = lineShownProduct(
+      line(['cheap', 'fav'], 'fav'),
+      reads({ cheap: [row(MERCADONA, 'priced', 1, 1)], fav: [] })
+    );
+
+    expect(shown?.itemId).toBe('fav');
+    expect(shown?.kind).toBe('noPrice');
+  });
+
+  it('shows the cheapest for each kilo or litre, not the lowest price', () => {
+    const shown = lineShownProduct(
+      line(['small', 'large']),
+      reads({
+        small: [row(MERCADONA, 'priced', 1.5, 7.5)],
+        large: [row(MERCADONA, 'priced', 2.15, 5.38)],
+      })
+    );
+
+    expect(shown?.itemId).toBe('large');
+  });
+
+  it('keeps the order of the line on a tie', () => {
+    const shown = lineShownProduct(
+      line(['first', 'second']),
+      reads({
+        first: [row(MERCADONA, 'priced', 2, 2)],
+        second: [row(MERCADONA, 'priced', 2, 2)],
+      })
+    );
+
+    expect(shown?.itemId).toBe('first');
+  });
+
+  it('counts only the prices at the supermarket of the line', () => {
+    const shown = lineShownProduct(
+      line(['a', 'b'], null, CARREFOUR),
+      reads({
+        // `a` is cheaper at Mercadona, and only Carrefour prices `b`.
+        a: [row(MERCADONA, 'priced', 1, 1), row(CARREFOUR, 'notSold')],
+        b: [row(CARREFOUR, 'priced', 4, 4)],
+      })
+    );
+
+    expect(shown?.itemId).toBe('b');
+    expect(shown?.offer?.price).toBe(4);
+  });
+
+  it('shows the first product when none has a price', () => {
+    const shown = lineShownProduct(line(['a', 'b']), reads({ a: [], b: null }));
+
+    expect(shown?.itemId).toBe('a');
+    expect(shown?.kind).toBe('noPrice');
+  });
+
+  it('shows the first product while a price is still read', () => {
+    const shown = lineShownProduct(
+      line(['a', 'b']),
+      reads({ b: [row(MERCADONA, 'priced', 1, 1)] })
+    );
+
+    expect(shown?.itemId).toBe('a');
+  });
+
+  it('ranks only the first twenty, as the line page does', () => {
+    const itemIds = Array.from(
+      { length: LINE_PRICED_PRODUCTS_MAX + 1 },
+      (_, i) => `p${i}`
+    );
+    const byItem: Record<string, LineProductPriceRead> = {};
+    for (const itemId of itemIds) {
+      byItem[itemId] = [row(MERCADONA, 'priced', 5, 5)];
+    }
+    // The cheapest of all sits past the cap, where nothing ranks it.
+    byItem[`p${LINE_PRICED_PRODUCTS_MAX}`] = [row(MERCADONA, 'priced', 1, 1)];
+
+    expect(lineShownProduct(line(itemIds), reads(byItem))?.itemId).toBe('p0');
+  });
+
+  it('is the first card of the line page', () => {
+    const source = line(['a', 'b', 'c']);
+    const pricesOf = reads({
+      a: [row(MERCADONA, 'priced', 3, 3)],
+      b: [row(MERCADONA, 'priced', 1, 1)],
+      c: [],
+    });
+
+    expect(lineShownProduct(source, pricesOf)).toEqual(
+      lineCardOrder(source, pricesOf)[0]
+    );
+    expect(lineShownProduct(source, pricesOf)?.itemId).toBe('b');
+  });
+
+  it('shows nothing for a line with no product', () => {
+    expect(lineShownProduct(line([]), reads({}))).toBeNull();
+  });
+});
+
+describe('listCost (velista 0145, section 6)', () => {
+  it('sums the quantity times the price of the lines still wanted', () => {
+    expect(
+      listCost([
+        { quantity: 2, offer: offer(1.5, null) },
+        { quantity: 1, offer: offer(0.89, null) },
+      ])
+    ).toEqual({ amount: 3.89, currency: 'EUR' });
+  });
+
+  it('leaves out a line at zero and a line with no price', () => {
+    expect(
+      listCost([
+        { quantity: 0, offer: offer(9, null) },
+        { quantity: 3, offer: null },
+        { quantity: 1, offer: offer(null, null) },
+        { quantity: 1, offer: offer(2, null) },
+      ])
+    ).toEqual({ amount: 2, currency: 'EUR' });
+  });
+
+  it('answers nothing with no priced line', () => {
+    expect(listCost([{ quantity: 2, offer: null }])).toBeNull();
+    expect(listCost([])).toBeNull();
+  });
+});
+
+describe('itemShopPrices', () => {
+  it('turns each chain price into a row, priced or not', () => {
+    const rows = itemShopPrices({
+      chainPrices: [
+        {
+          chain: { id: MERCADONA, name: { en: 'M', es: 'M' } },
+          offer: offer(1, 1),
+        },
+        {
+          chain: { id: LIDL, name: { en: 'L', es: 'L' } },
+          offer: offer(null, null),
+        },
+      ],
+    });
+
+    expect(rows.map((each) => [each.supermarketId, each.kind])).toEqual([
+      [MERCADONA, 'priced'],
+      [LIDL, 'unpriced'],
+    ]);
+  });
+});
+
 describe('favoriteFirst', () => {
   it('moves the favourite to the front and keeps the rest in order', () => {
     expect(favoriteFirst(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
@@ -323,7 +500,12 @@ describe('lineSupermarketRows', () => {
   });
 
   it('adds the supermarket of the line when it is not near the person', () => {
-    const rows = lineSupermarketRows(['a'], reads({ a: [] }), context, CARREFOUR);
+    const rows = lineSupermarketRows(
+      ['a'],
+      reads({ a: [] }),
+      context,
+      CARREFOUR
+    );
 
     expect(rows).toHaveLength(3);
     expect(rows[2]).toMatchObject({
@@ -335,7 +517,12 @@ describe('lineSupermarketRows', () => {
   });
 
   it('keeps a supermarket it cannot name, with no name', () => {
-    const rows = lineSupermarketRows(['a'], reads({ a: [] }), context, 'unknown');
+    const rows = lineSupermarketRows(
+      ['a'],
+      reads({ a: [] }),
+      context,
+      'unknown'
+    );
 
     expect(rows[2].name).toBeNull();
     expect(rows[2].selected).toBe(true);

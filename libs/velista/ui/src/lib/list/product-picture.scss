@@ -1,0 +1,26 @@
+// A square the size of a touch target, on the sunken surface the catalog draws its
+// pictures on, so a row with a photo and a row with the icon line up.
+:host {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-line-picture-size);
+  block-size: var(--app-line-picture-size);
+  overflow: hidden;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-line-picture-radius);
+  background: var(--app-surface-sunken);
+}
+
+.image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}

@@ -78,6 +78,79 @@ export type LineEditScope = 'full' | 'content';
  */
 export type LineIndicator = 'bought' | 'notAvailable' | 'claimed';
 
+/**
+ * What a row can say about its line in one word at the end of its second line
+ * (velista `0145`, section 4).
+ */
+export type LineStatus =
+  | 'awaiting'
+  | 'rejected'
+  | 'claimed'
+  | 'notAvailable'
+  | 'bought';
+
+/**
+ * The order the words are tried in. A row draws the first that applies, and a
+ * screen reader hears all that apply, in this order.
+ */
+export const LINE_STATUS_ORDER: readonly LineStatus[] = [
+  'awaiting',
+  'rejected',
+  'claimed',
+  'notAvailable',
+  'bought',
+];
+
+/** Every status word that applies to a row, in {@link LINE_STATUS_ORDER}. */
+export function lineStatuses(
+  row: Pick<LineRowVm, 'approvalStatus' | 'indicators'>
+): readonly LineStatus[] {
+  const applies = (status: LineStatus): boolean => {
+    switch (status) {
+      case 'awaiting':
+        return row.approvalStatus === 'PENDING';
+      case 'rejected':
+        return row.approvalStatus === 'REJECTED';
+      default:
+        return row.indicators.includes(status);
+    }
+  };
+  return LINE_STATUS_ORDER.filter(applies);
+}
+
+/**
+ * The product a row shows, as its picture and its second line (velista `0145`,
+ * section 3).
+ *
+ * - `loading`: the line has products and the catalog has not answered. The picture
+ *   and the second line are bones of the same size.
+ * - `none`: the line has no product. The row asks for one when `canChoose`.
+ * - `unread`: the read of the products failed. The row draws its name and no
+ *   product, and the page says so once.
+ * - `shown`: the one product of `lineShownProduct`.
+ */
+export type LineRowProduct =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'none'; readonly canChoose: boolean }
+  | { readonly kind: 'unread' }
+  | LineRowShownProduct;
+
+export interface LineRowShownProduct {
+  readonly kind: 'shown';
+  readonly itemId: string;
+  /** Its name in the reader's language, or null for a product the catalog lost. */
+  readonly name: string | null;
+  /** "Hacendado · 1 L": the brand, then the size. Null with neither. */
+  readonly brandSize: string | null;
+  readonly imageUrl: string | null;
+  /** Whether it is the favourite of the line, which draws the star. */
+  readonly favorite: boolean;
+  /** How many other products of the line will do, for "+2". */
+  readonly others: number;
+  /** The price of one, formatted, or null for "No price". */
+  readonly price: string | null;
+}
+
 /** One line, ready to draw. */
 export interface LineRowVm {
   /**
@@ -86,7 +159,21 @@ export interface LineRowVm {
    * row is never destroyed and rebuilt on the frame its real id arrives.
    */
   readonly id: string;
+  /** The name the row draws, from `lineName` (velista `0144`). */
   readonly content: string;
+  /**
+   * Whether a person named the line (velista `0145`, section 3). A named line draws
+   * its name in the heavier weight and the product's name on its second line; a
+   * line that is not named draws the product's name as its name.
+   *
+   * Optional, so a row built without a catalog draws as it always did.
+   */
+  readonly named?: boolean;
+  /**
+   * The picture and the second line (velista `0145`). Absent on a row built without
+   * a catalog, which then draws {@link detail} as it always did.
+   */
+  readonly product?: LineRowProduct;
   /**
    * The format and the brand of the line's product, as one string, or null.
    *
@@ -306,6 +393,12 @@ export interface ListHeaderVm {
   readonly zoneName: string | null;
   readonly wantedCount: number;
   readonly lineCount: number;
+  /**
+   * What the pending lines cost, formatted, or null with no priced line (velista
+   * `0145`, section 6). An estimate: the lines with no product or no price add
+   * nothing.
+   */
+  readonly cost?: string | null;
   /**
    * Who else has this list open right now, named and without the reader.
    *

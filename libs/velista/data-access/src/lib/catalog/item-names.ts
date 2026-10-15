@@ -1,7 +1,9 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
   ITEM_LOOKUP_MAX_IDS,
+  itemShopPrices,
   type CatalogItem,
+  type LineProductPriceRead,
 } from '@portfolio/velista/models';
 import { CATALOG_SERVICE, type CatalogServiceI } from './catalog-service';
 
@@ -92,6 +94,57 @@ export class ItemNames {
   }
 
   /**
+   * Ids the lookup answered about, found or gone. A signal for the reason
+   * {@link _failed} is one: a row draws a bone until its product is in here.
+   */
+  private readonly _answered = signal<ReadonlySet<string>>(new Set());
+
+  /**
+   * Whether the lookup has said what it knows about this product: found, gone,
+   * or failed. False while nobody asked and while the request is out.
+   */
+  settled(itemId: string): boolean {
+    return this._answered().has(itemId) || this._failed().has(itemId);
+  }
+
+  /**
+   * The prices of one product near the reader, as `lineProductPrices` reads them
+   * (velista `0145`, section 7). Every lookup here asks with `prices: true`, so the
+   * record holds them.
+   *
+   * - `undefined` while the lookup has not answered.
+   * - `null` when it failed.
+   * - an empty list for a product the catalog no longer has.
+   */
+  readonly pricesOf = (itemId: string): LineProductPriceRead => {
+    const item = this._byId().get(itemId);
+    if (item !== undefined) {
+      return itemShopPrices(item);
+    }
+    if (this._failed().has(itemId)) {
+      return null;
+    }
+    return this._answered().has(itemId) ? [] : undefined;
+  };
+
+  /**
+   * Read these products again, names and prices, whether or not they were read
+   * before (velista `0145`, section 7).
+   *
+   * The list page calls it once for each product when it opens, when the app comes
+   * back and when the socket comes back, so a price is never older than the visit.
+   * A failed read keeps what an earlier one answered, and marks failed only the
+   * products it has nothing for.
+   */
+  async refresh(itemIds: readonly string[]): Promise<void> {
+    const wanted = [...new Set(itemIds)].filter((itemId) => itemId !== '');
+    for (const itemId of wanted) {
+      this._asked.add(itemId);
+    }
+    await this._lookUpAll(wanted);
+  }
+
+  /**
    * Resolve a line's products, once.
    *
    * Only the ids nothing is known about are asked for, so opening the page after the
@@ -110,13 +163,19 @@ export class ItemNames {
       this._asked.add(itemId);
     }
 
-    // At most {@link ITEM_LOOKUP_MAX_IDS} per request, which is the gateway's cap. One
-    // screen asks for one line's set and never comes near it; the zone list page asks
-    // for every line's products at once (velista `0082`, section 3), and a household
-    // list of sixty lines can pass it. Each chunk answers or fails on its own.
+    await this._lookUpAll(missing);
+  }
+
+  /**
+   * At most {@link ITEM_LOOKUP_MAX_IDS} per request, which is the gateway's cap. One
+   * screen asks for one line's set and never comes near it; the zone list page asks
+   * for every line's products at once (velista `0082`, section 3), and a household
+   * list of sixty lines can pass it. Each chunk answers or fails on its own.
+   */
+  private async _lookUpAll(ids: readonly string[]): Promise<void> {
     const chunks: string[][] = [];
-    for (let at = 0; at < missing.length; at += ITEM_LOOKUP_MAX_IDS) {
-      chunks.push(missing.slice(at, at + ITEM_LOOKUP_MAX_IDS));
+    for (let at = 0; at < ids.length; at += ITEM_LOOKUP_MAX_IDS) {
+      chunks.push(ids.slice(at, at + ITEM_LOOKUP_MAX_IDS));
     }
 
     await Promise.all(chunks.map((chunk) => this._lookUp(chunk)));
@@ -124,18 +183,24 @@ export class ItemNames {
 
   /** One request's worth of ids, absorbed or marked failed. */
   private async _lookUp(missing: readonly string[]): Promise<void> {
-    const found = await this._catalog.itemsByIds(missing);
+    // With the prices, always (velista `0145`, section 7): one read gives a row its
+    // name, brand, size, photo and price, and a screen that draws no price pays
+    // only for the bytes.
+    const found = await this._catalog.itemsByIds(missing, { prices: true });
 
     if (found === null) {
       // Unasked, so a later visit retries rather than being permanently nameless, and
       // marked failed so the screen on it now can say the names could not be loaded
-      // rather than that the line is empty.
-      for (const itemId of missing) {
+      // rather than that the line is empty. A product an earlier read answered keeps
+      // that answer and is not marked.
+      const held = this._byId();
+      const lost = missing.filter((itemId) => !held.has(itemId));
+      for (const itemId of lost) {
         this._asked.delete(itemId);
       }
       this._failed.update((current) => {
         const next = new Set(current);
-        for (const itemId of missing) {
+        for (const itemId of lost) {
           next.add(itemId);
         }
         return next;
@@ -144,6 +209,13 @@ export class ItemNames {
     }
 
     this._absorb(found);
+    this._answered.update((current) => {
+      const next = new Set(current);
+      for (const itemId of missing) {
+        next.add(itemId);
+      }
+      return next;
+    });
 
     // Cleared for every id in the request, not only the ones that came back. An id the
     // catalog answered about and does not have is resolved: it is a gone product, not
@@ -167,6 +239,13 @@ export class ItemNames {
       this._asked.add(item.id);
     }
     this._absorb(items);
+    this._answered.update((current) => {
+      const next = new Set(current);
+      for (const item of items) {
+        next.add(item.id);
+      }
+      return next;
+    });
   }
 
   private _absorb(items: readonly CatalogItem[]): void {

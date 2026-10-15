@@ -152,4 +152,26 @@ describe('ListHeader', () => {
       expect(host(fixture).querySelector('.progress')).not.toBeNull();
     });
   });
+
+  // Velista 0145, section 6.
+  describe('what the list costs', () => {
+    it('ends the progress line with the estimate, and says what it is', async () => {
+      const fixture = await render(header({ cost: '14,29 €' }));
+      const cost = host(fixture).querySelector('.progress-line .cost');
+
+      expect(cost?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+        '~14,29 €'
+      );
+      expect(cost?.querySelector('.visually-hidden')?.textContent?.trim()).toBe(
+        'list.header.cost'
+      );
+      expect(cost?.closest('button, a')).toBeNull();
+    });
+
+    it('draws nothing with no priced line', async () => {
+      const fixture = await render(header({ cost: null }));
+
+      expect(host(fixture).querySelector('.cost')).toBeNull();
+    });
+  });
 });

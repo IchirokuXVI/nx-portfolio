@@ -10,6 +10,7 @@ import {
   type Line,
   type LineDetailVm,
   type LineIndicator,
+  type LineProductPriceRead,
   type LineSettlement,
 } from '@portfolio/velista/models';
 
@@ -52,6 +53,8 @@ export interface LineDetailInput {
    * library.
    */
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
+  /** The prices of a product, for the product the line shows (velista `0145`). */
+  readonly pricesOf?: (itemId: string) => LineProductPriceRead;
   /**
    * Whether the name lookup failed, as opposed to answering with nothing.
    *
@@ -101,7 +104,8 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     content: lineName(
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
-      input.locale
+      input.locale,
+      input.pricesOf
     ).text,
     quantity: line.quantity,
     ...productsPhrase(line, input, purchases),

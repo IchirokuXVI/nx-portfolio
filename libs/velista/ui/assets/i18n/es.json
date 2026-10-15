@@ -687,7 +687,8 @@
       "pending": "{{pending}} de {{total}} pendientes",
       "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
-      "back": "Volver al grupo"
+      "back": "Volver al grupo",
+      "cost": "Unos {{cost}} por las líneas que tienen precio"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -1114,6 +1115,18 @@
       "quantityLabel": "Cuántos de {{name}}",
       "more": "Ver más sugerencias",
       "added": "{{name}} añadido a la lista"
+    },
+    "row": {
+      "noPrice": "Sin precio",
+      "choose": "Elige un producto",
+      "chooseFor": "Elige un producto para {{name}}",
+      "noProduct": "Sin producto",
+      "favorite": "Favorito",
+      "more_one": "y {{count}} más que también vale",
+      "more_other": "y {{count}} más que también valen",
+      "pickFor": "Para {{name}}",
+      "failed": "Los productos de esta lista no se cargaron.",
+      "retry": "Reintentar"
     }
   },
   "account": {

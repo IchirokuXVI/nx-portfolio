@@ -12,10 +12,35 @@
 }
 
 .progress-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
   margin: 0 0 var(--app-space-1);
   font-size: var(--app-text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--app-text-secondary);
+}
+
+// The estimate at the end of the line (velista 0145, section 6), a step up from the
+// count so the number reads as the thing it is.
+.cost {
+  flex: none;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--app-text-primary);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .progress {

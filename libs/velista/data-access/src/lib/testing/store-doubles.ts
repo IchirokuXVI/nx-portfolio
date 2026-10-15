@@ -36,7 +36,9 @@ import {
   buildCategoryTree,
   EMPTY_CATEGORY_TREE,
   isOpenBasket,
+  itemShopPrices,
   type CategoryNode,
+  type LineProductPriceRead,
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
@@ -1373,6 +1375,8 @@ export interface FakeItemNamesOptions {
    * that could only be empty could not tell a spec which one it was showing.
    */
   readonly failed?: readonly string[];
+  /** Ids the lookup has not answered about yet, which a row draws as bones. */
+  readonly pending?: readonly string[];
 }
 
 /**
@@ -1387,18 +1391,38 @@ export interface FakeItemNamesOptions {
 export function fakeItemNames(options: FakeItemNamesOptions = {}) {
   const items = options.items ?? [];
   const failed = new Set(options.failed ?? []);
+  const pending = new Set(options.pending ?? []);
   const asked: string[][] = [];
+  const refreshed: string[][] = [];
+  const itemOf = (itemId: string) =>
+    items.find((row) => row.id === itemId) ?? null;
 
   return {
-    nameOf: (itemId: string) => items.find((row) => row.id === itemId) ?? null,
+    nameOf: itemOf,
     anyFailed: (itemIds: readonly string[]) =>
       itemIds.some((itemId) => failed.has(itemId)),
+    settled: (itemId: string) => !pending.has(itemId),
+    pricesOf: (itemId: string): LineProductPriceRead => {
+      const item = itemOf(itemId);
+      if (item !== null) {
+        return itemShopPrices({ chainPrices: item.chainPrices ?? [] });
+      }
+      if (failed.has(itemId)) {
+        return null;
+      }
+      return pending.has(itemId) ? undefined : [];
+    },
     ensure: async (itemIds: readonly string[]) => {
       asked.push([...itemIds]);
+    },
+    refresh: async (itemIds: readonly string[]) => {
+      refreshed.push([...itemIds]);
     },
     prime: () => undefined,
     /** Every set that was asked for, in order, so a spec can assert one request. */
     asked,
+    /** Every set read again with its prices (velista `0145`), in order. */
+    refreshed,
   };
 }
 

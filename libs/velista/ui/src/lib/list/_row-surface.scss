@@ -1,0 +1,18 @@
+// The surface every row of the list page sits on (velista 0145, section 1): flat,
+// on a hairline, with no card around it. The lines, the due rows and the trip rows
+// all take it, so one list never holds two kinds of row.
+//
+// One place on purpose. The owner accepted the flat surface for all three and may
+// take it back for some of them; that is a change here and nowhere else.
+@mixin row-surface {
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--app-border-subtle);
+  border-radius: 0;
+}
+
+// The hairline over the first row of a group of rows, which the flat rows under it
+// close with their own.
+@mixin rows-top {
+  border-block-start: 1px solid var(--app-border-subtle);
+}

@@ -1,24 +1,27 @@
+@use './row-surface' as surface;
+
 :host {
   display: block;
   position: relative;
 }
 
+// Flat on a hairline, no card around it (velista 0145, section 1), and the same
+// height whatever the row carries: two lines, always.
 .row {
+  @include surface.row-surface;
+
   display: flex;
   align-items: center;
-  gap: var(--app-space-3);
+  gap: var(--app-space-4);
   width: 100%;
-  min-height: var(--app-line-row-height);
-  padding: var(--app-space-2) var(--app-space-3);
-  background: var(--app-surface-raised);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
+  min-height: var(--app-line-row-two-line-height);
+  padding: var(--app-space-2) 0;
   text-align: start;
   cursor: pointer;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
   }
 }
 
@@ -34,15 +37,57 @@
   opacity: 0.7;
 }
 
-// The violet edge on the leading side of a line nobody has decided on yet.
+// The violet edge on the leading side of a line nobody has decided on yet. It stays
+// on the flat row (section 4), with room between it and the picture.
 .row.awaiting {
   border-inline-start: var(--app-line-accent-width) solid
     var(--app-status-attention-fg);
+  padding-inline-start: var(--app-space-3);
 }
 
 .row.turned-down {
   background: var(--app-surface-sunken);
 }
+
+// ------------------------------------------------------------- The picture
+
+.picture {
+  flex: none;
+}
+
+.picture.bone {
+  inline-size: var(--app-line-picture-size);
+  block-size: var(--app-line-picture-size);
+  border-radius: var(--app-line-picture-radius);
+}
+
+// A line with no product (section 5): a dashed square with a plus, the size of a
+// touch target, in the amber of a quiet action. One of the two buttons that choose.
+.choose {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-line-picture-size);
+  block-size: var(--app-line-picture-size);
+  padding: 0;
+  background: transparent;
+  border: 1px dashed var(--app-border-strong);
+  border-radius: var(--app-line-picture-radius);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.choose-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// ------------------------------------------------------------- The two lines
 
 .body {
   display: flex;
@@ -52,7 +97,18 @@
   min-width: 0;
 }
 
+.line-1,
+.line-2 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+// The name gives way to the price, never the other way round.
 .content {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--app-text-base);
   color: var(--app-text-primary);
   overflow: hidden;
@@ -60,92 +116,175 @@
   white-space: nowrap;
 }
 
+// A name a person gave the line, in the heavier weight. A line that is not named
+// draws its product's name in the regular one.
+.content.own {
+  font-weight: 600;
+}
+
 // The searched fragment (velista 0082, section 6), painted as the basket row paints
-// it: the amber quiet action tint, with both halves set because a browser's own
-// `<mark>` is yellow with black text. No padding and no weight, so it takes no room.
+// it, with both halves set because a browser's own `<mark>` is yellow on black.
 .match {
   border-radius: var(--app-radius-sm);
   background: var(--app-action-quiet-bg);
   color: inherit;
 }
 
-// The format and the brand of the line's one product, in the role and the size the
-// shopping list row gives its product caption. One line, cut like the name above it.
-.detail {
+.price {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--app-text-primary);
+}
+
+.price.none {
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+}
+
+.line-2 {
+  gap: var(--app-space-3);
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
+  // The height of a line of text, kept when the line holds nothing, so a row
+  // never changes height as its product arrives.
+  min-block-size: 1lh;
+}
+
+// On line 2 the name of the product gives way first, to a few letters. The brand
+// and the size give way only on a row that also carries a status word (section 3).
+.product-name {
+  flex: 0 1 auto;
+  min-width: var(--app-line-product-name-min);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.brand-size {
+  flex: none;
+  white-space: nowrap;
+  color: var(--app-text-muted);
+}
+
+.line-2:has(.status) .brand-size,
+.brand-size.alone {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more {
+  flex: none;
+  color: var(--app-text-muted);
+}
+
+.favorite {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  color: var(--app-action-quiet-fg);
+}
+
+.favorite-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+// The second button of section 5: the height of line 2, in amber text. The square
+// beside it is the full size target for the same action.
+.ask {
+  flex: none;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.no-product {
+  color: var(--app-text-muted);
+}
+
+// One status word at the end of line 2 (section 4). A word as well as a colour.
+.status {
+  flex: none;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.status-awaiting,
+.status-rejected {
+  color: var(--app-status-attention-fg);
+}
+
+.status-claimed {
+  color: var(--app-status-info-fg);
+}
+
+.status-notAvailable {
+  color: var(--app-status-danger-fg);
+}
+
+.status-bought {
+  color: var(--app-status-success-fg);
+}
+
+// A product not yet loaded: bones of the same size, so the row does not move when
+// the read answers (section 7).
+.bone {
+  display: block;
+  background: var(--app-surface-sunken);
+}
+
+.line-bone {
+  inline-size: 55%;
+  block-size: 1lh;
+  border-radius: var(--app-radius-sm);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bone {
+    animation: pulse var(--app-motion-slow) var(--app-motion-ease) infinite
+      alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
 // A settled line: at zero, with a purchase behind it. Muted, and **never struck
-// through**. The strikethrough went with the tick that drew it (plan 0043, section
-// 3.2): there is nothing crossed out about a line saying the household is stocked, and
-// a line through it would say the record itself was finished with, when in fact it is
-// the thing that survives every trip.
+// through** (plan 0043, section 3.2).
 .row.settled .content {
   color: var(--app-text-muted);
 }
 
-// Only approval and the read only note produce a caption, and an ordinary row never
-// grows one. The indicators below are **not** captions: a row can carry two of them at
-// once, which one line of text cannot.
-.caption {
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
-}
-
-.row.awaiting .caption {
-  color: var(--app-status-attention-fg);
-}
-
-// The three indicators (section 3.3). A row wraps them rather than truncating,
-// because the combined case is real: missing last trip, wanted again, and somebody is
-// out getting it now.
-.indicators {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--app-space-2) var(--app-space-4);
-}
-
-.indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  font-size: var(--app-text-2xs);
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
-}
-
-.indicator-glyph {
-  font-size: var(--app-icon-sm);
-}
-
-.indicator-bought {
-  color: var(--app-status-success-fg);
-}
-
-.indicator-notAvailable {
-  color: var(--app-status-danger-fg);
-}
-
-// Somebody is out buying this. Informational rather than a warning or a success,
-// because it is neither: it is a thing happening right now that will stop happening,
-// and it must never read as the line having been dealt with.
-.indicator-claimed {
-  color: var(--app-status-info-fg);
-}
-
-// A dot rather than a glyph, which is the same mark presence uses everywhere else in
-// this app. It is what tells this indicator apart from the two beside it at a glance:
-// those are records, this is a person.
-.indicator-dot {
-  flex-shrink: 0;
-  width: var(--app-dot-size);
-  height: var(--app-dot-size);
-  border-radius: var(--app-radius-full);
-  background: var(--app-status-info-fg);
 }
 
 // Somebody else is editing this line. Subdued on purpose: it is a thing to notice out
@@ -192,7 +331,7 @@
 .decisions {
   display: flex;
   gap: var(--app-space-2);
-  padding: var(--app-space-2) var(--app-space-3) 0;
+  padding: var(--app-space-2) 0;
 }
 
 .decision {
@@ -261,14 +400,8 @@
   color: var(--app-text-muted);
 }
 
-// What a finger takes hold of, as opposed to what it looks for. The glyph grew to
-// `--app-icon-lg`, which is still smaller than the target around it: at `--app-icon-md`
-// it read as a decoration between the two arrows rather than as the thing to drag, and
-// it was too small to aim at with a thumb even once it answered a pointer.
-//
-// `touch-action: none` is load bearing. Without it the browser claims the downward
-// movement as a scroll before the list ever sees a `pointermove`, which is why the grip
-// could not be dragged at all.
+// What a finger takes hold of. `touch-action: none` is load bearing: without it the
+// browser claims the downward movement as a scroll before the list sees it.
 .grip-handle {
   display: flex;
   align-items: center;
@@ -288,8 +421,8 @@
   font-size: var(--app-icon-lg);
 }
 
-// Small on screen and 44 wide in the hit area, which is what `min-width` plus the
-// negative margins buy: the arrows read as a hint and are still hittable.
+// Small on screen and 44 wide in the hit area: the arrows read as a hint and are
+// still hittable.
 .grip-step {
   display: flex;
   align-items: center;
@@ -314,8 +447,7 @@
   }
 }
 
-// Rows fade rather than slide, the drag ghost does not tilt, and nobody else's reorder
-// is ever animated. The last of those is the default for everyone (section 3.5).
+// Rows fade rather than slide, and nobody else's reorder is ever animated.
 @media (prefers-reduced-motion: reduce) {
   .row {
     transition: none;

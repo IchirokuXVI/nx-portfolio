@@ -1,20 +1,23 @@
+@use './row-surface' as surface;
+
 :host {
   display: block;
 }
 
-// A line drawn early, not a line (velista 0089, section 2): the attention tint under a
-// dashed attention hairline, no raised surface and no shadow. The same height floor as
-// a line row, so the section does not jump when a row turns into a line.
+// A line drawn early, not a line (velista 0089, section 2). Flat on a hairline like
+// every row of the page since velista 0145 (section 1), and still on the attention
+// tint, which is what says it is a suggestion. The same height floor as a line row,
+// so the section does not jump when a row turns into a line.
 .row {
+  @include surface.row-surface;
+
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--app-space-2) var(--app-space-3);
-  min-height: var(--app-line-row-height);
+  min-height: var(--app-line-row-two-line-height);
   padding: var(--app-space-2) var(--app-space-3);
   background: var(--app-status-attention-bg);
-  border: 1px dashed var(--app-status-attention-border);
-  border-radius: var(--app-card-radius);
 }
 
 // The name and the reason, one target that opens the line. Wide enough to keep the

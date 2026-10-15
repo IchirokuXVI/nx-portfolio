@@ -334,3 +334,77 @@ the sentence of a failed read of the products.
   said he will come back to it.
 - A press on the cost.
 - One picture component for the catalog and the line page.
+
+## What the build decided
+
+The build of 2026-10-16 follows the owner's answers of 2026-10-15 (the four points of
+this plan, as written) and the settled points of the review. It reads the code on `dev`
+after velista `0144` (pull request #723), `0140` (#716), `0137` (#692) and backend `0207`
+(#706), not what the plan assumed. Each choice below is the builder's, and the owner can
+overturn it.
+
+**Where the four accepted points live, so each is one change.**
+
+- The flat surface: the mixin `row-surface` in
+  `libs/velista/ui/src/lib/list/_row-surface.scss`. The line row, the due row and the trip
+  row include it.
+- One status word: `LINE_STATUS_ORDER` in `libs/velista/models/src/lib/list-view.ts`. The
+  row draws the first word that applies and describes all of them.
+- The number in the header: one `@if` branch in `list-header.html`, fed by
+  `ListHeaderVm.cost`.
+- The dashed square and the amber text: one `@case ('none')` branch in each line of
+  `line-row.html`, and the token `--app-line-picture-size`.
+
+**Names and files that moved since the plan was written.**
+
+- The product a line shows is `lineShownProduct` in
+  `libs/velista/models/src/lib/line-products.ts`. It is the first of `lineCardOrder`, which
+  is `lineProductPrices` and then `orderLineCards` of velista `0137`, over `itemIds` only.
+  The line page orders its cards with `lineCardOrder`, so the first card and the row are
+  one function. The cards themselves did not change.
+- `lineName` of velista `0144` takes the prices as a fourth argument and names a line that
+  is not named by that product. With no prices it is the favourite or the first product,
+  as before. The list page, the sheet of a row, the history page and every sheet that
+  reads `watchLineName` pass the prices `ItemNames` holds. The line page passes its own.
+- The lookup of backend `0207` with `prices: true` answers `scopes`, and the mapper
+  `toItemLookup` turns each item's offers into `chainPrices` through it, as the suggest
+  answer does. No other read was added.
+- `ItemNames` asks every lookup with `prices: true`, and holds three new answers:
+  `pricesOf`, `settled` and `refresh`.
+- "Choose a product" opens the catalog page of velista `0140` that chooses one product, with
+  the name of the line as its search and the supermarket of the line as its chain. The
+  page is a route of its own, so the list page finds the answer by its caller state when
+  it is back, through a new `ProductPickStore.answer`, and writes `itemIds: [itemId]`.
+
+**Choices the plan did not state.**
+
+1. **When a price is read again.** The list page reads every product of its lines with
+   `refresh` once per visit. A visit starts when the page opens on a list, when the app
+   comes back (`AppResumed`) and when the socket comes back after a drop. Within a visit a
+   line that arrives or changes asks only for the products the visit has not read. A
+   failed read keeps what an earlier one answered.
+2. **The chain of a price** is the chain the lookup names for the scope of each offer. The
+   line page still reads `scopeOffers` through `LineProductPrices`, so for a moment after a
+   price changes the row and the line page can read two answers. The rule is one function;
+   the data are two reads.
+3. **`line-supermarket-sheet.ts` is left alone.** It needs the chains near the reader and
+   the products they do not sell, which only the line page's context read has. Replacing
+   it would change its counts.
+4. **The status words keep their old keys**: "Waiting for approval" and the word of a line
+   turned down come from `list.line.*`, the others from `line.indicator.*`.
+5. **The accessible name of a line that is not named** is its name, its price and its
+   quantity. Its brand and size are not in it, as section 3 says.
+6. **A failed read draws the row's name and an empty line 2**, with the product icon in a
+   plain square, and one sentence with a retry above the list.
+7. **A product the catalog no longer has** is drawn as the shown product with no name, no
+   brand and no price ("No price"), with the product icon.
+8. **The cost** sums one currency: the first one counted. A price in another currency is
+   left out. It is rounded to cents and formatted with `Intl`.
+9. **The due rows keep their attention tint** on the flat surface, because the tint is what
+   says a row is a suggestion. They lost their dashed border and their radius, and took the
+   two line height.
+10. **Line 2 is `--app-text-xs`**, the size of the old detail line, and the price on line 1
+    is `--app-text-sm`. The mock draws 13 and 15 pixels, which the scale does not have.
+11. **The brand and the size read "Hacendado · 1 L"**, brand first, as the mock draws them.
+    A new `productBrandSizeText` says it; `productDetailText` keeps its order for the
+    screens that use it.

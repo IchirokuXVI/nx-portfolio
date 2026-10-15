@@ -11,11 +11,29 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  lineStatuses,
   QUANTITY_REEL_CLICK_SHIELD_MS,
+  type LineRowShownProduct,
   type LineRowVm,
+  type LineStatus,
 } from '@portfolio/velista/models';
-import { CheckIcon, CommentIcon, GripIcon, XCircleIcon } from '../icons/icons';
+import {
+  CommentIcon,
+  GripIcon,
+  PlusIcon,
+  StarFilledIcon,
+} from '../icons/icons';
+import { ProductPicture } from './product-picture';
 import { QuantityReel } from './quantity-reel';
+
+/** The words of section 4, by status. */
+const STATUS_KEYS: Record<LineStatus, string> = {
+  awaiting: 'list.line.awaitingApproval',
+  rejected: 'list.line.rejected',
+  claimed: 'line.indicator.claimed',
+  notAvailable: 'line.indicator.notAvailable',
+  bought: 'line.indicator.bought',
+};
 
 /**
  * What the row emits: the three approval decisions drawn under it, and the grip's two
@@ -102,11 +120,12 @@ export type LineRowAction =
   selector: 'lib-line-row',
   imports: [
     RokuTranslatorPipe,
-    CheckIcon,
     CommentIcon,
     GripIcon,
+    PlusIcon,
+    ProductPicture,
     QuantityReel,
-    XCircleIcon,
+    StarFilledIcon,
   ],
   templateUrl: './line-row.html',
   styleUrl: './line-row.scss',
@@ -174,6 +193,53 @@ export class LineRow {
 
   /** The overwritten notice was dismissed. */
   readonly dismiss = output<string>();
+
+  /**
+   * The plus or "Choose a product" was pressed on a line with no product (velista
+   * `0145`, section 5). The page opens the catalog to choose one.
+   */
+  readonly chooseProduct = output<string>();
+
+  /** The product the row shows, or null while it draws none. */
+  protected readonly shown = computed<LineRowShownProduct | null>(() => {
+    const product = this.line().product;
+    return product?.kind === 'shown' ? product : null;
+  });
+
+  /** Whether the reader may choose the product of this line (section 5). */
+  protected readonly mayChoose = computed(() => {
+    const product = this.line().product;
+    return product?.kind === 'none' && product.canChoose;
+  });
+
+  /**
+   * Whether the two buttons of section 5 are drawn: never in reorder mode, where
+   * the row is a thing being dragged and draws the square alone.
+   */
+  protected readonly canChoose = computed(
+    () => this.mayChoose() && !this.reordering()
+  );
+
+  /** Every status word that applies, in the order of section 4. */
+  protected readonly statuses = computed(() => lineStatuses(this.line()));
+
+  /** The one word the row draws: the first that applies. */
+  protected readonly status = computed(() => this.statuses()[0] ?? null);
+
+  protected statusKey(status: LineStatus): string {
+    return status === 'claimed' && this.line().claimedBy !== null
+      ? 'line.indicator.claimedBy'
+      : STATUS_KEYS[status];
+  }
+
+  protected readonly statusArgs = computed(() => ({
+    name: this.line().claimedBy ?? '',
+  }));
+
+  protected onChoose(event: Event): void {
+    event.stopPropagation();
+    this.chooseProduct.emit(this.line().id);
+  }
 
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _reel = viewChild(QuantityReel);
@@ -256,47 +322,45 @@ export class LineRow {
   }
 
   /**
-   * The accessible name: what it is, and how many.
+   * The accessible name (velista `0145`, section 3): the name, the product with its
+   * brand and its size when the line is named, the price, and how many.
    *
    * Assembled here rather than in the template so the quantity is present in the name
-   * exactly when it is present on screen, and so the two cannot drift.
+   * exactly when it is present on screen, and so the two cannot drift. **The number
+   * is always in it**: the quantity is the line's state, and a name that said "Olive
+   * oil" for a line at zero and "Olive oil, 2" a moment later would hide the only
+   * thing that changed.
    *
-   * **The number is always in it now**, where it used to appear only above one. The
-   * quantity is the line's state rather than an annotation on it, and a name that said
-   * "Olive oil" for a line at zero and "Olive oil, 2" for the same line a moment later
-   * would hide the only thing that changed.
-   *
-   * **The format and the brand are in it when the row draws them**, between the
-   * two: two lines of one name are told apart by exactly that, and a name without
-   * it would read both rows out as the same thing.
+   * A row built without a catalog keeps the old name: the format and the brand, when
+   * it draws them, tell two lines of one name apart.
    */
   accessibleName(): string {
     const line = this.line();
-    const detail = line.detail ?? null;
-    return detail === null
-      ? `${line.content}, ${line.quantity}`
-      : `${line.content}, ${detail}, ${line.quantity}`;
+    const shown = this.shown();
+    const parts: (string | null | undefined)[] = [line.content];
+    if (line.product === undefined) {
+      parts.push(line.detail);
+    } else if (shown !== null) {
+      if (line.named === true) {
+        parts.push(shown.name, shown.brandSize);
+      }
+      parts.push(shown.price);
+    }
+    parts.push(String(line.quantity));
+    return parts
+      .filter((part): part is string => part != null && part !== '')
+      .join(', ');
   }
 
   /**
-   * What `aria-describedby` points at: the indicators, the caption, or both.
+   * What `aria-describedby` points at: every status word that applies.
    *
-   * They are descriptions rather than part of the name, which is section 7's rule and
-   * the reason it exists: a name that grew "bought" and "Ana is buying this" would read
-   * both out every time focus touched the row, ahead of the thing itself.
-   *
-   * Assembled here rather than in the template because it is a list of ids that exist
-   * conditionally, and a template expression producing `"ind-x cap-x"` from two `@if`
-   * blocks is the kind of string that ends up pointing at an element nobody rendered.
+   * They are descriptions rather than part of the name: a name that grew "bought" and
+   * "Ana is buying this" would read both out every time focus touched the row, ahead
+   * of the thing itself.
    */
   describedBy(): string | null {
-    const line = this.line();
-    const ids = [
-      line.indicators.length > 0 ? `ind-${line.id}` : null,
-      line.captionKey !== null ? `cap-${line.id}` : null,
-    ].filter((id): id is string => id !== null);
-
-    return ids.length === 0 ? null : ids.join(' ');
+    return this.statuses().length === 0 ? null : `st-${this.line().id}`;
   }
 
   onRowClick(): void {
@@ -310,10 +374,14 @@ export class LineRow {
   /**
    * Space and Enter, because a `div` with `role="button"` gets neither for free.
    *
-   * Both, which the button role calls for and which everybody expects anyway.
+   * Both, which the button role calls for and which everybody expects anyway. Only
+   * on the row itself: a key on a button inside it is that button's.
    */
   onRowKeydown(event: KeyboardEvent): void {
     if (event.key !== ' ' && event.key !== 'Enter') {
+      return;
+    }
+    if (event.target !== event.currentTarget) {
       return;
     }
 

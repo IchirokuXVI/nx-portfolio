@@ -12,6 +12,7 @@ import {
   type LineHistoryFactsVm,
   type LineHistoryMonthVm,
   type LineHistoryRowVm,
+  type LineProductPriceRead,
   type LineSettlement,
 } from '@portfolio/velista/models';
 import { estimateFrom } from '../line-detail-sheet/select-line-detail';
@@ -34,6 +35,8 @@ export interface LineHistoryInput {
   /** Whether {@link scope} has an older page to read. */
   readonly hasMore: boolean;
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
+  /** The prices of a product, for the product the line shows (velista `0145`). */
+  readonly pricesOf?: (itemId: string) => LineProductPriceRead;
   readonly nameOf: (userId: string) => string | null;
   /** The name of another list, for a row of "everywhere". Null when not held. */
   readonly listNameOf: (listId: string) => string | null;
@@ -85,7 +88,8 @@ export function selectLineHistory(
     content: lineName(
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
-      input.locale
+      input.locale,
+      input.pricesOf
     ).text,
     listName: input.listName,
     scopes,
@@ -159,6 +163,10 @@ function factsOf(
       priced.unitPriceCents === null ||
       priced.currency === null
         ? null
-        : formatMinorMoney(priced.unitPriceCents, priced.currency, input.locale),
+        : formatMinorMoney(
+            priced.unitPriceCents,
+            priced.currency,
+            input.locale
+          ),
   };
 }

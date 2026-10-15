@@ -91,6 +91,7 @@ export class LineHistoryPage {
         ? this._lines.hasMoreItemSettlements(lineId)
         : this._lines.hasMoreSettlements(lineId),
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
+      pricesOf: this._itemNames.pricesOf,
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
       listNameOf: (listId) => this._listNameOf(listId),
       callerUserId: this._session.userId(),

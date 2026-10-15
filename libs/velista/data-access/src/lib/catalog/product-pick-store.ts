@@ -73,6 +73,13 @@ export class ProductPickStore {
   /** The product chosen on the page so far, or null for none yet. */
   readonly chosen = this._chosen.asReadonly();
 
+  /**
+   * The answer not taken yet, or null. A caller that is a page of its own is a new
+   * instance when it comes back, and finds its answer by its caller state here
+   * before it takes it with {@link takeAnswer} (velista `0145`, section 5).
+   */
+  readonly answer = this._answer.asReadonly();
+
   /** Open the catalog to choose. Called by the caller just before it navigates. */
   open(request: ProductPickRequest): void {
     this._request.set(request);

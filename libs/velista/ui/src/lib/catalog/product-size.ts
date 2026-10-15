@@ -61,3 +61,24 @@ export function productDetailText(
   ].filter((part): part is string => part !== null && part.trim() !== '');
   return parts.length === 0 ? null : parts.join(' · ');
 }
+
+/**
+ * The brand, then the size: "Hacendado · 1 L", as the second line of a row of a
+ * list draws them after the product's name (velista `0145`, section 3). Either
+ * alone when the catalog knows only one, null with neither.
+ */
+export function productBrandSizeText(
+  product: {
+    readonly size: number | null;
+    readonly unit: string | null;
+    readonly brand: string | null;
+  },
+  locale: string,
+  translate: SizeTranslate
+): string | null {
+  const parts = [
+    product.brand,
+    productSizeText(product.size, product.unit, locale, translate),
+  ].filter((part): part is string => part !== null && part.trim() !== '');
+  return parts.length === 0 ? null : parts.join(' · ');
+}

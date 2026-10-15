@@ -207,6 +207,19 @@ $app-content-max: 480px;
   // A catalog product's picture on its row (velista 0100, section 3): big enough to
   // tell two cartons apart, and still under the two lines of text beside it.
   --app-product-thumb-size: 52px;
+  // The picture on a row of a list (velista 0145, section 3). The size of a touch
+  // target, because on a line with no product the same square is the button that
+  // chooses one, and the two must not change the row's shape. Its corner is between
+  // the small and the middle radius, as the mock draws it.
+  --app-line-picture-size: var(--app-touch-target);
+  --app-line-picture-radius: 10px;
+  // A row of a list with its two lines: the name and the price, then the product.
+  // Its own token rather than a change to --app-line-row-height, which nine other
+  // components read as the height of one line of a list.
+  --app-line-row-two-line-height: 68px;
+  // How few letters of a product's name survive on a row before its brand and size
+  // start to give way (section 3).
+  --app-line-product-name-min: 4ch;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;
