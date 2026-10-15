@@ -49,6 +49,76 @@ leaves four cases open. Each one is a decision of the **owner**: ask, and do not
 One place is absent from section 5: the `about-products` sheet of velista `0137` (pull
 request #692) prints `{{line}}`, and it takes the drawn name too.
 
+### The owner's answers of 2026-10-15
+
+1. An old line whose product was renamed later shows the old product name as its label.
+   Accepted.
+2. An old line made from a group card keeps the group name as its label. Accepted.
+3. "Save with an empty field" while the product name has not loaded sends `named: false`
+   with no `content`. Backend `0207` then keeps the stored name.
+4. An empty product name is skipped in the comparison, in every language and not only
+   English. No language may make every line match.
+
+## What the build decided
+
+The build of 2026-10-15 follows the owner's answers above, and the code on `dev` after
+backend `0207` (pull request #706). Each choice below is the builder's, and the owner can
+overturn it.
+
+**Names and files that moved since the plan was written.**
+
+- The function of section 1 is `lineName` in `libs/velista/models/src/lib/line-name.ts`.
+  Beside it, `lineNameChange` answers what a save of a name field sends, and
+  `lineNameRefused` answers that an empty field on a line with no product may not save.
+  The name sheet and the sheet of a row both call them, so the two cannot disagree.
+- The pages and sheets of a line read it through `watchLineName` in
+  `feature-lists/src/lib/line-page/line-name.ts`. It also asks `ItemNames` for the
+  products of the line. The selectors of the line page, the history page and the sheet of
+  a row call `lineName` with the names they already hold.
+- Backend `0207` answers `named` on every `LineView`, and `named` is required on the wire.
+  The mapper still reads anything but `false` as named, as section 1 asks.
+- Backend `0207` made an edit of the flag alone an edit of the name for permissions. The
+  in-memory line service refuses it on an approved line for a reader without `MANAGE`, as
+  it refuses `content`.
+
+**Choices the plan did not state.**
+
+1. **The comparison of section 2 reads every language a product has**, which is `en` and
+   `es` today. A name that folds to nothing is skipped in each of them (answer 4).
+2. **While the products of a named line have not loaded, the line is drawn as named.** It
+   cannot be compared yet. When the names land and the name is a product's, the line is
+   drawn with the product's name, and an untouched name field empties itself.
+3. **The empty field shows the product's name as its placeholder**, in the name sheet and
+   in the sheet of a row. The plan says the field starts empty. The hint says what an
+   empty field means: the line is called by its product.
+4. **The line under the title of the name sheet** is the product's name, then its format
+   and brand as a row of the list prints them (`productDetailText`): "Shampoo · 400 ml ·
+   Deliplus". The mock prints "Tomate frito · Hacendado 400 g".
+5. **"Add a name" sits under "Added by"**, the last line of the place, and not between the
+   two lines. The mock has no "Added by". It shows for a reader who may rename the line,
+   by the same rule as the menu (`editScopeFor`), and it pushes the name sheet over the
+   page, so closing the sheet lands on the page.
+6. **The menu row reads "Rename" for a named line**, which replaces "Change the name". Its
+   accessible names are "Rename Toast bread" and "Add a name for Bread". Spanish keeps
+   "Cambiar el nombre" and gives "Ponerle un nombre".
+7. **The sheet of a row** saves an empty field on a named line with a product as the name
+   taken away, and saves the quantity alone when the field of a line that is not named
+   stays empty. An empty field on a line with no product holds Save, as it did.
+8. **The settle sheet of the shopping list adds with `named: false` too.** Velista `0142`
+   built "Add it to another list" after this plan was written. It makes a line from the
+   product of a row, which is the owner's sentence exactly. The scope named only the
+   composer of that page.
+9. **The due rows show the drawn name.** `selectDueLines` reads `LineRowVm.content`, which
+   this plan changes. The plan says the due rows keep `content`. To keep that would need a
+   second field on the row, which the boundaries forbid, so the build left
+   `selectDueLines` alone and the due rows follow the row.
+10. **The optimistic write claims the words and the flag together.** An edit of the name
+    writes both, so a realtime event during the write keeps the local flag as it keeps
+    the local words.
+11. **The rename sheet seeds its field when the line arrives** and follows the line while
+    nobody types, as the sheet of a row does. An `ItemNames` answer that knows no product
+    never loads a name, so a seed that waited for the names could wait forever.
+
 ## Brief for the agent
 
 ### Objective
