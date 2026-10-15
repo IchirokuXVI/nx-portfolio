@@ -280,8 +280,10 @@ export function chip(page: Page, label: string): Locator {
 /**
  * A second person: their own browser context, signed in to nothing, on the
  * same origin and with the same certificate allowance as the main page.
- * `browser.newContext()` inherits none of the config's `use` options, so all
- * three are stated here rather than assumed, "Don't ask again" included.
+ * All three options are stated here rather than assumed. The runner's
+ * `browser.newContext()` was seen to apply the config's storage state (the
+ * walk of velista `0141`), but nothing documents which `use` options it
+ * carries, so "Don't ask again" is stated too.
  */
 export async function newVisitor(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
