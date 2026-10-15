@@ -303,6 +303,8 @@ describeIntegration('support sessions (real Postgres)', () => {
 
       expect(start.expiresAt).toBe(row.expiresAt.toISOString());
       expect(start.codeExpiresAt).toBe(row.codeExpiresAt.toISOString());
+      // The lifetime itself, which the back office counts from the arrival.
+      expect(start.codeTtlMs).toBe(IMPERSONATION_CODE_TTL_MS);
     });
 
     it('stores the hash of the code and never the code', async () => {

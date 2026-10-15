@@ -76,6 +76,7 @@ export function recordingDirectory() {
         sessionId: 's1',
         url: 'https://velista.test/en/auth/impersonate#code=c1',
         codeExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        codeTtlMs: 60_000,
         expiresAt: '2026-10-15T21:30:00.000Z',
       };
     },

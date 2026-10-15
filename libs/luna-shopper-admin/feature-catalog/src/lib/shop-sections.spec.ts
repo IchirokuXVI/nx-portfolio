@@ -676,6 +676,233 @@ describe('the Sections tab of a shop', () => {
     expect(panel.preview()?.key).toBe('catalog.locationSections.preview.none');
   });
 
+  /**
+   * The panel on its own, so a spec can move its shop input under it. A move
+   * to another shop through the router builds a new tab, which hides the
+   * answer that lands late on the panel that stays.
+   */
+  async function bareShop(id: string) {
+    await boot(SHOPS);
+    const bare = TestBed.createComponent(LocationSections);
+    bare.componentRef.setInput('supermarketId', 'sm_mercadona');
+    bare.componentRef.setInput('locationId', id);
+    bare.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    bare.detectChanges();
+    const pick = async (next: string) => {
+      bare.componentRef.setInput('locationId', next);
+      bare.detectChanges();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      bare.detectChanges();
+    };
+    return { panel: bare.componentInstance, pick };
+  }
+
+  it('drops the answer of a save that ran while another shop was picked', async () => {
+    const { panel, pick } = await bareShop('loc_cordoba_oeste');
+    const service = TestBed.inject(ShopSections);
+    const oeste = await service.forLocation('loc_cordoba_oeste');
+    const centro = idsOf(await service.forLocation('loc_cordoba_centro'));
+    let answer: ((sections: typeof oeste) => void) | undefined;
+    jest.spyOn(service, 'setOrder').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        })
+    );
+    const changes = TestBed.inject(ResourceChanges);
+    const before = changes.version('location-sections');
+
+    panel.move(OESTE_CHILLED, -1);
+    const saving = panel.save();
+    await pick('loc_cordoba_centro');
+    expect(idsOf(panel.saved() ?? [])).toEqual(centro);
+
+    answer?.([...oeste].reverse());
+    await saving;
+
+    expect(idsOf(panel.saved() ?? [])).toEqual(centro);
+    expect(panel.order()).toEqual(centro);
+    expect(panel.savedNow()).toBe(false);
+    // The write happened, so the page above is still told.
+    expect(changes.version('location-sections')).toBe(before + 1);
+  });
+
+  it('drops the refusal of a save that ran while another shop was picked', async () => {
+    const { panel, pick } = await bareShop('loc_cordoba_oeste');
+    const service = TestBed.inject(ShopSections);
+    let refuse: ((error: unknown) => void) | undefined;
+    jest.spyOn(service, 'setOrder').mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        })
+    );
+
+    panel.move(OESTE_CHILLED, -1);
+    const saving = panel.save();
+    await pick('loc_cordoba_centro');
+    refuse?.(refusal('section_of_another_shop', 409));
+    await saving;
+
+    expect(panel.saveErrorKey()).toBeNull();
+  });
+
+  it('drops the answer of a delete that ran while another shop was picked', async () => {
+    const { panel, pick } = await bareShop('loc_cordoba_oeste');
+    const service = TestBed.inject(ShopSections);
+    let done: (() => void) | undefined;
+    jest.spyOn(service, 'remove').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          done = resolve;
+        })
+    );
+    const read = jest.spyOn(service, 'forLocation');
+
+    const deleting = panel.confirmDelete(panel.rows()[0].section);
+    await pick('loc_cordoba_centro');
+    const centro = idsOf(panel.saved() ?? []);
+    read.mockClear();
+
+    done?.();
+    await deleting;
+
+    // The old shop's list is not read again into the new shop's tab.
+    expect(read).not.toHaveBeenCalled();
+    expect(idsOf(panel.saved() ?? [])).toEqual(centro);
+    expect(panel.removing()).toBe(false);
+  });
+
+  it('closes the delete dialog of a shop left while the delete ran', async () => {
+    const { panel, pick } = await bareShop('loc_cordoba_oeste');
+    const service = TestBed.inject(ShopSections);
+    const settlers: { done: () => void; fail: (error: unknown) => void }[] = [];
+    jest.spyOn(service, 'remove').mockImplementation(
+      () =>
+        new Promise<void>((done, fail) => {
+          settlers.push({ done, fail });
+        })
+    );
+
+    // The delete is answered after another shop was picked.
+    let section = panel.rows()[0].section;
+    panel.deleting.set(section);
+    let deleting = panel.confirmDelete(section);
+    await pick('loc_cordoba_centro');
+    settlers[0].done();
+    await deleting;
+
+    expect(panel.deleting()).toBeNull();
+    expect(panel.removing()).toBe(false);
+
+    // The delete is refused after another shop was picked.
+    section = panel.rows()[0].section;
+    panel.deleting.set(section);
+    deleting = panel.confirmDelete(section);
+    await pick('loc_cordoba_oeste');
+    settlers[1].fail(refusal('section_not_found', 404));
+    await deleting;
+
+    expect(panel.deleting()).toBeNull();
+    expect(panel.removing()).toBe(false);
+    expect(panel.saveErrorKey()).toBeNull();
+  });
+
+  it('reads the list again when a saved order names a section deleted since, keeping the order', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_oeste');
+    const gateway = TestBed.inject(RESOURCE_GATEWAYS).for(sectionSource());
+    await gateway.create({
+      supermarketLocationId: 'loc_cordoba_oeste',
+      slug: 'bakery',
+      name: { en: 'Bakery', es: 'Panadería' },
+      categoryIds: [],
+    });
+    await panel.reload();
+    const bakery = panel.rows()[2].section.id;
+    panel.move(bakery, -1);
+    panel.move(bakery, -1);
+    expect(panel.order()).toEqual([bakery, OESTE_PANTRY, OESTE_CHILLED]);
+
+    // Another operator deletes a section of the order held here.
+    await TestBed.inject(ShopSections).remove(OESTE_PANTRY);
+    await panel.save();
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('resource.error.sectionNotFound');
+    expect(idsOf(panel.saved() ?? [])).toEqual([OESTE_CHILLED, bakery]);
+    // The move survives, less the section that went, so a retry can work.
+    expect(panel.order()).toEqual([bakery, OESTE_CHILLED]);
+    expect(panel.dirty()).toBe(true);
+
+    await panel.save();
+    await settle(fixture);
+    expect(idsOf(panel.saved() ?? [])).toEqual([bakery, OESTE_CHILLED]);
+    expect(panel.saveErrorKey()).toBeNull();
+  });
+
+  it('finishes a delete whose read after it failed, and says the read failed on its own', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro');
+    await panel.choose('it_milk_1l');
+    const service = TestBed.inject(ShopSections);
+    const changes = TestBed.inject(ResourceChanges);
+    const before = changes.version('sections');
+    const kept = panel.rows()[1].section.id;
+    jest
+      .spyOn(service, 'forLocation')
+      .mockRejectedValueOnce(refusal('unavailable', 503));
+    const preview = jest.spyOn(service, 'atLocation');
+
+    await panel.confirmDelete(panel.rows()[0].section);
+    await settle(fixture);
+
+    expect(panel.rows().map((row) => row.section.id)).not.toContain(
+      CENTRO_CHILLED
+    );
+    expect(panel.rows()[0].section.id).toBe(kept);
+    expect(changes.version('sections')).toBe(before + 1);
+    expect(preview).toHaveBeenCalled();
+    expect(panel.saveErrorKey()).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-reread-failed]')?.textContent
+    ).toContain('catalog.locationSections.rereadFailed');
+  });
+
+  it('keeps an order in hand when the failed read after a delete is retried', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro', [PHONE]);
+    panel.mapEditAccepted.set(true);
+    const gateway = TestBed.inject(RESOURCE_GATEWAYS).for(sectionSource());
+    await gateway.create({
+      supermarketLocationId: 'loc_cordoba_centro',
+      slug: 'bakery',
+      name: { en: 'Bakery', es: 'Panadería' },
+      categoryIds: [],
+    });
+    await panel.reload();
+    const bakery = panel.rows()[2].section.id;
+    panel.move(bakery, -1);
+    panel.move(bakery, -1);
+    jest
+      .spyOn(TestBed.inject(ShopSections), 'forLocation')
+      .mockRejectedValueOnce(refusal('unavailable', 503));
+
+    await panel.confirmDelete(panel.rows()[2].section);
+    await settle(fixture);
+    expect(panel.order()).toEqual([bakery, CENTRO_CHILLED]);
+
+    (
+      fixture.nativeElement.querySelector(
+        '[data-reread-failed] button'
+      ) as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(panel.rereadErrorKey()).toBeNull();
+    expect(idsOf(panel.saved() ?? [])).toEqual([CENTRO_CHILLED, bakery]);
+    expect(panel.order()).toEqual([bakery, CENTRO_CHILLED]);
+    expect(panel.dirty()).toBe(true);
+  });
+
   it('says why a preview could not be read', async () => {
     const { fixture, panel } = await openShop('loc_cordoba_centro');
     jest

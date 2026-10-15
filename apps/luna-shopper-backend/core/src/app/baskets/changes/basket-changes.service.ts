@@ -21,6 +21,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { ListLineChange } from '../../entities';
+import { isFrozenBasket } from '../basket-line-facts';
 import { BasketReadService } from '../basket-read.service';
 import { BasketWriteContext } from '../basket-write.context';
 import {
@@ -102,7 +103,12 @@ export class BasketChangesService {
     );
 
     const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
+    const held = hasMore ? rows.slice(0, limit) : rows;
+    // A finished trip carries no marks (plan 0209, decision 5), so nothing on
+    // its history is unseen. The history itself is still listed.
+    const page = isFrozenBasket(opened.basket)
+      ? held.map((row) => ({ ...row, unseen: false }))
+      : held;
     // The rows a client can act on: the covered lines, keyed as core keys them
     // with no picks (plan 0201). A change about a covered line names that line,
     // so the picks of a read cannot move it to a row this did not name.
@@ -163,10 +169,14 @@ export class BasketChangesService {
    *
    * **A removed row is not here**: its lines left the coverage, and a removal
    * sends ids alone.
+   *
+   * **A finished trip answers no marks** (plan 0209, decision 5), as the full
+   * read does: what changed on a list after the trip is not something its rows
+   * show.
    */
   async marksOf(req: GetBasketMarksRequest): Promise<BasketMarksView> {
     const opened = await this.context.open(req);
-    if (opened.coveredListIds.length === 0) {
+    if (opened.coveredListIds.length === 0 || isFrozenBasket(opened.basket)) {
       return { unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] };
     }
     const { lines: covered, keys } = await this.read.keyedLinesOf(
@@ -232,10 +242,10 @@ export class BasketChangesService {
     }
 
     return {
-      unseenChangeCount: await this.marks.countFor(
-        opened.participant.id,
-        covered
-      ),
+      // Zero for a finished trip, which the full read counts nothing on.
+      unseenChangeCount: isFrozenBasket(opened.basket)
+        ? 0
+        : await this.marks.countFor(opened.participant.id, covered),
       // A duration, never a moment (section 6). The client may run a timer for it;
       // it never compares its own clock to a time the server sent.
       marksLapseInMs: this.marks.markWindow,

@@ -596,6 +596,7 @@ export interface AdminBasketView {
   status: BasketStatus;
   /** The distinct zones this basket covers (plan 0136). May be empty. */
   zoneIds: string[];
+  /** The rows, in products, on every status (plan 0209). The name is older. */
   lineCount: number;
   /** ISO 8601 UTC. */
   generatedAt: string;
@@ -612,6 +613,10 @@ export interface AdminBasketView {
  * shopper is shown: the row, what is left of it and what has been bought of it.
  * It carries no timestamp, because a row is not a record and has none: the
  * anchor's own line was created on a list, not here.
+ *
+ * **One row per product, on every status** (plan 0201, plan 0209 section
+ * 1.2). Two lines of one product are one row, open or finished, which is what
+ * `lineCount` counts, so the rows of a detail and its count agree.
  */
 export interface AdminBasketRowView {
   /** The anchor's list line id, as `BasketRowView.rowKey` is. */
@@ -661,6 +666,7 @@ export interface AdminBasketSettlementView {
 }
 
 export interface AdminBasketDetailView extends AdminBasketView {
+  /** The rows, one per product, as `lineCount` counts them. */
   lines: AdminBasketRowView[];
 }
 

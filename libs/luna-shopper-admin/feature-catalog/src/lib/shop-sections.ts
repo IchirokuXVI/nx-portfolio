@@ -62,6 +62,11 @@ export function panelErrorKey(error: unknown): string {
     : 'resource.error.unknown';
 }
 
+/** Whether a failure is the server refusing with this one code. */
+export function isRefusal(error: unknown, code: string): boolean {
+  return error instanceof GatewayError && error.code === code;
+}
+
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null
     ? (value as Record<string, unknown>)

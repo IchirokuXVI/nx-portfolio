@@ -1,6 +1,14 @@
 import type { ImpersonationSession } from './directory-service';
 
 /**
+ * How long a handoff code is good for, when the answer does not say. The
+ * `codeTtlMs` of the answer is the number (backend plan 0194); this is for a
+ * gateway that is older than that field, which a staging deploy of only the
+ * affected images can leave beside a newer back office.
+ */
+export const FALLBACK_CODE_TTL_MS = 60 * 1000;
+
+/**
  * The answer of the start of a support session (backend plan 0194), read
  * from `unknown`.
  *
@@ -10,7 +18,8 @@ import type { ImpersonationSession } from './directory-service';
  * `href` of a link, so only an absolute http(s) address passes, and the two
  * times must be dates the browser can read. A field that fails makes the
  * whole answer unreadable, and the caller reports an error rather than draw
- * half a link.
+ * half a link. The one exception is `codeTtlMs`: an answer without a usable
+ * one reads as {@link FALLBACK_CODE_TTL_MS}, because the link still works.
  */
 export function toImpersonationSession(
   raw: unknown
@@ -23,13 +32,14 @@ export function toImpersonationSession(
   const url = link(record['url']);
   const codeExpiresAt = instant(record['codeExpiresAt']);
   const expiresAt = instant(record['expiresAt']);
+  const codeTtlMs = duration(record['codeTtlMs']) ?? FALLBACK_CODE_TTL_MS;
   return typeof sessionId !== 'string' ||
     sessionId === '' ||
     url === null ||
     codeExpiresAt === null ||
     expiresAt === null
     ? null
-    : { sessionId, url, codeExpiresAt, expiresAt };
+    : { sessionId, url, codeExpiresAt, codeTtlMs, expiresAt };
 }
 
 /** An absolute http(s) URL, and nothing else a link may point at. */
@@ -43,6 +53,13 @@ function link(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** A whole number of milliseconds above zero. */
+function duration(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null;
 }
 
 /** A date the browser can read. */

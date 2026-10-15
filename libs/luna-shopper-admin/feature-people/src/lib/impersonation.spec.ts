@@ -8,10 +8,7 @@ import {
   type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
-import {
-  IMPERSONATION_CODE_LIFETIME_MS,
-  ImpersonationPanel,
-} from './impersonation-panel';
+import { ImpersonationPanel } from './impersonation-panel';
 import { USER_SEED } from './people-seed';
 import {
   bootShoppers,
@@ -245,7 +242,7 @@ describe('opening the app as a person', () => {
     const arrival = Date.now();
     const clock = jest
       .spyOn(Date, 'now')
-      .mockReturnValue(arrival + IMPERSONATION_CODE_LIFETIME_MS + 1000);
+      .mockReturnValue(arrival + 60_000 + 1000);
     await new Promise((resolve) => setTimeout(resolve, 1100));
     await settle(fixture);
     clock.mockRestore();
@@ -272,6 +269,7 @@ describe('opening the app as a person', () => {
         sessionId: 's1',
         url: LINK,
         codeExpiresAt: new Date(Date.now() - 30 * 1000).toISOString(),
+        codeTtlMs: 60_000,
         expiresAt: '2026-10-15T21:30:00.000Z',
       }),
     });
@@ -291,6 +289,30 @@ describe('opening the app as a person', () => {
     expect(panel.secondsLeft()).toBeGreaterThan(55);
   });
 
+  it('counts the lifetime the answer names, and not a copy of its own', async () => {
+    const { directory } = recordingDirectory();
+    const fixture = await open({
+      ...directory,
+      // A code that auth says is good for twenty seconds.
+      startImpersonation: async () => ({
+        sessionId: 's1',
+        url: LINK,
+        codeExpiresAt: new Date(Date.now() + 20 * 1000).toISOString(),
+        codeTtlMs: 20_000,
+        expiresAt: '2026-10-15T21:30:00.000Z',
+      }),
+    });
+    await press(fixture, '[data-action="open-as-user"]');
+    await choose(fixture, 'TESTING');
+    await press(fixture, '[data-impersonate-start]');
+
+    const panel: ImpersonationPanel = fixture.debugElement.query(
+      By.directive(ImpersonationPanel)
+    ).componentInstance;
+    expect(panel.secondsLeft()).toBeLessThanOrEqual(20);
+    expect(panel.secondsLeft()).toBeGreaterThan(15);
+  });
+
   it('drops an answer that arrives after the dialog closed', async () => {
     const { directory } = recordingDirectory();
     let answer: (() => void) | undefined;
@@ -303,6 +325,7 @@ describe('opening the app as a person', () => {
               sessionId: 's1',
               url: LINK,
               codeExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+              codeTtlMs: 60_000,
               expiresAt: '2026-10-15T21:30:00.000Z',
             });
         }),

@@ -168,6 +168,8 @@ export class ImpersonationService {
       sessionId: session.id,
       code,
       codeExpiresAt: session.codeExpiresAt.toISOString(),
+      // The lifetime itself, so the back office holds no copy of the number.
+      codeTtlMs: IMPERSONATION_CODE_TTL_MS,
       expiresAt: session.expiresAt.toISOString(),
     };
   }

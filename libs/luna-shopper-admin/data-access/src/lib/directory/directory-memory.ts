@@ -105,6 +105,7 @@ export class DirectoryMemory implements DirectoryServiceI {
       sessionId: `memory-${randomJoinCode()}`,
       url: `https://velista.invalid/en/auth/impersonate#code=memory-${randomJoinCode()}`,
       codeExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      codeTtlMs: 60 * 1000,
       expiresAt: inHours(2),
     };
   }
