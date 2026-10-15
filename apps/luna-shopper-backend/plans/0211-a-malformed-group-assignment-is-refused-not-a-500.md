@@ -1,3 +1,5 @@
+> **PR:** [#719](https://github.com/IchirokuXVI/nx-portfolio/pull/719)
+
 # 0211: a malformed group assignment is refused, not a 500
 
 > Asked for by the owner on 2026-10-15: "create a plan to fix the bugs you mentioned". The
