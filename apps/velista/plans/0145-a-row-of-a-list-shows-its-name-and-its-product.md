@@ -1,3 +1,5 @@
+> **PR:** [#733](https://github.com/IchirokuXVI/nx-portfolio/pull/733)
+
 # 0145: a row of a list shows its name and its product
 
 > Asked for by the owner on 2026-10-11: "List lines will show always two lines: user
