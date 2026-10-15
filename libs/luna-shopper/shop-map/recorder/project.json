@@ -29,6 +29,13 @@
       "options": {
         "command": "npx tsx libs/luna-shopper/shop-map/recorder/tools/cut-tracking-fixture.ts"
       }
+    },
+    "synthesize-bent-compass": {
+      "//": "Writes the synthetic src/__fixtures__/tracking/bent-compass.synthetic.tracking.json (recorder plan 0005 section 5) until the walk lab recording of the freezer aisles replaces it. Never edit the output by hand.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/shop-map/recorder/tools/synthesize-bent-compass.ts"
+      }
     }
   }
 }
