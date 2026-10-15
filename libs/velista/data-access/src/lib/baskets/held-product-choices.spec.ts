@@ -32,6 +32,33 @@ describe('HeldProductChoices', () => {
     expect(choices.heldOn('b-1').size).toBe(0);
   });
 
+  it('retains the lines it is told to keep and releases the rest', () => {
+    const choices = new HeldProductChoices();
+    choices.hold('b-1', ['zl-1', 'zl-2', 'zl-3'], {
+      itemId: 'oat',
+      product: null,
+    });
+    choices.hold('b-2', ['zl-9'], { itemId: 'soy', product: null });
+
+    choices.retain('b-1', (lineId) => lineId === 'zl-2');
+    expect([...choices.heldOn('b-1').keys()]).toEqual(['zl-2']);
+
+    choices.retain('b-1', () => false);
+    expect(choices.heldOn('b-1').size).toBe(0);
+    // Another basket is not touched.
+    expect([...choices.heldOn('b-2').keys()]).toEqual(['zl-9']);
+  });
+
+  it('writes nothing when every held line is retained', () => {
+    const choices = new HeldProductChoices();
+    choices.hold('b-1', ['zl-1'], { itemId: 'oat', product: null });
+    const before = choices.heldOn('b-1');
+
+    choices.retain('b-1', () => true);
+
+    expect(choices.heldOn('b-1')).toBe(before);
+  });
+
   it('holds nothing for no lines', () => {
     const choices = new HeldProductChoices();
     const before = choices.heldOn('b-1');
