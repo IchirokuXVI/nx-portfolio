@@ -15,7 +15,7 @@ import {
   type ScopePriced,
 } from './products/product-list-gateway';
 import { ProductPricesTab } from './products/product-prices-tab';
-import { ProductSourcesTab, ProductWhereTab } from './products/product-tabs';
+import { ProductSourcesTab } from './products/product-tabs';
 import { SetCategoriesPanel } from './set-categories-panel';
 import { SetGroupPanel } from './set-group-panel';
 
@@ -24,9 +24,6 @@ import { SetGroupPanel } from './set-group-panel';
  * part, the key of its count, and the segment the `prices` resource is at.
  */
 export const PRODUCT_PRICES_TAB = 'prices';
-
-/** The "Where it is" tab: the product in each chain's shops. */
-export const PRODUCT_WHERE_TAB = 'where';
 
 /** The Sources tab: the chain rows that name the product. */
 export const PRODUCT_SOURCES_TAB = 'sources';
@@ -297,12 +294,6 @@ export const ITEMS = defineResource<Item>({
         name: PRODUCT_PRICES_TAB,
         label: 'catalog.products.tabs.prices',
         component: ProductPricesTab,
-      },
-      {
-        as: 'tab',
-        name: PRODUCT_WHERE_TAB,
-        label: 'catalog.products.tabs.where',
-        component: ProductWhereTab,
       },
       {
         as: 'tab',

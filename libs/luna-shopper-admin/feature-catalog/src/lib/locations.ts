@@ -407,10 +407,8 @@ export const LOCATIONS = defineResource<Location>({
    * for a code that was inferred and that nobody has checked, which is the
    * one a person has to look at.
    *
-   * The mock has a third, "Own section order". The list read does not say
-   * whether a shop's sections are its own or its chain's: only the read of one
-   * shop's sections does. So the shop's Sections tab says it, and the row does
-   * not guess.
+   * The mock has a third, "Own section order". Since backend plan 0200 every
+   * section is the shop's own, so the state says nothing a shop could lack.
    */
   rowStates: () => (row) => [
     ...(row.hasMap
