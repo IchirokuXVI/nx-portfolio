@@ -736,7 +736,8 @@ export type LineWriteCall =
        * acceptance criterion in its own right (velista plan 0043, section 8), and
        * the only place it can be observed is the arguments of this call.
        */
-      readonly itemIds?: readonly string[];
+      readonly itemIds?: readonly string[]; /** `false` for a line made from a card (velista `0144`), absent for typed text. */
+      readonly named?: false;
     }
   /**
    * A quantity adjustment, as the **delta** that was sent.
@@ -777,6 +778,7 @@ export type LineWriteCall =
       readonly kind: 'update';
       readonly lineId: string;
       readonly content?: string;
+      readonly named?: false;
       readonly itemIds?: readonly string[];
       /**
        * The products this edit adopted (velista plan 0065, section 4).
@@ -922,9 +924,16 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       quantity: number,
       createdByUserId: string,
       _approval: unknown,
-      itemIds?: readonly string[]
+      itemIds?: readonly string[],
+      named?: false
     ) => {
-      calls.push({ kind: 'add', content, quantity, itemIds });
+      calls.push({
+        kind: 'add',
+        content,
+        quantity,
+        itemIds,
+        ...(named === undefined ? {} : { named }),
+      });
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -934,6 +943,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         id: 'server-id',
         listId,
         content,
+        named: named !== false || (itemIds ?? []).length === 0,
         quantity,
         itemIds: [...(itemIds ?? [])],
         // Following no group, like every line the composer adds: nothing on the
@@ -971,6 +981,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       lineId: string,
       patch?: {
         content?: string;
+        named?: false;
         quantity?: number;
         itemIds?: readonly string[];
         adoptItemIds?: readonly string[];
@@ -1046,6 +1057,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.content === undefined
                     ? {}
                     : { content: patch.content }),
+                  ...(patch.named === false
+                    ? { named: false }
+                    : patch.content === undefined
+                      ? {}
+                      : { named: true }),
                   ...(patch.quantity === undefined
                     ? {}
                     : { quantity: patch.quantity }),

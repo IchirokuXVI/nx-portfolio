@@ -2218,6 +2218,8 @@ export class BasketPage {
       content: entry.content,
       quantity: entry.quantity,
       ...(itemIds.length > 0 ? { itemIds } : {}),
+      // A chosen card is not named (velista `0144`, section 3).
+      ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
     });
 
     // The dropdown goes with the words that produced it, whichever way the add

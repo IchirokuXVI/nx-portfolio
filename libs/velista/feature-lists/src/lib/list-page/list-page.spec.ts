@@ -142,6 +142,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     id,
     listId: LIST_ID,
     content: 'Sourdough loaf',
+    named: true,
     quantity: 1,
     itemIds: [],
     itemId: null,

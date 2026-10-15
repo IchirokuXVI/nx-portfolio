@@ -1,5 +1,6 @@
 import {
   catalogName,
+  lineName,
   lineProductPrices,
   orderLineCards,
   type AlsoOnVm,
@@ -50,6 +51,8 @@ export interface LinePageInput {
   readonly canEdit: boolean;
   /** Whether this caller may move the number. `DECIDE`. */
   readonly canStep: boolean;
+  /** Whether this caller may change the name of the line, as the menu decides it. */
+  readonly canRename: boolean;
   /** The translator, already bound to {@link locale}. */
   readonly translate: (key: string, args?: Record<string, unknown>) => string;
 }
@@ -67,9 +70,16 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     line.favoriteItemId
   ).map((price) => cardOf(price.itemId, price, line, input));
 
+  const name = lineName(
+    line,
+    (itemId) => input.itemNameOf(itemId)?.name ?? null,
+    input.locale
+  );
+
   return {
     lineId: line.id,
-    content: line.content,
+    content: name.text,
+    canAddName: !name.own && input.canRename,
     quantity: line.quantity,
     listName: input.list?.name ?? null,
     zoneName: input.zoneName,

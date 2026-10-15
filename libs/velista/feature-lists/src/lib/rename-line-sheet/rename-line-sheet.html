@@ -52,9 +52,16 @@
       {{ 'list.merge.keepEditing' | rokuT }}
     </button>
   } @else {
+    <!--
+      The name sheet (plan 0144, section 4): the title, the product the line shows,
+      one field and the sentence that says what a name changes.
+    -->
     <h2 class="title" id="rename-line-title">
       {{ 'list.rename.title' | rokuT }}
     </h2>
+    @if (product(); as shown) {
+      <p class="product">{{ shown }}</p>
+    }
 
     <form (submit)="save($event)" class="form">
       <label class="label" for="rename-line-name">
@@ -62,8 +69,11 @@
       </label>
       <input
         (input)="onInput($event)"
-        [attr.aria-describedby]="errorKey() ? 'rename-line-error' : null"
+        [attr.aria-describedby]="
+          errorKey() ? 'rename-line-note rename-line-error' : 'rename-line-note'
+        "
         [attr.maxlength]="maxLength"
+        [attr.placeholder]="productName()"
         [value]="name()"
         #field
         autocomplete="off"
@@ -72,6 +82,9 @@
         id="rename-line-name"
         type="text"
       />
+      <p class="note" id="rename-line-note">
+        {{ 'list.rename.note' | rokuT }}
+      </p>
 
       @if (errorKey(); as key) {
         <p class="error" id="rename-line-error" role="alert">
@@ -89,6 +102,14 @@
           <lib-spinner-icon class="spinning" />
         }
         <span>{{ 'list.rename.save' | rokuT }}</span>
+      </button>
+      <button
+        (click)="dismiss()"
+        [disabled]="saving()"
+        class="cancel"
+        type="button"
+      >
+        {{ 'list.rename.cancel' | rokuT }}
       </button>
     </form>
   }

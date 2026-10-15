@@ -681,6 +681,8 @@ export class SettleSheet {
             content: catalogName(product.name, this._locale()),
             quantity: to,
             itemIds: [product.id],
+            // Made from the product, so not named (velista `0144`).
+            named: false,
           })
         : await this._store.setDemand({
             lineId: list.lineId,

@@ -8,6 +8,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeLineStore,
+  provideFakeItemNames,
   provideFakeLineStore,
 } from '@portfolio/velista/data-access';
 import type { Line } from '@portfolio/velista/models';
@@ -39,6 +40,7 @@ function line(): Line {
     productGroupId: null,
     groupItemIds: [],
     favoriteItemId: null,
+    named: true,
     preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'PENDING',
@@ -73,6 +75,7 @@ async function render(options: { overList: boolean }): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
+      provideFakeItemNames(),
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: { navigateByUrl: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },

@@ -11,26 +11,45 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { LineStore } from '@portfolio/velista/data-access';
-import { LINE_CONTENT_MAX_LENGTH } from '@portfolio/velista/models';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
+import { ItemNames, LineStore } from '@portfolio/velista/data-access';
+import {
+  LINE_CONTENT_MAX_LENGTH,
+  lineNameChange,
+} from '@portfolio/velista/models';
 import { SheetNavigation } from '@portfolio/velista/platform';
-import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
+import {
+  productDetailText,
+  SheetShell,
+  SpinnerIcon,
+} from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import {
   mergeProductsMaxOf,
   mergeQuestionOf,
   type MergeQuestion,
 } from '../line-merge-question';
+import { watchLineName } from '../line-page/line-name';
 import { lineUrls } from '../line-page/line-urls';
 import { listErrorKey } from '../list-error-copy';
 
 /**
- * Change the name of a line, from the three dots of its page (velista `0135`,
- * section 6).
+ * Give a line a name, change it, or take it away (velista `0144`, section 4), from
+ * the three dots of its page and from "Add a name" on it (velista `0135`, section 6).
  *
  * One field and Save. The field is focused on arrival, which the sheet rules
  * allow for a sheet whose whole job is typing one value.
+ *
+ * ## A line made from a product has no name of its own
+ *
+ * It is drawn with the product's name, so its field starts empty. Text names the
+ * line. An empty field on a named line that holds a product takes the name away,
+ * and the line is drawn with the product's name again. What a save sends is
+ * `lineNameChange`, the same function the sheet of a row uses.
  *
  * ## A name another line holds asks first
  *
@@ -51,6 +70,9 @@ import { listErrorKey } from '../list-error-copy';
 })
 export class RenameLineSheet {
   private readonly _lines = inject(LineStore);
+  private readonly _itemNames = inject(ItemNames);
+  private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _translator = inject(RokuTranslatorService);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _injector = inject(Injector);
   private readonly _urls = lineUrls();
@@ -83,35 +105,69 @@ export class RenameLineSheet {
       .find((line) => line.id === this._urls.lineId())
   );
 
-  /** The name as it is saved, for the title of the question. */
-  readonly lineName = computed(() => this._line()?.content ?? '');
+  private readonly _name = watchLineName(() => this._line());
 
-  readonly canSave = computed(() => {
-    const line = this._line();
-    const typed = this.name().trim();
-    return (
-      line !== undefined &&
-      typed !== '' &&
-      typed !== line.content &&
-      !this.saving()
+  /** The name the line is drawn with, for the title of the question. */
+  readonly lineName = computed(() => this._name()?.text ?? '');
+
+  /** The product's name, as the empty field's hint. */
+  readonly productName = computed(() => this._name()?.productName ?? null);
+
+  /**
+   * The product the line shows, under the title: its name, its format and its
+   * brand. Null on a line with no product.
+   */
+  readonly product = computed(() => {
+    const itemId = this._name()?.itemId ?? null;
+    const item = itemId === null ? null : this._itemNames.nameOf(itemId);
+    const name = this.productName();
+    if (item === null || name === null) {
+      return null;
+    }
+    const locale = this._locale();
+    this._translator.loaded();
+    const detail = productDetailText(item, locale, (key, args) =>
+      this._translator.t(key, undefined, locale, args)
     );
+    return detail === null ? name : `${name} · ${detail}`;
   });
+
+  /** What Save sends, or null when there is nothing it may send. */
+  private readonly _change = computed(() => {
+    const line = this._line();
+    const name = this._name();
+    return line === undefined || name === null
+      ? null
+      : lineNameChange(line, name, this.name());
+  });
+
+  readonly canSave = computed(() => this._change() !== null && !this.saving());
 
   private readonly _question = viewChild<ElementRef<HTMLElement>>('question');
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
 
-  /** Whether the field took the line's name yet. Once, so typing is never undone. */
-  private _seeded = false;
+  /**
+   * What the field was last given from the line, or null before it was. The field
+   * follows the line only while it still holds this, so typing is never undone.
+   */
+  private _seeded: string | null = null;
 
   constructor() {
-    // The name arrives with the line, which on a cold load is after the sheet.
+    // The name arrives with the line, which on a cold load is after the sheet. The
+    // names of its products can come later still and show that the line's name is
+    // a product's (velista `0144`, section 2), and then the field empties, as long
+    // as nobody has typed in it.
     effect(() => {
-      const line = this._line();
-      if (line === undefined || this._seeded) {
+      const field = this._name()?.field;
+      if (field === undefined || this.saving()) {
         return;
       }
-      this._seeded = true;
-      untracked(() => this.name.set(line.content));
+      untracked(() => {
+        if (this._seeded === null || this.name() === this._seeded) {
+          this._seeded = field;
+          this.name.set(field);
+        }
+      });
     });
   }
 
@@ -146,7 +202,8 @@ export class RenameLineSheet {
 
   private async _save(confirmMerge: boolean): Promise<void> {
     const line = this._line();
-    if (line === undefined) {
+    const change = this._change();
+    if (line === undefined || change === null) {
       return;
     }
 
@@ -154,8 +211,10 @@ export class RenameLineSheet {
     this.errorKey.set(null);
     this.errorArgs.set(undefined);
 
+    // Text names the line; an empty field takes the name away, and the merge
+    // question answers either (velista `0144`, section 4).
     const outcome = await this._lines.updateLine(line.id, {
-      content: this.name().trim(),
+      ...change,
       ...(confirmMerge ? { confirmMerge: true } : {}),
     });
 

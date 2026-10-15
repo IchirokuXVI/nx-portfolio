@@ -221,6 +221,8 @@ export class LinePage {
       commentCount: this._lines.commentCountOf(this.lineId()) ?? null,
       canEdit: this._canEdit(),
       canStep: this._abilities().canDecide,
+      canRename:
+        line !== undefined && editScopeFor(line, this._abilities()) !== null,
       translate: (key, args) =>
         this._translator.t(key, undefined, locale, args),
     });
@@ -405,6 +407,14 @@ export class LinePage {
   /** The three dots: the menu, a sheet over this page. */
   async openMenu(): Promise<void> {
     await this._router.navigateByUrl(this._url(...sheetSegments('menu')));
+  }
+
+  /**
+   * "Add a name", on a line that is not named (velista `0144`, section 5): the name
+   * sheet, pushed over this page so closing it lands here.
+   */
+  async openName(): Promise<void> {
+    await this._router.navigateByUrl(this._url(...sheetSegments('name')));
   }
 
   /** The info button beside the heading of the products (velista `0137`, section 3). */

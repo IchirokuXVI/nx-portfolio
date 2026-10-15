@@ -9,15 +9,19 @@ import {
 import {
   CATALOG_BROWSE_SERVICE,
   type CatalogBrowseServiceI,
+  fakeItemNames,
+  type FakeItemNames,
   fakeLineStore,
   type FakeLineStore,
   fakeListStore,
   GatewayError,
+  provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
 } from '@portfolio/velista/data-access';
 import type {
   CatalogBrowseContext,
+  CatalogItem,
   CatalogScopeOffer,
   Line,
   ListPermission,
@@ -64,6 +68,7 @@ function line(overrides: Partial<Line> = {}): Line {
     boughtCount: 0,
     lastSettlementOutcome: null,
     claimed: false,
+    named: true,
     claimedByUserId: null,
     createdByUserId: 'user-me',
     approvedByUserId: null,
@@ -135,6 +140,7 @@ async function render<T>(
   options: {
     lines?: readonly Line[];
     permissions?: readonly ListPermission[];
+    itemNames?: FakeItemNames;
   } = {}
 ): Promise<Rendered<T>> {
   TestBed.resetTestingModule();
@@ -164,6 +170,7 @@ async function render<T>(
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
+      provideFakeItemNames(options.itemNames),
       provideFakeListStore(
         fakeListStore({
           lists: [list(options.permissions ?? ADMIN)],
@@ -231,6 +238,20 @@ describe('LineMenuSheet', () => {
     expect(textOf(fixture)).toContain('Shampoo');
     expect(buttonWith(fixture, 'list.menu.rename')).not.toBeNull();
     expect(buttonWith(fixture, 'list.menu.delete')).not.toBeNull();
+  });
+
+  it('offers Add a name for a line with no name of its own (velista 0144)', async () => {
+    const { fixture, sheets } = await render(LineMenuSheet, {
+      lines: [line({ named: false })],
+    });
+
+    expect(buttonWith(fixture, 'list.menu.rename')).toBeNull();
+    const add = buttonWith(fixture, 'list.menu.addName');
+    expect(add?.getAttribute('aria-label')).toBe('list.menu.addNameLabel');
+
+    add?.click();
+    await drain(fixture);
+    expect(sheets.leaveTo).toHaveBeenCalledWith(`${LINE_URL}/sheet/name`);
   });
 
   it('replaces itself with the sheet of the row that was pressed', async () => {
@@ -321,13 +342,126 @@ describe('RenameLineSheet', () => {
     expect(sheets.dismiss).toHaveBeenCalledWith(LINE_URL);
   });
 
-  it('does not save an empty name', async () => {
-    const { fixture, lines } = await render(RenameLineSheet);
+  it('does not save an empty name on a line with no product', async () => {
+    const { fixture, lines } = await render(RenameLineSheet, {
+      lines: [line({ itemIds: [] })],
+    });
 
     type(fixture, '   ');
+    expect(buttonWith(fixture, 'list.rename.save')?.disabled).toBe(true);
     await fixture.componentInstance.save();
 
     expect(updates(lines)).toEqual([]);
+  });
+
+  describe('the name sheet (velista 0144, section 4)', () => {
+    const NORMAL: CatalogItem = {
+      id: 'normal',
+      name: { en: 'Shampoo for normal hair', es: 'Champú cabello normal' },
+      brand: 'Deliplus',
+      size: 400,
+      unit: 'MILLILITER',
+      productGroupId: null,
+    } as CatalogItem;
+
+    function named(): FakeItemNames {
+      return fakeItemNames({ items: [NORMAL] });
+    }
+
+    function field(fixture: ComponentFixture<RenameLineSheet>): HTMLInputElement {
+      return fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    }
+
+    it('says what a name is for, and names the product the line shows', async () => {
+      const { fixture } = await render(RenameLineSheet, { itemNames: named() });
+      const text = fixture.nativeElement.textContent as string;
+
+      expect(text).toContain('list.rename.title');
+      expect(text).toContain('list.rename.note');
+      expect(fixture.nativeElement.querySelector('.product')?.textContent).toContain(
+        'Shampoo for normal hair'
+      );
+    });
+
+    it('draws no product line for a line with none', async () => {
+      const { fixture } = await render(RenameLineSheet, {
+        lines: [line({ itemIds: [] })],
+        itemNames: named(),
+      });
+
+      expect(fixture.nativeElement.querySelector('.product')).toBeNull();
+    });
+
+    it('starts empty for a line that is not named, and waits for words', async () => {
+      const { fixture, lines } = await render(RenameLineSheet, {
+        lines: [line({ named: false, content: 'Shampoo for normal hair' })],
+        itemNames: named(),
+      });
+
+      expect(field(fixture).value).toBe('');
+      expect(field(fixture).placeholder).toBe('Shampoo for normal hair');
+      expect(buttonWith(fixture, 'list.rename.save')?.disabled).toBe(true);
+
+      type(fixture, 'For the gym bag');
+      buttonWith(fixture, 'list.rename.save')?.click();
+      await drain(fixture);
+
+      expect(updates(lines)).toEqual([
+        { kind: 'update', lineId: LINE_ID, content: 'For the gym bag' },
+      ]);
+    });
+
+    it('starts empty for an old line named after its product', async () => {
+      const { fixture } = await render(RenameLineSheet, {
+        lines: [line({ named: true, content: 'Champú cabello normal' })],
+        itemNames: named(),
+      });
+
+      expect(field(fixture).value).toBe('');
+    });
+
+    it('takes the name away with an empty save, sending the product name', async () => {
+      const { fixture, lines, sheets } = await render(RenameLineSheet, {
+        itemNames: named(),
+      });
+
+      type(fixture, '');
+      expect(buttonWith(fixture, 'list.rename.save')?.disabled).toBe(false);
+      buttonWith(fixture, 'list.rename.save')?.click();
+      await drain(fixture);
+
+      expect(updates(lines)).toEqual([
+        {
+          kind: 'update',
+          lineId: LINE_ID,
+          named: false,
+          content: 'Shampoo for normal hair',
+        },
+      ]);
+      expect(sheets.dismiss).toHaveBeenCalledWith(LINE_URL);
+    });
+
+    it('takes the name away with no words while the product name is not loaded', async () => {
+      const { fixture, lines } = await render(RenameLineSheet);
+
+      type(fixture, '');
+      buttonWith(fixture, 'list.rename.save')?.click();
+      await drain(fixture);
+
+      expect(updates(lines)).toEqual([
+        { kind: 'update', lineId: LINE_ID, named: false },
+      ]);
+    });
+
+    it('closes with Cancel, writing nothing', async () => {
+      const { fixture, lines, sheets } = await render(RenameLineSheet);
+
+      buttonWith(fixture, 'list.rename.cancel')?.click();
+      await drain(fixture);
+
+      expect(updates(lines)).toEqual([]);
+      expect(sheets.dismiss).toHaveBeenCalledWith(LINE_URL);
+    });
   });
 
   it('asks before a merge, and merges with the confirmation', async () => {

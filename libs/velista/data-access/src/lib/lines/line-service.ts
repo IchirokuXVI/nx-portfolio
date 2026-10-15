@@ -72,12 +72,17 @@ export interface LineServiceI {
    * catalog was out of scope in `0012` and every line this screen wrote left it
    * null. The composer's suggestions are what fill it (velista plan 0043, section
    * 6), and choosing a group sends that group's products whole.
+   *
+   * `named: false` is a line made from a card, whose `content` is the name of a
+   * product and not a name somebody typed (backend `0207`). Omitted, the line is
+   * named. The server keeps `false` only on a line that holds a product.
    */
   addLine(
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<Line>;
 
   /**
@@ -94,7 +99,8 @@ export interface LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<LineAddResult>;
 
   /**
@@ -124,6 +130,7 @@ export interface LineServiceI {
     lineId: string,
     changes: {
       content?: string;
+      named?: false;
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
