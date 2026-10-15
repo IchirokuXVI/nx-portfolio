@@ -61,14 +61,14 @@ disagree, this section is right.
    delete that closes the gap, a `PATCH` with `position` that moves, an order that keeps
    the sections it leaves out after the named ones. It does not rewrite the names on the row
    of a shop after a write.
-8. **A write answers only the shop it was asked for** (follow up PR [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)). `save()`
+8. **A write answers only the shop it was asked for** (follow up PR [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). `save()`
    and `confirmDelete()` take `_generation` as they start, and drop an answer or a refusal
    that lands after another shop was picked. The note to the page above is still sent,
    because the write happened.
 9. **A save refused with `section_not_found` reads the list again** (follow up PR
-   [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)). The order in hand is kept, less the section that went, so a retry sends
+   [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). The order in hand is kept, less the section that went, so a retry sends
    sections that exist. The sentence of the refusal stays.
-10. **A delete is done once `remove` answers** (follow up PR [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)). If the read
+10. **A delete is done once `remove` answers** (follow up PR [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). If the read
     after it fails, the row leaves the list held here, the page above and the preview are
     told, and the failed read is said on its own under the list
     (`catalog.locationSections.rereadFailed`, with Retry).

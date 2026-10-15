@@ -74,11 +74,11 @@ Point 1 is a decision of the owner.
 16. **Prettier reordered the imports** of some files whose comments this plan corrects. Those
     files were not formatted on `dev`.
 17. **The changes routes read no marks for a finished basket either** (follow up PR
-    [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)). The marks route answers none, the changes page lists the history with
+    [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). The marks route answers none, the changes page lists the history with
     `unseen: false` on each item, and an acknowledgement answers `unseenChangeCount: 0`, so
     all three agree with the full read (decision 5).
 18. **The admin detail of a finished basket draws its rows by product** (follow up PR
-    [#PRNUM](https://github.com/IchirokuXVI/nx-portfolio/pull/PRNUM)). `getBasket` reads `BasketReadService.unredactedRows` (was `openRows`) on
+    [#729](https://github.com/IchirokuXVI/nx-portfolio/pull/729)). `getBasket` reads `BasketReadService.unredactedRows` (was `openRows`) on
     every status, so its rows are the frozen rows grouped as `countsFor` groups them, and
     `FINISHED_BASKET_ROWS_SQL` is gone. No wire shape changed. The contract comments say
     that a row is one product.
