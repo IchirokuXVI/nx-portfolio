@@ -251,6 +251,29 @@ describe('BrowserFacade', () => {
       expect(replace).toHaveBeenCalledTimes(1);
       expect(replace).toHaveBeenCalledWith('/home');
     });
+
+    // The handoff page in an ordinary tab, while a refresh of the operator's own pair is
+    // in flight: the server already rotated that refresh token, so its write must land.
+    it('still writes the origin once an ordinary tab has replaced the document', () => {
+      const facade = facadeFor(false);
+      jest
+        .spyOn(facade, 'location', 'get')
+        .mockReturnValue({ replace: jest.fn() } as unknown as Location);
+      localStorage.setItem(StorageKeys.session, 'the revoked pair');
+      localStorage.setItem(KEY, 'stale');
+      sessionStorage.setItem(StorageKeys.session, 'the new pair');
+
+      facade.replaceDocument('/home');
+      facade.writeStorage(StorageKeys.session, 'the refreshed pair');
+      facade.removeStorage(KEY);
+      facade.writeSessionStorage(StorageKeys.session, 'a late write');
+
+      expect(localStorage.getItem(StorageKeys.session)).toBe(
+        'the refreshed pair'
+      );
+      expect(localStorage.getItem(KEY)).toBeNull();
+      expect(sessionStorage.getItem(StorageKeys.session)).toBe('the new pair');
+    });
   });
 
   describe('on the server', () => {

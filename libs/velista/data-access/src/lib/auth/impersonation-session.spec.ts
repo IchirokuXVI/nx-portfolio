@@ -25,6 +25,7 @@ import { VELISTA_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { gatewayInterceptor } from '../gateway-interceptor';
 import {
   IMPERSONATION_END_WAIT_MS,
+  IMPERSONATION_EXCHANGE_WAIT_MS,
   ImpersonationSession,
 } from './impersonation-session';
 import { TokenStore } from './token-store';
@@ -86,8 +87,9 @@ interface Setup {
  * one `Map` for both: the facade's own spec proves that routing.
  *
  * The double keeps the facade's rule for leaving a document: after the first
- * `replaceDocument`, every write and every removal does nothing, and so does a second
- * call. `browser-facade.spec.ts` proves that rule on the real facade.
+ * `replaceDocument`, every write and every removal of the tab's storage does nothing,
+ * and so does a second call. The persisted keys of an ordinary tab are the origin's and
+ * stay open. `browser-facade.spec.ts` proves that rule on the real facade.
  */
 function setUp(options: {
   readonly active: boolean;
@@ -110,6 +112,11 @@ function setUp(options: {
         write(...args);
       }
     };
+  // The persisted keys are this tab's only in an active tab. In an ordinary one they are
+  // the origin's `localStorage`, which stays open after the document asked to leave.
+  const persistedUnlessLeaving = <A extends unknown[]>(
+    write: (...args: A) => void
+  ) => (options.active ? unlessLeaving(write) : write);
 
   TestBed.configureTestingModule({
     providers: [
@@ -124,10 +131,10 @@ function setUp(options: {
       { provide: APP_VERSION, useValue: '1.0.0' },
       { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
       provideFakeBrowserFacade(persisted, {
-        writeStorage: unlessLeaving(
+        writeStorage: persistedUnlessLeaving(
           (key: string, value: string) => void persisted.set(key, value)
         ),
-        removeStorage: unlessLeaving(
+        removeStorage: persistedUnlessLeaving(
           (key: string) => void persisted.delete(key)
         ),
         readSessionStorage: (key: string) => tab.get(key) ?? null,
@@ -464,13 +471,13 @@ describe('ImpersonationSession', () => {
 
     it('does not end the handoff page when the earlier session runs out during the exchange', async () => {
       jest.useFakeTimers();
-      const setup = active(sessionPair(60, 'old'));
+      const setup = active(sessionPair(5, 'old'));
 
       const answer = setup.support.exchange('second-code');
       const req = setup.http.expectOne(
         `${GATEWAY}/v1/auth/impersonation/exchange`
       );
-      await jest.advanceTimersByTimeAsync(120_000);
+      await jest.advanceTimersByTimeAsync(6_000);
       expect(setup.replaceDocument).not.toHaveBeenCalled();
 
       req.flush(sessionPair(2 * HOUR_S, 'new'));
@@ -488,13 +495,13 @@ describe('ImpersonationSession', () => {
 
     it('ends the earlier session after a code that opens nothing', async () => {
       jest.useFakeTimers();
-      const setup = active(sessionPair(60, 'old'));
+      const setup = active(sessionPair(5, 'old'));
 
       const answer = setup.support.exchange('used-code');
       const req = setup.http.expectOne(
         `${GATEWAY}/v1/auth/impersonation/exchange`
       );
-      await jest.advanceTimersByTimeAsync(120_000);
+      await jest.advanceTimersByTimeAsync(6_000);
       expect(setup.replaceDocument).not.toHaveBeenCalled();
 
       req.flush(
@@ -504,6 +511,55 @@ describe('ImpersonationSession', () => {
       expect(await answer).toEqual({ state: 'invalid' });
 
       expectEnded(setup);
+    });
+
+    it('answers failed for an exchange that hangs, and lets the held end go ahead', async () => {
+      jest.useFakeTimers();
+      const setup = active(sessionPair(5, 'old'));
+
+      const answer = setup.support.exchange('second-code');
+      setup.http.expectOne(`${GATEWAY}/v1/auth/impersonation/exchange`);
+      await jest.advanceTimersByTimeAsync(IMPERSONATION_EXCHANGE_WAIT_MS - 10);
+      expect(setup.replaceDocument).not.toHaveBeenCalled();
+
+      await jest.advanceTimersByTimeAsync(20);
+      expect(await answer).toEqual({ state: 'failed' });
+
+      expectEnded(setup);
+    });
+  });
+
+  // The handoff page in an ordinary tab, while a refresh of the operator's own pair is in
+  // flight. The server has rotated that refresh token, so the refreshed pair must land.
+  describe('a handoff in an ordinary tab', () => {
+    it("keeps the operator's refreshed pair when it lands after begin", async () => {
+      const persisted = new Map([
+        [StorageKeys.session, JSON.stringify(ordinaryPair())],
+      ]);
+      const setup = setUp({ active: false, persisted });
+
+      void TestBed.inject(TokenStore).refresh();
+      const refresh = setup.http.expectOne(`${GATEWAY}/v1/auth/refresh`);
+      setup.support.begin(sessionPair(2 * HOUR_S, 'new'));
+
+      refresh.flush({ ...ordinaryPair(), refreshToken: 'op-rotated' });
+      await settle();
+      TestBed.tick();
+
+      expect(
+        (
+          JSON.parse(
+            persisted.get(StorageKeys.session) ?? 'null'
+          ) as SessionTokens
+        ).refreshToken
+      ).toBe('op-rotated');
+      expect(
+        (
+          JSON.parse(
+            setup.tab.get(StorageKeys.session) ?? 'null'
+          ) as SessionTokens
+        ).refreshToken
+      ).toBe('new');
     });
   });
 });

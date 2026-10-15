@@ -215,6 +215,14 @@ export class BrowserFacade {
   }
 
   /**
+   * Whether a persisted write or removal is dropped because this document has asked to
+   * leave: only when the persisted keys are this tab's (see {@link replaceDocument}).
+   */
+  private _leavingTab(): boolean {
+    return this._leaving && this.tabScoped;
+  }
+
+  /**
    * Read a persisted value. Returns null when there is no storage *and* when
    * storage throws, which it does in private mode and with site data blocked —
    * a caller must never have to care which.
@@ -229,7 +237,7 @@ export class BrowserFacade {
 
   /** Persist a value. Silently does nothing when storage is unavailable. */
   writeStorage(key: string, value: string): void {
-    if (this._leaving) {
+    if (this._leavingTab()) {
       return;
     }
     try {
@@ -351,7 +359,7 @@ export class BrowserFacade {
 
   /** Remove a persisted value. Silently does nothing when storage is unavailable. */
   removeStorage(key: string): void {
-    if (this._leaving) {
+    if (this._leavingTab()) {
       return;
     }
     try {
@@ -396,9 +404,16 @@ export class BrowserFacade {
    * **The first call is the last word of this document.** The old document keeps
    * running until the new one commits, and a refresh of `TokenStore` that lands in that
    * window would write a pair into the storage the new document is about to read. So
-   * from here on every write and every removal through this facade does nothing, and so
-   * does a second call: the storage stays exactly as the caller left it, and the address
-   * is the first one asked for.
+   * from here on every write and every removal of this tab's `sessionStorage` does
+   * nothing, through the session methods and, in a support session, through the
+   * persisted ones, and so does a second call: the tab's storage stays exactly as the
+   * caller left it, and the address is the first one asked for.
+   *
+   * **`localStorage` stays open.** In an ordinary tab the persisted keys are the
+   * origin's, and they hold the operator's own account. A refresh of that pair that lands
+   * after the handoff page asked to leave has already rotated the refresh token on the
+   * server, so dropping its write would keep a revoked token, and the next refresh would
+   * sign that account out (for a guest, lose it).
    */
   replaceDocument(url: string): void {
     if (this._leaving) {

@@ -42,6 +42,14 @@ export type ImpersonationExchange =
  */
 export const IMPERSONATION_END_WAIT_MS = 3_000;
 
+/**
+ * How long the handoff waits for the exchange before it answers `failed` (velista
+ * `0133`). An end held for the exchange then goes ahead, so a hung request cannot keep
+ * an earlier session of the tab alive. The bound of the startup probe, well inside the
+ * code's 60 s life, so "Try again" still has a good code to send.
+ */
+export const IMPERSONATION_EXCHANGE_WAIT_MS = 8_000;
+
 /** The path of the page a tab lands on when its support session is over. */
 export const SUPPORT_ENDED_SEGMENTS = ['auth', 'support-ended'] as const;
 
@@ -83,9 +91,10 @@ export const SUPPORT_ENDED_SEGMENTS = ['auth', 'support-ended'] as const;
  * From the moment {@link exchange} starts, that earlier session does not end this
  * document: an end it asks for waits for the answer, because ending now would replace
  * the handoff page after its code was spent. A good code then begins the new session.
- * Any other answer lets the held end go ahead. After `begin` or an end has replaced the
- * document, the facade ignores every later write, so a late refresh of the earlier pair
- * cannot land in the storage the new document reads.
+ * Any other answer lets the held end go ahead, and so does no answer within
+ * {@link IMPERSONATION_EXCHANGE_WAIT_MS}. After `begin` or an end has replaced the
+ * document, the facade ignores every later write to the tab's storage, so a late
+ * refresh of the earlier pair cannot land in the storage the new document reads.
  */
 // Provided by the app layer, never root: rule D5. It reaches `TokenStore`.
 @Injectable()
@@ -144,11 +153,13 @@ export class ImpersonationSession {
   private async _exchange(code: string): Promise<ImpersonationExchange> {
     try {
       const body = await firstValueFrom(
-        this._http.post<unknown>(
-          this._urls.gateway('/v1/auth/impersonation/exchange'),
-          { code },
-          { context: anonymous('auth.impersonation.exchange') }
-        )
+        this._http
+          .post<unknown>(
+            this._urls.gateway('/v1/auth/impersonation/exchange'),
+            { code },
+            { context: anonymous('auth.impersonation.exchange') }
+          )
+          .pipe(timeout(IMPERSONATION_EXCHANGE_WAIT_MS))
       );
       const tokens = toSessionTokens(body);
       return tokens === null

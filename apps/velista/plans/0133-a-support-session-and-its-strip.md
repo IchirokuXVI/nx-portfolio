@@ -127,14 +127,27 @@ second `end` answers 401 `impersonation_ended`, and `impersonation_code_invalid`
 
 - **A document that has asked to leave writes nothing more.** The old document runs on
   until the new one commits, and a refresh of `TokenStore` can land in that window. So
-  after the first `BrowserFacade.replaceDocument`, every write and removal through the
-  facade does nothing, and so does a second `replaceDocument`. Without it, a second link
-  opened in a tab with a live session could have the old pair written over the new one.
+  after the first `BrowserFacade.replaceDocument`, every write and removal of the tab's
+  `sessionStorage` does nothing, and so does a second `replaceDocument`. That covers the
+  session methods, and the persisted keys of a tab that holds a support session, which
+  are `sessionStorage` too. Without it, a second link opened in a tab with a live session
+  could have the old pair written over the new one.
+- **`localStorage` stays open after that.** In an ordinary tab the persisted keys are the
+  origin's and hold the operator's own account, which the next document does not read in
+  place of the tab's. A refresh of that pair which lands after the handoff page asked to
+  leave has already rotated the refresh token on the server. Dropping its write would
+  keep a revoked token, and the next refresh would sign the operator out (for a guest,
+  lose the account).
 - **While a handoff runs, the earlier session of the tab does not end the document.** An
   end that it asks for (its clock, a refusal) waits for the answer of the exchange. A good
   code goes on to `begin`. Any other answer lets the held end go ahead, and the tab lands
   on the ended page. Without the hold, an earlier session that ran out during the exchange
   would replace the handoff page after its code was spent.
+- **The exchange waits at most `IMPERSONATION_EXCHANGE_WAIT_MS`, 8 seconds**, and then
+  answers `failed`, so a hung request cannot hold an earlier end for ever. The held end
+  then goes ahead. Eight seconds is the bound of the startup probe, the app's existing
+  wait for one answer of the gateway, and it is well inside the code's 60 s life, so
+  "Try again" on a page that did not end still sends a good code.
 - **A duplicated tab holds the same support session.** A browser copies `sessionStorage`
   into a duplicated tab, so two tabs then hold one session. The server's refresh rules
   bound it: the refresh token rotates, so only one of the two can refresh, and both stop
