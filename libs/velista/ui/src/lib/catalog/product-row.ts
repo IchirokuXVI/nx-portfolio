@@ -55,11 +55,17 @@ export interface ProductRowAdd {
   readonly lines: readonly HoldingRow[];
 }
 
-/** The radio of a row in the catalog that chooses (velista `0140`, section 3). */
+/**
+ * The radio of a row in the catalog that chooses one product (velista `0140`,
+ * section 3), or its tick in the catalog that chooses the products of a line
+ * (velista `0146`, section 3).
+ */
 export interface ProductRowChoice {
   /** The group the radios of one list share. */
   readonly name: string;
   readonly checked: boolean;
+  /** A tick, of a set, in place of the radio. Absent is a radio. */
+  readonly multiple?: boolean;
 }
 
 /** A press on the stepper of one line under a row. */
@@ -164,18 +170,37 @@ export interface ProductRowLineStep {
           label of a radio at its trailing edge, so a press anywhere on it chooses
           the product and opens nothing.
         -->
-        <label class="open">
-          <ng-container [ngTemplateOutlet]="content" />
-          <input
-            (change)="chosen.emit(row().id)"
-            [attr.aria-label]="row().label"
-            [checked]="picking.checked"
-            [disabled]="disabled()"
-            [name]="picking.name"
-            class="pick"
-            type="radio"
-          />
-        </label>
+        @if (picking.multiple === true) {
+          <label class="open">
+            <ng-container [ngTemplateOutlet]="content" />
+            <!--
+              A tick (velista 0146). The page decides the set, and may refuse a
+              tick at the cap, so the box never ticks itself: the press is held
+              back and the box follows what the page holds.
+            -->
+            <input
+              (click)="$event.preventDefault(); chosen.emit(row().id)"
+              [attr.aria-label]="row().label"
+              [checked]="picking.checked"
+              [disabled]="disabled()"
+              class="pick pick-many"
+              type="checkbox"
+            />
+          </label>
+        } @else {
+          <label class="open">
+            <ng-container [ngTemplateOutlet]="content" />
+            <input
+              (change)="chosen.emit(row().id)"
+              [attr.aria-label]="row().label"
+              [checked]="picking.checked"
+              [disabled]="disabled()"
+              [name]="picking.name"
+              class="pick"
+              type="radio"
+            />
+          </label>
+        }
       } @else {
         <button
           (click)="opened.emit(row().id)"

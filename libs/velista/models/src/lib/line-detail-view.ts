@@ -1,6 +1,6 @@
 import type { SettlementOutcome } from './enums';
-import type { LineIndicator } from './list-view';
 import type { LineProductPriceKind } from './line-products';
+import type { LineIndicator } from './list-view';
 import { formatMinorMoney } from './purchases';
 
 /**
@@ -124,39 +124,6 @@ export interface LineItemChipVm {
   readonly brand: string | null;
   /** False while a removal is in flight, so the chip cannot be pressed twice. */
   readonly removable: boolean;
-}
-
-/** Who put a product on a line (backend plan 0070, section 3). */
-export type LineProductSource = 'group' | 'user';
-
-/**
- * The product count against the cap, as the section heading says it (section 3.1).
- *
- * **Neither number is clamped**, and the flag is what a screen reads rather than
- * comparing them itself. `0070` section 7.2 makes `104/100` a legitimate state:
- * the catalog's sync ignores the cap so that a subscription does not silently stop
- * working at a number nobody can see. Clamping to `100/100` would claim the line
- * is exactly full when it is not, and would leave the refused add with no visible
- * explanation.
- */
-export interface LineProductCounterVm {
-  /** The **whole** set, both clusters, because the cap is on the whole set. */
-  readonly count: number;
-  readonly cap: number;
-  readonly overCap: boolean;
-}
-
-/**
- * Why an add was refused before it was sent (velista plan 0065, section 3.3).
- *
- * The key and its arguments rather than a sentence, because this app formats in
- * the selector and the translator is the only thing that interpolates. Two keys,
- * because one product and a group are different sentences in every language and
- * the group one carries a count the other does not have.
- */
-export interface LineProductsFullVm {
-  readonly key: string;
-  readonly args: Readonly<Record<string, string | number>>;
 }
 
 /**

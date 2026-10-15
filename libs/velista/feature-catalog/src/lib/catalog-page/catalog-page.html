@@ -10,8 +10,12 @@
 } @else {
   <lib-page-header
     (back)="closePick()"
-    [backLabel]="'basket.change.pickClose' | rokuT"
-    [title]="'basket.change.pickTitle' | rokuT"
+    [backLabel]="
+      (pickSet ? 'catalog.pick.closeSet' : 'basket.change.pickClose') | rokuT
+    "
+    [title]="
+      (pickSet ? 'catalog.pick.titleSet' : 'basket.change.pickTitle') | rokuT
+    "
     leading="close"
   />
 }
@@ -138,6 +142,31 @@
           </a>
         </div>
       }
+    }
+
+    <!--
+      The products of the line first, ticked, with nothing searched or chosen
+      (velista 0146, section 3). Drawn while the read is out: they are the line's,
+      not the read's.
+    -->
+    @if (lineFirst()) {
+      <h2 class="pick-heading">{{ 'catalog.pick.onLine' | rokuT }}</h2>
+      <ul class="rows">
+        @for (card of lineCards(); track card.id) {
+          <li>
+            @if (card.row; as row) {
+              <lib-product-row
+                (chosen)="choose($event)"
+                [choice]="choiceOf(row.id)"
+                [row]="row"
+              />
+            } @else {
+              <lib-product-row-skeleton />
+            }
+          </li>
+        }
+      </ul>
+      <h2 class="pick-heading">{{ 'catalog.pick.all' | rokuT }}</h2>
     }
 
     @switch (status()) {
@@ -267,13 +296,41 @@
     What the product is for, and the one button (velista 0140, section 3). In
     place of the line that names the list the plus adds to: nothing here adds.
   -->
-  @if (pickRequest(); as request) {
+  @if (pickBar(); as bar) {
+    <!--
+      Why a press did nothing: no product chosen yet, or the line is full
+      (velista 0146, sections 2 and 3).
+    -->
+    <p aria-live="polite" class="pick-note" role="status">
+      @if (pickNote(); as note) {
+        {{ note.key | rokuT: note.args }}
+      }
+    </p>
+    @if (saveFailed()) {
+      <p class="adds-failed" role="alert">
+        <span class="adds-failed-text">{{
+          'catalog.pick.saveFailed' | rokuT
+        }}</span>
+        <button (click)="usePick()" class="adds-failed-retry" type="button">
+          {{ 'catalog.error.retry' | rokuT }}
+        </button>
+      </p>
+    }
     <lib-choosing-bar
       (used)="usePick()"
-      [action]="'basket.change.use' | rokuT"
-      [disabled]="pickChosen() === null"
-      [forDetail]="request.forDetail"
-      [forLabel]="request.forLabel"
+      [action]="bar.action"
+      [disabled]="bar.disabled"
+      [forDetail]="bar.detail"
+      [forLabel]="bar.label"
+    />
+  }
+  @if (asking()) {
+    <lib-leave-question
+      (leave)="leave()"
+      (stay)="stay()"
+      [leaveLabel]="'catalog.pick.leave' | rokuT"
+      [question]="'catalog.pick.leaveQuestion' | rokuT"
+      [stayLabel]="'catalog.pick.stay' | rokuT"
     />
   }
 } @else {

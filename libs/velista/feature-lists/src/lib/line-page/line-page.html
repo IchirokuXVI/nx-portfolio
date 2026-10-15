@@ -30,7 +30,7 @@
         cards (plan 0135, section 4). One sentence for a screen reader, and bones
         for everybody else.
       -->
-      <div class="content" aria-busy="true">
+      <div aria-busy="true" class="content">
         <p class="visually-hidden">{{ 'list.page.loading' | rokuT }}</p>
         <div aria-hidden="true" class="top">
           <span class="bone bone-where"></span>
@@ -127,7 +127,16 @@
                 nothing to choose from.
               -->
               <span class="title-words">
-                {{ 'list.page.productsTitle' | rokuT }}
+                <!--
+                  A line with no product says so in its heading (velista 0146,
+                  section 5, artboard LineEmpty).
+                -->
+                {{
+                  (line.cards.length > 0
+                    ? 'list.page.productsTitle'
+                    : 'list.page.productsNone'
+                  ) | rokuT
+                }}
 
                 @if (line.cards.length > 0) {
                   <button
@@ -141,9 +150,18 @@
                 }
               </span>
 
-              @if (line.canEdit && line.cards.length > 0) {
+              <!--
+                Both open the catalog that chooses the products of the line
+                (velista 0146, section 5). A reader who may not edit sees neither.
+              -->
+              @if (line.canEdit) {
                 <button (click)="openProducts()" class="link" type="button">
-                  {{ 'list.page.productsChange' | rokuT }}
+                  {{
+                    (line.cards.length > 0
+                      ? 'list.page.productsChange'
+                      : 'list.page.productsChoose'
+                    ) | rokuT
+                  }}
                 </button>
               }
             </h2>
@@ -166,14 +184,9 @@
               [supermarket]="line.supermarket?.name ?? null"
             />
           } @else {
-            <!-- One sentence and one action. No empty card (section 2). -->
+            <!-- One sentence, what a product gives the list. No empty card. -->
             <div class="content">
-              <p class="empty">{{ 'list.page.productsEmpty' | rokuT }}</p>
-              @if (line.canEdit) {
-                <button (click)="openProducts()" class="link" type="button">
-                  {{ 'list.page.productsAdd' | rokuT }}
-                </button>
-              }
+              <p class="empty">{{ 'list.page.productsWhy' | rokuT }}</p>
             </div>
           }
         </section>
@@ -183,11 +196,7 @@
             @if (line.supermarket; as supermarket) {
               <li>
                 @if (supermarket.canChange) {
-                  <button
-                    (click)="openSupermarket()"
-                    class="row"
-                    type="button"
-                  >
+                  <button (click)="openSupermarket()" class="row" type="button">
                     <span class="row-name">{{
                       'list.page.supermarket' | rokuT
                     }}</span>

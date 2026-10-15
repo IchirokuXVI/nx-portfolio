@@ -1,12 +1,10 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * How many products the catalog chooses: one, with a radio on each card.
- *
- * A union of one today. Velista `0146` adds the kind that chooses the set of a
- * line, with a tick on each card, to this same page.
+ * How many products the catalog chooses: one, with a radio on each card, or the
+ * whole set of a line, with a tick on each card (velista `0146`, section 1).
  */
-export type ProductPickKind = 'one';
+export type ProductPickKind = 'one' | 'set';
 
 /**
  * What the screen that opens the catalog to choose hands it (velista `0140`,
@@ -23,8 +21,14 @@ export interface ProductPickRequest {
   /** The two lines of the bar at the foot: what the choice is for. */
   readonly forLabel: string;
   readonly forDetail: string;
-  /** The product the page opens with chosen, or null for none. */
+  /** The product the page opens with chosen, or null for none. The kind `one`. */
   readonly chosenId: string | null;
+  /**
+   * The products the page opens with ticked: the products of the line, its own
+   * and those its group put there, which are one set (`itemIds`, review point 3).
+   * The kind `set`. Absent is none.
+   */
+  readonly chosenIds?: readonly string[];
   /**
    * Where the close control goes, and the answer. The URL is the fallback used
    * when the history cannot be walked back; the depth is the `AppHistory` depth
@@ -65,6 +69,7 @@ export interface ProductPickAnswer {
 export class ProductPickStore {
   private readonly _request = signal<ProductPickRequest | null>(null);
   private readonly _chosen = signal<string | null>(null);
+  private readonly _ticked = signal<readonly string[]>([]);
   private readonly _answer = signal<ProductPickAnswer | null>(null);
 
   /** The open request, or null when nothing opened the catalog to choose. */
@@ -72,6 +77,14 @@ export class ProductPickStore {
 
   /** The product chosen on the page so far, or null for none yet. */
   readonly chosen = this._chosen.asReadonly();
+
+  /**
+   * The set ticked on the page so far, in the kind `set`: the products the page
+   * opened with, then each one ticked since, in the order they were ticked. Here
+   * and not in the page for the reason the request is: the pickers are pages, and
+   * the page is gone while one is open.
+   */
+  readonly ticked = this._ticked.asReadonly();
 
   /**
    * The answer not taken yet, or null. A caller that is a page of its own is a new
@@ -84,12 +97,30 @@ export class ProductPickStore {
   open(request: ProductPickRequest): void {
     this._request.set(request);
     this._chosen.set(request.chosenId);
+    this._ticked.set(request.chosenIds ?? []);
     this._answer.set(null);
   }
 
   /** A press on a card: that product is the choice now. */
   choose(itemId: string): void {
     this._chosen.set(itemId);
+  }
+
+  /** A tick on a card in the kind `set`: the whole set as it now stands. */
+  tick(itemIds: readonly string[]): void {
+    this._ticked.set(itemIds);
+  }
+
+  /**
+   * The kind `set` is over: saved by the page, or left. The page writes the set
+   * itself, so a failed save keeps it open (velista `0146`, section 3), and there
+   * is no answer for the caller to take.
+   */
+  end(): void {
+    this._request.set(null);
+    this._chosen.set(null);
+    this._ticked.set([]);
+    this._answer.set(null);
   }
 
   /**
@@ -131,6 +162,7 @@ export class ProductPickStore {
     });
     this._request.set(null);
     this._chosen.set(null);
+    this._ticked.set([]);
     return true;
   }
 }

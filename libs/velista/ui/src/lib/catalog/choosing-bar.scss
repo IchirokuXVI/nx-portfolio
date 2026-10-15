@@ -51,16 +51,19 @@
   white-space: nowrap;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not([aria-disabled='true']) {
     background: var(--app-action-bg-hover);
   }
 
-  &:active {
+  &:active:not([aria-disabled='true']) {
     background: var(--app-action-bg-pressed);
   }
 
-  &:disabled {
-    opacity: 0.5;
+  // Unavailable as the mock draws it (`btn off`): the sunken surface and the
+  // secondary ink, which keeps its contrast where a faded accent loses it.
+  &[aria-disabled='true'] {
+    background: var(--app-surface-sunken);
+    color: var(--app-text-secondary);
     cursor: default;
   }
 

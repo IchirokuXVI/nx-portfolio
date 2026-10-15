@@ -37,7 +37,7 @@ describe('ChoosingBar (velista 0140)', () => {
     ).toBeNull();
   });
 
-  it('says the button was pressed, and not while it is disabled', async () => {
+  it('says the button was pressed, also while it is drawn unavailable (velista 0146)', async () => {
     const used: void[] = [];
     const fixture = await render({ disabled: true });
     fixture.componentInstance.used.subscribe(() => used.push(undefined));
@@ -45,12 +45,16 @@ describe('ChoosingBar (velista 0140)', () => {
       'button'
     ) as HTMLButtonElement;
 
+    // Unavailable, and still in the tab order: the page says why on a press.
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
     button.click();
-    expect(used).toHaveLength(0);
+    expect(used).toHaveLength(1);
 
     fixture.componentRef.setInput('disabled', false);
     fixture.detectChanges();
+    expect(button.hasAttribute('aria-disabled')).toBe(false);
     button.click();
-    expect(used).toHaveLength(1);
+    expect(used).toHaveLength(2);
   });
 });

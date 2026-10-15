@@ -77,6 +77,7 @@ import {
   PageNavigation,
   productPagePath,
   productPickPath,
+  productsPickPath,
   RECORDING_LIMITS,
   type RecordingLimits,
   searchOpenOf,
@@ -294,6 +295,34 @@ export class ListPage {
     }
     const locale = this._locale();
     const name = this._lineName(line);
+    if (line.itemIds.length > 0) {
+      // A product arrived since the row was drawn (velista `0146`, section 2):
+      // the catalog that chooses the whole set, so nothing it holds is replaced.
+      // It answers back onto this list, as the one it stands in for would.
+      this._pick.open({
+        kind: 'set',
+        lineId,
+        forLabel: this._translator.t('list.row.pickFor', undefined, locale, {
+          name,
+        }),
+        forDetail: this.header()?.listName ?? '',
+        chosenId: null,
+        chosenIds: line.itemIds,
+        returnUrl: this._router.url,
+        returnDepth: this._history.depth(),
+        callerState: null,
+      });
+      void this._router.navigateByUrl(
+        productsPickPath(
+          locale,
+          this._basePath,
+          this.zoneId(),
+          this.listId(),
+          lineId
+        )
+      );
+      return;
+    }
     this._pick.open({
       kind: 'one',
       lineId,

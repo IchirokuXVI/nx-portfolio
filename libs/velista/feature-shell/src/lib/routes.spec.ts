@@ -14,6 +14,7 @@ import {
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
+import { catalogPickLeaveGuard } from './catalog-pick-guards';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
 import {
@@ -600,12 +601,13 @@ describe('AppShellRoutes', () => {
         );
       });
 
-      it('has its history and its products as pages of their own, declared before it', () => {
-        // Pages and not children: a child is drawn over the line page, which is what
+      it('has its history as a page of its own, declared before it', () => {
+        // A page and not a child: a child is drawn over the line page, which is what
         // a sheet does. Before the line page, as the specific before the general.
+        // Its products are the catalog that chooses them (velista 0146), below.
         const paths = pages.map((route) => route.path);
 
-        for (const page of ['history', 'products']) {
+        for (const page of ['history']) {
           const path = `${linePath}/${page}`;
           expect(paths).toContain(path);
           expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
@@ -638,7 +640,38 @@ describe('AppShellRoutes', () => {
           expect(routeAt(path)?.canMatch).toHaveLength(2);
           expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
           expect(routeAt(path)?.children).toBeUndefined();
+          expect(routeAt(path)?.canDeactivate).toBeUndefined();
         }
+      });
+
+      it('has the catalog that chooses the products of the line at the path the products page had, outside the marker (velista 0146)', () => {
+        // The page of section 3, with its pickers under it, so each comes back
+        // to it with the mode, the line and the ticks intact.
+        const paths = pages.map((route) => route.path);
+        const page = `${linePath}/products`;
+
+        for (const path of [
+          `${page}/categories/:parentSlug`,
+          `${page}/categories`,
+          `${page}/supermarket`,
+          page,
+        ]) {
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(path.split('/')).not.toContain(SHEET_SEGMENT);
+          expect(routeAt(path)?.data).toEqual({
+            [CATALOG_PICK_DATA]: 'set',
+            [NAV_CHROME]: NO_NAV_CHROME,
+          });
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
+
+        // Leaving with a change asks first, and the back of the browser reaches
+        // the question only through a guard on the page. The pickers carry none.
+        expect(routeAt(page)?.canDeactivate).toEqual([catalogPickLeaveGuard]);
+        expect(routeAt(`${page}/supermarket`)?.canDeactivate).toBeUndefined();
       });
     });
 
@@ -1319,10 +1352,15 @@ describe('the sheets and their exit animation', () => {
   it('puts the guard on nothing else', () => {
     // A page is not a panel, and delaying a navigation off one would be a stall with
     // nothing on screen to explain it. The one page guard allowed is the unsaved
-    // warning of the edit page (velista 0123), which asks on screen.
+    // warning of the edit page (velista 0123), which asks on screen, and the
+    // question of the catalog that chooses the products of a line (velista 0146),
+    // which asks on screen as well.
     const overreach = all
       .filter(({ route }) =>
-        (route.canDeactivate ?? []).some((guard) => guard !== unsavedWalkGuard)
+        (route.canDeactivate ?? []).some(
+          (guard) =>
+            guard !== unsavedWalkGuard && guard !== catalogPickLeaveGuard
+        )
       )
       .filter(({ route }) => !isSheet(route))
       .map(({ path }) => path);
@@ -1426,6 +1464,11 @@ describe('the bottom bar', () => {
     'zones/:zoneId/lists/:listId/lines/:lineId/product/supermarket',
     'zones/:zoneId/lists/:listId/lines/:lineId/product/categories',
     'zones/:zoneId/lists/:listId/lines/:lineId/product/categories/:parentSlug',
+    // Velista 0146: the same page choosing the products of a line, and its pickers.
+    'zones/:zoneId/lists/:listId/lines/:lineId/products',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/supermarket',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/categories',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/categories/:parentSlug',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {

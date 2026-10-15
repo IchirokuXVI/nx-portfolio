@@ -20,6 +20,7 @@ import {
   LineStore,
   ListStore,
   MemberNames,
+  ProductPickStore,
   SessionStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
@@ -31,11 +32,13 @@ import {
   LINE_PRICED_PRODUCTS_MAX,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   appPath,
   lineIdOf,
   listIdOf,
   PageNavigation,
   productPagePath,
+  productsPickPath,
   sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
@@ -120,6 +123,8 @@ export class LinePage {
   private readonly _localeStore = inject(RokuLocaleStore);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _pick = inject(ProductPickStore);
+  private readonly _history = inject(AppHistory);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -210,9 +215,8 @@ export class LinePage {
       priceOf: this._prices.priceOf,
       supermarketNameOf: (supermarketId) => {
         const name =
-          context?.chains.find(
-            (chain) => chain.supermarketId === supermarketId
-          )?.name ??
+          context?.chains.find((chain) => chain.supermarketId === supermarketId)
+            ?.name ??
           context?.chainNames.get(supermarketId) ??
           null;
         return name === null ? null : catalogName(name, locale);
@@ -395,9 +399,39 @@ export class LinePage {
     );
   }
 
-  /** "Change", and "Add a product" on a line with none: the products page. */
+  /**
+   * "Change", and "Choose a product" on a line with none: the catalog that
+   * chooses the whole set of the line (velista `0146`, section 5), opened on the
+   * products the line holds, its own and its group's, which are one set.
+   */
   async openProducts(): Promise<void> {
-    await this._router.navigateByUrl(this._url('products'));
+    const line = this._line();
+    if (line === undefined || !this._canEdit()) {
+      return;
+    }
+    const locale = this._localeStore.locale();
+    this._pick.open({
+      kind: 'set',
+      lineId: line.id,
+      forLabel: this._translator.t('list.row.pickFor', undefined, locale, {
+        name: this.page()?.content ?? '',
+      }),
+      forDetail: this._list()?.name ?? '',
+      chosenId: null,
+      chosenIds: line.itemIds,
+      returnUrl: this._url(),
+      returnDepth: this._history.depth(),
+      callerState: null,
+    });
+    await this._router.navigateByUrl(
+      productsPickPath(
+        locale,
+        this._basePath,
+        this.zoneId(),
+        this.listId(),
+        line.id
+      )
+    );
   }
 
   async openHistory(): Promise<void> {

@@ -225,6 +225,33 @@
   list-style: none;
 }
 
+// The two headings of the catalog that chooses the products of a line (velista
+// 0146, section 3, the `cgh` of the mock): "On this line" over its products, and
+// "All products" over the catalog's. Quiet, as a group label is, so the cards stay
+// what the eye lands on.
+.pick-heading {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+// Why a press did nothing, above the bar (velista 0146): no product chosen yet,
+// or the line is full. It takes no room while it says nothing.
+.pick-note {
+  flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+
+  &:empty {
+    display: none;
+  }
+}
+
 // Where the rows with no price start, in a price order (section 3).
 .unpriced {
   padding-block-start: var(--app-space-3);

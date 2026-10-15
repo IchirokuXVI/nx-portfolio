@@ -17,6 +17,7 @@ import {
   fakeZoneStore,
   LINE_SERVICE,
   type LineServiceI,
+  ProductPickStore,
   provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
@@ -34,7 +35,7 @@ import {
   type MyZone,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { AppHistory, provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { LinePage } from './line-page';
 
@@ -215,6 +216,8 @@ async function render(options: Options = {}): Promise<{
         useValue: browse as unknown as CatalogBrowseServiceI,
       },
       { provide: LINE_SERVICE, useValue: holding },
+      ProductPickStore,
+      { provide: AppHistory, useValue: { depth: () => 4 } },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
@@ -273,16 +276,18 @@ describe('LinePage', () => {
   it('titles the header with the line and says where it is', async () => {
     const { fixture } = await render();
 
-    expect(
-      fixture.nativeElement.querySelector('h1')?.textContent?.trim()
-    ).toBe('Shampoo');
+    expect(fixture.nativeElement.querySelector('h1')?.textContent?.trim()).toBe(
+      'Shampoo'
+    );
     expect(textOf(fixture)).toContain('list.page.where');
     expect(textOf(fixture)).toContain('list.page.addedBy');
   });
 
   describe('a line with no name of its own (velista 0144, section 5)', () => {
     const addName = (fixture: ComponentFixture<LinePage>) =>
-      fixture.nativeElement.querySelector('.add-name') as HTMLButtonElement | null;
+      fixture.nativeElement.querySelector(
+        '.add-name'
+      ) as HTMLButtonElement | null;
 
     it('is titled with its product and offers Add a name, which opens the name sheet', async () => {
       const { fixture, router } = await render({
@@ -328,9 +333,7 @@ describe('LinePage', () => {
       fewer.click();
       await drain(fixture);
 
-      expect(
-        lines.calls.filter((call) => call.kind === 'quantity')
-      ).toEqual([
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
         { kind: 'quantity', lineId: LINE_ID, delta: 1 },
         { kind: 'quantity', lineId: LINE_ID, delta: -1 },
       ]);
@@ -396,18 +399,29 @@ describe('LinePage', () => {
       expect(fixture.nativeElement.querySelector('button.info')).toBeNull();
     });
 
-    it('opens the products page from Change', async () => {
+    it('opens the catalog that chooses the products of the line from Change, with them ticked (velista 0146)', async () => {
       const { fixture, router } = await render();
 
       buttonWith(fixture, 'list.page.productsChange')?.click();
       await drain(fixture);
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `${LINE_URL}/products`
-      );
+      expect(router.navigateByUrl).toHaveBeenCalledWith(`${LINE_URL}/products`);
+      expect(TestBed.inject(ProductPickStore).request()).toMatchObject({
+        kind: 'set',
+        lineId: LINE_ID,
+        forLabel: 'list.row.pickFor',
+        forDetail: 'Weekly shop',
+        chosenIds: ['normal', 'classic'],
+        returnUrl: LINE_URL,
+        returnDepth: 4,
+      });
+      expect(TestBed.inject(ProductPickStore).ticked()).toEqual([
+        'normal',
+        'classic',
+      ]);
     });
 
-    it('says one sentence and offers Add a product on a line with none', async () => {
+    it('says No product yet, one sentence and Choose a product on a line with none (velista 0146)', async () => {
       const { fixture, router } = await render({
         lines: [line({ itemIds: [] })],
       });
@@ -415,14 +429,29 @@ describe('LinePage', () => {
       expect(
         fixture.nativeElement.querySelector('lib-line-product-rail')
       ).toBeNull();
-      expect(textOf(fixture)).toContain('list.page.productsEmpty');
-      expect(textOf(fixture)).not.toContain('list.page.supermarket');
+      expect(textOf(fixture)).toContain('list.page.productsNone');
+      expect(textOf(fixture)).toContain('list.page.productsWhy');
+      expect(textOf(fixture)).not.toContain('list.page.productsTitle');
+      expect(buttonWith(fixture, 'list.page.productsChange')).toBeNull();
 
-      buttonWith(fixture, 'list.page.productsAdd')?.click();
+      buttonWith(fixture, 'list.page.productsChoose')?.click();
       await drain(fixture);
-      expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `${LINE_URL}/products`
-      );
+      expect(router.navigateByUrl).toHaveBeenCalledWith(`${LINE_URL}/products`);
+      expect(TestBed.inject(ProductPickStore).request()?.chosenIds).toEqual([]);
+    });
+
+    it('offers neither Change nor Choose a product to a reader who may not edit', async () => {
+      const withProducts = await render({ permissions: READER });
+      expect(
+        buttonWith(withProducts.fixture, 'list.page.productsChange')
+      ).toBeNull();
+
+      const empty = await render({
+        permissions: READER,
+        lines: [line({ itemIds: [] })],
+      });
+      expect(buttonWith(empty.fixture, 'list.page.productsChoose')).toBeNull();
+      expect(textOf(empty.fixture)).toContain('list.page.productsNone');
     });
   });
 

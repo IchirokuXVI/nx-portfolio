@@ -228,13 +228,26 @@ describe('CatalogPage, opened to choose one product (velista 0140)', () => {
     });
   });
 
-  it('keeps the button disabled until a product is chosen', async () => {
-    const { fixture } = await render();
+  it('says why the button does nothing until a product is chosen (velista 0146)', async () => {
+    const { fixture, backTo } = await render();
+    const button = host(fixture).querySelector<HTMLButtonElement>(
+      'lib-choosing-bar button'
+    );
+    const note = () =>
+      host(fixture).querySelector('.pick-note[aria-live="polite"]');
 
-    expect(
-      host(fixture).querySelector<HTMLButtonElement>('lib-choosing-bar button')
-        ?.disabled
-    ).toBe(true);
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
+    expect(note()?.textContent?.trim()).toBe('');
+
+    button?.click();
+    fixture.detectChanges();
+    expect(note()?.textContent).toContain('catalog.pick.first');
+    expect(backTo).not.toHaveBeenCalled();
+
+    cards(fixture)[1].click();
+    fixture.detectChanges();
+    expect(button?.hasAttribute('aria-disabled')).toBe(false);
+    expect(note()?.textContent?.trim()).toBe('');
   });
 
   it('goes back with nothing changed from the close', async () => {

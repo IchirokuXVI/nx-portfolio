@@ -28,7 +28,7 @@ import {
     </span>
     <button
       (click)="used.emit()"
-      [disabled]="disabled()"
+      [attr.aria-disabled]="disabled() ? 'true' : null"
       class="use"
       type="button"
     >
@@ -43,10 +43,16 @@ export class ChoosingBar {
   readonly forLabel = input.required<string>();
   /** "Leche para el café", or empty for none. */
   readonly forDetail = input('');
-  /** The button's words: "Use this product". */
+  /** The button's words: "Use this product", or "Save". */
   readonly action = input.required<string>();
+  /**
+   * Drawn as unavailable, and still pressed (velista `0146`, section 2): the
+   * button is `aria-disabled` and not `disabled`, so it stays in the tab order
+   * and a press reaches the page, which says why in its live region ("Choose a
+   * product first"). A disabled button says nothing to whoever presses it.
+   */
   readonly disabled = input(false);
 
-  /** The button was pressed. */
+  /** The button was pressed, unavailable or not. */
   readonly used = output<void>();
 }

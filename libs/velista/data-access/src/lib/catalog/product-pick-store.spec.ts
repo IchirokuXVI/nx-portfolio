@@ -73,4 +73,43 @@ describe('ProductPickStore', () => {
     expect(store.use()).toBe(false);
     expect(store.request()).not.toBeNull();
   });
+
+  describe('the kind that chooses the set of a line (velista 0146)', () => {
+    const SET: ProductPickRequest = {
+      ...REQUEST,
+      kind: 'set',
+      chosenId: null,
+      chosenIds: ['oat', 'soy'],
+    };
+
+    it('opens with the products of the line ticked', () => {
+      const store = new ProductPickStore();
+
+      store.open(SET);
+
+      expect(store.ticked()).toEqual(['oat', 'soy']);
+    });
+
+    it('keeps the set ticked so far until it ends, with no answer', () => {
+      const store = new ProductPickStore();
+      store.open(SET);
+
+      store.tick(['soy', 'rice']);
+      expect(store.ticked()).toEqual(['soy', 'rice']);
+
+      store.end();
+      expect(store.request()).toBeNull();
+      expect(store.ticked()).toEqual([]);
+      expect(store.takeAnswer('zl-1')).toBeNull();
+    });
+
+    it('opens the kind one with nothing ticked', () => {
+      const store = new ProductPickStore();
+      store.open(SET);
+
+      store.open(REQUEST);
+
+      expect(store.ticked()).toEqual([]);
+    });
+  });
 });
