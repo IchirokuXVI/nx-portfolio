@@ -10,7 +10,8 @@
   margin-block-end: var(--app-space-4);
 }
 
-.back {
+.back,
+.close {
   @include shared.tap-target;
 
   display: flex;
@@ -23,7 +24,8 @@
   cursor: pointer;
 }
 
-.back-glyph {
+.back-glyph,
+.close-glyph {
   font-size: var(--app-icon-md);
 }
 
@@ -58,4 +60,57 @@
 
 .visually-hidden {
   @include shared.visually-hidden;
+}
+
+// The cross of the question at the first buy (velista 0141), at the end of the
+// title row, where the chevron would be a way back to a filter it did not come from.
+.close {
+  margin-inline-end: calc(var(--app-space-3) * -1);
+  border-radius: var(--app-radius-full);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The foot of the question (velista 0141): one sentence and a text button, on the
+// sheet's own hairline and with no container, as the mock draws it.
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding-block-start: var(--app-space-4);
+  text-align: center;
+}
+
+.foot-note {
+  margin: 0;
+  max-inline-size: 36ch;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.never {
+  @include shared.tap-target;
+
+  padding: 0 var(--app-space-4);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: none;
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }

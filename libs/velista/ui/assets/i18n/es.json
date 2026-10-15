@@ -1614,6 +1614,14 @@
         "showAll": "Mostrar todas las líneas"
       }
     },
+    "shopAsk": {
+      "title": "¿Estás comprando aquí?",
+      "noShop": "Sin tienda",
+      "noShopHint": "Se guarda el precio más barato",
+      "note": "También puedes elegir la tienda en el filtro de tu lista de la compra.",
+      "never": "No volver a preguntar",
+      "close": "Cerrar"
+    },
     "price": {
       "cheaperAt": "{{price}} en {{chain}}"
     },

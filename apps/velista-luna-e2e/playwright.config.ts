@@ -35,6 +35,31 @@ export const VELISTA_BASE_URL =
 export const GATEWAY_URL =
   process.env['E2E_GATEWAY_URL'] || 'http://e2e-gateway-url.unset.invalid';
 
+/**
+ * A device that answered "Don't ask again" to the shop question at the first buy
+ * of a trip (velista `0141`), for every page of this suite: its specs buy with no
+ * shop, and the question is the browser walk's to prove, not each trip's to
+ * answer. The key is `StorageKeys.shopAskOff` in `libs/velista/platform`, written
+ * out because this file cannot import an Angular library.
+ */
+export const SHOP_ASK_OFF_STATE = {
+  cookies: [],
+  origins: [
+    {
+      origin: originOf(VELISTA_BASE_URL),
+      localStorage: [{ name: 'shop-ask-off:velista', value: 'true' }],
+    },
+  ],
+};
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
 export default defineConfig({
   ...preset,
   /* The preset's reporters are silent on a terminal, which on CI turns a running
@@ -58,6 +83,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   use: {
     baseURL: VELISTA_BASE_URL,
+    storageState: SHOP_ASK_OFF_STATE,
     // The e2e proxy serves self signed certificates on `.app` hosts, which are
     // HSTS preloaded and cannot be clicked through. This covers the page, its
     // fetches and its socket.

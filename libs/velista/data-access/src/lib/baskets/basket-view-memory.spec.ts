@@ -242,11 +242,49 @@ describe('forget', () => {
  * that says "two hours" deserves a test that says two hours.
  */
 describe('BASKET_VIEW_LIFETIME_MS', () => {
-  it('keeps the order and the grouping for ever, and the shop for two hours', () => {
+  it('keeps the order and the grouping for ever, and the shop and its answer for two hours', () => {
     expect(BASKET_VIEW_LIFETIME_MS).toEqual({
       order: null,
       grouping: null,
       location: 2 * HOUR,
+      shopAnswered: 2 * HOUR,
     });
+  });
+});
+
+/**
+ * The answer to the shop question of a trip (velista `0141`, section 3): kept for
+ * the shop's two hours, and gone after them like the shop.
+ */
+describe('the answer for the trip', () => {
+  it('is remembered for the lifetime of the shop', () => {
+    const kept = remember({ version: 1 }, 'shopAnswered', true, NOW);
+
+    expect(kept.shopAnswered).toEqual({ value: true, until: at(2 * HOUR) });
+    expect(dropExpired(kept, NOW + 2 * HOUR - 1).shopAnswered).toBeDefined();
+  });
+
+  it('ends after its lifetime', () => {
+    const kept = remember({ version: 1 }, 'shopAnswered', true, NOW);
+
+    expect(dropExpired(kept, NOW + 2 * HOUR).shopAnswered).toBeUndefined();
+  });
+
+  it('is read back, and a value that is not true makes the record unreadable', () => {
+    expect(
+      toBasketViewMemory({
+        version: 1,
+        shopAnswered: { value: true, until: at(HOUR) },
+      })
+    ).toEqual({
+      version: 1,
+      shopAnswered: { value: true, until: at(HOUR) },
+    });
+    expect(
+      toBasketViewMemory({
+        version: 1,
+        shopAnswered: { value: 'yes', until: at(HOUR) },
+      })
+    ).toBeNull();
   });
 });

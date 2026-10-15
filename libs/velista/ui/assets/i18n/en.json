@@ -1614,6 +1614,14 @@
         "showAll": "Show every line"
       }
     },
+    "shopAsk": {
+      "title": "Are you buying here?",
+      "noShop": "No shop",
+      "noShopHint": "The cheapest price is recorded",
+      "note": "You can also choose the shop from the filter of your shopping list.",
+      "never": "Don't ask again",
+      "close": "Close"
+    },
     "price": {
       "cheaperAt": "{{price}} at {{chain}}"
     },

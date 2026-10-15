@@ -70,6 +70,15 @@ export const StorageKeys = {
    */
   boughtShop: `bought-shop:${APP_KEY}`,
   /**
+   * That this device answered "Don't ask again" to the shop question at the first
+   * buy of a trip (velista `0141`).
+   *
+   * One flag for the device and every shopping list on it, with no expiry: the
+   * answer is about the person, not about a trip. Nothing turns it back on except
+   * clearing the app's data, and the filter still chooses a shop.
+   */
+  shopAskOff: `shop-ask-off:${APP_KEY}`,
+  /**
    * The last shop map opened, with the basket lines it was opened with (velista
    * `0121`, target 6), so the map opens in a shop with poor signal.
    *

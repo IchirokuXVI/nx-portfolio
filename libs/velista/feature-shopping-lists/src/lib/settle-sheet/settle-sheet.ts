@@ -59,11 +59,12 @@ import {
   participantName,
   touchedCaption,
 } from '../basket-labels';
-import { basketPath, settleSheetPath } from '../basket-paths';
+import { basketPath, settleSheetPath, shopAskPath } from '../basket-paths';
 import {
   changeableLineIds,
   changeSheetPath,
 } from '../change-sheet/change-targets';
+import { HeldBuy } from '../held-buy';
 import { RowEntries, type OtherListsState } from '../row-entries/row-entries';
 
 /**
@@ -221,6 +222,8 @@ export class SettleSheet {
    * product on one screen.
    */
   private readonly _view = inject(BasketViewStore);
+  /** The buy that waits for the shop question, which the page provides (`0141`). */
+  private readonly _held = inject(HeldBuy);
 
   private readonly _injector = inject(Injector);
   private readonly _pane = signal<Pane>('settle');
@@ -717,12 +720,13 @@ export class SettleSheet {
    */
   protected async settleAll(): Promise<void> {
     const left = this.outstanding();
-    await this._send({
+    const got = this._got();
+    await this._buy(() => ({
       outcome: 'BOUGHT',
       quantity: left,
       from: left,
-      ...this._got(),
-    });
+      ...got(),
+    }));
   }
 
   /**
@@ -1062,16 +1066,19 @@ export class SettleSheet {
    * price itself. Absent when the row draws no price. And, while a shop is chosen,
    * that shop (velista `0102`), from the one place the row's settle asks too.
    */
-  private _got(): {
+  private _got(): () => {
     itemId?: string;
     priceScopeId?: string;
     supermarketLocationId?: string;
   } {
+    // The row's product now, and the shop when the body is built: a buy held by
+    // the shop question (velista `0141`) is built after the answer chose it.
     const itemId = this.row()?.productId ?? null;
-    return {
+    const product = this._product();
+    return () => ({
       ...(itemId === null ? {} : { itemId }),
-      ...this._view.settleShop(this._product()),
-    };
+      ...this._view.settleShop(product),
+    });
   }
 
   /**
@@ -1135,11 +1142,14 @@ export class SettleSheet {
     // The shop, though: "they had none" is a fact about the shop the person is
     // standing in, and every settle made while one is chosen names it (velista
     // `0102`). In "any of your shops" mode it names none.
-    const shop = this._view.shop();
-    await this._send({
-      outcome: 'NOT_AVAILABLE',
-      from: this.outstanding(),
-      ...(shop === null ? {} : { supermarketLocationId: shop }),
+    const from = this.outstanding();
+    await this._buy(() => {
+      const shop = this._view.shop();
+      return {
+        outcome: 'NOT_AVAILABLE',
+        from,
+        ...(shop === null ? {} : { supermarketLocationId: shop }),
+      };
     });
   }
 
@@ -1442,10 +1452,33 @@ export class SettleSheet {
     return map;
   });
 
-  private async _send(
-    body: Parameters<BasketStore['settle']>[1]
+  /**
+   * Send a settle, or hold it and ask where the person is first (velista `0141`).
+   *
+   * The body is built when it is sent, because the shop in it is what the
+   * question decides. A held buy outlives this sheet, which the question replaces,
+   * so it reaches nothing of the sheet's: a failure is the page's to show, as it is
+   * for the row's own circle.
+   */
+  private async _buy(
+    body: () => Parameters<BasketStore['settle']>[1]
   ): Promise<void> {
-    await this._run(() => this._store.settle(this._rowKey, body));
+    if (!this._view.asksForShop()) {
+      await this._run(() => this._store.settle(this._rowKey, body()));
+      return;
+    }
+
+    const rowKey = this._rowKey;
+    const store = this._store;
+    this._held.hold(async () => {
+      await store.settle(rowKey, body());
+    });
+    // Marked first, so the effect that closes this sheet for a row gone cannot
+    // dismiss it a second time on the way out.
+    this._left = true;
+    await this._sheet.leaveTo(
+      shopAskPath(this._locale(), this._basePath, this._address())
+    );
   }
 
   /**

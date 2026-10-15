@@ -62,6 +62,7 @@
               [groups]="nearGroups()"
               [mixed]="true"
               [mode]="'pick'"
+              [pickChecked]="pickChecked()"
               [pickedId]="pickedId()"
               groupName="shop-pick-near"
             />
@@ -97,6 +98,33 @@
     guest, whom nobody asks, and gone while a search is typed, when the matches are
     the whole answer.
   -->
+  <!--
+    "No shop" (velista 0141), a row of its own under the shops near the device,
+    where the question at the first buy offers it. The filter offers no shop with
+    its own row, so it never sets this. Gone while a search is typed.
+  -->
+  @if (offerNoShop() && !searching()) {
+    <div class="card no-shop">
+      <label class="no-shop-row">
+        <lib-chain-logo [logo]="noShopLogo" />
+        <span class="no-shop-body">
+          <span class="no-shop-title">{{
+            'basket.shopAsk.noShop' | rokuT
+          }}</span>
+          <span class="no-shop-hint">
+            {{ 'basket.shopAsk.noShopHint' | rokuT }}
+          </span>
+        </span>
+        <input
+          (change)="noShop.emit()"
+          class="no-shop-radio"
+          name="shop-pick-none"
+          type="radio"
+        />
+      </label>
+    </div>
+  }
+
   @if (!searching()) {
     @if (recentGroups().length > 0) {
       <section class="section">
@@ -113,6 +141,7 @@
           [groups]="recentGroups()"
           [mixed]="true"
           [mode]="'pick'"
+          [pickChecked]="pickChecked()"
           [pickedId]="pickedId()"
           groupName="shop-pick-recent"
         />
@@ -177,6 +206,7 @@
         [groups]="matches()"
         [mixed]="true"
         [mode]="'pick'"
+        [pickChecked]="pickChecked()"
         [pickedId]="pickedId()"
       />
     }
@@ -206,6 +236,7 @@
       (pick)="picked.emit($event)"
       [groups]="groups()"
       [mode]="'pick'"
+      [pickChecked]="pickChecked()"
       [pickedId]="pickedId()"
       class="chain-shops"
     />

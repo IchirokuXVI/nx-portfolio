@@ -412,3 +412,94 @@ describe('ShopPicker, near me and recent shops', () => {
     );
   });
 });
+
+/**
+ * What the question at the first buy of a trip adds (velista `0141`): "No shop" as
+ * a row of its own, and a selected shop that answers one press.
+ */
+describe('ShopPicker, the question at the first buy', () => {
+  function candidate(id: string, distance: string) {
+    return {
+      ...shop(id),
+      aside: { text: distance, kind: 'distance' as const },
+    };
+  }
+
+  async function renderAsk(
+    options: { readonly pickChecked?: boolean; readonly query?: string } = {}
+  ): Promise<ComponentFixture<ShopPicker>> {
+    const fixture = await render({
+      pickedId: 'near-1',
+      query: options.query ?? '',
+    });
+    fixture.componentRef.setInput('near', {
+      state: 'answered',
+      reason: null,
+      candidates: [candidate('near-1', '40 m'), candidate('near-2', '210 m')],
+    });
+    fixture.componentRef.setInput('offerNoShop', true);
+    fixture.componentRef.setInput('pickChecked', options.pickChecked ?? true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('draws "No shop" with its second line, under the shops near you', async () => {
+    const fixture = await renderAsk();
+
+    const row = element(fixture).querySelector('.no-shop') as HTMLElement;
+    expect(row.textContent).toContain('basket.shopAsk.noShop');
+    expect(row.textContent).toContain('basket.shopAsk.noShopHint');
+    const near = element(fixture).querySelector('.near-region') as HTMLElement;
+    expect(
+      near.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('reports "No shop" as its own output', async () => {
+    const fixture = await renderAsk();
+    let none = 0;
+    const picked: string[] = [];
+    fixture.componentInstance.noShop.subscribe(() => none++);
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    (
+      element(fixture).querySelector('.no-shop-radio') as HTMLInputElement
+    ).click();
+
+    expect(none).toBe(1);
+    expect(picked).toEqual([]);
+  });
+
+  it('draws no "No shop" while a word is searched, nor unless asked to', async () => {
+    const searched = await renderAsk({ query: 'tejares' });
+    expect(element(searched).querySelector('.no-shop')).toBeNull();
+
+    const plain = await render({});
+    expect(element(plain).querySelector('.no-shop')).toBeNull();
+  });
+
+  it('picks the selected shop with one press on it', async () => {
+    const fixture = await renderAsk();
+    const picked: string[] = [];
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    const radios =
+      element(fixture).querySelectorAll<HTMLInputElement>('.near-region input');
+    expect(radios[0].checked).toBe(true);
+    radios[0].click();
+
+    expect(picked).toEqual(['near-1']);
+  });
+
+  it('leaves a press on the checked shop alone without pickChecked, as the filter does', async () => {
+    const fixture = await renderAsk({ pickChecked: false });
+    const picked: string[] = [];
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    element(fixture)
+      .querySelectorAll<HTMLInputElement>('.near-region input')[0]
+      .click();
+
+    expect(picked).toEqual([]);
+  });
+});

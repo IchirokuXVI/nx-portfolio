@@ -446,6 +446,19 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.FilterSheet
         ),
     }),
+    // The first buy of a trip asks where the person is (velista `0141`). The
+    // shop picker of the filter in its asking mode, which `data.shopAsk` turns
+    // on: "No shop", "Don't ask again", and a way out to the basket rather than
+    // to the filter. The buy that opened it waits in the page's `HeldBuy`; a cold
+    // load of this URL has none, and an answer here only chooses the shop.
+    sheet({
+      path: 'shop',
+      data: { shopAsk: true },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.ShopPickerSheet
+        ),
+    }),
   ];
 }
 

@@ -5,7 +5,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { DEMO_PASSWORD } from '@portfolio/luna-shopper/test-fixtures';
-import { VELISTA_BASE_URL } from '../../playwright.config';
+import { SHOP_ASK_OFF_STATE, VELISTA_BASE_URL } from '../../playwright.config';
 
 /**
  * The screens, as a spec drives them. Every string here is the English copy
@@ -280,13 +280,14 @@ export function chip(page: Page, label: string): Locator {
 /**
  * A second person: their own browser context, signed in to nothing, on the
  * same origin and with the same certificate allowance as the main page.
- * `browser.newContext()` inherits none of the config's `use` options, so both
- * are stated here rather than assumed.
+ * `browser.newContext()` inherits none of the config's `use` options, so all
+ * three are stated here rather than assumed, "Don't ask again" included.
  */
 export async function newVisitor(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
     baseURL: VELISTA_BASE_URL,
     ignoreHTTPSErrors: true,
+    storageState: SHOP_ASK_OFF_STATE,
   });
   return context.newPage();
 }

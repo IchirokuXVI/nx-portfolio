@@ -17,6 +17,7 @@ import {
   type NearbyNoPick,
 } from '@portfolio/velista/models';
 import { InfoIcon, SearchIcon, SpinnerIcon } from '../icons/icons';
+import { ChainLogo, type ChainLogoView } from './chain-logo';
 import { FranchiseButtons } from './franchise-buttons';
 import { ShopList, type ShopGroup, type ShopRow } from './shop-list';
 
@@ -92,6 +93,7 @@ export type ShopPickerNear =
     RokuTranslatorPipe,
     SearchIcon,
     InfoIcon,
+    ChainLogo,
     ShopList,
     SpinnerIcon,
   ],
@@ -161,6 +163,20 @@ export class ShopPicker {
    */
   readonly recent = input<readonly ShopRow[]>([]);
 
+  /**
+   * Whether a press on the checked shop picks it (velista `0141`). The question at
+   * the first buy selects the nearest shop for the person, and that shop has to
+   * answer one press. See `ShopList.pickChecked`.
+   */
+  readonly pickChecked = input(false);
+
+  /**
+   * Whether to offer "No shop" as a row of its own (velista `0141`), at the root
+   * under the shops near the device. The filter offers no shop through its own
+   * "Any of your shops" row, so only the question at the first buy sets this.
+   */
+  readonly offerNoShop = input(false);
+
   /** Something was typed. The container decides what it matches. */
   readonly queried = output<string>();
 
@@ -173,6 +189,9 @@ export class ShopPicker {
   /** A shop's radio was chosen: its location id. */
   readonly picked = output<string>();
 
+  /** "No shop" was chosen. Only drawn under {@link offerNoShop}. */
+  readonly noShop = output<void>();
+
   /**
    * A shop row's round button was pressed: its location id, for the shop's own
    * page (velista `0121`). Every host opens `shops/:locationId`.
@@ -180,6 +199,13 @@ export class ShopPicker {
   readonly about = output<string>();
 
   private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** The store glyph in a logo's square, which "No shop" leads with. */
+  protected readonly noShopLogo: ChainLogoView = {
+    logoUrl: null,
+    name: '',
+    store: true,
+  };
 
   /** How far the server looks, in the reader's language, for the heading. */
   protected readonly radius = computed(() =>

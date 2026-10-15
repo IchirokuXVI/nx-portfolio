@@ -58,6 +58,7 @@
 
               <input
                 (change)="choose(shop.id)"
+                (click)="pressChecked(shop)"
                 [attr.name]="groupName()"
                 [checked]="isChecked(shop)"
                 class="checkbox pick-radio"

@@ -27,7 +27,9 @@ import {
   provideFakeGeolocationReader,
   provideVelistaTesting,
   SheetNavigation,
+  StorageKeys,
 } from '@portfolio/velista/platform';
+import { HeldBuy } from '../held-buy';
 import { ShopPickerSheet } from './shop-picker-sheet';
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
@@ -91,6 +93,10 @@ function render(
     readonly me?: Pick<BasketParticipant, 'kind'> | null;
     readonly memory?: ShopFinderMemory;
     readonly reader?: ReturnType<typeof fakeGeolocationReader>;
+    /** The question at the first buy (velista `0141`): `data.shopAsk` on the route. */
+    readonly asking?: boolean;
+    /** This device's storage, so a spec can read what an answer kept. */
+    readonly storage?: Map<string, string>;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -150,14 +156,19 @@ function render(
       provideFakeShopSectionsStore(),
       { provide: SHOP_FINDER_SERVICE, useValue: memory },
       provideFakeGeolocationReader(reader),
-      provideFakeBrowserFacade(new Map()),
+      provideFakeBrowserFacade(options.storage ?? new Map()),
+      HeldBuy,
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: { navigate: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { paramMap, parent: null },
+          snapshot: {
+            paramMap,
+            parent: null,
+            data: options.asking ? { shopAsk: true } : {},
+          },
           paramMap: { subscribe: () => ({ unsubscribe: () => undefined }) },
           parent: null,
         },
@@ -175,6 +186,7 @@ function render(
     reader,
     view: TestBed.inject(BasketViewStore),
     notices: TestBed.inject(ShopPickNotices),
+    held: TestBed.inject(HeldBuy),
   };
 }
 
@@ -705,5 +717,305 @@ describe('ShopPickerSheet, recent shops', () => {
     expect(fixture.nativeElement.textContent).not.toContain(
       'basket.view.shop.recent.heading'
     );
+  });
+});
+
+/**
+ * The question at the first buy of a trip (velista `0141`): the same sheet at
+ * `sheet/shop`, with "No shop", a foot with "Don't ask again", and every way out
+ * leading to the basket and writing the buy that waits.
+ */
+describe('ShopPickerSheet, asking at the first buy', () => {
+  const BASKET_URL = `/en/shopping-lists/${BASKET_ID}`;
+
+  /** Two shops near the device, the nearest first, and no pick of the server's. */
+  function nearby(): ShopFinderMemory {
+    const memory = new ShopFinderMemory();
+    memory.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...shopView('near-1', 'Mercadona'),
+          distanceMetres: 40,
+          excluded: false,
+        },
+        { ...shopView('near-2', 'Dia'), distanceMetres: 210, excluded: false },
+      ],
+      pick: null,
+      noPick: 'AMBIGUOUS',
+    });
+    return memory;
+  }
+
+  function granted() {
+    return fakeGeolocationReader({
+      permission: 'granted',
+      outcome: {
+        state: 'located',
+        point: { latitude: 37.88, longitude: -4.78, accuracyMetres: 12 },
+      },
+    });
+  }
+
+  function title(fixture: Fixture): string {
+    return (
+      (fixture.nativeElement.querySelector('#shop-picker-title') as HTMLElement)
+        .textContent ?? ''
+    ).trim();
+  }
+
+  /** A buy the page held, which records that it was written. */
+  function holdBuy(held: HeldBuy): { written: number } {
+    const buy = { written: 0 };
+    held.hold(async () => {
+      buy.written++;
+    });
+    return buy;
+  }
+
+  describe('with location already allowed', () => {
+    it('finds the shops, selects the nearest, and asks "Are you buying here?"', async () => {
+      const reader = granted();
+      const { fixture, memory } = render(OWNER_SCOPES, {
+        asking: true,
+        memory: nearby(),
+        reader,
+      });
+      await settle(fixture);
+
+      expect(reader.state.queries).toBe(1);
+      expect(reader.state.reads).toBe(1);
+      expect(memory.calls).toContain('basket');
+      expect(title(fixture)).toBe('basket.shopAsk.title');
+      const radios = fixture.nativeElement.querySelectorAll(
+        '.near-region input'
+      ) as NodeListOf<HTMLInputElement>;
+      expect(radios[0].checked).toBe(true);
+      // The question has found the shop, so it draws no Near me and no reason.
+      expect(
+        fixture.nativeElement.querySelector('lib-near-me-button')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('.near-region .line')
+      ).toBeNull();
+    });
+
+    it('chooses the selected shop with one press and writes the buy', async () => {
+      const { fixture, view, held, sheets } = render(OWNER_SCOPES, {
+        asking: true,
+        memory: nearby(),
+        reader: granted(),
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      (
+        fixture.nativeElement.querySelector(
+          '.near-region input'
+        ) as HTMLInputElement
+      ).click();
+      await settle(fixture);
+
+      expect(view.shop()).toBe('near-1');
+      expect(buy.written).toBe(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+    });
+
+    it('is the plain picker when no shop is near, with no line about the look', async () => {
+      const { fixture } = render(OWNER_SCOPES, {
+        asking: true,
+        reader: granted(),
+      });
+      await settle(fixture);
+
+      expect(title(fixture)).toBe('basket.view.shop.title');
+      expect(
+        fixture.nativeElement.querySelector('.near-region .line')
+      ).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('lib-near-me-button')
+      ).not.toBeNull();
+    });
+
+    it('is the plain picker when the read fails, with no line about it', async () => {
+      const memory = nearby();
+      memory.failNearby = true;
+      const { fixture } = render(OWNER_SCOPES, {
+        asking: true,
+        memory,
+        reader: granted(),
+      });
+      await settle(fixture);
+
+      expect(title(fixture)).toBe('basket.view.shop.title');
+      expect(
+        fixture.nativeElement.querySelector('.near-region .line')
+      ).toBeNull();
+    });
+  });
+
+  it.each(['prompt', 'denied', 'unknown'] as const)(
+    'is the plain picker when the permission is %s, and reads no position',
+    async (permission) => {
+      const reader = fakeGeolocationReader({ permission });
+      const { fixture, memory } = render(OWNER_SCOPES, {
+        asking: true,
+        memory: nearby(),
+        reader,
+      });
+      await settle(fixture);
+
+      expect(reader.state.reads).toBe(0);
+      expect(memory.calls).not.toContain('basket');
+      expect(title(fixture)).toBe('basket.view.shop.title');
+      expect(
+        fixture.nativeElement.querySelector('lib-near-me-button')
+      ).not.toBeNull();
+    }
+  );
+
+  describe('the answers', () => {
+    it('"No shop" keeps an answer for the trip and writes the buy with none', async () => {
+      const storage = new Map<string, string>();
+      const { fixture, view, held, sheets } = render(OWNER_SCOPES, {
+        asking: true,
+        storage,
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      (
+        fixture.nativeElement.querySelector(
+          '.no-shop-radio'
+        ) as HTMLInputElement
+      ).click();
+      await settle(fixture);
+
+      expect(view.shop()).toBeNull();
+      expect(view.asksForShop()).toBe(false);
+      expect(storage.get(StorageKeys.shopAskOff)).toBeUndefined();
+      expect(buy.written).toBe(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+    });
+
+    it('"Don\'t ask again" keeps the flag on the device and writes the buy', async () => {
+      const storage = new Map<string, string>();
+      const { fixture, held, sheets } = render(OWNER_SCOPES, {
+        asking: true,
+        storage,
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      (
+        fixture.nativeElement.querySelector('.never') as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+
+      expect(storage.get(StorageKeys.shopAskOff)).toBe('true');
+      expect(buy.written).toBe(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+    });
+
+    it('a shop chosen by hand is kept as the filter keeps it, and writes the buy', async () => {
+      const { fixture, view, held } = render(OWNER_SCOPES, { asking: true });
+      const buy = holdBuy(held);
+      await settle(fixture);
+      tapChain(fixture, 0);
+
+      fixture.debugElement
+        .queryAll(By.css('lib-shop-list .checkbox'))[0]
+        .nativeElement.click();
+      await settle(fixture);
+
+      expect(view.shop()).toBe('loc-tejares');
+      expect(view.asksForShop()).toBe(false);
+      expect(buy.written).toBe(1);
+    });
+
+    it('the cross keeps an answer for the trip and writes the buy', async () => {
+      const { fixture, view, held, sheets } = render(OWNER_SCOPES, {
+        asking: true,
+      });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      (
+        fixture.nativeElement.querySelector('.close') as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+
+      expect(view.asksForShop()).toBe(false);
+      expect(buy.written).toBe(1);
+      expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+    });
+
+    it('a sheet left by the back gesture answers for the trip and writes the buy', async () => {
+      const { fixture, view, held } = render(OWNER_SCOPES, { asking: true });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      fixture.destroy();
+      await Promise.resolve();
+
+      expect(view.asksForShop()).toBe(false);
+      expect(buy.written).toBe(1);
+    });
+
+    it('writes the buy once, whichever answer came first', async () => {
+      const { fixture, held } = render(OWNER_SCOPES, { asking: true });
+      const buy = holdBuy(held);
+      await settle(fixture);
+
+      (
+        fixture.nativeElement.querySelector('.close') as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+      fixture.destroy();
+      await Promise.resolve();
+
+      expect(buy.written).toBe(1);
+    });
+  });
+
+  it('draws the foot and "No shop", and no chevron to the filter', async () => {
+    const { fixture } = render(OWNER_SCOPES, { asking: true });
+    await settle(fixture);
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.foot')?.textContent).toContain(
+      'basket.shopAsk.note'
+    );
+    expect(element.querySelector('.never')?.textContent).toContain(
+      'basket.shopAsk.never'
+    );
+    expect(element.querySelector('.no-shop')).not.toBeNull();
+    expect(element.querySelector('.back')).toBeNull();
+  });
+
+  it('answers a cold load with no buy waiting, and only chooses the shop', async () => {
+    const { fixture, view, held, sheets } = render(OWNER_SCOPES, {
+      asking: true,
+    });
+    await settle(fixture);
+    expect(held.waiting).toBe(false);
+    tapChain(fixture, 0);
+
+    fixture.debugElement
+      .queryAll(By.css('lib-shop-list .checkbox'))[1]
+      .nativeElement.click();
+    await settle(fixture);
+
+    expect(view.shop()).toBe('loc-barcelona');
+    expect(sheets.dismiss).toHaveBeenCalledWith(BASKET_URL);
+  });
+
+  it('never draws the question on the filter’s own picker', async () => {
+    const { fixture } = render(OWNER_SCOPES);
+    await settle(fixture);
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.foot')).toBeNull();
+    expect(element.querySelector('.no-shop')).toBeNull();
+    expect(element.querySelector('.close')).toBeNull();
   });
 });
