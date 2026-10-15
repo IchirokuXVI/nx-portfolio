@@ -104,6 +104,16 @@ was always the right number, and this plan does not go near `select-home-state.t
 `select-group-state.ts` or `select-list-state.ts`. Anything that recomputes a count here is a
 second definition of the same fact and will drift from the server's.
 
+> **Velista `0143` reverses this rule for the header of a shopping list, and only there.** The
+> page counts the progress of a basket itself, over the rows it holds, after an event or a
+> write. The reason is backend `0201`: the rows of a shopping list depend on the shop of the
+> read, so two phones on one shopping list can hold different rows, and no event can carry
+> one count that is right for both. The count cannot drift from the server's, because both
+> call the same function, `progressOf` of `@portfolio/luna-shopper/basket-rules`. A spec of
+> `0143` puts one set of entries through a read of the memory twin and through a patch, and
+> compares the two shopping lists field by field. The counts of a list row, a zone card and
+> the list header that this plan covers still come from the server.
+
 ### 4.1 The bar
 
 In `list-header.ts`:

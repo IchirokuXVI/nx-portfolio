@@ -45,6 +45,141 @@ A review of pull request #694 checked this plan against the code on `dev`. The w
 3. **This plan reverses velista `0090` and `0060` section 4, and those files have no
    note.** Add one to each in the pull request that builds this plan.
 
+## What the build decided
+
+The build of 2026-10-15 settled the review above as the owner's brief for the build said,
+and made the choices below. Each is a choice of the builder that the owner can overturn.
+Where this section and a later section disagree, this section is right. Backend `0201`,
+`0204` and `0205` and velista `0139`, `0140`, `0142` and `0149` were on the base branch.
+
+**The three review points.**
+
+1. **Review point 1: the client rule of backend `0204`.** An entry and a patch of the same
+   `version` whose `skipped` or `closed` differ answer `'read'`. Entries are applied only
+   from `BasketSocket`, which joined the room of one basket and no other. The store does
+   not listen to `basket.linesChanged` on the account socket, whose user room hears the
+   envelopes of every basket the owner holds with no basket named, so nothing changed there.
+2. **Review point 2: the ceiling of 3000 ms stays, and a long burst costs more than two
+   reads.** A read is asked at once after a quiet time. Later asks wait until 1500 ms pass
+   with no ask, and never more than 3000 ms from the first ask the wait gathered. So a
+   burst costs one read at once, about one for each 3000 ms it lasts, and one after it
+   ends. Ten events one second apart cost four reads, at 0, 4000, 7000 and 10000 ms. The
+   store spec "never lets a read asked for wait more than 3000 ms" asserts exactly that,
+   and that no ask waited more than 3000 ms for a read that started after it. The waiting
+   lives in `CoalescedRead` (`libs/velista/data-access/src/lib/baskets/coalesced-read.ts`).
+3. **Review point 3: notes in velista `0090` section 7 and `0060` section 4**, in this pull
+   request. Each says which rule this plan reverses and why.
+
+**The patch (sections 1 to 3).**
+
+4. **`applyBasketPatch` is in `libs/velista/models/src/lib/basket-patch.ts`.** It rebuilds a
+   touched row with `rebuildBasketRow` of velista `0139`, which calls `rowStateOf` and
+   `rowNumbersOf` of `@portfolio/luna-shopper/basket-rules`, and counts with `progressOf`
+   through `basketProgressOf`. No state table is written here. A row the patch does not touch
+   is the same object, so nothing above it is drawn again, and the scroll and the focus stay.
+5. **The note of a row follows core's `noteOf`, and reads where a patch cannot know it.**
+   - A skip stands on a line exactly while it is the newest act of that line: core's
+     `actOf` names the skip only when no settlement is later, which is `SKIP_STANDS`. So the
+     skip note and its time are read off the entries' acts, for a row in a state that carries
+     one.
+   - **A patch that changes `skipped` answers `'read'`.** The rule of section 3 needed more
+     than its words in that direction, and section 3 says to read then.
+   - **A patch that moves a row's `boughtElsewhere` answers `'read'`.** The note of a buy
+     made elsewhere says whether it was made through a basket or on the list page, and when.
+     A patch carries neither.
+   - A skip note that leaves a row with something bought elsewhere answers `'read'`: the
+     note under it is one this client was never sent.
+6. **So four writes of another phone read rather than patch:** a skip, a skip taken back,
+   "they had none" and a buy made through another shopping list. "They had none" moves no
+   version, so the rule of point 1 already reads for it. Each reads the rows at once when
+   it is the first of a burst. A buy, a buy taken back and a change of demand are patched,
+   and so is a row crossed out by velista `0142` or brought back from it by a change of
+   demand.
+7. **`tripItemId` (backend `0201`).** A patch whose `tripItemId` is set and is not the
+   product of the row answers `'read'`. A patch that takes a trip buy back answers `'read'`
+   too, unless the line then counts as the row's product by its favourite or its first
+   product. A line that would count by price is the server's to place.
+8. **The held choices of velista `0140`.** The patch is applied to the entries of the read,
+   `BasketStore.rows` applies the held choices over them and groups with basket-rules, as
+   after a read, and `_pruneHeld` runs after every patch, so a choice is spent exactly when
+   velista `0149` spends it. A buy of a held line under another product reads (point 7),
+   and the choice is spent when that read lands.
+
+**The store (sections 4 to 6).**
+
+9. **A write that only moves numbers is applied as a patch, and no read follows it**:
+   settle, revert, skip, the skip taken back and a change of demand. A write answer the
+   patch cannot apply is folded as before and read after. A rename, an add and a change of
+   product are always folded and read after: a rename changes a name a patch does not carry
+   and can merge rows, and the other two place a line in a row this client may not hold.
+10. **A patch that lands while a read is out is kept and applied again to the answer** when
+    it lands, by the version rule. When the rule cannot tell, the answer is drawn and the
+    rows are read once more at once. A write the patch path applied no longer makes a read
+    that is out go round again, because its patch is applied to the answer instead.
+11. **The rows read is the read of every event**: an event with no entries, a patch that
+    cannot be applied, `basket.updated` and a participant who joins or leaves. It keeps the
+    products, the scopes and the shop the store holds, and makes the full read when a row
+    names a product the store does not hold. A permanent basket reads by id after its first
+    read, as its full read already does, so it asks `GET /v1/baskets/:id/rows` and never
+    `live/rows`.
+12. **The marks read** waits 300 ms from the first `marksMoved` and does not start the wait
+    again, so a burst inside 300 ms costs one request. Marks that move while it is out ask
+    one more after it. An answer is dropped when a read landed while it was out, because
+    that read brought marks at least as new. An event with no entries asks no marks: the
+    read brings them.
+13. **The mapper is all or nothing.** One malformed patch makes the whole `entries` null,
+    and so does an id of `lineIds` that cannot be read, because the entries are the whole
+    truth only about the lines they name. A read whose entry has no `version` reads as 0, so
+    every patch applies over it.
+
+**The memory twin (section 7).**
+
+14. **`BasketMemory.events` is the room.** It sends `basket.linesChanged` with the entries
+    for a settle, a revert, a skip, the skip taken back, a change of demand and a buy or
+    revert made elsewhere, and with the ids alone for a rename, an add and a change of
+    product. The version of a line rises on a buy, a buy taken back, a change of demand, a
+    rename, a new favourite and a buy elsewhere, and not on a skip or a close. The twin also
+    answers the rows read and the marks read. Nothing listens to `events` in the running app.
+
+**The proof.**
+
+15. **The comparison of section 3** is `a read and a patch give the same shopping list` in
+    `basket-store.spec.ts`. It reads the twin, applies the events of one write to that read,
+    and compares the rows, the progress, `pending` and the banner with a read made after the
+    write, field by field. It covers a buy, a buy that finishes a row of two lists, a buy
+    taken back, a change of quantity, a line of a row of two lists taken to zero, a row
+    crossed out and a crossed out row brought back. A skip, "they had none" and a buy
+    through another shopping list are asserted to read (point 6). The held choice is
+    compared in the store: a patch over a held choice draws exactly what a read draws.
+    A spec breaking `asked` in `applyBasketPatch` made four of these cases fail.
+16. **`velista-luna-e2e` gained `sync.spec.ts`.** The page opens a shopping list, a session
+    buys the Milk over the gateway, and the page draws the row bought within one second
+    with no `GET` of the shopping list in the 2.5 s after it. On `dev` it fails at 2028 ms.
+    The suite passed 8 of 8 twice on the final code, and once before a change for lint to
+    the new spec alone, on a Luna slot started with
+    `LUNA_REFERENCE_SEED=0` and a front end slot of shell and velista pointed at it.
+
+**The measurement (progress evidence).** Two browsers signed in as one owner on one
+generated shopping list, development builds, front end slot 1 on Luna slot 2. The first
+browser buys one Nails with the row's reel and marks the commit (`performance.mark`). The
+second marks the first frame that draws the new number. "Before" is `dev` at `cd0c51f2`.
+
+|                                                                         | Before                   | After  |
+| ----------------------------------------------------------------------- | ------------------------ | ------ |
+| Ten buys, each after a quiet time: median from the tap to the row drawn | 1789 ms                  | 153 ms |
+| Ten buys one second apart: the longest                                  | 10851 ms                 | 159 ms |
+| Requests of the second browser for the shopping list                    | 11 `GET /v1/baskets/:id` | none   |
+
+- Before, each buy waited the 1500 ms and a full read. In the burst every event started the
+  wait again, so the first buy was drawn after the last one, 10.9 s later, with one read.
+- After, the second browser made no request to the gateway at all during the 20 buys. The
+  153 ms is the write itself on a slot, where every hop over NATS costs about 50 ms
+  (backend `0205`, point 3), and the event that follows it.
+
+**Left as found.** The three lint warnings of `velista/data-access`
+(`basket-view-memory.ts`) and the three of `velista/feature-shopping-lists`
+(`basket-page.spec.ts`) were on `dev` before this plan.
+
 ## Brief for the agent
 
 ### Objective
@@ -208,8 +343,10 @@ An event with no `entries`, `'read'` from section 2, `basket.updated`, and a par
 who joins or leaves.
 
 - **The first event after a quiet time reads at once.** Events that arrive while that
-  read is out, or within 1500 ms of it, are gathered into one more read at the end. So a
-  burst costs two reads at most, and the first change is on screen after one round trip.
+  read is out, or within 1500 ms of it, are gathered into one more read at the end. The
+  first change is on screen after one round trip. A burst that lasts longer than the
+  ceiling below costs about one read for each 3000 ms it lasts, not two in all ("What
+  the build decided", point 2).
 - **The wait has a ceiling.** A read that was asked for never waits more than 3000 ms,
   however many events follow.
 - **The rows read.** When `GET /v1/baskets/:id/rows` of backend plan `0205` exists, a read
