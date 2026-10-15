@@ -65,6 +65,7 @@ import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
 import { basketDoors } from '../basket-menu';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
+import { HeldBuy } from '../held-buy';
 import { BasketPage } from './basket-page';
 
 /**
@@ -739,7 +740,12 @@ async function render(options: Options = {}): Promise<{
       // test and not the real facade: jsdom hands every test in this file the same
       // `localStorage`, so a test that chose an order would hand it to the next
       // page to open, through the restore the page now runs on load.
-      provideFakeBrowserFacade(options.storage ?? new Map()),
+      //
+      // A device that answered "Don't ask again" by default, so a buy here is
+      // written at once; the shop question (velista `0141`) seeds its own.
+      provideFakeBrowserFacade(
+        options.storage ?? new Map([[StorageKeys.shopAskOff, 'true']])
+      ),
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
@@ -4601,5 +4607,103 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
       expect(note(atShop.fixture).shopChosen()).toBe(true);
     });
+  });
+});
+
+/**
+ * The first buy of a trip asks where you are (velista `0141`, section 1). The page
+ * holds the buy, opens the question over itself, and the answer writes it.
+ */
+describe('the first buy asks where you are', () => {
+  function firstRow(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const milk = () => line('Milk', { left: 5 });
+
+  it('holds the circle of a row and opens the question, writing nothing yet', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map(),
+    });
+
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'shop'],
+      expect.anything()
+    );
+    // It waits in the page's holder: the release is what writes it.
+    await fixture.debugElement.injector.get(HeldBuy).release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes the held buy once the answer releases it', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map(),
+    });
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    await fixture.debugElement.injector.get(HeldBuy).release();
+
+    expect(store.settle).toHaveBeenCalledWith(
+      'row-Milk',
+      expect.objectContaining({ outcome: 'BOUGHT', quantity: 5, from: 5 })
+    );
+  });
+
+  it('holds the reel when it buys, and never when it takes units back', async () => {
+    const { fixture, store } = await render({
+      lines: [line('Milk', { left: 3, bought: 2, state: 'PARTLY' })],
+      storage: new Map(),
+    });
+
+    firstRow(fixture).left.emit({ from: 3, to: 1 });
+    await settleWrites(fixture);
+    expect(store.setLeft).not.toHaveBeenCalled();
+
+    firstRow(fixture).left.emit({ from: 3, to: 4 });
+    await settleWrites(fixture);
+    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 4, 3, {});
+  });
+
+  it('does not ask once the trip answered, and writes at once', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map([
+        [
+          StorageKeys.basketView,
+          JSON.stringify({
+            version: 1,
+            shopAnswered: {
+              value: true,
+              until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            },
+          }),
+        ],
+      ]),
+    });
+
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    expect(store.navigate).not.toHaveBeenCalledWith(
+      ['sheet', 'shop'],
+      expect.anything()
+    );
   });
 });

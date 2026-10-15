@@ -2,6 +2,19 @@
   The app's chrome lives here: header, navigation and footer arrive with the page
   plans. Until then this is just the frame every route renders into.
 -->
+@if (supportSession(); as session) {
+  <!--
+    The strip of a support session (velista `0133`). The first thing in the document,
+    above the main column and outside it, so it is never inert under the tour and it is
+    read first. Over every cover, which is its stylesheet's job.
+  -->
+  <lib-support-strip
+    (end)="endSupportSession()"
+    [until]="session.until"
+    [username]="session.username"
+  />
+}
+
 <!--
   Inert while the tour is up (velista `0099`, section 4): nothing on the screen responds
   to a press, a key or a screen reader while a card explains part of it. The card is

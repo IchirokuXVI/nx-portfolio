@@ -29,6 +29,7 @@
           <div
             [class.is-mixed]="mixed()"
             [class.is-picked]="isChecked(shop)"
+            [class.no-about]="!showAbout()"
             class="pick"
           >
             <label class="row pick-row">
@@ -58,6 +59,7 @@
 
               <input
                 (change)="choose(shop.id)"
+                (click)="pressChecked(shop)"
                 [attr.name]="groupName()"
                 [checked]="isChecked(shop)"
                 class="checkbox pick-radio"
@@ -67,18 +69,21 @@
 
             <!--
               The shop's own page (velista 0121): the label's sibling, so pressing it
-              never picks the shop, and drawn between the words and the radio.
+              never picks the shop, and drawn between the words and the radio. Not
+              under the question at the first buy (velista 0141).
             -->
-            <button
-              (click)="about.emit(shop.id)"
-              [attr.aria-label]="
-                'shops.row.about' | rokuT: { shop: text.title }
-              "
-              class="pick-about"
-              type="button"
-            >
-              <lib-info-icon class="pick-about-glyph" />
-            </button>
+            @if (showAbout()) {
+              <button
+                (click)="about.emit(shop.id)"
+                [attr.aria-label]="
+                  'shops.row.about' | rokuT: { shop: text.title }
+                "
+                class="pick-about"
+                type="button"
+              >
+                <lib-info-icon class="pick-about-glyph" />
+              </button>
+            }
 
             @if (shop.sections; as sections) {
               @if (sections.length > 0) {

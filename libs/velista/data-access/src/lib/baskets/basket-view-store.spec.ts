@@ -1770,3 +1770,81 @@ describe('BasketViewStore: the estimated total', () => {
     expect(harnessed.view.total().leftCents).toBe(210);
   });
 });
+
+/**
+ * The shop question at the first buy of a trip (velista `0141`): the rule read
+ * against what the device holds, and what each answer keeps.
+ */
+describe('BasketViewStore: the shop question', () => {
+  const basket: readonly BasketRow[] = [
+    onLists('l-1', 'Milk', ['l-groceries']),
+  ];
+
+  const OWN_SHOP: BasketShop = {
+    id: 'loc-tejares',
+    supermarketId: 'sm-mercadona',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Ronda de los Tejares 32',
+    city: 'Córdoba',
+    postalCode: '14008',
+    inProfile: true,
+  };
+
+  afterEach(() => jest.useRealTimers());
+
+  it('asks while no shop is chosen and nothing was answered', () => {
+    expect(harness(basket).view.asksForShop()).toBe(true);
+  });
+
+  it('does not ask once a shop is chosen', () => {
+    const harnessed = harness(basket);
+    harnessed.view.setShop('loc-tejares');
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('does not ask on a basket started at a shop', () => {
+    const harnessed = harness(basket);
+    harnessed.own.set(OWN_SHOP);
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('keeps "No shop" for the trip, and asks again after it', () => {
+    jest.useFakeTimers({ now: Date.UTC(2026, 9, 15, 10, 0, 0) });
+    const harnessed = harness(basket);
+
+    harnessed.view.answerShopForTrip();
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+    jest.setSystemTime(Date.UTC(2026, 9, 15, 11, 59, 0));
+    expect(harnessed.view.asksForShop()).toBe(false);
+    jest.setSystemTime(Date.UTC(2026, 9, 15, 12, 0, 0));
+    expect(harnessed.view.asksForShop()).toBe(true);
+  });
+
+  it('keeps the device flag with no end', () => {
+    jest.useFakeTimers({ now: Date.UTC(2026, 9, 15, 10, 0, 0) });
+    const harnessed = harness(basket);
+
+    harnessed.view.neverAskShop();
+
+    expect(harnessed.storage.get(StorageKeys.shopAskOff)).toBe('true');
+    jest.setSystemTime(Date.UTC(2027, 9, 15, 10, 0, 0));
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('keeps the trip answer beside the other properties of the record', () => {
+    const harnessed = harness(basket);
+    harnessed.view.setGrouping('category');
+
+    harnessed.view.answerShopForTrip();
+
+    const stored = JSON.parse(
+      harnessed.storage.get(StorageKeys.basketView) ?? '{}'
+    );
+    expect(stored.grouping.value).toBe('category');
+    expect(stored.shopAnswered.value).toBe(true);
+  });
+});

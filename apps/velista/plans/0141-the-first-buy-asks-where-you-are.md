@@ -1,3 +1,5 @@
+> **PR:** [#728](https://github.com/IchirokuXVI/nx-portfolio/pull/728)
+
 # 0141: the first buy asks where you are
 
 > Asked for by the owner on 2026-10-11: "When you start buying, you will get a prompt
@@ -34,6 +36,125 @@
 
 A buy records its shop only when a shop is chosen in the filter, and nothing asks for one.
 Most buys therefore name no place. This plan asks once, at the first buy of a trip.
+
+## What the build decided
+
+The build of 2026-10-15 settled the points below. Each one is a choice of the builder that
+the owner can overturn. Backend `0202` was on the base branch, so a buy with no shop records
+the cheapest price with no shop and no chain. The basket of the base branch had rows that
+are products (`0139`), crossed out rows (`0142`), held product choices (`0140`, `0149`) and
+patches from events (`0143`). Nothing that the context section names had moved: the paths,
+`BasketViewMemory.location`, `BasketViewStore.settleShop` and `permission()` are where it
+says.
+
+**Where the pieces are.**
+
+1. **The route is `sheet/shop`** over both basket routes, declared with `sheet()` after
+   `sheet/filter`. It is `ShopPickerSheet` again, with `data: { shopAsk: true }`. The
+   filter's own picker stays at `sheet/filter/shop` and never asks. `shopAskPath` and
+   `SHOP_ASK_SEGMENTS` are in `basket-paths.ts`.
+2. **The holder is `HeldBuy`**, provided by `BasketPage` beside `ChangeAcknowledger`, so the
+   page, the settle sheet and the question reach one instance through the page's outlet. It
+   holds the **write**, not its body. The body names the shop, so it is built when the
+   answer releases it, and a shop chosen there is the shop the buy records. A second press
+   while the sheet is open waits behind the first, and both are written in order.
+3. **The settle sheet replaces itself with the question** (`leaveTo`), so one back gesture
+   from the question lands on the basket, not on the settle sheet. "Got all" and "They had
+   none" both ask. A held write reaches nothing of the destroyed sheet: a failure is the
+   page's to show, as it is for the circle of a row. A settle never reports
+   `skippedCount`, so the reopen that the circle has for a revert is not needed.
+4. **The reel asks only when it buys.** A drag that takes units back names no shop, so it is
+   written at once.
+5. **The rule is `asksForShop` in `data-access`**, a pure function over four facts. The
+   store reads them at the press and watches nothing: the shop of the view (which includes
+   the basket's own shop), the lock, the device flag and the trip answer against now.
+6. **The trip answer is `shopAnswered`** in `BasketViewMemory`, with the lifetime of
+   `location` (one constant, `TRIP_MS`). "Don't ask again" is `StorageKeys.shopAskOff`,
+   holding `'true'`, with no end.
+
+**The sheet.**
+
+7. **The look by itself selects the server's pick when it names a candidate, else the
+   nearest.** The section says "the nearest". The pick is the nearest one that the server
+   is sure of, so the two agree in the usual case.
+8. **The title changes only once a shop is found.** While the look runs, the title is the
+   plain "Buying at" over the loading rows of "Near you". A title that asked "Are you buying
+   here?" and then went back to "Buying at" when nothing was found would say something that
+   was not true for a moment.
+9. **A look nobody pressed for draws no failure line.** No shop near, a refused position, a
+   timeout and a failed read are all the plain picker, with Near me. The reason line of the
+   server ("Several shops are close") is not drawn either: the title asks the question. A
+   press on Near me is drawn exactly as in the filter, lines included.
+10. **Near me pressed in the question chooses the server's pick and closes**, as in the filter,
+    and writes the buy. It leaves no message, because the message is the filter sheet's and
+    the question does not land on it.
+11. **A press on the selected shop chooses it.** A checked radio fires no `change`, so
+    `ShopList` and `ShopPicker` take a new input, `pickChecked`. Only the question sets it:
+    on the filter's picker the checked shop is the one already chosen.
+12. **"No shop" sits after "Near you" and before "Recent"**, as in the mock, as a card of its
+    own with the store glyph. It is gone while a word is searched, like the recent shops.
+    `ShopPicker` takes `offerNoShop` and emits `noShop`.
+13. **The cross is at the end of the title row, and the root draws no chevron.** There is no
+    filter to go back to. On a chain's screen the chevron still goes back to the chains.
+14. **The foot is the sheet shell's footer**, which already draws the hairline and no
+    container. The sentence is the plan's, word for word.
+15. **Every way out to the basket answers.** The cross, the scrim and Escape go through
+    `close()`. The back gesture only destroys the sheet, so its teardown records the trip
+    answer and releases the buy when nothing else answered first. A buy is written once,
+    whichever came first.
+16. **A cold load of `sheet/shop` draws the question**, "No shop" and the foot included, and
+    an answer there keeps what it keeps (the shop, the trip answer or the flag) and writes no
+    buy, because none waits.
+
+**Things the plan did not say.**
+
+17. **A guest is asked too.** The plan excludes nobody, and a guest's buy records a shop like
+    anybody's.
+18. **A shop chosen in the question records no trip answer**, which is the table of section 3.
+    So a shopper who chooses a shop and later sets the filter back to "Any of your shops" is
+    asked again at the next buy of that trip.
+19. **Reset in the filter forgets the trip answer**, because Reset writes an empty record. The
+    question then comes back at the next buy. "Don't ask again" is a key of its own and Reset
+    leaves it.
+20. **The e2e suite sets "Don't ask again" in its setup**: `storageState` in
+    `apps/velista-luna-e2e/playwright.config.ts`, and the same state stated in
+    `newVisitor`. Its specs buy with no shop. One buy meets the question: step 3 of
+    `member.spec.ts` clears the flag, buys a row from its circle, answers "No shop", checks
+    that the buy landed, and puts the flag back. The suite stays at 8 specs. The runner's
+    `browser.newContext()` applies the config's storage state, so the walk passed an empty
+    one to see the question.
+21. **The question draws no button to a shop's own page.** That button opens `shops/:id`,
+    which leaves the basket. `ShopList` and `ShopPicker` take `showAbout`, true by default,
+    and only the question turns it off. The words of the row take the room the button had.
+22. **Leaving the basket while the question is open answers nothing, and drops the buy.** With
+    the button gone, the way left is the browser itself: a jump of two entries in the
+    history, an address typed, or a link to another basket. The teardown reads the
+    navigation that destroys the sheet. When its URL is the basket or one of its sheets, it
+    is the back gesture of point 15. Otherwise no trip answer is kept and the held buy is
+    dropped, unwritten. The page lets the basket go as it leaves (`BasketStore.leave`), so a
+    write released then would reach a basket no longer held, and on another basket it would
+    name a row of the first. The press is a buy the person never confirmed a place for, on a
+    screen they left, and a reload loses it in the same way. The constraint "the buy is
+    never lost" holds for every way out of the sheet that stays on the basket.
+23. **A shop chosen in the question regroups the list first, and the buy follows.** Section 3
+    says the opposite order. `pickShop` calls `setShop` and only then releases the held
+    write, because the write builds its body when it is released and the body has to name
+    that shop. `setShop` is also what regroups the list by the sections of the shop (plan
+    `0138`), so the list regroups a moment before the buy lands. The buy still lands on the
+    row that was pressed, because the write names its row key from the press.
+24. **A held buy uses the numbers captured at the press.** The circle and the reel send the
+    `from` that the row showed when it was pressed. A patch of `0143` that moves the row
+    while the question is open makes that `from` stale, and the server refuses the write.
+    Nothing tells the person: no message is drawn for it. The window is the time the
+    question is open, and the row is left unbought, so the person can press it again.
+
+**The browser walk.** At 390 pixels, in English and in Spanish, on a Luna slot with the
+Valencia Colón shop given coordinates by SQL (the demo world has none) and a throwaway spec:
+with location allowed, the question found Colón at 34 m, selected it, and one press chose it
+and wrote the buy with the shop and the chain. With location not allowed, the plain picker
+opened and the page made no position read at all. "No shop" wrote the buy with the cheapest
+price and no shop or chain. The next buy of that trip did not ask. "Don't ask again" stopped
+the question on the trip after. The filter still chose a shop.
 
 ## Brief for the agent
 
@@ -156,12 +277,12 @@ Artboard `BuyingHere.dc.html`.
 
 ## 3. The answers
 
-| The shopper | What is kept | The buy |
-| --- | --- | --- |
-| Presses a shop | The shop, as the filter keeps it | With that shop |
-| Presses "No shop" | An answer for this trip, for 2 hours | With no shop |
-| Presses "Don't ask again" | A flag on the device, under a new storage key, with no end | With no shop |
-| Closes the sheet (the cross, the scrim, Escape, back) | An answer for this trip, for 2 hours | With no shop |
+| The shopper                                           | What is kept                                               | The buy        |
+| ----------------------------------------------------- | ---------------------------------------------------------- | -------------- |
+| Presses a shop                                        | The shop, as the filter keeps it                           | With that shop |
+| Presses "No shop"                                     | An answer for this trip, for 2 hours                       | With no shop   |
+| Presses "Don't ask again"                             | A flag on the device, under a new storage key, with no end | With no shop   |
+| Closes the sheet (the cross, the scrim, Escape, back) | An answer for this trip, for 2 hours                       | With no shop   |
 
 - The answer for the trip is a new field of `BasketViewMemory` with the lifetime of
   `location`.

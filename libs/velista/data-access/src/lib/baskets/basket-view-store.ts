@@ -41,12 +41,14 @@ import { BasketStore } from './basket-store';
 import {
   dropExpired,
   forget,
+  hasExpired,
   holdsLegacyShop,
   NO_BASKET_VIEW_MEMORY,
   parseBasketViewMemory,
   remember,
   type BasketViewMemory,
 } from './basket-view-memory';
+import { asksForShop, SHOP_ASK_OFF } from './shop-ask';
 
 /**
  * The chosen shop, named for a person (velista `0078`, section 3; `0102`).
@@ -544,6 +546,40 @@ export class BasketViewStore {
         ? forget(memory, 'location')
         : remember(memory, 'location', shop, now)
     );
+  }
+
+  // --- The shop question at the first buy of a trip (velista `0141`) ---------
+
+  /**
+   * Whether a press that writes a buy asks where the person is first.
+   *
+   * Read at the press and never watched: the trip's answer is a date compared
+   * against now, like every other property of the record, and the flag can only be
+   * set from the sheet this opens.
+   */
+  asksForShop(): boolean {
+    const answered = this._read()?.shopAnswered;
+    return asksForShop({
+      shopChosen: this.shop() !== null,
+      basketHasShop: this.shopLocked(),
+      neverAsk:
+        this._browser.readStorage(StorageKeys.shopAskOff) === SHOP_ASK_OFF,
+      answeredForTrip:
+        answered !== undefined && !hasExpired(answered, Date.now()),
+    });
+  }
+
+  /**
+   * The question was answered with no shop, by "No shop" or by closing the sheet.
+   * Kept for one trip, the lifetime the chosen shop has.
+   */
+  answerShopForTrip(): void {
+    this._store((memory, now) => remember(memory, 'shopAnswered', true, now));
+  }
+
+  /** "Don't ask again": a flag for this device and every list on it, with no end. */
+  neverAskShop(): void {
+    this._browser.writeStorage(StorageKeys.shopAskOff, SHOP_ASK_OFF);
   }
 
   /**

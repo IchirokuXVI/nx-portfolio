@@ -404,6 +404,27 @@ describe('gatewayInterceptor', () => {
       expect(storage.has(StorageKeys.session)).toBe(false);
     });
 
+    it('tries no refresh for a support session that is over (velista 0133)', async () => {
+      // A refresh does not revive it (backend 0194). In an ordinary tab nothing else
+      // happens, because no ordinary token carries a session to be over.
+      const held = pair(freshToken());
+      tokens.set(held);
+
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'impersonation_ended' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('impersonation_ended');
+      httpMock.expectNone(`${GATEWAY}/v1/auth/refresh`);
+      expect(tokens.tokens()).toEqual(held);
+    });
+
     it('keeps the session when a basket says the account is not a participant', async () => {
       // A member removed from a shared list reloads the basket. Their token is good;
       // the basket is what refuses them. Refreshing would be refused the same way,

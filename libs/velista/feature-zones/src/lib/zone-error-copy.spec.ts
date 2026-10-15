@@ -66,6 +66,12 @@ describe('zoneErrorKey', () => {
         'the usernameChange bucket',
       ],
       ['internal', 'zone.read', 'zone.error.failed', 'the generic panel'],
+      [
+        'impersonation_not_allowed',
+        'member.govern',
+        'support.refused',
+        'a support session handing the group on (velista 0133)',
+      ],
     ];
 
   it.each(rows)('maps %s on %s to %s (%s)', (code, operation, expected) => {

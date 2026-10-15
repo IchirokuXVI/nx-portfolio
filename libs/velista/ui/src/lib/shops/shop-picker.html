@@ -62,7 +62,9 @@
               [groups]="nearGroups()"
               [mixed]="true"
               [mode]="'pick'"
+              [pickChecked]="pickChecked()"
               [pickedId]="pickedId()"
+              [showAbout]="showAbout()"
               groupName="shop-pick-near"
             />
           }
@@ -92,6 +94,33 @@
 
 @if (openKey() === null) {
   <!--
+    "No shop" (velista 0141), a row of its own under the shops near the device,
+    where the question at the first buy offers it. The filter offers no shop with
+    its own row, so it never sets this. Gone while a search is typed.
+  -->
+  @if (offerNoShop() && !searching()) {
+    <div class="card no-shop">
+      <label class="no-shop-row">
+        <lib-chain-logo [logo]="noShopLogo" />
+        <span class="no-shop-body">
+          <span class="no-shop-title">{{
+            'basket.shopAsk.noShop' | rokuT
+          }}</span>
+          <span class="no-shop-hint">
+            {{ 'basket.shopAsk.noShopHint' | rokuT }}
+          </span>
+        </span>
+        <input
+          (change)="noShop.emit()"
+          class="no-shop-radio"
+          name="shop-pick-none"
+          type="radio"
+        />
+      </label>
+    </div>
+  }
+
+  <!--
     The shops this person bought at recently, newest first (velista 0103), which
     are also the usual shops (0124). Not drawn when there are none, never for a
     guest, whom nobody asks, and gone while a search is typed, when the matches are
@@ -113,7 +142,9 @@
           [groups]="recentGroups()"
           [mixed]="true"
           [mode]="'pick'"
+          [pickChecked]="pickChecked()"
           [pickedId]="pickedId()"
+          [showAbout]="showAbout()"
           groupName="shop-pick-recent"
         />
       </section>
@@ -177,7 +208,9 @@
         [groups]="matches()"
         [mixed]="true"
         [mode]="'pick'"
+        [pickChecked]="pickChecked()"
         [pickedId]="pickedId()"
+        [showAbout]="showAbout()"
       />
     }
   } @else {
@@ -206,7 +239,9 @@
       (pick)="picked.emit($event)"
       [groups]="groups()"
       [mode]="'pick'"
+      [pickChecked]="pickChecked()"
       [pickedId]="pickedId()"
+      [showAbout]="showAbout()"
       class="chain-shops"
     />
   }

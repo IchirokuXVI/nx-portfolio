@@ -1,0 +1,99 @@
+// The strip of a support session (velista `0133`, target 5).
+//
+// In the app's column, as its first item, rather than fixed over it: a strip in the
+// flow takes its real height out of the layout, so it covers nothing, and the page slot
+// below it is shorter by exactly its height (the reason the bar is in the column,
+// velista 0106). `position: relative` and the z-index are for the covers, which are
+// fixed to the viewport and would otherwise paint over it.
+:host {
+  position: relative;
+  z-index: var(--app-support-strip-z);
+  display: block;
+  flex: none;
+  block-size: var(--app-support-strip-height);
+  background: var(--app-support-strip-bg);
+  color: var(--app-support-strip-fg);
+}
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  box-sizing: border-box;
+  block-size: 100%;
+  // The top inset belongs to the strip while it is up: the app root zeroes
+  // `--app-safe-top` for everything below it, so the header does not clear the notch a
+  // second time.
+  padding-block-start: var(--app-support-strip-safe-top);
+  padding-inline: calc(var(--app-space-5) + var(--app-safe-left))
+    calc(var(--app-space-2) + var(--app-safe-right));
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-heading);
+}
+
+.eye {
+  flex: none;
+  font-size: var(--app-icon-md);
+}
+
+.who,
+.left {
+  margin: 0;
+  white-space: nowrap;
+}
+
+// The name takes the room that is left and ends in an ellipsis. The time and "End"
+// never shrink, because the time is the one number that changes and "End" is the one
+// thing to press.
+.who {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  b {
+    font-weight: 700;
+  }
+}
+
+.left {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+// The target is the whole height of the row; the face drawn inside it is smaller, so
+// the strip reads as one line and not as a toolbar.
+.end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  block-size: var(--app-support-strip-row);
+  min-inline-size: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  // The focus ring of the theme is drawn for its grounds, and the strip's ground is
+  // the theme's ink, so the ring here is the strip's own text colour.
+  &:focus-visible {
+    outline: none;
+  }
+
+  &:focus-visible .end-face {
+    outline: var(--app-focus-ring-width) solid var(--app-support-strip-fg);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.end-face {
+  display: flex;
+  align-items: center;
+  block-size: calc(var(--app-support-strip-row) - var(--app-space-5));
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-support-strip-fg);
+  border-radius: var(--app-radius-sm);
+  font-weight: 600;
+}

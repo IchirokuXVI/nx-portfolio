@@ -55,6 +55,12 @@ export function authErrorCopy(
     return GENERIC;
   }
 
+  // A support session asked for something only the person may do (backend `0194`):
+  // here, securing a guest account with an address. Whatever the operation.
+  if (error.code === 'impersonation_not_allowed') {
+    return { key: 'support.refused', placement: 'pair' };
+  }
+
   // Five a minute on login and three on register, and the copy says the same thing
   // either way, so it is answered before the split.
   if (error.code === 'rate_limited') {

@@ -98,11 +98,13 @@ import {
   visitTime,
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
+import { SHOP_ASK_SEGMENTS } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import {
   basketGroupScope,
   changeableLineIds,
 } from '../change-sheet/change-targets';
+import { HeldBuy } from '../held-buy';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
 
@@ -211,7 +213,9 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
   // `BasketChangeStore` is **not** here. It is on the route beside
   // `BasketStore`, because the changes sheet is a child route that is
   // constructed and destroyed while this page stays.
-  providers: [ChangeAcknowledger],
+  // `HeldBuy` here, for `ChangeAcknowledger`'s reason: the sheets that hold and
+  // release a buy are drawn in this page's outlet (velista `0141`).
+  providers: [ChangeAcknowledger, HeldBuy],
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
@@ -1181,14 +1185,40 @@ export class BasketPage {
    * exactly as it does when the sheet sends the same body.
    */
   protected settleRow(row: BasketRowModel): void {
-    void this._toggle(row, () =>
-      this._store.settle(row.rowKey, {
-        outcome: 'BOUGHT',
-        quantity: row.left,
-        from: row.left,
-        ...this._settleAt(row),
-      })
+    this._buy(() =>
+      this._toggle(row, () =>
+        this._store.settle(row.rowKey, {
+          outcome: 'BOUGHT',
+          quantity: row.left,
+          from: row.left,
+          ...this._settleAt(row),
+        })
+      )
     );
+  }
+
+  // --- The first buy asks where you are (velista `0141`) ---------------------
+
+  private readonly _held = inject(HeldBuy);
+
+  /**
+   * Write a buy, or hold it and ask where the person is first.
+   *
+   * The question comes at the first buy of a trip with no shop chosen
+   * (`BasketViewStore.asksForShop`). The write is held, not its body: the body
+   * names the shop, so it is worked out when the answer releases it, and a shop
+   * chosen there is the shop this buy records.
+   */
+  private _buy(write: () => Promise<void>): void {
+    if (!this._view.asksForShop()) {
+      void write();
+      return;
+    }
+    this._held.hold(write);
+    void this._router.navigate(sheetSegments(...SHOP_ASK_SEGMENTS), {
+      relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
+    });
   }
 
   /**
@@ -1267,7 +1297,20 @@ export class BasketPage {
    * the server divides oldest entry first, which is what it did before a heading
    * existed.
    */
-  protected async setRowLeft(
+  protected setRowLeft(
+    row: BasketViewRow,
+    change: { from: number; to: number }
+  ): void {
+    // Only the settling direction is a buy. Taking units back names no shop, so
+    // it never asks (velista `0141`).
+    if (change.to < change.from) {
+      this._buy(() => this._writeRowLeft(row, change));
+      return;
+    }
+    void this._writeRowLeft(row, change);
+  }
+
+  private async _writeRowLeft(
     row: BasketViewRow,
     change: { from: number; to: number }
   ): Promise<void> {

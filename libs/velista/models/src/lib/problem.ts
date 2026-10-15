@@ -160,6 +160,18 @@ export const ERROR_CODES = [
    */
   'impersonation_not_allowed',
   /**
+   * The support session this token belongs to is over (backend `0194`), as a 401:
+   * ended from the strip, past its deadline, or its operator disabled. A refresh does
+   * not revive it, so the tab drops the pair and draws the ended page (velista `0133`).
+   */
+  'impersonation_ended',
+  /**
+   * The handoff code is missing, used, too old, or its session ended (backend `0194`),
+   * as a 400. One code for all four, on purpose, so the answer says nothing about
+   * which. The handoff page says the link no longer works (velista `0133`).
+   */
+  'impersonation_code_invalid',
+  /**
    * A sign in link was opened while another account is signed in, and the link is
    * still good (backend `0210`), as a 409. Nothing was spent. The reset page asks
    * before it sends the link again with `switchAccount` (velista `0148`).
