@@ -1,3 +1,5 @@
+> **PR:** [#718](https://github.com/IchirokuXVI/nx-portfolio/pull/718)
+
 # 0149: a held product choice lets go once it is spent
 
 > Asked for by the owner on 2026-10-15: "create a plan to fix the bugs you mentioned", after
