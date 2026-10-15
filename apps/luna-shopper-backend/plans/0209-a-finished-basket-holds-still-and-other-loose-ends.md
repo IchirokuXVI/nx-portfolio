@@ -1,3 +1,5 @@
+> **PR:** [#724](https://github.com/IchirokuXVI/nx-portfolio/pull/724)
+
 # 0209: a finished basket holds still, and other loose ends
 
 > Asked for by the owner on 2026-10-14: "create a cleanup plan for the backend to fix the
