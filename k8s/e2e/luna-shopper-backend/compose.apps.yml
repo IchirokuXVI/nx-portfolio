@@ -95,10 +95,11 @@ services:
       GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
       GOOGLE_CLIENT_SECRET: e2e-client-secret
       GOOGLE_CALLBACK_URL: http://localhost:3000/v1/auth/google/callback
-      # Where the callback sends the browser back. `{locale}` is substituted with
-      # the locale the flow started in; the app lives under a path that follows
-      # the locale segment, so a plain prefix could not express it.
-      APP_BASE_URL: http://localhost:4200/{locale}/velista
+      # Where the callback and the support handoff send the browser: velista on
+      # its own origin, the shape the clusters use (`https://velista.app/{locale}`)
+      # and the origin MAIL_VERIFY_BASE_URL below names. `{locale}` is
+      # substituted with a supported locale.
+      APP_BASE_URL: http://localhost:4205/{locale}
       # The byte cap the spoken turn route's multipart interceptor enforces
       # (plan 0041). The gateway is where an upload is actually refused, so the
       # number has to be here as well as on the assistant.

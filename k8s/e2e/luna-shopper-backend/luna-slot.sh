@@ -73,12 +73,16 @@
 #   git ignored file and removes the whole class of problem.
 #
 #   APP_BASE_URL and the two MAIL_*_BASE_URL are SINGULAR: they are where the
-#   Google callback and the verification links send a browser, and a redirect can
-#   only have one target. So they have to name one front end, which is what
-#   `--app-slot <n>` chooses. It defaults to 0, the shared front end, because that
-#   is the one a backend serving several worktrees is most likely to be driven
-#   from. Only the OAuth and mail round trips are affected by getting it wrong;
-#   ordinary API calls from any slot work regardless.
+#   Google callback, the support handoff and the mail links send a browser, and a
+#   link can only have one target. So they name one front end slot, and all three
+#   name velista on its own origin, the shape the clusters use
+#   (`https://velista.app/{locale}`): `http://localhost:<velista port>/{locale}`.
+#   Which slot is resolve_app_slot's rule, in this order: `--app-slot <n>`, then
+#   an --app-slot this worktree recorded, then the front end slot of this same
+#   worktree when its velista points at this backend, then the lowest front end
+#   slot in any worktree whose velista points at this backend, then the front end
+#   slot with this backend's number. Only those round trips are affected by
+#   getting it wrong; ordinary API calls from any slot work regardless.
 #
 # --- one checkout, two slots: --ephemeral ------------------------------------
 #
@@ -169,12 +173,6 @@ MAX_SLOT=9
 # one checkout that cannot move. `luna-slot.sh 0` is still accepted, because
 # asking for it explicitly means it.
 MIN_AUTO_SLOT=1
-
-# Which front end slot the singular URLs (the Google callback, the mail links)
-# point at when nobody says. Slot 0 is the developer's own front end, which is the
-# one a shared backend is most likely to be driven from. A default, not an
-# assumption about who may call: CORS allows every slot regardless.
-DEFAULT_APP_SLOT=0
 
 # --- what a re-run is allowed to rewrite -------------------------------------
 #
@@ -768,9 +766,13 @@ options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
   --services a,b         limit --up and --restart to these (default: all of
                          them). The compose stack is always the whole of it.
-  --app-slot <n>         which Angular slot the Google callback and the mail
-                         links send a browser to (default 0). Only those; CORS
-                         allows every Angular slot no matter what this says.
+  --app-slot <n>         which Angular slot the Google callback, the support
+                         handoff and the mail links open velista on, with --up,
+                         --restart or a configure. Kept across re-runs once
+                         named. Without it: this worktree's front end slot when
+                         its velista points here, else the lowest front end slot
+                         pointing here, else the slot with this number. Only
+                         those links; CORS allows every Angular slot regardless.
   --keep-data            --down stops the containers instead of removing them
                          and their volumes, so the databases survive. It also
                          LOCKS the slot, so --auto will not hand those databases
@@ -1076,8 +1078,8 @@ write_config() {
   HARVESTER_PORT="$(luna_port harvester "$slot")"
   ASSISTANT_PORT="$(luna_port assistant "$slot")"
 
-  # The one front end the singular URLs point at. See the note at the top: this is
-  # a choice, not an inference, because a redirect target cannot be a list.
+  # The one front end the singular URLs point at. See the note at the top and
+  # resolve_app_slot: a redirect target cannot be a list, so one slot is picked.
   local SHELL_PORT VELISTA_PORT
   SHELL_PORT="$(frontend_port shell "$app_slot")"
   VELISTA_PORT="$(frontend_port velista "$app_slot")"
@@ -1143,9 +1145,11 @@ write_config() {
 # one file that already describes it.
 LUNA_SLOT=${slot}
 # Which front end slot the singular redirect and mail URLs point at. Independent
-# of LUNA_SLOT on purpose (see the header); kept here so a plain re-run of this
-# script preserves the choice instead of silently resetting it to the default.
+# of LUNA_SLOT on purpose (see the header). LUNA_APP_SLOT_CHOSEN=1 says somebody
+# named it with --app-slot, so a re-run keeps it; empty says resolve_app_slot
+# worked it out, so a re-run works it out again and follows a new pairing.
 LUNA_APP_SLOT=${app_slot}
+LUNA_APP_SLOT_CHOSEN=${APP_SLOT_CHOSEN:-}
 COMPOSE_PROJECT_NAME=${project}
 LUNA_AUTH_DB_PORT=${AUTH_DB_PORT}
 LUNA_CORE_DB_PORT=${CORE_DB_PORT}
@@ -1250,9 +1254,12 @@ PORT=${GATEWAY_PORT}
 GOOGLE_CLIENT_ID=your-dev-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-dev-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:${GATEWAY_PORT}/v1/auth/google/callback
-# Where the callback sends the browser. {locale} is substituted with the locale
-# the flow started in; the app sits under a path that follows the locale segment.
-APP_BASE_URL=http://localhost:${SHELL_PORT}/{locale}/velista
+# Where the Google callback and the support handoff send the browser: velista on
+# its own origin, where its mount is empty, so the locale is the first segment.
+# The clusters use the same shape (https://velista.app/{locale}). {locale} is
+# substituted with a supported locale, and the gateway appends auth/callback or
+# auth/impersonate.
+APP_BASE_URL=http://localhost:${VELISTA_PORT}/{locale}
 # The byte cap the spoken turn route's multipart interceptor enforces (plan
 # 0041). The gateway is where an upload is actually refused, so the number lives
 # here as well as in the assistant's env.
@@ -1602,8 +1609,10 @@ ${headline}
   prometheus      : http://localhost:${PROMETHEUS_PORT}
   cors            : every front end slot (0..${MAX_SLOT}), shell and velista origins both.
                     Any Angular slot can call this backend, and several can at once.
-  redirects       : Angular slot ${app_slot} (http://localhost:${SHELL_PORT}), for the Google
-                    callback and the mail links only, which can name just one.
+  app links       : Angular slot ${app_slot}, velista at http://localhost:${VELISTA_PORT}/{locale}
+                    (${APP_SLOT_WHY:-as recorded})
+                    For the Google callback, the support handoff and the mail
+                    links only, which can name just one.
                     Change it with --app-slot <n>.
 
 Start the whole thing (compose, migrations, all seven services):
@@ -1694,14 +1703,107 @@ require_config() {
   [[ -n "${LUNA_SLOT:-}" ]]
 }
 
-# The front end this worktree already points its redirects at, so re-running the
-# script to move slots does not quietly reset a choice somebody made.
+# The front end this worktree's descriptor records its links pointing at, or
+# nothing. resolve_app_slot decides whether a re-run keeps it.
 current_app_slot() {
   local value=''
   if [[ -f "$SLOT_ENV" ]]; then
     value="$(sed -n 's/^LUNA_APP_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$SLOT_ENV" | head -n 1)"
   fi
-  echo "${value:-$DEFAULT_APP_SLOT}"
+  echo "$value"
+}
+
+# "<front end slot> <backend slot>" from the ng-slot claim of a worktree, or
+# nothing. ng-slot.sh writes both into tools/dev/.env.ng-slot, and --down there
+# deletes the file, so a front end that gave its slot back is not found here.
+ng_pairing_of_worktree() {
+  local file="$1/tools/dev/.env.ng-slot" ng backend
+  [[ -f "$file" ]] || return 0
+  ng="$(sed -n 's/^NG_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$file" | head -n 1)"
+  backend="$(sed -n 's/^NG_BACKEND_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$file" | head -n 1)"
+  [[ -n "$ng" && -n "$backend" ]] && echo "$ng $backend"
+  return 0
+}
+
+# Which front end slot the singular URLs of luna slot $1 name. $2 is an
+# --app-slot from the command line, or empty.
+#
+# It sets three globals rather than echoing, because the caller needs all three:
+# APP_SLOT, APP_SLOT_CHOSEN (1 when a person named it) and APP_SLOT_WHY.
+#
+# The rule, first match wins:
+#
+#   1. --app-slot <n>.
+#   2. An --app-slot this descriptor recorded (LUNA_APP_SLOT_CHOSEN=1). A choice
+#      somebody made survives a re-run and a slot move.
+#   3. The front end slot of this same worktree, when its velista points at this
+#      backend. The same pairing ng-slot's detect_backend_slot makes from the
+#      other side: same worktree, not same number.
+#   4. The lowest front end slot of any worktree whose velista points at this
+#      backend. Several front ends may share one backend and a link can name one,
+#      so the lowest is a pick, and the summary says which others there were.
+#   5. The front end slot with this backend's number. Nothing points here yet, so
+#      this is a guess, but a guess on this slot's band and never slot 0's ports
+#      for a slot that is not 0.
+#
+# Rules 3 to 5 are worked out again on every run, so after a front end pairs
+# with a backend that is already up, `--restart --services gateway,auth` in the
+# backend's worktree repoints the links.
+resolve_app_slot() {
+  local slot="$1" explicit="$2"
+  APP_SLOT=''
+  APP_SLOT_CHOSEN=''
+  APP_SLOT_WHY=''
+
+  if [[ -n "$explicit" ]]; then
+    APP_SLOT="$explicit"
+    APP_SLOT_CHOSEN=1
+    APP_SLOT_WHY='named with --app-slot'
+    return 0
+  fi
+
+  local recorded
+  recorded="$(current_app_slot)"
+  if [[ -n "$recorded" ]] && grep -q '^LUNA_APP_SLOT_CHOSEN=1[[:space:]]*$' "$SLOT_ENV" 2>/dev/null; then
+    APP_SLOT="$recorded"
+    APP_SLOT_CHOSEN=1
+    APP_SLOT_WHY='the --app-slot this slot recorded'
+    return 0
+  fi
+
+  local pairing ng backend
+  pairing="$(ng_pairing_of_worktree "$root")"
+  if [[ -n "$pairing" ]]; then
+    read -r ng backend <<< "$pairing"
+    if [[ "$backend" == "$slot" ]]; then
+      APP_SLOT="$ng"
+      APP_SLOT_WHY="this worktree's front end slot ${ng} points its velista here"
+      return 0
+    fi
+  fi
+
+  local wt
+  local -a paired=()
+  while IFS= read -r wt; do
+    [[ -n "$wt" ]] || continue
+    pairing="$(ng_pairing_of_worktree "$wt")"
+    [[ -n "$pairing" ]] || continue
+    read -r ng backend <<< "$pairing"
+    [[ "$backend" == "$slot" ]] && paired+=("$ng")
+  done < <(worktree_paths)
+  if (( ${#paired[@]} )); then
+    mapfile -t paired < <(printf '%s\n' "${paired[@]}" | sort -n -u)
+    APP_SLOT="${paired[0]}"
+    if (( ${#paired[@]} == 1 )); then
+      APP_SLOT_WHY="front end slot ${APP_SLOT} points its velista here"
+    else
+      APP_SLOT_WHY="the lowest of the front end slots pointing here: ${paired[*]}"
+    fi
+    return 0
+  fi
+
+  APP_SLOT="$slot"
+  APP_SLOT_WHY="no front end slot points here yet; the one with this number"
 }
 
 # --- up ----------------------------------------------------------------------
@@ -1863,16 +1965,23 @@ up() {
   fi
 
   if [[ -n "$requested_slot" ]]; then
-    write_config "$requested_slot" "${app_slot:-$(current_app_slot)}"
+    resolve_app_slot "$requested_slot" "$app_slot"
+    write_config "$requested_slot" "$APP_SLOT"
   elif ! require_config; then
     # "--up without generating the env file does that first" is the whole point:
     # an agent that has just made a worktree should need one command, not two.
     local slot
     slot="$(find_free_slot)"
     echo "==> this worktree has no slot yet; taking the lowest free one: ${slot}"
-    write_config "$slot" "${app_slot:-$DEFAULT_APP_SLOT}"
-  elif [[ -n "$app_slot" && "$app_slot" != "${LUNA_APP_SLOT:-}" ]]; then
-    write_config "$LUNA_SLOT" "$app_slot"
+    resolve_app_slot "$slot" "$app_slot"
+    write_config "$slot" "$APP_SLOT"
+  else
+    # The slot is kept, but the front end its links name is worked out again, so
+    # a front end that paired with this backend since the last run is followed.
+    resolve_app_slot "$LUNA_SLOT" "$app_slot"
+    if [[ "$APP_SLOT" != "${LUNA_APP_SLOT:-}" || "$APP_SLOT_CHOSEN" != "${LUNA_APP_SLOT_CHOSEN:-}" ]]; then
+      write_config "$LUNA_SLOT" "$APP_SLOT"
+    fi
   fi
 
   require_config || { echo "could not read $SLOT_ENV after writing it" >&2; return 1; }
@@ -2107,17 +2216,30 @@ describe_port_holder() {
 # databases and their volumes with it. Restarting a service should never cost the
 # data somebody has been working with.
 restart_services() {
-  local services_csv="$1" timeout="$2"
+  local services_csv="$1" timeout="$2" app_slot="$3"
 
   # Same as --down: nothing was recorded, so the descriptor is rendered again
   # from the number on the command line.
   if [[ -n "$EPHEMERAL" ]]; then
-    write_config "$EPHEMERAL_SLOT" "$DEFAULT_APP_SLOT" > /dev/null
+    resolve_app_slot "$EPHEMERAL_SLOT" "$app_slot"
+    write_config "$EPHEMERAL_SLOT" "$APP_SLOT" > /dev/null
   fi
 
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing to restart." >&2
     return 1
+  fi
+
+  # The front end the links name is worked out again (resolve_app_slot), so a
+  # restart after a front end paired with this backend repoints them. Only the
+  # derived keys move; the rest of every .env is merged back as it was.
+  if [[ -z "$EPHEMERAL" ]]; then
+    resolve_app_slot "$LUNA_SLOT" "$app_slot"
+    if [[ "$APP_SLOT" != "${LUNA_APP_SLOT:-}" || "$APP_SLOT_CHOSEN" != "${LUNA_APP_SLOT_CHOSEN:-}" ]]; then
+      write_config "$LUNA_SLOT" "$APP_SLOT" > /dev/null
+      require_config
+      echo "==> app links now open front end slot ${APP_SLOT} (${APP_SLOT_WHY})"
+    fi
   fi
 
   local -a wanted=()
@@ -2249,7 +2371,7 @@ release_slot() {
   echo "==> giving Luna Shopper slot $LUNA_SLOT back"
 
   MERGE_MODE='strip'
-  write_config "$LUNA_SLOT" "$(current_app_slot)"
+  write_config "$LUNA_SLOT" "${LUNA_APP_SLOT:-$LUNA_SLOT}"
   MERGE_MODE=''
 
   rm -f "$SLOT_ENV"
@@ -2270,7 +2392,8 @@ down() {
   # on the command line, so this produces the same file the --up produced even
   # when the directory it lived in is gone.
   if [[ -n "$EPHEMERAL" ]]; then
-    write_config "$EPHEMERAL_SLOT" "$DEFAULT_APP_SLOT" > /dev/null
+    resolve_app_slot "$EPHEMERAL_SLOT" ''
+    write_config "$EPHEMERAL_SLOT" "$APP_SLOT" > /dev/null
   fi
 
   if ! require_config; then
@@ -2622,10 +2745,13 @@ case "${action:-}" in
   list) list ;;
   unlock) unlock "$slot_arg" ;;
   down) down "$profile" "$keep_data" "$keep_slot" ;;
-  restart) restart_services "$services_csv" "$timeout" ;;
+  restart) restart_services "$services_csv" "$timeout" "$app_slot" ;;
   up) up "$slot_arg" "$profile" "$timeout" "$app_slot" "$services_csv" ;;
-  # An --app-slot given on its own keeps the slot this worktree already has, and a
-  # re-run with neither keeps the front end it was already pointed at.
-  configure) write_config "$slot_arg" "${app_slot:-$(current_app_slot)}" ;;
+  # A re-run keeps a front end somebody named with --app-slot, and otherwise
+  # works the front end out again (resolve_app_slot).
+  configure)
+    resolve_app_slot "$slot_arg" "$app_slot"
+    write_config "$slot_arg" "$APP_SLOT"
+    ;;
   *) usage; exit 2 ;;
 esac

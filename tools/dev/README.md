@@ -253,6 +253,16 @@ Nothing on the backend side has to agree in advance: `luna-slot` allows **every*
 front end slot's origin, so any of them can call any backend without being
 configured into it.
 
+The one thing a backend names in the other direction is **where its links open**:
+the Google callback, the support handoff (`APP_BASE_URL`) and the mail links
+(`MAIL_*_BASE_URL`). A link has one target, so it names velista on one front end
+slot, on velista's own origin as in the clusters:
+`http://localhost:<velista port>/{locale}`. `luna-slot` reads the pairing this
+script records (`NG_SLOT` and `NG_BACKEND_SLOT` in `tools/dev/.env.ng-slot`) to
+pick that slot; see `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md`.
+A backend already up when a front end pairs with it keeps its old links until
+`luna-slot.sh --restart --services gateway,auth` in its worktree.
+
 ## How it works, and why it is not simply a port in project.json
 
 The ports cannot be overridden in `project.json`. `nx serve shell` runs the module
