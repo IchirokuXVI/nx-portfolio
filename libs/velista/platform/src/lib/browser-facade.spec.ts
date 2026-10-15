@@ -225,6 +225,32 @@ describe('BrowserFacade', () => {
       expect(sessionStorage.getItem('a:velista')).toBeNull();
       expect(sessionStorage.getItem('b:shell')).toBe('1');
     });
+
+    // The old document runs on until the new one commits. A refresh that lands in that
+    // window must not change what the new document reads.
+    it('writes and removes nothing once it has replaced the document', () => {
+      const facade = facadeFor(true);
+      const replace = jest.fn();
+      jest
+        .spyOn(facade, 'location', 'get')
+        .mockReturnValue({ replace } as unknown as Location);
+      sessionStorage.setItem(StorageKeys.session, 'the new pair');
+      sessionStorage.setItem('a:velista', '1');
+
+      facade.replaceDocument('/home');
+      facade.writeStorage(StorageKeys.session, 'a late refresh');
+      facade.removeStorage('a:velista');
+      facade.writeSessionStorage(StorageKeys.supportSession, '2');
+      facade.removeSessionStorage('a:velista');
+      facade.removeSessionStorageWhere(() => true);
+      facade.replaceDocument('/auth/support-ended');
+
+      expect(sessionStorage.getItem(StorageKeys.session)).toBe('the new pair');
+      expect(sessionStorage.getItem(StorageKeys.supportSession)).toBe('1');
+      expect(sessionStorage.getItem('a:velista')).toBe('1');
+      expect(replace).toHaveBeenCalledTimes(1);
+      expect(replace).toHaveBeenCalledWith('/home');
+    });
   });
 
   describe('on the server', () => {

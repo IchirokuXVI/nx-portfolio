@@ -76,6 +76,16 @@ export const SUPPORT_ENDED_SEGMENTS = ['auth', 'support-ended'] as const;
  * it is an ordinary tab, and so is any reload of it.
  *
  * In an ordinary tab nothing here runs except the handoff.
+ *
+ * ## A handoff in a tab that already holds a session
+ *
+ * An operator can open a second link in a tab whose earlier session is still live.
+ * From the moment {@link exchange} starts, that earlier session does not end this
+ * document: an end it asks for waits for the answer, because ending now would replace
+ * the handoff page after its code was spent. A good code then begins the new session.
+ * Any other answer lets the held end go ahead. After `begin` or an end has replaced the
+ * document, the facade ignores every later write, so a late refresh of the earlier pair
+ * cannot land in the storage the new document reads.
  */
 // Provided by the app layer, never root: rule D5. It reaches `TokenStore`.
 @Injectable()
@@ -93,6 +103,8 @@ export class ImpersonationSession {
   private _timer: ReturnType<typeof setTimeout> | null = null;
   private _ending = false;
   private _pressed = false;
+  private _handingOff = false;
+  private _finishHeld = false;
 
   constructor() {
     if (!this._state.active) {
@@ -115,6 +127,21 @@ export class ImpersonationSession {
    * is a failure rather than a session.
    */
   async exchange(code: string): Promise<ImpersonationExchange> {
+    this._handingOff = true;
+    const outcome = await this._exchange(code);
+
+    // A good code goes on to `begin`, which replaces this document, so the hold stays.
+    if (outcome.state !== 'opened') {
+      this._handingOff = false;
+      if (this._finishHeld) {
+        this._finishHeld = false;
+        this._finish();
+      }
+    }
+    return outcome;
+  }
+
+  private async _exchange(code: string): Promise<ImpersonationExchange> {
     try {
       const body = await firstValueFrom(
         this._http.post<unknown>(
@@ -211,6 +238,10 @@ export class ImpersonationSession {
 
   private _finish(): void {
     if (this._ending) {
+      return;
+    }
+    if (this._handingOff) {
+      this._finishHeld = true;
       return;
     }
     this._ending = true;

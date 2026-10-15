@@ -81,8 +81,13 @@ interface Setup {
 
 /**
  * `tab` stands for `sessionStorage` and `persisted` for whatever the facade's
- * persisted keys use, which in an active tab is `sessionStorage` too: the facade's own
- * spec proves that routing, so here the two are kept apart to see who writes where.
+ * persisted keys use. In an ordinary tab the two are kept apart to see who writes
+ * where. In an active tab the persisted keys are `sessionStorage` too, so a spec passes
+ * one `Map` for both: the facade's own spec proves that routing.
+ *
+ * The double keeps the facade's rule for leaving a document: after the first
+ * `replaceDocument`, every write and every removal does nothing, and so does a second
+ * call. `browser-facade.spec.ts` proves that rule on the real facade.
  */
 function setUp(options: {
   readonly active: boolean;
@@ -95,8 +100,16 @@ function setUp(options: {
     new Map<string, string>(
       options.active ? [[StorageKeys.supportSession, '1']] : []
     );
+  let leaving = false;
   const replaceDocument = jest.fn();
   const written: string[] = [];
+  const unlessLeaving =
+    <A extends unknown[]>(write: (...args: A) => void) =>
+    (...args: A) => {
+      if (!leaving) {
+        write(...args);
+      }
+    };
 
   TestBed.configureTestingModule({
     providers: [
@@ -111,16 +124,29 @@ function setUp(options: {
       { provide: APP_VERSION, useValue: '1.0.0' },
       { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
       provideFakeBrowserFacade(persisted, {
+        writeStorage: unlessLeaving(
+          (key: string, value: string) => void persisted.set(key, value)
+        ),
+        removeStorage: unlessLeaving(
+          (key: string) => void persisted.delete(key)
+        ),
         readSessionStorage: (key: string) => tab.get(key) ?? null,
-        writeSessionStorage: (key: string, value: string) => {
+        writeSessionStorage: unlessLeaving((key: string, value: string) => {
           written.push(key);
           tab.set(key, value);
-        },
-        removeSessionStorage: (key: string) => void tab.delete(key),
-        removeSessionStorageWhere: (match: (key: string) => boolean) => {
-          [...tab.keys()].filter(match).forEach((key) => tab.delete(key));
-        },
-        replaceDocument,
+        }),
+        removeSessionStorage: unlessLeaving(
+          (key: string) => void tab.delete(key)
+        ),
+        removeSessionStorageWhere: unlessLeaving(
+          (match: (key: string) => boolean) => {
+            [...tab.keys()].filter(match).forEach((key) => tab.delete(key));
+          }
+        ),
+        replaceDocument: unlessLeaving((url: string) => {
+          leaving = true;
+          replaceDocument(url);
+        }),
       }),
       ...VELISTA_DATA_ACCESS_PROVIDERS,
     ],
@@ -138,6 +164,25 @@ function setUp(options: {
     replaceDocument,
     written,
   };
+}
+
+/**
+ * A tab that holds a session. One `Map` for the tab and the persisted keys: in an
+ * active tab they are the same store, so the pair `TokenStore` reads is the pair an end
+ * has to remove.
+ */
+function active(pair: SessionTokens | null = sessionPair()): Setup {
+  const tab = new Map<string, string>([[StorageKeys.supportSession, '1']]);
+  if (pair !== null) {
+    tab.set(StorageKeys.session, JSON.stringify(pair));
+  }
+  return setUp({ active: true, persisted: tab, tab });
+}
+
+function expectEnded(setup: Setup): void {
+  expect(setup.replaceDocument).toHaveBeenCalledWith(ENDED);
+  expect(setup.tab.has(StorageKeys.supportSession)).toBe(false);
+  expect(setup.tab.has(StorageKeys.session)).toBe(false);
 }
 
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -246,18 +291,6 @@ describe('ImpersonationSession', () => {
   });
 
   describe('a tab that holds a session', () => {
-    function active(pair: SessionTokens | null = sessionPair()) {
-      const persisted = new Map<string, string>(
-        pair === null ? [] : [[StorageKeys.session, JSON.stringify(pair)]]
-      );
-      return setUp({ active: true, persisted });
-    }
-
-    function expectEnded(setup: Setup): void {
-      expect(setup.replaceDocument).toHaveBeenCalledWith(ENDED);
-      expect(setup.tab.has(StorageKeys.supportSession)).toBe(false);
-    }
-
     it('shows the name from the pair and the deadline from the claim', () => {
       const pair = sessionPair(HOUR_S);
       const { state } = active(pair);
@@ -375,6 +408,102 @@ describe('ImpersonationSession', () => {
       setup.support.endedByServer();
 
       expect(setup.replaceDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes no pair back when a refresh lands after the end', async () => {
+      const setup = active();
+
+      void TestBed.inject(TokenStore).refresh();
+      const refresh = setup.http.expectOne(`${GATEWAY}/v1/auth/refresh`);
+      setup.support.endedByServer();
+      expectEnded(setup);
+
+      refresh.flush(sessionPair(2 * HOUR_S, 'late'));
+      await settle();
+      TestBed.tick();
+
+      expectEnded(setup);
+      expect(setup.replaceDocument).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // An operator opens a second link in a tab whose earlier session is still live.
+  describe('a handoff in a tab that holds a session', () => {
+    const storedRefreshToken = (tab: Map<string, string>) =>
+      (
+        JSON.parse(
+          tab.get(StorageKeys.session) ?? 'null'
+        ) as SessionTokens | null
+      )?.refreshToken;
+
+    it('keeps the new pair when a refresh of the earlier one lands after begin', async () => {
+      const setup = active(sessionPair(2 * HOUR_S, 'old'));
+
+      void TestBed.inject(TokenStore).refresh();
+      const oldRefresh = setup.http.expectOne(`${GATEWAY}/v1/auth/refresh`);
+
+      const answer = setup.support.exchange('second-code');
+      setup.http
+        .expectOne(`${GATEWAY}/v1/auth/impersonation/exchange`)
+        .flush(sessionPair(2 * HOUR_S, 'new'));
+      const outcome = await answer;
+      if (outcome.state !== 'opened') {
+        throw new Error('expected a session');
+      }
+      setup.support.begin(outcome.tokens);
+
+      oldRefresh.flush(sessionPair(2 * HOUR_S, 'old-refreshed'));
+      await settle();
+      TestBed.tick();
+
+      expect(storedRefreshToken(setup.tab)).toBe('new');
+      expect(setup.tab.get(StorageKeys.supportSession)).toBe('1');
+      expect(setup.replaceDocument).toHaveBeenCalledTimes(1);
+      expect(setup.replaceDocument).toHaveBeenCalledWith('/velista/en/home');
+    });
+
+    it('does not end the handoff page when the earlier session runs out during the exchange', async () => {
+      jest.useFakeTimers();
+      const setup = active(sessionPair(60, 'old'));
+
+      const answer = setup.support.exchange('second-code');
+      const req = setup.http.expectOne(
+        `${GATEWAY}/v1/auth/impersonation/exchange`
+      );
+      await jest.advanceTimersByTimeAsync(120_000);
+      expect(setup.replaceDocument).not.toHaveBeenCalled();
+
+      req.flush(sessionPair(2 * HOUR_S, 'new'));
+      const outcome = await answer;
+      if (outcome.state !== 'opened') {
+        throw new Error('expected a session');
+      }
+      setup.support.begin(outcome.tokens);
+      await jest.advanceTimersByTimeAsync(60_000);
+
+      expect(storedRefreshToken(setup.tab)).toBe('new');
+      expect(setup.replaceDocument).toHaveBeenCalledTimes(1);
+      expect(setup.replaceDocument).toHaveBeenCalledWith('/velista/en/home');
+    });
+
+    it('ends the earlier session after a code that opens nothing', async () => {
+      jest.useFakeTimers();
+      const setup = active(sessionPair(60, 'old'));
+
+      const answer = setup.support.exchange('used-code');
+      const req = setup.http.expectOne(
+        `${GATEWAY}/v1/auth/impersonation/exchange`
+      );
+      await jest.advanceTimersByTimeAsync(120_000);
+      expect(setup.replaceDocument).not.toHaveBeenCalled();
+
+      req.flush(
+        { code: 'impersonation_code_invalid' },
+        { status: 400, statusText: 'Bad Request' }
+      );
+      expect(await answer).toEqual({ state: 'invalid' });
+
+      expectEnded(setup);
     });
   });
 });

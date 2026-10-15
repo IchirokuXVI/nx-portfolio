@@ -72,9 +72,9 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   const updates = inject(AppUpdates);
   const readiness = inject(BackendReadiness);
   const version = inject(APP_VERSION);
-  // Looked up only when a support session is refused, and optional, so no request of
-  // an ordinary tab constructs it, and a spec that knows nothing of support sessions
-  // needs no double for one.
+  // The support session is looked up only when the server says it ended, and
+  // optionally, so a spec that knows nothing of support sessions needs no double for
+  // one. The app constructs the service in every tab anyway, through its initializer.
   const injector = inject(Injector);
 
   // Stamped here rather than in `decorate`, and that is the one header that is.

@@ -196,12 +196,12 @@ export class AppLayout {
   /** The card to draw, from `TourStore`, which reads the router on this one's behalf. */
   readonly tourCard = this._tour.card;
 
-  /** Next, or Finish on the last card. */
   /** "End" on the strip. `data-access` ends the session and leaves the document. */
   endSupportSession(): void {
     this._impersonation.end();
   }
 
+  /** Next, or Finish on the last card. */
   tourNext(): void {
     this._tour.next();
   }

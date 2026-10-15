@@ -62,6 +62,7 @@ export class BrowserFacade {
   private readonly _mediaQueries = new Map<string, Signal<boolean>>();
   private readonly _injector = inject(Injector);
   private _tabScoped: boolean | null = null;
+  private _leaving = false;
 
   constructor() {
     this.isBrowser = isPlatformBrowser(this._platformId);
@@ -228,6 +229,9 @@ export class BrowserFacade {
 
   /** Persist a value. Silently does nothing when storage is unavailable. */
   writeStorage(key: string, value: string): void {
+    if (this._leaving) {
+      return;
+    }
     try {
       this._persisted()?.setItem(key, value);
     } catch {
@@ -293,6 +297,9 @@ export class BrowserFacade {
 
   /** Persist a value for this tab. Silently does nothing when storage is unavailable. */
   writeSessionStorage(key: string, value: string): void {
+    if (this._leaving) {
+      return;
+    }
     try {
       this.window?.sessionStorage.setItem(key, value);
     } catch {
@@ -302,6 +309,9 @@ export class BrowserFacade {
 
   /** Remove a value stored for this tab. Silently does nothing without storage. */
   removeSessionStorage(key: string): void {
+    if (this._leaving) {
+      return;
+    }
     try {
       this.window?.sessionStorage.removeItem(key);
     } catch {
@@ -318,6 +328,9 @@ export class BrowserFacade {
    * because mounted in the portfolio the tab's storage is the shell's origin too.
    */
   removeSessionStorageWhere(match: (key: string) => boolean): void {
+    if (this._leaving) {
+      return;
+    }
     try {
       const store = this.window?.sessionStorage;
       if (!store) {
@@ -338,6 +351,9 @@ export class BrowserFacade {
 
   /** Remove a persisted value. Silently does nothing when storage is unavailable. */
   removeStorage(key: string): void {
+    if (this._leaving) {
+      return;
+    }
     try {
       this._persisted()?.removeItem(key);
     } catch {
@@ -376,8 +392,19 @@ export class BrowserFacade {
    * store reads its storage as the document starts, so a new document is what makes
    * the app start from the storage of the tab rather than from what it held. A no-op
    * on the server.
+   *
+   * **The first call is the last word of this document.** The old document keeps
+   * running until the new one commits, and a refresh of `TokenStore` that lands in that
+   * window would write a pair into the storage the new document is about to read. So
+   * from here on every write and every removal through this facade does nothing, and so
+   * does a second call: the storage stays exactly as the caller left it, and the address
+   * is the first one asked for.
    */
   replaceDocument(url: string): void {
+    if (this._leaving) {
+      return;
+    }
+    this._leaving = true;
     this.location?.replace(url);
   }
 }

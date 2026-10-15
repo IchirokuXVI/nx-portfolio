@@ -2697,7 +2697,7 @@
       "invalidTitle": "Este enlace ya no funciona",
       "invalidBody": "Ya se usó o es demasiado antiguo. Abre uno nuevo desde el panel de administración.",
       "failedTitle": "La sesión de soporte no se abrió",
-      "failedBody": "El servidor no respondió. Puede que el enlace aún funcione.",
+      "failedBody": "Algo ha fallado. Puede que el enlace aún funcione.",
       "retry": "Reintentar"
     },
     "ended": {

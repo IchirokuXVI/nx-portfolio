@@ -2697,7 +2697,7 @@
       "invalidTitle": "This link no longer works",
       "invalidBody": "It was already used, or it is too old. Open a new one from the back office.",
       "failedTitle": "The support session did not open",
-      "failedBody": "The server did not answer. The link may still work.",
+      "failedBody": "Something went wrong. The link may still work.",
       "retry": "Try again"
     },
     "ended": {

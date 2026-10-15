@@ -35,6 +35,11 @@ second `end` answers 401 `impersonation_ended`, and `impersonation_code_invalid`
 - `shop-map-page.scss` names no `100svh` any more, so target 6 had nothing to change there.
   Two rules that the plan did not name do: `reset-password-page.scss` (velista `0148`)
   and `record-page.scss` of the walk lab. Both now subtract the strip.
+- Two `100svh` rules do not subtract the strip, and need not: `apps/velista/src/styles.scss`
+  (the `min-height` of the document) and the host of `AppRoot`
+  (`apps/velista/src/app/app-root.ts`). Both are outer frames, and the strip is drawn
+  inside `AppLayout`, within them. Shortening them would leave a gap of the strip's height
+  under the app.
 - `impersonation_not_allowed` was already in `problem.ts` (velista `0148` added it for the
   sign in link of a reset mail). This build adds `impersonation_ended` and
   `impersonation_code_invalid`.
@@ -78,7 +83,8 @@ second `end` answers 401 `impersonation_ended`, and `impersonation_code_invalid`
    is created, before the request.
 8. **A failure that is not `impersonation_code_invalid`** (no answer, a 5xx, a body it
    cannot read) draws "The support session did not open" with "Try again", which posts the
-   same code again from memory. The plan names only the bad code and the missing code. The
+   same code again from memory. Its body names no one cause, because it covers all three.
+   The plan names only the bad code and the missing code. The
    retry is not a way into the app, so the rule "no way in" still holds.
 9. `OutcomeScreen` takes `actionLabel` as optional now, and draws no button without it.
    The invalid link page and the ended page use it with no action.
@@ -116,6 +122,23 @@ second `end` answers 401 `impersonation_ended`, and `impersonation_code_invalid`
     minutes drops. The strip is a labelled region (`Support session`) and no live region.
 18. **The copy** is under `support` in `libs/velista/ui/assets/i18n`. Spanish puts the
     verb first: "Quedan 1 h 42 min", "Queda menos de un minuto". "End" is "Terminar".
+
+**Leaving a document, and a tab that holds two.**
+
+- **A document that has asked to leave writes nothing more.** The old document runs on
+  until the new one commits, and a refresh of `TokenStore` can land in that window. So
+  after the first `BrowserFacade.replaceDocument`, every write and removal through the
+  facade does nothing, and so does a second `replaceDocument`. Without it, a second link
+  opened in a tab with a live session could have the old pair written over the new one.
+- **While a handoff runs, the earlier session of the tab does not end the document.** An
+  end that it asks for (its clock, a refusal) waits for the answer of the exchange. A good
+  code goes on to `begin`. Any other answer lets the held end go ahead, and the tab lands
+  on the ended page. Without the hold, an earlier session that ran out during the exchange
+  would replace the handoff page after its code was spent.
+- **A duplicated tab holds the same support session.** A browser copies `sessionStorage`
+  into a duplicated tab, so two tabs then hold one session. The server's refresh rules
+  bound it: the refresh token rotates, so only one of the two can refresh, and both stop
+  at the deadline of the session.
 
 **The refusal (target 8).** `support.refused` is returned for `impersonation_not_allowed`
 by `accountFailure` (deleting the account), `authErrorCopy` (securing a guest) and
