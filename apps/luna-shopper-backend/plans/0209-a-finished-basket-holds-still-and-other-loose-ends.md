@@ -24,16 +24,17 @@ The build of 2026-10-15 settled the points below. Each one is a choice of the bu
 owner can overturn. Where this section and a later section disagree, this section is right. The
 base was `dev` at `f7c49941`.
 
-**One point waits for the owner (point 1).**
+Point 1 is a decision of the owner.
 
-1. **A line deleted after the finish is drawn, and the trips read does not draw it.** Section
+1. **The owner decided on 2026-10-15: a finished basket draws a line deleted after the
+   finish.** The trips read differs on this one case and does not draw it. Section
    1.1 says the deleted line is drawn and asks to match the trips read, and section 7 tests it
    drawn. The trips read (`lists/trips/trips.sql.ts`, `basketRowsCte`) joins `list_lines` with
    `"deletedAt" IS NULL`, so a finished trip drops a line deleted after it (plan `0132`). The
    two cannot be matched. The build draws it, which is what the history count of a finished
    basket already did (`FINISHED_BASKET_COUNTS_SQL` read no `list_lines`) and what the admin
-   detail still does (`FINISHED_BASKET_ROWS_SQL`). To match the trips read instead is one
-   predicate in `FROZEN_LINES_SQL`. A list the owner lost is drawn on both reads.
+   detail still does (`FINISHED_BASKET_ROWS_SQL`). `FROZEN_LINES_SQL` therefore has no
+   `"deletedAt"` predicate. A list the owner lost is drawn on both reads.
 2. **The frozen read is one statement for any number of baskets.** `FROZEN_LINES_SQL` takes
    basket ids, so the screen asks it for one basket and the history for a page.
 3. **The history count is computed in TypeScript and not in SQL.** Section 1.2 says to read the
