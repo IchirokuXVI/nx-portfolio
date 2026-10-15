@@ -1,8 +1,5 @@
-import type {
-  CatalogBrowseContext,
-  ProductShopPrice,
-} from './catalog-browse';
-import type { ProductOffer } from './domain';
+import type { CatalogBrowseContext, ProductShopPrice } from './catalog-browse';
+import type { CatalogItem, Line, ProductOffer } from './domain';
 import { compareGroupOffers } from './product-group';
 import type { LocalizedName } from './shopping-profile';
 
@@ -241,9 +238,7 @@ export function lineSupermarketRows(
       if (
         offer !== null &&
         offer.price !== null &&
-        (lowest === null ||
-          lowest.price === null ||
-          offer.price < lowest.price)
+        (lowest === null || lowest.price === null || offer.price < lowest.price)
       ) {
         lowest = offer;
       }
@@ -279,3 +274,110 @@ export function lineSupermarketRows(
 
 /** How many products of a line the page reads prices for (section 3.2). */
 export const LINE_PRICED_PRODUCTS_MAX = 20;
+
+/** The fields of a line the order of its products reads. */
+export type LineShowSource = Pick<
+  Line,
+  'itemIds' | 'favoriteItemId' | 'preferredSupermarketId'
+>;
+
+/**
+ * The products of a line in the order the line page draws its cards (velista
+ * `0137`, section 2), each with its price.
+ *
+ * {@link lineProductPrices} and then {@link orderLineCards}, over `itemIds` only:
+ * `groupItemIds` is the part of that set a group put there, not a second set.
+ */
+export function lineCardOrder(
+  line: LineShowSource,
+  pricesOf: (itemId: string) => LineProductPriceRead
+): readonly LineProductPrice[] {
+  return orderLineCards(
+    lineProductPrices(line.itemIds, pricesOf, line.preferredSupermarketId),
+    line.favoriteItemId
+  );
+}
+
+/**
+ * **The one product a line shows** (velista `0145`, section 2), or null for a line
+ * with no product.
+ *
+ * It is the first card of the line page by definition, so the row of a list and
+ * the line page never show two products for one line. That gives the rule:
+ *
+ * 1. The favourite, when the line holds it, with or without a price.
+ * 2. The cheapest product with a price among the first
+ *    {@link LINE_PRICED_PRODUCTS_MAX}: at the supermarket of the line when it has
+ *    one, else the lowest price near the reader. The price for each kilo or litre
+ *    decides, then the price, and a tie keeps the order of the line.
+ * 3. The first product of the line when none has a price, and while a price among
+ *    those is still being read.
+ *
+ * The price that comes back is the price that made the choice.
+ */
+export function lineShownProduct(
+  line: LineShowSource,
+  pricesOf: (itemId: string) => LineProductPriceRead
+): LineProductPrice | null {
+  return lineCardOrder(line, pricesOf)[0] ?? null;
+}
+
+/** One line, as {@link listCost} counts it. */
+export interface ListCostLine {
+  readonly quantity: number;
+  /** The price of the product the line shows, or null for none. */
+  readonly offer: ProductOffer | null;
+}
+
+/**
+ * What the pending lines of a list cost (velista `0145`, section 6), or null with
+ * no priced line.
+ *
+ * The sum, over the lines with a quantity above zero, of the quantity times the
+ * price of the product the line shows. A line with no product or no price adds
+ * nothing. The first currency counted is the currency of the sum, and a price in
+ * another is left out rather than added to it.
+ */
+export function listCost(
+  lines: readonly ListCostLine[]
+): { readonly amount: number; readonly currency: string | null } | null {
+  let amount = 0;
+  let currency: string | null | undefined;
+  for (const line of lines) {
+    const price = line.offer?.price ?? null;
+    if (line.quantity <= 0 || price === null || line.offer === null) {
+      continue;
+    }
+    if (currency === undefined) {
+      currency = line.offer.currency;
+    } else if (line.offer.currency !== currency) {
+      continue;
+    }
+    amount += line.quantity * price;
+  }
+  return currency === undefined
+    ? null
+    : { amount: Math.round(amount * 100) / 100, currency };
+}
+
+/**
+ * The prices one catalog record carries, as the rows {@link lineProductPrices}
+ * reads (velista `0145`, section 7).
+ *
+ * The lookup with `prices: true` answers every chain's offer at the reader's own
+ * scopes, one for each chain and cheapest first (`CatalogItem.chainPrices`). A
+ * chain near the reader that is not in it does not sell the product, which is
+ * what a missing row already means to {@link lineProductPrices}.
+ */
+export function itemShopPrices(
+  item: Pick<CatalogItem, 'chainPrices'>
+): readonly ProductShopPrice[] {
+  return item.chainPrices.map((price) => ({
+    supermarketId: price.chain.id,
+    chain: price.chain.name,
+    logoUrl: null,
+    kind: price.offer.price === null ? 'unpriced' : 'priced',
+    offer: price.offer,
+    cheapest: false,
+  }));
+}

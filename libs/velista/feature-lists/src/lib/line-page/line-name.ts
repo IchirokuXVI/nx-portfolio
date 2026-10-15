@@ -43,7 +43,8 @@ export function watchLineName(
       : lineName(
           current,
           (itemId) => items.nameOf(itemId)?.name ?? null,
-          locale()
+          locale(),
+          items.pricesOf
         );
   });
 }

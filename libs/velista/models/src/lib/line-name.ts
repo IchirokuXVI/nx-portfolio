@@ -1,5 +1,6 @@
 import { catalogName } from './catalog-browse';
 import type { Line } from './domain';
+import { lineShownProduct, type LineProductPriceRead } from './line-products';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -30,16 +31,18 @@ export interface LineName {
 export type LineNameSource = Pick<
   Line,
   'content' | 'named' | 'itemIds' | 'favoriteItemId'
->;
+> &
+  Partial<Pick<Line, 'preferredSupermarketId'>>;
 
 /**
  * The one answer to "what is this line called" (velista `0144`, sections 1 and 2).
  *
  * - **A named line** draws its `content`.
- * - **A line that is not named** draws the name of the product it shows: the
- *   favourite when the line holds it, or else its first product. While that name has
- *   not loaded it draws `content`, which is the name the product had when the line
- *   was made.
+ * - **A line that is not named** draws the name of the product it shows, which is
+ *   `lineShownProduct` over the prices `pricesOf` answers (velista `0145`, section
+ *   2). With no prices that is the favourite when the line holds it, or else its
+ *   first product. While that name has not loaded it draws `content`, which is the
+ *   name the product had when the line was made.
  * - **A named line whose `content` is the name of one of its products** is drawn as
  *   not named. Before backend `0207` every line made from a product took the
  *   product's name and the server marks all of them named, so this is how those
@@ -48,13 +51,15 @@ export type LineNameSource = Pick<
  *   name that is empty in that language, so no product makes every line match.
  *
  * `nameOf` answers the catalog's name of a product, or null while it is not loaded.
+ * `pricesOf` answers its prices, and is absent where a screen reads none.
  */
 export function lineName(
   line: LineNameSource,
   nameOf: (itemId: string) => LocalizedName | null,
-  locale: string
+  locale: string,
+  pricesOf: (itemId: string) => LineProductPriceRead = noPrices
 ): LineName {
-  const itemId = shownItemId(line);
+  const itemId = shownItemId(line, pricesOf);
   if (itemId === null) {
     return {
       text: line.content,
@@ -136,13 +141,26 @@ export function lineNameRefused(line: LineNameSource, typed: string): boolean {
   return typed.trim() === '' && line.itemIds.length === 0;
 }
 
-/** The favourite when the line holds it, else the first product, else null. */
-function shownItemId(line: LineNameSource): string | null {
-  const favorite = line.favoriteItemId;
-  if (favorite !== null && line.itemIds.includes(favorite)) {
-    return favorite;
-  }
-  return line.itemIds[0] ?? null;
+/** The product the line shows (velista `0145`, section 2), or null. */
+function shownItemId(
+  line: LineNameSource,
+  pricesOf: (itemId: string) => LineProductPriceRead
+): string | null {
+  return (
+    lineShownProduct(
+      {
+        itemIds: line.itemIds,
+        favoriteItemId: line.favoriteItemId,
+        preferredSupermarketId: line.preferredSupermarketId ?? null,
+      },
+      pricesOf
+    )?.itemId ?? null
+  );
+}
+
+/** No price read: the favourite when the line holds it, else the first product. */
+function noPrices(): LineProductPriceRead {
+  return undefined;
 }
 
 /** Whether `content` says one of the names of a product, in any language. */

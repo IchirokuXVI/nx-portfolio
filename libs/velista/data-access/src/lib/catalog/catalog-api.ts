@@ -15,10 +15,11 @@ import { toCategoryNodes } from '../mapping/category-mappers';
 import {
   toCatalogItem,
   toCatalogSuggestions,
+  toItemLookup,
   toProductGroup,
 } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
-import type { CatalogServiceI } from './catalog-service';
+import type { CatalogServiceI, ItemLookupOptions } from './catalog-service';
 
 /** The server's largest page (`MAX_PAGE_SIZE`), so a group is one request. */
 const GROUP_MEMBERS_PAGE = 100;
@@ -86,7 +87,8 @@ export class CatalogApi implements CatalogServiceI {
    * collapsing them is the defect this plan exists to fix.
    */
   async itemsByIds(
-    itemIds: readonly string[]
+    itemIds: readonly string[],
+    options?: ItemLookupOptions
   ): Promise<readonly CatalogItem[] | null> {
     if (itemIds.length === 0) {
       // No request at all, and an empty answer rather than null: nothing was asked, so
@@ -98,12 +100,15 @@ export class CatalogApi implements CatalogServiceI {
       const body = await firstValueFrom(
         this._http.post<unknown>(
           this._urls.gateway('/v1/catalog/items/lookup'),
-          { ids: [...new Set(itemIds)] },
+          {
+            ids: [...new Set(itemIds)],
+            ...(options?.prices === true ? { prices: true } : {}),
+          },
           { context: operation('catalog.itemsByIds') }
         )
       );
 
-      return isRecord(body) ? mapArray(body['items'], toCatalogItem) : null;
+      return toItemLookup(body);
     } catch {
       return null;
     }

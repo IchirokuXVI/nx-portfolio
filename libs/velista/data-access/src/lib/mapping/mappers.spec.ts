@@ -9,6 +9,7 @@ import {
   toCatalogSuggestions,
   toComment,
   toItemLists,
+  toItemLookup,
   toLine,
   toLineSettlement,
   toListAccessEntries,
@@ -1408,6 +1409,19 @@ describe('toCatalogSuggestions', () => {
     );
     expect(names).not.toContain(undefined);
     expect(names).toHaveLength(3);
+  });
+
+  it('reads the lookup with prices the same way (velista 0145)', () => {
+    const items = toItemLookup({ items: [milk], scopes: body.scopes });
+    expect(
+      items?.[0]?.chainPrices.map((one) => [one.chain.id, one.offer.price])
+    ).toEqual([
+      ['mercadona', 1.19],
+      ['dia', 1.29],
+      ['lidl', null],
+    ]);
+    expect(toItemLookup({ items: [milk] })?.[0]?.chainPrices).toEqual([]);
+    expect(toItemLookup('nope')).toBeNull();
   });
 
   it('names no chain at all when the map is absent or empty', () => {

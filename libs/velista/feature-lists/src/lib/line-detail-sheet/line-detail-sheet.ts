@@ -359,7 +359,8 @@ export class LineDetailSheet {
       : lineName(
           line,
           (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
-          this._localeStore.locale()
+          this._localeStore.locale(),
+          this._itemNames.pricesOf
         );
   });
 
@@ -476,6 +477,7 @@ export class LineDetailSheet {
       // this used to read (section 1). Against a real catalog every one of its ids
       // missed, and this sheet told the reader their line had no products.
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
+      pricesOf: this._itemNames.pricesOf,
       namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
@@ -766,7 +768,8 @@ export class LineDetailSheet {
     return lineName(
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
-      this._localeStore.locale()
+      this._localeStore.locale(),
+      this._itemNames.pricesOf
     ).field;
   }
 

@@ -33,6 +33,7 @@ import {
   presenceNames,
   presencePeople,
   PresenceStore,
+  ProductPickStore,
   REALTIME_CLIENT,
   type RealtimeClientI,
   SessionStore,
@@ -47,6 +48,7 @@ import {
   type Line,
   LINE_VOICE_MAX_SECONDS,
   lineName,
+  type LineName,
   type LineRowVm,
   type ListGoneReason,
   type ListPageState,
@@ -61,9 +63,12 @@ import {
   tripKey,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   appPath,
+  AppResumed,
   AudioRecorder,
   BrowserFacade,
+  formatMoney,
   lineQueryOf,
   listIdOf,
   ListSearchNavigation,
@@ -71,6 +76,7 @@ import {
   NOTIFICATION_TONE,
   PageNavigation,
   productPagePath,
+  productPickPath,
   RECORDING_LIMITS,
   type RecordingLimits,
   searchOpenOf,
@@ -92,7 +98,7 @@ import {
   ListNotice,
   PageHeader,
   PageHeaderAction,
-  productDetailText,
+  productBrandSizeText,
   RowSkeleton,
   SpinnerIcon,
   type SuggestionChoice,
@@ -109,9 +115,23 @@ import {
   type ListOperation,
 } from '../list-error-copy';
 import { selectDueLines } from '../select-due-lines';
-import { selectListState } from '../select-list-state';
+import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
+
+/** What the list page hands the catalog that chooses a product, to know its answer. */
+const LIST_ROW_PICK = 'list-row';
+
+/**
+ * How long after the app comes back a reconnect counts as the same return
+ * (velista `0145`): the resume already read every product, and the socket that
+ * died in the background comes back a few seconds after it.
+ */
+const RECONNECT_AFTER_RESUME_MS = 15_000;
+
+interface ListRowPick {
+  readonly from: typeof LIST_ROW_PICK;
+}
 
 /**
  * The list, its lines, and the aisle. The screen the product exists for.
@@ -226,8 +246,85 @@ export class ListPage {
    */
   private readonly _view = inject(ListViewStore);
 
-  /** The products on the lines, for their categories and names (section 3). */
+  /** The products on the lines, for their categories, names and prices (section 3). */
   private readonly _itemNames = inject(ItemNames);
+
+  /** Bumped when the app or the socket comes back, which starts a new visit. */
+  private readonly _priceVisit = signal(0);
+
+  /** The products this visit has read, so each is read once (velista `0145`). */
+  private readonly _pricedThisVisit = new Set<string>();
+
+  private readonly _resumed = inject(AppResumed);
+
+  /** The catalog opened to choose a product from a row (velista `0145`, section 5). */
+  private readonly _pick = inject(ProductPickStore);
+  private readonly _history = inject(AppHistory);
+
+  /**
+   * Whether the products of a line on this list did not load (velista `0145`,
+   * section 7). The rows keep their names, and the page says so once.
+   */
+  readonly productsFailed = computed(() => {
+    const lines = this._lines.forList(this.listId())().lines;
+    return this._itemNames.anyFailed(lines.flatMap((line) => line.itemIds));
+  });
+
+  /** The retry under that sentence: the products that failed are read again. */
+  retryProducts(): void {
+    const lines = this._lines.forList(this.listId())().lines;
+    const itemIds = lines.flatMap((line) => line.itemIds);
+    void this._itemNames.refresh(
+      itemIds.filter((itemId) => this._itemNames.anyFailed([itemId]))
+    );
+  }
+
+  /**
+   * The plus or "Choose a product" on a row with no product (velista `0145`,
+   * section 5): the catalog page that chooses one product (velista `0140`), opened
+   * on the name of the line and on its supermarket. The answer is written when this
+   * page is back.
+   */
+  chooseProduct(lineId: string): void {
+    const line = this._lines
+      .forList(this.listId())()
+      .lines.find((candidate) => candidate.id === lineId);
+    if (line === undefined) {
+      return;
+    }
+    const locale = this._locale();
+    const name = this._lineName(line);
+    this._pick.open({
+      kind: 'one',
+      lineId,
+      forLabel: this._translator.t('list.row.pickFor', undefined, locale, {
+        name,
+      }),
+      forDetail: this.header()?.listName ?? '',
+      chosenId: null,
+      returnUrl: this._router.url,
+      returnDepth: this._history.depth(),
+      callerState: { from: LIST_ROW_PICK } satisfies ListRowPick,
+    });
+
+    const url = this._router.parseUrl(
+      productPickPath(
+        locale,
+        this._basePath,
+        this.zoneId(),
+        this.listId(),
+        lineId
+      )
+    );
+    const query = name.trim();
+    url.queryParams = {
+      ...(query === '' ? {} : { q: query }),
+      ...(line.preferredSupermarketId === null
+        ? {}
+        : { chain: line.preferredSupermarketId }),
+    };
+    void this._router.navigateByUrl(url);
+  }
 
   /** Both from the URL, and both signals: the router reuses this component. */
   readonly zoneId = zoneIdOf(this._route);
@@ -331,28 +428,39 @@ export class ListPage {
   readonly markedLine = signal<string | null>(null);
 
   /**
-   * What tells a product from another of its name, or null for a product the
-   * catalog has not answered about or knows neither fact of.
+   * The name a line is drawn with, in the reader's language (velista `0144`), for
+   * the product the row shows (velista `0145`, section 2).
    */
-  private _detailOf(itemId: string): string | null {
-    const item = this._itemNames.nameOf(itemId);
-    if (item === null) {
-      return null;
-    }
-    const locale = this._locale();
-    return productDetailText(item, locale, (key, args) =>
-      this._translator.t(key, undefined, locale, args)
-    );
-  }
-
-  /** The name a line is drawn with, in the reader's language (velista `0144`). */
-  private _lineName(line: Line): string {
+  private _lineNameOf(line: Line): LineName {
     return lineName(
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
-      this._locale()
-    ).text;
+      this._locale(),
+      this._itemNames.pricesOf
+    );
   }
+
+  private _lineName(line: Line): string {
+    return this._lineNameOf(line).text;
+  }
+
+  /** What the rows read of the catalog (velista `0145`). */
+  private readonly _catalogFacts = computed<ListStateCatalog>(() => {
+    const locale = this._locale();
+    // Read so the sizes redraw once the translations of a cold load arrive.
+    this._translator.loaded();
+    const translate = (key: string, args?: Record<string, unknown>) =>
+      this._translator.t(key, undefined, locale, args);
+    return {
+      itemOf: (itemId) => this._itemNames.nameOf(itemId),
+      settled: (itemId) => this._itemNames.settled(itemId),
+      failed: (itemId) => this._itemNames.anyFailed([itemId]),
+      pricesOf: this._itemNames.pricesOf,
+      locale,
+      brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      formatMoney: (amount, currency) => formatMoney(amount, currency, locale),
+    };
+  });
 
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
@@ -389,12 +497,12 @@ export class ListPage {
       // somebody in it (plan 0022, sections 2.1 and 3.4).
       viewers: this._viewers(),
       editorOf: (lineId) => this._editors().get(lineId) ?? null,
-      // The format and the brand of a line's one product. `ItemNames` is a signal,
-      // so a row gains its detail the moment its product resolves.
-      detailOf: (itemId) => this._detailOf(itemId),
       // The name each row draws: a line made from a product has none of its own and
       // shows the product's (velista `0144`, section 5).
-      nameOfLine: (line) => this._lineName(line),
+      nameOfLine: (line) => this._lineNameOf(line),
+      // The product each row shows, its picture and its price (velista `0145`).
+      // `ItemNames` is a signal, so a row gains its product the moment it resolves.
+      catalog: this._catalogFacts(),
       // Not live means the room was refused or the connection dropped. What is on
       // screen is correct and will not update itself, which is worth saying: looking
       // live while being stale is worse than looking broken.
@@ -952,15 +1060,86 @@ export class ListPage {
       });
     });
 
-    // The products on every line, for the category view and the search (section 3).
-    // Runs again when lines arrive over the socket; `ItemNames` asks only for ids it
-    // has not seen, and splits a large set at the lookup limit.
+    // The products on every line with their prices, for the rows, the category view
+    // and the search (velista `0082`, section 3, and `0145`, section 7). Each product
+    // is read once for each visit: when the page opens, and again after the app or
+    // the socket comes back. A line that arrives over the socket, or changes its
+    // products, asks for the ones this visit has not read. `ItemNames` splits a large
+    // set at the lookup limit.
+    let visit: string | null = null;
     effect(() => {
-      const lines = this._lines.forList(this.listId())().lines;
-      const itemIds = lines.flatMap((line) => line.itemIds);
-      if (itemIds.length > 0) {
-        untracked(() => void this._itemNames.ensure(itemIds));
+      const listId = this.listId();
+      const lines = this._lines.forList(listId)().lines;
+      const current = `${listId}:${this._priceVisit()}`;
+      if (current !== visit) {
+        visit = current;
+        this._pricedThisVisit.clear();
       }
+      const fresh = [...new Set(lines.flatMap((line) => line.itemIds))].filter(
+        (itemId) => !this._pricedThisVisit.has(itemId)
+      );
+      if (fresh.length > 0) {
+        for (const itemId of fresh) {
+          this._pricedThisVisit.add(itemId);
+        }
+        untracked(() => void this._itemNames.refresh(fresh));
+      }
+    });
+
+    // The app or the socket came back: a new visit for the prices. The edges only,
+    // so neither first run counts. The socket's first connect is not a return
+    // either: on a cold open it starts down, and the page has just read. A
+    // reconnect that follows a resume closely is the same return, which the resume
+    // has read for already.
+    let seenResumes = untracked(() => this._resumed.resumes());
+    let wasConnected = untracked(() => this._realtime.connected());
+    let hasConnected = wasConnected;
+    let resumedAt: number | null = null;
+    effect(() => {
+      const resumes = this._resumed.resumes();
+      const connected = this._realtime.connected();
+      untracked(() => {
+        const resumed = resumes !== seenResumes;
+        const reconnected = connected && !wasConnected && hasConnected;
+        seenResumes = resumes;
+        wasConnected = connected;
+        hasConnected ||= connected;
+        const now = Date.now();
+        if (resumed) {
+          resumedAt = now;
+        }
+        const afterResume =
+          !resumed &&
+          resumedAt !== null &&
+          now - resumedAt < RECONNECT_AFTER_RESUME_MS;
+        if (resumed || (reconnected && !afterResume)) {
+          this._priceVisit.update((visit) => visit + 1);
+        }
+      });
+    });
+
+    // The answer of the catalog opened to choose a product from a row (velista
+    // `0145`, section 5): that product becomes the line's one product.
+    // The page is a route of its own, so this page was gone while it was open: the
+    // answer is found by what the request said it was for, not by this instance.
+    effect(() => {
+      const answer = this._pick.answer();
+      const lines = this._lines.forList(this.listId())().lines;
+      if (
+        answer === null ||
+        (answer.callerState as ListRowPick | null)?.from !== LIST_ROW_PICK ||
+        !lines.some((line) => line.id === answer.lineId)
+      ) {
+        return;
+      }
+      untracked(() => {
+        const taken = this._pick.takeAnswer(answer.lineId);
+        if (taken?.itemId != null) {
+          void this._lines.updateLine(taken.lineId, {
+            itemIds: [taken.itemId],
+          });
+        }
+      });
     });
 
     // The lines, from the list id alone. Keyed on the id and nothing else, so it runs

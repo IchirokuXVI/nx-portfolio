@@ -123,6 +123,19 @@
       <lib-list-notice messageKey="list.buying.notMine" />
     }
 
+    <!--
+      The products of the lines did not load (velista 0145, section 7). The rows keep
+      their names and draw no product, and the page says so here, once.
+    -->
+    @if (productsFailed()) {
+      <div class="products-failed">
+        <p class="trips-failed-body">{{ 'list.row.failed' | rokuT }}</p>
+        <button (click)="retryProducts()" class="state-action" type="button">
+          {{ 'list.row.retry' | rokuT }}
+        </button>
+      </div>
+    }
+
     @if (typing()) {
       <!--
         What the composer's field found (velista 0117, rule F1), in place of the
@@ -160,6 +173,7 @@
         @if (drawnLines().length > 0) {
           <lib-line-list
             (act)="act($event)"
+            (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
             (quantityChanged)="changeQuantity($event)"
@@ -252,6 +266,7 @@
           -->
           <lib-line-list
             (act)="act($event)"
+            (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
             (quantityChanged)="changeQuantity($event)"
@@ -289,6 +304,7 @@
           @if (restLines().length > 0) {
             <lib-line-list
               (act)="act($event)"
+              (chooseProduct)="chooseProduct($event)"
               (dismiss)="dismissNote($event)"
               (opened)="openLine($event)"
               (quantityChanged)="changeQuantity($event)"
@@ -301,6 +317,7 @@
         } @else {
           <lib-line-list
             (act)="act($event)"
+            (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
             (quantityChanged)="changeQuantity($event)"

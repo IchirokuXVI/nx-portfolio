@@ -1,3 +1,4 @@
+import type { ProductOffer } from './domain';
 import {
   foldName,
   lineName,
@@ -94,6 +95,31 @@ describe('lineName', () => {
       'es'
     );
     expect(name.itemId).toBe('tomato');
+  });
+
+  it('draws the product the line shows, by its prices (velista 0145)', () => {
+    const priced = (price: number) => [
+      {
+        supermarketId: 'chain',
+        chain: { en: 'Chain', es: 'Chain' },
+        logoUrl: null,
+        kind: 'priced' as const,
+        offer: {
+          price,
+          unitPrice: price,
+          currency: 'EUR',
+        } as unknown as ProductOffer,
+        cheapest: false,
+      },
+    ];
+    const name = lineName(
+      line({ itemIds: ['tomato', 'milk'] }),
+      nameOf,
+      'es',
+      (itemId) => (itemId === 'milk' ? priced(1) : priced(2))
+    );
+    expect(name.itemId).toBe('milk');
+    expect(name.text).toBe('Leche semidesnatada');
   });
 
   it('falls back to the other language for a product named in one', () => {

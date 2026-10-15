@@ -687,7 +687,8 @@
       "pending": "{{pending}} of {{total}} pending",
       "done": "Nothing left",
       "notLive": "Not updating right now",
-      "back": "Back to the group"
+      "back": "Back to the group",
+      "cost": "About {{cost}} for the lines that have a price"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -1114,6 +1115,18 @@
       "quantityLabel": "How many of {{name}}",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"
+    },
+    "row": {
+      "noPrice": "No price",
+      "choose": "Choose a product",
+      "chooseFor": "Choose a product for {{name}}",
+      "noProduct": "No product",
+      "favorite": "Favourite",
+      "more_one": "and {{count}} more that will do",
+      "more_other": "and {{count}} more that will do",
+      "pickFor": "For {{name}}",
+      "failed": "The products on this list did not load.",
+      "retry": "Try again"
     }
   },
   "account": {

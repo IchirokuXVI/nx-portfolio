@@ -83,6 +83,7 @@ interface RowBand {
         >
           <lib-line-row
             (act)="act.emit($event)"
+            (chooseProduct)="chooseProduct.emit($event)"
             (dismiss)="dismiss.emit($event)"
             (grab)="startDrag($event)"
             (opened)="opened.emit($event)"
@@ -153,6 +154,9 @@ export class LineList {
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();
+
+  /** A row with no product asked to choose one (velista `0145`, section 5). */
+  readonly chooseProduct = output<string>();
 
   /**
    * A row was dragged to a new index, once, when the finger came off.
