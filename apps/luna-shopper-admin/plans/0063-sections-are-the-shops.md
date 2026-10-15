@@ -1,3 +1,5 @@
+> **PR:** [#722](https://github.com/IchirokuXVI/nx-portfolio/pull/722)
+
 # 0063: sections are the shop's
 
 > Asked for by the owner on 2026-10-11: "Sections of a shop are almost never the same for
