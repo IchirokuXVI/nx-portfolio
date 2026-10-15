@@ -175,11 +175,21 @@ test.describe('the owner and a guest', () => {
       await revoke.getByRole('button', { name: 'Revoke the link' }).click();
       await expectBasketUrl(page, basketId);
 
-      // The guest's next action: refused, in words, on the screen they are on.
-      await guest.getByRole('button', { name: 'Mark Eggs as got' }).click();
+      // The guest learns it one of two ways, and both are the app working. Their
+      // next tap is refused; or the cascade's own event reaches their socket
+      // first, the read it asks for is refused, and the basket goes, the row's
+      // button with it. So the tap is tried and may find no button: a tap that
+      // failed for any other reason leaves no refusal, and the line below fails.
+      const refused = guest.getByText('You are no longer on this list').first();
+      const tap = guest.getByRole('button', { name: 'Mark Eggs as got' });
+      await expect(tap.or(refused)).toBeVisible();
+      await tap.click({ timeout: 2_000 }).catch(() => undefined);
+      // Refused, in words, on the screen they are on. Whichever refusal comes
+      // second must not turn it into the join screen.
+      await expect(refused).toBeVisible();
       await expect(
-        guest.getByText('You are no longer on this list').first()
-      ).toBeVisible();
+        guest.getByText('This link is no longer accepting people')
+      ).toHaveCount(0);
       await expectBasketUrl(guest, basketId);
     });
   });

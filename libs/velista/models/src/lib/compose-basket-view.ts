@@ -113,7 +113,7 @@ export interface BasketViewContext {
    * The covered lists this reader was served, by list id (velista `0090`).
    *
    * Empty for a reader who may not name any list, which is what keeps the list
-   * grouping out of their view without a `seesZoneData` branch in here. A ref the
+   * grouping out of their view without a branch on a flag in here. A ref the
    * basket did not serve is simply absent, and an entry naming an absent list is
    * one this reader cannot place, so **one collection answers both questions**:
    * which lists there are, and whether this entry belongs to one of them.

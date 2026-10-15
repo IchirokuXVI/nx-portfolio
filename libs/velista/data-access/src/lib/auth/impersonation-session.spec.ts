@@ -47,14 +47,16 @@ const nowS = () => Math.floor(Date.now() / 1000);
 
 /** The pair of a support session that ends `untilS` seconds from now. */
 function sessionPair(untilS = 2 * HOUR_S, refreshToken = 'r1'): SessionTokens {
+  // Read once, so the two claims cannot straddle a second boundary.
+  const issuedS = nowS();
   return {
     userId: 'u1',
     kind: 'REGISTERED',
     username: 'marta_r',
     accessToken: jwt({
       sub: 'u1',
-      exp: nowS() + Math.min(untilS, 900),
-      act: { sub: 'admin', sid: 's1', until: nowS() + untilS },
+      exp: issuedS + Math.min(untilS, 900),
+      act: { sub: 'admin', sid: 's1', until: issuedS + untilS },
     }),
     refreshToken,
   };
@@ -299,11 +301,15 @@ describe('ImpersonationSession', () => {
 
   describe('a tab that holds a session', () => {
     it('shows the name from the pair and the deadline from the claim', () => {
+      // The clock holds still from before the pair is built: a second read of a
+      // running clock after setup could land a second later on a loaded runner.
+      jest.useFakeTimers({ now: nowS() * 1000 });
+      const issuedS = nowS();
       const pair = sessionPair(HOUR_S);
       const { state } = active(pair);
 
       expect(state.session()?.username).toBe('marta_r');
-      expect(state.session()?.until.getTime()).toBe((nowS() + HOUR_S) * 1000);
+      expect(state.session()?.until.getTime()).toBe((issuedS + HOUR_S) * 1000);
     });
 
     it('ends when the clock reaches the deadline', () => {

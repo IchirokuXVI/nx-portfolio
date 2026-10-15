@@ -1858,6 +1858,14 @@ export class BasketStore {
       // and must not be reported as one.
       const held = this._sessions.read(basketId);
       this._sessions.forget(basketId);
+      if (held === null && this._state() === 'revoked') {
+        // The credential is gone because an earlier refusal of this basket just
+        // dropped it, not because this is a stranger. A revoked guest's tap and the
+        // read their own removal's event asked for both come back 401, in either
+        // order, and the second must not turn "You are no longer on this list"
+        // into the join screen's "This link is no longer accepting people".
+        return;
+      }
       if (held !== null) {
         // Which of the two endings it was, from the code the server put on the
         // refusal (backend `0140`, section 8). Anything else, including a 401

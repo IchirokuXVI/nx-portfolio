@@ -336,13 +336,17 @@ export class BasketViewStore {
    *
    * What the filter sheet's radio and the chip read, so the words Aisle and By
    * aisle appear in the same frame as the headings and never before them. So it is
-   * false while the tree has not landed, too: the pipeline draws the rows ungrouped
-   * then, with no aisle heading for the words to name (velista `0138`).
+   * false while the tree has not landed under the category grouping, too: the
+   * pipeline draws the rows ungrouped then, with no aisle heading for the words to
+   * name (velista `0138`). Under any other grouping no heading is waiting on the
+   * tree, which is not even asked for, so the radio names the aisles from the first
+   * frame instead of changing its word under the finger once the tree lands.
    */
   readonly byAisle = computed(() => {
     const context = this._context();
     return (
-      context.parents !== null && basketGroupsByAisle(this.state(), context)
+      (this.state().grouping !== 'category' || context.parents !== null) &&
+      basketGroupsByAisle(this.state(), context)
     );
   });
 

@@ -107,7 +107,6 @@ async function render(
           ),
           me: signal(me),
           present: signal([]),
-          seesZoneData: signal(true),
           removeParticipant: jest.fn().mockResolvedValue(undefined),
           addParticipant,
           leaveBasket,

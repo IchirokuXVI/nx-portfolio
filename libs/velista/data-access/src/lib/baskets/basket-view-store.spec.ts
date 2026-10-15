@@ -1384,7 +1384,8 @@ describe('BasketViewStore: the aisles of the shop', () => {
   };
 
   function atTejares(
-    categories: FakeCategoryStore = fakeCategoryStore(TREE)
+    categories: FakeCategoryStore = fakeCategoryStore(TREE),
+    grouping: 'category' | 'none' = 'category'
   ): Harness {
     const harnessed = harness(basket, products, new Map(), {}, categories);
     harnessed.scopes.set(
@@ -1407,7 +1408,7 @@ describe('BasketViewStore: the aisles of the shop', () => {
         ],
       ])
     );
-    harnessed.view.setGrouping('category');
+    harnessed.view.setGrouping(grouping);
     harnessed.view.setShop('loc-tejares');
     TestBed.tick();
     return harnessed;
@@ -1467,6 +1468,20 @@ describe('BasketViewStore: the aisles of the shop', () => {
       'aisle:sec-dairy',
       'category:cat-other',
     ]);
+    expect(view.byAisle()).toBe(true);
+  });
+
+  // The tree gates the words only under the category grouping, the one view that
+  // waits on it. Under the default the radio would otherwise read Category until
+  // somebody grouped by category, then change to Aisle under the finger.
+  it('names the radio Aisle under the default grouping with the tree not read', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories, 'none');
+    sections.land('loc-tejares', [DAIRY]);
+
+    expect(view.grouping()).toBe('none');
+    expect(categories.loaded()).toBe(false);
+    expect(categories.ensured()).toBe(0);
     expect(view.byAisle()).toBe(true);
   });
 

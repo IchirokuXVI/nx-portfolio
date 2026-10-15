@@ -1279,7 +1279,7 @@ describe('SettleSheet: renaming the line', () => {
      * rule: it lets somebody rename exactly the rows whose every list they can
      * write, and a list this reader was not served is one they cannot.
      *
-     * It replaced a `seesZoneData` read, which was one flag for the whole basket:
+     * It replaced a read of the old all or nothing flag, one for the whole basket:
      * a reader who could write four of five covered lists was refused the field on
      * every row, including the four they could rename.
      */
@@ -2412,5 +2412,36 @@ describe('SettleSheet: the first buy asks where you are', () => {
     // Nothing waits in the holder.
     await held.release();
     expect(store.settle).toHaveBeenCalledTimes(1);
+  });
+
+  // A held buy sends the `from` of the press. A patch that moved or re-keyed the
+  // row while the question was open makes the server refuse it, and the sheet is
+  // gone by then, so the refusal goes to the page through the holder.
+  it.each([
+    ['"Got all"', gotOne],
+    ['"They had none"', pressNone],
+  ])('tells the page when a held %s is refused', async (_, press) => {
+    const { fixture, store, held } = await render({ asks: true });
+    const report = jest.fn();
+    held.reportTo(report);
+    store.settle.mockResolvedValue(null);
+
+    await press(fixture);
+    await held.release();
+
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(LINE_ID);
+  });
+
+  it('tells the page nothing when a held buy lands', async () => {
+    const { fixture, store, held } = await render({ asks: true });
+    const report = jest.fn();
+    held.reportTo(report);
+    store.settle.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    await gotOne(fixture);
+    await held.release();
+
+    expect(report).not.toHaveBeenCalled();
   });
 });
