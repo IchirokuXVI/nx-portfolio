@@ -1,3 +1,5 @@
+> **PR:** [#727](https://github.com/IchirokuXVI/nx-portfolio/pull/727)
+
 # 0062 Open the app as a user
 
 > Backend half: `apps/luna-shopper-backend/plans/0194` (an operator opens the app as a
