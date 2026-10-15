@@ -2,9 +2,8 @@ import type {
   LocalizedName,
   ShopSection,
   ShopSectionName,
-  ShopSections,
 } from '@portfolio/velista/models';
-import { isRecord, mapArray, numOr, oneOf, str, strOr } from './primitives';
+import { isRecord, mapArray, numOr, str, strOr } from './primitives';
 
 /**
  * A shop's sections, read off the wire (velista `0120`, backend `0167`). Rule D4:
@@ -20,7 +19,12 @@ function readableName(raw: unknown): LocalizedName | null {
   return name.en !== '' || name.es !== '' ? name : null;
 }
 
-/** From `SupermarketSectionView`: one section, or null for one nothing can head. */
+/**
+ * From `ShopSectionView`: one section, or null for one nothing can head.
+ *
+ * The view also names its shop (`supermarketLocationId`, backend `0200`), which is
+ * the shop this read was asked about, so it is not kept.
+ */
 export function toShopSection(raw: unknown): ShopSection | null {
   if (!isRecord(raw)) {
     return null;
@@ -34,7 +38,6 @@ export function toShopSection(raw: unknown): ShopSection | null {
 
   return {
     id,
-    supermarketId: strOr(raw['supermarketId'], ''),
     slug: strOr(raw['slug'], ''),
     name,
     position: numOr(raw['position'], 0),
@@ -69,31 +72,28 @@ export function toShopSectionNames(raw: unknown): readonly ShopSectionName[] {
 }
 
 /**
- * `GET /v1/catalog/locations/:id/sections`: `{ sections, source }`.
+ * `GET /v1/catalog/locations/:id/sections`: `{ sections }`, the shop's own (backend
+ * `0200`). The answer carries no `source` since that plan, because there is no
+ * chain list for a shop to fall back on.
  *
- * The sections stay **in the order the wire sent them**, which is the shop's order
- * (backend `0167`): `position` is the chain's default order and a shop with a list
- * of its own walks it differently, so sorting by it would undo the shop's own list.
- * An unreadable section is dropped. Null for a body that is not this shape, which
- * the store reads as a read that did not answer.
+ * The sections stay **in the order the wire sent them**, which is the shop's order:
+ * the server sorts by `position` already, and a client sort would be a second copy
+ * of that rule. An unreadable section is dropped. Null for a body that is not this
+ * shape, which the store reads as a read that did not answer.
  */
-export function toShopSections(raw: unknown): ShopSections | null {
+export function toShopSections(raw: unknown): readonly ShopSection[] | null {
   if (!isRecord(raw) || !Array.isArray(raw['sections'])) {
     return null;
   }
 
   const seen = new Set<string>();
-  const sections = mapArray(raw['sections'], toShopSection).filter((one) => {
+  return mapArray(raw['sections'], toShopSection).filter((one) => {
     if (seen.has(one.id)) {
       return false;
     }
     seen.add(one.id);
     return true;
   });
-  return {
-    sections,
-    source: oneOf(raw['source'], ['LOCATION', 'CHAIN'] as const, 'CHAIN'),
-  };
 }
 
 /**

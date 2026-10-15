@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
-import type { ShopSections } from '@portfolio/velista/models';
+import type { ShopSection } from '@portfolio/velista/models';
 import { ShopSectionsApi } from './shop-sections-api';
 
 /**
@@ -16,13 +16,14 @@ import { ShopSectionsApi } from './shop-sections-api';
  */
 export interface ShopSectionsServiceI {
   /**
-   * `GET /v1/catalog/locations/:id/sections`: the shop's sections in its order.
+   * `GET /v1/catalog/locations/:id/sections`: the shop's own sections in its order
+   * (backend `0200`).
    *
-   * An empty list for a shop the catalog does not know, which is a fact about the
-   * shop and not worth asking again. `null` for a read that did not answer, and
+   * An empty list for a shop with none, and for a shop the catalog does not know,
+   * which are facts about the shop and not worth asking again. `null` for a read that did not answer, and
    * **never throws**: nothing waits on this.
    */
-  sections(locationId: string): Promise<ShopSections | null>;
+  sections(locationId: string): Promise<readonly ShopSection[] | null>;
 }
 
 /**

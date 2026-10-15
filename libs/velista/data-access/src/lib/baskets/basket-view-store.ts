@@ -17,6 +17,7 @@ import {
   basketViewActiveCount,
   basketViewChips,
   basketViewRows,
+  categoryParents,
   composeBasketView,
   DEFAULT_BASKET_VIEW_STATE,
   foldForSearch,
@@ -34,6 +35,7 @@ import {
   type BasketViewState,
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { CategoryStore } from '../catalog/category-store';
 import { ShopSectionsStore } from '../shops/shop-sections-store';
 import { BasketStore } from './basket-store';
 import {
@@ -120,6 +122,7 @@ export class BasketViewStore {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _browser = inject(BrowserFacade);
   private readonly _shopSections = inject(ShopSectionsStore);
+  private readonly _categories = inject(CategoryStore);
 
   private readonly _query = signal('');
 
@@ -313,7 +316,17 @@ export class BasketViewStore {
     // The shop's aisles once they have landed (velista `0120`), and null until
     // then, which the pipeline draws by category with nothing waiting.
     sections: this._shopSections.sectionsOf(this.shopAt()?.id ?? null),
+    parents: this._parents(),
   }));
+
+  /**
+   * The names of the tree's roots once it has landed, and null until then
+   * (velista `0138`): the category grouping heads its sections with them, and
+   * draws the rows ungrouped while there is nothing to head them with.
+   */
+  private readonly _parents = computed(() =>
+    this._categories.loaded() ? categoryParents(this._categories.tree()) : null
+  );
 
   /**
    * Whether grouping by category draws the shop's aisles right now (velista
@@ -334,6 +347,14 @@ export class BasketViewStore {
       const shop = this.shop();
       if (shop !== null) {
         untracked(() => void this._shopSections.ensure(shop));
+      }
+    });
+    // The tree names the parent headings (velista `0138`). Read once per session,
+    // and asked for only when somebody groups by category, which is the one view
+    // that needs it. A failed read is asked again the next time they do.
+    effect(() => {
+      if (this.grouping() === 'category') {
+        untracked(() => void this._categories.ensure());
       }
     });
   }

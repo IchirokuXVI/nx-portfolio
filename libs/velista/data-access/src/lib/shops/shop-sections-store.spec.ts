@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import type { ShopSections } from '@portfolio/velista/models';
+import type { ShopSection } from '@portfolio/velista/models';
 import {
   MEMORY_SHOP_SECTIONS,
   ShopSectionsMemory,
@@ -11,7 +11,7 @@ import {
 import { ShopSectionsStore } from './shop-sections-store';
 
 /** A service answering what the spec says, one answer per call. */
-function service(...answers: (ShopSections | null | Error)[]) {
+function service(...answers: (readonly ShopSection[] | null | Error)[]) {
   const asked: string[] = [];
   const double: ShopSectionsServiceI = {
     sections: async (locationId) => {
@@ -37,10 +37,7 @@ function harness(double: ShopSectionsServiceI) {
   return TestBed.inject(ShopSectionsStore);
 }
 
-const TEJARES: ShopSections = {
-  sections: MEMORY_SHOP_SECTIONS['loc-tejares'],
-  source: 'CHAIN',
-};
+const TEJARES: readonly ShopSection[] = MEMORY_SHOP_SECTIONS['loc-tejares'];
 
 /** Velista `0120`, target 1: a shop's aisles, read once per shop per session. */
 describe('ShopSectionsStore', () => {
@@ -68,10 +65,7 @@ describe('ShopSectionsStore', () => {
   });
 
   it('reads each shop on its own', async () => {
-    const { double, asked } = service(TEJARES, {
-      sections: [],
-      source: 'CHAIN',
-    });
+    const { double, asked } = service(TEJARES, []);
     const store = harness(double);
 
     await store.ensure('loc-tejares');

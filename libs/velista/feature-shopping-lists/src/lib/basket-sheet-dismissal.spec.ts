@@ -13,6 +13,7 @@ import {
   ContactStore,
   fakeZoneStore,
   LINE_SERVICE,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   provideFakeZoneStore,
   SessionStore,
@@ -193,6 +194,7 @@ async function render(
       // the store above, and the filter sheet reads five of them, so a double here
       // would be a second implementation of the thing under test's whole input.
       BasketViewStore,
+      provideFakeCategoryStore(),
       provideFakeShopSectionsStore(),
       // And a fresh `Map` for what it remembers (`0076`), so no test in this file
       // inherits an order or a grouping another one chose.

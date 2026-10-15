@@ -1,26 +1,38 @@
-import { signal } from '@angular/core';
+import { signal, type Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
   applyBasketMarks,
   applyBasketPatch,
   BASKET_PATCH_READ,
   type Basket,
+  type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
   type BasketSession,
   type BasketSettleRequest,
 } from '@portfolio/velista/models';
-import { AppResumed } from '@portfolio/velista/platform';
+import {
+  AppResumed,
+  provideFakeBrowserFacade,
+} from '@portfolio/velista/platform';
 import { Subject } from 'rxjs';
+import { MEMORY_CATEGORIES, memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import type { RealtimeEvent } from '../realtime/realtime-events';
 import { RealtimeMemory } from '../realtime/realtime-memory';
+import {
+  fakeCategoryStore,
+  provideFakeCategoryStore,
+  provideFakeShopSectionsStore,
+} from '../testing/store-doubles';
 import { BasketMemory } from './basket-memory';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
 import { BasketStore } from './basket-store';
+import { BasketViewStore } from './basket-view-store';
 import { HeldProductChoices } from './held-product-choices';
 
 /**
@@ -127,7 +139,9 @@ function build(
   overrides: Partial<BasketServiceI> = {},
   sessions: FakeSessions = new FakeSessions(),
   socket: FakeSocket = new FakeSocket(),
-  resumed: FakeResumed = new FakeResumed()
+  resumed: FakeResumed = new FakeResumed(),
+  /** More of the route's providers, for a spec that reads the store through them. */
+  extra: readonly Provider[] = []
 ): {
   store: BasketStore;
   sessions: FakeSessions;
@@ -190,6 +204,7 @@ function build(
       { provide: BasketSocket, useValue: socket },
       { provide: AppResumed, useValue: resumed },
       { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
+      ...extra,
     ],
   });
 
@@ -2651,28 +2666,37 @@ describe('a read and a patch give the same shopping list (velista 0143, section 
 
 describe('BasketStore: a buy reaches the other phone at once (velista 0143)', () => {
   /** A store whose twin's room is this store's socket, and that counts reads. */
-  async function live(overrides: Partial<BasketServiceI> = {}) {
+  async function live(
+    overrides: Partial<BasketServiceI> = {},
+    extra: readonly Provider[] = []
+  ) {
     const reads = { full: 0, rows: 0, marks: 0 };
     const twin = new BasketMemory();
-    const built = build({
-      getBasket: (id, at) => {
-        reads.full += 1;
-        return twin.getBasket(id, at);
+    const built = build(
+      {
+        getBasket: (id, at) => {
+          reads.full += 1;
+          return twin.getBasket(id, at);
+        },
+        getBasketRows: (id, at) => {
+          reads.rows += 1;
+          return twin.getBasketRows(id, at);
+        },
+        getMarks: () => {
+          reads.marks += 1;
+          return twin.getMarks();
+        },
+        settle: (id, target, body) => twin.settle(id, target, body),
+        setDemand: (id, body) => twin.setDemand(id, body),
+        skip: (id, target) => twin.skip(id, target),
+        changeProduct: (id, body) => twin.changeProduct(id, body),
+        ...overrides,
       },
-      getBasketRows: (id, at) => {
-        reads.rows += 1;
-        return twin.getBasketRows(id, at);
-      },
-      getMarks: () => {
-        reads.marks += 1;
-        return twin.getMarks();
-      },
-      settle: (id, target, body) => twin.settle(id, target, body),
-      setDemand: (id, body) => twin.setDemand(id, body),
-      skip: (id, target) => twin.skip(id, target),
-      changeProduct: (id, body) => twin.changeProduct(id, body),
-      ...overrides,
-    });
+      undefined,
+      undefined,
+      undefined,
+      extra
+    );
     await built.store.open('basket-saturday');
     reads.full = 0;
     return { ...built, twin, reads };
@@ -2925,5 +2949,99 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     waiting.shift()?.();
     await reading;
     expect(store.rowFor('zl-1')?.entries[0].left).toBe(6);
+  });
+
+  /**
+   * Velista `0138`: the shopping list grouped by category is grouped by the parent
+   * of each category, and stays so on both paths that change rows without a read:
+   * a patch from an event, and a product choice held on this device.
+   */
+  describe('the parent headings', () => {
+    /** Yoghurt, under a parent the read's products do not use. */
+    const YOGHURT: BasketProduct = {
+      id: 'item-yoghurt',
+      name: { en: 'Natural yoghurt, 4', es: 'Yogur natural, 4' },
+      brand: 'Hacendado',
+      productGroupId: null,
+      size: 4,
+      unit: 'UNIT',
+      offer: null,
+      offers: [],
+      atShop: null,
+      imageUrl: null,
+      categories: [memoryCategory('natural-and-skimmed-yogurts')],
+      sectionIds: null,
+    };
+
+    async function grouped() {
+      const built = await live({}, [
+        BasketViewStore,
+        { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+        provideFakeBrowserFacade(new Map()),
+        provideFakeShopSectionsStore(),
+        provideFakeCategoryStore(fakeCategoryStore(MEMORY_CATEGORIES)),
+      ]);
+      wire(built.twin, built.socket);
+      const view = TestBed.inject(BasketViewStore);
+      view.setGrouping('category');
+      return { ...built, view };
+    }
+
+    /** Each heading's key and the products of its rows. */
+    function outline(view: BasketViewStore) {
+      return view
+        .sections()
+        .map((part) => [part.key, part.rows.map((one) => one.row.productId)]);
+    }
+
+    it('draws milk and eggs under their one parent, after a patch as after the read', async () => {
+      const { view, twin } = await grouped();
+      const read = outline(view);
+
+      expect(read[0]).toEqual([
+        'category:cat-eggs-milk-and-butter',
+        ['item-milk-hacendado', 'item-eggs'],
+      ]);
+      expect(read[read.length - 1][0]).toBe('no-category');
+
+      await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+
+      expect(outline(view)).toEqual(read);
+      const milk = view
+        .sections()[0]
+        .rows.find((one) => one.row.productId === 'item-milk-hacendado');
+      expect(milk?.row.entries.find((one) => one.lineId === 'zl-1')?.left).toBe(
+        4
+      );
+    });
+
+    it('moves a line held under another product to that product’s parent, and keeps it there after a patch', async () => {
+      const { view, store, twin } = await grouped();
+      const milk = rowOf(store, 'Milk');
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: ['zl-1'], itemId: 'item-yoghurt', keep: false },
+        YOGHURT
+      );
+
+      const held = outline(view);
+      expect(held.slice(0, 2)).toEqual([
+        // The other milk line stays where it was, under the dairy parent.
+        [
+          'category:cat-eggs-milk-and-butter',
+          ['item-milk-hacendado', 'item-eggs'],
+        ],
+        ['category:cat-yoghurts-and-desserts', ['item-yoghurt']],
+      ]);
+
+      await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+
+      expect(outline(view)).toEqual(held);
+      expect(store.rowFor('zl-1')).toMatchObject({
+        productId: 'item-yoghurt',
+        left: 4,
+      });
+    });
   });
 });

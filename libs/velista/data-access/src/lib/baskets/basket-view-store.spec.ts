@@ -9,15 +9,20 @@ import type {
   BasketRow,
   BasketRowEntry,
   BasketShop,
+  CategoryNode,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   StorageKeys,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
+import { MEMORY_CATEGORIES, memoryCategory } from '../catalog/category-memory';
 import {
+  fakeCategoryStore,
   fakeShopSectionsStore,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
+  type FakeCategoryStore,
   type FakeShopSectionsStore,
 } from '../testing/store-doubles';
 import { BasketStore } from './basket-store';
@@ -113,6 +118,30 @@ function product(
   };
 }
 
+/**
+ * The tree the harness holds by default: the memory slice, and the root the
+ * fixtures' "Not yet categorised" leaf sits under (velista `0138`).
+ */
+const TREE: readonly CategoryNode[] = [
+  ...MEMORY_CATEGORIES,
+  {
+    id: 'cat-other',
+    parentId: null,
+    slug: 'other',
+    name: { en: 'Other', es: 'Otros' },
+    position: 99,
+    itemCount: 0,
+  },
+  {
+    id: 'cat-uncategorised',
+    parentId: 'cat-other',
+    slug: 'uncategorised',
+    name: { en: 'Not yet categorised', es: 'Sin categoría' },
+    position: 0,
+    itemCount: 0,
+  },
+];
+
 const ME: BasketParticipant = {
   id: 'p-me',
   kind: 'OWNER',
@@ -143,6 +172,8 @@ interface Harness {
   /** The shop the basket was started at, which locks it, or null. */
   readonly own: WritableSignal<BasketShop | null>;
   readonly sections: FakeShopSectionsStore;
+  /** The category tree, which names the parent headings (velista `0138`). */
+  readonly categories: FakeCategoryStore;
 }
 
 function harness(
@@ -150,7 +181,9 @@ function harness(
   products: ReadonlyMap<string, BasketProduct> = new Map(),
   storage: Map<string, string> = new Map(),
   /** What a storage that will not answer looks like from above the facade (`0076`). */
-  browser: Partial<BrowserFacade> = {}
+  browser: Partial<BrowserFacade> = {},
+  /** Landed by default; `fakeCategoryStore()` is a tree not read yet. */
+  categories: FakeCategoryStore = fakeCategoryStore(TREE)
 ): Harness {
   TestBed.resetTestingModule();
 
@@ -165,6 +198,7 @@ function harness(
   TestBed.configureTestingModule({
     providers: [
       provideFakeShopSectionsStore(sections),
+      provideFakeCategoryStore(categories),
       { provide: RokuLocaleStore, useValue: { locale } },
       provideFakeBrowserFacade(storage, browser),
       {
@@ -206,6 +240,7 @@ function harness(
     readAt,
     own,
     sections,
+    categories,
   };
 }
 
@@ -1342,7 +1377,6 @@ describe('BasketViewStore: the aisles of the shop', () => {
 
   const DAIRY = {
     id: 'sec-dairy',
-    supermarketId: 'sm-mercadona',
     slug: 'dairy',
     name: { en: 'Dairy', es: 'Lácteos' },
     position: 0,
@@ -1387,7 +1421,7 @@ describe('BasketViewStore: the aisles of the shop', () => {
     const { view, sections } = atTejares();
 
     expect(view.sections().map((part) => part.key)).toEqual([
-      'category:cat-uncategorised',
+      'category:cat-other',
     ]);
     expect(view.byAisle()).toBe(false);
     expect(view.chips().map((chip) => chip.key)).toContain(
@@ -1400,7 +1434,7 @@ describe('BasketViewStore: the aisles of the shop', () => {
       view.sections().map((part) => [part.key, part.uncoveredBand === true])
     ).toEqual([
       ['aisle:sec-dairy', false],
-      ['category:cat-uncategorised', true],
+      ['category:cat-other', true],
     ]);
     expect(view.byAisle()).toBe(true);
     expect(view.chips().map((chip) => chip.key)).toContain(
@@ -1417,7 +1451,122 @@ describe('BasketViewStore: the aisles of the shop', () => {
 
     expect(view.byAisle()).toBe(false);
     expect(view.sections().map((part) => part.key)).toEqual([
-      'category:cat-uncategorised',
+      'category:cat-other',
+    ]);
+  });
+});
+
+/**
+ * The headings are the parents of the products' categories (velista `0138`).
+ *
+ * The parents' names come from the tree, so the store hands the pipeline nothing to
+ * group by until the tree has landed, and asks for it only for the one view that
+ * needs it.
+ */
+describe('BasketViewStore: parent headings', () => {
+  const MILK = memoryCategory('milk');
+  const EGGS = memoryCategory('eggs');
+  const BREAD = memoryCategory('sliced-and-specialty-breads');
+
+  function categorised(
+    id: string,
+    name: string,
+    leaf: BasketProduct['categories'][number]
+  ): BasketProduct {
+    return { ...product(id, name, name), categories: [leaf] };
+  }
+
+  const products = new Map<string, BasketProduct>([
+    ['item-milk', categorised('item-milk', 'Milk', MILK)],
+    ['item-bread', categorised('item-bread', 'Bread', BREAD)],
+    ['item-eggs', categorised('item-eggs', 'Eggs', EGGS)],
+  ]);
+  const basket: readonly BasketRow[] = [
+    row('l-1', 'Milk', 'item-milk'),
+    row('l-2', 'Bread', 'item-bread'),
+    row('l-3', 'Eggs', 'item-eggs'),
+  ];
+
+  function outline(view: BasketViewStore) {
+    return view
+      .sections()
+      .map((part) => [
+        part.key,
+        part.heading?.kind === 'text' ? part.heading.text : null,
+        part.rows.map((one) => one.row.rowKey),
+      ]);
+  }
+
+  it('heads two leaves of one parent once, with the parent’s name', () => {
+    const { view } = harness(basket, products);
+    view.setGrouping('category');
+
+    expect(outline(view)).toEqual([
+      [
+        'category:cat-eggs-milk-and-butter',
+        'Eggs, milk, and butter',
+        ['l-1', 'l-3'],
+      ],
+      ['category:cat-bakery', 'Bakery', ['l-2']],
+    ]);
+  });
+
+  it('names a parent in the reader’s language', () => {
+    const { view, locale } = harness(basket, products);
+    view.setGrouping('category');
+    locale.set('es');
+
+    expect(outline(view).map(([, heading]) => heading)).toEqual([
+      'Huevos, leche y mantequilla',
+      'Panadería',
+    ]);
+  });
+
+  it('draws the rows ungrouped until the tree lands, then the parents, never a leaf', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+    expect(outline(view)).toEqual([['all', null, ['l-1', 'l-2', 'l-3']]]);
+
+    categories.land(TREE);
+
+    expect(outline(view).map(([key]) => key)).toEqual([
+      'category:cat-eggs-milk-and-butter',
+      'category:cat-bakery',
+    ]);
+  });
+
+  it('asks for the tree only when somebody groups by category', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    TestBed.tick();
+    view.setGrouping('list');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(0);
+
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+  });
+
+  it('moves a row to its new parent when the rows change under it', () => {
+    const { view, rows } = harness(basket, products);
+    view.setGrouping('category');
+
+    rows.set([
+      row('l-1', 'Milk', 'item-milk'),
+      row('l-2', 'Bread', 'item-bread'),
+      row('l-3', 'Eggs', 'item-bread'),
+    ]);
+
+    expect(outline(view)).toEqual([
+      ['category:cat-eggs-milk-and-butter', 'Eggs, milk, and butter', ['l-1']],
+      ['category:cat-bakery', 'Bakery', ['l-2', 'l-3']],
     ]);
   });
 });

@@ -10,6 +10,7 @@ import {
   BasketStore,
   BasketViewStore,
   fakeShopSectionsStore,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   ShopPickNotices,
   type FakeShopSectionsStore,
@@ -177,6 +178,7 @@ function render(options: {
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      provideFakeCategoryStore(),
       provideFakeShopSectionsStore(options.shopSections),
       // A fresh `Map` per test for what the sheet remembers (`0076`), rather than
       // the one `localStorage` jsdom shares with every other test in this file.
@@ -898,7 +900,6 @@ describe('FilterSheet: the aisles of the shop', () => {
 
   const DAIRY = {
     id: 'sec-dairy',
-    supermarketId: 'sm-merca',
     slug: 'dairy',
     name: { en: 'Dairy', es: 'Lácteos' },
     position: 0,

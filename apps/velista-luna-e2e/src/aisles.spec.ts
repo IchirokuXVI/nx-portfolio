@@ -42,8 +42,12 @@ const AISLE_EGGS = 'E2E aisle eggs';
  * first and fridge second, which is the reverse of the order the basket lists
  * Milk and Bread in. Eggs gets a product of its own that no section covers.
  * Grouped by category at that shop, the page draws the two aisles in the shop's
- * order, then the band, then Eggs under its own category, then the line with no
- * product.
+ * order, then the band, then Eggs under the parent of its category, then the line
+ * with no product.
+ *
+ * The heading of Eggs is the parent and never the leaf (velista plan 0138): eggs
+ * and milk are two leaves of one parent, and the Fridge covers milk, so the parent
+ * heading holds only the row the sections left out.
  *
  * The sections belong to that one shop (backend plan `0200`), and they would
  * regroup every later spec that buys there. They are taken down after the run,
@@ -52,7 +56,8 @@ const AISLE_EGGS = 'E2E aisle eggs';
 test.describe('the aisles of the shop you are in', () => {
   let alice: Session;
   let admin: Session;
-  let eggsCategory = '';
+  /** The name of the parent of the eggs leaf, which heads the Eggs row. */
+  let eggsParent = '';
 
   async function clearSections(): Promise<void> {
     for (const held of await shopSections(
@@ -85,11 +90,18 @@ test.describe('the aisles of the shop you are in', () => {
 
     // The third product: eggs, under a leaf neither section covers.
     const tree = await alice.get<{
-      categories: { id: string; slug: string; name: { en: string } }[];
+      categories: {
+        id: string;
+        parentId: string | null;
+        slug: string;
+        name: { en: string };
+      }[];
     }>('/v1/catalog/categories');
     const eggs = tree.categories.find((one) => one.slug === 'eggs');
     if (eggs === undefined) throw new Error('the catalog has no eggs leaf');
-    eggsCategory = eggs.name.en;
+    const parent = tree.categories.find((one) => one.id === eggs.parentId);
+    if (parent === undefined) throw new Error('the eggs leaf has no parent');
+    eggsParent = parent.name.en;
     const eggsItem = await ensureItem(
       admin,
       { en: AISLE_EGGS, es: 'Huevos del pasillo E2E' },
@@ -105,7 +117,7 @@ test.describe('the aisles of the shop you are in', () => {
     await alice?.dispose();
   });
 
-  test('draws the shop’s aisles in its order, then the band, then the rest by category', async ({
+  test('draws the shop’s aisles in its order, then the band, then the rest by parent category', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
@@ -151,7 +163,7 @@ test.describe('the aisles of the shop you are in', () => {
       await expect(headings).toHaveText([
         'Fresh bakery',
         'Fridge',
-        eggsCategory,
+        eggsParent,
         'No category',
       ]);
       await expect(
@@ -177,13 +189,13 @@ test.describe('the aisles of the shop you are in', () => {
         page
           .locator('.uncovered-band + section.group h2.group-title > span')
           .first()
-      ).toHaveText(eggsCategory);
+      ).toHaveText(eggsParent);
       await expect(
         page
           .locator('section.group', { has: row(page, AISLE_EGGS) })
           .locator('h2.group-title > span')
           .first()
-      ).toHaveText(eggsCategory);
+      ).toHaveText(eggsParent);
     });
 
     await test.step('the info control explains the band', async () => {
