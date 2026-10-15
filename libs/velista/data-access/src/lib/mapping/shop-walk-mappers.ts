@@ -265,9 +265,50 @@ function toWalkEvent(raw: unknown): WalkEvent | null {
       const logMs = finite(raw['logMs']);
       return logMs === null ? null : { type: 'section-left', logMs };
     }
+    case 'guard':
+      return toWalkGuardEvent(raw);
     default:
       return null;
   }
+}
+
+/**
+ * What the tracking guard decided (backend `0197`, velista `0136`):
+ * `SHOP_WALK_GUARD_KINDS` in the contracts, restated here as every enum of the
+ * wire is.
+ */
+export const WALK_GUARD_KINDS = [
+  'lost',
+  'jump',
+  'turned',
+  'heading',
+  'compass-disturbed',
+  'compass-settled',
+] as const;
+
+/** A log's `guard` event. */
+export type WalkGuardEvent = Extract<WalkEvent, { type: 'guard' }>;
+
+/**
+ * A `guard` event off the wire. The fold ignores it, but the log is still all
+ * or nothing, so one that cannot be read makes the log unreadable. A number
+ * that is not a finite number is left out.
+ */
+function toWalkGuardEvent(raw: Record<string, unknown>): WalkGuardEvent | null {
+  const logMs = finite(raw['logMs']);
+  const what = oneOfOrNull(raw['what'], WALK_GUARD_KINDS);
+  if (logMs === null || what === null) {
+    return null;
+  }
+  const degrees = finite(raw['degrees']);
+  const metres = finite(raw['metres']);
+  return {
+    type: 'guard',
+    logMs,
+    what,
+    ...(degrees !== null ? { degrees } : {}),
+    ...(metres !== null ? { metres } : {}),
+  };
 }
 
 const AREA_KINDS: readonly AreaKind[] = [

@@ -123,3 +123,104 @@ fixture that recorder `0005` section 5 asks for.
   has nothing to do about it.
 - Positioning by Wi-Fi access points.
 - Mapping without the camera.
+
+## What the build decided
+
+### Where the facts moved since the plan
+
+- **Recorder `0005` changed what it hands over** (PR #726, its section "What the build
+  decided"). The turn limit is 60 degrees, and the guard has
+  `state().awaitingTurnJudgement`. A yes that comes before the turn rule has answered does
+  not vouch for the frame, and any stop while that flag is true carries
+  `unconfirmedDropped`. The README's host contract then asks velista to hold the purple
+  points past the yes. The plan does not say this, and item 3 below builds it.
+- **The walk event model is the shared one.** `WalkEvent` of
+  `@portfolio/luna-shopper/shop-map/model` already had `guard` from backend `0197`, and
+  `libs/velista/models/src/lib/shop-walks.ts` says that velista uses the shared
+  `WalkEntry` because the phone folds it. So `data-access` has no new type of its own.
+  It has the alias `WalkGuardEvent`, the kinds `WALK_GUARD_KINDS`, and the read mapper's
+  `guard` case. That case is needed: the log is all or nothing, so before it a walk with
+  one `guard` event failed to load on the rewind page. Events go to the wire as they are,
+  as every other event does. No outward mapper exists, and none was added.
+- Backend `0197` has no "What the build decided" section. Its code holds what this plan
+  uses: `SHOP_WALK_GUARD_KINDS`, `SHOP_WALK_LIMITS.guardEventsMax` (50), and a gateway
+  that forwards the event as it is.
+- Every file the plan names is where it says.
+
+### Choices of the build
+
+1. **The gyro offset of a stop is the last trusted one at least 2 s before the stop**,
+   not the offset at the moment of the stop. At a `lost` stop the guard has no
+   `gyroOffset` (no tracked pose for 3 s). At a `turned` stop the last 2 s are in the
+   turned frame. Trusted means `good`, with neither the guard nor velista waiting for a
+   judgement. The 120 s limit and the gap rule count from that reading, not from the
+   stop, which is stricter by at most 5 s.
+2. **The rotation by the gyro is the stopped offset minus the probe's offset.** The
+   session guard is fed aligned poses, so its offset already holds the session's
+   rotation (recorder `AlignSessionByRotation`). This is the plan's "rotation plus
+   gyroOffset at the stop minus the probe's".
+3. **A yes before the guard's judgement is held** (`WalkRecording._judging`). The screen
+   goes back to walking. The purple points and the points kept after them stay purple and
+   unsaved, and the live map does not get them. The log stays at the loss. When the guard
+   has judged, the `confirmed` entry and the `resumed` entry are written as before. A stop
+   in that window drops them all and ends the walk at the first loss. A second loss does
+   not move that point. Stop and leaving the page do the same.
+4. **`readyToResume` does not wait for the compass when the gyro can turn the resume.**
+5. **The compass rule agrees within `COMPASS_RESUME_AGREES_DEGREES` (45).** The baseline
+   a resume derives when the walk has none is unchanged (the probe's offset minus the
+   rotation), whichever rule turned it.
+6. **Where a `guard` event sits in the log.** A loss and a compass notice carry their own
+   log time in the open entry. A stop's event carries the `logTo` of its `stopped`
+   entry, which is where the walk now ends (the loss for `lost` and for a dropped
+   segment). The stop's own moment is already in the loss event or the entry's time. A
+   loss after the first one in a resume keeps its real log time, even when that is later
+   than the entry's end.
+7. **Numbers.** Degrees are rounded to a tenth and keep their sign, in (-180, 180].
+   Metres are rounded to a centimetre. `lost` carries no number. Recorder `0005` item 9
+   decided this.
+8. **`guard` events wait with the session's points.** A session that adds nothing sends
+   none (plan `0129`, target 9). A held event makes the next flush due.
+9. **The cap of 50 is applied in `WalkEntrySaver`** (`capGuardEvents`) when an entry is
+   sealed or pushed. The compass pairs go first, oldest first, and a `compass-disturbed`
+   goes together with the `compass-settled` after it. Then the oldest losses go. `jump`,
+   `turned` and `heading` are never dropped, and a stop's event is alone in its entry.
+10. **The scripted walk** gives the gyro the walk's true heading plus a zero of 40
+    degrees, with no drift. Its bent stretch starts at 72 s, beside the "Horno de pan"
+    mark. Over 3 s the compass swings 90 degrees. It holds there for 8 s, then swings
+    back over 3 s.
+11. **Marks are not stopped during a held yes.** A mark saved in the 1.8 s before the
+    guard judges is kept even if the frame turned. The window is too short for the sheet
+    to be opened and saved in. The plan does not ask for a gate, so none was added.
+
+### Progress evidence
+
+- **Target 1** (`walk-sensors.ts`, `scripted-walk-sensors.ts`, `walk-recording.ts`,
+  `record-walk-page.ts`, `shop-map.testing.ts`): `walk-sensors.spec.ts` hears the `game`
+  stream next to the compass, on the camera clock.
+- **Target 2**: `scripted-walk-sensors.spec.ts` runs the guard over the scripted walk. With
+  the gyro, the bent stretch gives one `compass-disturbed`, then one `compass-settled`, and
+  no stop. Without it, one `heading` stop. `walk-recording.spec.ts` shows the same at the
+  recording, with no tone.
+- **Target 3**: `walk-recording.spec.ts`, "how a resume is turned". The gyro is used
+  whatever the phone points at. It is not used 120 s after the stop or after a gap of 2 s.
+  Pointing is used when a bent compass at the mark disagrees by more than 45 degrees. The
+  existing compass resumes report `compass`.
+- **Target 4** (`shop-walk-mappers.ts`, `walk-entry-saver.ts`): the specs cover the loss,
+  `heading`, `jump` and `turned` events, the cap of 50, the read mapper, and a session that
+  sends nothing. Under the host contract they cover a yes before the judgement in a
+  turned frame, in a good frame, with a second loss, and with Stop.
+- **Target 5**: no template, locale or sound file changed.
+- `npx nx run-many -t test lint` for `velista/platform`, `velista/feature-shop-map`,
+  `velista/data-access` and `velista/feature-walk-lab`: green (three warnings from before
+  this plan). `npx nx build velista`: green.
+- `velista-luna-e2e` on Luna slot 4 started with `LUNA_REFERENCE_SEED=0`: 8 of 8 pass.
+- **Browser walk** of `?fakeWalk=4` at 390 px on that slot. The log read back holds
+  `compass-disturbed` at 76.1 s (46.6 degrees) and `compass-settled` at 87.1 s, with no
+  stop and no tone between them. It holds a `lost` event at each of the three losses, and
+  the guard's stop at 330 s carries `lost` in its `stopped` entry. After the two gyro
+  resumes, the kept path lies within 0.53 m and 0.66 m of the script's true path. The
+  second resume was into a frame turned by 158.5 degrees. The screenshots and the log
+  table: https://claude.ai/artifact/PUVLC5tG3gs15Y1Av6UpWU (private).
+- **Not done: the owner's real walk (section 2).** It needs this plan in a cluster and the
+  Mercadona of Córdoba. The walk lab recording of the freezer aisles is also the owner's
+  to make.

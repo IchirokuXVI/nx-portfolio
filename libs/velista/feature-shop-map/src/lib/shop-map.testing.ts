@@ -29,6 +29,7 @@ import {
   WALK_SENSORS,
   WALK_TONES,
   type WalkCompassReading,
+  type WalkGyroReading,
   type WalkPoseReading,
   type WalkSensorListener,
   type WalkSensorSession,
@@ -94,6 +95,10 @@ export class FakeWalkSensors implements WalkSensorsI {
   compass(reading: WalkCompassReading): void {
     this.listener?.compass(reading);
   }
+
+  gyro(reading: WalkGyroReading): void {
+    this.listener?.gyro(reading);
+  }
 }
 
 /** A tracked, upright pose at a point of the walk's frame, facing `heading`. */
@@ -121,6 +126,11 @@ export function uprightPose(
 export function compassAt(t: number, bearing: number): WalkCompassReading {
   const b = (-bearing * Math.PI) / 180;
   return { t, qx: 0, qy: 0, qz: Math.sin(b / 2), qw: Math.cos(b / 2) };
+}
+
+/** A gyro reading for a heading: the same flat phone as `compassAt`, another zero. */
+export function gyroAt(t: number, heading: number): WalkGyroReading {
+  return compassAt(t, heading);
 }
 
 /**

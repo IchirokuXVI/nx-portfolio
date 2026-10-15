@@ -31,12 +31,27 @@ export interface ScriptedIncident {
   readonly stand?: { readonly pathMs: number; readonly holdMs: number };
 }
 
+/**
+ * A stretch where a magnet bends the compass and nothing else (velista `0136`,
+ * target 2): the freezers of 2026-10-08. The compass swings away over `rampMs`,
+ * holds `holdMs`, and swings back over `rampMs`. The camera and the gyro do not.
+ */
+export interface ScriptedCompassBend {
+  /** When it starts, in milliseconds of the script. */
+  readonly at: number;
+  /** How far the compass swings, in degrees. */
+  readonly degrees: number;
+  readonly rampMs: number;
+  readonly holdMs: number;
+}
+
 export interface ScriptedWalk {
   /** `[ms, x, y]`, metres in the walk's frame. */
   readonly path: readonly (readonly [number, number, number])[];
   /** `[ms, heading]`: when the walker faced what they marked. */
   readonly facing: readonly (readonly [number, number])[];
   readonly incidents: readonly ScriptedIncident[];
+  readonly compassBends?: readonly ScriptedCompassBend[];
 }
 
 /**
@@ -51,10 +66,16 @@ export interface ScriptedWalk {
  * 3. At 330 s it is lost for 4 s, which stops the walk, and comes back turned
  *    158.5 degrees. The walker stands where "Horno de pan" was marked (79 s) for
  *    two minutes, then walks on.
+ *
+ * And one stretch that is no incident (velista `0136`): from 72 s, next to the
+ * "Horno de pan" mark, the compass swings 90 degrees over 3 s, holds 8 s and
+ * swings back, as next to the freezers of 2026-10-08. The gyro hears that the
+ * phone did not turn, so the walk goes on with no stop and no sound.
  */
 export const EL_JAMON_SCRIPT: ScriptedWalk = {
   path: SCRIPTED_WALK_PATH,
   facing: SCRIPTED_WALK_FACING,
+  compassBends: [{ at: 72_000, degrees: 90, rampMs: 3_000, holdMs: 8_000 }],
   incidents: [
     { at: 100_000, lostMs: 1_500 },
     {
@@ -78,6 +99,32 @@ export const EL_JAMON_SCRIPT: ScriptedWalk = {
  * minute of the real walk learned.
  */
 export const SCRIPTED_COMPASS_OFFSET = 316.6;
+
+/**
+ * Gyro heading minus the heading in the walk's frame: the `game` stream's yaw
+ * starts at an arbitrary zero. It does not drift in the script.
+ */
+export const SCRIPTED_GYRO_ZERO = 40;
+
+/** How far the bends of the script turn the compass at `ms` of the script. */
+export function compassBendAt(script: ScriptedWalk, ms: number): number {
+  let degrees = 0;
+  for (const bend of script.compassBends ?? []) {
+    const into = ms - bend.at;
+    const back = bend.rampMs + bend.holdMs;
+    if (into <= 0 || into >= back + bend.rampMs) {
+      continue;
+    }
+    const share =
+      into < bend.rampMs
+        ? into / bend.rampMs
+        : into <= back
+          ? 1
+          : 1 - (into - back) / bend.rampMs;
+    degrees += bend.degrees * share;
+  }
+  return degrees;
+}
 
 /** How often a pose and a compass reading are made, in milliseconds of the script. */
 const SAMPLE_MS = 100;
@@ -235,7 +282,7 @@ function normalize(degrees: number): number {
  * the specs and for the browser check, which have no phone and no WebXR. Dev
  * builds reach it through `?fakeWalk=1`.
  *
- * Every 100 ms of the script it makes one pose and one compass reading, on the
+ * Every 100 ms of the script it makes one pose, one compass and one gyro reading, on the
  * `performance.now()` clock from the start, and a timer plays the script at
  * `speed` times real time.
  */
@@ -279,14 +326,20 @@ export class ScriptedWalkSensors implements WalkSensorsI {
         this._segments.find((one) => at >= one.from && at < one.to) ??
         this._segments[this._segments.length - 1];
       const t = base + at;
+      // The compass and the gyro read the walker's heading in the walk's frame,
+      // whatever frame the camera is in. Only the compass is bent.
       const compass = () => {
         const [cx, cy, cz, cw] = compassQuaternion(
-          heading + SCRIPTED_COMPASS_OFFSET
+          heading + SCRIPTED_COMPASS_OFFSET + compassBendAt(this._script, at)
         );
         listener.compass({ t, qx: cx, qy: cy, qz: cz, qw: cw });
+        const [gx, gy, gz, gw] = compassQuaternion(
+          heading + SCRIPTED_GYRO_ZERO
+        );
+        listener.gyro({ t, qx: gx, qy: gy, qz: gz, qw: gw });
       };
       if (segment.kind === 'lost') {
-        // The camera lost its place; the compass did not.
+        // The camera lost its place; the compass and the gyro did not.
         listener.pose(untrackedAt(t));
         compass();
         return;

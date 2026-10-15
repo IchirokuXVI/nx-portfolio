@@ -890,6 +890,7 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
     const started = await this._sensors.start(root, {
       pose: (reading) => this._recording?.pose(reading),
       compass: (reading) => this._recording?.compass(reading),
+      gyro: (reading) => this._recording?.gyro(reading),
       ended: () => {
         this._session = null;
         this._recording?.stopWalk('left-page');

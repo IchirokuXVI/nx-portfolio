@@ -6,7 +6,12 @@ import type {
 import { GatewayError } from '../errors';
 import { MEMORY_SHOWN_WALK_ID, ShopWalkMemory } from './shop-walk-memory';
 import { SHOP_WALK_SERVICE } from './shop-walk-service';
-import { WALK_SAVE_EVERY_MS, WalkEntrySaver } from './walk-entry-saver';
+import {
+  capGuardEvents,
+  WALK_GUARD_EVENTS_MAX,
+  WALK_SAVE_EVERY_MS,
+  WalkEntrySaver,
+} from './walk-entry-saver';
 
 const WALK = MEMORY_SHOWN_WALK_ID;
 
@@ -317,5 +322,72 @@ describe('WalkEntrySaver', () => {
       await saver.save();
       expect(memory.appended.map((entry) => entry.kind)).toEqual(['resumed']);
     });
+  });
+});
+
+/** Velista `0136`: an entry holds at most 50 guard events (backend `0197`). */
+describe('capGuardEvents', () => {
+  const guard = (
+    logMs: number,
+    what: Extract<WalkEvent, { type: 'guard' }>['what']
+  ): WalkEvent => ({ type: 'guard', logMs, what, degrees: 50 });
+  const guardsOf = (events: readonly WalkEvent[]) =>
+    events.flatMap((event) => (event.type === 'guard' ? [event] : []));
+
+  it('leaves an entry within the limit as it is', () => {
+    const events = [
+      put('a-1'),
+      guard(1, 'lost'),
+      guard(2, 'compass-disturbed'),
+    ];
+    expect(capGuardEvents(events)).toEqual(events);
+  });
+
+  it('drops the compass pairs first, oldest first, and keeps every other event', () => {
+    const events: WalkEvent[] = [put('a-1'), guard(0, 'lost')];
+    for (let i = 1; i <= 30; i += 1) {
+      events.push(guard(i * 10, 'compass-disturbed'));
+      events.push(guard(i * 10 + 5, 'compass-settled'));
+    }
+    events.push(guard(400, 'lost'), put('a-2'));
+
+    const kept = capGuardEvents(events);
+
+    const guards = guardsOf(kept);
+    expect(guards).toHaveLength(WALK_GUARD_EVENTS_MAX);
+    expect(kept.filter((event) => event.type === 'area-put')).toHaveLength(2);
+    // Both losses stay; the six oldest pairs went.
+    expect(guards.filter((event) => event.what === 'lost')).toHaveLength(2);
+    const notices = guards.filter((event) => event.what !== 'lost');
+    expect(notices[0]).toMatchObject({ logMs: 70, what: 'compass-disturbed' });
+    expect(notices[1]).toMatchObject({ logMs: 75, what: 'compass-settled' });
+  });
+
+  it('drops the oldest losses only once no compass notice is left, never a stop', () => {
+    const events: WalkEvent[] = [
+      guard(0, 'turned'),
+      guard(1, 'compass-disturbed'),
+    ];
+    for (let i = 0; i < 52; i += 1) {
+      events.push(guard(10 + i, 'lost'));
+    }
+
+    const kept = capGuardEvents(events);
+
+    expect(kept).toHaveLength(WALK_GUARD_EVENTS_MAX);
+    expect(kept[0]).toMatchObject({ what: 'turned' });
+    expect(kept[1]).toMatchObject({ what: 'lost', logMs: 13 });
+  });
+
+  it('caps what the saver sends', async () => {
+    const { memory, saver } = await harness();
+    for (let i = 0; i < 40; i += 1) {
+      saver.add([guard(i * 2, 'compass-disturbed')]);
+      saver.add([guard(i * 2 + 1, 'compass-settled')]);
+    }
+    expect(await saver.save()).toBe('saved');
+    expect(guardsOf(memory.appended[0].events)).toHaveLength(
+      WALK_GUARD_EVENTS_MAX
+    );
   });
 });
