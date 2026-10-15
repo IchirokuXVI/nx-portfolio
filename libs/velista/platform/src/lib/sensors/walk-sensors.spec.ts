@@ -29,22 +29,38 @@ describe('WebXrWalkSensors, the gyro', () => {
    * A window with no Generic Sensor API, so both streams fall back to their
    * events, and a camera whose session is still being asked for.
    */
-  function browser(now: number) {
+  function browser(now: number, session?: unknown) {
     const win = Object.assign(new EventTarget(), {
       performance: { now: () => now },
       XRWebGLLayer: class {},
       navigator: {
         xr: {
           isSessionSupported: async () => true,
-          requestSession: () => new Promise<never>(() => undefined),
+          requestSession: () =>
+            session === undefined
+              ? new Promise<never>(() => undefined)
+              : Promise.resolve(session),
         },
       },
     });
     const doc = Object.assign(new EventTarget(), {
       defaultView: win,
       visibilityState: 'visible',
+      createElement: () => ({ getContext: () => ({}) }),
     }) as unknown as Document;
     return { win, doc };
+  }
+
+  /** An `immersive-ar` session that opens and draws no frame. */
+  function xrSession() {
+    return Object.assign(new EventTarget(), {
+      visibilityState: 'visible',
+      renderState: {},
+      end: async () => undefined,
+      updateRenderState: () => undefined,
+      requestReferenceSpace: async () => ({}),
+      requestAnimationFrame: () => 0,
+    });
   }
 
   function orientation(type: string, timeStamp: number, alpha: number): Event {
@@ -79,5 +95,29 @@ describe('WebXrWalkSensors, the gyro', () => {
     // A turn of 30 degrees about the vertical.
     expect(gyro[0].qz).toBeCloseTo(Math.sin((15 * Math.PI) / 180), 6);
     expect(gyro[0].qw).toBeCloseTo(Math.cos((15 * Math.PI) / 180), 6);
+  });
+
+  it('stops hearing the gyro once the session ends', async () => {
+    const { win, doc } = browser(5_000, xrSession());
+    const compass: WalkCompassReading[] = [];
+    const gyro: WalkGyroReading[] = [];
+    const session = await new WebXrWalkSensors(doc).start(null, {
+      pose: () => undefined,
+      compass: (one) => compass.push(one),
+      gyro: (one) => gyro.push(one),
+      ended: () => undefined,
+    });
+    if (typeof session === 'string') {
+      throw new Error(`the session did not open: ${session}`);
+    }
+    win.dispatchEvent(orientation('deviceorientation', 4_990, 30));
+    expect(gyro).toHaveLength(1);
+
+    session.end();
+    win.dispatchEvent(orientation('deviceorientation', 4_995, 31));
+    win.dispatchEvent(orientation('deviceorientationabsolute', 4_996, 300));
+
+    expect(gyro).toHaveLength(1);
+    expect(compass).toEqual([]);
   });
 });

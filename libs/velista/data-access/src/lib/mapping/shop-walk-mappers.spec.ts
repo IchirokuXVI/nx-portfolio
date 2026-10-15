@@ -258,12 +258,43 @@ describe('toShopWalkLog', () => {
     ]);
   });
 
-  it('reads no log with a guard event of a kind this build does not know', () => {
+  it('skips a guard event it cannot read and keeps the rest of the log', () => {
+    const log = toShopWalkLog({
+      walkId: 'w1',
+      entries: [
+        {
+          ...ENTRY,
+          events: [
+            { type: 'guard', logMs: 4, what: 'wifi' },
+            ...ENTRY.events,
+            { type: 'guard', what: 'lost' },
+            { type: 'guard', logMs: 8, what: 'lost' },
+          ],
+        },
+      ],
+      lastSeq: 1,
+    });
+
+    const plain = toShopWalkLog({ walkId: 'w1', entries: [ENTRY], lastSeq: 1 });
+    expect(log?.entries[0].events).toEqual([
+      ...(plain?.entries[0].events ?? []),
+      { type: 'guard', logMs: 8, what: 'lost' },
+    ]);
+    expect(log?.entries[0].events).toHaveLength(5);
+  });
+
+  it('still reads no log with any other event it cannot read beside guard events', () => {
     expect(
       toShopWalkLog({
         walkId: 'w1',
         entries: [
-          { ...ENTRY, events: [{ type: 'guard', logMs: 4, what: 'wifi' }] },
+          {
+            ...ENTRY,
+            events: [
+              { type: 'guard', logMs: 4, what: 'wifi' },
+              { type: 'section-left' },
+            ],
+          },
         ],
         lastSeq: 1,
       })

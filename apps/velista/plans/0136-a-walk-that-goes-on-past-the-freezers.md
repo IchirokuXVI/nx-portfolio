@@ -142,8 +142,10 @@ fixture that recorder `0005` section 5 asks for.
   `WalkEntry` because the phone folds it. So `data-access` has no new type of its own.
   It has the alias `WalkGuardEvent`, the kinds `WALK_GUARD_KINDS`, and the read mapper's
   `guard` case. That case is needed: the log is all or nothing, so before it a walk with
-  one `guard` event failed to load on the rewind page. Events go to the wire as they are,
-  as every other event does. No outward mapper exists, and none was added.
+  one `guard` event failed to load on the rewind page. A `guard` event that this build
+  cannot read (a kind it does not know, or no log time) is skipped, because the fold
+  draws nothing from it. Every other event stays all or nothing. Events go to the wire as
+  they are, as every other event does. No outward mapper exists, and none was added.
 - Backend `0197` has no "What the build decided" section. Its code holds what this plan
   uses: `SHOP_WALK_GUARD_KINDS`, `SHOP_WALK_LIMITS.guardEventsMax` (50), and a gateway
   that forwards the event as it is.
@@ -177,7 +179,8 @@ fixture that recorder `0005` section 5 asks for.
    segment). The stop's own moment is already in the loss event or the entry's time. A
    loss after the first one in a resume keeps its real log time, even when that is later
    than the entry's end.
-7. **Numbers.** Degrees are rounded to a tenth and keep their sign, in (-180, 180].
+7. **Numbers.** Degrees are rounded to a tenth and keep their sign, in (-180, 180]. They
+   are wrapped after the rounding, so -179.96 is written as 180 and not as -180.
    Metres are rounded to a centimetre. `lost` carries no number. Recorder `0005` item 9
    decided this.
 8. **`guard` events wait with the session's points.** A session that adds nothing sends
@@ -190,9 +193,19 @@ fixture that recorder `0005` section 5 asks for.
     degrees, with no drift. Its bent stretch starts at 72 s, beside the "Horno de pan"
     mark. Over 3 s the compass swings 90 degrees. It holds there for 8 s, then swings
     back over 3 s.
-11. **Marks are not stopped during a held yes.** A mark saved in the 1.8 s before the
-    guard judges is kept even if the frame turned. The window is too short for the sheet
-    to be opened and saved in. The plan does not ask for a gate, so none was added.
+11. **Marks and "Section left" wait with a held yes.** A mark saved while the guard has
+    not judged the frame is not drawn or sent yet. The sheet closes as it does for any
+    mark, and says nothing about saving. The mark and each "Section left" are held with
+    the purple points, in the order they came. When the guard judges the frame good, they
+    go to the live map between the points they came between, and they are saved in the
+    entry the purple points belong to, before `confirmed`. A stop in that window (turned,
+    jump, lost, Stop, leaving the page) drops them with the points. The stop panel then
+    says that the walk stopped, and the history shows it kept up to the first loss, as it
+    does for the purple path. No copy changed.
+12. **A resume by the gyro gets the walk's baseline whenever the walk has one**, also
+    when the probe has heard no compass yet (item 4 lets such a resume go). Before the
+    fix that guard learned a baseline of its own over 60 s, and a bent compass in that
+    minute was not seen.
 
 ### Progress evidence
 
@@ -208,9 +221,16 @@ fixture that recorder `0005` section 5 asks for.
   Pointing is used when a bent compass at the mark disagrees by more than 45 degrees. The
   existing compass resumes report `compass`.
 - **Target 4** (`shop-walk-mappers.ts`, `walk-entry-saver.ts`): the specs cover the loss,
-  `heading`, `jump` and `turned` events, the cap of 50, the read mapper, and a session that
-  sends nothing. Under the host contract they cover a yes before the judgement in a
-  turned frame, in a good frame, with a second loss, and with Stop.
+  `heading`, `jump` and `turned` events, the cap of 50, the read mapper (an unreadable
+  `guard` event is skipped, any other unreadable event is no log), the degrees wrapped
+  after rounding, and a session that sends nothing. Under the host contract they cover a
+  yes before the judgement in a turned frame, in a good frame, with a second loss, with a
+  jump, and with Stop, and a mark and a "Section left" made meanwhile, kept in a good
+  frame and dropped in a turned one or on Stop.
+- `walk-recording.spec.ts` also covers the 120 s gyro limit at 119 s and 121 s, a gyro
+  rotation across 180 and -180, and a gyro resume before the probe heard the compass that
+  still weighs the compass against the walk's baseline. `walk-sensors.spec.ts` shows that
+  `end()` of the session stops the gyro and the compass listeners.
 - **Target 5**: no template, locale or sound file changed.
 - `npx nx run-many -t test lint` for `velista/platform`, `velista/feature-shop-map`,
   `velista/data-access` and `velista/feature-walk-lab`: green (three warnings from before

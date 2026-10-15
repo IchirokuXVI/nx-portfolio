@@ -180,7 +180,8 @@ export interface RecordingPerson {
  * (`awaitingTurnJudgement`, recorder plan 0005) is held: the walk goes on, but
  * the purple points and those kept since stay unsaved until the guard has
  * judged it. A stop meanwhile drops them all and keeps the walk up to the
- * first loss of the resume (the recorder README's host contract).
+ * first loss of the resume (the recorder README's host contract). Marks and
+ * "Section left" made meanwhile wait with them, in the order they came.
  *
  * ## What the guard saw (velista `0136`)
  *
@@ -229,6 +230,11 @@ export class WalkRecording {
   private _lastLog = 0;
   /** The person said yes before the guard judged the frame: the purple points wait for it. */
   private _judging = false;
+  /**
+   * Marks and "Section left" made while a yes is held, each with how many
+   * purple points came before it: they wait for the judgement with the points.
+   */
+  private _held: HeldEdit[] = [];
   /** `guard` events for the open entry, sent with the session's points. */
   private _guardEvents: WalkEvent[] = [];
 
@@ -424,10 +430,10 @@ export class WalkRecording {
       this._output.baseline(this._baseline);
     }
     const transform = alignSession({ mark, standingAt, rotation });
+    // The walk's baseline whenever it has one: a resume by the gyro can go
+    // before the probe heard the compass, and its guard still needs it.
     const guard = createTrackingGuard(
-      offset !== undefined && this._baseline !== null
-        ? { baseline: this._baseline }
-        : {}
+      this._baseline !== null ? { baseline: this._baseline } : {}
     );
     this._probe = null;
     this._resumedBy = rule;
@@ -578,7 +584,11 @@ export class WalkRecording {
     return snapshot;
   }
 
-  /** A mark, where the phone is and the way it points at this moment (target 3). */
+  /**
+   * A mark, where the phone is and the way it points at this moment (target 3).
+   * While a yes is held it waits with the purple points: the frame it was made
+   * in may yet be judged turned (velista `0136`).
+   */
   mark(kind: MarkKind, text: string): MapMark | null {
     const pose = this._lastAligned;
     if (this._phase !== 'walking' || pose === null) {
@@ -594,12 +604,20 @@ export class WalkRecording {
       text,
       logMs: this._lastLog,
     };
-    this._live.mark(mark);
+    if (this._judging) {
+      this._held.push({ after: this._purple.length, mark });
+    } else {
+      this._live.mark(mark);
+    }
     return mark;
   }
 
-  /** "Section left" (target 4). */
+  /** "Section left" (target 4). It waits with a held yes, as a mark does. */
   sectionLeft(): void {
+    if (this._judging) {
+      this._held.push({ after: this._purple.length, mark: null });
+      return;
+    }
     this._live.sectionLeft();
   }
 
@@ -640,10 +658,27 @@ export class WalkRecording {
   private _keepPurple(): void {
     this._judging = false;
     const purple = this._purple;
+    const held = this._held;
     this._purple = [];
-    for (const [logMs, x, y] of purple) {
+    this._held = [];
+    // The live map gets the points and the held edits in the order they came,
+    // as it would have while walking.
+    let next = 0;
+    const editsUpTo = (count: number) => {
+      for (; next < held.length && held[next].after <= count; next += 1) {
+        const { mark } = held[next];
+        if (mark === null) {
+          this._live.sectionLeft();
+        } else {
+          this._live.mark(mark);
+        }
+      }
+    };
+    purple.forEach(([logMs, x, y], index) => {
+      editsUpTo(index);
       this._live.push({ logMs, x, y });
-    }
+    });
+    editsUpTo(purple.length);
     this._pending.push(...purple);
     this._lossLog = null;
     this._phase = 'walking';
@@ -665,6 +700,7 @@ export class WalkRecording {
     }
     guard.discard(this._lastT);
     this._purple = [];
+    this._held = [];
     this.flush();
     const at = this._lossLog ?? this._lastLog;
     this._end([
@@ -708,6 +744,7 @@ export class WalkRecording {
     const waiting =
       this._phase === 'unconfirmed' || this._phase === 'lost' || this._judging;
     this._purple = [];
+    this._held = [];
     this.flush();
     const at =
       waiting && this._lossLog !== null ? this._lossLog : this._lastLog;
@@ -751,6 +788,7 @@ export class WalkRecording {
     this._moved = false;
     this._wrote = false;
     this._purple = [];
+    this._held = [];
     this._lossLog = null;
     this._judging = false;
     this._guardEvents = [];
@@ -793,7 +831,9 @@ export class WalkRecording {
           break;
         case 'stopped': {
           if (event.unconfirmedDropped) {
+            // The marks made while the yes was held go with the points.
             this._purple = [];
+            this._held = [];
           }
           const played = this._phase === 'lost';
           this.flush();
@@ -881,6 +921,7 @@ export class WalkRecording {
     this._transform = null;
     this._lossLog = null;
     this._purple = [];
+    this._held = [];
     this._pending = [];
     this._live.setTracking('lost');
     this._stop = reason;
@@ -905,6 +946,15 @@ function sampleOf(reading: WalkPoseReading): PoseSample {
   };
 }
 
+/**
+ * A mark (or "Section left", as null) made while a yes is held, after this
+ * many of the purple points.
+ */
+interface HeldEdit {
+  readonly after: number;
+  readonly mark: MapMark | null;
+}
+
 /** A session guard's gyro offset (`state().gyroOffset`) at a camera time. */
 interface GyroSnapshot {
   readonly t: number;
@@ -926,10 +976,20 @@ function guardEvent(
     logMs,
     what,
     ...(numbers.degrees !== undefined
-      ? { degrees: Math.round(numbers.degrees * 10) / 10 }
+      ? { degrees: roundDegrees(numbers.degrees) }
       : {}),
     ...(numbers.metres !== undefined ? { metres: round2(numbers.metres) } : {}),
   };
+}
+
+/**
+ * Degrees to a tenth, in (-180, 180]. Wrapped after rounding, so -179.96 is
+ * 180, not -180.
+ */
+export function roundDegrees(degrees: number): number {
+  const wrapped = wrapDegrees(Math.round(degrees * 10) / 10);
+  const r = Math.round(wrapped * 10) / 10;
+  return r === 0 ? 0 : r;
 }
 
 function round2(value: number): number {

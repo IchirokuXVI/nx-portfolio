@@ -6,7 +6,12 @@ import {
 import type { WalkEntryDraft } from '@portfolio/velista/data-access';
 import type { ShopWalkEntryKind } from '@portfolio/velista/models';
 import { compassAt, gyroAt, uprightPose } from '../shop-map.testing';
-import { WalkRecording, type RecordingOutput } from './walk-recording';
+import {
+  GYRO_RESUME_MAX_MS,
+  roundDegrees,
+  WalkRecording,
+  type RecordingOutput,
+} from './walk-recording';
 
 /** Compass minus camera heading in the walk's frame. */
 const OFFSET = 300;
@@ -89,6 +94,8 @@ function walk(
     still?: boolean;
     /** Feed the gyro too (velista 0136): it reads the true heading, whatever the camera's frame. */
     gyro?: boolean;
+    /** The gyro's zero at `t`, `GYRO_ZERO` by default. */
+    gyroZero?: (t: number) => number;
     /** Degrees a magnet adds to the compass at `t`. */
     bend?: (t: number) => number;
     each?: (t: number) => void;
@@ -103,7 +110,7 @@ function walk(
     const raw = applyRigid(frame, { x: 0, y });
     rec.compass(compassAt(t, heading + OFFSET + (options.bend?.(t) ?? 0)));
     if (options.gyro) {
-      rec.gyro(gyroAt(t, heading + GYRO_ZERO));
+      rec.gyro(gyroAt(t, heading + (options.gyroZero?.(t) ?? GYRO_ZERO)));
     }
     rec.pose(uprightPose(t, raw.x, raw.y, heading + frame.rotation));
     options.each?.(t);
@@ -114,11 +121,17 @@ function lose(
   rec: WalkRecording,
   from: number,
   to: number,
-  options: { gyro?: boolean; heading?: number } = {}
+  options: {
+    gyro?: boolean;
+    heading?: number;
+    gyroZero?: (t: number) => number;
+  } = {}
 ): void {
   for (let t = from; t < to; t += 100) {
     if (options.gyro) {
-      rec.gyro(gyroAt(t, (options.heading ?? 0) + GYRO_ZERO));
+      rec.gyro(
+        gyroAt(t, (options.heading ?? 0) + (options.gyroZero?.(t) ?? GYRO_ZERO))
+      );
     }
     rec.compass(compassAt(t, (options.heading ?? 0) + OFFSET));
     rec.pose({
@@ -552,6 +565,13 @@ describe('WalkRecording (velista 0126)', () => {
   });
 });
 
+const edits = (out: Output) =>
+  out.adds.flatMap(({ events }) =>
+    events.filter(
+      (event) => event.type === 'mark-put' || event.type === 'section-left'
+    )
+  );
+
 const guards = (out: Output) =>
   out.adds.flatMap(({ events }) =>
     events.flatMap((event) => (event.type === 'guard' ? [event] : []))
@@ -658,6 +678,15 @@ describe('WalkRecording, what the guard saw', () => {
         events: [{ type: 'guard', logMs: 10_000, what: 'jump', metres: 3.1 }],
       },
     ]);
+  });
+
+  it('rounds degrees to a tenth inside (-180, 180]', () => {
+    expect(roundDegrees(-179.96)).toBe(180);
+    expect(roundDegrees(179.96)).toBe(180);
+    expect(roundDegrees(-179.94)).toBe(-179.9);
+    expect(roundDegrees(-46.64)).toBe(-46.6);
+    expect(roundDegrees(270)).toBe(-90);
+    expect(Object.is(roundDegrees(-0.04), 0)).toBe(true);
   });
 
   it('sends no guard event for a session that added nothing', () => {
@@ -778,6 +807,91 @@ describe('WalkRecording, a yes before the guard judged the frame', () => {
     ]);
     expect(paths(out).every(([logMs]) => logMs < 10_000)).toBe(true);
   });
+
+  it('drops the purple path and the points since when a jump stops it', () => {
+    const out = output();
+    const rec = returned(out, IDENTITY);
+    rec.confirm();
+    walk(rec, 12_000, 12_500, { gyro: true, startY: 30 });
+
+    expect(rec.stop).toBe('frame-moved');
+    expect(rec.purple()).toEqual([]);
+    expect(paths(out).every(([logMs]) => logMs < 10_000)).toBe(true);
+    expect(out.opened).toEqual(['started']);
+    expect(out.pushes).toEqual([
+      {
+        kind: 'stopped',
+        reason: 'frame-moved',
+        logTo: 10_000,
+        events: [
+          {
+            type: 'guard',
+            logMs: 10_000,
+            what: 'jump',
+            metres: expect.any(Number),
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('holds a mark and a section left made meanwhile, and keeps them once the frame is good', () => {
+    const out = output();
+    const rec = returned(out, IDENTITY);
+    rec.confirm();
+    walk(rec, 12_000, 12_300, { gyro: true, startY: 12 });
+    const mark = rec.mark('section', 'Fruta');
+    rec.sectionLeft();
+    rec.flush();
+
+    // The sheet closes on a mark, but nothing of it goes out yet.
+    expect(mark).not.toBeNull();
+    expect(out.pushes).toEqual([]);
+    expect(edits(out)).toEqual([]);
+
+    walk(rec, 12_300, 15_000, { gyro: true, startY: 12.3 });
+    rec.flush();
+
+    expect(out.pushes.map((one) => one.kind)).toEqual(['confirmed']);
+    expect(edits(out)).toEqual([
+      { type: 'mark-put', mark },
+      { type: 'section-left', logMs: expect.any(Number) },
+    ]);
+    expect(mark?.logMs).toBeGreaterThan(11_500);
+  });
+
+  it('drops a mark and a section left made meanwhile, with the points, when the frame turned', () => {
+    const out = output();
+    const frame: RigidTransform = { rotation: 150, x: 0, y: 0 };
+    const rec = returned(out, frame);
+    rec.confirm();
+    walk(rec, 12_000, 12_300, { gyro: true, frame, startY: 12 });
+    expect(rec.mark('note', 'Congelados')).not.toBeNull();
+    rec.sectionLeft();
+    walk(rec, 12_300, 15_000, { gyro: true, frame, startY: 12.3 });
+    rec.flush();
+
+    expect(rec.stop).toBe('frame-moved');
+    expect(edits(out)).toEqual([]);
+    expect(out.pushes).toEqual([
+      expect.objectContaining({
+        kind: 'stopped',
+        reason: 'frame-moved',
+        logTo: 10_000,
+      }),
+    ]);
+  });
+
+  it('drops a mark made meanwhile when the person stops', () => {
+    const out = output();
+    const rec = returned(out, IDENTITY);
+    rec.confirm();
+    expect(rec.mark('note', 'Pan')).not.toBeNull();
+    rec.stopWalk('button');
+    rec.flush();
+
+    expect(edits(out)).toEqual([]);
+  });
 });
 
 /** Velista `0136`, section 1. */
@@ -868,6 +982,86 @@ describe('WalkRecording, how a resume is turned', () => {
     expect(rec.resumeAt(MARK)).toBe(true);
 
     expect(rec.resumedBy).toBe('pointing');
+  });
+
+  /**
+   * The stop's gyro offset is the last trusted one 2 s or more before the
+   * stop: the pose at 19.9 s. A resume `after` ms from it, by a probe heard
+   * for the 2 s before.
+   */
+  function resumeAfter(after: number): WalkRecording {
+    const rec = stoppedAt20(output());
+    const at = 19_900 + after;
+    lose(rec, 24_000, at - 2_000, { gyro: true });
+    rec.startProbe();
+    walk(rec, at - 2_000, at + 100, {
+      gyro: true,
+      frame: FRAME,
+      still: true,
+      startY: 10,
+      heading: 120,
+    });
+    expect(rec.resumeAt(MARK)).toBe(true);
+    return rec;
+  }
+
+  it('turns by the gyro 119 s after the stop, and not 121 s after it', () => {
+    expect(GYRO_RESUME_MAX_MS).toBe(120_000);
+    expect(resumeAfter(119_000).resumedBy).toBe('gyro');
+    expect(resumeAfter(121_000).resumedBy).toBe('pointing');
+  });
+
+  it('turns by the gyro across 180 and -180', () => {
+    const out = output();
+    const rec = recording(out);
+    // Camera minus gyro straddles 180 and -180 for the whole walk.
+    const gyroZero = (t: number) => (t % 200 === 0 ? 179.5 : 180.5);
+    rec.beginFirst();
+    walk(rec, 0, 20_000, { gyro: true, gyroZero });
+    lose(rec, 20_000, 24_000, { gyro: true, gyroZero });
+    expect(rec.stop).toBe('tracking-lost');
+    rec.startProbe();
+    const probe = {
+      gyro: true,
+      gyroZero,
+      frame: FRAME,
+      still: true,
+      startY: 10,
+      heading: 120,
+    };
+    walk(rec, 24_000, 26_000, probe);
+    expect(rec.resumeAt(MARK)).toBe(true);
+    walk(rec, 26_000, 26_500, probe);
+
+    expect(rec.resumedBy).toBe('gyro');
+    expect(rec.person()?.heading).toBeCloseTo(120, 0);
+  });
+
+  it('gives a resume by the gyro the walk baseline before the probe heard the compass', () => {
+    const out = output();
+    const rec = stoppedAt20(out, OFFSET);
+    rec.startProbe();
+    // The gyro and the camera, and no compass yet.
+    const standing = applyRigid(FRAME, { x: 0, y: 10 });
+    for (let t = 24_000; t < 26_000; t += 100) {
+      rec.gyro(gyroAt(t, 120 + GYRO_ZERO));
+      rec.pose(uprightPose(t, standing.x, standing.y, 120 + FRAME.rotation));
+    }
+    expect(rec.readyToResume).toBe(true);
+    expect(rec.resumeAt(MARK)).toBe(true);
+    expect(rec.resumedBy).toBe('gyro');
+
+    // Then a compass a freezer bends, and no gyro: the guard weighs it
+    // against the walk's baseline at once, not after learning its own.
+    walk(rec, 26_000, 36_000, {
+      frame: FRAME,
+      startY: 10,
+      heading: 120,
+      bend: () => 90,
+    });
+
+    // A guard that learns its own baseline needs 60 s of walking first.
+    expect(rec.stop).toBe('frame-moved');
   });
 
   it('turns by pointing when the compass at the mark disagrees with it by more than 45 degrees', () => {

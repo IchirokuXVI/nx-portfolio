@@ -201,9 +201,16 @@ export function toWalkEntry(raw: unknown): WalkEntry | null {
   ) {
     return null;
   }
-  const events = raw['events'].map(toWalkEvent);
-  if (events.some((event) => event === null)) {
-    return null;
+  const events: WalkEvent[] = [];
+  for (const one of raw['events'] as unknown[]) {
+    const event = toWalkEvent(one);
+    if (event !== null) {
+      events.push(event);
+    } else if (!isRecord(one) || one['type'] !== 'guard') {
+      // All or nothing, but for a `guard` event: the fold draws nothing from
+      // it, so one this build cannot read is left out.
+      return null;
+    }
   }
   const rewoundTo = whole(raw['rewoundTo']);
   if (kind === 'rewound' && rewoundTo === null) {
@@ -217,7 +224,7 @@ export function toWalkEntry(raw: unknown): WalkEntry | null {
     at,
     logFrom,
     logTo,
-    events: events as WalkEvent[],
+    events,
     ...(kind === 'rewound' && rewoundTo !== null ? { rewoundTo } : {}),
     ...(kind === 'stopped' && reason !== null ? { reason } : {}),
   };
@@ -290,9 +297,9 @@ export const WALK_GUARD_KINDS = [
 export type WalkGuardEvent = Extract<WalkEvent, { type: 'guard' }>;
 
 /**
- * A `guard` event off the wire. The fold ignores it, but the log is still all
- * or nothing, so one that cannot be read makes the log unreadable. A number
- * that is not a finite number is left out.
+ * A `guard` event off the wire, or null when it cannot be read. The fold
+ * ignores it, so `toWalkEntry` skips an unreadable one rather than the log. A
+ * number that is not a finite number is left out.
  */
 function toWalkGuardEvent(raw: Record<string, unknown>): WalkGuardEvent | null {
   const logMs = finite(raw['logMs']);
