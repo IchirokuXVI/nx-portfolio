@@ -9,7 +9,6 @@ import {
   DeploymentStore,
   GatewayError,
   HARVEST_SERVICE,
-  RESOURCE_GATEWAYS,
   ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
@@ -20,7 +19,6 @@ import {
   provideSections,
   RecordPage,
   RecordView,
-  ResourceChanges,
   ResourceListPage,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -34,17 +32,14 @@ import type {
 import { PageHeader, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sectionSource } from '../catalog-sources';
-import { ChainSections } from '../chain-sections';
-import { ShopSections } from '../shop-sections';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains-routes';
 
 /**
  * A chain on the record page (admin plan 0056), against the in memory
  * gateways and through the real route table of the Chains section.
  *
- * The seed is the catalog's own: Mercadona holds three shops, two sections and
- * six price scopes, and Consum holds one shop and one scope. Bonpreu holds
+ * The seed is the catalog's own: Mercadona holds three shops and six price
+ * scopes, and Consum holds one shop and one scope. Bonpreu holds
  * nothing and has no default scope.
  *
  * Assertions are on view models and on keys wherever a string is translated,
@@ -276,10 +271,10 @@ describe('a chain, on the record page', () => {
     );
 
     expect(catalog.chains.info.holds).toBe(
-      'A chain holds its shops, its sections and its price scopes.'
+      'A chain holds its shops and its price scopes.'
     );
     expect(catalog.chains.info.openShop).toBe(
-      'Open a shop to set its section order, its products and the scopes that price it.'
+      'Open a shop to set its sections, its products and the scopes that price it.'
     );
   });
 
@@ -319,21 +314,37 @@ describe('a chain, on the record page', () => {
 });
 
 describe('the tabs of a chain', () => {
-  it('is Shops, Sections, Price scopes and Details, each under the chain', async () => {
+  /** A chain has no sections since backend plan 0200: its shops do. */
+  it('is Shops, Price scopes and Details, each under the chain', async () => {
     const fixture = await boot('/chains/sm_mercadona/shops');
 
     expect(tabs(fixture).map((tab) => tab.label)).toEqual([
       'catalog.locations.many',
-      'catalog.chains.tabs.sections',
       'catalog.priceScopes.many',
       'record.tab.details',
     ]);
     expect(tabs(fixture).map((tab) => tab.path)).toEqual([
       '/chains/sm_mercadona/shops',
-      '/chains/sm_mercadona/sections',
       '/chains/sm_mercadona/scopes',
       '/chains/sm_mercadona/details',
     ]);
+  });
+
+  /** The three routes of the sections of a chain are gone (admin plan 0063). */
+  it('draws no page for the sections of a chain', async () => {
+    for (const address of [
+      '/chains/sm_mercadona/sections',
+      '/chains/sm_mercadona/sections/new',
+      '/chains/sm_mercadona/sections/sec_centro_chilled',
+    ]) {
+      const fixture = await boot(address);
+      expect(fixture.debugElement.query(By.directive(RecordPage))).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-not-found-page'
+        )
+      ).not.toBeNull();
+    }
   });
 
   it('marks the tab that is open as the current page', async () => {
@@ -344,12 +355,10 @@ describe('the tabs of a chain', () => {
 
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/chains/sm_mercadona/shops',
-      '/chains/sm_mercadona/sections',
       '/chains/sm_mercadona/scopes',
       '/chains/sm_mercadona/details',
     ]);
     expect(links.map((link) => link.getAttribute('aria-current'))).toEqual([
-      null,
       null,
       'page',
       null,
@@ -358,21 +367,21 @@ describe('the tabs of a chain', () => {
 
   /**
    * The shop count is the `locationCount` catalog gave on the chain. The
-   * sections are read whole, and the scopes fit one page, so both are counted.
-   * Details is the record and counts nothing.
+   * scopes fit one page, so they are counted. Details is the record and
+   * counts nothing.
    */
-  it('counts the shops, the sections and the scopes of the seed', async () => {
+  it('counts the shops and the scopes of the seed', async () => {
     const fixture = await boot('/chains/sm_mercadona/shops');
 
-    expect(counts(fixture)).toEqual([3, 2, 6, null]);
-    expect(tabs(fixture)[3].count).toBeUndefined();
+    expect(counts(fixture)).toEqual([3, 6, null]);
+    expect(tabs(fixture)[2].count).toBeUndefined();
   });
 
   it('counts the own rows of another chain, and not those of the first', async () => {
     const fixture = await boot('/chains/sm_consum/shops');
 
-    // One shop, no section and one scope.
-    expect(counts(fixture)).toEqual([1, 0, 1, null]);
+    // One shop and one scope.
+    expect(counts(fixture)).toEqual([1, 1, null]);
   });
 
   /** "Do not show a number that the gateway does not give." */
@@ -385,10 +394,10 @@ describe('the tabs of a chain', () => {
         return row;
       };
     });
-    const fixture = await boot('/chains/sm_mercadona/sections');
+    const fixture = await boot('/chains/sm_mercadona/scopes');
 
-    // The other two were given, and still show.
-    expect(counts(fixture)).toEqual([null, 2, 6, null]);
+    // The other was given, and still shows.
+    expect(counts(fixture)).toEqual([null, 6, null]);
   });
 
   /**
@@ -403,15 +412,12 @@ describe('the tabs of a chain', () => {
         nextCursor: 'more',
       });
     });
-    const fixture = await boot('/chains/sm_mercadona/sections');
+    const fixture = await boot('/chains/sm_mercadona/shops');
 
-    expect(counts(fixture)).toEqual([3, 2, null, null]);
+    expect(counts(fixture)).toEqual([3, null, null]);
   });
 
   it('shows no count for what could not be read, and still opens', async () => {
-    jest
-      .spyOn(ShopSections.prototype, 'chainSections')
-      .mockRejectedValue(refusal('unavailable', 503));
     alter('/price-scopes', (gateway) => {
       gateway.list = async () => {
         throw refusal('unavailable', 503);
@@ -419,37 +425,9 @@ describe('the tabs of a chain', () => {
     });
     const fixture = await boot('/chains/sm_mercadona/details');
 
-    expect(counts(fixture)).toEqual([3, null, null, null]);
+    expect(counts(fixture)).toEqual([3, null, null]);
     expect(page(fixture).heading()).toBe('Mercadona');
     expect(fixture.debugElement.query(By.directive(RecordView))).not.toBeNull();
-  });
-
-  /**
-   * The page asks for the counts once for each chain it opens. A section
-   * written by anything else says so, and the number is read again.
-   */
-  it('counts the sections again when one is written', async () => {
-    const fixture = await boot('/chains/sm_mercadona/shops');
-    expect(counts(fixture)[1]).toBe(2);
-
-    await TestBed.inject(RESOURCE_GATEWAYS)
-      .for(sectionSource())
-      .create({
-        supermarketId: 'sm_mercadona',
-        slug: 'bakery',
-        name: { en: 'Bakery', es: 'Panadería' },
-        position: 2,
-        categoryIds: [],
-      });
-    // Nothing said so yet, and the tab still shows what it read.
-    await settle(fixture);
-    expect(counts(fixture)[1]).toBe(2);
-
-    TestBed.inject(ResourceChanges).wrote('sections');
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(counts(fixture)).toEqual([3, 3, 6, null]);
   });
 });
 
@@ -681,34 +659,6 @@ describe('the Shops tab of a chain', () => {
 
     await go(fixture, '/chains/sm_mercadona/details');
     expect(page(fixture).yielded()).toBe(false);
-  });
-});
-
-describe('the Sections tab of a chain', () => {
-  it('draws the sections panel, given the chain of the page', async () => {
-    const fixture = await boot('/chains/sm_mercadona/sections');
-    const panel = fixture.debugElement.query(By.directive(ChainSections))
-      .componentInstance as ChainSections;
-
-    expect(panel.supermarketId()).toBe('sm_mercadona');
-    expect(panel.sections().map((section) => section.slug)).toEqual([
-      'offers',
-      'chilled',
-    ]);
-  });
-
-  /** The tab counts what the panel lists, so a delete moves the number. */
-  it('counts again after a section is deleted', async () => {
-    const fixture = await boot('/chains/sm_mercadona/sections');
-    const panel = fixture.debugElement.query(By.directive(ChainSections))
-      .componentInstance as ChainSections;
-    expect(counts(fixture)[1]).toBe(2);
-
-    await panel.confirmDelete(panel.sections()[0]);
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(counts(fixture)[1]).toBe(1);
   });
 });
 
@@ -1166,27 +1116,14 @@ describe('going from one chain to another', () => {
 
   it('counts the new chain on the tabs', async () => {
     const fixture = await boot('/chains/sm_mercadona/scopes', [WIDE]);
-    expect(counts(fixture)).toEqual([3, 2, 6, null]);
+    expect(counts(fixture)).toEqual([3, 6, null]);
 
     await go(fixture, '/chains/sm_consum/scopes');
 
-    expect(counts(fixture)).toEqual([1, 0, 1, null]);
-    expect(tabs(fixture)[2].path).toBe('/chains/sm_consum/scopes');
+    expect(counts(fixture)).toEqual([1, 1, null]);
+    expect(tabs(fixture)[1].path).toBe('/chains/sm_consum/scopes');
     expect(tableRows(fixture)).toHaveLength(1);
     expect(tableRows(fixture)[0].textContent).toContain('loc_consum_centro');
-  });
-
-  it('draws the sections of the new chain', async () => {
-    const fixture = await boot('/chains/sm_mercadona/sections', [WIDE]);
-    const panel = () =>
-      fixture.debugElement.query(By.directive(ChainSections))
-        .componentInstance as ChainSections;
-    expect(panel().sections()).toHaveLength(2);
-
-    await go(fixture, '/chains/sm_consum/sections');
-
-    expect(panel().supermarketId()).toBe('sm_consum');
-    expect(panel().sections()).toEqual([]);
   });
 
   it('draws the new chain on the Details tab', async () => {

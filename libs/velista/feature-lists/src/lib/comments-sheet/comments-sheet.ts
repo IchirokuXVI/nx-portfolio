@@ -40,6 +40,7 @@ import {
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { watchLineName } from '../line-page/line-name';
 import { listErrorKey } from '../list-error-copy';
 import { selectAbilities } from '../select-list-state';
 
@@ -205,12 +206,11 @@ export class CommentsSheet {
   );
 
   /** What the sheet is titled: the line it is about, by name. */
-  readonly lineName = computed(
-    () =>
-      this._lines
-        .linesIn(this.listId())
-        .find((line) => line.id === this.lineId())?.content ?? ''
+  private readonly _name = watchLineName(() =>
+    this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
+
+  readonly lineName = computed(() => this._name()?.text ?? '');
 
   /** Oldest first, so the conversation reads downwards and ends at the newest line. */
   readonly comments = computed<readonly CommentRowVm[]>(() => {

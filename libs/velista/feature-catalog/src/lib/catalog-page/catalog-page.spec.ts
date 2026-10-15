@@ -942,7 +942,9 @@ describe('CatalogPage', () => {
         'list-weekly',
         'Extra virgin olive oil',
         1,
-        ['item-oil']
+        ['item-oil'],
+        // Not named: the words are the product's (velista 0144).
+        false
       );
       // The plus stays a plus. The line it made is under the row, with one.
       expect(plusOf(fixture, OIL)?.classList.contains('has-count')).toBe(false);

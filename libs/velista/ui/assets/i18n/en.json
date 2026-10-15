@@ -951,6 +951,7 @@
     "page": {
       "where": "On {{list}}, in {{zone}}",
       "addedBy": "Added by {{who}}",
+      "addName": "Add a name",
       "you": "you",
       "someone": "somebody",
       "quantityLabel": "How many on the list",
@@ -991,13 +992,18 @@
       "toList": "Back to the list"
     },
     "menu": {
-      "rename": "Change the name",
+      "rename": "Rename",
+      "renameLabel": "Rename {{name}}",
+      "addName": "Add a name",
+      "addNameLabel": "Add a name for {{name}}",
       "delete": "Delete this line"
     },
     "rename": {
-      "title": "Change the name",
+      "title": "Name this line",
       "label": "Name",
-      "save": "Save"
+      "note": "The name is only for this list. The product stays the same.",
+      "save": "Save",
+      "cancel": "Cancel"
     },
     "supermarket": {
       "title": "Where do you buy {{line}}?",

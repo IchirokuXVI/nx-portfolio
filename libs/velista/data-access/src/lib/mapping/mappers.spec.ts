@@ -317,6 +317,7 @@ describe('toLine', () => {
     // The third one (backend plan 0052, section 4), which the other two cannot
     // stand in for: bought is history and this is right now.
     claimed: true,
+    named: true,
     claimedByUserId: 'u9',
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
@@ -325,6 +326,14 @@ describe('toLine', () => {
 
   it('maps a well formed line', () => {
     expect(toLine(valid)).toEqual(valid);
+  });
+
+  it('reads whether a person named the line, and names it for anything but false (velista 0144)', () => {
+    expect(toLine({ ...valid, named: false })?.named).toBe(false);
+    expect(toLine({ ...valid, named: true })?.named).toBe(true);
+    expect(toLine({ ...valid, named: undefined })?.named).toBe(true);
+    expect(toLine({ ...valid, named: 'false' })?.named).toBe(true);
+    expect(toLine({ ...valid, named: 0 })?.named).toBe(true);
   });
 
   it('drops a line with no list id, since it cannot be placed', () => {

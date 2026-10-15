@@ -61,6 +61,7 @@ function line(id: string, listId: string, overrides: Partial<Line> = {}): Line {
     boughtCount: 0,
     lastSettlementOutcome: null,
     claimed: false,
+    named: true,
     claimedByUserId: null,
     createdByUserId: 'user-me',
     approvedByUserId: 'user-me',
@@ -99,6 +100,8 @@ function settled(): Promise<void> {
  */
 function setup(world: World) {
   const calls: string[] = [];
+  /** The `named` of every add, in order (velista `0144`). */
+  const addedNamed: (false | undefined)[] = [];
   const storage = new Map<string, string>();
   if (world.lastList !== undefined) {
     storage.set(StorageKeys.lastList, world.lastList);
@@ -223,8 +226,9 @@ function setup(world: World) {
         hasMore: false,
       });
     },
-    addLineResult: async (listId, content, quantity, itemIds) => {
+    addLineResult: async (listId, content, quantity, itemIds, named) => {
       calls.push(`add:${listId}:${content}:${quantity}:${itemIds?.join(',')}`);
+      addedNamed.push(named);
       await written();
       const existing = linesOf(listId).find(
         (held) =>
@@ -293,6 +297,7 @@ function setup(world: World) {
   return {
     store,
     calls,
+    addedNamed,
     storage,
     /** The lines as the server holds them. */
     server,
@@ -677,12 +682,14 @@ describe('CatalogAddStore', () => {
 
   describe('adding', () => {
     it('adds one of the product, named as the reader reads it', async () => {
-      const { store, calls, drawn } = setup(HOME);
+      const { store, calls, addedNamed, drawn } = setup(HOME);
       await store.ensure();
 
       await store.add(MILK);
 
       expect(calls).toContain('add:weekly:Leche:1:milk');
+      // The words are the product's, so the line is not named (velista 0144).
+      expect(addedNamed).toEqual([false]);
       expect(store.visit()).toEqual([
         {
           listId: 'weekly',

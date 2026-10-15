@@ -197,7 +197,16 @@ describe('appRoutes', () => {
     ['/chains/sm_mercadona/shops/loc_cordoba_centro/details', 'a shop'],
     [
       '/chains/sm_mercadona/shops/loc_cordoba_centro/sections',
-      'the order a shop walks its sections in',
+      'the sections of a shop',
+    ],
+    // A section belongs to its shop (admin plan 0063).
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/sections/new',
+      'the form of a new section',
+    ],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/sections/sec_centro_chilled',
+      'a section of a shop',
     ],
     [
       '/chains/sm_mercadona/shops/loc_cordoba_centro/products',
@@ -207,8 +216,6 @@ describe('appRoutes', () => {
       '/chains/sm_mercadona/shops/loc_cordoba_centro/products/new',
       'the form of a new shop product',
     ],
-    ['/chains/sm_mercadona/sections', 'the sections of a chain'],
-    ['/chains/sm_mercadona/sections/new', 'the form of a new section'],
     ['/chains/sm_mercadona/scopes', 'the price scopes of a chain'],
     ['/chains/sm_mercadona/scopes/new', 'the form of a new price scope'],
     ['/chains/sm_mercadona/details', 'the form of a chain'],
@@ -225,7 +232,6 @@ describe('appRoutes', () => {
     ['/products/it_milk_1l/details', 'the form of a product'],
     ['/products/it_milk_1l/prices', 'the prices of a product'],
     ['/products/it_milk_1l/prices/new', 'the form of a new price'],
-    ['/products/it_milk_1l/where', 'where a product is'],
     ['/products/it_milk_1l/sources', 'the source rows of a product'],
     // A zone holds its members and its lists (admin plan 0045).
     ['/shoppers/people', 'the people'],

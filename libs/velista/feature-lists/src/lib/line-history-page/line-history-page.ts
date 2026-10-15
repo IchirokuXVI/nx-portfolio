@@ -117,7 +117,9 @@ export class LineHistoryPage {
         ...(this._lines.itemSettlementsOf(lineId) ?? []),
       ]
         .map((settlement) => settlement.itemId)
-        .filter((itemId): itemId is string => itemId !== null);
+        .filter((itemId): itemId is string => itemId !== null)
+        // And the line's own, for the name the title draws (velista `0144`).
+        .concat(this._line()?.itemIds ?? []);
       if (itemIds.length > 0) {
         untracked(() => void this._itemNames.ensure([...new Set(itemIds)]));
       }

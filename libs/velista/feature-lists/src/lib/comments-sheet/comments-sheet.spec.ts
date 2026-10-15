@@ -11,6 +11,7 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
@@ -50,6 +51,7 @@ function line(): Line {
     productGroupId: null,
     groupItemIds: [],
     favoriteItemId: null,
+    named: true,
     preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
@@ -217,6 +219,7 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
+      provideFakeItemNames(),
       provideFakeListStore(
         fakeListStore({ lists: [list(permissions)], state: 'loaded' })
       ),

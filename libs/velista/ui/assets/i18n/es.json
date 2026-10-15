@@ -951,6 +951,7 @@
     "page": {
       "where": "En {{list}}, en {{zone}}",
       "addedBy": "Añadida por {{who}}",
+      "addName": "Ponerle un nombre",
       "you": "ti",
       "someone": "alguien",
       "quantityLabel": "Cuántos hay en la lista",
@@ -992,12 +993,17 @@
     },
     "menu": {
       "rename": "Cambiar el nombre",
+      "renameLabel": "Cambiar el nombre de {{name}}",
+      "addName": "Ponerle un nombre",
+      "addNameLabel": "Ponerle un nombre a {{name}}",
       "delete": "Borrar esta línea"
     },
     "rename": {
-      "title": "Cambiar el nombre",
+      "title": "Ponle un nombre a esta línea",
       "label": "Nombre",
-      "save": "Guardar"
+      "note": "El nombre es solo para esta lista. El producto sigue siendo el mismo.",
+      "save": "Guardar",
+      "cancel": "Cancelar"
     },
     "supermarket": {
       "title": "¿Dónde compras {{line}}?",

@@ -959,7 +959,8 @@ describe('ProductPage', () => {
         'list-party',
         'Extra virgin olive oil',
         1,
-        ['item-oil']
+        ['item-oil'],
+        false
       );
       expect(listRow(fixture, 'list-party').main?.quantity).toBe('1');
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('0');
@@ -989,7 +990,8 @@ describe('ProductPage', () => {
         'list-weekly',
         'Extra virgin olive oil',
         1,
-        ['item-oil']
+        ['item-oil'],
+        false
       );
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('3');
       expect(store.visit()).toMatchObject([
@@ -1187,7 +1189,8 @@ describe('ProductPage', () => {
         'list-weekly',
         'Carbonell olive oil',
         1,
-        ['item-oil-other']
+        ['item-oil-other'],
+        false
       );
       // What this page adds joins the record of the visit.
       expect(store.count()).toBe(1);

@@ -51,6 +51,26 @@
   color: var(--app-text-muted);
 }
 
+// "Add a name" (plan 0144): a text action under the place, as quiet as "Change".
+// The target is the full touch height, and the negative margin keeps the line of
+// text where the mock draws it.
+.add-name {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-2) * -1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include page.focus-ring;
+}
+
 // The number for a reader who may not move it: the stepper's number, with no buttons.
 .quantity {
   flex: none;
