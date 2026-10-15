@@ -29,6 +29,7 @@ import { SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { FilterSheet } from './filter-sheet/filter-sheet';
 import { FinishSheet } from './finish-sheet/finish-sheet';
+import { HeldBuy } from './held-buy';
 import { PeopleSheet } from './people-sheet/people-sheet';
 import { SettleSheet } from './settle-sheet/settle-sheet';
 import { ShareSheet } from './share-sheet/share-sheet';
@@ -53,6 +54,8 @@ const SHEETS: readonly {
   /** What the route consumes, which is what a relative `..` would climb one of. */
   readonly path: string;
   readonly params: Readonly<Record<string, string>>;
+  /** The route's own `data`, which turns the shop picker into the question. */
+  readonly data?: Readonly<Record<string, unknown>>;
 }[] = [
   {
     name: 'SettleSheet',
@@ -64,6 +67,15 @@ const SHEETS: readonly {
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
   { name: 'FinishSheet', component: FinishSheet, path: 'finish', params: {} },
   { name: 'FilterSheet', component: FilterSheet, path: 'filter', params: {} },
+  // The shop question at the first buy (velista `0141`): the shop picker in its
+  // asking mode, which closes onto the basket and never onto the filter.
+  {
+    name: 'ShopPickerSheet, asking',
+    component: ShopPickerSheet,
+    path: 'shop',
+    params: {},
+    data: { shopAsk: true },
+  },
 ];
 
 /**
@@ -153,7 +165,10 @@ function storeDouble() {
  * every sheet pass without walking up the tree, and walking up the tree is the whole of
  * how a sheet knows which basket it is covering.
  */
-function routeTree(params: Readonly<Record<string, string>>) {
+function routeTree(
+  params: Readonly<Record<string, string>>,
+  data: Readonly<Record<string, unknown>> = {}
+) {
   const pageMap = convertToParamMap({ basketId: BASKET_ID });
   const page = {
     paramMap: of(pageMap),
@@ -164,7 +179,7 @@ function routeTree(params: Readonly<Record<string, string>>) {
   const sheetMap = convertToParamMap(params);
   return {
     paramMap: of(sheetMap),
-    snapshot: { paramMap: sheetMap, parent: page.snapshot },
+    snapshot: { paramMap: sheetMap, parent: page.snapshot, data },
     parent: page,
   };
 }
@@ -172,7 +187,8 @@ function routeTree(params: Readonly<Record<string, string>>) {
 async function render(
   component: Type<unknown>,
   params: Readonly<Record<string, string>>,
-  basePath: string
+  basePath: string,
+  data: Readonly<Record<string, unknown>> = {}
 ) {
   TestBed.resetTestingModule();
 
@@ -232,7 +248,9 @@ async function render(
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
-      { provide: ActivatedRoute, useValue: routeTree(params) },
+      { provide: ActivatedRoute, useValue: routeTree(params, data) },
+      // The buy the shop question holds, which the basket page provides.
+      HeldBuy,
     ],
   }).compileComponents();
 
@@ -270,59 +288,73 @@ async function close(fixture: Awaited<ReturnType<typeof render>>['fixture']) {
  * broke.
  */
 describe('the sheets over the basket', () => {
-  describe.each(SHEETS)('$name, declared at $path', ({ component, params }) => {
-    it('closes onto the basket it covers, whole', async () => {
-      const { fixture, sheets } = await render(component, params, '/velista');
+  describe.each(SHEETS)(
+    '$name, declared at $path',
+    ({ component, params, data }) => {
+      it('closes onto the basket it covers, whole', async () => {
+        const { fixture, sheets } = await render(
+          component,
+          params,
+          '/velista',
+          data
+        );
 
-      await close(fixture);
+        await close(fixture);
 
-      expect(sheets.dismiss).toHaveBeenCalledWith(
-        `/velista/en/shopping-lists/${BASKET_ID}`
-      );
-    });
+        expect(sheets.dismiss).toHaveBeenCalledWith(
+          `/velista/en/shopping-lists/${BASKET_ID}`
+        );
+      });
 
-    it('leaves no part of its own path behind', async () => {
-      const { fixture, sheets } = await render(component, params, '/velista');
+      it('leaves no part of its own path behind', async () => {
+        const { fixture, sheets } = await render(
+          component,
+          params,
+          '/velista',
+          data
+        );
 
-      await close(fixture);
+        await close(fixture);
 
-      // The basket id is the last segment there is, so no `lines`, no line id and no
-      // half climbed path can survive this. It is the assertion the defect fails.
-      const [url] = sheets.dismiss.mock.calls[0] as [string];
-      expect(url).toBe(`/velista/en/shopping-lists/${BASKET_ID}`);
-    });
+        // The basket id is the last segment there is, so no `lines`, no line id and no
+        // half climbed path can survive this. It is the assertion the defect fails.
+        const [url] = sheets.dismiss.mock.calls[0] as [string];
+        expect(url).toBe(`/velista/en/shopping-lists/${BASKET_ID}`);
+      });
 
-    it('names the basket in the standalone build too', async () => {
-      // The mount is `/velista` under the shell and `''` when velista is served from
-      // its own origin (plan 0001, the extraction contract). A sheet that wrote either
-      // one down would close onto a 404 in the other, and only in the other.
-      const { fixture, sheets } = await render(component, params, '');
+      it('names the basket in the standalone build too', async () => {
+        // The mount is `/velista` under the shell and `''` when velista is served from
+        // its own origin (plan 0001, the extraction contract). A sheet that wrote either
+        // one down would close onto a 404 in the other, and only in the other.
+        const { fixture, sheets } = await render(component, params, '', data);
 
-      await close(fixture);
+        await close(fixture);
 
-      expect(sheets.dismiss).toHaveBeenCalledWith(
-        `/en/shopping-lists/${BASKET_ID}`
-      );
-    });
+        expect(sheets.dismiss).toHaveBeenCalledWith(
+          `/en/shopping-lists/${BASKET_ID}`
+        );
+      });
 
-    it('dismisses rather than navigating, so back cannot reopen it', async () => {
-      // `SheetNavigation` pops the entry the sheet was opened with; an ordinary
-      // `Router.navigate` pushes a second one, and the next back press lands on the
-      // sheet that was just closed and opens it again (plan 0031). Reaching the router
-      // at all from a close is the shape of that defect, whatever URL it was handed.
-      const { fixture, sheets, router } = await render(
-        component,
-        params,
-        '/velista'
-      );
+      it('dismisses rather than navigating, so back cannot reopen it', async () => {
+        // `SheetNavigation` pops the entry the sheet was opened with; an ordinary
+        // `Router.navigate` pushes a second one, and the next back press lands on the
+        // sheet that was just closed and opens it again (plan 0031). Reaching the router
+        // at all from a close is the shape of that defect, whatever URL it was handed.
+        const { fixture, sheets, router } = await render(
+          component,
+          params,
+          '/velista',
+          data
+        );
 
-      await close(fixture);
+        await close(fixture);
 
-      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
-      expect(router.navigate).not.toHaveBeenCalled();
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
-    });
-  });
+        expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+        expect(router.navigate).not.toHaveBeenCalled();
+        expect(router.navigateByUrl).not.toHaveBeenCalled();
+      });
+    }
+  );
 
   /**
    * The sheets reached **from** another sheet, which close onto that one.

@@ -245,6 +245,10 @@
   margin-inline-end: calc(var(--app-pick-about) + var(--app-space-3));
 }
 
+.pick.no-about .pick-body {
+  margin-inline-end: 0;
+}
+
 .pick-about {
   position: absolute;
   inset-block-start: var(--app-space-4);

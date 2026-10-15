@@ -916,7 +916,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the eleven sheets over the basket, and no units sheet', () => {
+    it('offers the twelve sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -947,6 +947,9 @@ describe('AppShellRoutes', () => {
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
+          // The first buy of a trip asks where the person is (velista `0141`).
+          // The shop picker again, in its asking mode.
+          'sheet/shop',
         ]
       );
     });
@@ -1057,6 +1060,19 @@ describe('AppShellRoutes', () => {
       });
     });
 
+    it('asks for the shop under the marker, in the picker’s asking mode (velista 0141)', () => {
+      const ask = routeAt(basketPath)?.children?.find(
+        (route) => route.path === 'sheet/shop'
+      );
+      const filterShop = routeAt(basketPath)?.children?.find(
+        (route) => route.path === 'sheet/filter/shop'
+      );
+
+      expect(ask?.data?.['shopAsk']).toBe(true);
+      // The filter's own picker never asks.
+      expect(filterShop?.data?.['shopAsk']).toBeUndefined();
+    });
+
     it('resolves the units sheet to nothing at all', () => {
       // Asserted rather than left to the list above, because the failure it guards
       // against is a URL somebody bookmarked resolving to a component that no longer
@@ -1075,7 +1091,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(11);
+      expect(sheets).toHaveLength(12);
       for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1287,7 +1303,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0140` took away the swap sheet and added the change sheet twice, for one
     // list and for all of them, over both baskets: two more.
-    expect(sheets).toHaveLength(63);
+    //
+    // `0141` added the shop question at the first buy, over both baskets: two more.
+    expect(sheets).toHaveLength(65);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

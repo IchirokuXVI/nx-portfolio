@@ -1,24 +1,33 @@
-<lib-sheet-shell (dismiss)="close()" labelledBy="shop-picker-title">
+<lib-sheet-shell
+  (dismiss)="close()"
+  [hasFooter]="asking"
+  labelledBy="shop-picker-title"
+>
   <!--
     The chevron beside the title, which is this sheet's own way back. At the root it
     is a dismissal rather than a navigation: the filter sheet pushed this one, so
     popping lands there and nothing is pushed (`0031`). On a chain's screen it
     returns to the root and never leaves the sheet (velista 0124).
+
+    The question at the first buy (velista 0141) has no filter to go back to, so its
+    root draws no chevron and a cross at the end instead.
   -->
   <div class="head">
-    <button
-      (click)="back()"
-      [attr.aria-label]="
-        (openHead() === null
-          ? 'basket.view.shop.back'
-          : 'catalog.supermarket.backToChains'
-        ) | rokuT
-      "
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
+    @if (!asking || openHead() !== null) {
+      <button
+        (click)="back()"
+        [attr.aria-label]="
+          (openHead() === null
+            ? 'basket.view.shop.back'
+            : 'catalog.supermarket.backToChains'
+          ) | rokuT
+        "
+        class="back"
+        type="button"
+      >
+        <lib-chevron-left-icon class="back-glyph" />
+      </button>
+    }
     @if (openHead(); as head) {
       <lib-chain-logo [logo]="head.logo" class="head-logo" size="sm" />
       <!--
@@ -26,21 +35,32 @@
         "Buying at" to a screen reader; the chain's name is what is seen.
       -->
       <h2 class="title is-chain" id="shop-picker-title">
-        <span class="visually-hidden">
-          {{ 'basket.view.shop.title' | rokuT }},
-        </span>
+        <span class="visually-hidden">{{ titleKey() | rokuT }}, </span>
         {{ head.name }}
       </h2>
     } @else {
       <h2 class="title" id="shop-picker-title">
-        {{ 'basket.view.shop.title' | rokuT }}
+        {{ titleKey() | rokuT }}
       </h2>
       <!--
         In the title row, reachable without scrolling (velista 0103). It asks for
         the position only when pressed, even when the permission was granted long
-        ago. Not on a chain's screen, which has no Near me of its own.
+        ago. Not on a chain's screen, which has no Near me of its own, and not once
+        the question has found the shop by itself (velista 0141).
       -->
-      <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+      @if (suggested() === null) {
+        <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+      }
+      @if (asking) {
+        <button
+          (click)="close()"
+          [attr.aria-label]="'basket.shopAsk.close' | rokuT"
+          class="close"
+          type="button"
+        >
+          <lib-close-icon class="close-glyph" />
+        </button>
+      }
     }
   </div>
 
@@ -52,11 +72,14 @@
 
   <!--
     The body every shop picker draws (velista 0124): the recent shops, the search
-    and the chain buttons at the root, or one chain's shops once it is open.
+    and the chain buttons at the root, or one chain's shops once it is open. The
+    question adds "No shop", lets the shop it selected answer one press, and draws
+    no button to a shop's own page, which would leave the basket with a buy waiting.
   -->
   <lib-shop-picker
     (about)="openShop($event)"
     (chosen)="select($event)"
+    (noShop)="noShop()"
     (picked)="pickShop($event)"
     (queried)="onQuery($event)"
     [chains]="chains()"
@@ -64,11 +87,27 @@
     [matchCount]="matches()"
     [matches]="flat()"
     [near]="near()"
+    [offerNoShop]="asking"
     [openKey]="openChain()"
+    [pickChecked]="asking"
     [pickedChain]="pickedChain()"
     [pickedId]="pickedId()"
     [query]="typed()"
     [recent]="recent()"
+    [showAbout]="!asking"
     fieldId="basket-shop-search"
   />
+
+  <!--
+    The foot of the question (velista 0141): where else the shop is chosen, and the
+    one way to stop being asked. On the sheet's hairline, with no container.
+  -->
+  @if (asking) {
+    <div class="foot" sheetFooter>
+      <p class="foot-note">{{ 'basket.shopAsk.note' | rokuT }}</p>
+      <button (click)="neverAsk()" class="never" type="button">
+        {{ 'basket.shopAsk.never' | rokuT }}
+      </button>
+    </div>
+  }
 </lib-sheet-shell>

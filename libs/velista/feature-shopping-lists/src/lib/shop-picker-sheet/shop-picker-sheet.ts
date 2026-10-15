@@ -2,11 +2,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
   untracked,
 } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -29,10 +31,16 @@ import {
   type FranchiseButton,
   type ShopSectionName,
 } from '@portfolio/velista/models';
-import { SheetNavigation, shopPageOpener } from '@portfolio/velista/platform';
+import {
+  GEOLOCATION_READER,
+  SheetNavigation,
+  shopPageOpener,
+  type GeolocationReaderI,
+} from '@portfolio/velista/platform';
 import {
   ChainLogo,
   ChevronLeftIcon,
+  CloseIcon,
   groupByPostalCode,
   nearbyShopRow,
   NearMeButton,
@@ -45,7 +53,8 @@ import {
   type ShopPickerNear,
   type ShopRow,
 } from '@portfolio/velista/ui';
-import { filterSheetPath } from '../basket-paths';
+import { basketPath, filterSheetPath } from '../basket-paths';
+import { HeldBuy } from '../held-buy';
 
 /**
  * One shop of the basket, flattened out of the scope it belongs to.
@@ -109,12 +118,27 @@ interface PickerShop {
  *
  * The recent shops are the signed in reader's own, asked for once when the reader
  * is known and never for a guest.
+ *
+ * ## The question at the first buy of a trip (velista `0141`)
+ *
+ * The same sheet at `sheet/shop` over the basket, with `data.shopAsk`: the first
+ * buy of a trip with no shop chosen opens it and waits in {@link HeldBuy}. It adds
+ * "No shop" as a row, a foot with "Don't ask again", and a cross where the
+ * chevron back to the filter would be. Every way out releases the buy, and leaves
+ * for the basket rather than for the filter.
+ *
+ * It looks for the shop without a press **only when the browser already allows
+ * location**, which `permission()` answers without asking anybody. When it finds
+ * shops, the nearest is selected and the title asks "Are you buying here?". When it
+ * finds none, or cannot look, the sheet is the plain picker and says nothing about
+ * the look it made: nobody asked for it.
  */
 @Component({
   selector: 'lib-shop-picker-sheet',
   imports: [
     ChainLogo,
     ChevronLeftIcon,
+    CloseIcon,
     NearMeButton,
     RokuTranslatorPipe,
     SheetShell,
@@ -149,6 +173,22 @@ export class ShopPickerSheet {
     inject<ShopFinderServiceI>(SHOP_FINDER_SERVICE);
   private readonly _notices = inject(ShopPickNotices);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _held = inject(HeldBuy);
+  private readonly _reader = inject<GeolocationReaderI>(GEOLOCATION_READER);
+  private readonly _router = inject(Router);
+
+  /** Whether this is the question at the first buy (velista `0141`). */
+  protected readonly asking =
+    inject(ActivatedRoute).snapshot.data?.['shopAsk'] === true;
+
+  /**
+   * Whether the last look for shops near the device was the one made without a
+   * press. Its failures are not drawn, and its answer is what selects a shop.
+   */
+  private readonly _lookedByItself = signal(false);
+
+  /** Whether the question was answered, so the teardown does not answer it again. */
+  private _answered = false;
 
   constructor() {
     // The recent shops, once the reader is known, and only for somebody signed
@@ -164,6 +204,35 @@ export class ShopPickerSheet {
       asked = true;
       untracked(() => void this._finder.loadRecent());
     });
+
+    // The question looks for the shop by itself once the basket is known, and only
+    // where the browser already allows it (velista `0141`, section 2).
+    let looked = false;
+    effect(() => {
+      const basketId = this._basket.basket()?.id;
+      if (!this.asking || looked || basketId === undefined) {
+        return;
+      }
+      looked = true;
+      untracked(() => void this._lookIfAllowed(basketId));
+    });
+
+    // Any way out to the basket that did not answer is an answer for the trip
+    // with no shop, the back gesture included, which only destroys this sheet.
+    // The buy is written. A way out that leaves the basket itself answers
+    // nothing, and the buy is dropped: the page lets the basket go as it leaves.
+    inject(DestroyRef).onDestroy(() => {
+      if (!this.asking || this._answered) {
+        return;
+      }
+      this._answered = true;
+      if (this._leavesBasket()) {
+        this._held.drop();
+        return;
+      }
+      this._view.answerShopForTrip();
+      void this._held.release();
+    });
   }
 
   /** Whether "Near me" is working, which is what the button says. */
@@ -171,9 +240,52 @@ export class ShopPickerSheet {
     () => this._finder.finding().state === 'locating'
   );
 
+  /**
+   * The shop the look made by itself selects (velista `0141`): the server's pick
+   * when it named one of the candidates, else the nearest. Null when that look
+   * found nothing, or a pressed look replaced it.
+   */
+  protected readonly suggested = computed<string | null>(() => {
+    const finding = this._finder.finding();
+    if (
+      !this.asking ||
+      !this._lookedByItself() ||
+      finding.state !== 'answered'
+    ) {
+      return null;
+    }
+    const answer = finding.answer;
+    return nearbyPickedShop(answer)?.id ?? answer.candidates[0]?.id ?? null;
+  });
+
+  /** The title: the question once a shop near the device is selected. */
+  protected readonly titleKey = computed(() =>
+    this.suggested() === null
+      ? 'basket.view.shop.title'
+      : 'basket.shopAsk.title'
+  );
+
   /** What "Near me" answered, as the picker draws it. */
   protected readonly near = computed<ShopPickerNear>(() => {
     const finding = this._finder.finding();
+    if (this._lookedByItself()) {
+      // The look nobody pressed for: its loading rows, and its shops when it found
+      // some. Anything else is the plain picker, with no line about it.
+      if (finding.state === 'locating') {
+        return { state: 'locating' };
+      }
+      if (this.suggested() === null || finding.state !== 'answered') {
+        return { state: 'idle' };
+      }
+      const locale = this._locale();
+      return {
+        state: 'answered',
+        reason: null,
+        candidates: finding.answer.candidates.map((shop) =>
+          nearbyShopRow(shop, locale)
+        ),
+      };
+    }
     if (finding.state !== 'answered') {
       return { state: finding.state };
     }
@@ -215,6 +327,10 @@ export class ShopPickerSheet {
 
   /** Which row is the checked radio: the chosen shop, when this basket names it. */
   protected readonly pickedId = computed<string | null>(() => {
+    const suggested = this.suggested();
+    if (suggested !== null) {
+      return suggested;
+    }
     const shop = this._view.shop();
     return shop !== null && this._shops().some((row) => row.id === shop)
       ? shop
@@ -409,7 +525,23 @@ export class ShopPickerSheet {
     // A pick by hand is not the automatic one, so any message about that goes.
     this._notices.dismiss();
     this._view.setShop(locationId);
+    if (this.asking) {
+      this._leaveAnswered();
+      return;
+    }
     void this._sheet.dismiss(this._filterUrl());
+  }
+
+  /** "No shop" (velista `0141`): an answer for this trip, and the buy with none. */
+  noShop(): void {
+    this._view.answerShopForTrip();
+    this._leaveAnswered();
+  }
+
+  /** "Don't ask again": the device's flag, and the buy with no shop. */
+  neverAsk(): void {
+    this._view.neverAskShop();
+    this._leaveAnswered();
   }
 
   /**
@@ -424,12 +556,22 @@ export class ShopPickerSheet {
     if (basketId === undefined) {
       return;
     }
+    // A press is a look somebody asked for, drawn the way the filter draws it.
+    this._lookedByItself.set(false);
     const answer = await this._finder.find((point) =>
       this._finderService.nearBasket(basketId, point)
     );
     const shop = answer === null ? null : nearbyPickedShop(answer);
     const pick = answer?.pick ?? null;
     if (shop === null || pick === null) {
+      return;
+    }
+
+    if (this.asking) {
+      // As the filter does, the server's pick is chosen. The message about it is
+      // the filter sheet's, which this does not land on, so none is left.
+      this._view.setShop(shop.id);
+      this._leaveAnswered();
       return;
     }
 
@@ -482,7 +624,62 @@ export class ShopPickerSheet {
    * load on this sheet's own address.
    */
   close(): void {
+    if (this.asking) {
+      this._view.answerShopForTrip();
+      this._leaveAnswered();
+      return;
+    }
     void this._sheet.dismiss(this._filterUrl());
+  }
+
+  /**
+   * Look for the shop without a press, when the browser already allows location
+   * (velista `0141`). `permission()` raises no dialog, and a browser that cannot
+   * say counts as not allowed.
+   */
+  private async _lookIfAllowed(basketId: string): Promise<void> {
+    const permission = await this._reader.permission().catch(() => 'unknown');
+    if (permission !== 'granted' || this._answered) {
+      return;
+    }
+    this._lookedByItself.set(true);
+    await this._finder.find((point) =>
+      this._finderService.nearBasket(basketId, point)
+    );
+  }
+
+  /**
+   * The question was answered: leave for the basket and write the buy that waits.
+   * The sheet goes first, so the row that was pressed is bought on the page.
+   */
+  private _leaveAnswered(): void {
+    this._answered = true;
+    void this._sheet.dismiss(
+      basketPath(this._locale(), this._basePath, this._address())
+    );
+    void this._held.release();
+  }
+
+  /**
+   * Whether the navigation that is destroying this sheet leaves the basket under
+   * it: a URL that is neither the basket nor one of its sheets, another basket
+   * included. A teardown outside a navigation counts as staying, which is the
+   * dismissal it always was.
+   */
+  private _leavesBasket(): boolean {
+    const navigation = this._router.getCurrentNavigation();
+    if (navigation === null) {
+      return false;
+    }
+    const address = this._address();
+    if (address === null) {
+      return true;
+    }
+    const basket = basketPath(this._locale(), this._basePath, address);
+    const target = this._router
+      .serializeUrl(navigation.finalUrl ?? navigation.extractedUrl)
+      .split(/[?#]/)[0];
+    return target !== basket && !target.startsWith(`${basket}/`);
   }
 
   private _filterUrl(): string {

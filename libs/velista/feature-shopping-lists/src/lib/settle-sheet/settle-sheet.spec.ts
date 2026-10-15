@@ -30,11 +30,14 @@ import type {
   ParticipantKind,
 } from '@portfolio/velista/models';
 import {
+  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
+  StorageKeys,
 } from '@portfolio/velista/platform';
 import { QuantityReel } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
+import { HeldBuy } from '../held-buy';
 import { SettleSheet } from './settle-sheet';
 
 /**
@@ -191,6 +194,12 @@ interface World {
    * `0139`, section 3): the lists, or null for a read that failed.
    */
   readonly productLists?: readonly BasketProductList[] | null;
+  /**
+   * Whether a buy here asks where the person is first (velista `0141`). Off by
+   * default, as on a device that answered "Don't ask again", so every other test
+   * here writes its buy at once.
+   */
+  readonly asks?: boolean;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -389,6 +398,11 @@ async function render(world: World = {}) {
       // supplies. The sheet asks it one thing, which shop the screen is pricing
       // at, and the honest answer for a spec that has not chosen one is its own.
       BasketViewStore,
+      provideFakeBrowserFacade(
+        new Map(world.asks ? [] : [[StorageKeys.shopAskOff, 'true']])
+      ),
+      // The buy the shop question holds, which the basket page provides.
+      HeldBuy,
       provideFakeCategoryStore(),
       provideFakeShopSectionsStore(),
       { provide: LINE_SERVICE, useValue: lineService },
@@ -436,7 +450,15 @@ async function render(world: World = {}) {
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, store };
+  return {
+    fixture,
+    store,
+    held: TestBed.inject(HeldBuy),
+    sheets: TestBed.inject(SheetNavigation) as unknown as {
+      dismiss: jest.Mock;
+      leaveTo: jest.Mock;
+    },
+  };
 }
 
 const text = (fixture: ComponentFixture<SettleSheet>) =>
@@ -2328,5 +2350,67 @@ describe('SettleSheet: a row bought outside this shopping list (velista 0142)', 
     expect(text(fixture)).toContain('basket.settle.none');
     expect(text(fixture)).toContain('basket.sheet.gotAll');
     expect(text(fixture)).not.toContain('basket.line.alreadyBought');
+  });
+});
+
+/**
+ * The first buy of a trip asks where you are (velista `0141`, section 1). The
+ * sheet's buttons hold their buy and replace this sheet with the question; the
+ * buy is written when the answer releases it, with the shop the answer chose.
+ */
+describe('SettleSheet: the first buy asks where you are', () => {
+  it('holds "Got all" and leaves for the question, writing nothing yet', async () => {
+    const { fixture, store, held, sheets } = await render({ asks: true });
+
+    await gotOne(fixture);
+
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(sheets.leaveTo).toHaveBeenCalledWith(
+      `/velista/en/shopping-lists/${BASKET_ID}/sheet/shop`
+    );
+    expect(sheets.dismiss).not.toHaveBeenCalled();
+    // It waits in the holder: the release is what writes it.
+    await held.release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes the held buy on release, with the shop chosen by then', async () => {
+    const { fixture, store, held } = await render({ asks: true });
+    await gotOne(fixture);
+
+    TestBed.inject(BasketViewStore).setShop('loc-tejares');
+    await held.release();
+
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({
+        outcome: 'BOUGHT',
+        supermarketLocationId: 'loc-tejares',
+      })
+    );
+  });
+
+  it('holds "They had none" too, and writes it with no shop when none was chosen', async () => {
+    const { fixture, store, held } = await render({ asks: true });
+
+    await pressNone(fixture);
+    expect(store.settle).not.toHaveBeenCalled();
+
+    await held.release();
+
+    const [, body] = store.settle.mock.calls[0];
+    expect(body.outcome).toBe('NOT_AVAILABLE');
+    expect(body.supermarketLocationId).toBeUndefined();
+  });
+
+  it('writes at once on a device that said "Don\'t ask again"', async () => {
+    const { fixture, store, held } = await render();
+
+    await gotOne(fixture);
+
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    // Nothing waits in the holder.
+    await held.release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
   });
 });

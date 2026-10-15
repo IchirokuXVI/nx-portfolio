@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LIST_HARDWARE_ID } from '@portfolio/luna-shopper/test-fixtures';
+import { SHOP_ASK_OFF_KEY } from '../playwright.config';
 import {
   addBasketLine,
   ALICE_EMAIL,
@@ -155,10 +156,32 @@ test.describe('a registered participant', () => {
         )
         .toContain(aisleLine);
 
+      // The first buy of a trip asks where she is (velista `0141`), which is
+      // what every device meets until it answers "Don't ask again". The suite's
+      // storage state answers that for every other buy, so this one buy clears
+      // the flag, meets the question, answers "No shop", and puts the flag back.
+      await page.evaluate(
+        (key) => localStorage.removeItem(key),
+        SHOP_ASK_OFF_KEY
+      );
       await row(page, aisleLine)
         .getByRole('button', { name: `Mark ${aisleLine} as got` })
         .click();
 
+      // The plain picker, or the question once a shop near the device is found.
+      await expect(page).toHaveURL(/\/sheet\/shop(\?.*)?$/);
+      const question = sheet(page, /^(Buying at|Are you buying here\?)$/);
+      await expect(
+        question.getByRole('button', { name: "Don't ask again" })
+      ).toBeVisible();
+      await question.getByRole('radio', { name: /^No shop/ }).click();
+      await expectBasketUrl(page, basketId);
+      await page.evaluate(
+        (key) => localStorage.setItem(key, 'true'),
+        SHOP_ASK_OFF_KEY
+      );
+
+      // The buy waited for the answer, and was written with no shop.
       await expect(
         row(page, aisleLine).getByRole('button', {
           name: `${aisleLine} is got. Undo it`,

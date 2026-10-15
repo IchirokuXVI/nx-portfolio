@@ -145,6 +145,21 @@ export function shopPickerPath(
   ).join('/')}`;
 }
 
+/** The segments of the shop question at the first buy (velista `0141`). */
+export const SHOP_ASK_SEGMENTS = ['shop'] as const;
+
+/**
+ * The shop question's URL (velista `0141`): a sheet of its own over the basket,
+ * which the settle sheet replaces itself with when one of its buttons asks.
+ */
+export function shopAskPath(
+  locale: string,
+  basePath: string,
+  address: BasketAddress | null
+): string {
+  return basketSheetPath(locale, basePath, address, ...SHOP_ASK_SEGMENTS);
+}
+
 /** The path to the join screen for one link secret. */
 export function joinPath(
   locale: string,

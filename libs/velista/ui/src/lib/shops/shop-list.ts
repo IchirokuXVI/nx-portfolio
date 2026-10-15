@@ -193,6 +193,22 @@ export class ShopList {
   readonly mixed = input(false);
 
   /**
+   * Whether a press on the checked radio picks it too, under `pick` (velista
+   * `0141`). A checked radio fires no `change`, so a shop that was selected for
+   * the person (the nearest one) would otherwise take a press on another row and
+   * then one on it. Off by default: on the filter's picker the checked shop is the
+   * one already chosen, and pressing it does nothing.
+   */
+  readonly pickChecked = input(false);
+
+  /**
+   * Whether a pick row draws its round button to the shop's own page (velista
+   * `0121`). Off only under the question at the first buy (velista `0141`): the
+   * shop's page leaves the basket, and a buy waits there for the answer.
+   */
+  readonly showAbout = input(true);
+
+  /**
    * A row's checkbox was tapped under `exclude`.
    *
    * Named `toggled` and not `toggle`, which is a DOM event a `<details>` fires:
@@ -227,6 +243,17 @@ export class ShopList {
 
   protected lines(shop: ShopRow) {
     return pickRowLines(shop, this.mixed());
+  }
+
+  /**
+   * A press on a pick radio that is already checked, which fires no `change`.
+   * Reported only under {@link pickChecked}; an unchecked radio reports through
+   * `change` as before.
+   */
+  protected pressChecked(shop: ShopRow): void {
+    if (this.mode() === 'pick' && this.pickChecked() && this.isChecked(shop)) {
+      this.pick.emit(shop.id);
+    }
   }
 
   /** Report the tap as whichever act this mode's control performs. */
