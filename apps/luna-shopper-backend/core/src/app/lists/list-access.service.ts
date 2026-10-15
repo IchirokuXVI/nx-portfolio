@@ -221,8 +221,8 @@ export class ListAccessService {
   }
 
   /**
-   * Requires the right to settle a line: `WRITE` or `MANAGE`, per
-   * {@link canSettle} (plan 0131).
+   * Requires the right to settle a line: `WRITE`, per {@link canSettle} (plan
+   * 0131; plan 0209, section 4).
    *
    * It is not `requireWrite` under another name even though the two admit the
    * same people today, because they answer different questions: one is "may this

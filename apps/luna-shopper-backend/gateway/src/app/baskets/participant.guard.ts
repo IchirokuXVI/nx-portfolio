@@ -1,6 +1,6 @@
 import {
-  Injectable,
   createParamDecorator,
+  Injectable,
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
@@ -39,9 +39,10 @@ export const PARTICIPANT_SECRET_HEADER = 'x-participant-secret';
  *
  * The check is **one indexed lookup** on the participant row, reading `revokedAt`
  * on it, with no cache, because revocation has to bite immediately. Core owns
- * that table, and it also owns the `seesZoneData` question in section 5.2, which
- * is about access at request time rather than about the credential. Splitting
- * them would put half a security rule in each service.
+ * that table, and it also decides what a reader is told about each list
+ * (`BasketRedaction`: the covered lists the reader writes), which is about
+ * access at request time rather than about the credential. Splitting them would
+ * put half a security rule in each service.
  *
  * ## Why the account token is verified here rather than by JwtAuthGuard
  *
@@ -120,10 +121,7 @@ export class ParticipantGuard implements CanActivate {
  * handler parameter. The analogue of `AuthUser` for the participant surface.
  */
 export const Participant = createParamDecorator(
-  (
-    _data: unknown,
-    context: ExecutionContext
-  ): BasketParticipantContext => {
+  (_data: unknown, context: ExecutionContext): BasketParticipantContext => {
     const request = context.switchToHttp().getRequest();
     return request.participant as BasketParticipantContext;
   }

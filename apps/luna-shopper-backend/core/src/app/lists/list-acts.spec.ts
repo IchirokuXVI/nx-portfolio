@@ -39,14 +39,28 @@ const APPROVALS = [
 
 describe('canSettle', () => {
   it.each(everySubset().map((set) => [[...set].join(',') || '(none)', set]))(
-    'answers WRITE or MANAGE for %s',
+    'answers WRITE for %s',
     (_name, permissions) => {
       const set = permissions as Set<ListPermission>;
-      expect(canSettle(set)).toBe(
-        set.has(ListPermission.WRITE) || set.has(ListPermission.MANAGE)
-      );
+      expect(canSettle(set)).toBe(set.has(ListPermission.WRITE));
     }
   );
+
+  it('refuses MANAGE without WRITE, as the basket does (plan 0209, section 4)', () => {
+    // Only a grant written by hand can hold it: the app adds WRITE to every
+    // grant with MANAGE. The basket covers no such list (`WRITABLE_LIST`), so
+    // neither surface settles it.
+    expect(canSettle(new Set([ListPermission.MANAGE]))).toBe(false);
+    expect(
+      canSettle(
+        new Set([
+          ListPermission.READ,
+          ListPermission.DECIDE,
+          ListPermission.MANAGE,
+        ])
+      )
+    ).toBe(false);
+  });
 
   it('refuses a reader and a DECIDE holder who cannot write', () => {
     expect(canSettle(new Set([ListPermission.READ]))).toBe(false);

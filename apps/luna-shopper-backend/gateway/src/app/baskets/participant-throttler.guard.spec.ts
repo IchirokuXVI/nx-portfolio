@@ -58,7 +58,6 @@ function participant(id: string): BasketParticipantContext {
     basketId: 'gl-1',
     kind: ParticipantKind.GUEST,
     userId: null,
-    seesZoneData: false,
   };
 }
 

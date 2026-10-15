@@ -8163,7 +8163,7 @@
             }
           },
           "409": {
-            "description": "`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29901,6 +29901,12 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000
+          },
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given."
           },
           "itemIds": {
             "maxItems": 500,

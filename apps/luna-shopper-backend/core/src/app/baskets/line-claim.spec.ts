@@ -11,7 +11,7 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { WRITABLE_LIST } from './basket.sql';
 import { LineClaimService } from './line-claim.service';
 import {
-  BASKET_CLAIMED_LINES_SQL,
+  BASKET_ZONE_LINES_SQL,
   LINE_CLAIMS_SQL,
   readLineClaims,
 } from './line-claim.sql';
@@ -37,7 +37,7 @@ function build(rows: unknown[] = [], basketRefs: unknown[] = []) {
   const dataSource = {
     query: async (sql: string, parameters: unknown[]) => {
       queries.push({ sql, parameters });
-      return sql === BASKET_CLAIMED_LINES_SQL ? basketRefs : rows;
+      return sql === BASKET_ZONE_LINES_SQL ? basketRefs : rows;
     },
   } as unknown as DataSource;
 
@@ -308,23 +308,21 @@ describe('the lines a basket could be releasing (plan 0136, section 7.1)', () =>
   it('is one read where there were two', () => {
     // `BASKET_LINE_CLAIMED_LINES_SQL` asked one basket line, and a basket has
     // none, so the narrow twin has nothing left to be narrow about.
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`"basket_sources" bs`);
-    expect(BASKET_CLAIMED_LINES_SQL).not.toContain(
-      'basket_line_origins'
-    );
+    expect(BASKET_ZONE_LINES_SQL).toContain(`"basket_sources" bs`);
+    expect(BASKET_ZONE_LINES_SQL).not.toContain('basket_line_origins');
   });
 
   it('names only lines the household still wants', () => {
     // Not redundant with the caller's transition: a basket being finished
     // covers lines that were released an hour ago, and announcing those again
     // would be an event saying nothing changed.
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll.quantity > 0`);
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll."deletedAt" IS NULL`);
+    expect(BASKET_ZONE_LINES_SQL).toContain(`ll.quantity > 0`);
+    expect(BASKET_ZONE_LINES_SQL).toContain(`ll."deletedAt" IS NULL`);
   });
 
   it('carries the room each line goes to', () => {
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`sl."zoneId" AS "zoneId"`);
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`sl.id AS "listId"`);
-    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll.id AS "lineId"`);
+    expect(BASKET_ZONE_LINES_SQL).toContain(`sl."zoneId" AS "zoneId"`);
+    expect(BASKET_ZONE_LINES_SQL).toContain(`sl.id AS "listId"`);
+    expect(BASKET_ZONE_LINES_SQL).toContain(`ll.id AS "lineId"`);
   });
 });

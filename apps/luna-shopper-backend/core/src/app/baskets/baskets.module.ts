@@ -22,10 +22,10 @@ import { BasketCoverageModule } from './basket-coverage.module';
 import { BasketDemandService } from './basket-demand.service';
 import { BasketLineAddService } from './basket-line-add.service';
 import { BasketLiveService } from './basket-live.service';
-import { BasketProductChangeService } from './basket-product-change.service';
-import { BasketProductService } from './basket-product.service';
 import { BasketMembersService } from './basket-members.service';
 import { BasketOrderService } from './basket-order.service';
+import { BasketProductChangeService } from './basket-product-change.service';
+import { BasketProductService } from './basket-product.service';
 import { BasketReadController } from './basket-read.controller';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
@@ -167,34 +167,6 @@ import { LineClaimModule } from './line-claim.module';
     // and the share sheet both add people, so the contact check, the name rule
     // and the row table live here rather than in either of them.
     BasketMembersService,
-    // The reverse of the settle (plan 0054, section 3), and a provider of its
-    // own for the same reason: it is the other operation here that reaches a
-    // zone list, with its own transaction and its own announcements.
-    // Moving what is still to get (plan 0056, rewritten by plan 0104). Small,
-    // because neither direction is implemented in it: lowering calls the settle
-    // above it and raising calls the reopen's walk, rather than either of them
-    // settling its own way.
-    // A line split by the product that was got (plan 0094). A provider of its
-    // own rather than a method on the basket service, because it is the one
-    // write here that creates rows, folds rows away and moves provenance rows
-    // between them, all in one transaction, and it replaced the pick that did
-    // live there.
-    // Editing what each household asked for, which is deliberately not the
-    // settle service (plan 0057, section 1): it changes a zone list without
-    // buying anything. Since plan 0092 it is also the one gesture that takes a
-    // line out of the basket, because raising a list from zero is what sending
-    // a line there means, and plan 0058's separate bind service went with it.
-    // What one list **got**, which is deliberately not the service above it
-    // (plan 0104, section 4): that one says what a household asked for, this one
-    // says how much of it this basket bought for them, and the two move in
-    // opposite directions on the same row of the same sheet.
-    // Renaming a basket line and every zone line it came from (plan 0113). A
-    // provider of its own, because it is the one write here that renames zone
-    // lines, merges them through plan 0112's merge, and merges two basket lines,
-    // all in one transaction. The owner's line edit calls it too.
-    // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
-    // by plan 0093). It does nothing yet, and it is provided rather than left
-    // out so the two origin inserts already call the one method.
     // The backstop for a trip nobody finished (plan 0059, section 4). A timer
     // in the zone reaper's shape that finishes live baskets past the claim
     // window, through `BasketService.update` so the release is heard.
