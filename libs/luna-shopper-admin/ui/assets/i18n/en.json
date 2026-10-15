@@ -1887,6 +1887,7 @@
         "resendVerification": "Send the confirmation email again",
         "sendPasswordReset": "Send a password reset email",
         "createRecoveryLinks": "Create recovery links",
+        "openAsUser": "Open the app as this user",
         "giveRole": {
           "admin": "Give the admin role",
           "premium": "Give the premium role"
@@ -1945,6 +1946,34 @@
         "copied": "Copied",
         "copyFailed": "Could not copy. Select the link and copy it by hand.",
         "expires": "Either link works once, and using one ends both. Both stop working at {{until}}."
+      },
+      "impersonate": {
+        "heading": "Open the app as {{name}}",
+        "body": "The app opens in a new tab, signed in as {{name}}. A strip on every screen says that it is a support session, and the session ends by itself after two hours.",
+        "reason": {
+          "label": "Why are you opening this account?",
+          "choose": "Choose a reason",
+          "BUG_REPORT": "A reported bug",
+          "SUPPORT_REQUEST": "A support request",
+          "TESTING": "Testing",
+          "OTHER": "Other"
+        },
+        "note": {
+          "label": "What for?",
+          "help": "Required. {{max}} characters at most."
+        },
+        "start": "Start session",
+        "starting": "Starting the session",
+        "once": "This link works one time, and only for one minute.",
+        "open": "Open as {{name}}",
+        "left": "{{seconds}} seconds left.",
+        "tooOld": "This link is too old.",
+        "again": "Start again",
+        "opened": "The session is open in another tab. It ends at {{until}}.",
+        "refused": {
+          "disabled": "This deployment does not allow support sessions.",
+          "gone": "This account no longer exists."
+        }
       },
       "usernameHelp": "The handle this person is known by. Changing it reaches every zone they are in: the name on each of their memberships is rewritten to match, so this is not a private label.",
       "displayNameHelp": "Whatever the sign in provider supplied, which for a Google account is somebody’s real full name. It is kept off every listing for that reason, and clearing it is allowed.",

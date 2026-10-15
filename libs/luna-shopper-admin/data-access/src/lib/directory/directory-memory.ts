@@ -18,6 +18,7 @@ import {
   orderedRoles,
   type AccountRole,
   type DirectoryServiceI,
+  type ImpersonationSession,
   type LineApproval,
 } from './directory-service';
 import type { PasswordResetSent, RecoveryLinks } from './recovery-links';
@@ -82,6 +83,29 @@ export class DirectoryMemory implements DirectoryServiceI {
       resetUrl,
       signInUrl: `${resetUrl}&mode=sign-in`,
       expiresAt: inHours(24),
+    };
+  }
+
+  /**
+   * Allowed, so that the dialog can be driven with no backend. The real
+   * switch is off by default; this mode has no switch.
+   */
+  async impersonationEnabled(): Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * A link in the shape of the real one, on a host that is not one, so that
+   * nothing it opens looks like the app. An account that is gone is refused
+   * with the 404 the gateway gives.
+   */
+  async startImpersonation(userId: string): Promise<ImpersonationSession> {
+    await this._users().read(userId);
+    return {
+      sessionId: `memory-${randomJoinCode()}`,
+      url: `https://velista.invalid/en/auth/impersonate#code=memory-${randomJoinCode()}`,
+      codeExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      expiresAt: inHours(2),
     };
   }
 

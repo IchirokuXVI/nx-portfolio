@@ -67,6 +67,18 @@ export function recordingDirectory() {
         expiresAt: '2026-10-15T19:30:00.000Z',
       };
     },
+    impersonationEnabled: async () => true,
+    startImpersonation: async (id, start) => {
+      calls.push(
+        `impersonate:${id}:${start.reason}:${start.note ?? ''}:${start.locale ?? ''}`
+      );
+      return {
+        sessionId: 's1',
+        url: 'https://velista.test/en/auth/impersonate#code=c1',
+        codeExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        expiresAt: '2026-10-15T21:30:00.000Z',
+      };
+    },
     setUserRoles: async (id, roles) =>
       void calls.push(`roles:${id}:${roles.join(',')}`),
     deleteZone: async (id) => void calls.push(`deleteZone:${id}`),
