@@ -21,6 +21,67 @@ import { SHOP_WALK_SERVICE, type ShopWalkServiceI } from './shop-walk-service';
 export const WALK_SAVE_EVERY_MS = 20_000;
 
 /**
+ * The most `guard` events one entry may hold: `SHOP_WALK_LIMITS.guardEventsMax`
+ * (backend `0197`). The server refuses an entry with more, and a refused entry is
+ * dropped whole, path and marks with it.
+ */
+export const WALK_GUARD_EVENTS_MAX = 50;
+
+/**
+ * An entry's events with at most `max` `guard` events (velista `0136`). Past
+ * that, the compass notices go first, a `compass-disturbed` together with the
+ * `compass-settled` that follows it, oldest first, because they are the ones a
+ * compass that flickers makes without end. Only when no notice is left do the
+ * oldest losses go. A stop's cause (`jump`, `turned`, `heading`) is never
+ * dropped, and a stop's own event is alone in its `stopped` entry. Every other
+ * event is kept as it is, in its order.
+ */
+export function capGuardEvents(
+  events: readonly WalkEvent[],
+  max = WALK_GUARD_EVENTS_MAX
+): WalkEvent[] {
+  const guards = events.filter(
+    (event): event is Extract<WalkEvent, { type: 'guard' }> =>
+      event.type === 'guard'
+  );
+  let excess = guards.length - max;
+  if (excess <= 0) {
+    return [...events];
+  }
+  const dropped = new Set<WalkEvent>();
+  const notices = guards.filter(
+    (event) =>
+      event.what === 'compass-disturbed' || event.what === 'compass-settled'
+  );
+  for (let i = 0; i < notices.length && excess > 0; i += 1) {
+    const one = notices[i];
+    dropped.add(one);
+    excess -= 1;
+    const next = notices[i + 1];
+    if (
+      one.what === 'compass-disturbed' &&
+      next !== undefined &&
+      next.what === 'compass-settled'
+    ) {
+      // The pair goes together, so no settling is left without its notice.
+      dropped.add(next);
+      excess -= 1;
+      i += 1;
+    }
+  }
+  for (const one of guards) {
+    if (excess <= 0) {
+      break;
+    }
+    if (one.what === 'lost') {
+      dropped.add(one);
+      excess -= 1;
+    }
+  }
+  return events.filter((event) => !dropped.has(event));
+}
+
+/**
  * Where a saver stands.
  *
  * - `idle`: nothing sent yet and nothing to send.
@@ -237,7 +298,7 @@ export class WalkEntrySaver {
       at: new Date().toISOString(),
       logFrom: this._logEnd,
       logTo,
-      events: [...(draft.events ?? [])],
+      events: capGuardEvents(draft.events ?? []),
       ...(draft.reason !== undefined ? { reason: draft.reason } : {}),
       ...(draft.rewoundTo !== undefined ? { rewoundTo: draft.rewoundTo } : {}),
     });
@@ -427,7 +488,7 @@ export class WalkEntrySaver {
       at: new Date().toISOString(),
       logFrom: open.logFrom,
       logTo: open.logTo,
-      events: [...open.events],
+      events: capGuardEvents(open.events),
     });
   }
 

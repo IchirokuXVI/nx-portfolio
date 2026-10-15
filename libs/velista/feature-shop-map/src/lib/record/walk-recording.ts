@@ -13,18 +13,25 @@ import {
   alignSession,
   cameraHeading,
   createTrackingGuard,
+  GYRO_HEARD_MS,
   keepPathPoint,
   mapPoint,
+  TURN_NOW_MS,
+  wrapDegrees,
   type PathPoint,
   type PoseSample,
   type RigidTransform,
   type TrackingEvent,
   type TrackingGuard,
 } from '@portfolio/luna-shopper/shop-map/recorder';
-import type { WalkEntryDraft } from '@portfolio/velista/data-access';
+import type {
+  WalkEntryDraft,
+  WalkGuardEvent,
+} from '@portfolio/velista/data-access';
 import type { ShopWalkEntryKind } from '@portfolio/velista/models';
 import type {
   WalkCompassReading,
+  WalkGyroReading,
   WalkPoseReading,
 } from '@portfolio/velista/platform';
 
@@ -105,6 +112,30 @@ export const PATH_BATCH_POINTS = 8;
  */
 export const SESSION_MOVED_METRES = 0.25;
 
+/**
+ * A resume is turned by the gyro only this soon after the stopped session's
+ * last trusted gyro reading (velista `0136`, section 1). The gyro drifts about
+ * 0.33 degrees a second (recorder plan 0005), so 120 s is 40 degrees at worst;
+ * the stops of 2026-10-08 lasted 35 to 45 s.
+ */
+export const GYRO_RESUME_MAX_MS = 120_000;
+
+/**
+ * A resume by the compass needs it to agree with pointing this closely
+ * (velista `0136`, section 1). A person facing the mark's arrow is seldom
+ * 45 degrees wrong; a compass bent by a freezer is.
+ */
+export const COMPASS_RESUME_AGREES_DEGREES = 45;
+
+/**
+ * How long the gyro offsets of a session are kept, so a stop can reach back
+ * past the last 2 s, which a frame that turned may already be in.
+ */
+const GYRO_SNAPSHOTS_MS = 5_000;
+
+/** Which rule turned a resumed session (velista `0136`, section 1). */
+export type ResumeRule = 'gyro' | 'compass' | 'pointing';
+
 /** Where the phone points, next to where the person walks. */
 export type RecordingPointing = 'left' | 'right' | 'ahead' | 'behind';
 
@@ -144,6 +175,20 @@ export interface RecordingPerson {
  * belong to, appends `confirmed`, and opens the next entry as `resumed`. One
  * discarded, or a stop that drops it, appends `stopped` at the loss (and
  * `discarded` for the person's no), so the walk ends up to the problem.
+ *
+ * A yes that comes before the guard judged the frame that came back
+ * (`awaitingTurnJudgement`, recorder plan 0005) is held: the walk goes on, but
+ * the purple points and those kept since stay unsaved until the guard has
+ * judged it. A stop meanwhile drops them all and keeps the walk up to the
+ * first loss of the resume (the recorder README's host contract). Marks and
+ * "Section left" made meanwhile wait with them, in the order they came.
+ *
+ * ## What the guard saw (velista `0136`)
+ *
+ * Each loss, compass notice and settling goes into the open entry as a `guard`
+ * event, and each guard stop's cause and number into its `stopped` entry. They
+ * are held with the session's points, so a session that adds nothing still
+ * sends nothing.
  */
 export class WalkRecording {
   private readonly _live: LiveMapHandle;
@@ -183,6 +228,24 @@ export class WalkRecording {
   /** The log time tracking was lost at, while a loss or its resume waits. */
   private _lossLog: number | null = null;
   private _lastLog = 0;
+  /** The person said yes before the guard judged the frame: the purple points wait for it. */
+  private _judging = false;
+  /**
+   * Marks and "Section left" made while a yes is held, each with how many
+   * purple points came before it: they wait for the judgement with the points.
+   */
+  private _held: HeldEdit[] = [];
+  /** `guard` events for the open entry, sent with the session's points. */
+  private _guardEvents: WalkEvent[] = [];
+
+  /** When the gyro was heard last, and since when without a gap of more than 1 s. */
+  private _gyroLast: number | null = null;
+  private _gyroSince: number | null = null;
+  /** The session guard's gyro offset at its recent trusted poses. */
+  private _gyroSnapshots: GyroSnapshot[] = [];
+  /** The stopped session's gyro offset, for a resume by the gyro. */
+  private _gyroAtStop: GyroSnapshot | null = null;
+  private _resumedBy: ResumeRule | null = null;
 
   constructor(options: WalkRecordingOptions) {
     this._live = createLiveMap({
@@ -208,23 +271,58 @@ export class WalkRecording {
     return this._baseline;
   }
 
+  /** Which rule turned the last manual resume, for the spec (velista `0136`). */
+  get resumedBy(): ResumeRule | null {
+    return this._resumedBy;
+  }
+
   /** Whether a manual resume can line up now: the camera is tracking. */
   get canResume(): boolean {
     return this._lastRaw !== null;
   }
 
   /**
-   * Whether a manual resume can line up by the compass: the camera is tracking,
-   * and when the walk's baseline is known, the probe has a compass offset too.
-   * Without a baseline there is nothing to wait for: it lines up by pointing.
+   * Whether a manual resume can line up now: the camera is tracking, and either
+   * the gyro can turn it (velista `0136`), or the walk's baseline is unknown, or
+   * the probe has a compass offset to weigh against pointing. Without a
+   * baseline there is nothing to wait for: it lines up by pointing.
    */
   get readyToResume(): boolean {
+    const raw = this._lastRaw;
     return (
       this.canResume &&
-      (this._baseline === null ||
+      ((raw !== null && this._gyroRotation(raw.t) !== null) ||
+        this._baseline === null ||
         (this._probe?.state().offset !== undefined &&
           this._probeCompassMs() >= PROBE_COMPASS_MS))
     );
+  }
+
+  /**
+   * The rotation the gyro gives a new session at `now` (velista `0136`, section
+   * 1, rule 1), or null when it cannot: no stop in this page visit with a gyro
+   * offset, a gap of more than 1 s in the gyro since then, the stop 120 s ago or
+   * more, or no gyro offset in the probe yet.
+   *
+   * The stopped session's offset was read from a guard fed aligned poses, so it
+   * already holds that session's rotation (recorder `AlignSessionByRotation`):
+   * the rotation is that offset minus the probe's.
+   */
+  private _gyroRotation(now: number): number | null {
+    const atStop = this._gyroAtStop;
+    const probe = this._probe?.state().gyroOffset;
+    if (
+      atStop === null ||
+      probe === undefined ||
+      this._gyroSince === null ||
+      this._gyroLast === null ||
+      this._gyroSince > atStop.t ||
+      now - this._gyroLast > GYRO_HEARD_MS ||
+      now - atStop.t >= GYRO_RESUME_MAX_MS
+    ) {
+      return null;
+    }
+    return normalizeDegrees(atStop.offset - probe);
   }
 
   /** How long the probe has been hearing the compass, so its offset is a median. */
@@ -288,9 +386,15 @@ export class WalkRecording {
 
   /**
    * A manual resume at a mark the person stands next to, facing the way its arrow
-   * shows (target 7): the new session is turned by the compass (`alignSession`
-   * with the walk's baseline), or by the direction the phone points when the
-   * baseline or the compass is unknown, and placed half a metre behind the mark.
+   * shows (target 7), placed half a metre behind the mark. The new session is
+   * turned in this order (velista `0136`, section 1):
+   *
+   * 1. by the gyro, when it was heard without a gap since a stop in this page
+   *    visit less than 120 s ago;
+   * 2. by the compass against the walk's baseline, when it agrees with pointing
+   *    within 45 degrees;
+   * 3. by pointing: the phone faces the mark's heading now.
+   *
    * Answers false when no tracked pose has arrived yet.
    */
   resumeAt(mark: Pick<MapMark, 'x' | 'y' | 'heading'>): boolean {
@@ -302,26 +406,37 @@ export class WalkRecording {
     this.endSession();
     const offset = this._probe?.state().offset;
     const standingAt = mapPoint(raw);
-    let baseline = this._baseline;
-    if (baseline === null || offset === undefined) {
-      // Line up by pointing: the phone faces the mark's heading now.
-      const rotation = mark.heading - cameraHeading(raw);
-      baseline = (offset ?? 0) - rotation;
-      if (offset !== undefined && this._baseline === null) {
-        this._baseline = normalizeDegrees(baseline);
-        this._output.baseline(this._baseline);
+    const pointing = normalizeDegrees(mark.heading - cameraHeading(raw));
+    const byGyro = this._gyroRotation(raw.t);
+    let rotation = pointing;
+    let rule: ResumeRule = 'pointing';
+    if (byGyro !== null) {
+      rotation = byGyro;
+      rule = 'gyro';
+    } else if (this._baseline !== null && offset !== undefined) {
+      const byCompass = normalizeDegrees(offset - this._baseline);
+      if (
+        Math.abs(wrapDegrees(byCompass - pointing)) <=
+        COMPASS_RESUME_AGREES_DEGREES
+      ) {
+        rotation = byCompass;
+        rule = 'compass';
       }
     }
-    const transform = alignSession({
-      mark,
-      standingAt,
-      compassOffset: offset ?? 0,
-      baseline,
-    });
+    if (offset !== undefined && this._baseline === null) {
+      // The compass reading here, turned as the session is, is the walk's
+      // baseline from now on.
+      this._baseline = normalizeDegrees(offset - rotation);
+      this._output.baseline(this._baseline);
+    }
+    const transform = alignSession({ mark, standingAt, rotation });
+    // The walk's baseline whenever it has one: a resume by the gyro can go
+    // before the probe heard the compass, and its guard still needs it.
     const guard = createTrackingGuard(
-      offset !== undefined ? { baseline: normalizeDegrees(baseline) } : {}
+      this._baseline !== null ? { baseline: this._baseline } : {}
     );
     this._probe = null;
+    this._resumedBy = rule;
     this._begin('resumed', transform, guard);
     return true;
   }
@@ -349,6 +464,7 @@ export class WalkRecording {
         : sampleOf(raw);
     this._sessionStart ??= raw.t;
     this._handle(guard.pushPose(aligned));
+    this._settleJudgement(guard);
     if (this._guard !== guard || !aligned.tracked) {
       return;
     }
@@ -357,7 +473,12 @@ export class WalkRecording {
     const logMs = this._log(raw.t);
     const at = mapPoint(aligned);
     const state = guard.state();
-    if (state.kind === 'good') {
+    // Good, and in a frame the guard has judged: the walk keeps it.
+    const trusted = state.kind === 'good' && !this._judging;
+    if (trusted && !state.awaitingTurnJudgement) {
+      this._snapshotGyro(raw.t, state.gyroOffset);
+    }
+    if (trusted) {
       this._live.push({ logMs, x: at.x, y: at.y });
     }
     const point: PathPoint = { t: logMs, x: at.x, y: at.y };
@@ -378,7 +499,7 @@ export class WalkRecording {
       (one) => Math.hypot(point.x - one.x, point.y - one.y) <= 3
     );
     const row: [number, number, number] = [logMs, round2(at.x), round2(at.y)];
-    if (state.kind === 'good') {
+    if (trusted) {
       this._pending.push(row);
     } else {
       this._purple.push(row);
@@ -394,8 +515,28 @@ export class WalkRecording {
         last: reading.t,
       };
     }
-    if (this._guard !== null && this._phase !== 'stopped') {
-      this._handle(this._guard.pushCompass(reading));
+    const guard = this._guard;
+    if (guard !== null && this._phase !== 'stopped') {
+      this._handle(guard.pushCompass(reading));
+      this._settleJudgement(guard);
+    }
+  }
+
+  /**
+   * One gyro reading (velista `0136`, target 1): to the guard, which tells a
+   * frame that turned from a bent compass by it, and to the probe of a manual
+   * resume, which turns the new session by it.
+   */
+  gyro(reading: WalkGyroReading): void {
+    if (this._gyroLast === null || reading.t - this._gyroLast > GYRO_HEARD_MS) {
+      this._gyroSince = reading.t;
+    }
+    this._gyroLast = Math.max(reading.t, this._gyroLast ?? reading.t);
+    this._probe?.pushGyro(reading);
+    const guard = this._guard;
+    if (guard !== null && this._phase !== 'stopped') {
+      this._handle(guard.pushGyro(reading));
+      this._settleJudgement(guard);
     }
   }
 
@@ -421,26 +562,33 @@ export class WalkRecording {
       !held &&
       (force ||
         snapshot.events.length > 0 ||
+        this._guardEvents.length > 0 ||
         this._pending.length >= PATH_BATCH_POINTS);
     if (due && this._pending.length > 0) {
       events.push({ type: 'path', points: this._pending });
       this._pending = [];
     }
+    if (due && this._guardEvents.length > 0) {
+      events.push(...this._guardEvents);
+      this._guardEvents = [];
+    }
     events.push(...snapshot.events);
     if (events.length > 0) {
       // While a loss waits for an answer the log stays at the loss: the time
-      // walked since belongs to the purple path, which is not saved yet.
-      const logTo =
-        this._phase === 'walking' || this._lossLog === null
-          ? this._lastLog
-          : this._lossLog;
+      // walked since belongs to the purple path, which is not saved yet. That
+      // holds after a yes too, until the guard has judged the frame.
+      const logTo = this._lossLog === null ? this._lastLog : this._lossLog;
       this._output.add(events, logTo);
       this._wrote = true;
     }
     return snapshot;
   }
 
-  /** A mark, where the phone is and the way it points at this moment (target 3). */
+  /**
+   * A mark, where the phone is and the way it points at this moment (target 3).
+   * While a yes is held it waits with the purple points: the frame it was made
+   * in may yet be judged turned (velista `0136`).
+   */
   mark(kind: MarkKind, text: string): MapMark | null {
     const pose = this._lastAligned;
     if (this._phase !== 'walking' || pose === null) {
@@ -456,12 +604,20 @@ export class WalkRecording {
       text,
       logMs: this._lastLog,
     };
-    this._live.mark(mark);
+    if (this._judging) {
+      this._held.push({ after: this._purple.length, mark });
+    } else {
+      this._live.mark(mark);
+    }
     return mark;
   }
 
-  /** "Section left" (target 4). */
+  /** "Section left" (target 4). It waits with a held yes, as a mark does. */
   sectionLeft(): void {
+    if (this._judging) {
+      this._held.push({ after: this._purple.length, mark: null });
+      return;
+    }
     this._live.sectionLeft();
   }
 
@@ -475,19 +631,54 @@ export class WalkRecording {
     this._live.dismissSuggestion(id);
   }
 
-  /** "Yes, keep it": the purple path joins the walk (target 7). */
+  /**
+   * "Yes, keep it": the purple path joins the walk (target 7). When the guard
+   * has not judged the frame that came back yet, the walk goes on and the
+   * purple points wait for its judgement (velista `0136`).
+   */
   confirm(): void {
     const guard = this._guard;
     if (this._phase !== 'unconfirmed' || guard === null) {
       return;
     }
     this._handle(guard.confirm(this._lastT));
-    this._live.setTracking('good');
-    const purple = this._purple;
-    this._purple = [];
-    for (const [logMs, x, y] of purple) {
-      this._live.push({ logMs, x, y });
+    if (this._guard !== guard) {
+      return;
     }
+    this._live.setTracking('good');
+    this._phase = 'walking';
+    if (guard.state().awaitingTurnJudgement) {
+      this._judging = true;
+      return;
+    }
+    this._keepPurple();
+  }
+
+  /** The purple path joins the session it belongs to, and the next entry is `resumed`. */
+  private _keepPurple(): void {
+    this._judging = false;
+    const purple = this._purple;
+    const held = this._held;
+    this._purple = [];
+    this._held = [];
+    // The live map gets the points and the held edits in the order they came,
+    // as it would have while walking.
+    let next = 0;
+    const editsUpTo = (count: number) => {
+      for (; next < held.length && held[next].after <= count; next += 1) {
+        const { mark } = held[next];
+        if (mark === null) {
+          this._live.sectionLeft();
+        } else {
+          this._live.mark(mark);
+        }
+      }
+    };
+    purple.forEach(([logMs, x, y], index) => {
+      editsUpTo(index);
+      this._live.push({ logMs, x, y });
+    });
+    editsUpTo(purple.length);
     this._pending.push(...purple);
     this._lossLog = null;
     this._phase = 'walking';
@@ -509,6 +700,7 @@ export class WalkRecording {
     }
     guard.discard(this._lastT);
     this._purple = [];
+    this._held = [];
     this.flush();
     const at = this._lossLog ?? this._lastLog;
     this._end([
@@ -549,8 +741,10 @@ export class WalkRecording {
     if (this._phase === 'idle' || this._phase === 'stopped') {
       return;
     }
-    const waiting = this._phase === 'unconfirmed' || this._phase === 'lost';
+    const waiting =
+      this._phase === 'unconfirmed' || this._phase === 'lost' || this._judging;
     this._purple = [];
+    this._held = [];
     this.flush();
     const at =
       waiting && this._lossLog !== null ? this._lossLog : this._lastLog;
@@ -594,7 +788,11 @@ export class WalkRecording {
     this._moved = false;
     this._wrote = false;
     this._purple = [];
+    this._held = [];
     this._lossLog = null;
+    this._judging = false;
+    this._guardEvents = [];
+    this._gyroSnapshots = [];
     this._stop = null;
     this._output.openNext(kind);
     this._live.setTracking('good');
@@ -611,8 +809,12 @@ export class WalkRecording {
     for (const event of events) {
       switch (event.kind) {
         case 'lost':
+          this._guardEvents.push(guardEvent('lost', this._log(event.t)));
           if (this._phase === 'walking') {
-            this._lossLog = this._log(event.t);
+            // A loss while a yes waits for the guard's judgement keeps the
+            // first loss: nothing since it is vouched for (recorder README).
+            this._lossLog ??= this._log(event.t);
+            this._judging = false;
             this.flush();
             this._output.save();
             this._output.tone('stopped');
@@ -629,7 +831,9 @@ export class WalkRecording {
           break;
         case 'stopped': {
           if (event.unconfirmedDropped) {
+            // The marks made while the yes was held go with the points.
             this._purple = [];
+            this._held = [];
           }
           const played = this._phase === 'lost';
           this.flush();
@@ -638,13 +842,34 @@ export class WalkRecording {
             (event.reason === 'tracking-lost' || event.unconfirmedDropped)
               ? this._lossLog
               : this._log(event.t);
-          this._end([{ kind: 'stopped', reason: event.reason, logTo: at }]);
+          // The stop's cause and number, where the walk now ends.
+          const why = guardEvent(event.cause, at, {
+            degrees: event.degrees,
+            metres: event.metres,
+          });
+          this._end([
+            {
+              kind: 'stopped',
+              reason: event.reason,
+              logTo: at,
+              events: [why],
+            },
+          ]);
           if (!played) {
             this._output.tone('stopped');
           }
           this._stopped(event.reason);
           break;
         }
+        case 'compass-disturbed':
+        case 'compass-settled':
+          // A notice and no more: the walk goes on (recorder plan 0005).
+          this._guardEvents.push(
+            guardEvent(event.kind, this._log(event.t), {
+              degrees: event.drift,
+            })
+          );
+          break;
         case 'baseline':
           if (this._baseline === null) {
             this._baseline = event.degrees;
@@ -657,11 +882,46 @@ export class WalkRecording {
     }
   }
 
+  /**
+   * After the guard's events: a yes held for the guard's judgement is kept
+   * once the guard has judged the frame and the walk did not stop.
+   */
+  private _settleJudgement(guard: TrackingGuard): void {
+    if (
+      this._judging &&
+      this._guard === guard &&
+      this._phase === 'walking' &&
+      !guard.state().awaitingTurnJudgement
+    ) {
+      this._keepPurple();
+    }
+  }
+
+  /** Keeps the session guard's gyro offset at a trusted pose, for a later resume. */
+  private _snapshotGyro(t: number, offset: number | undefined): void {
+    if (offset === undefined) {
+      return;
+    }
+    this._gyroSnapshots = this._gyroSnapshots.filter(
+      (one) => one.t >= t - GYRO_SNAPSHOTS_MS
+    );
+    this._gyroSnapshots.push({ t, offset });
+  }
+
   private _stopped(reason: RecordingStop): void {
+    // The gyro offset a resume turns by: the last one read 2 s or more before
+    // the stop, because the last 2 s may hold a frame that just turned.
+    const before = this._lastT - TURN_NOW_MS;
+    this._gyroAtStop =
+      [...this._gyroSnapshots].reverse().find((one) => one.t <= before) ?? null;
+    this._gyroSnapshots = [];
+    this._judging = false;
+    this._guardEvents = [];
     this._guard = null;
     this._transform = null;
     this._lossLog = null;
     this._purple = [];
+    this._held = [];
     this._pending = [];
     this._live.setTracking('lost');
     this._stop = reason;
@@ -684,6 +944,52 @@ function sampleOf(reading: WalkPoseReading): PoseSample {
     qw: reading.qw,
     tracked: reading.tracked,
   };
+}
+
+/**
+ * A mark (or "Section left", as null) made while a yes is held, after this
+ * many of the purple points.
+ */
+interface HeldEdit {
+  readonly after: number;
+  readonly mark: MapMark | null;
+}
+
+/** A session guard's gyro offset (`state().gyroOffset`) at a camera time. */
+interface GyroSnapshot {
+  readonly t: number;
+  readonly offset: number;
+}
+
+/**
+ * One `guard` event of the walk log (backend `0197`): one kind, one time and
+ * at most one number, never a raw reading. Degrees to a tenth, metres to a
+ * centimetre.
+ */
+function guardEvent(
+  what: WalkGuardEvent['what'],
+  logMs: number,
+  numbers: { degrees?: number; metres?: number } = {}
+): WalkGuardEvent {
+  return {
+    type: 'guard',
+    logMs,
+    what,
+    ...(numbers.degrees !== undefined
+      ? { degrees: roundDegrees(numbers.degrees) }
+      : {}),
+    ...(numbers.metres !== undefined ? { metres: round2(numbers.metres) } : {}),
+  };
+}
+
+/**
+ * Degrees to a tenth, in (-180, 180]. Wrapped after rounding, so -179.96 is
+ * 180, not -180.
+ */
+export function roundDegrees(degrees: number): number {
+  const wrapped = wrapDegrees(Math.round(degrees * 10) / 10);
+  const r = Math.round(wrapped * 10) / 10;
+  return r === 0 ? 0 : r;
 }
 
 function round2(value: number): number {

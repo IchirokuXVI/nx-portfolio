@@ -216,6 +216,90 @@ describe('toShopWalkLog', () => {
       })
     ).toBeNull();
   });
+
+  // Velista 0136, target 4; backend 0197.
+  it('reads the guard events of an entry and of its stop', () => {
+    const log = toShopWalkLog({
+      walkId: 'w1',
+      entries: [
+        {
+          ...ENTRY,
+          events: [
+            ...ENTRY.events,
+            {
+              type: 'guard',
+              logMs: 4,
+              what: 'compass-disturbed',
+              degrees: 88.2,
+            },
+            { type: 'guard', logMs: 8, what: 'compass-settled', degrees: 12 },
+          ],
+        },
+        {
+          id: 'e2',
+          seq: 2,
+          kind: 'stopped',
+          reason: 'frame-moved',
+          at: '2026-09-29T10:00:30.000Z',
+          logFrom: 10,
+          logTo: 10,
+          events: [{ type: 'guard', logMs: 10, what: 'jump', metres: 28.8 }],
+        },
+      ],
+      lastSeq: 2,
+    });
+
+    expect(log?.entries[0].events.slice(4)).toEqual([
+      { type: 'guard', logMs: 4, what: 'compass-disturbed', degrees: 88.2 },
+      { type: 'guard', logMs: 8, what: 'compass-settled', degrees: 12 },
+    ]);
+    expect(log?.entries[1].events).toEqual([
+      { type: 'guard', logMs: 10, what: 'jump', metres: 28.8 },
+    ]);
+  });
+
+  it('skips a guard event it cannot read and keeps the rest of the log', () => {
+    const log = toShopWalkLog({
+      walkId: 'w1',
+      entries: [
+        {
+          ...ENTRY,
+          events: [
+            { type: 'guard', logMs: 4, what: 'wifi' },
+            ...ENTRY.events,
+            { type: 'guard', what: 'lost' },
+            { type: 'guard', logMs: 8, what: 'lost' },
+          ],
+        },
+      ],
+      lastSeq: 1,
+    });
+
+    const plain = toShopWalkLog({ walkId: 'w1', entries: [ENTRY], lastSeq: 1 });
+    expect(log?.entries[0].events).toEqual([
+      ...(plain?.entries[0].events ?? []),
+      { type: 'guard', logMs: 8, what: 'lost' },
+    ]);
+    expect(log?.entries[0].events).toHaveLength(5);
+  });
+
+  it('still reads no log with any other event it cannot read beside guard events', () => {
+    expect(
+      toShopWalkLog({
+        walkId: 'w1',
+        entries: [
+          {
+            ...ENTRY,
+            events: [
+              { type: 'guard', logMs: 4, what: 'wifi' },
+              { type: 'section-left' },
+            ],
+          },
+        ],
+        lastSeq: 1,
+      })
+    ).toBeNull();
+  });
 });
 
 describe('toUserProfile: permissions (backend 0175)', () => {
