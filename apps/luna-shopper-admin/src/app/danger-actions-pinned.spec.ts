@@ -61,6 +61,8 @@ const PINNED: Readonly<
       'take-role-admin',
       'give-role-premium',
       'take-role-premium',
+      // Admin plan 0062: it changes nothing in the account.
+      'open-as-user',
     ],
   },
   zones: {

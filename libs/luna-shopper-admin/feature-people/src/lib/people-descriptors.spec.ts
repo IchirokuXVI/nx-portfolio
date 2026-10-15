@@ -253,14 +253,22 @@ describe('every people descriptor', () => {
    * with **one** exception: restoring a zone is the undo of marking it, and
    * asking before somebody takes back a mistake is a click that teaches an
    * operator to click through the next one (plan 0009, section 3.1).
+   *
+   * Opening the app as a person asks too, but in a dialog of its own rather
+   * than a question with two buttons, because it asks why (admin plan 0062).
    */
-  it('confirms every named action but the one that is an undo', () => {
+  it('confirms every named action but the undo and the support session', () => {
     for (const descriptor of ALL) {
       const unconfirmed = namedActionsOf(descriptor)
         .filter((action) => action.confirm === undefined)
         .map((action) => action.name);
 
-      const allowed = descriptor.name === 'zones' ? ['restore-zone'] : [];
+      const allowed =
+        descriptor.name === 'zones'
+          ? ['restore-zone']
+          : descriptor.name === 'users'
+            ? ['open-as-user']
+            : [];
       expect([descriptor.name, unconfirmed]).toEqual([
         descriptor.name,
         allowed,
