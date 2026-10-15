@@ -52,9 +52,20 @@ disagree, this section is right.
    it opened, which is the toggle of the More menu. A step that takes the focused control
    away hands the focus on: to the link, to "Start again", or to the sentence that says the
    tab is open.
-10. **The press.** A click or a middle click on the link counts as the press. "Open in new
-    tab" from the context menu cannot be seen, so there the link stays until its minute
-    ends. The countdown compares the clock of the browser with `codeExpiresAt`.
+10. **The press, and the minute.** A click or a middle click on the link counts as the
+    press. "Open in new tab" from the context menu cannot be seen, so there the link stays
+    until its minute ends. The minute is counted from the arrival of the answer, on the
+    clock of the browser, by the code lifetime of backend `0194` (60 seconds, kept in the
+    panel as `IMPERSONATION_CODE_LIFETIME_MS`). `codeExpiresAt` is a time on the clock of
+    the server, so it is not compared with the clock of the browser: an operator clock a
+    minute fast would make every link too old as it arrives. The `Date` header of the
+    answer could correct for that, but a browser does not expose it to a script across
+    origins. The cost is that the countdown runs a little long by the time the answer took
+    to arrive, and changes by hand if backend `0194` changes its lifetime. The server still
+    refuses a code that is too old. Only the address is held in its own signal. The rest
+    of the answer is kept without it, so the press and the end of the minute drop it from
+    the panel and not only from the page. An answer that arrives after the dialog closed
+    is dropped, and starts no clock.
 11. **Two refusals are final.** After `impersonation_disabled` or a 404, "Start session"
     stays disabled. Every other refusal leaves it enabled.
 12. **`gatewayErrorKey` is unchanged.** Of the five codes of backend `0194`, only
@@ -62,6 +73,12 @@ disagree, this section is right.
     for it. The other four answer user tokens.
 13. **The record page reads the record again as the dialog opens.** It does that after
     every action that went through, and here the action is only the opening.
+14. **`ImpersonationStore` is `providedIn: 'root'`**, as `DashboardStore` and
+    `PostalCodeSummaryStore` are. The stores of the session and the deployment are listed
+    in `LUNA_SHOPPER_ADMIN_DATA_ACCESS_PROVIDERS` instead. To move it there, every spec
+    that draws the actions of a person would have to provide it, so it stays where it is.
+    An answer that arrives after another operator signed in is dropped, so it cannot hide
+    the action from that operator.
 
 ## Brief for the agent
 

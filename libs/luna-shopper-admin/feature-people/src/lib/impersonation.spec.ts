@@ -1,4 +1,6 @@
+import { isSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import {
   DIRECTORY_SERVICE,
   GatewayError,
@@ -6,6 +8,10 @@ import {
   type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  IMPERSONATION_CODE_LIFETIME_MS,
+  ImpersonationPanel,
+} from './impersonation-panel';
 import { USER_SEED } from './people-seed';
 import {
   bootShoppers,
@@ -80,6 +86,17 @@ async function choose(
 
 const startButton = (fixture: ComponentFixture<unknown>) =>
   find<HTMLButtonElement>(fixture, '[data-impersonate-start]');
+
+/** Everything the panel holds in its signals, as one string. */
+function held(fixture: ComponentFixture<unknown>): string {
+  const panel: object = fixture.debugElement.query(
+    By.directive(ImpersonationPanel)
+  ).componentInstance;
+  return Object.values(panel)
+    .filter(isSignal)
+    .map((value) => JSON.stringify(value()) ?? '')
+    .join(' ');
+}
 
 describe('opening the app as a person', () => {
   afterEach(() => localStorage.clear());
@@ -207,6 +224,8 @@ describe('opening the app as a person', () => {
 
     expect(find(fixture, '[data-impersonate-link]')).toBeNull();
     expect(fixture.nativeElement.innerHTML).not.toContain('code=c1');
+    // Dropped, and not only from the page: the panel holds it nowhere.
+    expect(held(fixture)).not.toContain('code=c1');
     expect(find(fixture, '[data-impersonate-opened]')?.textContent).toContain(
       'people.users.impersonate.opened'
     );
@@ -216,21 +235,24 @@ describe('opening the app as a person', () => {
 
   it('replaces a link that is too old, and starts again from the reason', async () => {
     const { directory } = recordingDirectory();
-    const fixture = await open({
-      ...directory,
-      startImpersonation: async () => ({
-        sessionId: 's1',
-        url: LINK,
-        codeExpiresAt: new Date(Date.now() - 1000).toISOString(),
-        expiresAt: '2026-10-15T21:30:00.000Z',
-      }),
-    });
+    const fixture = await open(directory);
     await press(fixture, '[data-action="open-as-user"]');
     await choose(fixture, 'SUPPORT_REQUEST');
     await press(fixture, '[data-impersonate-start]');
+    expect(find(fixture, '[data-impersonate-link]')).not.toBeNull();
+
+    // The minute passes, and the clock of the panel ticks once.
+    const arrival = Date.now();
+    const clock = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(arrival + IMPERSONATION_CODE_LIFETIME_MS + 1000);
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await settle(fixture);
+    clock.mockRestore();
 
     expect(find(fixture, '[data-impersonate-link]')).toBeNull();
     expect(fixture.nativeElement.innerHTML).not.toContain('code=c1');
+    expect(held(fixture)).not.toContain('code=c1');
     expect(find(fixture, '[data-impersonate-old]')?.textContent).toContain(
       'people.users.impersonate.tooOld'
     );
@@ -238,6 +260,70 @@ describe('opening the app as a person', () => {
     await press(fixture, '[data-impersonate-again]');
 
     expect(find(fixture, '[data-impersonate-reason]')).not.toBeNull();
+  });
+
+  it('counts the minute from the arrival, not from a browser clock that runs fast', async () => {
+    const { directory } = recordingDirectory();
+    const fixture = await open({
+      ...directory,
+      // The clock of this browser is 90 seconds ahead of the server's, so
+      // the code reads as expired before it arrived.
+      startImpersonation: async () => ({
+        sessionId: 's1',
+        url: LINK,
+        codeExpiresAt: new Date(Date.now() - 30 * 1000).toISOString(),
+        expiresAt: '2026-10-15T21:30:00.000Z',
+      }),
+    });
+    await press(fixture, '[data-action="open-as-user"]');
+    await choose(fixture, 'TESTING');
+    await press(fixture, '[data-impersonate-start]');
+
+    expect(find(fixture, '[data-impersonate-old]')).toBeNull();
+    expect(
+      find<HTMLAnchorElement>(fixture, '[data-impersonate-link]')?.getAttribute(
+        'href'
+      )
+    ).toBe(LINK);
+    const panel: ImpersonationPanel = fixture.debugElement.query(
+      By.directive(ImpersonationPanel)
+    ).componentInstance;
+    expect(panel.secondsLeft()).toBeGreaterThan(55);
+  });
+
+  it('drops an answer that arrives after the dialog closed', async () => {
+    const { directory } = recordingDirectory();
+    let answer: (() => void) | undefined;
+    const fixture = await open({
+      ...directory,
+      startImpersonation: () =>
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({
+              sessionId: 's1',
+              url: LINK,
+              codeExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+              expiresAt: '2026-10-15T21:30:00.000Z',
+            });
+        }),
+    });
+    await press(fixture, '[data-action="open-as-user"]');
+    await choose(fixture, 'TESTING');
+    await press(fixture, '[data-impersonate-start]');
+    // Still starting: the operator closes the dialog.
+    expect(find(fixture, '[data-impersonate-link]')).toBeNull();
+    await press(fixture, '[data-action-outcome] [data-close]');
+    expect(find(fixture, '[data-action-outcome]')).toBeNull();
+
+    const ticks = jest.spyOn(globalThis, 'setInterval');
+    answer?.();
+    await settle(fixture);
+    await settle(fixture);
+
+    // No clock was started for a panel that is gone.
+    expect(ticks.mock.calls.filter(([, ms]) => ms === 1000)).toEqual([]);
+    ticks.mockRestore();
+    expect(fixture.nativeElement.innerHTML).not.toContain('code=c1');
   });
 
   it('keeps the link nowhere once the dialog closes', async () => {

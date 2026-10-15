@@ -32,6 +32,22 @@ export const IMPERSONATION_NOTE_MAX = 500;
 /** How often the time left on the link is said again. */
 const TICK_MS = 1000;
 
+/**
+ * How long a handoff code is good for, from its start: the
+ * `IMPERSONATION_CODE_TTL_MS` of backend plan 0194. The link counts down from
+ * the arrival of the answer by this much, so a browser clock that is wrong
+ * does not change the time left (see "What the build decided").
+ */
+export const IMPERSONATION_CODE_LIFETIME_MS = 60 * 1000;
+
+/** What the dialog keeps of an answer once it arrived. Not the address. */
+interface Started {
+  /** When the session ends, as the gateway said it. */
+  readonly expiresAt: string;
+  /** When the link is too old, on the clock of this browser. */
+  readonly deadline: number;
+}
+
 /** What the dialog asks the descriptor to do: start one session. */
 export type StartImpersonation = (start: {
   readonly reason: ImpersonationReason;
@@ -55,9 +71,10 @@ const REFUSAL_KEYS: Readonly<Record<string, string>> = {
  * answer becomes a real `<a target="_blank">`, and the operator presses it.
  *
  * **The address lives here and nowhere else.** It arrives in the answer, is
- * held in one signal of this component, and is written only into the `href`
- * of the link. The press, the end of the minute and the close of the dialog
- * each drop it. It is never logged, copied or stored.
+ * held in one signal of this component (`link`), and is written only into the
+ * `href` of the link. The rest of the answer is kept without it. The press,
+ * the end of the minute and the close of the dialog each drop it. It is never
+ * logged, copied or stored.
  *
  * **The reason is sent as its code.** The words of an option are copy.
  */
@@ -283,10 +300,12 @@ export class ImpersonationPanel implements OnDestroy {
 
   /** The address of the app, until it is pressed or too old. */
   readonly link = signal<string | null>(null);
-  private readonly _session = signal<ImpersonationSession | null>(null);
+  private readonly _started = signal<Started | null>(null);
   private readonly _opened = signal(false);
   private readonly _now = signal(Date.now());
   private _timer: ReturnType<typeof setInterval> | null = null;
+  /** The dialog closed. An answer that arrives after it is dropped. */
+  private _destroyed = false;
 
   /** The control that had the focus when the dialog opened. */
   private readonly _opener =
@@ -298,11 +317,11 @@ export class ImpersonationPanel implements OnDestroy {
     if (this._opened()) {
       return 'opened';
     }
-    const session = this._session();
-    if (session === null) {
+    const started = this._started();
+    if (started === null) {
       return 'ask';
     }
-    return this._now() >= Date.parse(session.codeExpiresAt) ? 'old' : 'link';
+    return this._now() >= started.deadline ? 'old' : 'link';
   });
 
   readonly canStart = computed(() => {
@@ -319,18 +338,15 @@ export class ImpersonationPanel implements OnDestroy {
 
   /** Whole seconds left on the link, never below zero. */
   readonly secondsLeft = computed(() => {
-    const session = this._session();
-    return session === null
+    const started = this._started();
+    return started === null
       ? 0
-      : Math.max(
-          0,
-          Math.ceil((Date.parse(session.codeExpiresAt) - this._now()) / 1000)
-        );
+      : Math.max(0, Math.ceil((started.deadline - this._now()) / 1000));
   });
 
   /** When the session ends, in the reading language of the operator. */
   readonly until = computed(() =>
-    instant(this._session()?.expiresAt ?? null, this._translator.locale())
+    instant(this._started()?.expiresAt ?? null, this._translator.locale())
   );
 
   constructor() {
@@ -351,6 +367,7 @@ export class ImpersonationPanel implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this._destroyed = true;
     this._stopClock();
     this.link.set(null);
     // Back to the control that opened the dialog, when it is still there.
@@ -385,11 +402,15 @@ export class ImpersonationPanel implements OnDestroy {
       const session = await this.startSession()(
         reason === 'OTHER' ? { reason, note } : { reason }
       );
-      this._now.set(Date.now());
-      this.link.set(session.url);
-      this._session.set(session);
-      this._startClock();
+      if (this._destroyed) {
+        // Closed while it started: nothing is left to hold the link or tick.
+        return;
+      }
+      this._keep(session);
     } catch (error) {
+      if (this._destroyed) {
+        return;
+      }
       const refused = toGatewayError(error);
       if (refused.status === 404) {
         this._final.set(true);
@@ -426,8 +447,24 @@ export class ImpersonationPanel implements OnDestroy {
 
   /** Back to the reason, for a link that is too old. */
   again(): void {
-    this._session.set(null);
+    this._started.set(null);
     this.link.set(null);
+  }
+
+  /**
+   * Hold the address in `link` alone, and the rest without it. The minute is
+   * counted from now, on this clock, and not from `codeExpiresAt`, which is a
+   * time on the clock of the server.
+   */
+  private _keep(session: ImpersonationSession): void {
+    const now = Date.now();
+    this._now.set(now);
+    this.link.set(session.url);
+    this._started.set({
+      expiresAt: session.expiresAt,
+      deadline: now + IMPERSONATION_CODE_LIFETIME_MS,
+    });
+    this._startClock();
   }
 
   private _startClock(): void {

@@ -88,4 +88,27 @@ describe('ImpersonationStore', () => {
     expect(store.enabled()).toBe(true);
     expect(reads()).toBe(2);
   });
+
+  it('keeps the answer of the next operator when the earlier read lands late', async () => {
+    const session = signal<Pick<AdminSession, 'adminId'> | null>({
+      adminId: 'a-1',
+    });
+    const answers: ((enabled: boolean) => void)[] = [];
+    const { store } = setUp(
+      () => new Promise<boolean>((resolve) => answers.push(resolve)),
+      session
+    );
+    const first = store.load();
+
+    session.set({ adminId: 'a-2' });
+    const second = store.load();
+    answers[1](true);
+    await second;
+    expect(store.enabled()).toBe(true);
+
+    // The read of a-1 answers last, and says something else.
+    answers[0](false);
+    await first;
+    expect(store.enabled()).toBe(true);
+  });
 });

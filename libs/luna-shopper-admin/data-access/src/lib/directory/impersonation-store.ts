@@ -51,9 +51,16 @@ export class ImpersonationStore {
       return this._reading.done;
     }
 
+    // An answer that lands after somebody else signed in is not theirs, and
+    // would hide the action from them until a reload.
+    const settle = (enabled: boolean) => {
+      if (this._reading?.operator === operator) {
+        this._answer.set({ operator, enabled });
+      }
+    };
     const done = this._directory.impersonationEnabled().then(
-      (enabled) => this._answer.set({ operator, enabled }),
-      () => this._answer.set({ operator, enabled: false })
+      (enabled) => settle(enabled),
+      () => settle(false)
     );
     this._reading = { operator, done };
     return done;
