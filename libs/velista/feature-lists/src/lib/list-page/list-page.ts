@@ -46,6 +46,7 @@ import {
   DUE_LINE_ADDS_ON_STEP,
   type Line,
   LINE_VOICE_MAX_SECONDS,
+  lineName,
   type LineRowVm,
   type ListGoneReason,
   type ListPageState,
@@ -344,6 +345,15 @@ export class ListPage {
     );
   }
 
+  /** The name a line is drawn with, in the reader's language (velista `0144`). */
+  private _lineName(line: Line): string {
+    return lineName(
+      line,
+      (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
+      this._locale()
+    ).text;
+  }
+
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
     const zoneId = this.zoneId();
@@ -382,6 +392,9 @@ export class ListPage {
       // The format and the brand of a line's one product. `ItemNames` is a signal,
       // so a row gains its detail the moment its product resolves.
       detailOf: (itemId) => this._detailOf(itemId),
+      // The name each row draws: a line made from a product has none of its own and
+      // shows the product's (velista `0144`, section 5).
+      nameOfLine: (line) => this._lineName(line),
       // Not live means the room was refused or the connection dropped. What is on
       // screen is correct and will not update itself, which is worth saying: looking
       // live while being stale is worse than looking broken.
@@ -1231,7 +1244,7 @@ export class ListPage {
             undefined,
             undefined,
             {
-              name: line.content,
+              name: this._lineName(line),
               quantity: line.quantity,
             }
           )
@@ -1292,6 +1305,7 @@ export class ListPage {
     content: string;
     quantity: number;
     itemIds?: readonly string[];
+    named?: false;
   }): Promise<void> {
     const current = this.loaded();
     this._typedBusy.set(true);
@@ -1313,7 +1327,9 @@ export class ListPage {
       },
       // Whatever the composer attached: a group's whole set, one product, or nothing
       // at all for free text, which stays first class (section 6).
-      entry.itemIds
+      entry.itemIds,
+      // A chosen card is not named (velista `0144`, section 3).
+      entry.named
     );
 
     // The list the suggestions were for has been added. Clearing here rather than in
@@ -1326,7 +1342,8 @@ export class ListPage {
       return;
     }
 
-    this.announcement.set(entry.content);
+    // The name the new row draws, which for a card is the product's.
+    this.announcement.set(this._lineName(outcome.line));
   }
 
   /**
@@ -1672,7 +1689,7 @@ export class ListPage {
 
     this.announcement.set(
       this._translator.t('list.due.added', undefined, undefined, {
-        name: line.content,
+        name: this._lineName(line),
       })
     );
   }

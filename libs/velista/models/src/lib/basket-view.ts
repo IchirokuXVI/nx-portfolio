@@ -1318,6 +1318,11 @@ export interface BasketAddLineRequest {
   readonly quantity: number;
   /** The product set a suggestion carried, as the list's own add takes it. */
   readonly itemIds?: readonly string[];
+  /**
+   * `false` for a line made from a product card: its `content` is the product's
+   * name and nobody typed it (backend `0207`). Absent for typed text.
+   */
+  readonly named?: false;
 }
 
 /**

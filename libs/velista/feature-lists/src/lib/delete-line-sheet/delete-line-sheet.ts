@@ -21,6 +21,7 @@ import {
 } from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { watchLineName } from '../line-page/line-name';
 import { listErrorKey } from '../list-error-copy';
 
 /**
@@ -93,12 +94,11 @@ export class DeleteLineSheet {
   });
 
   /** What the confirmation names, so the copy says the thing rather than "this item". */
-  readonly lineName = computed(
-    () =>
-      this._lines
-        .linesIn(this.listId())
-        .find((line) => line.id === this.lineId())?.content ?? ''
+  private readonly _name = watchLineName(() =>
+    this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
+
+  readonly lineName = computed(() => this._name()?.text ?? '');
 
   async confirm(): Promise<void> {
     if (this.submitting()) {

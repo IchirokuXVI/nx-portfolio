@@ -84,6 +84,15 @@
               <p class="added-by">
                 {{ 'list.page.addedBy' | rokuT: { who: line.addedBy } }}
               </p>
+              <!--
+                A line made from a product shows the product's name and has none of
+                its own (plan 0144, section 5). Named lines rename from the menu.
+              -->
+              @if (line.canAddName) {
+                <button (click)="openName()" class="add-name" type="button">
+                  {{ 'list.page.addName' | rokuT }}
+                </button>
+              }
             </div>
 
             @if (line.canStep) {

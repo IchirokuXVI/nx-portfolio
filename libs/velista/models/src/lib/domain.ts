@@ -228,7 +228,20 @@ export interface ShoppingListSummary extends ShoppingList {
 export interface Line {
   readonly id: string;
   readonly listId: string;
+  /**
+   * What the line says. Required on the wire and always sent: a line made from a
+   * product carries the name the product had then, and the server reads it.
+   *
+   * **Not what a screen draws.** {@link lineName} decides that, from this and
+   * {@link named}.
+   */
   readonly content: string;
+  /**
+   * Whether a person gave the line its name (backend `0207`, section 1). False is a
+   * line made from a product, whose `content` nobody typed, and a screen then draws
+   * the name of the product instead. A line with no product is always named.
+   */
+  readonly named: boolean;
   /**
    * How many of this the household wants **right now**, and the line's only
    * state (velista plan 0043, section 1).

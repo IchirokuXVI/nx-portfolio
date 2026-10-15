@@ -3,7 +3,27 @@
 @include sheet-form.sheet-form;
 
 .title {
-  margin-block-end: var(--app-space-5);
+  margin-block-end: var(--app-space-2);
+}
+
+// The product the line shows, under the title (plan 0144, section 4).
+.product {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// The label sits close over the field when no product line comes before it.
+.title + .form {
+  margin-block-start: var(--app-space-5);
+}
+
+.note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
 }
 
 .form {

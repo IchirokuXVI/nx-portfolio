@@ -92,6 +92,11 @@ export interface ListStateInput {
    * draws no detail on any row.
    */
   readonly detailOf?: (itemId: string) => string | null;
+  /**
+   * The name a line is drawn with, through `lineName` (velista `0144`), or absent
+   * for its `content`. A line with no name of its own draws its product's name.
+   */
+  readonly nameOfLine?: (line: Line) => string;
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
@@ -260,7 +265,7 @@ function toRow(
 
   return {
     id: line.id,
-    content: line.content,
+    content: input.nameOfLine?.(line) ?? line.content,
     // One product is the only case with one format and one brand to state. It is
     // what tells two lines of the same name apart.
     detail:

@@ -10,6 +10,7 @@ import { SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import { lineUrls } from '../line-page/line-urls';
+import { watchLineName } from '../line-page/line-name';
 
 /**
  * What the info button beside "Any of these will do" says (velista `0137`,
@@ -70,12 +71,14 @@ export class LineProductsInfoSheet {
   });
 
   /** The line the sentences are about, or nothing while it has not arrived. */
-  readonly lineName = computed(
-    () =>
-      this._lines
-        .linesIn(this._urls.listId())
-        .find((line) => line.id === this._urls.lineId())?.content ?? ''
+  private readonly _name = watchLineName(() =>
+    this._lines
+      .linesIn(this._urls.listId())
+      .find((line) => line.id === this._urls.lineId())
   );
+
+  /** The name the line is drawn with (velista `0144`). */
+  readonly lineName = computed(() => this._name()?.text ?? '');
 
   /** Close, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {

@@ -9,6 +9,7 @@ import { LineStore, ListStore } from '@portfolio/velista/data-access';
 import { SheetNavigation, sheetSegments } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { watchLineName } from '../line-page/line-name';
 import { lineUrls } from '../line-page/line-urls';
 import {
   actionsFor,
@@ -19,7 +20,7 @@ import {
 /**
  * What the three dots of the line page hold (velista `0135`, section 6).
  *
- * The rare acts on a line: change its name, delete it. They left the page so the
+ * The rare acts on a line: give it a name or change it, delete it. They left the page so the
  * page can be about the products.
  *
  * **A row the reader may not use is absent, not disabled.** The page draws the
@@ -46,8 +47,22 @@ import {
         <ul class="acts">
           @if (canRename()) {
             <li>
-              <button (click)="rename()" class="act" type="button">
-                {{ 'list.menu.rename' | rokuT }}
+              <!--
+                One sheet either way (plan 0144, section 5). The words say what
+                it does to this line: a line with no name of its own gets one.
+              -->
+              <button
+                (click)="rename()"
+                [attr.aria-label]="
+                  (named() ? 'list.menu.renameLabel' : 'list.menu.addNameLabel')
+                    | rokuT: { name: lineName() }
+                "
+                class="act"
+                type="button"
+              >
+                {{
+                  (named() ? 'list.menu.rename' : 'list.menu.addName') | rokuT
+                }}
               </button>
             </li>
           }
@@ -91,7 +106,12 @@ export class LineMenuSheet {
     )
   );
 
-  readonly lineName = computed(() => this._line()?.content ?? '');
+  private readonly _name = watchLineName(() => this._line());
+
+  readonly lineName = computed(() => this._name()?.text ?? '');
+
+  /** Whether a person named the line: the row then renames, and else adds a name. */
+  readonly named = computed(() => this._name()?.own ?? true);
 
   readonly canRename = computed(() => {
     const line = this._line();
