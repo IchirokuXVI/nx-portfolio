@@ -1,6 +1,9 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  applyBasketMarks,
+  applyBasketPatch,
+  BASKET_PATCH_READ,
   type Basket,
   type BasketRow,
   type BasketRowEntry,
@@ -130,6 +133,8 @@ function build(
   sessions: FakeSessions;
   socket: FakeSocket;
   resumed: FakeResumed;
+  /** The twin behind every method the spec did not override. */
+  memory: BasketMemory;
 } {
   const memory = new BasketMemory();
   const service: BasketServiceI = {
@@ -159,7 +164,21 @@ function build(
       memory.revokeParticipant(id, participantId),
     addParticipant: (id, userId) => memory.addParticipant(id, userId),
     leaveBasket: () => memory.leaveBasket(),
+    getMarks: () => memory.getMarks(),
     ...overrides,
+    // The rows read is the full read with no catalog half (backend `0205`). A
+    // spec that holds or counts the full read holds and counts this one too.
+    getBasketRows:
+      overrides.getBasketRows ??
+      (async (id, at) => {
+        const read = overrides.getBasket ?? (() => memory.getBasket());
+        return {
+          ...(await read(id, at)),
+          products: new Map(),
+          scopes: new Map(),
+          shop: null,
+        };
+      }),
   };
 
   TestBed.configureTestingModule({
@@ -174,7 +193,30 @@ function build(
     ],
   });
 
-  return { store: TestBed.inject(BasketStore), sessions, socket, resumed };
+  return {
+    store: TestBed.inject(BasketStore),
+    sessions,
+    socket,
+    resumed,
+    memory,
+  };
+}
+
+/** A `basket.linesChanged` with ids alone, as every envelope before backend `0204`. */
+function idsAlone(lineIds: readonly string[]): RealtimeEvent {
+  return {
+    type: 'basket.linesChanged',
+    lineIds,
+    entries: null,
+    marksMoved: false,
+  };
+}
+
+/** Let the promises a timer started settle. */
+async function flush(): Promise<void> {
+  for (let turn = 0; turn < 10; turn += 1) {
+    await Promise.resolve();
+  }
 }
 
 /** The row this basket holds under one name, which every write here addresses. */
@@ -721,7 +763,7 @@ describe('BasketStore', () => {
       };
     }
 
-    it('asks again rather than applying an answer a write overtook', async () => {
+    it('puts a write back on an answer that left before it (velista 0143, section 5)', async () => {
       const memory = new BasketMemory();
       const held = holdReads(memory);
       const { store } = build({
@@ -741,6 +783,36 @@ describe('BasketStore', () => {
         quantity: 1,
         from: eggs.left,
       });
+      expect(rowOf(store, 'Eggs').bought).toBe(eggs.bought + 1);
+
+      // The answer is older than the settle. The settle's lines are newer by
+      // their version, so they are put on it, and nothing reads again.
+      const before = held.counted.reads;
+      await held.release();
+      await reading;
+      expect(held.counted.reads).toBe(before);
+      expect(rowOf(store, 'Eggs').bought).toBe(eggs.bought + 1);
+    });
+
+    it('asks again rather than applying an answer an add overtook', async () => {
+      const memory = new BasketMemory();
+      const held = holdReads(memory);
+      const { store } = build({
+        getBasket: held.getBasket,
+        addLine: (id, body) => memory.addLine(id, body),
+      });
+
+      const opening = store.open('basket-saturday');
+      await held.release();
+      await opening;
+
+      // An add is folded and not patched: its line is new to this client.
+      const reading = store.refresh();
+      await store.addLine({
+        content: 'Rice',
+        quantity: 1,
+        targetListId: 'list-weekly',
+      });
 
       // The stale answer is dropped and the read goes round again.
       const before = held.counted.reads;
@@ -749,7 +821,7 @@ describe('BasketStore', () => {
 
       await held.release();
       await reading;
-      expect(rowOf(store, 'Eggs').bought).toBe(eggs.bought + 1);
+      expect(rowOf(store, 'Rice').left).toBe(1);
     });
 
     /**
@@ -1027,10 +1099,7 @@ describe('BasketStore', () => {
 
         await store.open('basket-saturday');
         const readsAfterOpen = reads;
-        socket.events.next({
-          type: 'basket.linesChanged',
-          lineIds: ['zl-1'],
-        });
+        socket.events.next(idsAlone(['zl-1']));
 
         jest.advanceTimersByTime(2000);
         await Promise.resolve();
@@ -1044,44 +1113,35 @@ describe('BasketStore', () => {
     });
 
     /**
-     * A broadcast carries **ids and no numbers** (backend `0130`, section 6), and a
-     * row is a group the server computes, so a line id does not even say which row
-     * moved. There is nothing to merge and the only honest answer is to ask.
+     * An event with no entries carries ids alone: every write that is not a
+     * change of numbers, and every envelope from before backend `0204`. It reads
+     * the rows, and the first one after a quiet time reads **at once** (velista
+     * `0143`, section 5).
      */
-    it('reads the basket again on basket.linesChanged rather than merging it', async () => {
+    it('reads the rows at once for an event with ids alone', async () => {
       jest.useFakeTimers();
       try {
         let reads = 0;
         const memory = new BasketMemory();
         const { store, socket } = build({
-          getBasket: () => {
+          getBasket: () => memory.getBasket(),
+          getBasketRows: async () => {
             reads += 1;
-            return memory.getBasket();
+            return { ...(await memory.getBasket()), products: new Map() };
           },
         });
         await store.open('basket-saturday');
-        const readsAfterOpen = reads;
 
-        socket.events.next({
-          type: 'basket.linesChanged',
-          lineIds: ['zl-1', 'zl-3'],
-        });
+        socket.events.next(idsAlone(['zl-1', 'zl-3']));
+        await flush();
 
-        // Nothing at once: a shop full of people settling rows is a stream of
-        // these, and a request each would be a request per tin of tomatoes.
-        expect(reads).toBe(readsAfterOpen);
-
-        jest.advanceTimersByTime(2000);
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(reads).toBe(readsAfterOpen + 1);
+        expect(reads).toBe(1);
       } finally {
         jest.useRealTimers();
       }
     });
 
-    it('costs one read for a burst of three', async () => {
+    it('gathers three more events inside the window into one more read', async () => {
       jest.useFakeTimers();
       try {
         let reads = 0;
@@ -1095,24 +1155,82 @@ describe('BasketStore', () => {
         await store.open('basket-saturday');
         const readsAfterOpen = reads;
 
-        for (const lineId of ['zl-1', 'zl-2', 'zl-3']) {
-          socket.events.next({
-            type: 'basket.linesChanged',
-            lineIds: [lineId],
-          });
-        }
-
-        jest.advanceTimersByTime(2000);
-        await Promise.resolve();
-        await Promise.resolve();
-
+        socket.events.next(idsAlone(['zl-1']));
+        await flush();
         expect(reads).toBe(readsAfterOpen + 1);
+
+        for (const lineId of ['zl-2', 'zl-3', 'zl-4']) {
+          jest.advanceTimersByTime(200);
+          socket.events.next(idsAlone([lineId]));
+        }
+        await flush();
+        expect(reads).toBe(readsAfterOpen + 1);
+
+        jest.advanceTimersByTime(1500);
+        await flush();
+        expect(reads).toBe(readsAfterOpen + 2);
+
+        jest.advanceTimersByTime(5000);
+        await flush();
+        expect(reads).toBe(readsAfterOpen + 2);
         // And the event set nothing by itself (velista `0093`, section 11).
         // It carries ids and no marks, so every mark on screen is one the
         // read that followed it answered with.
         expect(store.rows().map((row) => row.mark)).toEqual(
           (await memory.getBasket()).rows.map((row) => row.mark)
         );
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * Review point 2 of velista `0143`: with a ceiling of 3000 ms a long burst
+     * costs about one read for each 3000 ms it lasts, not two in all. Ten events
+     * a second apart cost the first read, one for each ceiling inside the burst,
+     * and one after it.
+     */
+    it('never lets a read asked for wait more than 3000 ms, so a long burst reads every 3000 ms', async () => {
+      jest.useFakeTimers();
+      try {
+        const at: number[] = [];
+        let now = 0;
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => memory.getBasket(),
+          getBasketRows: async () => {
+            at.push(now);
+            return { ...(await memory.getBasket()), products: new Map() };
+          },
+        });
+        await store.open('basket-saturday');
+
+        const asked: number[] = [];
+        for (let second = 0; second < 10; second += 1) {
+          asked.push(now);
+          socket.events.next(idsAlone(['zl-1']));
+          await flush();
+          for (let tick = 0; tick < 10; tick += 1) {
+            now += 100;
+            jest.advanceTimersByTime(100);
+            await flush();
+          }
+        }
+        for (let tick = 0; tick < 40; tick += 1) {
+          now += 100;
+          jest.advanceTimersByTime(100);
+          await flush();
+        }
+
+        // At once, then 3000 ms after the first event the window gathered, and
+        // again for each ceiling: four reads for ten seconds, not two.
+        expect(at).toEqual([0, 4000, 7000, 10000]);
+        // No ask waited longer than the ceiling for a read that started after it.
+        for (const ask of asked) {
+          const answered = at.find((read) => read >= ask);
+          expect(answered).toBeDefined();
+          expect((answered as number) - ask).toBeLessThanOrEqual(3000);
+        }
       } finally {
         jest.useRealTimers();
       }
@@ -1136,10 +1254,7 @@ describe('BasketStore', () => {
         const readsAfterOpen = reads;
 
         store.leave();
-        socket.events.next({
-          type: 'basket.linesChanged',
-          lineIds: ['zl-1'],
-        });
+        socket.events.next(idsAlone(['zl-1']));
 
         jest.advanceTimersByTime(2000);
         await Promise.resolve();
@@ -2360,5 +2475,455 @@ describe('BasketStore: buying at one shop', () => {
     expect(
       store.itemIdFor(rowOf(store, 'Sourdough loaf').rowKey)
     ).toBeUndefined();
+  });
+});
+
+type LinesChanged = Extract<RealtimeEvent, { type: 'basket.linesChanged' }>;
+
+/** What a person sees of a basket: the rows, the header and the banner. */
+function drawn(basket: Basket) {
+  return {
+    rows: basket.rows,
+    progress: basket.progress,
+    pending: basket.pending,
+    unseenChangeCount: basket.unseenChangeCount,
+    newestUnseenChangeId: basket.newestUnseenChangeId,
+  };
+}
+
+/** The target of the row the twin draws under one name. */
+function targetIn(basket: Basket, content: string) {
+  const row = basket.rows.find((held) => held.content === content);
+  if (row === undefined) {
+    throw new Error(`the twin lost its ${content}`);
+  }
+  return {
+    row,
+    target: {
+      rowKey: row.rowKey,
+      lineIds: row.entries.map((entry) => entry.lineId),
+    },
+  };
+}
+
+/**
+ * One set of entries, through a read and through a patch (velista `0143`,
+ * section 3).
+ *
+ * The twin stands in for the server: it is read before the write, the write's
+ * events are applied to that read with `applyBasketPatch` (and the marks read
+ * when they say so), and the result is compared field by field with a read made
+ * after the write. Both run the shared rules, so they cannot drift.
+ */
+async function patchedAndRead(
+  write: (memory: BasketMemory, before: Basket) => Promise<unknown> | void,
+  setup: (memory: BasketMemory) => void = () => undefined
+): Promise<{ patched: Basket | 'read'; read: Basket; events: LinesChanged[] }> {
+  const memory = new BasketMemory();
+  setup(memory);
+  const before = await memory.getBasket();
+  const events: LinesChanged[] = [];
+  const listening = memory.events.subscribe((event) => events.push(event));
+  await write(memory, before);
+  listening.unsubscribe();
+  const read = await memory.getBasket();
+
+  let patched: Basket | 'read' = before;
+  for (const event of events) {
+    if (patched === BASKET_PATCH_READ) {
+      break;
+    }
+    patched =
+      event.entries === null
+        ? BASKET_PATCH_READ
+        : applyBasketPatch(patched, event.lineIds, event.entries);
+    if (patched !== BASKET_PATCH_READ && event.marksMoved) {
+      patched = applyBasketMarks(patched, await memory.getMarks());
+    }
+  }
+  return { patched, read, events };
+}
+
+describe('a read and a patch give the same shopping list (velista 0143, section 3)', () => {
+  it('for a buy', async () => {
+    const { patched, read, events } = await patchedAndRead((memory, before) => {
+      const { row, target } = targetIn(before, 'Milk');
+      return memory.settle('b', target, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: row.left,
+      });
+    });
+    expect(events[0].entries).not.toBeNull();
+    expect(patched).not.toBe(BASKET_PATCH_READ);
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('for a buy that finishes a row of two lists', async () => {
+    const { patched, read } = await patchedAndRead((memory, before) => {
+      const { row, target } = targetIn(before, 'Milk');
+      return memory.settle('b', target, {
+        outcome: 'BOUGHT',
+        quantity: row.left,
+        from: row.left,
+      });
+    });
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+    expect(targetIn(read, 'Milk').row.state).toBe('DONE');
+  });
+
+  it('for a buy taken back', async () => {
+    const { patched, read } = await patchedAndRead((memory, before) => {
+      const { row, target } = targetIn(before, 'Eggs');
+      return memory.revert('b', target, {
+        target: 'UNITS',
+        units: 1,
+        from: row.bought,
+      });
+    });
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('for a change of quantity', async () => {
+    const { patched, read } = await patchedAndRead((memory) =>
+      memory.setDemand('b', { lineId: 'zl-1', quantity: 5, from: 2 })
+    );
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('for a line of a row of two lists taken to zero, which leaves the row', async () => {
+    const { patched, read, events } = await patchedAndRead((memory) =>
+      memory.setDemand('b', { lineId: 'zl-2', quantity: 0, from: 1 })
+    );
+    // The line has no patch, so the client removes its entry.
+    expect(events[0].entries).toEqual([]);
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('for a row crossed out when its last demand goes (velista 0142)', async () => {
+    const { patched, read } = await patchedAndRead(
+      (memory) =>
+        memory.setDemand('b', { lineId: 'zl-2', quantity: 0, from: 1 }),
+      (memory) => memory.buyElsewhere('zl-1', 2)
+    );
+    expect(targetIn(read, 'Milk').row.state).toBe('BOUGHT_ELSEWHERE');
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('for a crossed out row its list asks for again (velista 0142)', async () => {
+    const { patched, read } = await patchedAndRead(
+      (memory) =>
+        memory.setDemand('b', { lineId: 'zl-1', quantity: 1, from: 0 }),
+      (memory) => {
+        memory.buyElsewhere('zl-1', 2);
+        memory.buyElsewhere('zl-2', 1);
+      }
+    );
+    expect(targetIn(read, 'Milk').row.state).toBe('WANTED');
+    expect(drawn(patched as Basket)).toEqual(drawn(read));
+  });
+
+  it('reads for a skip, whose note a patch does not write', async () => {
+    const { patched } = await patchedAndRead((memory, before) =>
+      memory.skip('b', targetIn(before, 'Milk').target)
+    );
+    expect(patched).toBe(BASKET_PATCH_READ);
+  });
+
+  it('reads for "they had none", which moves no version', async () => {
+    const { patched } = await patchedAndRead((memory, before) => {
+      const { row, target } = targetIn(before, 'Milk');
+      return memory.settle('b', target, {
+        outcome: 'NOT_AVAILABLE',
+        from: row.left,
+      });
+    });
+    expect(patched).toBe(BASKET_PATCH_READ);
+  });
+
+  it('reads for a buy made through another shopping list, whose note a patch does not carry', async () => {
+    const { patched } = await patchedAndRead((memory) =>
+      memory.buyElsewhere('zl-3', 1)
+    );
+    expect(patched).toBe(BASKET_PATCH_READ);
+  });
+});
+
+describe('BasketStore: a buy reaches the other phone at once (velista 0143)', () => {
+  /** A store whose twin's room is this store's socket, and that counts reads. */
+  async function live(overrides: Partial<BasketServiceI> = {}) {
+    const reads = { full: 0, rows: 0, marks: 0 };
+    const twin = new BasketMemory();
+    const built = build({
+      getBasket: (id, at) => {
+        reads.full += 1;
+        return twin.getBasket(id, at);
+      },
+      getBasketRows: (id, at) => {
+        reads.rows += 1;
+        return twin.getBasketRows(id, at);
+      },
+      getMarks: () => {
+        reads.marks += 1;
+        return twin.getMarks();
+      },
+      settle: (id, target, body) => twin.settle(id, target, body),
+      setDemand: (id, body) => twin.setDemand(id, body),
+      skip: (id, target) => twin.skip(id, target),
+      changeProduct: (id, body) => twin.changeProduct(id, body),
+      ...overrides,
+    });
+    await built.store.open('basket-saturday');
+    reads.full = 0;
+    return { ...built, twin, reads };
+  }
+
+  /** The other phone writes, and this one hears it on its socket. */
+  function wire(
+    twin: BasketMemory,
+    socket: { events: Subject<RealtimeEvent> }
+  ) {
+    return twin.events.subscribe((event) => socket.events.next(event));
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('draws a buy from the event with no request', async () => {
+    jest.useFakeTimers();
+    const { store, socket, twin, reads } = await live();
+    wire(twin, socket);
+
+    const milk = rowOf(store, 'Milk');
+    await twin.settle('b', store.targetOf(milk.rowKey) as never, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: milk.left,
+    });
+
+    expect(rowOf(store, 'Milk')).toMatchObject({
+      bought: milk.bought + 1,
+      left: milk.left - 1,
+      state: 'PARTLY',
+    });
+    jest.advanceTimersByTime(10_000);
+    await flush();
+    expect(reads.full + reads.rows).toBe(0);
+    // The settle moved the marks, which are read once, 300 ms later.
+    expect(reads.marks).toBe(1);
+  });
+
+  it('keeps the rows on screen as they were for a row nothing touched', async () => {
+    const { store, socket, twin } = await live();
+    wire(twin, socket);
+    const eggs = rowOf(store, 'Eggs');
+
+    await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+
+    expect(rowOf(store, 'Eggs')).toBe(eggs);
+  });
+
+  it('reads the rows at once for a patch it cannot apply', async () => {
+    const { store, socket, twin, reads } = await live();
+    wire(twin, socket);
+
+    await twin.skip('b', store.targetOf(rowOf(store, 'Milk').rowKey) as never);
+    await flush();
+
+    expect(reads.rows).toBe(1);
+    expect(rowOf(store, 'Milk').state).toBe('SKIPPED');
+  });
+
+  it('applies the answer of a write, then its own event changes nothing, and no read follows', async () => {
+    jest.useFakeTimers();
+    const { store, socket, twin, reads } = await live();
+    const own: RealtimeEvent[] = [];
+    twin.events.subscribe((event) => own.push(event));
+
+    const milk = rowOf(store, 'Milk');
+    await store.settle(milk.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: milk.left,
+    });
+    const answered = store.basket();
+    expect(rowOf(store, 'Milk').bought).toBe(milk.bought + 1);
+
+    for (const event of own) {
+      socket.events.next(event);
+    }
+    expect(store.basket()).toBe(answered);
+
+    jest.advanceTimersByTime(10_000);
+    await flush();
+    expect(reads.full + reads.rows).toBe(0);
+  });
+
+  it('counts the header from the rows after a patch', async () => {
+    const { store, socket, twin } = await live();
+    wire(twin, socket);
+    const milk = rowOf(store, 'Milk');
+    const done = store.progress().done;
+
+    await twin.settle('b', store.targetOf(milk.rowKey) as never, {
+      outcome: 'BOUGHT',
+      quantity: milk.left,
+      from: milk.left,
+    });
+
+    expect(rowOf(store, 'Milk').state).toBe('DONE');
+    expect(store.progress().done).toBe(done + 1);
+    expect(store.progress()).toEqual((await twin.getBasket()).progress);
+  });
+
+  it('asks the marks once for a burst, 300 ms after the first', async () => {
+    jest.useFakeTimers();
+    const { store, socket, twin, reads } = await live();
+    wire(twin, socket);
+    twin.seenThrough = 'chg-5';
+
+    for (const quantity of [3, 4, 5]) {
+      await twin.setDemand('b', {
+        lineId: 'zl-1',
+        quantity,
+        from: quantity - 1,
+      });
+      jest.advanceTimersByTime(50);
+    }
+    expect(reads.marks).toBe(0);
+
+    jest.advanceTimersByTime(300);
+    await flush();
+    expect(reads.marks).toBe(1);
+    expect(store.basket()?.unseenChangeCount).toBe(0);
+    expect(store.rows().every((row) => row.mark !== 'CHANGED')).toBe(true);
+  });
+
+  it('keeps the screen as it is when the marks read fails', async () => {
+    jest.useFakeTimers();
+    const { store, socket, twin } = await live({
+      getMarks: () => Promise.reject(new Error('offline')),
+    });
+    wire(twin, socket);
+    await twin.setDemand('b', { lineId: 'zl-1', quantity: 3, from: 2 });
+    const shown = store.basket();
+
+    jest.advanceTimersByTime(300);
+    await flush();
+
+    expect(store.basket()).toBe(shown);
+    expect(store.state()).toBe('ready');
+  });
+
+  it('keeps the products it holds on a rows read', async () => {
+    const { store, socket, reads } = await live();
+    const products = store.products();
+
+    socket.events.next(idsAlone(['zl-1']));
+    await flush();
+
+    expect(reads.rows).toBe(1);
+    expect(reads.full).toBe(0);
+    expect(store.products()).toBe(products);
+  });
+
+  it('makes the full read when the rows name a product it does not hold', async () => {
+    const twin = new BasketMemory();
+    const { store, socket, reads } = await live({
+      getBasketRows: async (id, at) => {
+        const rows = await twin.getBasketRows(id, at);
+        return {
+          ...rows,
+          rows: rows.rows.map((row, index) =>
+            index === 0 ? { ...row, productId: 'item-new' } : row
+          ),
+        };
+      },
+    });
+
+    socket.events.next(idsAlone(['zl-1']));
+    await flush();
+
+    expect(reads.full).toBe(1);
+    expect(store.state()).toBe('ready');
+  });
+
+  it('applies a patch to a held choice and draws what a read draws (velista 0140, 0149)', async () => {
+    const { store, socket, twin } = await live();
+    wire(twin, socket);
+    const milk = rowOf(store, 'Milk');
+    await store.changeProduct(
+      milk.rowKey,
+      { lineIds: ['zl-1'], itemId: 'item-milk-pascual', keep: false },
+      null
+    );
+    expect(store.rowFor('zl-1')?.productId).toBe('item-milk-pascual');
+
+    await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+    const patched = store.rows();
+    expect(store.rowFor('zl-1')).toMatchObject({
+      productId: 'item-milk-pascual',
+      left: 4,
+    });
+
+    await store.refresh();
+    expect(store.rows()).toEqual(patched);
+  });
+
+  it('reads when the other phone buys a held line under another product, and spends the choice', async () => {
+    const { store, socket, twin, reads } = await live();
+    wire(twin, socket);
+    const milk = rowOf(store, 'Milk');
+    await store.changeProduct(
+      milk.rowKey,
+      { lineIds: ['zl-1'], itemId: 'item-milk-pascual', keep: false },
+      null
+    );
+
+    await twin.settle(
+      'b',
+      { rowKey: 'zl-1', lineIds: ['zl-1'] },
+      { outcome: 'BOUGHT', quantity: 1, from: 2, itemId: 'item-milk-pascual' }
+    );
+    await flush();
+
+    // The line now counts as the product it was bought as, which only a read
+    // places, and the held choice is spent exactly as velista 0149 spends it.
+    expect(reads.rows + reads.full).toBeGreaterThan(0);
+    expect(store.rowFor('zl-1')).toMatchObject({
+      productId: 'item-milk-pascual',
+    });
+    expect(
+      TestBed.inject(HeldProductChoices).heldOn(store.basket()?.id ?? null).size
+    ).toBe(0);
+  });
+
+  it('applies a patch that lands while a read is out to that read’s answer', async () => {
+    const twin = new BasketMemory();
+    const waiting: (() => void)[] = [];
+    let holding = false;
+    const { store, socket } = await live({
+      // The answer is composed when the read leaves, so it is older than the
+      // change of demand that lands while it is out.
+      getBasket: (id, at) => {
+        const answer = twin.getBasket(id, at);
+        return holding
+          ? new Promise((resolve) => waiting.push(() => resolve(answer)))
+          : answer;
+      },
+      setDemand: (id, body) => twin.setDemand(id, body),
+    });
+    wire(twin, socket);
+    holding = true;
+
+    const reading = store.refresh();
+    await twin.setDemand('b', { lineId: 'zl-1', quantity: 6, from: 2 });
+    expect(store.rowFor('zl-1')?.entries[0].left).toBe(6);
+
+    holding = false;
+    waiting.shift()?.();
+    await reading;
+    expect(store.rowFor('zl-1')?.entries[0].left).toBe(6);
   });
 });

@@ -70,6 +70,7 @@ function line(
       state: 'WANTED' as const,
       awaitingApproval: false,
       demandEditable: true,
+      version: 1,
     })),
   };
 }

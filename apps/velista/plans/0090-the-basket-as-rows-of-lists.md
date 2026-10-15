@@ -483,6 +483,18 @@ state table row by row. Everything about waiting units (`basket-memory.ts:791`, 
 
 ## 7. Staying current
 
+> **Velista `0143` reverses one rule of this section.** This plan says that every event is a
+> reason to read again and none is a thing to merge, and the table below reads after each
+> `basket.linesChanged` with a wait of 1500 ms that starts again on every event. Since
+> backend `0204` an event addressed to one basket carries the state of each line as that
+> basket reads it, with nothing a guest does not already read. So `0143` applies those
+> entries to the rows on screen with no request, and rebuilds each row with
+> `@portfolio/luna-shopper/basket-rules`, the rules core uses, so a row cannot drift from
+> the server's. The reason: the other phone waited 1500 ms and a whole read for every buy,
+> and a person who bought once a second kept it waiting until they stopped. An event with
+> no entries, or one that cannot be applied, still reads, at once for the first of a burst
+> and never more than 3000 ms late. `0143`, "What the build decided", has the detail.
+
 ### 7.1 The three reasons to read again
 
 | Reason                                   | Source                                                         | Read        |

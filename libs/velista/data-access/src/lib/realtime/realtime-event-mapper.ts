@@ -1,10 +1,12 @@
+import type { BasketEntryPatch } from '@portfolio/velista/models';
 import {
+  toBasketEntryPatch,
   toBasketParticipant,
   toBasketPresenceEntry,
 } from '../mapping/basket-mappers';
 import {
-  toComment,
   toBasketFromView,
+  toComment,
   toLine,
   toLineSettlement,
   toListPermissions,
@@ -306,10 +308,8 @@ export function toRealtimeEvent(
     }
 
     case 'basket.linesChanged': {
-      // Ids and nothing else, which is the whole event (backend `0130`,
-      // section 6): a basket room holds guests, so a broadcast carries the least
-      // privileged view there is. There is nothing here to merge and the store
-      // reads the basket again.
+      // The ids, and since backend `0204` the state of each line as the
+      // addressed basket reads it (velista `0143`, section 1).
       //
       // An unreadable id is dropped rather than failing the event, because the
       // event's meaning is "something moved" and one bad id does not make that
@@ -317,7 +317,13 @@ export function toRealtimeEvent(
       if (!isRecord(payload)) {
         return null;
       }
-      return { type: name, lineIds: mapArray(payload['lineIds'], str) };
+      const lineIds = mapArray(payload['lineIds'], str);
+      return {
+        type: name,
+        lineIds,
+        entries: entriesOf(payload['entries'], payload['lineIds'], lineIds),
+        marksMoved: payload['marksMoved'] === true,
+      };
     }
 
     case 'basket.participantJoined':
@@ -344,9 +350,7 @@ export function toRealtimeEvent(
         return null;
       }
       const accessTo = str(payload['basketId']);
-      return accessTo === null
-        ? null
-        : { type: name, basketId: accessTo };
+      return accessTo === null ? null : { type: name, basketId: accessTo };
     }
 
     case 'presence.basketUpdated': {
@@ -387,4 +391,35 @@ export function toRealtimeEvent(
 
 function idOf(payload: unknown): string | null {
   return isRecord(payload) ? str(payload['id']) : null;
+}
+
+/**
+ * The patches of a `basket.linesChanged`, or null (velista `0143`, section 1).
+ *
+ * All or nothing. Null when the wire has none, when one of them will not map,
+ * and when an id of `lineIds` was unreadable: the patches are only the whole
+ * truth about the lines they name, and a line whose id was dropped would read
+ * as a line nobody touched.
+ */
+function entriesOf(
+  raw: unknown,
+  rawLineIds: unknown,
+  lineIds: readonly string[]
+): readonly BasketEntryPatch[] | null {
+  if (
+    !Array.isArray(raw) ||
+    !Array.isArray(rawLineIds) ||
+    rawLineIds.length !== lineIds.length
+  ) {
+    return null;
+  }
+  const patches: BasketEntryPatch[] = [];
+  for (const member of raw) {
+    const patch = toBasketEntryPatch(member);
+    if (patch === null) {
+      return null;
+    }
+    patches.push(patch);
+  }
+  return patches;
 }

@@ -11,9 +11,12 @@ import {
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
   type Basket,
+  type BasketChangeMark,
   type BasketEntryAct,
+  type BasketEntryPatch,
   type BasketLinkPreview,
   type BasketListRef,
+  type BasketMarks,
   type BasketMergeRequired,
   type BasketMergeRequiredBasket,
   type BasketMergeRequiredList,
@@ -200,6 +203,9 @@ function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
     skipped: raw['skipped'] === true,
     closed: raw['closed'] === true,
     act: toBasketEntryAct(raw['act']),
+    // Zero when absent, which is a gateway before backend `0204`: every patch is
+    // then at least as new as the entry, and the store applies it.
+    version: atLeastZero(raw['version']),
     left,
     bought,
     // Zero when absent, which is a gateway without backend `0188` behind it, and
@@ -933,4 +939,97 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
         expiresAt,
         participantCount: numOr(link['participantCount'], 0),
       };
+}
+
+/**
+ * From `BasketEntryPatch` (backend `0204`, section 2): the state of one line as
+ * the addressed basket reads it, on `basket.linesChanged` (velista `0143`).
+ *
+ * **Strict, unlike {@link toBasketRowEntry}.** An entry of a read degrades,
+ * because a row drawn with a zero is better than no row. A patch that is half
+ * read would put a state on screen that the server never answered, so a missing
+ * or malformed field makes it no patch, and the store reads the basket instead.
+ */
+export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const lineId = str(raw['lineId']);
+  const version = wholeCount(raw['version']);
+  const left = wholeCount(raw['left']);
+  const bought = wholeCount(raw['bought']);
+  const boughtElsewhere = wholeCount(raw['boughtElsewhere']);
+  const state = oneOfOrNull(raw['state'], BASKET_ROW_STATES);
+  const approval = raw['approvalStatus'];
+  const skipped = raw['skipped'];
+  const closed = raw['closed'];
+  const tripItemId = raw['tripItemId'];
+  const act = raw['act'] === null ? null : toBasketEntryAct(raw['act']);
+  if (
+    lineId === null ||
+    version === null ||
+    left === null ||
+    bought === null ||
+    boughtElsewhere === null ||
+    // An entry is never `REMOVED` (backend `0136`).
+    state === null ||
+    state === 'REMOVED' ||
+    (approval !== 'APPROVED' && approval !== 'PENDING') ||
+    typeof skipped !== 'boolean' ||
+    typeof closed !== 'boolean' ||
+    (tripItemId !== null && typeof tripItemId !== 'string') ||
+    (raw['act'] !== null && act === null)
+  ) {
+    return null;
+  }
+  return {
+    lineId,
+    version,
+    left,
+    bought,
+    boughtElsewhere,
+    state,
+    awaitingApproval: approval === 'PENDING',
+    skipped,
+    closed,
+    act,
+    tripItemId,
+  };
+}
+
+/**
+ * From `BasketMarksView` (`GET /v1/baskets/:id/changes/marks`, backend `0204`,
+ * section 6; velista `0143`, section 4).
+ *
+ * Null without the two numbers or the `lines` array. A line with a mark this
+ * build does not know is dropped, which draws its row with no tag.
+ */
+export function toBasketMarks(raw: unknown): BasketMarks | null {
+  if (!isRecord(raw) || !Array.isArray(raw['lines'])) {
+    return null;
+  }
+  const unseen = wholeCount(raw['unseenChangeCount']);
+  const newest = raw['newestUnseenChangeId'];
+  if (unseen === null || (newest !== null && typeof newest !== 'string')) {
+    return null;
+  }
+  const lines = new Map<string, BasketChangeMark>();
+  for (const line of raw['lines']) {
+    if (!isRecord(line)) {
+      continue;
+    }
+    const lineId = str(line['lineId']);
+    const mark = oneOfOrNull(line['mark'], BASKET_CHANGE_MARKS);
+    if (lineId !== null && mark !== null) {
+      lines.set(lineId, mark);
+    }
+  }
+  return { unseenChangeCount: unseen, newestUnseenChangeId: newest, lines };
+}
+
+/** A whole number at zero or above, or null. */
+function wholeCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0
+    ? raw
+    : null;
 }

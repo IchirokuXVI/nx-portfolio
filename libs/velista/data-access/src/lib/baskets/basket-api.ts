@@ -6,6 +6,7 @@ import type {
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
+  BasketMarks,
   BasketParticipant,
   BasketProductChangeRequest,
   BasketProductList,
@@ -29,6 +30,7 @@ import {
 import {
   toBasket,
   toBasketLinkPreview,
+  toBasketMarks,
   toBasketParticipant,
   toBasketProductLists,
   toBasketRowResult,
@@ -186,6 +188,30 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasket(body), 'basket.live');
+  }
+
+  async getBasketRows(basketId: string, locationId?: string): Promise<Basket> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._basket(basketId)}/rows`, {
+        ...this._participantOptions(basketId, 'basket.rows'),
+        ...atShop(locationId),
+      })
+    );
+
+    // The full answer without `products`, `scopes` and `shop` (backend `0205`),
+    // which the mapper reads as empty. The store keeps its own.
+    return required(toBasket(body), 'basket.rows');
+  }
+
+  async getMarks(basketId: string): Promise<BasketMarks> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._basket(basketId)}/changes/marks`,
+        this._participantOptions(basketId, 'basket.changes.marks')
+      )
+    );
+
+    return required(toBasketMarks(body), 'basket.changes.marks');
   }
 
   /** The three numbers the dashboard card draws, with no rows behind them. */

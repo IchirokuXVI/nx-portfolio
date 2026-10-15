@@ -6,6 +6,7 @@ import type {
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
+  BasketMarks,
   BasketParticipant,
   BasketProductChangeRequest,
   BasketProductList,
@@ -112,6 +113,23 @@ export interface BasketServiceI {
    * else here takes a `'live'`.
    */
   getLiveBasket(locationId?: string): Promise<Basket>;
+
+  /**
+   * The rows of a basket and nothing of the catalog (`GET /v1/baskets/:id/rows`,
+   * backend `0205`; velista `0143`, section 5).
+   *
+   * The full answer without `products`, `scopes` and `shop`, which come back
+   * empty here: the caller keeps the ones it holds. What an event that cannot be
+   * applied reads, at a third of the bytes. `locationId` is the full read's.
+   */
+  getBasketRows(basketId: string, locationId?: string): Promise<Basket>;
+
+  /**
+   * The marks of each line and the two numbers of the banner
+   * (`GET /v1/baskets/:id/changes/marks`, backend `0204`, section 6), for an
+   * event that says `marksMoved` (velista `0143`, section 4).
+   */
+  getMarks(basketId: string): Promise<BasketMarks>;
 
   /**
    * The three numbers the dashboard card draws (`GET /v1/baskets/live/summary`).

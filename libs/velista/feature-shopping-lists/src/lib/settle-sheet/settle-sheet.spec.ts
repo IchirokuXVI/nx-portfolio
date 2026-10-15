@@ -121,6 +121,7 @@ function entry(
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
     ...over,
   };
 }

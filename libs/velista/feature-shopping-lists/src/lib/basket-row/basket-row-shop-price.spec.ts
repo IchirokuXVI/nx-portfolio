@@ -67,6 +67,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
         state: 'WANTED',
         awaitingApproval: false,
         demandEditable: true,
+        version: 1,
       },
     ],
     ...overrides,

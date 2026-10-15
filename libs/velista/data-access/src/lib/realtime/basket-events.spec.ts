@@ -36,6 +36,100 @@ describe('the basket room, off the wire', () => {
     ).toEqual({
       type: 'basket.linesChanged',
       lineIds: ['zl-1', 'zl-2'],
+      entries: null,
+      marksMoved: false,
+    });
+  });
+
+  /**
+   * Since backend `0204` an envelope addressed to one basket carries the state of
+   * each line as that basket reads it (velista `0143`, section 1).
+   */
+  describe('the state of each line', () => {
+    const PATCH = {
+      lineId: 'zl-1',
+      version: 4,
+      left: 1,
+      bought: 1,
+      boughtElsewhere: 0,
+      state: 'PARTLY',
+      approvalStatus: 'PENDING',
+      skipped: false,
+      closed: false,
+      act: {
+        participantId: 'p-1',
+        at: '2026-10-15T10:00:00.000Z',
+        outcome: 'BOUGHT',
+      },
+      tripItemId: 'item-milk',
+    };
+
+    it('reads the patches and the marks', () => {
+      expect(
+        toRealtimeEvent('basket.linesChanged', {
+          lineIds: ['zl-1', 'zl-2'],
+          entries: [PATCH],
+          marksMoved: true,
+        })
+      ).toEqual({
+        type: 'basket.linesChanged',
+        lineIds: ['zl-1', 'zl-2'],
+        entries: [
+          {
+            lineId: 'zl-1',
+            version: 4,
+            left: 1,
+            bought: 1,
+            boughtElsewhere: 0,
+            state: 'PARTLY',
+            awaitingApproval: true,
+            skipped: false,
+            closed: false,
+            act: PATCH.act,
+            tripItemId: 'item-milk',
+          },
+        ],
+        marksMoved: true,
+      });
+    });
+
+    it('reads a patch with no act and no product', () => {
+      const event = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1'],
+        entries: [{ ...PATCH, act: null, tripItemId: null }],
+      });
+      expect(event).toMatchObject({
+        entries: [{ act: null, tripItemId: null }],
+      });
+    });
+
+    it.each([
+      ['a missing version', { version: undefined }],
+      ['a version that is not a whole number', { version: 1.5 }],
+      ['a negative count', { left: -1 }],
+      ['an unknown state', { state: 'LOST' }],
+      ['a removed entry', { state: 'REMOVED' }],
+      ['a rejected line', { approvalStatus: 'REJECTED' }],
+      ['a skip that is not a boolean', { skipped: 'yes' }],
+      ['a missing product field', { tripItemId: undefined }],
+      ['an act with no time', { act: { outcome: 'BOUGHT' } }],
+    ])('makes every patch no patch for %s, so the store reads', (_, change) => {
+      const event = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1', 'zl-2'],
+        entries: [
+          { ...PATCH, lineId: 'zl-2' },
+          { ...PATCH, ...change },
+        ],
+      });
+      expect(event).toMatchObject({ lineIds: ['zl-1', 'zl-2'], entries: null });
+    });
+
+    it('drops the patches when an id of the event was unreadable', () => {
+      const event = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1', 42],
+        entries: [PATCH],
+      });
+      expect(event).toMatchObject({ lineIds: ['zl-1'], entries: null });
     });
   });
 
@@ -50,6 +144,8 @@ describe('the basket room, off the wire', () => {
     ).toEqual({
       type: 'basket.linesChanged',
       lineIds: ['zl-1'],
+      entries: null,
+      marksMoved: false,
     });
   });
 
@@ -57,6 +153,8 @@ describe('the basket room, off the wire', () => {
     expect(toRealtimeEvent('basket.linesChanged', {})).toEqual({
       type: 'basket.linesChanged',
       lineIds: [],
+      entries: null,
+      marksMoved: false,
     });
   });
 
