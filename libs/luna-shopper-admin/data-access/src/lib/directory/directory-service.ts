@@ -70,6 +70,26 @@ export interface DirectoryServiceI {
   createRecoveryLinks(userId: string, locale?: string): Promise<RecoveryLinks>;
 
   /**
+   * Whether this deployment lets an operator open the app as a person (backend
+   * plan 0194, `GET /v1/admin/impersonation`). One switch in auth answers it.
+   */
+  impersonationEnabled(): Promise<boolean>;
+
+  /**
+   * Start a support session for one person and answer with the link that
+   * hands it to the app (backend plan 0194, target state 6; admin plan 0062).
+   *
+   * The answer holds a code that opens the account once. The caller keeps it
+   * in a component and nowhere else, and shows the URL only as a link.
+   * Refused with `impersonation_disabled` where the switch is off, and with a
+   * 404 for an account that is gone.
+   */
+  startImpersonation(
+    userId: string,
+    start: ImpersonationStart
+  ): Promise<ImpersonationSession>;
+
+  /**
    * Replace somebody's roles with exactly these (backend plan 0175).
    *
    * The whole set rather than a grant or a revoke, which is what the account
@@ -136,6 +156,23 @@ export interface DirectoryServiceI {
     status: LineApproval
   ): Promise<void>;
 }
+
+/** Why an operator opens an account: the body of the start (backend 0194). */
+export type ImpersonationStart = Wire.StartImpersonationDto;
+
+/** Why an operator opens an account, as the code the server keeps. */
+export type ImpersonationReason = Wire.StartImpersonationDto['reason'];
+
+/** What the start answers: the link, and when the code and session end. */
+export type ImpersonationSession = Wire.ImpersonationStartImpersonationView;
+
+/** Every reason, in the order the dialog offers them (admin plan 0062). */
+export const IMPERSONATION_REASONS: readonly ImpersonationReason[] = [
+  'BUG_REPORT',
+  'SUPPORT_REQUEST',
+  'TESTING',
+  'OTHER',
+];
 
 /** A role on a velista account, which is the whole of `enums.AccountRole`. */
 export type AccountRole = Wire.EnumsAccountRole;

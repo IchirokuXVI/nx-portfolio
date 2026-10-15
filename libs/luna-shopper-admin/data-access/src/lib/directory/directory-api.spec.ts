@@ -142,6 +142,77 @@ describe('DirectoryApi', () => {
     http.verify();
   });
 
+  /** Admin plan 0062: whether support sessions exist here. */
+  it.each([
+    [{ enabled: true }, true],
+    [{ enabled: false }, false],
+    [{ enabled: 'true' }, false],
+    [null, false],
+  ])('reads the switch of support sessions from %j', async (body, enabled) => {
+    const { directory, http } = setUp();
+
+    const done = directory.impersonationEnabled();
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/impersonation`
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush(body);
+
+    await expect(done).resolves.toBe(enabled);
+    http.verify();
+  });
+
+  it('starts a support session with the reason as its code', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.startImpersonation(USER, {
+      reason: 'OTHER',
+      note: 'Checking the basket',
+      locale: 'en',
+    });
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      reason: 'OTHER',
+      note: 'Checking the basket',
+      locale: 'en',
+    });
+    request.flush({
+      sessionId: 's-1',
+      url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+      codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      expiresAt: '2026-10-15T21:30:00.000Z',
+      code: 'never-passed-through',
+    });
+
+    await expect(done).resolves.toEqual({
+      sessionId: 's-1',
+      url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+      codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      expiresAt: '2026-10-15T21:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it('refuses a session answer whose link is not a web address', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.startImpersonation(USER, { reason: 'TESTING' });
+    http
+      .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`)
+      .flush({
+        sessionId: 's-1',
+        url: 'javascript:alert(1)',
+        codeExpiresAt: '2026-10-15T19:31:00.000Z',
+        expiresAt: '2026-10-15T21:30:00.000Z',
+      });
+
+    await expect(done).rejects.toThrow('impersonation');
+    http.verify();
+  });
+
   /**
    * The whole set with a PUT (backend plan 0175), in the order the server
    * lists roles, so a set sent in any order reads back as it was sent.
