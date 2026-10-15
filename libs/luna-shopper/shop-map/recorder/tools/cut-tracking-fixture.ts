@@ -6,7 +6,8 @@
  *
  * The source walk is 18 MB and is never committed. It lives in the owner's
  * checkout as `tmp/walk-20260929-1242-el-jamon-2.geojson`. This script keeps
- * the `pose` and `absolute` streams of two windows, down sampled to 10 Hz:
+ * the `pose`, `absolute` and `game` streams of two windows, down sampled to
+ * 10 Hz (`game` since recorder plan 0005, for the gyro witness):
  *
  * - `baseline`: the first two minutes, where the compass offset is learned;
  * - `incident`: 860 s to 1040 s, which holds the tracking loss at 920.5 s, the
@@ -40,7 +41,7 @@ interface SourceWalk {
   startedAt: string;
   poseSource?: string;
   source: { platform: string; device?: string };
-  streams: { pose?: number[][]; absolute?: number[][] };
+  streams: { pose?: number[][]; absolute?: number[][]; game?: number[][] };
   events: { t: number; kind: string; detail?: string }[];
 }
 
@@ -67,6 +68,7 @@ const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
 const walk: SourceWalk = parsed.walk ?? parsed;
 const pose = walk.streams.pose ?? [];
 const absolute = walk.streams.absolute ?? [];
+const game = walk.streams.game ?? [];
 
 const windows = Object.fromEntries(
   Object.entries(WINDOWS).map(([name, [from, to]]) => [
@@ -76,6 +78,7 @@ const windows = Object.fromEntries(
       to,
       pose: downSample(pose, from, to),
       absolute: downSample(absolute, from, to),
+      game: downSample(game, from, to),
       events: walk.events.filter(
         (e) => e.t >= from && e.t < to && e.kind.startsWith('tracking-')
       ),
@@ -104,6 +107,6 @@ mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, text + '\n');
 for (const [name, w] of Object.entries(windows)) {
   console.log(
-    `${name}: ${w.pose.length} poses, ${w.absolute.length} compass rows, ${w.events.length} events`
+    `${name}: ${w.pose.length} poses, ${w.absolute.length} compass rows, ${w.game.length} gyro rows, ${w.events.length} events`
   );
 }
