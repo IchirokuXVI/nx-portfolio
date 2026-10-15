@@ -121,7 +121,14 @@ function build(
   const events = { itemGroupChanged } as unknown as CatalogEventsPublisher;
 
   const service = new ProductGroupAssignmentService(admin, audit, events);
-  return { service, createdGroups, updatedItems, itemGroupChanged, tx };
+  return {
+    service,
+    createdGroups,
+    updatedItems,
+    itemGroupChanged,
+    tx,
+    audit,
+  };
 }
 
 function request(
@@ -322,5 +329,86 @@ describe('ProductGroupAssignmentService', () => {
     expect(result.results[0].error?.code).toBe(
       BulkOperationErrorCode.MALFORMED_OPERATION
     );
+  });
+
+  describe('an operation that lacks a field its kind requires (plan 0211)', () => {
+    /** What a caller other than the typed gateway can send. */
+    function malformed(fields: object): ProductGroupAssignmentOperation {
+      return fields as unknown as ProductGroupAssignmentOperation;
+    }
+
+    const ASSIGN = {
+      op: 'assignItem',
+      itemId: 'i-1',
+      groupRef: 'milk',
+      expect: { productGroupId: null },
+    };
+
+    const cases: [string, object, string][] = [
+      [
+        'an assignItem with no expect',
+        { ...ASSIGN, expect: undefined },
+        'expect',
+      ],
+      [
+        'an assignItem with an empty expect',
+        { ...ASSIGN, expect: {} },
+        'expect.productGroupId',
+      ],
+      [
+        'an assignItem with no itemId',
+        { ...ASSIGN, itemId: undefined },
+        'itemId',
+      ],
+      [
+        'a createGroup with no slug',
+        { ...MILK, ref: 'other', slug: undefined },
+        'slug',
+      ],
+      [
+        'a createGroup with no referenceUnit',
+        { ...MILK, ref: 'other', referenceUnit: undefined },
+        'referenceUnit',
+      ],
+      ['an operation of an unknown kind', { ...ASSIGN, op: 'moveItem' }, 'op'],
+    ];
+
+    it.each(cases)(
+      'refuses %s, writing nothing',
+      async (_name, fields, field) => {
+        const { service, tx, audit, updatedItems, itemGroupChanged } = build({
+          items: [item('i-1')],
+        });
+
+        const result = await service.apply(request([MILK, malformed(fields)]));
+
+        expect(result.applied).toBe(false);
+        expect(result.createdGroups).toEqual([]);
+        expect(result.results[1].error?.code).toBe(
+          BulkOperationErrorCode.MALFORMED_OPERATION
+        );
+        expect(result.results[1].error?.detail).toContain(field);
+        // Only the malformed operation carries an error: it gets no second one,
+        // and its sound neighbour is not blamed for it.
+        expect(result.results[0].error).toBeNull();
+        expect(result.results.every((outcome) => !outcome.applied)).toBe(true);
+        // Refused before a transaction was opened over it.
+        expect(audit.write).not.toHaveBeenCalled();
+        expect(tx.create).not.toHaveBeenCalled();
+        expect(updatedItems).toEqual([]);
+        expect(itemGroupChanged).not.toHaveBeenCalled();
+      }
+    );
+
+    it('still applies an assignment that expects the product in no group', async () => {
+      const { service, updatedItems } = build({ items: [item('i-1')] });
+
+      const result = await service.apply(request([MILK, malformed(ASSIGN)]));
+
+      expect(result.applied).toBe(true);
+      expect(updatedItems.map((row) => row.productGroupId)).toEqual([
+        'group-new-1',
+      ]);
+    });
   });
 });
