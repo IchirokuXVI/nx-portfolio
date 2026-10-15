@@ -1,5 +1,6 @@
 import {
   isAccessTokenExpired,
+  readAccessTokenActor,
   readAccessTokenExpiry,
 } from './access-token-expiry';
 
@@ -68,5 +69,34 @@ describe('isAccessTokenExpired', () => {
 
   it('treats an unreadable token as expired so the caller refreshes', () => {
     expect(isAccessTokenExpired('garbage', 60_000, now)).toBe(true);
+  });
+});
+
+// Velista `0133`: the `act` claim of a support session (backend `0194`, target 4).
+describe('readAccessTokenActor', () => {
+  it('reads the session and its deadline out of the claim', () => {
+    const token = tokenWith({
+      sub: 'user',
+      act: { sub: 'operator', sid: 'session', until: 1_900_000_000 },
+    });
+
+    expect(readAccessTokenActor(token)).toEqual({
+      sessionId: 'session',
+      until: new Date(1_900_000_000 * 1000),
+    });
+  });
+
+  it.each([
+    ['an ordinary token', { sub: 'user' }],
+    ['an act with no deadline', { act: { sub: 'o', sid: 's' } }],
+    ['an act with no session', { act: { sub: 'o', until: 1 } }],
+    ['an act with no operator', { act: { sid: 's', until: 1 } }],
+    ['an act that is not an object', { act: 'operator' }],
+  ])('answers null for %s', (_, payload) => {
+    expect(readAccessTokenActor(tokenWith(payload))).toBeNull();
+  });
+
+  it('answers null for a token it cannot read', () => {
+    expect(readAccessTokenActor('not-a-jwt')).toBeNull();
   });
 });

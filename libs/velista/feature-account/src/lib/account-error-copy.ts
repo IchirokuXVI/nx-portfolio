@@ -52,6 +52,11 @@ export function accountFailure(
   }
 
   switch (error.code) {
+    case 'impersonation_not_allowed':
+      // A support session asked for something only the person may do, here deleting
+      // the account (backend `0194`). The server decides, and this says so.
+      return { key: 'support.refused', waitSeconds: null, endSession: false };
+
     case 'not_found':
       // See {@link AccountFailure.endSession}. This is the row worth arguing for.
       return {

@@ -216,6 +216,14 @@ describe('contrast', () => {
       );
     });
 
+    // Velista `0133`: the strip of a support session. Its text, the border of End and
+    // the ring End takes are all the one foreground, so one ratio covers the three.
+    it(`the strip of a support session reaches ${TEXT}:1`, () => {
+      expect(
+        ratio('--app-support-strip-fg', '--app-support-strip-bg', theme)
+      ).toBeGreaterThanOrEqual(TEXT);
+    });
+
     // The two things WCAG's 3:1 non-text floor is actually about here: the outline
     // that identifies an input, and the ring that shows where the keyboard is.
     it.each([

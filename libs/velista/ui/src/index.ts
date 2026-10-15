@@ -61,6 +61,7 @@ export * from './lib/install/install-steps';
 export * from './lib/layout/app-layout';
 export * from './lib/layout/page-header';
 export * from './lib/layout/page-header-action';
+export * from './lib/layout/support-strip';
 export * from './lib/list/anchored-popover';
 export * from './lib/list/audio-player';
 export * from './lib/list/chip-row';

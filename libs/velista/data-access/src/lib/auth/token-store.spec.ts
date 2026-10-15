@@ -349,3 +349,69 @@ describe('TokenStore', () => {
     httpMock.expectNone(REFRESH_URL);
   });
 });
+
+/**
+ * Velista `0133`: over the real facade, so where the pair lands is the browser's
+ * answer and not a double's. An ordinary tab keeps the pair on the origin and follows
+ * the other document, exactly as before; a tab that holds a support session keeps it
+ * to itself.
+ */
+describe('TokenStore over the real facade', () => {
+  afterEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  function store(): TokenStore {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: APP_API_CONFIG,
+          useValue: {
+            gatewayBaseUrl: GATEWAY,
+            realtimeBaseUrl: 'https://realtime.test',
+          },
+        },
+        ApiUrl,
+        TokenStore,
+      ],
+    });
+    return TestBed.inject(TokenStore);
+  }
+
+  it('keeps an ordinary pair on the origin and follows the other document', () => {
+    const tokens = store();
+    tokens.set(pair('REGISTERED'));
+
+    expect(localStorage.getItem(StorageKeys.session)).not.toBeNull();
+    expect(sessionStorage.getItem(StorageKeys.session)).toBeNull();
+
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: StorageKeys.session, newValue: null })
+    );
+    expect(tokens.tokens()).toBeNull();
+  });
+
+  it('keeps the pair of a support session in the tab, and the operator out of it', () => {
+    const operator = pairFromElsewhere('operator-refresh');
+    localStorage.setItem(StorageKeys.session, JSON.stringify(operator));
+    sessionStorage.setItem(StorageKeys.supportSession, '1');
+
+    const tokens = store();
+    expect(tokens.tokens()).toBeNull();
+
+    tokens.set(pair('REGISTERED'));
+    expect(sessionStorage.getItem(StorageKeys.session)).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem(StorageKeys.session) ?? '')).toEqual(
+      operator
+    );
+
+    // The operator signing out in another tab ends nothing here.
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: StorageKeys.session, newValue: null })
+    );
+    expect(tokens.tokens()).not.toBeNull();
+  });
+});

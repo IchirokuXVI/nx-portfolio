@@ -820,6 +820,33 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.AuthCallbackPage
               ),
           },
+          {
+            // The handoff of a support session (velista `0133`, backend `0194`): the
+            // back office opens it with a code in the fragment. Public, and it has to
+            // be: no session is needed to trade the code, and the operator is usually
+            // signed in as themselves, which no guard here may act on.
+            path: 'auth/impersonate',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ImpersonatePage
+              ),
+          },
+          {
+            // Where a tab lands when its support session is over (velista `0133`).
+            // Public, with no bar and no way in. `WORKS_WITHOUT_BACKEND`, because its
+            // one sentence needs no answer from anybody, and a session ended by the
+            // server going away must still say that it ended.
+            path: 'auth/support-ended',
+            data: {
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [WORKS_WITHOUT_BACKEND]: true,
+            },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.SupportEndedPage
+              ),
+          },
           // The group and its people (plan 0010). Both carry `zoneIdGuard`, which is
           // **rule G1**: a `canMatch` that declines any segment that is not a UUID, so
           // `/zones/new` falls through to the front door's create sheet instead of being

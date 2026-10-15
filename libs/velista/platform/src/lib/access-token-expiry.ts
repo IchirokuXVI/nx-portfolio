@@ -47,6 +47,38 @@ export function isAccessTokenExpired(
   return expiry === null || expiry.getTime() - skewMs <= now;
 }
 
+/**
+ * The actor of a support session, out of the `act` claim of an access token (backend
+ * `0194`, target 4): the operator who opened the app as this user.
+ *
+ * Read for the strip and for the clock that ends the session, and for nothing else.
+ * The same caveat as {@link readAccessTokenExpiry} holds: the signature is not checked
+ * here, and the gateway asks auth on every request of a session, so the client decides
+ * nothing about access from what it reads.
+ *
+ * Returns null for a token with no `act`, which is an ordinary token, and for one whose
+ * `act` is malformed. The gateway refuses the second (backend `0194`, section 5), so a
+ * caller treats both as "no support session".
+ */
+export function readAccessTokenActor(
+  token: string
+): { readonly sessionId: string; readonly until: Date } | null {
+  const act = decodePayload(token)?.['act'];
+  if (!isRecord(act)) {
+    return null;
+  }
+
+  const { sub, sid, until } = act;
+  return typeof sub === 'string' &&
+    sub !== '' &&
+    typeof sid === 'string' &&
+    sid !== '' &&
+    typeof until === 'number' &&
+    Number.isFinite(until)
+    ? { sessionId: sid, until: new Date(until * 1000) }
+    : null;
+}
+
 function decodePayload(token: string): Record<string, unknown> | null {
   const segments = token.split('.');
   if (segments.length !== 3) {

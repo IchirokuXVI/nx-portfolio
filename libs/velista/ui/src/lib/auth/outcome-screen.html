@@ -19,9 +19,11 @@
          in. The caller decides both, because both are facts about the session. -->
     <ng-content />
 
-    <button (click)="action.emit()" class="primary" type="button">
-      {{ actionLabel() }}
-    </button>
+    @if (actionLabel(); as label) {
+      <button (click)="action.emit()" class="primary" type="button">
+        {{ label }}
+      </button>
+    }
 
     <!-- A quieter way on under the one action, when the caller has one: the dead
          reset link offers signing in with the password kept (velista 0148). -->
