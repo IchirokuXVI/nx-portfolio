@@ -2,13 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  BasketKind,
   BASKET_SHARING_LIMITS,
+  BasketKind,
   isOpenBasket,
   ParticipantEndedReason,
   ParticipantKind,
   type AddBasketParticipantRequest,
-  type EnsureShareLinkRequest,
   type BasketJoinCoreResult,
   type BasketLinkPreview,
   type BasketParticipantContext,
@@ -17,6 +16,7 @@ import {
   type BasketShareLinkResult,
   type BasketShareLinkView,
   type BasketShareRequest,
+  type EnsureShareLinkRequest,
   type JoinBasketRequest,
   type LeaveBasketRequest,
   type ListParticipantsRequest,
@@ -36,26 +36,19 @@ import {
 import { createHash, randomBytes } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
-import {
-  Basket,
-  BasketParticipant,
-  BasketShareLink,
-} from '../entities';
+import { Basket, BasketParticipant, BasketShareLink } from '../entities';
 import { BasketMembersService } from './basket-members.service';
-import {
-  hasEnded,
-  liveLinkWhere,
-  liveParticipantWhere,
-} from './live-participant';
-import {
-  toParticipantView,
-  toShareLinkView,
-} from './basket-sharing.mappers';
+import { toParticipantView, toShareLinkView } from './basket-sharing.mappers';
 import {
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
   type WritableAmongRow,
 } from './basket-sharing.sql';
+import {
+  hasEnded,
+  liveLinkWhere,
+  liveParticipantWhere,
+} from './live-participant';
 
 /**
  * Sharing a basket with people who have no account (plan 0051, sections 3, 4, 5
@@ -121,9 +114,7 @@ export class BasketSharingService {
    * the gap between them. The unique violation branch stays anyway, for the two
    * that reach the insert by some path the lock did not serialize.
    */
-  async ensureLink(
-    req: EnsureShareLinkRequest
-  ): Promise<BasketShareLinkView> {
+  async ensureLink(req: EnsureShareLinkRequest): Promise<BasketShareLinkView> {
     const list = await this.loadOwned(req.userId, req.basketId);
     // Sharing is where the owner's row is minted, so it is where their account
     // name arrives, and an owner row that predates plan 0054 is backfilled here
@@ -212,9 +203,7 @@ export class BasketSharingService {
    * section 4), which is the state the share sheet draws "Share" in. This read
    * does not revoke it: the write belongs to `ensureLink`, under the lock.
    */
-  async getLink(
-    req: BasketShareRequest
-  ): Promise<BasketShareLinkResult> {
+  async getLink(req: BasketShareRequest): Promise<BasketShareLinkResult> {
     const list = await this.loadOwned(req.userId, req.basketId);
     const live = await this.liveLink(list.id);
     return live ? { link: await this.linkView(live) } : {};
@@ -424,9 +413,7 @@ export class BasketSharingService {
    * for one and 200 for the other would satisfy the second and quietly break the
    * first.
    */
-  async preview(
-    req: PreviewShareLinkRequest
-  ): Promise<BasketLinkPreview> {
+  async preview(req: PreviewShareLinkRequest): Promise<BasketLinkPreview> {
     const link = await this.acceptingLink(req.secret);
     if (!link) {
       return { joinable: false };
@@ -465,9 +452,7 @@ export class BasketSharingService {
    * their user id. What changes is that it ends by itself, and only the owner
    * adding them by name makes it stay.
    */
-  async join(
-    req: JoinBasketRequest
-  ): Promise<BasketJoinCoreResult> {
+  async join(req: JoinBasketRequest): Promise<BasketJoinCoreResult> {
     const link = await this.acceptingLink(req.secret);
     if (!link) {
       // The same answer the preview gives, for the same reason: a revoked link,
@@ -779,11 +764,10 @@ export class BasketSharingService {
    * read. The link's state is never consulted, which is exactly what lets
    * section 3.4 revoke a link without evicting the people already shopping.
    *
-   * It carries no `seesZoneData` since plan 0136 (section 3.4). That flag was
-   * all or nothing over every source list of the run, and a `LIVE` basket covers
-   * every list its owner can write, so "every source list" is not a set a second
-   * reader can be measured against at all. What replaced it is per list and is
-   * answered by the basket read, which knows the coverage.
+   * It answers who the participant is and nothing about the lists. What a
+   * reader is told about a list is decided per list by the basket read
+   * (`BasketRedaction`, plan 0136, section 3.4): the covered lists the reader
+   * writes, which only the read knows, because it knows the coverage.
    *
    * Since plan 0140 the row's `expiresAt` is part of "live", and an expired
    * caller is told so rather than told they are not a participant (section 8).
@@ -999,8 +983,8 @@ export class BasketSharingService {
     let withDevices = true;
     if (req.asParticipantId) {
       const asker = rows.find((row) => row.id === req.asParticipantId);
-      // Who may inspect the people on a basket, since plan 0136 deleted
-      // `seesZoneData`. The same rule as the shop addresses and for the same
+      // Who may inspect the people on a basket: the owner and the people they
+      // named (plan 0136). The same rule as the shop addresses and for the same
       // reason: when somebody arrived and what device they are on is a fact
       // about **them** rather than about any list, so no list's permissions can
       // decide it. The owner and the people they named see it; a link visitor,
@@ -1098,10 +1082,7 @@ export class BasketSharingService {
   // --- Internals ------------------------------------------------------------
 
   /** One basket of this caller's, or not found. Never forbidden (0050, s8). */
-  private async loadOwned(
-    userId: string,
-    basketId: string
-  ): Promise<Basket> {
+  private async loadOwned(userId: string, basketId: string): Promise<Basket> {
     const list = await this.lists.findOne({
       where: { id: basketId, ownerUserId: userId },
     });
@@ -1120,9 +1101,7 @@ export class BasketSharingService {
    * it, which is what frees the slot the partial unique index holds, is
    * `ensureLink`'s write under the lock.
    */
-  private liveLink(
-    basketId: string
-  ): Promise<BasketShareLink | null> {
+  private liveLink(basketId: string): Promise<BasketShareLink | null> {
     return this.links.findOne({
       where: { basketId, ...liveLinkWhere() },
     });
@@ -1137,9 +1116,7 @@ export class BasketSharingService {
    * all **null** here, which is exactly what keeps them indistinguishable to
    * the unauthenticated preview and join (plan 0051, section 3.1).
    */
-  private acceptingLink(
-    secret: string
-  ): Promise<BasketShareLink | null> {
+  private acceptingLink(secret: string): Promise<BasketShareLink | null> {
     return this.links.findOne({ where: { secret, ...liveLinkWhere() } });
   }
 
@@ -1188,9 +1165,7 @@ export class BasketSharingService {
   }
 
   /** Ended by the clock rather than by a person, on the database's clock. */
-  private async expiredByClock(
-    row: BasketParticipant
-  ): Promise<boolean> {
+  private async expiredByClock(row: BasketParticipant): Promise<boolean> {
     if (row.endedReason === ParticipantEndedReason.EXPIRED) {
       return true;
     }
@@ -1220,18 +1195,14 @@ export class BasketSharingService {
     return isOpenBasket(list.status);
   }
 
-  private async linkView(
-    link: BasketShareLink
-  ): Promise<BasketShareLinkView> {
+  private async linkView(link: BasketShareLink): Promise<BasketShareLinkView> {
     const participantCount = await this.participants.count({
       where: { shareLinkId: link.id, ...liveParticipantWhere() },
     });
     return toShareLinkView(link, participantCount);
   }
 
-  private view(
-    participant: BasketParticipant
-  ): BasketParticipantView {
+  private view(participant: BasketParticipant): BasketParticipantView {
     return toParticipantView(participant, false);
   }
 }
@@ -1244,10 +1215,7 @@ export class BasketSharingService {
  * way round either. A row past its expiry that the sweep has not reached yet
  * carries no reason at all, and reads as expired.
  */
-function canReturnByLink(
-  row: BasketParticipant,
-  now: Date
-): boolean {
+function canReturnByLink(row: BasketParticipant, now: Date): boolean {
   if (!row.revokedAt) {
     // Ended only by the clock, so the sweep has simply not got to it.
     return hasEnded(row, now);

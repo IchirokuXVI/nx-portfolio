@@ -30,12 +30,15 @@ import {
  * records purchases on every list they can write, from the other screen. What
  * `DECIDE` still protects is the thing it was named for: approving, rejecting,
  * and moving a number the group agreed to.
+ *
+ * **`WRITE` alone, and not `MANAGE`** (plan 0209, section 4), which is the rule
+ * the basket asks too (`WRITABLE_LIST`) and what plan 0130 decision 1 states.
+ * No grant the app writes is affected: `normalizeGrant` adds `WRITE` to every
+ * grant that holds `MANAGE`. Only a row written by hand can hold `MANAGE`
+ * without `WRITE`, and both surfaces now refuse it the same way.
  */
 export function canSettle(permissions: ReadonlySet<ListPermission>): boolean {
-  return (
-    permissions.has(ListPermission.WRITE) ||
-    permissions.has(ListPermission.MANAGE)
-  );
+  return permissions.has(ListPermission.WRITE);
 }
 
 /**

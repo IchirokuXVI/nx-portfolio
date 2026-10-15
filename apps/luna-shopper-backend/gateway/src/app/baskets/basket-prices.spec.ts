@@ -533,9 +533,9 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
     // Plan 0136, section 2: what decides is `BasketView.servesLocations`, which
     // core answers for the owner and for every person the owner **named**. It
     // is not a fact the gateway can derive from the participant it holds, and
-    // being `REGISTERED` and writing every covered list — which was the whole
-    // of the deleted `seesZoneData` — is no longer enough on its own. So this
-    // reader has an account and still gets shops only because the view says so.
+    // being `REGISTERED` and writing every covered list is not enough on its
+    // own. So this reader has an account and still gets shops only because the
+    // view says so.
     const result = await controller.get(
       participant({ kind: ParticipantKind.REGISTERED, userId: 'u-named' }),
       BASKET_ID

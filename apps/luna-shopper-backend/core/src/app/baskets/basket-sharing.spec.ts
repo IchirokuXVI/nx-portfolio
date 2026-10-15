@@ -1,3 +1,4 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   BasketStatus,
   ParticipantEndedReason,
@@ -8,11 +9,10 @@ import { DomainException } from '@portfolio/luna-shopper/platform';
 import { createHash } from 'node:crypto';
 import type { DataSource, FindOperator } from 'typeorm';
 import { BasketParticipant, BasketShareLink } from '../entities';
-import type { ConfigService } from '@nestjs/config';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { BasketMembersService } from './basket-members.service';
-import { BasketSharingService } from './basket-sharing.service';
 import { COMMON_GROUPS_SQL } from './basket-members.sql';
+import { BasketSharingService } from './basket-sharing.service';
 import {
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
@@ -956,18 +956,14 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
   ];
 
   /**
-   * `seesZoneData` is deleted, and these four tests are the reversal of the four
-   * that asserted it.
-   *
-   * It was all or nothing over **every** source list of the run, and a `LIVE`
-   * basket covers every list its owner can write, so "every source list" stopped
-   * being a set a second reader could be measured against. What replaces it is
-   * per list and is answered by {@link BasketSharingService.writableAmong},
-   * which the basket read asks of the coverage: a reader is told which list a row
-   * belongs to for exactly the covered lists they write themselves.
+   * The context of a participant says who they are and nothing about the
+   * lists. What a reader is told about the lists is per list and is answered by
+   * {@link BasketSharingService.writableAmong}, which the basket read asks of
+   * the coverage: a reader is told which list a row belongs to for exactly the
+   * covered lists they write themselves.
    */
 
-  it('answers a guest no flag at all, because the question is per list now', async () => {
+  it('serves a guest no list by name', async () => {
     const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({
       userId: OWNER,
@@ -979,7 +975,10 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
       basketId: BASKET,
       sessionSecret: guest.sessionSecret as string,
     });
-    expect(context).not.toHaveProperty('seesZoneData');
+    expect(context).toMatchObject({
+      kind: ParticipantKind.GUEST,
+      userId: null,
+    });
     // A guest holds no account, so no list is served to them by name. The rows
     // themselves still are.
     expect(await harness.service.writableAmong('', [LIST_A, LIST_B])).toEqual(
@@ -987,7 +986,7 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
     );
   });
 
-  it('answers the owner no flag either, writing every covered list by construction', async () => {
+  it('serves the owner every covered list, which they write by construction', async () => {
     const harness = build({
       writable: { [OWNER]: [LIST_A, LIST_B] },
     });
@@ -1000,7 +999,10 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
       basketId: BASKET,
       userId: OWNER,
     });
-    expect(context).not.toHaveProperty('seesZoneData');
+    expect(context).toMatchObject({
+      kind: ParticipantKind.OWNER,
+      userId: OWNER,
+    });
     // Covered means the owner writes it, so the owner is served all of them.
     expect(
       await harness.service.writableAmong(OWNER, [LIST_A, LIST_B])
@@ -1021,17 +1023,15 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
       basketId: BASKET,
       userId: OTHER_USER,
     });
-    expect(context).not.toHaveProperty('seesZoneData');
+    expect(context).toMatchObject({ userId: OTHER_USER });
     expect(
       await harness.service.writableAmong(OTHER_USER, [LIST_A, LIST_B])
     ).toEqual(new Set([LIST_A, LIST_B]));
   });
 
-  it('keeps the list it does not collapse, which is the cliff this replaced', async () => {
-    // The reversal. One list where the reader holds only `READ` used to collapse
-    // the whole view, and the old test asserted that cliff as accepted because it
-    // failed in the safe direction. Per list, there is no cliff to accept: the
-    // list they write is named and the other one is not, on the same read.
+  it('serves a registered reader the list they write and not the one they only read', async () => {
+    // Per list: the list they write is named and the other one is not, on the
+    // same read. One list they only read does not hide the other.
     const harness = build({
       writable: { [OTHER_USER]: [LIST_A] },
     });
@@ -1045,7 +1045,7 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
       basketId: BASKET,
       userId: OTHER_USER,
     });
-    expect(context).not.toHaveProperty('seesZoneData');
+    expect(context).toMatchObject({ userId: OTHER_USER });
     expect(
       await harness.service.writableAmong(OTHER_USER, [LIST_A, LIST_B])
     ).toEqual(new Set([LIST_A]));
@@ -1053,10 +1053,10 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
 });
 
 describe('the device string is not presence data (section 7)', () => {
-  // Who may see it is `kind === OWNER || invitedAt !== null` since plan 0136
-  // section 3.4 deleted `seesZoneData`, and for the reason that flag could not
-  // answer: when somebody arrived and what device they are on is a fact about
-  // **them** rather than about any list, so no list's permissions decide it.
+  // Who may see it is `kind === OWNER || invitedAt !== null` (plan 0136,
+  // section 3.4): when somebody arrived and what device they are on is a fact
+  // about **them** rather than about any list, so no list's permissions decide
+  // it.
   it('shows it to the owner and hides it from a link visitor', async () => {
     const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({

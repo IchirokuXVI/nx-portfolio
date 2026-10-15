@@ -15,6 +15,8 @@
 > happens to the lines that exist today. Section 1.4 states what this plan does and why.
 > The name of the flag is also mine.
 >
+> **The owner answered both on 2026-10-13, and the build took both answers.**
+>
 > Prerequisite reading: plan `0199` (the favourite and the supermarket of a line), plan
 > `0148` (the line that is already there), plan `0049` section 3 (why a product read is not
 > scoped), `core/src/app/entities/list-line.entity.ts`, `core/src/app/lists/line.service.ts`

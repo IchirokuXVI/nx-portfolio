@@ -14,9 +14,9 @@ import {
   BASKET_PATTERNS,
   BASKET_SCHEMA_IDS,
   SUPERMARKET_LOCATION_PATTERNS,
+  type BasketHeaderView,
   type BasketPage,
   type BasketRunResult,
-  type BasketHeaderView,
   type SharedBasketCorePage,
   type SharedBasketPage,
   type ShopAvailabilityRequest,
@@ -108,10 +108,11 @@ export class BasketsController {
         } satisfies ShopAvailabilityRequest
       );
     }
-    return this.nats.send<BasketRunResult>(
-      BASKET_PATTERNS.create,
-      { userId: user.userId, ...dto, globalUsernames }
-    );
+    return this.nats.send<BasketRunResult>(BASKET_PATTERNS.create, {
+      userId: user.userId,
+      ...dto,
+      globalUsernames,
+    });
   }
 
   /**
@@ -133,10 +134,10 @@ export class BasketsController {
     @AuthUser() user: CurrentUser,
     @Query() query: ListBasketsQueryDto
   ): Promise<BasketPage> {
-    const page = await this.nats.send<BasketPage>(
-      BASKET_PATTERNS.listMine,
-      { userId: user.userId, ...query }
-    );
+    const page = await this.nats.send<BasketPage>(BASKET_PATTERNS.listMine, {
+      userId: user.userId,
+      ...query,
+    });
     const present = await this.presence.countsFor(
       page.items.map((item) => item.id)
     );
@@ -214,7 +215,7 @@ export class BasketsController {
   // Search `REMOVED-BY-0144` to delete this note once a release has shipped
   // without anybody missing the read.
 
-  /** Rename it, archive it, or move it between the four statuses. */
+  /** Rename it, or move it between its three statuses (open, finished, archived). */
   @Patch(':id')
   @ApiContractResponse(BASKET_PATTERNS.update)
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
@@ -231,8 +232,10 @@ export class BasketsController {
   }
 
   /**
-   * Delete a basket. A real delete of the generated rows alone: it never touches
-   * a zone list, whose lines are the originals this one only ever copied.
+   * Delete a basket that somebody composed. A basket holds no lines of its own,
+   * so the delete takes the basket and what hangs off it, and never touches a
+   * zone list. The purchases made through it stay, as facts of the zone. The
+   * basket that is always there cannot be deleted.
    */
   @Delete(':id')
   @ApiContractResponse(BASKET_PATTERNS.delete)
@@ -246,6 +249,4 @@ export class BasketsController {
       basketId: id,
     });
   }
-
-  /** Reorder the basket into the order this person walks the shop in. */
 }

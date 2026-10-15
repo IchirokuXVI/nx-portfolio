@@ -261,6 +261,18 @@ export class UpdateLineDto {
   quantity?: number;
 
   @ApiPropertyOptional({
+    minimum: LINE_QUANTITY_MIN,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(LINE_QUANTITY_MIN)
+  @Max(LINE_QUANTITY_MAX)
+  from?: number;
+
+  @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
     maxItems: LINE_ITEM_SET_CEILING,
