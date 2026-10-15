@@ -1,3 +1,5 @@
+> **PR:** [#723](https://github.com/IchirokuXVI/nx-portfolio/pull/723)
+
 # 0144: a line made from a product has no name of its own
 
 > Asked for by the owner on 2026-10-11: "When a line comes directly from a product, its
