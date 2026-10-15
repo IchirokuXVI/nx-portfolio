@@ -75,6 +75,17 @@ export class HeldProductChoices {
     });
   }
 
+  /**
+   * Keep only the lines `keep` accepts, and let the rest follow the server again
+   * (velista `0149`). One write for all of them, and none when every line stays.
+   */
+  retain(basketId: string, keep: (lineId: string) => boolean): void {
+    const refused = [...this.heldOn(basketId).keys()].filter(
+      (lineId) => !keep(lineId)
+    );
+    this.release(basketId, refused);
+  }
+
   private _update(
     basketId: string,
     change: (lines: Map<string, HeldProductChoice>) => void

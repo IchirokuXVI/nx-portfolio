@@ -946,6 +946,7 @@ export class BasketStore {
       }
 
       this._basket.set(basket);
+      this._pruneHeld(basket);
       this._state.set('ready');
       this._error.set(null);
 
@@ -1187,8 +1188,50 @@ export class BasketStore {
       this._choices.release(id, sent);
       this._regroup(result, sent);
     }
-    this._choices.hold(id, kept, { itemId: body.itemId, product });
+    // A line taken back to the product the read already draws for it holds
+    // nothing: the row is the server's again (velista `0149`).
+    const rows = this._basket()?.rows ?? [];
+    const home = kept.filter((lineId) =>
+      rows.some(
+        (row) =>
+          row.productId === body.itemId &&
+          row.entries.some(
+            (entry) => entry.lineId === lineId && entry.tripItemId === null
+          )
+      )
+    );
+    this._choices.release(id, home);
+    this._choices.hold(
+      id,
+      kept.filter((lineId) => !home.includes(lineId)),
+      { itemId: body.itemId, product }
+    );
     return true;
+  }
+
+  /**
+   * Let go of every choice held on this basket that the stored read has spent
+   * (velista `0149`): a line the read no longer names, or a line whose entry
+   * carries a buy of its own, which the server answers from now on.
+   *
+   * Reads `basket.rows`, the server's answer, and never {@link rows}, whose
+   * entries carry the held product as their `tripItemId`.
+   */
+  private _pruneHeld(basket: Basket): void {
+    if (this._choices.heldOn(basket.id).size === 0) {
+      return;
+    }
+    const unbought = new Set<string>();
+    const bought = new Set<string>();
+    for (const row of basket.rows) {
+      for (const entry of row.entries) {
+        (entry.tripItemId === null ? unbought : bought).add(entry.lineId);
+      }
+    }
+    this._choices.retain(
+      basket.id,
+      (lineId) => unbought.has(lineId) && !bought.has(lineId)
+    );
   }
 
   /**
@@ -1321,7 +1364,9 @@ export class BasketStore {
     const served = new Set(held.lists.map((ref) => ref.listId));
     const rows = foldBasketEntries(held.rows, result.entries, named, served);
     const { progress, pending } = basketProgressOf(rows);
-    this._basket.set({ ...held, rows, progress, pending });
+    const stored = { ...held, rows, progress, pending };
+    this._basket.set(stored);
+    this._pruneHeld(stored);
     this._changed();
     this._scheduleRefresh();
   }
@@ -1341,7 +1386,9 @@ export class BasketStore {
     const served = new Set(held.lists.map((ref) => ref.listId));
     const rows = regroupBasketEntries(held.rows, result.entries, served, named);
     const { progress, pending } = basketProgressOf(rows);
-    this._basket.set({ ...held, rows, progress, pending });
+    const stored = { ...held, rows, progress, pending };
+    this._basket.set(stored);
+    this._pruneHeld(stored);
     this._changed();
     this._scheduleRefresh();
   }

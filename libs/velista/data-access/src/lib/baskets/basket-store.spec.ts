@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import {
   type Basket,
   type BasketRow,
+  type BasketRowEntry,
   type BasketSession,
   type BasketSettleRequest,
 } from '@portfolio/velista/models';
@@ -2015,6 +2016,138 @@ describe('BasketStore: skip, demand and the add', () => {
       expect(done).toBe(false);
       expect(rowOf(store, 'Milk').productId).toBe(milk.productId);
       expect(store.error()).toBeInstanceOf(GatewayError);
+    });
+  });
+
+  describe('a held choice lets go once it is spent (velista 0149)', () => {
+    const PASCUAL = 'item-milk-pascual';
+
+    /**
+     * A service whose read passes through `edit`, so a spec can state what the
+     * next read says about one line.
+     */
+    function withRead(): {
+      store: BasketStore;
+      choices: HeldProductChoices;
+      edit: { next: ((basket: Basket) => Basket) | null };
+    } {
+      const memory = new BasketMemory();
+      const edit: { next: ((basket: Basket) => Basket) | null } = {
+        next: null,
+      };
+      const { store } = build({
+        getBasket: async () => {
+          const basket = await memory.getBasket();
+          return edit.next === null ? basket : edit.next(basket);
+        },
+      });
+      return { store, choices: TestBed.inject(HeldProductChoices), edit };
+    }
+
+    /** The read with one line changed, or dropped when `change` is null. */
+    function readWith(
+      lineId: string,
+      change: ((entry: BasketRowEntry) => BasketRowEntry) | null
+    ): (basket: Basket) => Basket {
+      return (basket) => ({
+        ...basket,
+        rows: basket.rows.map((row) => ({
+          ...row,
+          entries: row.entries.flatMap((entry) =>
+            entry.lineId !== lineId
+              ? [entry]
+              : change === null
+                ? []
+                : [change(entry)]
+          ),
+        })),
+      });
+    }
+
+    async function holdOat(
+      store: BasketStore
+    ): Promise<{ lineId: string; basketId: string }> {
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const lineId = milk.entries[0].lineId;
+      const product = {
+        ...(store.products().get(milk.productId ?? '') ?? null),
+        id: 'item-oat',
+      };
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [lineId], itemId: 'item-oat', keep: false },
+        product as never
+      );
+      return { lineId, basketId: store.basket()?.id ?? '' };
+    }
+
+    it('releases a choice once the read names a buy of its own for the line', async () => {
+      const { store, choices, edit } = withRead();
+      const { lineId, basketId } = await holdOat(store);
+      expect(choices.heldOn(basketId).has(lineId)).toBe(true);
+      expect(store.products().has('item-oat')).toBe(true);
+
+      edit.next = readWith(lineId, (entry) => ({
+        ...entry,
+        tripItemId: 'item-oat',
+      }));
+      await store.refresh();
+
+      expect(choices.heldOn(basketId).size).toBe(0);
+      // The read names no row for it, and nothing held draws it any more.
+      expect(store.products().has('item-oat')).toBe(false);
+    });
+
+    it('releases a choice for a line the read no longer names', async () => {
+      const { store, choices, edit } = withRead();
+      const { lineId, basketId } = await holdOat(store);
+
+      edit.next = readWith(lineId, null);
+      await store.refresh();
+
+      expect(choices.heldOn(basketId).size).toBe(0);
+    });
+
+    it('keeps a choice whose line is still unbought across a refresh', async () => {
+      const { store, choices } = withRead();
+      const { lineId, basketId } = await holdOat(store);
+
+      await store.refresh();
+
+      expect(choices.heldOn(basketId).get(lineId)?.itemId).toBe('item-oat');
+      const moved = store
+        .rows()
+        .find((row) => row.entries.some((entry) => entry.lineId === lineId));
+      expect(moved?.productId).toBe('item-oat');
+    });
+
+    it('holds nothing for a line taken back to the product the read draws', async () => {
+      const { store, choices } = withRead();
+      await store.open('basket-saturday');
+      const milk = rowOf(store, 'Milk');
+      const own = milk.productId ?? '';
+      const lineId = milk.entries[0].lineId;
+      const basketId = store.basket()?.id ?? '';
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: [lineId], itemId: PASCUAL, keep: false },
+        null
+      );
+      expect(choices.heldOn(basketId).has(lineId)).toBe(true);
+      const moved = store
+        .rows()
+        .find((row) => row.entries.some((entry) => entry.lineId === lineId));
+
+      await store.changeProduct(
+        moved?.rowKey ?? '',
+        { lineIds: [lineId], itemId: own, keep: false },
+        null
+      );
+
+      expect(choices.heldOn(basketId).size).toBe(0);
+      expect(store.rows()).toBe(store.basket()?.rows);
     });
   });
 
