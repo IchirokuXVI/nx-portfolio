@@ -20,6 +20,122 @@
 > `libs/velista/feature-auth/src/lib/auth-callback-page/`,
 > `libs/velista/ui/src/lib/layout/app-layout.html` and `app-layout.scss`.
 
+## What the build decided
+
+The build of 2026-10-15 follows the plan. It made the choices below, and each one is a
+choice of the builder that the owner can overturn. Where this section and a later section
+disagree, this section is right. Backend `0194` (PR #700) was on the base branch, and its
+section 5 ("As built") is the contract this build read: `end` answers 201 `{ ended }`, a
+second `end` answers 401 `impersonation_ended`, and `impersonation_code_invalid` is a 400.
+
+**Names and files that moved since the plan was written.**
+
+- `shop-map-page.scss` names no `100svh` any more, so target 6 had nothing to change there.
+  Two rules that the plan did not name do: `reset-password-page.scss` (velista `0148`)
+  and `record-page.scss` of the walk lab. Both now subtract the strip.
+- `impersonation_not_allowed` was already in `problem.ts` (velista `0148` added it for the
+  sign in link of a reset mail). This build adds `impersonation_ended` and
+  `impersonation_code_invalid`.
+- The token decoder is `libs/velista/platform/src/lib/access-token-expiry.ts`, in
+  `platform` and not in `data-access`. `readAccessTokenActor` is beside
+  `readAccessTokenExpiry` there.
+- An eye icon already exists, in `libs/velista/ui/src/lib/icons/icons.ts` (the password
+  reveal uses it). It is the glyph of the mock. The strip uses it, and `libs/shared/ui`
+  gets no second copy (target 5 allows this: "unless one exists there already" was read
+  as "unless one exists in the app's own icon set").
+
+**Where the state lives.**
+
+1. **`ImpersonationState` is `providedIn: 'root'`**, and not per app as the constraints
+   say. `BrowserFacade` is root, and a root service cannot read a service that the app
+   provides below it. The answer is a fact about the document, and the root injector is
+   one per document in both run modes. It has no `rxjs-interop`.
+2. **The facade asks `ImpersonationState` lazily, once**, on its first storage call,
+   because `ImpersonationState` reads its marker through the facade itself.
+3. **`data-access` holds the session in `ImpersonationSession`**, provided in
+   `VELISTA_DATA_ACCESS_PROVIDERS` and started by an environment initializer in
+   `app-providers.ts`. It does the exchange, the handoff write, the strip's state, the
+   clock and the three ends. `ui` reaches "End" through `ImpersonationState.end()`, which
+   calls the handler that `data-access` registered (rule D1).
+4. **The handoff page does not use `TokenStore.set`.** The document it runs in is usually
+   an ordinary one, whose `TokenStore` holds the operator's own account and whose facade
+   writes to `localStorage`. `ImpersonationSession.begin` writes the marker and then the
+   pair to `sessionStorage` itself, then loads home with `location.replace`.
+5. **An end leaves the document too.** It removes every key of this app from the tab's
+   `sessionStorage` and loads `auth/support-ended` with `location.replace`. It does not
+   call `TokenStore.clear()`, because a signal change would wake the guards and pages of a
+   document that is about to go. The new document has no marker, so it is ordinary at once.
+6. **Leftovers of an earlier session in the same tab are removed** by `begin` before it
+   writes, so a second session in one tab never reads the last list of the first user.
+   Only keys that name this app's key are removed, because mounted in the portfolio the
+   tab's storage is the shell's origin too.
+
+**The handoff page.**
+
+7. It removes the fragment with `Location.replaceState(location.path(false))` as the page
+   is created, before the request.
+8. **A failure that is not `impersonation_code_invalid`** (no answer, a 5xx, a body it
+   cannot read) draws "The support session did not open" with "Try again", which posts the
+   same code again from memory. The plan names only the bad code and the missing code. The
+   retry is not a way into the app, so the rule "no way in" still holds.
+9. `OutcomeScreen` takes `actionLabel` as optional now, and draws no button without it.
+   The invalid link page and the ended page use it with no action.
+
+**Ending.**
+
+10. "End" waits at most `IMPERSONATION_END_WAIT_MS`, 3 seconds, for the server.
+11. A 401 `impersonation_ended` is answered in `gatewayInterceptor` with no refresh, in
+    every tab. Only an active tab then ends. The interceptor looks the session service up
+    only when that code arrives, so no ordinary request constructs it.
+12. A refused refresh reaches the end through `TokenStore`, which drops the pair: the
+    session's effect sees a null pair in an active tab and ends it. A pair with no `act`
+    ends the same way, and so does a tab that starts with the marker and no pair.
+13. The ended page carries `WORKS_WITHOUT_BACKEND`, so a session that the server's loss
+    ended still says that it ended. Neither page has a guard.
+
+**The strip.**
+
+14. **The strip is in the column, not fixed.** It is the first item of the `AppLayout`
+    frame, above `main` and outside it, so it is never inert under the tour. The frame
+    stays `100svh`, and `main` (`flex: 1`) is shorter by the strip. This is "the app is
+    shorter by the strip" without a `calc` on the frame. `--app-support-strip-height` is
+    `0px` by default and `44px` plus the top inset while the strip is up. The strip takes
+    the top inset, and `--app-safe-top` is `0px` below it, the bar's rule turned upside
+    down.
+15. **It stays above every cover with `--app-support-strip-z: 200`.** The covers are
+    fixed at `inset: 0`, so they still draw under the strip's 44px. A spec compares the
+    number with the sheet (10), the account lost panel (20), the tour (8) and the
+    connection screen (100). `--app-sheet-max-height` now subtracts the strip.
+16. **The tokens are in both themes**: `--app-support-strip-bg` is `--app-text-primary`
+    and `--app-support-strip-fg` is `--app-surface-ground`. The border of "End" and its
+    focus ring use the foreground, so one ratio in `contrast.spec.ts` covers all three.
+17. **The time** is whole minutes rounded down. A whole hour reads "1 h left" and not
+    "1 h 0 min left". The strip keeps its own clock and ticks when the whole number of
+    minutes drops. The strip is a labelled region (`Support session`) and no live region.
+18. **The copy** is under `support` in `libs/velista/ui/assets/i18n`. Spanish puts the
+    verb first: "Quedan 1 h 42 min", "Queda menos de un minuto". "End" is "Terminar".
+
+**The refusal (target 8).** `support.refused` is returned for `impersonation_not_allowed`
+by `accountFailure` (deleting the account), `authErrorCopy` (securing a guest) and
+`zoneErrorKey` (handing a group on). Resending the confirmation mail shows no refusal on
+any page today (each page keeps "Ready" on a failure, by design), so a refused resend shows
+nothing there either. `google/state` has no caller in velista.
+
+**Storage doors outside the facade (target 2).** Two exist, and both are safe:
+
+- `readAppLocale` and `writeAppLocale` in `rokutranslator-angular` (`roku-locale:velista`
+  in `localStorage`). The locale guard writes the locale of the address. A support tab
+  can thus set the operator's remembered language to the one the back office put in the
+  link. It holds no account and no session. Moving it would change a shared library,
+  which is outside this plan's scope.
+- `WalkDb` in the walk lab (IndexedDB `velista-walk-lab`). It holds walks recorded on this
+  device, keyed by nothing of an account, and the lab is a test tool.
+
+**A defect outside this plan.** `luna-slot.sh` writes
+`APP_BASE_URL=http://localhost:${SHELL_PORT}/{locale}/velista`, which puts the locale
+before the mount, and on slot 4 it named port 4200. The link the gateway builds on a slot
+thus does not open velista. The walk replaced the origin and the path and kept the code.
+
 ## Brief for the agent
 
 ### Objective
