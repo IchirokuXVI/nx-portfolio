@@ -3,10 +3,16 @@ import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-an
 import {
   ADMIN_USERS_PATH,
   DIRECTORY_SERVICE,
+  ImpersonationStore,
   RESOURCE_GATEWAYS,
+  toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
+import {
+  ImpersonationPanel,
+  type StartImpersonation,
+} from './impersonation-panel';
 import { instant } from './people-format';
 import { USER_SEED, type UserRow } from './people-seed';
 import { PersonZonesTab } from './person-tabs';
@@ -311,6 +317,10 @@ export const USERS = defineResource<User>({
       // Optional, so that a spec which only lists the actions needs no
       // translator. The app always provides one.
       const translator = inject(RokuTranslatorService, { optional: true });
+      // Whether this deployment allows support sessions, asked once for the
+      // operator signed in (admin plan 0062).
+      const impersonation = inject(ImpersonationStore);
+      void impersonation.load();
 
       return [
         {
@@ -378,6 +388,40 @@ export const USERS = defineResource<User>({
         // question. The list beside the page shows the roles as a column, and
         // the page says that `users` was written after any action.
         ...roleActions(directory),
+        // Admin plan 0062 on backend plan 0194: a support session, offered
+        // only where the deployment allows one, and to a guest too. Not red,
+        // because it changes nothing in the account. No question first: the
+        // dialog is the question, since it asks why. The panel holds the
+        // link the answer gives, and the page drops it when it closes. On
+        // the page of a person only, because a list has nowhere to put it.
+        {
+          name: 'open-as-user',
+          label: 'people.users.action.openAsUser',
+          recordOnly: true,
+          available: () => impersonation.enabled(),
+          run: async (row) => {
+            const startSession: StartImpersonation = async (start) => {
+              try {
+                return await directory.startImpersonation(row.userId, {
+                  ...start,
+                  locale: translator?.locale() ?? 'en',
+                });
+              } catch (error) {
+                // The account is gone: the list beside the page reads again.
+                if (toGatewayError(error).status === 404) {
+                  changes.wrote('users');
+                }
+                throw error;
+              }
+            };
+            return {
+              kind: 'panel',
+              heading: 'people.users.impersonate.heading',
+              panel: ImpersonationPanel,
+              inputs: { name: row.username, startSession },
+            };
+          },
+        },
         {
           name: 'delete-account',
           label: 'people.users.action.deleteAccount',

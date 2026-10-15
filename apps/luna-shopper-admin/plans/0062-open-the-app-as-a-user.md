@@ -12,6 +12,55 @@
 The page of a person gains one action. It asks why, starts a support session, and gives
 the operator a link that opens the app as that person in a new tab.
 
+## What the build decided
+
+The build of 2026-10-15 settled the points below. None was asked of the owner, so each is a
+choice of the builder that the owner can overturn. Where this section and a later section
+disagree, this section is right.
+
+1. **The dialog is the panel of the action, in the frame backend `0210` built.** Backend
+   `0210` gave a named action a second answer, `ActionOutcome` of kind `panel`, drawn in
+   `ActionOutcomeDialog` (`feature-resource`). "Open the app as this user" has no `confirm`,
+   and its `run` answers at once with `ImpersonationPanel`. The panel asks the reason,
+   starts the session and holds the link. So `ConfirmDialog`, the contract of a named
+   action and `libs/luna-shopper-admin/ui` are unchanged.
+2. **No separate "Cancel".** The frame of every action panel has one way out, "Close", and
+   it is there in every step. A "Cancel" beside it would do the same thing. Target state 3
+   names both; the build draws "Start session" and the frame's "Close".
+3. **The action is on the page of a person only (`recordOnly`).** The list drops every
+   action whose answer is a panel, because it has nowhere to draw one. Section 1 already
+   leaves the list out.
+4. **The write is declared in `users.ts`.** The descriptor builds the function that calls
+   `startImpersonation` and hands it to the panel, so `actions-declared-once.spec.ts` still
+   finds each write in one file. The same function reads the list again after a 404.
+5. **The two calls are on `DirectoryServiceI`**, beside the other person actions:
+   `impersonationEnabled()` and `startImpersonation()`. The `enabled` read is
+   `ImpersonationStore` in the same folder. It keeps the answer with the operator who
+   asked, reads nothing while nobody is signed in, and asks again after a sign in as
+   somebody else. The descriptor starts the read as it builds the actions.
+6. **No new type.** `ImpersonationStart`, `ImpersonationSession` and `ImpersonationReason`
+   are aliases of the wire types. The answer is still read from `unknown`, so that only an
+   absolute http(s) `url` can become an `href`.
+7. **The memory twin says the switch is on**, with a link on `velista.invalid`, as the
+   recovery links do. The dialog can then be driven with no backend.
+8. **The copy is in `libs/luna-shopper-admin/ui/assets/i18n/en.json`**, under
+   `people.users.impersonate`. Target state 6 names the assets of `feature-people`, which
+   has none: every key of the back office is in that one file.
+9. **Focus.** The dialog gives the focus back, as it closes, to the control that had it as
+   it opened, which is the toggle of the More menu. A step that takes the focused control
+   away hands the focus on: to the link, to "Start again", or to the sentence that says the
+   tab is open.
+10. **The press.** A click or a middle click on the link counts as the press. "Open in new
+    tab" from the context menu cannot be seen, so there the link stays until its minute
+    ends. The countdown compares the clock of the browser with `codeExpiresAt`.
+11. **Two refusals are final.** After `impersonation_disabled` or a 404, "Start session"
+    stays disabled. Every other refusal leaves it enabled.
+12. **`gatewayErrorKey` is unchanged.** Of the five codes of backend `0194`, only
+    `impersonation_disabled` can answer an admin route, and the dialog has its own sentence
+    for it. The other four answer user tokens.
+13. **The record page reads the record again as the dialog opens.** It does that after
+    every action that went through, and here the action is only the opening.
+
 ## Brief for the agent
 
 ### Objective

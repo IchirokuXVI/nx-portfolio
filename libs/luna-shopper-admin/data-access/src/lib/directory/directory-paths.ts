@@ -9,6 +9,8 @@
  */
 
 export const ADMIN_USERS_PATH = '/v1/admin/users';
+/** Whether support sessions are allowed here (backend plan 0194). */
+export const ADMIN_IMPERSONATION_PATH = '/v1/admin/impersonation';
 export const ADMIN_ADMINS_PATH = '/v1/admin/admins';
 export const ADMIN_ZONES_PATH = '/v1/admin/zones';
 export const ADMIN_LISTS_PATH = '/v1/admin/lists';
