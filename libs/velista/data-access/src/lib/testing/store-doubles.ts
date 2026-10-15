@@ -1435,6 +1435,10 @@ export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
     rank: (categoryId: string) => tree().ranks.get(categoryId) ?? null,
     ensure: async () => {
       ensured += 1;
+      // A failed read asked again is in flight, as the real store's would be.
+      if (state() === 'failed') {
+        state.set('loading');
+      }
     },
     prime: (next: readonly CategoryNode[]) => {
       tree.set(buildCategoryTree(next));
@@ -1444,6 +1448,10 @@ export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
     land: (next: readonly CategoryNode[]) => {
       tree.set(buildCategoryTree(next));
       state.set('loaded');
+    },
+    /** The read failing, as the real store's does when the catalog will not answer. */
+    fail: () => {
+      state.set('failed');
     },
     /** How many times a screen asked for the tree. */
     ensured: () => ensured,

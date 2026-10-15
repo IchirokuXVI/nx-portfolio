@@ -20,8 +20,8 @@ export interface ShopSectionsServiceI {
    * (backend `0200`).
    *
    * An empty list for a shop with none, and for a shop the catalog does not know,
-   * which are facts about the shop and not worth asking again. `null` for a read that did not answer, and
-   * **never throws**: nothing waits on this.
+   * which are facts about the shop and not worth asking again. `null` for a read
+   * that did not answer, and **never throws**: nothing waits on this.
    */
   sections(locationId: string): Promise<readonly ShopSection[] | null>;
 }

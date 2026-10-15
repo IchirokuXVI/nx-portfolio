@@ -9,6 +9,7 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  fakeCategoryStore,
   fakeShopSectionsStore,
   provideFakeCategoryStore,
   provideFakeShopSectionsStore,
@@ -178,7 +179,9 @@ function render(options: {
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
-      provideFakeCategoryStore(),
+      // A tree that has landed, so the aisles are not held back for it (velista
+      // `0138`): until it does, the list is drawn ungrouped and the radio says so.
+      provideFakeCategoryStore(fakeCategoryStore([])),
       provideFakeShopSectionsStore(options.shopSections),
       // A fresh `Map` per test for what the sheet remembers (`0076`), rather than
       // the one `localStorage` jsdom shares with every other test in this file.

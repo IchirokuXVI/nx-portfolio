@@ -2973,8 +2973,8 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       sectionIds: null,
     };
 
-    async function grouped() {
-      const built = await live({}, [
+    async function grouped(overrides: Partial<BasketServiceI> = {}) {
+      const built = await live(overrides, [
         BasketViewStore,
         { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
         provideFakeBrowserFacade(new Map()),
@@ -2995,7 +2995,8 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     }
 
     it('draws milk and eggs under their one parent, after a patch as after the read', async () => {
-      const { view, twin } = await grouped();
+      jest.useFakeTimers();
+      const { view, twin, reads } = await grouped();
       const read = outline(view);
 
       expect(read[0]).toEqual([
@@ -3005,7 +3006,11 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       expect(read[read.length - 1][0]).toBe('no-category');
 
       await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+      jest.advanceTimersByTime(10_000);
+      await flush();
 
+      // The event's patch drew this, and no read did.
+      expect(reads.full + reads.rows).toBe(0);
       expect(outline(view)).toEqual(read);
       const milk = view
         .sections()[0]
@@ -3042,6 +3047,41 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
         productId: 'item-yoghurt',
         left: 4,
       });
+    });
+
+    it('keeps a choice the server never heard of under its parent through a patch, with no read', async () => {
+      jest.useFakeTimers();
+      const { view, store, twin, reads } = await grouped({
+        // The twin does not take the change, so only the device holds it: a read
+        // would put the line back under milk.
+        changeProduct: async () => ({ entries: [], skippedCount: 0 }),
+      });
+      const milk = rowOf(store, 'Milk');
+
+      await store.changeProduct(
+        milk.rowKey,
+        { lineIds: ['zl-1'], itemId: 'item-yoghurt', keep: false },
+        YOGHURT
+      );
+      const held = outline(view);
+      expect(held[1]).toEqual([
+        'category:cat-yoghurts-and-desserts',
+        ['item-yoghurt'],
+      ]);
+
+      await twin.setDemand('b', { lineId: 'zl-1', quantity: 4, from: 2 });
+      jest.advanceTimersByTime(10_000);
+      await flush();
+
+      expect(reads.full + reads.rows).toBe(0);
+      expect(outline(view)).toEqual(held);
+      expect(store.rowFor('zl-1')).toMatchObject({
+        productId: 'item-yoghurt',
+        left: 4,
+      });
+      // And the twin still names the read's product for that line.
+      const rows = await twin.getBasketRows('basket-saturday');
+      expect(JSON.stringify(rows)).not.toContain('item-yoghurt');
     });
   });
 });

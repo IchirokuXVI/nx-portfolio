@@ -159,11 +159,16 @@ below is a choice of the builder that the owner can overturn.
    pair, so the pipeline resolves it with the reader's locale like every other heading.
 2. **The tree is asked for only when somebody groups by category.** `BasketViewStore` calls
    `CategoryStore.ensure()` from an effect on the grouping. A failed read is asked again the
-   next time the grouping changes to category.
+   next time the grouping changes to category, and each time a basket opens while the grouping
+   is category (`BasketViewStore.restore`). The retry is not in the effect, so a failure never
+   asks again by itself, and no loop is possible.
 3. **Until the tree lands, the whole category grouping is drawn ungrouped**, the aisles of a
    shop included. The aisles do not need the tree, but drawing them with the rest ungrouped
    below them would be a second interim layout. The tree is read once per session, so this is
-   one short wait per session. A tree that failed to load draws the list ungrouped.
+   one short wait per session. A tree that failed to load draws the list ungrouped until the
+   next basket opens (decision 2). `BasketViewStore.byAisle` is false for the same time, so the
+   chip, the radio of the filter sheet and the section name on each row say "category" while
+   no aisle heading is drawn.
 4. **A product with one known root and one stale root is drawn under the known one only.** It
    goes under "No category" only when none of its roots is in the tree.
 5. **Stage 2 removed the `ShopSections` wrapper too.** With `source` gone it held one field, so

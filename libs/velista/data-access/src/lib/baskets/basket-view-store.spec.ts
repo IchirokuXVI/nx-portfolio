@@ -1383,8 +1383,10 @@ describe('BasketViewStore: the aisles of the shop', () => {
     categoryIds: [],
   };
 
-  function atTejares(): Harness {
-    const harnessed = harness(basket, products);
+  function atTejares(
+    categories: FakeCategoryStore = fakeCategoryStore(TREE)
+  ): Harness {
+    const harnessed = harness(basket, products, new Map(), {}, categories);
     harnessed.scopes.set(
       new Map([
         [
@@ -1440,6 +1442,32 @@ describe('BasketViewStore: the aisles of the shop', () => {
     expect(view.chips().map((chip) => chip.key)).toContain(
       'basket.view.chip.byAisle'
     );
+  });
+
+  // Velista `0138`: the pipeline draws the rows ungrouped until the tree names the
+  // parents, so the words wait for the tree as well as for the aisles.
+  it('says By aisle only once the tree has landed too, and not after it failed', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories);
+    sections.land('loc-tejares', [DAIRY]);
+
+    expect(view.sections().map((part) => part.key)).toEqual(['all']);
+    expect(view.byAisle()).toBe(false);
+    expect(view.chips().map((chip) => chip.key)).not.toContain(
+      'basket.view.chip.byAisle'
+    );
+
+    categories.fail();
+
+    expect(view.byAisle()).toBe(false);
+
+    categories.land(TREE);
+
+    expect(view.sections().map((part) => part.key)).toEqual([
+      'aisle:sec-dairy',
+      'category:cat-other',
+    ]);
+    expect(view.byAisle()).toBe(true);
   });
 
   it('regroups by category, with no message, when the shop is put back to any', () => {
@@ -1552,6 +1580,36 @@ describe('BasketViewStore: parent headings', () => {
     TestBed.tick();
 
     expect(categories.ensured()).toBe(1);
+  });
+
+  it('asks again for a tree that failed each time a basket opens, and only then', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    view.setGrouping('category');
+    TestBed.tick();
+    categories.fail();
+    TestBed.tick();
+
+    // A failure alone asks nothing: no loop.
+    expect(categories.ensured()).toBe(1);
+
+    view.restore();
+
+    expect(categories.ensured()).toBe(2);
+
+    // The read asked again is in flight, so a second open joins it.
+    view.restore();
+
+    expect(categories.ensured()).toBe(2);
+
+    // Leaving puts the grouping back to the default and the next basket's open
+    // restores it, which the effect alone might not see.
+    categories.fail();
+    view.leave();
+    view.restore();
+
+    expect(view.grouping()).toBe('category');
+    expect(categories.ensured()).toBe(3);
   });
 
   it('moves a row to its new parent when the rows change under it', () => {
