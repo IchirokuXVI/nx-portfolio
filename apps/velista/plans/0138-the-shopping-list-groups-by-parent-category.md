@@ -1,3 +1,5 @@
+> **PR:** [#721](https://github.com/IchirokuXVI/nx-portfolio/pull/721)
+
 # 0138: the shopping list groups by parent category
 
 > Asked for by the owner on 2026-10-11: "The basket list won't be grouped by the child
