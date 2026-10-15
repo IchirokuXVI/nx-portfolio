@@ -232,7 +232,7 @@ export interface TrackingState {
    * True from a confirm made before the turn rule judged the frame that came
    * back until the rule has answered (or cannot any more, because the gyro
    * stayed silent for 3 s). While it is true the host keeps the loss point and
-   * the points kept since the return: a `turned` stop then carries
+   * the points kept since the return: any stop then carries
    * `unconfirmedDropped`, and those points are dropped. Plan 0005, "What the
    * build decided" item 5.
    */
@@ -271,9 +271,9 @@ export type TrackingEvent =
        * since an automatic resume that nobody confirmed. They may be in a
        * moved frame (a `frame-moved` stop during an automatic resume is
        * exactly that), so the host drops them and saves the walk only up to
-       * the loss. A `turned` stop while `awaitingTurnJudgement` carries it
-       * too: the confirm came before the frame was judged, so it did not
-       * vouch for the frame. Absent when there is nothing unconfirmed to drop.
+       * the loss. Any stop while `awaitingTurnJudgement` carries it too:
+       * the confirm came before the frame was judged, so it did not vouch
+       * for the frame. Absent when there is nothing unconfirmed to drop.
        */
       unconfirmedDropped?: true;
     }
@@ -504,8 +504,9 @@ export function createTrackingGuard(
     if (stopped !== undefined) return;
     stopped = reason;
     automaticResume = false;
-    const dropped =
-      unconfirmed || (why.cause === 'turned' && awaitingJudgement);
+    // Any stop while the frame awaits the turn rule drops the points since
+    // the return, not only a `turned` one (the owner, 2026-10-15).
+    const dropped = unconfirmed || awaitingJudgement;
     unconfirmed = false;
     awaitingJudgement = false;
     emit(out, {
@@ -767,12 +768,18 @@ export function createTrackingGuard(
       // the same turn again. Before that (a confirm during an automatic
       // resume) the readings from before the loss stay, and the rule still
       // compares the returned frame with them.
-      // That confirm does not vouch for the frame either, so a `turned` stop
-      // until the rule answers still drops the points since the return.
+      // That confirm does not vouch for the frame either, so any stop until
+      // the rule answers still drops the points since the return. A gyro
+      // silent for less than 3 s keeps its readings and the rule still
+      // answers when it returns, so the same 3 s decides here.
       if (turnJudged) {
         cameraGyro = cameraGyro.filter((r) => r.t > t);
         turnFired = false;
-      } else if (trackedFrom !== undefined && gyroHeard(t)) {
+      } else if (
+        trackedFrom !== undefined &&
+        gyroAt !== undefined &&
+        t - gyroAt < GYRO_NEW_ZERO_MS
+      ) {
         awaitingJudgement = true;
       }
       emit(out, { t, kind: 'confirmed' });

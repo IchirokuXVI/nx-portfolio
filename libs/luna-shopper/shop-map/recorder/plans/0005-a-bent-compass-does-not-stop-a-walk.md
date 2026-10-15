@@ -233,9 +233,12 @@ The build stopped at an action boundary and asked. The owner answered three ques
    answer, which is what velista sends during an automatic resume, keeps the samples
    from before the loss, so the rule still compares the returned frame with them. Such a
    confirm does not vouch for the frame either, because nobody could know yet that it
-   turned. Until the rule answers, `state().awaitingTurnJudgement` is true, a `turned`
-   stop carries `unconfirmedDropped`, and the host drops the points kept since the
-   return. The compass notice waits for the answer too, because the frame it would be
+   turned. Until the rule answers, `state().awaitingTurnJudgement` is true, any stop
+   carries `unconfirmedDropped` (decision 15), and the host drops the points kept since
+   the return. A confirm sets it while the gyro was heard within the last 3 s
+   (`GYRO_NEW_ZERO_MS`), not only within 1 s: a gyro back from a shorter silence keeps
+   its readings and the rule still answers, so a confirm in a 1 to 3 s gap does not
+   vouch for the frame either. The compass notice waits for the answer too, because the frame it would be
    judged against is still in doubt. On the El Jamón fixture a confirm at 922.37, 923.00
    or 923.71 s still ends in a `turned` stop of 148.4 degrees at 923.90 s, with
    `unconfirmedDropped`, and no `compass-disturbed` comes before it. A new loss judges
@@ -244,7 +247,10 @@ The build stopped at an action boundary and asked. The owner answered three ques
 
    **Hand-off to velista `0136`.** The host keeps its loss point and the points kept
    since the return until the guard has judged the frame (`awaitingTurnJudgement` false),
-   not only until the confirm. Today velista flushes the unconfirmed points at the
+   not only until the confirm. A stop with `unconfirmedDropped` saves the walk up to
+   the loss before the first return that the rule has not judged, not up to the latest
+   loss: a second loss while `awaitingTurnJudgement` is true does not move that point.
+   Today velista flushes the unconfirmed points at the
    confirm, so a `turned` stop after an early confirm would leave them in the walk.
    Velista `0136` changes that; this plan does not touch velista.
 
@@ -283,6 +289,14 @@ The build stopped at an action boundary and asked. The owner answered three ques
     in the file, because 30 s cannot learn one.
 14. **`cut-tracking-fixture`** now keeps the `game` stream. The recut added only the
     `game` rows: every pose, compass and event row is unchanged.
+
+### The owner's decision in review (2026-10-15)
+
+15. **Any stop while `awaitingTurnJudgement` is true drops the points since the
+    return**, not only a `turned` stop. A `jump` stop, or a `lost` stop after a second
+    loss, also carries `unconfirmedDropped`, because the early confirm vouched for no
+    frame. The specs cover a 3 m jump at 17.0 s and a second loss at 17.0 s, each after
+    a confirm at 16.6 s that followed a loss from 15.0 to 16.0 s.
 
 ### Where the facts moved since the plan
 

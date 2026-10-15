@@ -897,6 +897,95 @@ describe('the rules, one at a time', () => {
       ]);
     });
 
+    it('drops the points since the return for a confirm in a 1 to 3 s gyro gap', () => {
+      const s = steady();
+      for (let t = 0; t < 15_000; t += 100) s.withGyro(t);
+      // Lost from 15.0 to 16.0 s; the gyro falls silent from 15.5 to 17.0 s,
+      // short of the 3 s that would give it another zero.
+      s.guard.pushPose({ ...facing(15_000, 0), tracked: false });
+      for (let t = 15_100; t < 16_000; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+        if (t < 15_500) s.guard.pushGyro(compassAt(t, 0));
+      }
+      // Poses come back at 16.0 s in a frame turned by 150 degrees, and the
+      // confirm at 16.6 s comes while the gyro is not heard.
+      const out: TrackingEvent[] = [];
+      for (let t = 16_000; t < 17_000; t += 100) {
+        out.push(...s.at(t, 150, 0, 0, 0));
+        if (t === 16_600) out.push(...s.guard.confirm(t));
+      }
+      expect(s.guard.state().awaitingTurnJudgement).toBe(true);
+      for (let t = 17_000; t <= 19_000; t += 100) {
+        out.push(...s.withGyro(t, 150, 0, 0, 0, 0));
+      }
+      expect(out).toMatchObject([
+        { t: 16_000, kind: 'suspect', cause: 'returned' },
+        { t: 16_600, kind: 'confirmed' },
+        { t: 17_800, kind: 'suspect', cause: 'turned' },
+        {
+          t: 17_800,
+          kind: 'stopped',
+          cause: 'turned',
+          unconfirmedDropped: true,
+        },
+      ]);
+    });
+
+    /** A 1 s loss from 15 s, poses back at 16 s, and a confirm at 16.6 s. */
+    function confirmedEarly() {
+      const s = steady();
+      for (let t = 0; t < 15_000; t += 100) s.withGyro(t);
+      s.guard.pushPose({ ...facing(15_000, 0), tracked: false });
+      for (let t = 15_100; t < 16_000; t += 100) {
+        s.guard.pushCompass(compassAt(t, 0));
+        s.guard.pushGyro(compassAt(t, 0));
+      }
+      for (let t = 16_000; t < 17_000; t += 100) {
+        s.withGyro(t);
+        if (t === 16_600) s.guard.confirm(t);
+      }
+      expect(s.guard.state()).toMatchObject({
+        kind: 'good',
+        awaitingTurnJudgement: true,
+      });
+      return s;
+    }
+
+    it('drops the points since the return for a jump stop after an early confirm', () => {
+      const s = confirmedEarly();
+      expect(s.withGyro(17_000, 0, 3, 0)).toMatchObject([
+        { t: 17_000, kind: 'suspect', cause: 'jump' },
+        {
+          t: 17_000,
+          kind: 'stopped',
+          cause: 'jump',
+          metres: 3,
+          unconfirmedDropped: true,
+        },
+      ]);
+      expect(s.guard.state().awaitingTurnJudgement).toBe(false);
+    });
+
+    it('drops the points since the return for a lost stop after an early confirm', () => {
+      const s = confirmedEarly();
+      const out: TrackingEvent[] = [];
+      out.push(...s.guard.pushPose({ ...facing(17_000, 0), tracked: false }));
+      for (let t = 17_100; t <= 20_000; t += 100) {
+        out.push(...s.guard.pushCompass(compassAt(t, 0)));
+        out.push(...s.guard.pushGyro(compassAt(t, 0)));
+      }
+      expect(out).toEqual([
+        { t: 17_000, kind: 'lost', cause: 'emulated' },
+        {
+          t: 20_000,
+          kind: 'stopped',
+          reason: 'tracking-lost',
+          cause: 'lost',
+          unconfirmedDropped: true,
+        },
+      ]);
+    });
+
     it('settles when the 5 s median is back inside the limit', () => {
       const s = steady();
       const out: TrackingEvent[] = [];
