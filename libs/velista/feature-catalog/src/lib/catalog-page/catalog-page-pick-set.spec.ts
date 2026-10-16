@@ -357,6 +357,25 @@ describe('CatalogPage, opened to choose the products of a line (velista 0146)', 
       expect(bar(fixture)?.textContent).toContain('For Leche');
     });
 
+    it('names the cap a line over it is held to, not the cap of a new line', async () => {
+      const over = Array.from(
+        { length: LINE_ITEM_SET_MAX + 20 },
+        (_, at) => `over-${at}`
+      );
+      const { fixture } = await render({ before: over });
+
+      tickOf(fixture, catalog[0])[0].click();
+      fixture.detectChanges();
+
+      expect(
+        (
+          fixture.componentInstance as unknown as {
+            pickNote: () => { args?: Record<string, unknown> } | null;
+          }
+        ).pickNote()?.args
+      ).toEqual({ count: LINE_ITEM_SET_MAX + 20, cap: LINE_ITEM_SET_MAX + 20 });
+    });
+
     it('is refused past the cap, with the sentence of the products page', async () => {
       const full = Array.from(
         { length: LINE_ITEM_SET_MAX },
@@ -420,6 +439,76 @@ describe('CatalogPage, opened to choose the products of a line (velista 0146)', 
       const { fixture, lines } = await render({ favorite: catalog[0].id });
 
       tickOf(fixture, catalog[0])[0].click();
+      save(fixture);
+      await settle(fixture);
+
+      expect(updates(lines)).toEqual([
+        {
+          kind: 'update',
+          lineId: 'zl-1',
+          itemIds: [catalog[1].id],
+          favoriteItemId: null,
+        },
+      ]);
+    });
+
+    it('keeps a product another device added while the page was open', async () => {
+      const { fixture, lines, before } = await render();
+      tickOf(fixture, catalog[2])[0].click();
+
+      lines.set([line({ itemIds: [...before, catalog[3].id] })]);
+      await settle(fixture);
+      expect(tickOf(fixture, catalog[3])[0].checked).toBe(true);
+      save(fixture);
+      await settle(fixture);
+
+      expect(updates(lines)).toEqual([
+        {
+          kind: 'update',
+          lineId: 'zl-1',
+          itemIds: [...before, catalog[3].id, catalog[2].id],
+        },
+      ]);
+    });
+
+    it('still takes out what the person unticked when the line moved', async () => {
+      const { fixture, lines, before } = await render();
+      tickOf(fixture, catalog[0])[0].click();
+
+      lines.set([line({ itemIds: [...before, catalog[3].id] })]);
+      await settle(fixture);
+      save(fixture);
+      await settle(fixture);
+
+      expect(updates(lines)).toEqual([
+        {
+          kind: 'update',
+          lineId: 'zl-1',
+          itemIds: [catalog[1].id, catalog[3].id],
+        },
+      ]);
+    });
+
+    it('lets a product another device added be taken out', async () => {
+      const { fixture, lines, before } = await render();
+
+      lines.set([line({ itemIds: [...before, catalog[3].id] })]);
+      await settle(fixture);
+      tickOf(fixture, catalog[3])[0].click();
+      save(fixture);
+      await settle(fixture);
+
+      expect(updates(lines)).toEqual([
+        { kind: 'update', lineId: 'zl-1', itemIds: [...before] },
+      ]);
+    });
+
+    it('clears the favourite the line holds now, not the one it arrived with', async () => {
+      const { fixture, lines, before } = await render();
+      tickOf(fixture, catalog[0])[0].click();
+
+      lines.set([line({ itemIds: before, favoriteItemId: catalog[0].id })]);
+      await settle(fixture);
       save(fixture);
       await settle(fixture);
 
@@ -522,6 +611,84 @@ describe('CatalogPage, opened to choose the products of a line (velista 0146)', 
       expect(pick.request()).toBeNull();
     });
 
+    it('makes the page behind the question inert while it is up', async () => {
+      const { fixture } = await render();
+      tickOf(fixture, catalog[2])[0].click();
+
+      close(fixture);
+      await settle(fixture);
+
+      for (const part of ['lib-page-header', '.page', 'lib-choosing-bar']) {
+        expect(host(fixture).querySelector(part)?.hasAttribute('inert')).toBe(
+          true
+        );
+      }
+      host(fixture)
+        .querySelector<HTMLButtonElement>('lib-leave-question button.keep')
+        ?.click();
+      await settle(fixture);
+      expect(host(fixture).querySelector('.page')?.hasAttribute('inert')).toBe(
+        false
+      );
+    });
+
+    describe('while a save is out', () => {
+      async function saving() {
+        const harness = await render();
+        harness.lines.holdWrites();
+        tickOf(harness.fixture, catalog[2])[0].click();
+        save(harness.fixture);
+        await settle(harness.fixture);
+        return harness;
+      }
+
+      it('does not ask or leave from the close or Escape', async () => {
+        const { fixture, backTo, lines } = await saving();
+
+        close(fixture);
+        host(fixture)
+          .querySelector('.list')
+          ?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+          );
+        await settle(fixture);
+
+        expect(host(fixture).querySelector('lib-leave-question')).toBeNull();
+        expect(backTo).not.toHaveBeenCalled();
+
+        lines.releaseWrites();
+        await settle(fixture);
+        expect(backTo).toHaveBeenCalledTimes(1);
+        expect(backTo).toHaveBeenCalledWith(3, LINE_PAGE);
+      });
+
+      it('refuses the back of the browser and the pickers, and asks nothing', async () => {
+        const { fixture, lines } = await saving();
+        const page = fixture.componentInstance;
+
+        expect(page.canLeave(LINE_PAGE)).toBe(false);
+        expect(page.canLeave(`${PAGE}/supermarket`)).toBe(false);
+        await settle(fixture);
+        expect(host(fixture).querySelector('lib-leave-question')).toBeNull();
+
+        lines.releaseWrites();
+        await settle(fixture);
+      });
+
+      it('neither navigates nor touches the page once it is gone', async () => {
+        const { fixture, backTo, lines, pick } = await saving();
+
+        fixture.destroy();
+        lines.releaseWrites();
+        for (let tick = 0; tick < 20; tick++) {
+          await Promise.resolve();
+        }
+
+        expect(backTo).not.toHaveBeenCalled();
+        expect(pick.request()).toBeNull();
+      });
+    });
+
     it('closes from Escape, but not from the field', async () => {
       const { fixture, backTo } = await render();
 
@@ -568,6 +735,24 @@ describe('CatalogPage, opened to choose the products of a line (velista 0146)', 
 
     expect(tickOf(again, catalog[2])[0].checked).toBe(true);
     expect(TestBed.inject(ProductPickStore).ticked()).toEqual(ticked);
+  });
+
+  it('does not answer a request of the other kind for the same line', async () => {
+    const { navigateByUrl, fixture } = await render({
+      request: {
+        kind: 'one',
+        lineId: 'zl-1',
+        forLabel: 'For Leche',
+        forDetail: 'Compra semanal',
+        chosenId: null,
+        returnUrl: LINE_PAGE,
+        returnDepth: 3,
+        callerState: null,
+      },
+    });
+
+    expect(navigateByUrl).toHaveBeenCalledWith(LINE_PAGE, { replaceUrl: true });
+    expect(bar(fixture)).toBeNull();
   });
 
   it('goes to the line page when nothing opened it, in place, which is where a reader lands', async () => {

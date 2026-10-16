@@ -103,6 +103,21 @@ describe('ProductPickStore', () => {
       expect(store.takeAnswer('zl-1')).toBeNull();
     });
 
+    it('moves onto the line as it now is, keeping the ticks the person made', () => {
+      const store = new ProductPickStore();
+      store.open(SET);
+      expect(store.base()).toEqual(['oat', 'soy']);
+
+      store.rebase(['oat', 'soy', 'rice'], ['oat', 'rice']);
+
+      expect(store.base()).toEqual(['oat', 'soy', 'rice']);
+      expect(store.ticked()).toEqual(['oat', 'rice']);
+      expect(store.request()).toEqual(SET);
+
+      store.end();
+      expect(store.base()).toEqual([]);
+    });
+
     it('opens the kind one with nothing ticked', () => {
       const store = new ProductPickStore();
       store.open(SET);

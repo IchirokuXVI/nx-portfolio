@@ -70,6 +70,7 @@ export class ProductPickStore {
   private readonly _request = signal<ProductPickRequest | null>(null);
   private readonly _chosen = signal<string | null>(null);
   private readonly _ticked = signal<readonly string[]>([]);
+  private readonly _base = signal<readonly string[]>([]);
   private readonly _answer = signal<ProductPickAnswer | null>(null);
 
   /** The open request, or null when nothing opened the catalog to choose. */
@@ -87,6 +88,13 @@ export class ProductPickStore {
   readonly ticked = this._ticked.asReadonly();
 
   /**
+   * The products of the line the ticks are counted against, in the kind `set`:
+   * what it arrived with, then what it holds after another device changed it
+   * while the page was open ({@link rebase}).
+   */
+  readonly base = this._base.asReadonly();
+
+  /**
    * The answer not taken yet, or null. A caller that is a page of its own is a new
    * instance when it comes back, and finds its answer by its caller state here
    * before it takes it with {@link takeAnswer} (velista `0145`, section 5).
@@ -98,6 +106,7 @@ export class ProductPickStore {
     this._request.set(request);
     this._chosen.set(request.chosenId);
     this._ticked.set(request.chosenIds ?? []);
+    this._base.set(request.chosenIds ?? []);
     this._answer.set(null);
   }
 
@@ -112,6 +121,15 @@ export class ProductPickStore {
   }
 
   /**
+   * The line moved while the page was open: the set is counted against what it
+   * holds now, with the person's own ticks carried over by the page.
+   */
+  rebase(base: readonly string[], ticked: readonly string[]): void {
+    this._base.set(base);
+    this._ticked.set(ticked);
+  }
+
+  /**
    * The kind `set` is over: saved by the page, or left. The page writes the set
    * itself, so a failed save keeps it open (velista `0146`, section 3), and there
    * is no answer for the caller to take.
@@ -120,6 +138,7 @@ export class ProductPickStore {
     this._request.set(null);
     this._chosen.set(null);
     this._ticked.set([]);
+    this._base.set([]);
     this._answer.set(null);
   }
 
@@ -163,6 +182,7 @@ export class ProductPickStore {
     this._request.set(null);
     this._chosen.set(null);
     this._ticked.set([]);
+    this._base.set([]);
     return true;
   }
 }

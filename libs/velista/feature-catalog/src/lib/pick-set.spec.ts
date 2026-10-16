@@ -1,5 +1,5 @@
 import { LINE_ITEM_SET_MAX } from '@portfolio/velista/models';
-import { tickProduct } from './pick-set';
+import { rebaseProductSet, tickProduct } from './pick-set';
 
 function ids(count: number, prefix = 'p'): string[] {
   return Array.from({ length: count }, (_, at) => `${prefix}${at}`);
@@ -46,5 +46,47 @@ describe('tickProduct (velista 0146, section 3)', () => {
       ticked: [...shrunk, 'new'],
     });
     expect(tickProduct(before, 'new', before).kind).toBe('full');
+  });
+
+  it('names the cap the line is held to, which is what it had when that is more', () => {
+    const before = ids(LINE_ITEM_SET_MAX + 20);
+
+    expect(tickProduct(before, 'new', before)).toEqual({
+      kind: 'full',
+      full: { count: LINE_ITEM_SET_MAX + 20, cap: LINE_ITEM_SET_MAX + 20 },
+    });
+  });
+});
+
+describe('rebaseProductSet (velista 0146, section 3)', () => {
+  it('is the ticks as they are when the line has not moved', () => {
+    expect(rebaseProductSet(['a', 'b'], ['b', 'c'], ['a', 'b'])).toEqual([
+      'b',
+      'c',
+    ]);
+  });
+
+  it('keeps a product another device added, and the ticks of the person', () => {
+    expect(
+      rebaseProductSet(['a', 'b'], ['a', 'b', 'c'], ['a', 'b', 'x'])
+    ).toEqual(['a', 'b', 'x', 'c']);
+  });
+
+  it('still takes out what the person unticked', () => {
+    expect(rebaseProductSet(['a', 'b'], ['b'], ['a', 'b', 'x'])).toEqual([
+      'b',
+      'x',
+    ]);
+  });
+
+  it('drops a product another device took off that the person did not tick', () => {
+    expect(rebaseProductSet(['a', 'b'], ['a', 'b', 'c'], ['b'])).toEqual([
+      'b',
+      'c',
+    ]);
+  });
+
+  it('keeps a product both added only once', () => {
+    expect(rebaseProductSet(['a'], ['a', 'x'], ['a', 'x'])).toEqual(['a', 'x']);
   });
 });

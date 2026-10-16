@@ -24,7 +24,8 @@ export type PickSetTick =
  * `max(LINE_ITEM_SET_MAX, the products the line had)` (`UpdateLineRequest.itemIds`).
  * A line the catalog's own sync took past the cap can still shrink, and can be
  * saved at any size up to what it had, but a tick that would pass both is
- * refused. A press that takes a product out is never refused.
+ * refused, and the sentence names that bound. A press that takes a product out
+ * is never refused.
  */
 export function tickProduct(
   ticked: readonly string[],
@@ -41,10 +42,31 @@ export function tickProduct(
   if (ticked.length + 1 > cap) {
     return {
       kind: 'full',
-      full: { count: ticked.length, cap: LINE_ITEM_SET_MAX },
+      full: { count: ticked.length, cap },
     };
   }
   return { kind: 'ticked', ticked: [...ticked, itemId] };
+}
+
+/**
+ * The set to write when the line moved while the page was open (velista
+ * `0146`, section 3): what the line holds now, less the products the person
+ * unticked, plus the products the person ticked. A product another device
+ * added is kept, and one it took off is gone unless the person ticked it.
+ * In the order the line holds them, then the person's ticks in their order.
+ */
+export function rebaseProductSet(
+  before: readonly string[],
+  ticked: readonly string[],
+  live: readonly string[]
+): string[] {
+  const kept = new Set(ticked);
+  const had = new Set(before);
+  const holds = new Set(live);
+  return [
+    ...live.filter((itemId) => kept.has(itemId) || !had.has(itemId)),
+    ...ticked.filter((itemId) => !had.has(itemId) && !holds.has(itemId)),
+  ];
 }
 
 /**

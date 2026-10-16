@@ -10,6 +10,7 @@
 } @else {
   <lib-page-header
     (back)="closePick()"
+    [attr.inert]="asking() ? '' : null"
     [backLabel]="
       (pickSet ? 'catalog.pick.closeSet' : 'basket.change.pickClose') | rokuT
     "
@@ -20,7 +21,7 @@
   />
 }
 
-<div class="page">
+<div [attr.inert]="asking() ? '' : null" class="page">
   <!--
     The tools (velista 0134, section 2), held at the top while the list scrolls
     under them: the field, and one row of two selectors.
@@ -301,13 +302,18 @@
       Why a press did nothing: no product chosen yet, or the line is full
       (velista 0146, sections 2 and 3).
     -->
-    <p aria-live="polite" class="pick-note" role="status">
+    <p
+      [attr.inert]="asking() ? '' : null"
+      aria-live="polite"
+      class="pick-note"
+      role="status"
+    >
       @if (pickNote(); as note) {
         {{ note.key | rokuT: note.args }}
       }
     </p>
     @if (saveFailed()) {
-      <p class="adds-failed" role="alert">
+      <p [attr.inert]="asking() ? '' : null" class="adds-failed" role="alert">
         <span class="adds-failed-text">{{
           'catalog.pick.saveFailed' | rokuT
         }}</span>
@@ -319,6 +325,7 @@
     <lib-choosing-bar
       (used)="usePick()"
       [action]="bar.action"
+      [attr.inert]="asking() ? '' : null"
       [disabled]="bar.disabled"
       [forDetail]="bar.detail"
       [forLabel]="bar.label"

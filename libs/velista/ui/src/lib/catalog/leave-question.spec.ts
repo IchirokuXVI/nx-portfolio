@@ -42,6 +42,32 @@ describe('LeaveQuestion (velista 0146, section 4)', () => {
     expect(answers).toEqual(['stay', 'leave', 'stay']);
   });
 
+  it('keeps Tab inside the card, both ways', async () => {
+    const { host } = await render();
+    const keep = host.querySelector<HTMLButtonElement>('button.keep');
+    const leave = host.querySelector<HTMLButtonElement>('button.leave');
+    const tab = (from: HTMLElement | null, shiftKey = false) => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      from?.dispatchEvent(event);
+      return event;
+    };
+
+    leave?.focus();
+    expect(tab(leave).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(keep);
+
+    expect(tab(keep, true).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(leave);
+
+    keep?.focus();
+    expect(tab(keep).defaultPrevented).toBe(false);
+  });
+
   it('gives the focus back to the control that asked', async () => {
     const asker = document.createElement('button');
     document.body.appendChild(asker);

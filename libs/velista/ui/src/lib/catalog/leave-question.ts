@@ -22,7 +22,10 @@ import {
  * to be part of the page, as the walk editor's "Not saved yet" is.
  *
  * The safe answer is the first one and has the focus, so Enter and Escape both
- * keep the person on the page. Every string arrives translated.
+ * keep the person on the page. Tab goes round the two answers and never reaches
+ * the page behind, which the page makes `inert` while the card is up: the
+ * keyboard's half of what `aria-modal` says to a screen reader, as the sheets
+ * and the tour card do. Every string arrives translated.
  */
 @Component({
   selector: 'lib-leave-question',
@@ -38,7 +41,7 @@ import {
       <button (click)="stay.emit()" #keep class="keep" type="button">
         {{ stayLabel() }}
       </button>
-      <button (click)="leave.emit()" class="leave" type="button">
+      <button (click)="leave.emit()" #leaveButton class="leave" type="button">
         {{ leaveLabel() }}
       </button>
     </div>
@@ -47,6 +50,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(keydown.escape)': '$event.stopPropagation(); stay.emit()',
+    // Plain `keydown`: Angular's `keydown.tab` does not match Shift+Tab.
+    '(keydown)': 'wrapFocus($event)',
   },
 })
 export class LeaveQuestion {
@@ -64,6 +69,8 @@ export class LeaveQuestion {
   readonly leave = output<void>();
 
   private readonly _keep = viewChild<ElementRef<HTMLButtonElement>>('keep');
+  private readonly _leave =
+    viewChild<ElementRef<HTMLButtonElement>>('leaveButton');
 
   constructor() {
     // The control that asked (the close, a card), so the focus goes back to it
@@ -75,5 +82,28 @@ export class LeaveQuestion {
         asker.focus();
       }
     });
+  }
+
+  /** Tab from the last answer goes to the first, and Shift Tab the other way. */
+  protected wrapFocus(event: Event): void {
+    if (!(event instanceof KeyboardEvent) || event.key !== 'Tab') {
+      return;
+    }
+    const first = this._keep()?.nativeElement;
+    const last = this._leave()?.nativeElement;
+    if (first === undefined || last === undefined) {
+      return;
+    }
+    const active = first.ownerDocument.activeElement;
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (active !== first && active !== last) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
   }
 }

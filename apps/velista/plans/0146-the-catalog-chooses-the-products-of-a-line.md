@@ -435,6 +435,38 @@ the group's. The person keeps oat, takes soy off and ticks rice, and Save sends
 The line still follows the group. Oat stays the group's, soy is gone, and rice is the
 person's own: the owner's option A, as decided.
 
+### Fixes after the review of pull request #734
+
+- **A change from another device survives Save. The owner should confirm this
+  choice.** Save sent the ticked set, which was counted from the products the line
+  had when the page opened. A product another device added in the meantime was thus
+  removed without a word. Now the set written is what the line holds at that moment,
+  less the products the person unticked, plus the products the person ticked
+  (`rebaseProductSet`). It is still one `updateLine` with `itemIds` and no
+  `adoptItemIds` (option A). The line is read from `LineStore`, the store the line
+  page reads and realtime keeps current, so no new read is sent. The page moves its
+  ticks onto the line each time the store changes it, not only at Save: a product
+  another device added is then drawn ticked under "On this line", and the person can
+  untick it. A product another device took off is gone unless the person ticked it.
+  The bar counts against the line as it now is. The favourite is the one the line
+  holds now, and is cleared only when the set written lost it. The cap is counted on
+  the set written.
+- **No leaving while a save is out.** Close and Escape do nothing until the save
+  lands, and the guard refuses the back of the browser and the pickers, so nothing
+  offers to discard a set that may already be written. The save then goes back to
+  the line page itself, or keeps the page on a failure. A save that lands after the
+  page is gone neither navigates nor sets anything on it. When it succeeded it still
+  ends the request, so a later visit does not open on old ticks.
+- **The page answers only a request of its own kind.** A request of the kind "one"
+  for the same line no longer opens the kind "a set", and the page goes to its
+  fallback as for no request.
+- **"Leave without saving?" keeps the focus.** Tab and Shift Tab go round its two
+  answers, as the sheets and the tour card do, and the page behind (the header, the
+  list and the bar) is `inert` while it is up.
+- **The cap sentence names the cap the line is held to.** A line that arrived with
+  120 products said "120 of 100". It now says "120 of 120", the larger of 100 and
+  what the line holds.
+
 ### Evidence
 
 - `npx nx build velista` passes. Lint and test pass for `velista/models`,

@@ -78,7 +78,7 @@ import {
 import { CatalogContext } from '../catalog-context';
 import { routePath } from '../catalog-opener';
 import { categoryChoice } from '../category-choice';
-import { lineProductCard, tickProduct } from '../pick-set';
+import { lineProductCard, rebaseProductSet, tickProduct } from '../pick-set';
 import { rowAdds } from '../row-adds';
 import {
   CATALOG_PARAMS,
@@ -112,6 +112,11 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 type ListStatus = 'loading' | 'ready' | 'failed';
 type MoreStatus = 'idle' | 'loading' | 'failed';
+
+/** Two lists of products, the same in the same order. */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, at) => id === b[at]);
+}
 
 /**
  * The second tab: every product from every supermarket (velista `0100`).
@@ -263,11 +268,16 @@ export class CatalogPage {
   private readonly _pickLineId: string | null =
     this._route.snapshot?.paramMap?.get('lineId') ?? null;
 
-  /** What the screen that opened the page handed it, for this line, or null. */
+  /**
+   * What the screen that opened the page handed it, for this line and this
+   * kind, or null. A request for the other kind on the same line is not this
+   * page's to answer.
+   */
   protected readonly pickRequest = computed<ProductPickRequest | null>(() => {
     const request = this._pick.request();
     return this.pickKind !== null &&
       request !== null &&
+      request.kind === this.pickKind &&
       request.lineId === this._pickLineId
       ? request
       : null;
@@ -287,10 +297,31 @@ export class CatalogPage {
   private readonly _itemNames = this.pickSet ? inject(ItemNames) : null;
   private readonly _lines = this.pickSet ? inject(LineStore) : null;
 
-  /** The products the line arrived with, which the bar compares the set to. */
-  private readonly _pickBefore = computed<readonly string[]>(
-    () => this.pickRequest()?.chosenIds ?? []
+  /**
+   * The products of the line the bar compares the set to: what it arrived
+   * with, or what it holds after another device changed it while the page was
+   * open (the effect in the constructor moves it).
+   */
+  private readonly _pickBefore = computed<readonly string[]>(() =>
+    this.pickRequest() === null ? [] : this._pick.base()
   );
+
+  /**
+   * The line as `LineStore` holds it now, the store the line page reads, or
+   * null when the store does not hold it. Realtime keeps it current while the
+   * page is open.
+   */
+  private readonly _liveLine = computed(() => {
+    const listId = this._route.snapshot?.paramMap?.get('listId') ?? '';
+    return (
+      this._lines
+        ?.linesIn(listId)
+        .find((line) => line.id === this._pickLineId) ?? null
+    );
+  });
+
+  /** The page is gone: a save that settles later neither navigates nor sets. */
+  private _destroyed = false;
 
   /** The set ticked so far. */
   protected readonly ticked = this._pick.ticked;
@@ -703,9 +734,35 @@ export class CatalogPage {
       this._readChoice(catalogChoiceOf(map))
     );
     inject(DestroyRef).onDestroy(() => {
+      this._destroyed = true;
       params.unsubscribe();
       this._clearDebounce();
     });
+
+    // Another device changed the line while the page is open: the set moves
+    // onto what the line holds now, with the person's own ticks and unticks
+    // carried over, so the ticks drawn are what Save writes. Not while a save is
+    // out: the store's optimistic copy of that write is not news.
+    if (this.pickSet) {
+      effect(() => {
+        const live = this._liveLine()?.itemIds;
+        if (
+          live === undefined ||
+          this.pickRequest() === null ||
+          this.saving()
+        ) {
+          return;
+        }
+        untracked(() => {
+          const base = this._pick.base();
+          if (sameIds(base, live)) {
+            return;
+          }
+          this._pick.rebase(live, rebaseProductSet(base, this.ticked(), live));
+          void this._itemNames?.ensure(live);
+        });
+      });
+    }
 
     void this._context.load().then((context) => this.context.set(context));
     // The catalog that chooses adds to nothing, so it reads no list to add to.
@@ -824,6 +881,11 @@ export class CatalogPage {
       return;
     }
     if (this.pickSet) {
+      // A save that is out decides where the page goes. Leaving now would offer
+      // to discard a set that may already be written.
+      if (this.saving()) {
+        return;
+      }
       // Asked before the walk back, never from inside it: the guard then finds
       // the set ended and lets the walk through.
       if (this.pickChanged() && !(await this._ask())) {
@@ -865,6 +927,12 @@ export class CatalogPage {
   canLeave(nextUrl: string): boolean | Promise<boolean> {
     if (!this.pickSet || this.pickRequest() === null) {
       return true;
+    }
+    // While a save is out nothing leaves, not even to a picker: the save goes
+    // back to the line page itself once it lands, and keeps the page on a
+    // failure.
+    if (this.saving()) {
+      return false;
     }
     const own = this._ownPath();
     const path = nextUrl.split(/[?#]/)[0];
@@ -917,6 +985,11 @@ export class CatalogPage {
    * nothing sent. With one, the whole set in one write, with the favourite
    * cleared in the same write when the set no longer holds it, and no
    * `adoptItemIds`. A failed save keeps the page and the ticks, and says so.
+   *
+   * The set written is built from the line as the store holds it now: what it
+   * holds, less what the person unticked, plus what the person ticked. A
+   * product another device added while the page was open is kept, and the
+   * favourite is the one the line holds now.
    */
   private async _saveSet(request: ProductPickRequest): Promise<void> {
     const lines = this._lines;
@@ -925,17 +998,17 @@ export class CatalogPage {
     }
     this.pickNote.set(null);
     this.saveFailed.set(false);
-    if (!this.pickChanged()) {
+
+    const line = this._liveLine();
+    const live = line?.itemIds ?? this._pickBefore();
+    const itemIds = rebaseProductSet(this._pickBefore(), this.ticked(), live);
+    if (!productSetChanged(productSetChange(live, itemIds))) {
       this._pick.end();
       void this._pages.backTo(request.returnDepth, request.returnUrl);
       return;
     }
 
-    const itemIds = [...this.ticked()];
-    const listId = this._route.snapshot.paramMap.get('listId') ?? '';
-    const favorite =
-      lines.linesIn(listId).find((line) => line.id === request.lineId)
-        ?.favoriteItemId ?? null;
+    const favorite = line?.favoriteItemId ?? null;
     this.saving.set(true);
     const outcome = await lines.updateLine(request.lineId, {
       itemIds,
@@ -943,6 +1016,14 @@ export class CatalogPage {
         ? { favoriteItemId: null }
         : {}),
     });
+    if (this._destroyed) {
+      // Nothing on the page is left to answer. A written set still ends the
+      // request, so a later visit does not open on it.
+      if (outcome.state !== 'failed') {
+        this._pick.end();
+      }
+      return;
+    }
     this.saving.set(false);
     if (outcome.state === 'failed') {
       this.saveFailed.set(true);
