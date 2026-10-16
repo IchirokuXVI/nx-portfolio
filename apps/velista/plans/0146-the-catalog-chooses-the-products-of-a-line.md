@@ -1,3 +1,5 @@
+> **PR:** [#734](https://github.com/IchirokuXVI/nx-portfolio/pull/734)
+
 # 0146: the catalog chooses the products of a line
 
 > Asked for by the owner on 2026-10-11: "In order to pick a product for an existing line,
