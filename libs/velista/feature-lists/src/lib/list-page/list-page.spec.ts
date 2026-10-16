@@ -60,10 +60,12 @@ import type {
   TripRow,
   ZoneRole,
 } from '@portfolio/velista/models';
+import { DEFAULT_LIST_VIEW_STATE } from '@portfolio/velista/models';
 import {
   AppResumed,
   NavChrome,
   NOTIFICATION_TONE,
+  PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -204,6 +206,8 @@ interface Options {
   readonly search?: boolean;
   /** Whether the socket is up as the page builds. Up by default. */
   readonly connected?: boolean;
+  /** What `PageReturn` hands back, which makes this arrival a return to the page. */
+  readonly returned?: unknown;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -230,8 +234,15 @@ async function render(options: Options = {}): Promise<{
   dueCalls: { reads: number };
   /** The app's resume count, which a spec bumps to bring the app back. */
   resumes: ReturnType<typeof signal<number>>;
+  /** What the page kept for a return to it, and under which key. */
+  returns: { keep: jest.Mock; recall: jest.Mock };
 }> {
   TestBed.resetTestingModule();
+
+  const returns = {
+    keep: jest.fn(),
+    recall: jest.fn(() => options.returned ?? null),
+  };
 
   const tone = { play: jest.fn() };
 
@@ -341,6 +352,7 @@ async function render(options: Options = {}): Promise<{
       { provide: AppResumed, useValue: { resumes } },
       { provide: Router, useValue: router },
       { provide: NavChrome, useValue: chrome },
+      { provide: PageReturn, useValue: returns },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: activatedRoute },
       // The composer's microphone posts through this (plan 0038). Every test in
@@ -381,6 +393,7 @@ async function render(options: Options = {}): Promise<{
     profiles,
     itemNames,
     resumes,
+    returns,
     view: TestBed.inject(ListViewStore),
     trips: TestBed.inject(TripStore),
     tripCalls,
@@ -1789,6 +1802,70 @@ describe('ListPage: searching and viewing one category', () => {
         '/velista/en/zones/z/lists/l',
         { replaceUrl: true }
       );
+    });
+
+    describe('coming back from another page', () => {
+      const RETURNED = {
+        view: {
+          state: { ...DEFAULT_LIST_VIEW_STATE, order: 'alpha' },
+          openTrips: new Set<string>(),
+        },
+        words: 'le',
+        dueExpanded: false,
+        scrollTop: 0,
+      };
+
+      it('comes back to the words, their results and the order it was left on', async () => {
+        const { fixture, router, view, returns } = await render({
+          lines: LINES,
+          items: ITEMS,
+          search: true,
+          returned: RETURNED,
+        });
+
+        expect(returns.recall).toHaveBeenCalledWith(`list:${LIST_ID}`);
+        expect(field(fixture).value).toBe('le');
+        expect(query(fixture, '#list-results')).not.toBeNull();
+        expect(view.order()).toBe('alpha');
+        // The open search entry stays: the field holds the words it stands for.
+        expect(router.navigateByUrl).not.toHaveBeenCalled();
+      });
+
+      it('leaves the words out on an entry whose search was closed', async () => {
+        const { fixture, router, view } = await render({
+          lines: LINES,
+          items: ITEMS,
+          returned: RETURNED,
+        });
+
+        expect(field(fixture).value).toBe('');
+        expect(router.navigate).not.toHaveBeenCalled();
+        expect(view.order()).toBe('alpha');
+      });
+
+      it('keeps the words and the view as it is left', async () => {
+        const { fixture, activatedRoute, view, returns } = await render({
+          lines: LINES,
+          items: ITEMS,
+        });
+        view.setOrder('alpha');
+        typeInto(fixture, 'le');
+        activatedRoute.setQuery({ search: '1' });
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        fixture.destroy();
+
+        expect(returns.keep).toHaveBeenCalledWith(`list:${LIST_ID}`, {
+          view: {
+            state: { ...DEFAULT_LIST_VIEW_STATE, order: 'alpha' },
+            openTrips: expect.any(Set),
+          },
+          words: 'le',
+          dueExpanded: false,
+          scrollTop: 0,
+        });
+      });
     });
 
     it('gives the bar’s room to the page while the field has focus or holds words', async () => {

@@ -28,6 +28,7 @@ import {
   ItemNames,
   LineStore,
   ListStore,
+  type ListViewSnapshot,
   ListViewStore,
   MemberNames,
   presenceNames,
@@ -68,6 +69,7 @@ import {
   AppResumed,
   AudioRecorder,
   BrowserFacade,
+  ColumnScroll,
   formatMoney,
   lineQueryOf,
   listIdOf,
@@ -75,6 +77,7 @@ import {
   NavChrome,
   NOTIFICATION_TONE,
   PageNavigation,
+  PageReturn,
   productPagePath,
   productPickPath,
   productsPickPath,
@@ -132,6 +135,23 @@ const RECONNECT_AFTER_RESUME_MS = 15_000;
 
 interface ListRowPick {
   readonly from: typeof LIST_ROW_PICK;
+}
+
+/**
+ * What the page was showing when somebody left it for another page, handed back
+ * when they come back to it (`PageReturn`).
+ */
+interface ListPageReturn {
+  readonly view: ListViewSnapshot;
+  /** The words in the field, put back only onto an entry whose search is open. */
+  readonly words: string;
+  readonly dueExpanded: boolean;
+  readonly scrollTop: number;
+}
+
+/** One list's place, so another list on this same page never takes it. */
+function listReturnKey(listId: string): string {
+  return `list:${listId}`;
 }
 
 /**
@@ -358,6 +378,20 @@ export class ListPage {
   /** Both from the URL, and both signals: the router reuses this component. */
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
+
+  private readonly _returns = inject(PageReturn);
+
+  /**
+   * What this page showed when it was left, when this arrival is a return to it: the
+   * back button from the line page or the product picker. Null on a fresh visit,
+   * which starts unsearched and at the top.
+   */
+  private readonly _back = this._returns.recall<ListPageReturn>(
+    listReturnKey(this.listId())
+  );
+
+  /** The column's scroll, read as it moves and put back on a return. */
+  private readonly _scroll = new ColumnScroll(this._back?.scrollTop ?? null);
 
   readonly reordering = signal(false);
 
@@ -933,15 +967,21 @@ export class ListPage {
    * When the results first appear, the column scrolls so their heading sits under
    * the header. The list's progress block goes above the fold while typing and comes
    * back with the list.
+   *
+   * Not on a return to the page: the results were already on screen when somebody
+   * left, and the place they were reading in is what {@link _scroll} puts back.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
     const heading = this._resultsHeading()?.nativeElement;
     const column = this._column()?.nativeElement;
     if (heading === undefined || column === undefined) {
-      this._resultsDrawn = false;
+      if (!this._scroll.returning) {
+        this._resultsDrawn = false;
+      }
       return;
     }
-    if (this._resultsDrawn) {
+    if (this._resultsDrawn || this._scroll.returning) {
+      this._resultsDrawn = true;
       return;
     }
     this._resultsDrawn = true;
@@ -1035,6 +1075,37 @@ export class ListPage {
   }
 
   constructor() {
+    // A return to this page comes back to what it showed (`PageReturn`). Applied
+    // here, before any effect runs, so the search entry's effect finds the words it
+    // expects on `?search=1` rather than taking the entry off for an empty field.
+    const back = this._back;
+    const words =
+      back !== null && this.searchOpen() && back.words.trim() !== ''
+        ? back.words
+        : null;
+    if (back !== null) {
+      this._view.open(this.listId());
+      this._view.resume(back.view);
+      this._dueExpanded.set(back.dueExpanded);
+    }
+    if (words !== null) {
+      this.onComposerQuery(words);
+      // The field is drawn once the list has loaded, so the words wait for it.
+      const filled = effect(() => {
+        const composer = this._composer();
+        if (composer !== undefined) {
+          composer.fill(words);
+          filled.destroy();
+        }
+      });
+    }
+
+    // The scroll it was left at, once the rows are there to scroll over.
+    afterRenderEffect(() => {
+      this._scroll.attach(this._column()?.nativeElement ?? null);
+      this._scroll.settle(this.loaded() !== null);
+    });
+
     // The view store follows the list in the URL. Opening another list restores the
     // remembered order and starts with no search and all lines.
     effect(() => {
@@ -1049,9 +1120,16 @@ export class ListPage {
     });
 
     // Another list starts folded to three suggestions again (velista 0089, section 2).
+    // The list this page was returned to keeps the fold it had.
+    let foldedFor = back === null ? null : this.listId();
     effect(() => {
-      this.listId();
-      untracked(() => this._dueExpanded.set(false));
+      const listId = this.listId();
+      untracked(() => {
+        if (listId !== foldedFor) {
+          foldedFor = listId;
+          this._dueExpanded.set(false);
+        }
+      });
     });
 
     // The due lines, once the lines have arrived and never in front of them (velista
@@ -1342,6 +1420,14 @@ export class ListPage {
     inject(DestroyRef).onDestroy(() => {
       // The bar comes back with whatever screen is next (velista `0117`).
       this._chrome.setComposing(false);
+      // What a return to this list comes back to, taken before the stores let go.
+      this._returns.keep<ListPageReturn>(listReturnKey(this.listId()), {
+        view: this._view.snapshot(),
+        words: this._query(),
+        dueExpanded: this._dueExpanded(),
+        scrollTop: this._scroll.top,
+      });
+      this._scroll.detach();
       // The view store is provided on the route and is never destroyed, so it is
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();

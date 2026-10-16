@@ -39,6 +39,7 @@ import {
   basketRowProduct,
   type BasketViewRow,
   type BasketViewSection,
+  type BasketViewState,
   catalogName,
   type CatalogSuggestion,
   cheaperInGroup,
@@ -53,8 +54,10 @@ import {
 } from '@portfolio/velista/models';
 import {
   BrowserFacade,
+  ColumnScroll,
   ListSearchNavigation,
   NavChrome,
+  PageReturn,
   productPagePath,
   searchOpenOf,
   sheetSegments,
@@ -118,6 +121,22 @@ import { SeenTarget } from './seen-target';
  * with weeks left on it.
  */
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * What the basket showed when somebody left it for another page, handed back when
+ * they come back to it (`PageReturn`).
+ */
+interface BasketPageReturn {
+  readonly view: BasketViewState;
+  /** The words in the field, put back only onto an entry whose search is open. */
+  readonly words: string;
+  readonly scrollTop: number;
+}
+
+/** One basket's place. The caller's own is `live`, since its URL holds no id. */
+function basketReturnKey(live: boolean, id: string): string {
+  return `basket:${live ? 'live' : id}`;
+}
 
 /**
  * The basket: a list of lines with quantities, which whoever is holding the
@@ -279,6 +298,20 @@ export class BasketPage {
    * basket's address is replaced by another's: see {@link _followBasket}.
    */
   private _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+
+  private readonly _returns = inject(PageReturn);
+
+  /**
+   * What this basket showed when it was left, when this arrival is a return to it:
+   * the back button from the product picker or a product's page. Null on a fresh
+   * visit, which starts unsearched and at the top (`0076`, section 4.7).
+   */
+  private readonly _back = this._returns.recall<BasketPageReturn>(
+    basketReturnKey(this._live, this._id)
+  );
+
+  /** The column's scroll, read as it moves and put back on a return. */
+  private readonly _scroll = new ColumnScroll(this._back?.scrollTop ?? null);
 
   /**
    * What this reader may reach from here, which the menu sheet over this page asks
@@ -953,10 +986,36 @@ export class BasketPage {
      * date passes while the shopper is standing in an aisle must not move the rows
      * in front of them.
      */
+    const back = this._back;
     void (
       this._live ? this._store.openLive() : this._store.open(this._id)
     ).then(() => {
       this._view.restore();
+      // A return to this basket comes back to what it showed (`PageReturn`).
+      if (back !== null) {
+        this._view.resume(back.view);
+      }
+    });
+
+    // The words go back at once, before any effect runs, so the search entry's
+    // effect finds them on `?search=1` rather than taking the entry off for an
+    // empty field. The field itself is drawn once the basket is ready.
+    if (back !== null && this.searchOpen() && back.words.trim() !== '') {
+      const words = back.words;
+      this.onComposerQuery(words);
+      const filled = effect(() => {
+        const composer = this._composer();
+        if (composer !== undefined) {
+          composer.fill(words);
+          filled.destroy();
+        }
+      });
+    }
+
+    // The scroll it was left at, once the rows are there to scroll over.
+    afterRenderEffect(() => {
+      this._scroll.attach(this._column()?.nativeElement ?? null);
+      this._scroll.settle(this.state() === 'ready');
     });
 
     /**
@@ -1014,6 +1073,16 @@ export class BasketPage {
       followed.unsubscribe();
       // The bar comes back with whatever screen is next (velista `0117`).
       this._chrome.setComposing(false);
+      // What a return to this basket comes back to, taken before the stores let go.
+      this._returns.keep<BasketPageReturn>(
+        basketReturnKey(this._live, this._id),
+        {
+          view: this._view.snapshot(),
+          words: this._query(),
+          scrollTop: this._scroll.top,
+        }
+      );
+      this._scroll.detach();
       this._letGo();
     });
   }
@@ -1680,15 +1749,22 @@ export class BasketPage {
    * Not further, unlike the zone list: the basket's bar is inside this column
    * rather than above it, so scrolling the heading to the top would take the bar
    * off the screen, and the bar stays while typing.
+   *
+   * Not on a return to the basket: the results were already on screen when
+   * somebody left, and the place they were reading in is what {@link _scroll} puts
+   * back.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
     const shown = this.typing();
     const column = this._column()?.nativeElement;
     if (!shown || column === undefined) {
-      this._resultsDrawn = false;
+      if (!this._scroll.returning) {
+        this._resultsDrawn = false;
+      }
       return;
     }
-    if (this._resultsDrawn) {
+    if (this._resultsDrawn || this._scroll.returning) {
+      this._resultsDrawn = true;
       return;
     }
     this._resultsDrawn = true;

@@ -748,6 +748,23 @@ export class BasketViewStore {
   }
 
   /**
+   * The filter sheet's choices as they stand, for `PageReturn`. The shop is not in
+   * it: `BasketStore` holds that, and {@link restore} reads it at the remembered one.
+   */
+  snapshot(): BasketViewState {
+    return this._state();
+  }
+
+  /**
+   * Come back to what {@link snapshot} kept, after {@link restore} for the same
+   * basket: what somebody chose a moment ago beats what the device remembers.
+   */
+  resume(kept: BasketViewState): void {
+    this._state.set(kept);
+    this._askAgainForFailedTree();
+  }
+
+  /**
    * Ask again for a tree whose last read failed, when grouping by category
    * (velista `0138`).
    *

@@ -136,6 +136,18 @@ export class AppHistory {
   }
 
   /**
+   * Whether the navigation that started last came from the browser's history: the
+   * back or forward button, a back control that pops, or `history.go`.
+   *
+   * A page asks it from its constructor, while its own arrival is still in flight,
+   * to tell a return to a screen from a fresh visit (`PageReturn`). Unwatched it is
+   * always false, so every arrival is a fresh one.
+   */
+  arrivingByPop(): boolean {
+    return this._pending?.navigationTrigger === 'popstate';
+  }
+
+  /**
    * A popstate is applied here rather than on the way out, because the browser has
    * already moved by the time it is announced and the navigation it starts may never
    * end: a guard can redirect it, and the redirect replaces the entry we have already
