@@ -68,6 +68,21 @@ describe('ColumnScroll', () => {
 
     scroll.settle(true);
     expect(main.scrollTop).toBe(480);
+  });
+
+  it('holds the offset for the window, against a shift above the rows', () => {
+    const scroll = new ColumnScroll(480);
+    const main = column();
+    scroll.attach(main);
+    scroll.settle(true);
+
+    // Scroll anchoring moving the column as something above the rows shrinks.
+    main.scrollTop = 446;
+    jest.advanceTimersToNextTimer();
+    expect(main.scrollTop).toBe(480);
+    expect(scroll.returning).toBe(true);
+
+    jest.advanceTimersByTime(COLUMN_SCROLL_RETURN_MS + 100);
     expect(scroll.returning).toBe(false);
   });
 
@@ -86,7 +101,6 @@ describe('ColumnScroll', () => {
     jest.advanceTimersToNextTimer();
 
     expect(main.scrollTop).toBe(480);
-    expect(scroll.returning).toBe(false);
   });
 
   it('gives up when the column never grows that far', () => {

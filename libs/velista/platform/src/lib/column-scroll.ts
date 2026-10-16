@@ -1,6 +1,6 @@
 /**
- * How long a returning page keeps trying to reach its old scroll, from the first
- * render that had its content.
+ * How long a returning page holds its old scroll, from the first render that had its
+ * content.
  *
  * The rows land before everything inside them does: names, prices and folds can add
  * height for a moment after, and a column too short for the old position clamps it.
@@ -74,10 +74,15 @@ export class ColumnScroll {
 
   /**
    * Put the old offset back, once the page has drawn what it scrolls over. Called from
-   * an `afterRenderEffect`; the first call with `ready` starts trying, once a frame,
-   * until the column reaches the offset, somebody scrolls by hand, or
-   * {@link COLUMN_SCROLL_RETURN_MS} passes. Frames rather than renders, because what
-   * still grows the column (a name, a price) is not something the page's effect reads.
+   * an `afterRenderEffect`; the first call with `ready` holds the offset, once a
+   * frame, until somebody scrolls by hand or {@link COLUMN_SCROLL_RETURN_MS} passes.
+   * Frames rather than renders, because what still grows the column (a name, a price)
+   * is not something the page's effect reads.
+   *
+   * Held for the whole window and not dropped on the first frame that reaches it:
+   * something above the rows that shrinks a moment later (a notice, a bar still
+   * loading) moves the offset by the browser's scroll anchoring, and the basket came
+   * back 34px short of where it was left until this held on.
    */
   settle(ready: boolean): void {
     if (
@@ -100,11 +105,12 @@ export class ColumnScroll {
       return;
     }
 
-    column.scrollTop = target;
+    if (Math.abs(column.scrollTop - target) > 1) {
+      column.scrollTop = target;
+    }
     this._top = column.scrollTop;
 
     if (
-      Math.abs(column.scrollTop - target) <= 1 ||
       Date.now() >= this._deadline ||
       typeof requestAnimationFrame !== 'function'
     ) {
