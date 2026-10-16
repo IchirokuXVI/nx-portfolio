@@ -56,6 +56,7 @@ const MERCADONA = 'chain-mercadona';
 
 const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
 const READER: readonly ListPermission[] = ['READ'];
+const WRITER: readonly ListPermission[] = ['READ', 'WRITE'];
 
 function line(overrides: Partial<Line> = {}): Line {
   return {
@@ -438,6 +439,21 @@ describe('LinePage', () => {
       await drain(fixture);
       expect(router.navigateByUrl).toHaveBeenCalledWith(`${LINE_URL}/products`);
       expect(TestBed.inject(ProductPickStore).request()?.chosenIds).toEqual([]);
+    });
+
+    it('offers Change and Choose a product to a writer on an approved line (backend 0076)', async () => {
+      const withProducts = await render({ permissions: WRITER });
+      expect(
+        buttonWith(withProducts.fixture, 'list.page.productsChange')
+      ).not.toBeNull();
+
+      const empty = await render({
+        permissions: WRITER,
+        lines: [line({ itemIds: [] })],
+      });
+      expect(
+        buttonWith(empty.fixture, 'list.page.productsChoose')
+      ).not.toBeNull();
     });
 
     it('offers neither Change nor Choose a product to a reader who may not edit', async () => {
