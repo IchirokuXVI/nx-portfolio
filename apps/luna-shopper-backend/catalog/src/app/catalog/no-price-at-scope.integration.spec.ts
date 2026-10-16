@@ -190,7 +190,7 @@ describeIntegration(
         priceScopeId: scopeId,
         entries: [{ itemId: notSold, available: false }],
       });
-      // A crawl a month old is past its seven days, so the only price this
+      // A crawl three weeks old is past its seven days, so the only price this
       // scope has for the product is shown flagged, and is still a price.
       await prices.add({
         userId: OWNER,
@@ -199,7 +199,7 @@ describeIntegration(
         sourceKind: PriceSourceKind.OFFICIAL_API,
         price: 0.99,
         currency: 'EUR',
-        observedAt: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+        observedAt: new Date(Date.now() - 20 * DAY_MS).toISOString(),
       });
     }, 180_000);
 
