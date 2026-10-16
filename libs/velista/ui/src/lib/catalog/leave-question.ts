@@ -1,8 +1,11 @@
+import { DOCUMENT } from '@angular/common';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   type ElementRef,
+  inject,
   input,
   output,
   viewChild,
@@ -63,6 +66,14 @@ export class LeaveQuestion {
   private readonly _keep = viewChild<ElementRef<HTMLButtonElement>>('keep');
 
   constructor() {
+    // The control that asked (the close, a card), so the focus goes back to it
+    // when the card goes and the person keeps choosing.
+    const asker = inject(DOCUMENT).activeElement;
     afterNextRender(() => this._keep()?.nativeElement.focus());
+    inject(DestroyRef).onDestroy(() => {
+      if (asker instanceof HTMLElement && asker.isConnected) {
+        asker.focus();
+      }
+    });
   }
 }

@@ -318,3 +318,117 @@ products page that nothing reads.
 - A favourite chosen in the catalog. The star is on the line page.
 - A line that follows a product group and takes its new members. The page of section 3
   shows what the group holds today.
+
+## What the build decided
+
+The build of 2026-10-16 follows the owner's decision of 2026-10-15 on review point 2
+(option A) and the three settled review points. It reads the code on `dev` after velista
+`0144` (pull request #723), `0140` (#716), `0137` (#692), `0145` (#733) and backend `0207`
+(#706), not what the plan assumed. Each choice below is the builder's, and the owner can
+overturn it.
+
+**What the code had already.** Velista `0140` built the kind "one" of section 1 as a mode
+of `CatalogPage` (route data `CATALOG_PICK_DATA`, the request in `ProductPickStore`, the
+foot `ChoosingBar`, the pickers declared under the page). Velista `0145` built the plus and
+"Choose a product" of a row, which open it. Section 2 was thus built, and this plan adds
+the kind "a set" to the same component, as section 1 says for that order.
+
+**Review point 2, the owner's option A.** Save sends one `updateLine` with the ticked set
+as `itemIds`, and the favourite as `null` in the same write when the set lost it. It
+never sends `adoptItemIds`. A line that follows a group keeps following it.
+
+**Review point 3.** The page ticks `Line.itemIds` only. `groupItemIds` is not read.
+
+**Review point 4.** "Change" is `list.page.productsChange`, which already existed.
+
+**Review point 1.** The `LineHistoryPage` block moved to
+`line-history-page/line-history-page.spec.ts` (a `git mv` of `line-pages.spec.ts`, then the
+products block taken out). The export left `feature-lists/src/index.ts`, and the loop in
+`routes.spec.ts` names only `history`.
+
+### The gaps of the review
+
+- **The caller contract of section 1.** The kind is the route's (`CATALOG_PICK_DATA`, now
+  `'one'` or `'set'`), because the page has no inputs. The first search text and the first
+  supermarket are the catalog's own URL (`q`, `chain`), as `0140` built it: the caller puts
+  them in the URL it navigates to. The close goes back to the caller's `returnDepth`, with
+  `returnUrl` as the fallback. `ProductPickRequest` gained `chosenIds`, the products the
+  set arrives with. The line page passes its own URL as `returnUrl`, so Save and close land
+  on the line page.
+- **Where the ticked set lives.** In `ProductPickStore.ticked`, beside the request, for the
+  request's reason: the pickers are pages, and the catalog page is destroyed while one is
+  open. A reload forgets it, and the page then goes to the line page in place of its
+  entry, as the kind "one" goes to the list.
+- **"Leave without saving?" is not a sheet.** It is an `alertdialog` drawn by the page
+  (`LeaveQuestion` in `velista/ui`), in the shape of the walk editor's "Not saved yet". The
+  back of the browser reaches it through `catalogPickLeaveGuard`, a `canDeactivate` on the
+  page's route only: the guard holds the navigation while the card is up and lets it go on
+  Leave. Close and Escape ask before they walk back. A navigation to the page's own pickers
+  is not a leaving and never asks. The count of sheets in `routes.spec.ts` does not change.
+  "Keep choosing" after the back of the browser is a cancelled pop, and the router writes
+  the page's URL over the entry the browser moved to. That is the bargain the walk editor
+  already makes.
+- **A product the catalog no longer holds.** It is a card under "On this line" named "No
+  longer in the catalog" ("Unnamed product" when the lookup failed rather than answered),
+  with no price and its tick, so it can be taken off. It is drawn only with an empty
+  search, where the products of the line are drawn first, and it stays in the set until it
+  is unticked.
+- **A line over the cap.** A tick is refused past `max(LINE_ITEM_SET_MAX, the products the
+line arrived with)`, which is core's own bound, with the sentence the products page had
+  (now `catalog.pick.full`). Taking a product out is never refused, so a line over the cap
+  can shrink and be saved.
+- **The marker.** Both routes are pages under the line, outside the `sheet` marker.
+
+### Other choices the plan did not state
+
+- **The page writes the set itself.** The kind "one" leaves its answer for the caller, as
+  `0140` built it. The kind "a set" sends the write from the page, because a failed save
+  keeps the page open with the ticks (section 3), which a caller that writes after the
+  page is gone cannot do. A failed save says "The products could not be saved." with
+  "Try again" above the bar.
+- **"Use this product" is `aria-disabled`, not `disabled`** (section 2). `0140` built a
+  disabled button. Now a press with nothing chosen says "Choose a product first." in a
+  polite region above the bar. This reaches the basket's caller of `0140` too, because it
+  is the same page.
+- **The right to edit.** The page opens only from a request, and the line page opens it
+  only for a reader who may edit (the rule of the products page: `MANAGE`, or `WRITE` on a
+  line not yet approved). A reader who reaches the URL has no request and lands on the
+  line page. The page does not read the list's permissions itself.
+- **A row whose line has a product by the time its plus is pressed** opens the kind "a set"
+  (section 2), and goes back to the list it was opened from.
+- **The products of the line are priced by the lookup by id** (`ItemNames`, with prices),
+  which prices at the default profile, as the catalog's read does with nothing chosen. They
+  are the only cards not taken from the read.
+- **"On this line" needs a product.** An empty line draws the catalog with no headings.
+- **The bar with a change** says "2 products added" over "1 product removed", or the one
+  that is not zero. With no change it says "For <the name of the line>" over the name of the
+  list. The name is the line page's title (`lineName`).
+- **The tick** is the 18 pixel checkbox of `0140` drawn at the radio's 24 pixels with the
+  mock's 7 pixel radius (`card-check-box`, three new tokens). The press is held back
+  (`preventDefault`), so a tick the cap refuses never shows as ticked.
+- **A card of a product of the line** says ", on this line" after its name to a screen
+  reader, as the mock's labels do.
+- **Escape** closes both kinds wherever the focus is (a listener on the document while the
+  page is open), unless it was pressed in the search field (which it clears) or in the
+  order menu. The question takes its own Escape as "Keep choosing", and gives the focus
+  back to the control that asked.
+- **The close label** of the kind "a set" is "Close without saving".
+- **Removed with the products page:** `SimilarProducts` in `velista/ui` (nothing else drew
+  it), the keys `list.products.*`, `list.page.productsAdd`, `list.page.productsEmpty` and
+  `catalog.similar.titleFor`, `.change` and `.changeLabel`, and the view models
+  `LineProductSource`, `LineProductCounterVm` and `LineProductsFullVm`.
+
+### What a save does to a line that follows a group (section 6)
+
+Checked on Luna slot 2 on 2026-10-16, over the gateway, with the write the page sends. A
+line follows the group "Plant drinks 0146" and holds its two members, oat and soy, both
+the group's. The person keeps oat, takes soy off and ticks rice, and Save sends
+`{ itemIds: [oat, rice] }`:
+
+|        | `productGroupId` | `itemIds` | `groupItemIds` |
+| ------ | ---------------- | --------- | -------------- |
+| Before | the group        | oat, soy  | oat, soy       |
+| After  | the group        | oat, rice | oat            |
+
+The line still follows the group. Oat stays the group's, soy is gone, and rice is the
+person's own: the owner's option A, as decided.

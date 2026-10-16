@@ -227,7 +227,7 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
     SearchIcon,
   ],
   providers: [CatalogContext],
-  host: { '(keydown.escape)': 'onEscape($event)' },
+  host: { '(document:keydown.escape)': 'onEscape($event)' },
   templateUrl: './catalog-page.html',
   styleUrl: './catalog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -836,13 +836,20 @@ export class CatalogPage {
     void this._pages.backTo(request.returnDepth, request.returnUrl);
   }
 
-  /** Escape on the catalog that chooses, unless the field or a menu takes it. */
+  /**
+   * Escape on the catalog that chooses, wherever the focus is, unless something
+   * on the page takes it first: the field clears itself, and the order menu and
+   * the question close themselves.
+   */
   protected onEscape(event: Event): void {
     const target = event.target as Element | null;
     if (
       this.pickKind === null ||
       this.asking() ||
-      target?.closest('input, lib-order-menu') != null
+      event.defaultPrevented ||
+      target?.closest?.(
+        'input, textarea, lib-order-menu, .cdk-overlay-container, [aria-modal="true"]'
+      ) != null
     ) {
       return;
     }
