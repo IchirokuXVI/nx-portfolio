@@ -963,17 +963,19 @@ None were made. The admin app was served on 42006, but the scenarios needed no c
 ## Infrastructure changes
 
 - Five volumes `luna-slot2_*` (auth, core, catalog and harvester databases, and NATS data) were created as copies of slot 1's volumes.
-- Backend slot 2 is claimed by this worktree and runs on those copies (gateway 43100, realtime 43101, Mailpit 43141). Migrations ran on the copies only.
-- Front end slot 1 serves velista (42005) and luna-shopper-admin (42006) against backend slot 2.
+- Backend slot 2 ran on those copies during the test (gateway 43100, realtime 43101, Mailpit 43141). Migrations ran on the copies only.
+- Front end slot 1 served velista (42005) and luna-shopper-admin (42006) against backend slot 2.
+- After the run, backend slot 2 was stopped with `--down --keep-data`. Its databases, and so all the test data, are kept, and the slot is locked. Front end slot 1 was given back with `--down`.
 - Slot 1's own volumes were only read. They stay locked.
 - Slot 0 was not touched.
 
-Cleanup, from the worktree `D:\Projects\nx-portfolio\.claude\worktrees\velista-e2e-slot1-report`:
+To look at the data again, bring slot 2 back (it takes the kept databases): `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 2`, then `tools/dev/ng-slot.sh --up --apps velista,luna-shopper-admin --backend-slot 2`.
+
+To delete everything, release the lock and remove the volumes:
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down 2
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock 2
 docker volume ls --filter name=luna-slot2_   # then remove each luna-slot2_* volume
-tools/dev/ng-slot.sh --down
 ```
 
 ## Test users and data left in place
