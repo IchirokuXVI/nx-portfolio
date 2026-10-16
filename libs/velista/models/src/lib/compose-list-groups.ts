@@ -208,7 +208,12 @@ export function composeListGroups<T extends ListViewLine>(
     const held = input.rowsOf(key);
 
     if (held === undefined) {
-      trips.push({ key, trip, open: input.openKeys.has(key), rows: null });
+      // Under a category a trip is drawn only once its rows show it holds a line in
+      // it: drawn before, a trip with none would sit there until somebody opened it
+      // and then vanish. The page asks for every trip's rows while a category is on.
+      if (category === null) {
+        trips.push({ key, trip, open: input.openKeys.has(key), rows: null });
+      }
       continue;
     }
 

@@ -339,6 +339,32 @@ describe('composeListGroups (velista 0088)', () => {
         'cheese',
       ]);
     });
+
+    it('draws no trip under a category until its rows show a line in it', () => {
+      const dairy = trip('b-dairy');
+      const unread = trip('b-unread');
+      const lines: Seed[] = [
+        { id: 'cheese', category: 'milk', quantity: 0, boughtCount: 1 },
+      ];
+      const options = {
+        past: [dairy, unread],
+        rows: { [tripKey(dairy)]: [tripRow('cheese')] },
+      };
+
+      const filtered = groups(
+        compose(lines, {
+          ...options,
+          state: { view: 'category', category: 'milk' },
+        })
+      );
+      const unfiltered = groups(compose(lines, options));
+
+      expect(filtered.trips.map((group) => group.trip.id)).toEqual(['b-dairy']);
+      expect(unfiltered.trips.map((group) => group.trip.id)).toEqual([
+        'b-dairy',
+        'b-unread',
+      ]);
+    });
   });
 
   describe('reorder mode (test 12)', () => {
