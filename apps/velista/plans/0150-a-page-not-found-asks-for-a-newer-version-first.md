@@ -1,3 +1,5 @@
+> **PR:** [#741](https://github.com/IchirokuXVI/nx-portfolio/pull/741)
+
 # 0150: a page not found asks for a newer version first
 
 > Asked for by the owner on 2026-10-16, after the question of what a 0.13.x install does with
