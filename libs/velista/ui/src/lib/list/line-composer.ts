@@ -584,6 +584,15 @@ export class LineComposer {
   }
 
   /**
+   * Put words back in the field without taking focus or saying so: the page is
+   * coming back to a search it already holds (`PageReturn`), and a focused field
+   * would raise the phone's keyboard over the rows somebody came back to.
+   */
+  fill(content: string): void {
+    this.content.set(content);
+  }
+
+  /**
    * Empty the field and say so, without taking focus (velista `0117`): the page
    * calls it when the phone's back button closed the search the words opened.
    */

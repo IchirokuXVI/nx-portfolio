@@ -52,9 +52,13 @@ import type {
   CategoryNode,
   ErrorCode,
 } from '@portfolio/velista/models';
-import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
+import {
+  DEFAULT_BASKET_VIEW_STATE,
+  SUGGEST_DEBOUNCE_MS,
+} from '@portfolio/velista/models';
 import {
   NavChrome,
+  PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -193,6 +197,8 @@ const PAGE_TREE: readonly CategoryNode[] = [
 interface Options {
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
+  /** What `PageReturn` hands back, which makes this arrival a return to the basket. */
+  readonly returned?: unknown;
   readonly live?: boolean;
   readonly revoked?: boolean;
   /** Why the reader lost the basket, for the two endings of velista `0094`. */
@@ -445,9 +451,16 @@ const navChrome = { setComposing: jest.fn() };
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
+  /** What the page kept for a return to it, and under which key. */
+  returns: { keep: jest.Mock; recall: jest.Mock };
 }> {
   TestBed.resetTestingModule();
   navChrome.setComposing.mockClear();
+
+  const returns = {
+    keep: jest.fn(),
+    recall: jest.fn(() => options.returned ?? null),
+  };
 
   const me = options.me === undefined ? participant(owner()) : options.me;
   // The device's shop (velista `0102`), read at once by this double.
@@ -534,6 +547,7 @@ async function render(options: Options = {}): Promise<{
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
       { provide: NavChrome, useValue: navChrome },
+      { provide: PageReturn, useValue: returns },
       {
         provide: Router,
         useValue: {
@@ -762,7 +776,7 @@ async function render(options: Options = {}): Promise<{
   await Promise.resolve();
   fixture.detectChanges();
 
-  return { fixture, store };
+  return { fixture, store, returns };
 }
 
 function faces(fixture: ComponentFixture<BasketPage>): HTMLElement[] {
@@ -1935,6 +1949,64 @@ describe('searching the basket', () => {
         '/shopping-lists/basket-saturday',
         { replaceUrl: true }
       );
+    });
+
+    describe('coming back from another page', () => {
+      const RETURNED = {
+        view: { ...DEFAULT_BASKET_VIEW_STATE, order: 'alpha' },
+        words: 'milk',
+        scrollTop: 0,
+      };
+
+      it('comes back to the words and the order it was left on', async () => {
+        const { fixture, returns } = await render({
+          lines: threeLines,
+          served,
+          search: true,
+          returned: RETURNED,
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(returns.recall).toHaveBeenCalledWith('basket:basket-saturday');
+        expect(field(fixture).value).toBe('milk');
+        expect(TestBed.inject(BasketViewStore).query()).toBe('milk');
+        expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
+        // The open search entry stays: the field holds the words it stands for.
+        expect(TestBed.inject(Router).navigateByUrl).not.toHaveBeenCalled();
+      });
+
+      it('leaves the words out on an entry whose search was closed', async () => {
+        const { fixture } = await render({
+          lines: threeLines,
+          served,
+          returned: RETURNED,
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(field(fixture).value).toBe('');
+        expect(rows(fixture)).toHaveLength(3);
+        expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
+      });
+
+      it('keeps the words and the view as it is left', async () => {
+        const { fixture, returns } = await render({
+          lines: threeLines,
+          served,
+        });
+        TestBed.inject(BasketViewStore).setOrder('alpha');
+        typeInto(fixture, 'milk');
+        await at(fixture, '/shopping-lists/basket-saturday?search=1');
+
+        fixture.destroy();
+
+        expect(returns.keep).toHaveBeenCalledWith('basket:basket-saturday', {
+          view: expect.objectContaining({ order: 'alpha' }),
+          words: 'milk',
+          scrollTop: 0,
+        });
+      });
     });
 
     it('empties the field on Escape', async () => {
