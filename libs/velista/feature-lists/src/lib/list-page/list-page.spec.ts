@@ -2094,6 +2094,17 @@ describe('ListPage: the zone list grouped by trip', () => {
     expect(groups(fixture)[1].rows?.map((row) => row.lineId)).toEqual(['milk']);
   });
 
+  it('reads every trip under a category and draws none that holds no line in it', async () => {
+    const { fixture, tripCalls, view } = await grouped();
+
+    // No line carries a product, so every line is "No category" and none is in this.
+    view.pickCategory('dairy');
+    await settle(fixture);
+
+    expect(tripCalls.rows).toEqual(['b-live', 'b-past']);
+    expect(groups(fixture)).toEqual([]);
+  });
+
   it('opens the line when a trip row is tapped', async () => {
     const { fixture, router } = await grouped();
 
