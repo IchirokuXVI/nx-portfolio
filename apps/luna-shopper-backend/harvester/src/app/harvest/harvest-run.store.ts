@@ -1,14 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  HarvestRunMode,
   HarvestRunStatus,
-  type HarvestRunMode,
   type HarvestRunTrigger,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { In, LessThan, QueryFailedError, Repository } from 'typeorm';
 import { HarvestRun } from '../entities';
+import type { RunSample } from './run-estimate';
 
 const PG_UNIQUE_VIOLATION = '23505';
 
@@ -58,6 +59,33 @@ export interface RunCounters {
 }
 
 /** The only column names `addCounters` will ever write. */
+/**
+ * The durations an estimate is drawn from (plan 0206, section 8), newest first.
+ *
+ * One more than the median needs, so a run's own duration can be left out of
+ * the estimate drawn beside it and five still remain.
+ */
+export interface RecentDurations {
+  /** By preset id. */
+  byPreset: Map<string, RunSample[]>;
+  /** By `${sourceId}|${mode}`. */
+  bySourceMode: Map<string, RunSample[]>;
+}
+
+/** The key {@link RecentDurations.bySourceMode} is read with. */
+export function sourceModeKey(sourceId: string, mode: HarvestRunMode): string {
+  return `${sourceId}|${mode}`;
+}
+
+/** What an estimate and a schedule's block need of a chain's source row. */
+export interface SourceRef {
+  id: string;
+  supermarketId: string;
+  adapterKey: string;
+  enabled: boolean;
+  consecutiveFailures: number;
+}
+
 const COUNTER_COLUMNS = [
   'processed',
   'created',
@@ -106,6 +134,8 @@ export class HarvestRunStore {
     documentSha256?: string | null;
     /** The preset the run was started from (plan 0120), null for a typed one. */
     presetId?: string | null;
+    /** The schedule that started the run (plan 0206), null for every other. */
+    scheduleId?: string | null;
   }): Promise<HarvestRun> {
     try {
       return await this.runs.save(
@@ -120,6 +150,7 @@ export class HarvestRunStore {
           input: input.payload,
           documentSha256: input.documentSha256 ?? null,
           presetId: input.presetId ?? null,
+          scheduleId: input.scheduleId ?? null,
           status: HarvestRunStatus.PENDING,
           requestedAt: new Date(),
         })
@@ -223,6 +254,103 @@ export class HarvestRunStore {
         status: In([HarvestRunStatus.PENDING, HarvestRunStatus.RUNNING]),
       },
     });
+  }
+
+  /**
+   * The store discovery in flight, of any chain or of none.
+   *
+   * `uq_harvest_run_active_store_discovery` allows one active store discovery
+   * in the whole database, the runs of the postal code queue included, so this
+   * is what a store discovery of one chain can be waiting behind when its own
+   * chain has nothing in flight (plan 0206, review point 6).
+   */
+  async findActiveStoreDiscovery(): Promise<HarvestRun | null> {
+    return this.runs.findOne({
+      where: {
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        status: In([HarvestRunStatus.PENDING, HarvestRunStatus.RUNNING]),
+      },
+      order: { requestedAt: 'ASC', id: 'ASC' },
+    });
+  }
+
+  /**
+   * The newest durations of completed, unreverted runs, for a page of
+   * estimates in two queries rather than one per row (plan 0206, section 8).
+   */
+  async recentDurations(
+    presetIds: readonly string[],
+    sourceIds: readonly string[],
+    perKey: number
+  ): Promise<RecentDurations> {
+    const byPreset = new Map<string, RunSample[]>();
+    const bySourceMode = new Map<string, RunSample[]>();
+    if (presetIds.length > 0) {
+      const rows: { key: string; runId: string; seconds: number }[] =
+        await this.runs.query(
+          `SELECT k."key", k."runId", k."seconds"
+             FROM (
+               SELECT r."presetId"::text AS "key",
+                      r."id" AS "runId",
+                      EXTRACT(EPOCH FROM (r."finishedAt" - r."startedAt"))::float8 AS "seconds",
+                      row_number() OVER (
+                        PARTITION BY r."presetId"
+                        ORDER BY r."finishedAt" DESC, r."id" DESC
+                      ) AS "n"
+                 FROM "harvest_runs" AS r
+                WHERE r."presetId" = ANY($1::uuid[])
+                  AND ${FINISHED_CLEANLY}
+             ) AS k
+            WHERE k."n" <= $2
+            ORDER BY k."key", k."n"`,
+          [presetIds, perKey]
+        );
+      collect(byPreset, rows);
+    }
+    if (sourceIds.length > 0) {
+      const rows: { key: string; runId: string; seconds: number }[] =
+        await this.runs.query(
+          `SELECT k."key", k."runId", k."seconds"
+             FROM (
+               SELECT r."sourceId"::text || '|' || r."mode"::text AS "key",
+                      r."id" AS "runId",
+                      EXTRACT(EPOCH FROM (r."finishedAt" - r."startedAt"))::float8 AS "seconds",
+                      row_number() OVER (
+                        PARTITION BY r."sourceId", r."mode"
+                        ORDER BY r."finishedAt" DESC, r."id" DESC
+                      ) AS "n"
+                 FROM "harvest_runs" AS r
+                WHERE r."sourceId" = ANY($1::uuid[])
+                  AND ${FINISHED_CLEANLY}
+             ) AS k
+            WHERE k."n" <= $2
+            ORDER BY k."key", k."n"`,
+          [sourceIds, perKey]
+        );
+      collect(bySourceMode, rows);
+    }
+    return { byPreset, bySourceMode };
+  }
+
+  /**
+   * The source rows a page of estimates and blocks needs, by their id or by
+   * their chain, in one query rather than one per row.
+   */
+  async sourcesFor(
+    sourceIds: readonly string[],
+    supermarketIds: readonly string[]
+  ): Promise<SourceRef[]> {
+    if (sourceIds.length === 0 && supermarketIds.length === 0) {
+      return [];
+    }
+    return this.runs.query(
+      `SELECT s."id", s."supermarketId", s."adapterKey", s."enabled",
+              s."consecutiveFailures"
+         FROM "supermarket_sources" AS s
+        WHERE s."id" = ANY($1::uuid[])
+           OR s."supermarketId" = ANY($2::uuid[])`,
+      [sourceIds, supermarketIds]
+    );
   }
 
   async load(runId: string): Promise<HarvestRun> {
@@ -464,6 +592,23 @@ export class HarvestRunStore {
 
   repository(): Repository<HarvestRun> {
     return this.runs;
+  }
+}
+
+/** A run whose duration an estimate may count. */
+const FINISHED_CLEANLY = `r."status" = 'COMPLETED'
+                  AND r."revertedAt" IS NULL
+                  AND r."startedAt" IS NOT NULL
+                  AND r."finishedAt" IS NOT NULL`;
+
+function collect(
+  into: Map<string, RunSample[]>,
+  rows: readonly { key: string; runId: string; seconds: number }[]
+): void {
+  for (const row of rows) {
+    const samples = into.get(row.key) ?? [];
+    samples.push({ runId: row.runId, seconds: Number(row.seconds) });
+    into.set(row.key, samples);
   }
 }
 

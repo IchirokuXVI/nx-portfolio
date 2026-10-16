@@ -27,7 +27,7 @@ function row(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -72,6 +72,26 @@ describe('foldForSearch', () => {
 });
 
 describe('matchesBasketRow', () => {
+  it('finds a product row by the name of any of its lines (velista 0139)', () => {
+    const milk = row('Leche', {
+      productId: 'item-1',
+      entries: [
+        { lineId: 'a', content: 'Leche' },
+        { lineId: 'b', content: 'Leche para el café' },
+      ] as BasketRow['entries'],
+    });
+    const named = product(
+      'Semi skimmed milk',
+      'Leche semidesnatada',
+      'Hacendado'
+    );
+
+    expect(matchesBasketRow(milk, named, 'cafe', 'es')).toBe(true);
+    expect(matchesBasketRow(milk, named, 'hacendado', 'es')).toBe(true);
+    expect(matchesBasketRow(milk, named, 'semidesnatada', 'es')).toBe(true);
+    expect(matchesBasketRow(milk, named, 'pan', 'es')).toBe(false);
+  });
+
   it('folds case and accents on both sides of the comparison', () => {
     expect(matchesBasketRow(row('Plátano'), undefined, 'platano', 'en')).toBe(
       true

@@ -9,15 +9,20 @@ import type {
   BasketRow,
   BasketRowEntry,
   BasketShop,
+  CategoryNode,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   StorageKeys,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
+import { MEMORY_CATEGORIES, memoryCategory } from '../catalog/category-memory';
 import {
+  fakeCategoryStore,
   fakeShopSectionsStore,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
+  type FakeCategoryStore,
   type FakeShopSectionsStore,
 } from '../testing/store-doubles';
 import { BasketStore } from './basket-store';
@@ -55,7 +60,7 @@ function row(
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: optionId === null ? [] : [optionId],
+    productId: optionId,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -67,6 +72,14 @@ function entry(listId: string | null, lineId: string): BasketRowEntry {
   return {
     lineId,
     listId,
+    content: '',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left: 1,
     bought: 0,
     asked: 1,
@@ -74,6 +87,7 @@ function entry(listId: string | null, lineId: string): BasketRowEntry {
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
   };
 }
 
@@ -103,6 +117,30 @@ function product(
     ],
   };
 }
+
+/**
+ * The tree the harness holds by default: the memory slice, and the root the
+ * fixtures' "Not yet categorised" leaf sits under (velista `0138`).
+ */
+const TREE: readonly CategoryNode[] = [
+  ...MEMORY_CATEGORIES,
+  {
+    id: 'cat-other',
+    parentId: null,
+    slug: 'other',
+    name: { en: 'Other', es: 'Otros' },
+    position: 99,
+    itemCount: 0,
+  },
+  {
+    id: 'cat-uncategorised',
+    parentId: 'cat-other',
+    slug: 'uncategorised',
+    name: { en: 'Not yet categorised', es: 'Sin categoría' },
+    position: 0,
+    itemCount: 0,
+  },
+];
 
 const ME: BasketParticipant = {
   id: 'p-me',
@@ -134,6 +172,8 @@ interface Harness {
   /** The shop the basket was started at, which locks it, or null. */
   readonly own: WritableSignal<BasketShop | null>;
   readonly sections: FakeShopSectionsStore;
+  /** The category tree, which names the parent headings (velista `0138`). */
+  readonly categories: FakeCategoryStore;
 }
 
 function harness(
@@ -141,7 +181,9 @@ function harness(
   products: ReadonlyMap<string, BasketProduct> = new Map(),
   storage: Map<string, string> = new Map(),
   /** What a storage that will not answer looks like from above the facade (`0076`). */
-  browser: Partial<BrowserFacade> = {}
+  browser: Partial<BrowserFacade> = {},
+  /** Landed by default; `fakeCategoryStore()` is a tree not read yet. */
+  categories: FakeCategoryStore = fakeCategoryStore(TREE)
 ): Harness {
   TestBed.resetTestingModule();
 
@@ -156,6 +198,7 @@ function harness(
   TestBed.configureTestingModule({
     providers: [
       provideFakeShopSectionsStore(sections),
+      provideFakeCategoryStore(categories),
       { provide: RokuLocaleStore, useValue: { locale } },
       provideFakeBrowserFacade(storage, browser),
       {
@@ -197,6 +240,7 @@ function harness(
     readAt,
     own,
     sections,
+    categories,
   };
 }
 
@@ -1333,15 +1377,17 @@ describe('BasketViewStore: the aisles of the shop', () => {
 
   const DAIRY = {
     id: 'sec-dairy',
-    supermarketId: 'sm-mercadona',
     slug: 'dairy',
     name: { en: 'Dairy', es: 'Lácteos' },
     position: 0,
     categoryIds: [],
   };
 
-  function atTejares(): Harness {
-    const harnessed = harness(basket, products);
+  function atTejares(
+    categories: FakeCategoryStore = fakeCategoryStore(TREE),
+    grouping: 'category' | 'none' = 'category'
+  ): Harness {
+    const harnessed = harness(basket, products, new Map(), {}, categories);
     harnessed.scopes.set(
       new Map([
         [
@@ -1362,7 +1408,7 @@ describe('BasketViewStore: the aisles of the shop', () => {
         ],
       ])
     );
-    harnessed.view.setGrouping('category');
+    harnessed.view.setGrouping(grouping);
     harnessed.view.setShop('loc-tejares');
     TestBed.tick();
     return harnessed;
@@ -1378,9 +1424,10 @@ describe('BasketViewStore: the aisles of the shop', () => {
     const { view, sections } = atTejares();
 
     expect(view.sections().map((part) => part.key)).toEqual([
-      'category:cat-uncategorised',
+      'category:cat-other',
     ]);
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(false);
+    expect(view.drawnByAisle()).toBe(false);
     expect(view.chips().map((chip) => chip.key)).toContain(
       'basket.view.chip.byCategory'
     );
@@ -1391,9 +1438,80 @@ describe('BasketViewStore: the aisles of the shop', () => {
       view.sections().map((part) => [part.key, part.uncoveredBand === true])
     ).toEqual([
       ['aisle:sec-dairy', false],
-      ['category:cat-uncategorised', true],
+      ['category:cat-other', true],
     ]);
-    expect(view.byAisle()).toBe(true);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byAisle'
+    );
+  });
+
+  // Velista `0138`: the pipeline draws the rows ungrouped until the tree names the
+  // parents, so the chip waits for the tree as well as for the aisles. The radio
+  // states what the shop offers and does not wait, even for a read that failed.
+  it('says By aisle only once the tree has landed too, and keeps the radio on Aisle', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories);
+    sections.land('loc-tejares', [DAIRY]);
+
+    expect(view.sections().map((part) => part.key)).toEqual(['all']);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+    expect(view.chips().map((chip) => chip.key)).not.toContain(
+      'basket.view.chip.byAisle'
+    );
+
+    categories.fail();
+
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+
+    categories.land(TREE);
+
+    expect(view.sections().map((part) => part.key)).toEqual([
+      'aisle:sec-dairy',
+      'category:cat-other',
+    ]);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
+  });
+
+  // Under the default the tree is not even asked for, and the radio still names
+  // the aisles, so a first pick cannot change its word under the finger.
+  it('names the radio Aisle under the default grouping with the tree not read', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories, 'none');
+    sections.land('loc-tejares', [DAIRY]);
+
+    expect(view.grouping()).toBe('none');
+    expect(categories.loaded()).toBe(false);
+    expect(categories.ensured()).toBe(0);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+  });
+
+  it('keeps the radio on Aisle through a first pick of category, while the chip waits for the tree', () => {
+    const categories = fakeCategoryStore();
+    const { view, sections } = atTejares(categories, 'none');
+    sections.land('loc-tejares', [DAIRY]);
+    expect(view.shopOffersAisles()).toBe(true);
+
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+    expect(categories.loaded()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(false);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byCategory'
+    );
+
+    categories.land(TREE);
+
+    expect(view.shopOffersAisles()).toBe(true);
+    expect(view.drawnByAisle()).toBe(true);
     expect(view.chips().map((chip) => chip.key)).toContain(
       'basket.view.chip.byAisle'
     );
@@ -1406,9 +1524,155 @@ describe('BasketViewStore: the aisles of the shop', () => {
     view.setShop(null);
     TestBed.tick();
 
-    expect(view.byAisle()).toBe(false);
+    expect(view.shopOffersAisles()).toBe(false);
+    expect(view.drawnByAisle()).toBe(false);
     expect(view.sections().map((part) => part.key)).toEqual([
-      'category:cat-uncategorised',
+      'category:cat-other',
+    ]);
+  });
+});
+
+/**
+ * The headings are the parents of the products' categories (velista `0138`).
+ *
+ * The parents' names come from the tree, so the store hands the pipeline nothing to
+ * group by until the tree has landed, and asks for it only for the one view that
+ * needs it.
+ */
+describe('BasketViewStore: parent headings', () => {
+  const MILK = memoryCategory('milk');
+  const EGGS = memoryCategory('eggs');
+  const BREAD = memoryCategory('sliced-and-specialty-breads');
+
+  function categorised(
+    id: string,
+    name: string,
+    leaf: BasketProduct['categories'][number]
+  ): BasketProduct {
+    return { ...product(id, name, name), categories: [leaf] };
+  }
+
+  const products = new Map<string, BasketProduct>([
+    ['item-milk', categorised('item-milk', 'Milk', MILK)],
+    ['item-bread', categorised('item-bread', 'Bread', BREAD)],
+    ['item-eggs', categorised('item-eggs', 'Eggs', EGGS)],
+  ]);
+  const basket: readonly BasketRow[] = [
+    row('l-1', 'Milk', 'item-milk'),
+    row('l-2', 'Bread', 'item-bread'),
+    row('l-3', 'Eggs', 'item-eggs'),
+  ];
+
+  function outline(view: BasketViewStore) {
+    return view
+      .sections()
+      .map((part) => [
+        part.key,
+        part.heading?.kind === 'text' ? part.heading.text : null,
+        part.rows.map((one) => one.row.rowKey),
+      ]);
+  }
+
+  it('heads two leaves of one parent once, with the parent’s name', () => {
+    const { view } = harness(basket, products);
+    view.setGrouping('category');
+
+    expect(outline(view)).toEqual([
+      [
+        'category:cat-eggs-milk-and-butter',
+        'Eggs, milk, and butter',
+        ['l-1', 'l-3'],
+      ],
+      ['category:cat-bakery', 'Bakery', ['l-2']],
+    ]);
+  });
+
+  it('names a parent in the reader’s language', () => {
+    const { view, locale } = harness(basket, products);
+    view.setGrouping('category');
+    locale.set('es');
+
+    expect(outline(view).map(([, heading]) => heading)).toEqual([
+      'Huevos, leche y mantequilla',
+      'Panadería',
+    ]);
+  });
+
+  it('draws the rows ungrouped until the tree lands, then the parents, never a leaf', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+    expect(outline(view)).toEqual([['all', null, ['l-1', 'l-2', 'l-3']]]);
+
+    categories.land(TREE);
+
+    expect(outline(view).map(([key]) => key)).toEqual([
+      'category:cat-eggs-milk-and-butter',
+      'category:cat-bakery',
+    ]);
+  });
+
+  it('asks for the tree only when somebody groups by category', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    TestBed.tick();
+    view.setGrouping('list');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(0);
+
+    view.setGrouping('category');
+    TestBed.tick();
+
+    expect(categories.ensured()).toBe(1);
+  });
+
+  it('asks again for a tree that failed each time a basket opens, and only then', () => {
+    const categories = fakeCategoryStore();
+    const { view } = harness(basket, products, new Map(), {}, categories);
+    view.setGrouping('category');
+    TestBed.tick();
+    categories.fail();
+    TestBed.tick();
+
+    // A failure alone asks nothing: no loop.
+    expect(categories.ensured()).toBe(1);
+
+    view.restore();
+
+    expect(categories.ensured()).toBe(2);
+
+    // The read asked again is in flight, so a second open joins it.
+    view.restore();
+
+    expect(categories.ensured()).toBe(2);
+
+    // Leaving puts the grouping back to the default and the next basket's open
+    // restores it, which the effect alone might not see.
+    categories.fail();
+    view.leave();
+    view.restore();
+
+    expect(view.grouping()).toBe('category');
+    expect(categories.ensured()).toBe(3);
+  });
+
+  it('moves a row to its new parent when the rows change under it', () => {
+    const { view, rows } = harness(basket, products);
+    view.setGrouping('category');
+
+    rows.set([
+      row('l-1', 'Milk', 'item-milk'),
+      row('l-2', 'Bread', 'item-bread'),
+      row('l-3', 'Eggs', 'item-bread'),
+    ]);
+
+    expect(outline(view)).toEqual([
+      ['category:cat-eggs-milk-and-butter', 'Eggs, milk, and butter', ['l-1']],
+      ['category:cat-bakery', 'Bakery', ['l-2', 'l-3']],
     ]);
   });
 });
@@ -1552,5 +1816,83 @@ describe('BasketViewStore: the estimated total', () => {
 
     expect(harnessed.view.total().boughtCents).toBe(135);
     expect(harnessed.view.total().leftCents).toBe(210);
+  });
+});
+
+/**
+ * The shop question at the first buy of a trip (velista `0141`): the rule read
+ * against what the device holds, and what each answer keeps.
+ */
+describe('BasketViewStore: the shop question', () => {
+  const basket: readonly BasketRow[] = [
+    onLists('l-1', 'Milk', ['l-groceries']),
+  ];
+
+  const OWN_SHOP: BasketShop = {
+    id: 'loc-tejares',
+    supermarketId: 'sm-mercadona',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Ronda de los Tejares 32',
+    city: 'Córdoba',
+    postalCode: '14008',
+    inProfile: true,
+  };
+
+  afterEach(() => jest.useRealTimers());
+
+  it('asks while no shop is chosen and nothing was answered', () => {
+    expect(harness(basket).view.asksForShop()).toBe(true);
+  });
+
+  it('does not ask once a shop is chosen', () => {
+    const harnessed = harness(basket);
+    harnessed.view.setShop('loc-tejares');
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('does not ask on a basket started at a shop', () => {
+    const harnessed = harness(basket);
+    harnessed.own.set(OWN_SHOP);
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('keeps "No shop" for the trip, and asks again after it', () => {
+    jest.useFakeTimers({ now: Date.UTC(2026, 9, 15, 10, 0, 0) });
+    const harnessed = harness(basket);
+
+    harnessed.view.answerShopForTrip();
+
+    expect(harnessed.view.asksForShop()).toBe(false);
+    jest.setSystemTime(Date.UTC(2026, 9, 15, 11, 59, 0));
+    expect(harnessed.view.asksForShop()).toBe(false);
+    jest.setSystemTime(Date.UTC(2026, 9, 15, 12, 0, 0));
+    expect(harnessed.view.asksForShop()).toBe(true);
+  });
+
+  it('keeps the device flag with no end', () => {
+    jest.useFakeTimers({ now: Date.UTC(2026, 9, 15, 10, 0, 0) });
+    const harnessed = harness(basket);
+
+    harnessed.view.neverAskShop();
+
+    expect(harnessed.storage.get(StorageKeys.shopAskOff)).toBe('true');
+    jest.setSystemTime(Date.UTC(2027, 9, 15, 10, 0, 0));
+    expect(harnessed.view.asksForShop()).toBe(false);
+  });
+
+  it('keeps the trip answer beside the other properties of the record', () => {
+    const harnessed = harness(basket);
+    harnessed.view.setGrouping('category');
+
+    harnessed.view.answerShopForTrip();
+
+    const stored = JSON.parse(
+      harnessed.storage.get(StorageKeys.basketView) ?? '{}'
+    );
+    expect(stored.grouping.value).toBe('category');
+    expect(stored.shopAnswered.value).toBe(true);
   });
 });

@@ -17,6 +17,41 @@ interface VerifiedClaims {
   participantId?: string;
   aud?: string | string[];
   kind?: string;
+  act?: unknown;
+}
+
+/**
+ * The support session a token belongs to, as realtime needs it (plan 0194):
+ * which session to ask auth about, and the moment to close the connection.
+ */
+export interface SocketImpersonation {
+  sessionId: string;
+  /** The deadline of the session, in seconds since the epoch. */
+  until: number;
+}
+
+/**
+ * Reads the `act` claim of a verified token (plan 0194).
+ *
+ * Absent reads as "not a support session". A claim that is present and
+ * malformed is refused and not ignored: read as absent, it would give a
+ * connection with no deadline to a token that has one.
+ */
+export function impersonationOf(act: unknown): SocketImpersonation | undefined {
+  if (act === undefined || act === null) {
+    return undefined;
+  }
+  const claim = act as { sid?: unknown; until?: unknown };
+  if (
+    typeof act !== 'object' ||
+    typeof claim.sid !== 'string' ||
+    !claim.sid ||
+    typeof claim.until !== 'number' ||
+    !Number.isFinite(claim.until)
+  ) {
+    throw new UnauthorizedException('Malformed support session claim');
+  }
+  return { sessionId: claim.sid, until: claim.until };
 }
 
 /**
@@ -28,7 +63,12 @@ interface VerifiedClaims {
  * all** and admits its holder to exactly one basket's two rooms.
  */
 export type SocketIdentity =
-  | { kind: 'user'; userId: string }
+  | {
+      kind: 'user';
+      userId: string;
+      /** Present only for a token of a support session (plan 0194). */
+      impersonation?: SocketImpersonation;
+    }
   | {
       kind: 'participant';
       participantId: string;
@@ -102,7 +142,10 @@ export class TokenVerifierService {
     }
 
     if (claims.sub) {
-      return { kind: 'user', userId: claims.sub };
+      const impersonation = impersonationOf(claims.act);
+      return impersonation
+        ? { kind: 'user', userId: claims.sub, impersonation }
+        : { kind: 'user', userId: claims.sub };
     }
     // `aud` is required alongside the participant id rather than optional: a
     // participant token without one would be good on every basket, which is the

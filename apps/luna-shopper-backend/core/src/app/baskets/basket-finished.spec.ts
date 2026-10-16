@@ -1,3 +1,4 @@
+import { fakeLineChanges } from '../lists/changes/line-change.fake';
 import {
   BasketKind,
   BasketStatus,
@@ -211,13 +212,15 @@ function build(status: BasketStatus): Harness {
     baskets as never,
     context,
     claims.service,
-    publisher
+    publisher,
+    fakeLineChanges().recorder
   );
   const revert = new BasketRevertService(
     dataSource,
     context,
     claims.service,
-    publisher
+    publisher,
+    fakeLineChanges().recorder
   );
   const demand = new BasketDemandService(
     context,
@@ -241,6 +244,7 @@ function build(status: BasketStatus): Harness {
         basketId: BASKET,
         participantId: ACTOR,
         rowKey: ZONE_LINE,
+        lineIds: [ZONE_LINE],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 2,
@@ -250,6 +254,7 @@ function build(status: BasketStatus): Harness {
         basketId: BASKET,
         participantId: ACTOR,
         rowKey: ZONE_LINE,
+        lineIds: [ZONE_LINE],
         target: 'UNITS',
         units: 1,
         from: 1,
@@ -259,6 +264,7 @@ function build(status: BasketStatus): Harness {
         basketId: BASKET,
         participantId: ACTOR,
         rowKey: ZONE_LINE,
+        lineId: ZONE_LINE,
         quantity: 1,
         from: 2,
       }),
@@ -277,6 +283,7 @@ function build(status: BasketStatus): Harness {
         participantId: ACTOR,
         userId: OWNER,
         rowKey: ZONE_LINE,
+        lineIds: [ZONE_LINE],
         content: 'Semi skimmed milk',
       }),
   };

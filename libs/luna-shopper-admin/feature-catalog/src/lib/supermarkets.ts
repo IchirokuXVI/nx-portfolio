@@ -9,8 +9,7 @@ import {
   type RowState,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { CHAIN_SECTIONS_TAB, ChainCounts } from './chains/chain-context';
-import { ChainSectionsTab } from './chains/section-tabs';
+import { ChainCounts } from './chains/chain-context';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /** A chain, as the gateway describes it. */
@@ -53,7 +52,7 @@ const CHAIN_INFO: InfoContent = {
  *
  * **A chain is a page, and its list is the column beside that page** (admin
  * plan 0042). The section mounts it at `/chains`, a chain at
- * `/chains/{chainId}`, and its shops, sections and price scopes are tabs of
+ * `/chains/{chainId}`, and its shops and price scopes are tabs of
  * that page. So the segment is `chains` and nothing mounts this as a flat
  * list.
  *
@@ -184,16 +183,10 @@ export const SUPERMARKETS = defineResource<Supermarket>({
         by: 'supermarketId',
         count: 'locationCount',
       },
-      {
-        as: 'tab',
-        name: CHAIN_SECTIONS_TAB,
-        label: 'catalog.chains.tabs.sections',
-        component: ChainSectionsTab,
-      },
       { as: 'tab', resource: 'price-scopes', by: 'supermarketId' },
     ],
-    // No field of a chain holds either count: its sections and its price
-    // scopes are each another read.
+    // No field of a chain holds the count of its price scopes: it is
+    // another read. A chain has no sections since backend plan 0200.
     counts: () => inject(ChainCounts).of,
   },
 

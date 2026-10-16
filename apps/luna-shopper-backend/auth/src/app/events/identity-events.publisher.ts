@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   IDENTITY_EVENTS,
+  IMPERSONATION_EVENTS,
+  type ImpersonationEndedEvent,
   type UserDeletedEvent,
   type UserEmailVerifiedEvent,
   type UserRegisteredEvent,
@@ -55,5 +57,10 @@ export class IdentityEventsPublisher {
 
   userUsernameChanged(event: UserUsernameChangedEvent): void {
     this.emit(IDENTITY_EVENTS.userUsernameChanged, event);
+  }
+
+  /** A support session is over (plan 0194). Realtime drops its sockets. */
+  impersonationEnded(event: ImpersonationEndedEvent): void {
+    this.emit(IMPERSONATION_EVENTS.ended, event);
   }
 }

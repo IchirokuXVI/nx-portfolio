@@ -1,3 +1,5 @@
+@use './row-surface' as surface;
+
 // Visually hidden and still announced. `display: none` would take it out of the
 // accessibility tree entirely, which is the usual way a live region ends up silent.
 .live {
@@ -20,13 +22,18 @@
   color: var(--app-status-info-fg);
 }
 
+// Flat rows on hairlines (velista 0145, section 1): no gap between them, and one
+// hairline over the first.
 .lines {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
+
+  &:has(.line) {
+    @include surface.rows-top;
+  }
 }
 
 .line {

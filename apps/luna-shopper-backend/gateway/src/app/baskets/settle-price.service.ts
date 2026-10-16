@@ -2,10 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
+  type BasketScopePrice,
   type CatalogScopeView,
   type GetItemsRequest,
   type GetItemsResult,
-  type ItemOfferView,
+  type ItemSnapshot,
+  type ItemView,
   type SettlePick,
   type SettlementPaid,
   type ShopAvailabilityRequest,
@@ -14,7 +16,7 @@ import {
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
-import { quotedScopeOf } from './basket-shop';
+import { atShopOf, quotedScopeOf } from './basket-shop';
 
 /**
  * Everything this service is allowed to spend, in milliseconds (plan 0143,
@@ -28,7 +30,7 @@ import { quotedScopeOf } from './basket-shop';
  */
 export const SETTLE_PRICE_BUDGET_MS = 750;
 
-/** Nothing resolved, so no scope the client can name is one of the owner's. */
+/** Nothing resolved, so the owner has no scope to find a cheapest price in. */
 const NO_SCOPES: CatalogScopeView = {
   priceScopeIds: [],
   scopes: [],
@@ -39,59 +41,21 @@ const NO_SCOPES: CatalogScopeView = {
 };
 
 /**
- * How far one lookup got, read by the timeout (plan 0151, section 4).
- *
- * A mutable object rather than a value the lookup returns, because the
- * timeout answers while the lookup is still running and has to know whether
- * step 2 already passed.
- */
-interface LookupProgress {
-  scopeResolved: boolean;
-}
-
-/**
- * The product a settle's price is read for (plan 0151, sections 1 and 2).
+ * The product a settle is priced and named for (plan 0151; plan 0202).
  *
  * What the caller named, when it named one. Otherwise core's answer in `pick`,
- * which is the product core will record, so the price and the settlement name
- * the same thing. The gateway never works that answer out itself: core owns
- * the rule.
+ * which is the product core will record, so the price, the name and the
+ * settlement are about the same thing. The gateway never works that answer out
+ * itself: core owns the rule.
  *
- * **Several products and none named is refused**, and only when the caller
- * also named a scope, which is the one case a pick is asked for. A price
- * cannot be read for a product nobody named, and a settlement with a scope and
- * no product says less than the caller knows. It is a `validation_failed` on
- * `itemId` and not a code of its own: the caller fixes it by sending the field.
+ * **Several products and none named is no product, and never a refusal.** The
+ * settle then records none, so there is nothing to price. Until plan 0202 that
+ * case was refused when the caller also named a scope, on the ground that a
+ * scope says the caller saw a price for one product. No caller's scope is read
+ * any more, so nothing says that. A basket never reaches the case at all since
+ * plan 0201: its lines agree on one product or record none.
  */
 export function pricedItemId(
-  named: string | undefined,
-  pick: SettlePick | undefined
-): string | undefined {
-  if (named !== undefined) {
-    return named;
-  }
-  if (pick === undefined) {
-    return undefined;
-  }
-  if (pick.optionCount > 1) {
-    throw new ValidationException(
-      'itemId is required to settle with a priceScopeId when there are several products to choose from',
-      { messageArgs: { field: 'itemId' } }
-    );
-  }
-  return pick.pickedItemId ?? undefined;
-}
-
-/**
- * The product a list page settle that names only a shop is priced for (velista
- * `0114`).
- *
- * {@link pricedItemId} without its refusal. That refusal exists because the
- * caller named a scope, which says they saw a price for one product; a shop says
- * no such thing, and a shop is optional, so a line with several products and
- * none named records no shop rather than failing a purchase over it.
- */
-export function shopPricedItemId(
   named: string | undefined,
   pick: SettlePick | undefined
 ): string | undefined {
@@ -111,39 +75,84 @@ export interface SettlePriceInput {
   /** The profile the basket is priced with. Undefined on the list page. */
   profileId: string | undefined;
   itemId: string | undefined;
-  priceScopeId: string | undefined;
   /**
    * The settle's shop: the basket's own when it has one, else the one the
-   * client named (plan 0163, section 5). Its scope stack is added to the
-   * owner's scopes, so a shop outside the owner's profile is priced too.
+   * client named (plan 0163, section 5). A shop outside the owner's profile is
+   * priced like one inside it.
    */
   supermarketLocationId: string | undefined;
   /** Plan 0136's one condition for serving `locations` to this reader. */
   servedLocations: boolean;
 }
 
+/** What one settle records beyond what the client said (plan 0202). */
+export interface SettleChoice {
+  /** The price and where it was read, or null when nothing was chosen. */
+  paid: SettlementPaid | null;
+  /** What the product is called, or null when catalog did not say. */
+  itemSnapshot: ItemSnapshot | null;
+}
+
+/** Nothing known, which is an ordinary settle. */
+const NOTHING: SettleChoice = { paid: null, itemSnapshot: null };
+
+/** What a change of product needs priced (plan 0202, section 3). */
+export interface RewritePriceInput extends SettlePriceInput {
+  itemId: string;
+  /** The scopes the buys of the trip were priced at, as core answered them. */
+  priceScopeIds: readonly string[];
+  /** At least one of those buys recorded no scope. */
+  unscoped: boolean;
+}
+
+/** What a change of product hands core beside the product. */
+export interface RewriteChoice extends SettleChoice {
+  /** What one unit of the product costs at each scope that prices it. */
+  prices: BasketScopePrice[];
+}
+
+/** No buy to rewrite, or a catalog that did not answer. */
+const NOTHING_TO_REWRITE: RewriteChoice = { ...NOTHING, prices: [] };
+
 /**
- * What a settle cost, read by the gateway and never sent by a client (plan
- * 0143, section 4.2).
+ * What a settle cost and what its product was called, read by the gateway and
+ * never sent by a client (plan 0143, section 4.2; plan 0202, sections 1 and 2).
  *
  * ## Why the gateway reads it
  *
  * The actor at the shelf can be a guest, and a guest writing money into a
  * household's history is exactly the write plan 0130 section 5 exists to
- * refuse. So the client names a **place** and this reads the **price**, as the
- * basket's owner and at the basket's scopes, which is how the basket screen was
- * already priced (plan 0066, sections 3 to 5). "The scope is the run's and never
- * the reader's."
+ * refuse. So the client names a **shop or none**, and this chooses the
+ * **price**, as the basket's owner. "The scope is the run's and never the
+ * reader's."
  *
- * ## A price never fails a settle, and never delays one past its budget
+ * ## The price it chooses (plan 0202, section 2)
  *
- * Every way of not knowing a price ends in nulls and a settlement that was
- * written. There is no branch here that throws, no branch that returns a
- * rejected promise, and no path that can outlast {@link
- * SETTLE_PRICE_BUDGET_MS}. A refusal is answered with **null** and never with
- * an error, for one reason worth stating: the profile can have changed between
- * the read that drew the screen and the tap, and the shopper can neither see
- * that nor fix it.
+ * - **With a shop**: the price at the quoted scope of that shop, which is the
+ *   price the basket shows there. The settle records that scope, the shop and
+ *   its chain. A shop that has no price for the product records nothing, as
+ *   before that plan: a shop is never stored without the scope a price was read
+ *   at.
+ * - **With no shop**: the cheapest offer across the owner's resolved scopes.
+ *   The settle records that price and its scope, and **no shop and no chain**.
+ *   The scope of the cheapest price is not where the person stood.
+ *
+ * Until plan 0202 the client sent the scope of the price it had drawn, and a
+ * client that drew none recorded none. The scope a client sends is no longer
+ * read.
+ *
+ * ## The name
+ *
+ * The same catalog read answers what the product is called. It is handed to
+ * core beside the price, and it is there also when the product has no price
+ * anywhere.
+ *
+ * ## It never fails a settle, and never delays one past its budget
+ *
+ * Every way of not knowing ends in nulls and a settlement that was written. No
+ * read here throws or returns a rejected promise, and no path can outlast
+ * {@link SETTLE_PRICE_BUDGET_MS}. The one refusal is {@link refuseUnknownItem},
+ * which is about the product and not its price.
  *
  * Slowness is logged at `debug` and never at `warn`. A slow catalog is
  * catalog's alarm to raise, and a settle that quietly recorded no price is
@@ -159,169 +168,249 @@ export class SettlePriceService {
   ) {}
 
   /**
-   * The four values a settle records, or null when it records nothing.
+   * The price and the name one settle records.
    *
-   * Null is an ordinary settle. It is the answer for a client that showed no
-   * price, for a scope the owner's profile does not resolve to, and for a
-   * catalog that could not be reached before step 2 finished.
+   * With no product there is nothing to price and nothing to name, so catalog
+   * is not asked: that is a free text line, and a line with several products
+   * of which the caller named none.
    */
-  async read(input: SettlePriceInput): Promise<SettlementPaid | null> {
-    const { priceScopeId } = input;
-    // Nothing is recorded, and catalog is never asked. A client that drew no
-    // price has nothing to tell us about where it came from.
-    if (!priceScopeId) {
-      return null;
+  async choose(input: SettlePriceInput): Promise<SettleChoice> {
+    const { itemId } = input;
+    if (!itemId) {
+      return NOTHING;
     }
-
-    const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
-    const progress: LookupProgress = { scopeResolved: false };
-    try {
-      return await timer.race(
-        this.lookup(input, priceScopeId, progress),
-        () => {
-          this.log.debug(
-            `Settle price lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
-          );
-          // The scope alone, and only once step 2 has said it is one of the
-          // owner's (plan 0151, section 4; plan 0143 section 4.2 step 5). A
-          // slow catalog then costs the amount and not the place. Before
-          // that, the scope is only what the client said, and a scope nobody
-          // checked is not written into a household's history. The lookup
-          // that lost the race is left to finish and its result is dropped.
-          return progress.scopeResolved
-            ? {
-                priceScopeId,
-                supermarketLocationId: null,
-                supermarketId: null,
-                pricePaidCents: null,
-                pricePaidCurrency: null,
-              }
-            : null;
-        }
-      );
-    } finally {
-      timer.stop();
-    }
-  }
-
-  /**
-   * The four values a settle records when the client named a shop and no scope
-   * (velista `0114`), or null when it records nothing.
-   *
-   * The zone list's "I bought this" names where, and never a scope, because it
-   * drew no price. So the scope is worked out here, **the way the basket works
-   * out the one it shows at a shop**: the most specific scope of the shop's
-   * stack ({@link quotedScopeOf}), kept only when that scope has a price for the
-   * product. Then the price is that price, exactly as {@link read} records it.
-   *
-   * Nothing resolves for a shop catalog does not know, a product with no price
-   * there, a free text line, or a catalog slower than the budget, and every one
-   * of them answers null: no price and **no shop**, because the settlement may
-   * not name a shop without a scope, and a purchase never fails over a shop.
-   * Each is logged at `debug`, for {@link read}'s reason.
-   */
-  async readAtShop(
-    input: Omit<SettlePriceInput, 'priceScopeId'>
-  ): Promise<SettlementPaid | null> {
-    if (!input.supermarketLocationId || !input.servedLocations) {
-      return null;
-    }
-    if (!input.itemId) {
-      // A free text line, or several products and none named: there is no
-      // product to find a price for, so there is no scope to record either.
-      this.log.debug('Settle shop not recorded: no product to price');
-      return null;
-    }
-
     const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
     try {
-      return await timer.race(this.lookupAtShop(input), () => {
+      return await timer.race(this.lookup({ ...input, itemId }), () => {
         this.log.debug(
-          `Settle shop lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+          `Settle price lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
         );
-        return null;
+        // The lookup that lost the race is left to finish and its result is
+        // dropped. The buy is written with no price and no name.
+        return NOTHING;
       });
     } finally {
       timer.stop();
     }
   }
 
-  /** {@link readAtShop}'s lookup, under its budget. */
-  private async lookupAtShop(
-    input: Omit<SettlePriceInput, 'priceScopeId'>
-  ): Promise<SettlementPaid | null> {
-    const shop = await this.shopOf({ ...input, priceScopeId: undefined });
-    const quoted = shop === null ? null : quotedScopeOf(shop);
-    if (shop === null || quoted === null) {
-      this.log.debug('Settle shop not recorded: catalog named no scope for it');
-      return null;
+  /**
+   * What a change of product records on the buys it rewrites (plan 0202,
+   * section 3).
+   *
+   * A rewritten buy keeps the place of the buy it replaces, so the product is
+   * priced at each scope those buys recorded: one catalog read for all of
+   * them. A buy that recorded no scope is priced as a settle is, by
+   * {@link choose}'s own rule, at the basket's shop or at the cheapest.
+   *
+   * With no buy to rewrite catalog is not asked. One budget covers everything,
+   * and a catalog that does not answer inside it rewrites the buys with no
+   * price and no name: the product of a buy is still corrected.
+   */
+  async chooseForRewrite(input: RewritePriceInput): Promise<RewriteChoice> {
+    const scopes = [...new Set(input.priceScopeIds)];
+    if (scopes.length === 0 && !input.unscoped) {
+      return NOTHING_TO_REWRITE;
     }
+    const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
+    try {
+      return await timer.race(this.lookupForRewrite(input, scopes), () => {
+        this.log.debug(
+          `Rewrite price lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+        );
+        return NOTHING_TO_REWRITE;
+      });
+    } finally {
+      timer.stop();
+    }
+  }
 
-    const offer = await this.offerOf(input.itemId, quoted);
-    if (!offer || offer.price === null || offer.currency === null) {
-      this.log.debug(
-        'Settle shop not recorded: no price for the product at its scope'
+  /**
+   * Refuse a settle whose `itemId` catalog does not know (plan 0201, section
+   * 4, and point 3 of its review).
+   *
+   * The product of a settle can be one that is on none of its lines, so core
+   * cannot check the id, and catalog is the one service that can. This is the
+   * one method here that throws, and it throws for one answer alone:
+   * **catalog answered, and the product is not in the answer.** That is a
+   * `validation_failed` on `itemId`.
+   *
+   * A catalog that fails, or that does not answer inside {@link
+   * SETTLE_PRICE_BUDGET_MS}, refuses nothing and the settle proceeds. Unknown
+   * and slow must not look the same: somebody at a shelf with a slow catalog
+   * still bought the thing.
+   *
+   * The change of product of plan 0202 asks the same question of its `itemId`,
+   * with the same answer.
+   *
+   * No scopes are asked for, so catalog reads no price for it.
+   */
+  async refuseUnknownItem(itemId: string): Promise<void> {
+    const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
+    let known: boolean | null;
+    try {
+      known = await timer.race(this.knows(itemId), () => {
+        this.log.debug(
+          `Settle product check gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+        );
+        return null;
+      });
+    } finally {
+      timer.stop();
+    }
+    if (known === false) {
+      throw new ValidationException('itemId names no product', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+  }
+
+  /** Whether catalog names this product, or null when it could not say. */
+  private async knows(itemId: string): Promise<boolean | null> {
+    const req: GetItemsRequest = { ids: [itemId] };
+    try {
+      const found = await this.nats.send<GetItemsResult>(
+        ITEM_PATTERNS.getMany,
+        req
       );
+      return found.items.some((item) => item.id === itemId);
+    } catch {
       return null;
     }
+  }
 
+  /** {@link choose}'s lookup, under its budget. */
+  private lookup(
+    input: SettlePriceInput & { itemId: string }
+  ): Promise<SettleChoice> {
+    return input.supermarketLocationId
+      ? this.lookupAtShop(input)
+      : this.lookupCheapest(input);
+  }
+
+  /**
+   * A buy at a shop: the price the basket shows there.
+   *
+   * The shop is read first, because its quoted scope is what the product is
+   * priced at. {@link atShopOf} is the rule of the basket read, so the price a
+   * settle records is the price the row drew.
+   *
+   * A shop catalog cannot name, a reader who is not served shops, and a shop
+   * that has no price for the product all record **no price and no shop**.
+   * The cheapest price of the owner's scopes is not used in its place: it is
+   * not the price of that shop (plan 0201, decision 21, for the same reason).
+   * The name of the product is still read.
+   */
+  private async lookupAtShop(
+    input: SettlePriceInput & { itemId: string }
+  ): Promise<SettleChoice> {
+    const shop = await this.shopOf(input);
+    const quoted = shop === null ? null : quotedScopeOf(shop);
+    const product = await this.productAt(
+      input.itemId,
+      quoted === null ? [] : [quoted],
+      'all'
+    );
+    if (!product) {
+      return NOTHING;
+    }
+    const itemSnapshot = snapshotOf(product);
+    const at = shop === null ? null : atShopOf(product, shop);
+    if (
+      shop === null ||
+      at === null ||
+      at.priceScopeId === null ||
+      at.price === null ||
+      at.currency === null
+    ) {
+      this.log.debug('Settle shop not recorded: no price for the product there');
+      return { paid: null, itemSnapshot };
+    }
     return {
-      priceScopeId: quoted,
-      supermarketLocationId: shop.location.id,
-      supermarketId: shop.supermarket.id,
-      pricePaidCents: Math.round(offer.price * 100),
-      pricePaidCurrency: offer.currency,
+      paid: {
+        priceScopeId: at.priceScopeId,
+        supermarketLocationId: shop.location.id,
+        supermarketId: shop.supermarket.id,
+        // Catalog holds the price in currency units with two decimals
+        // (`numeric(12,2)`), and this column is the minor unit.
+        pricePaidCents: Math.round(at.price * 100),
+        pricePaidCurrency: at.currency,
+      },
+      itemSnapshot,
     };
   }
 
-  /** Steps 2 to 4, which share the one budget above. */
-  private async lookup(
-    input: SettlePriceInput,
-    priceScopeId: string,
-    progress: LookupProgress
-  ): Promise<SettlementPaid | null> {
-    // Step 2. The cached pair of round trips the basket read already made a
-    // moment ago, and beside it the settle's shop with its scope stack (plan
-    // 0163, section 5): the resolution is the owner's scopes **plus** that
-    // stack, so a shop outside the owner's profile is priced like one inside
-    // it. A scope outside both is refused by answering null rather than by an
-    // error.
-    //
-    // The shop is asked first and awaited second, so the two round trips
-    // overlap, and a scope the owner's resolution names counts as resolved the
-    // moment that answer lands, as it did before there was a shop to wait for.
-    const shopping = this.shopOf(input);
+  /**
+   * A buy with no shop: the cheapest offer across the owner's scopes (plan
+   * 0202, section 2).
+   *
+   * `offers: 'best'` is catalog's own answer to "the cheapest across these
+   * scopes", so no price is compared here. **A `stale` offer is recorded**: it
+   * is the number the screen showed, and the column records what was paid as
+   * far as anybody knew at the shelf.
+   *
+   * The shop and the chain are null. A buy with no shop names no place, so it
+   * counts for no chain in "usual" (plan 0165).
+   */
+  private async lookupCheapest(
+    input: SettlePriceInput & { itemId: string }
+  ): Promise<SettleChoice> {
     const resolved = await this.resolvedScopes(input);
-    if (resolved.priceScopeIds.includes(priceScopeId)) {
-      progress.scopeResolved = true;
+    const product = await this.productAt(
+      input.itemId,
+      resolved.priceScopeIds,
+      'best'
+    );
+    if (!product) {
+      return NOTHING;
     }
-    const shop = await shopping;
-    const stack = shop?.location.priceScopeIds ?? [];
-    if (!progress.scopeResolved && !stack.includes(priceScopeId)) {
-      return null;
-    }
-    progress.scopeResolved = true;
-
-    // Step 3. The shop was read beside the resolution, so only the price is
-    // left, and step 4 is a question about what is already in hand.
-    const offer = await this.offerOf(input.itemId, priceScopeId);
-    const at = this.shopIn(shop, priceScopeId);
-
-    const priced =
-      offer && offer.price !== null && offer.currency !== null
-        ? {
-            // Catalog holds the price in currency units with two decimals
-            // (`numeric(12,2)`), and this column is the minor unit.
-            pricePaidCents: Math.round(offer.price * 100),
-            pricePaidCurrency: offer.currency,
-          }
-        : { pricePaidCents: null, pricePaidCurrency: null };
-
+    const best = product.bestOffer ?? null;
     return {
-      priceScopeId,
-      supermarketLocationId: at?.location.id ?? null,
-      supermarketId: at?.supermarket.id ?? null,
-      ...priced,
+      paid:
+        best && best.price !== null && best.currency !== null
+          ? {
+              priceScopeId: best.priceScopeId,
+              supermarketLocationId: null,
+              supermarketId: null,
+              pricePaidCents: Math.round(best.price * 100),
+              pricePaidCurrency: best.currency,
+            }
+          : null,
+      itemSnapshot: snapshotOf(product),
+    };
+  }
+
+  /** {@link chooseForRewrite}'s lookup, under its budget. */
+  private async lookupForRewrite(
+    input: RewritePriceInput,
+    scopes: readonly string[]
+  ): Promise<RewriteChoice> {
+    // Beside each other, because neither needs the other.
+    const [product, unscoped] = await Promise.all([
+      scopes.length > 0 ? this.productAt(input.itemId, scopes, 'all') : null,
+      input.unscoped ? this.lookup(input) : null,
+    ]);
+    const asked = new Set(scopes);
+    const prices: BasketScopePrice[] = [];
+    for (const offer of product?.offers ?? []) {
+      if (
+        asked.has(offer.priceScopeId) &&
+        offer.price !== null &&
+        offer.currency !== null
+      ) {
+        prices.push({
+          priceScopeId: offer.priceScopeId,
+          pricePaidCents: Math.round(offer.price * 100),
+          pricePaidCurrency: offer.currency,
+        });
+      }
+    }
+    return {
+      prices,
+      paid: unscoped?.paid ?? null,
+      itemSnapshot: product
+        ? snapshotOf(product)
+        : (unscoped?.itemSnapshot ?? null),
     };
   }
 
@@ -341,48 +430,35 @@ export class SettlePriceService {
       });
     } catch {
       // A profile emptied or deleted since, or a catalog that did not answer.
-      // No scope resolves, so nothing is recorded.
+      // No scope resolves, so no price is found and the name still is.
       return NO_SCOPES;
     }
   }
 
   /**
-   * One product's price at one scope (step 3).
+   * One product, priced at these scopes, or null when catalog does not answer
+   * or does not know it.
    *
-   * **A `stale` offer is recorded.** It is the number the screen showed, which
-   * is the whole definition of the column: this records what was paid as far as
-   * anybody knew at the shelf, not what the newest crawl says.
-   *
-   * No `itemId` here is a free text line: the caller named none and core, asked
-   * through {@link pricedItemId}, picked none either. Catalog is not asked, the
-   * scope is kept, and the price is null: something was bought and the record
-   * does not claim to know what it cost.
+   * With no scope the product is read with no price: the read is then for its
+   * name alone.
    */
-  private async offerOf(
-    itemId: string | undefined,
-    priceScopeId: string
-  ): Promise<ItemOfferView | null> {
-    if (!itemId) {
-      return null;
-    }
+  private async productAt(
+    itemId: string,
+    priceScopeIds: readonly string[],
+    offers: 'best' | 'all'
+  ): Promise<ItemView | null> {
     const req: GetItemsRequest = {
       ids: [itemId],
-      priceScopeIds: [priceScopeId],
-      // Every scope's offer rather than the cheapest of them (plan 0109): one
-      // scope was asked for, so this is that scope's own price and not a price
-      // some other warehouse happened to beat it with.
-      offers: 'all',
+      ...(priceScopeIds.length > 0
+        ? { priceScopeIds: [...priceScopeIds], offers }
+        : {}),
     };
     try {
       const found = await this.nats.send<GetItemsResult>(
         ITEM_PATTERNS.getMany,
         req
       );
-      const product = found.items.find((item) => item.id === itemId);
-      return (
-        product?.offers?.find((offer) => offer.priceScopeId === priceScopeId) ??
-        null
-      );
+      return found.items.find((item) => item.id === itemId) ?? null;
     } catch {
       return null;
     }
@@ -417,24 +493,23 @@ export class SettlePriceService {
       return null;
     }
   }
+}
 
-  /**
-   * The shop, confirmed to belong to the scope (step 4).
-   *
-   * The shop is kept when the scope is one of its stack, which is the whole of
-   * what "this shop sells at this scope" means (plan 0105, section 3). A shop
-   * outside the scope is a client that named two places, which is refused
-   * quietly for the reason step 2 gives, and the price still stands. The chain
-   * comes with it, because it is the shop's (plan 0163, section 5).
-   */
-  private shopIn(
-    shop: ShopAvailabilityView | null,
-    priceScopeId: string
-  ): ShopAvailabilityView | null {
-    return shop && shop.location.priceScopeIds.includes(priceScopeId)
-      ? shop
-      : null;
-  }
+/**
+ * What a product is called, as a buy copies it (plan 0202, section 1).
+ *
+ * Five fields of the view, under the names the view uses, and the whole
+ * localized name: a buy has no reader yet, and whoever reads the history later
+ * chooses the locale. Nothing else of the product is copied.
+ */
+export function snapshotOf(product: ItemView): ItemSnapshot {
+  return {
+    name: { ...product.name },
+    brand: product.brand ?? null,
+    unitSize: product.unitSize ?? null,
+    packCount: product.packCount ?? null,
+    defaultUnit: product.defaultUnit,
+  };
 }
 
 /**

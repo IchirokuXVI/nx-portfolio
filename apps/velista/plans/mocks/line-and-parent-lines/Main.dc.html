@@ -72,15 +72,21 @@ body{margin:0}
 .par{margin-top:16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .rail{display:flex;gap:12px;padding:0 16px;overflow-x:auto;scrollbar-width:none}
 .rail li{display:flex}
-.pc{display:block;width:156px;flex:none;padding:12px}
+.pc{position:relative;width:156px;flex:none}
+.pc .open{display:flex;flex-direction:column;justify-content:flex-start;width:100%;height:100%;padding:12px}
+.fav{position:absolute;top:8px;right:8px;width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:var(--strong)}
+.fav.on{color:var(--amber-fg)}
 .img{display:grid;place-items:center;height:96px;border-radius:12px;background:var(--sunken);color:var(--strong)}
 .pc .nm{font-size:14px;line-height:1.3;min-height:36px;margin-top:12px}
 .price{display:block;font-size:18px;font-weight:650;line-height:1.2;font-variant-numeric:tabular-nums;margin-top:12px}
 .chain{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .gap{margin-top:28px}
+.h2.hi{align-items:center;margin-bottom:4px}
+.h2 .ht{display:flex;align-items:center;font-size:16px;font-weight:650;color:var(--text)}
+.h2 .ht .ib{color:var(--text2)}
 </style>
 </helmet>
-<div class="app" style="height: 918px">
+<div class="app" style="height: 975px">
 <header class="ph">
 <button class="ib" type="button" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
 <h1>Shampoo</h1>
@@ -106,35 +112,45 @@ body{margin:0}
 </div>
 
 <section>
-<div class="sec"><h2 class="h2">Any of these will do <a href="Products.dc.html">Change</a></h2></div>
+<div class="sec"><h2 class="h2 hi"><span class="ht">Any of these will do<a class="ib" href="ProductsInfo.dc.html" aria-label="Which one you get when you shop"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"/><path d="M12 11v5.4" stroke-width="1.9"/><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"/></svg></a></span><a href="Products.dc.html">Change</a></h2></div>
 <ul class="rail">
-<li><button class="pc card" type="button">
+<li><div class="pc card">
+<button class="open" type="button">
+<span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
+<span class="nm">Classic care shampoo</span>
+<span class="dt">385 ml · Pantene</span>
+<span class="price">3,45 €</span>
+<span class="chain">Carrefour · 8,96 € / L</span>
+</button>
+<button class="fav on" type="button" aria-pressed="true" aria-label="Classic care shampoo is the favourite. Press to clear it"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></button>
+</div></li>
+<li><div class="pc card">
+<button class="open" type="button">
 <span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
 <span class="nm">Shampoo for normal hair</span>
 <span class="dt">400 ml · Deliplus</span>
 <span class="price">2,15 €</span>
 <span class="chain">Mercadona · 5,38 € / L</span>
 <span class="word">CHEAPEST</span>
-</button></li>
-<li><button class="pc card" type="button">
-<span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
-<span class="nm">Classic care shampoo</span>
-<span class="dt">385 ml · Pantene</span>
-<span class="price">3,45 €</span>
-<span class="chain">Carrefour · 8,96 € / L</span>
-</button></li>
-<li><button class="pc card" type="button">
+</button>
+<button class="fav" type="button" aria-pressed="false" aria-label="Make Shampoo for normal hair the favourite"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></button>
+</div></li>
+<li><div class="pc card">
+<button class="open" type="button">
 <span class="img"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg></span>
 <span class="nm">Anti dandruff shampoo</span>
 <span class="dt">360 ml · H&amp;S</span>
 <span class="price">4,95 €</span>
 <span class="chain">Carrefour · 13,75 € / L</span>
-</button></li>
+</button>
+<button class="fav" type="button" aria-pressed="false" aria-label="Make Anti dandruff shampoo the favourite"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></button>
+</div></li>
 </ul>
 </section>
 
 <div class="sec">
 <ul class="links gap">
+<li><a class="lk" href="Chain.dc.html"><span class="grow">Supermarket</span><span class="v">Any</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
 <li><a class="lk" href="History.dc.html"><span class="grow">Buy history</span><span class="v">12 times</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
 <li><button class="lk" type="button"><span class="grow">Comments</span><span class="v">3</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
 </ul>
@@ -151,7 +167,7 @@ body{margin:0}
 <div class="end"></div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":918}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":975}}'>
 class Component extends DCLogic {
 renderVals() { return {}; }
 }

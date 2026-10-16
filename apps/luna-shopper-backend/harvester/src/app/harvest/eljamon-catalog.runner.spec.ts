@@ -72,6 +72,7 @@ function productPage(
     `<li class="last"><span><a href="#">product ${code}</a></span></li></ul>` +
     '<script type="application/ld+json">{"@type": "Product", ' +
     `"name": "product ${code}", "brand": {"name": "PAGE BRAND"}, ` +
+    `"image": "https://www.supermercadoseljamon.com/documents/10180/892067/${code}_G.jpg", ` +
     `"offers": {"price": "${price}", "availability": 'InStock'}, ` +
     `"sku": "${code}"}</script>`
   );
@@ -199,6 +200,9 @@ describe('ElJamonCatalogRunner', () => {
       packCount: null,
       categoryPath: ['Frescos', 'Arroz'],
       url: `${BASE}/detalle/-/Producto/p/101`,
+      // The `image` of the product page's JSON-LD, verbatim (plan 0198).
+      imageUrl:
+        'https://www.supermercadoseljamon.com/documents/10180/892067/101_G.jpg',
       observedAt: expect.any(Date),
       extra: { previousPrice: 3.99 },
       prices: [

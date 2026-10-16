@@ -14,6 +14,8 @@ import {
   type AdminRefreshRequest,
   type AdminUserDetailView,
   type AdminUserPage,
+  type CreateAdminRecoveryLinksRequest,
+  type CreateAdminRecoveryLinksResult,
   type DeleteAdminUserRequest,
   type DeleteAdminUserResult,
   type GetAdminRequest,
@@ -24,6 +26,8 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type SendAdminPasswordResetRequest,
+  type SendAdminPasswordResetResult,
   type SetAdminUserRolesRequest,
   type SetAdminUserRolesResult,
   type UpdateAdminUserRequest,
@@ -149,5 +153,19 @@ export class AdminController {
     @Payload() req: ResendAdminVerificationRequest
   ): Promise<ResendAdminVerificationResult> {
     return this.directory.resendVerification(req);
+  }
+
+  @MessagePattern(ADMIN_USER_PATTERNS.sendPasswordReset)
+  sendPasswordReset(
+    @Payload() req: SendAdminPasswordResetRequest
+  ): Promise<SendAdminPasswordResetResult> {
+    return this.directory.sendPasswordReset(req);
+  }
+
+  @MessagePattern(ADMIN_USER_PATTERNS.createRecoveryLinks)
+  createRecoveryLinks(
+    @Payload() req: CreateAdminRecoveryLinksRequest
+  ): Promise<CreateAdminRecoveryLinksResult> {
+    return this.directory.createRecoveryLinks(req);
   }
 }

@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BASKET_CHANGE_LIMITS,
@@ -7,9 +8,10 @@ import {
   LINE_QUANTITY_MAX,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -33,7 +35,37 @@ import {
  * drew the control. A gesture whose meaning depends on where it started must be
  * refused rather than reinterpreted when somebody else moved it, which is why
  * `from` is **required** on three of the four and never optional.
+ *
+ * Every write on a row also carries `lineIds` (plan 0201, section 4). A row is
+ * recomputed on every read, and two reads at two shops can group the same
+ * lines differently, so the write names the lines it means and core acts on
+ * those and no others. The `rowKey` of the path must be one of them.
  */
+
+/**
+ * The lines a write on a row acts on (plan 0201, section 4).
+ *
+ * One stack of decorators for the five places that take it, so the bounds
+ * cannot differ between them: 1 to `BASKET_LIMITS.maxWriteLines` ids, each a
+ * uuid, none twice.
+ */
+function LineIds(description: string): PropertyDecorator {
+  return applyDecorators(
+    ApiProperty({
+      type: [String],
+      format: 'uuid',
+      minItems: 1,
+      maxItems: BASKET_LIMITS.maxWriteLines,
+      uniqueItems: true,
+      description,
+    }),
+    IsArray(),
+    ArrayMinSize(1),
+    ArrayMaxSize(BASKET_LIMITS.maxWriteLines),
+    ArrayUnique(),
+    IsUUID('all', { each: true })
+  );
+}
 
 /** One entry's share of a settle, when the caller allocates by hand. */
 export class BasketAllocationDto {
@@ -49,6 +81,11 @@ export class BasketAllocationDto {
 }
 
 export class SettleBasketRowDto {
+  @LineIds(
+    'The list lines this settle acts on: the entries of the row as you drew it. The `rowKey` of the path must be one of them. A line the basket does not cover, or on a list you were not served, answers 404.'
+  )
+  lineIds!: string[];
+
   @ApiProperty({ enum: SettlementOutcome, enumName: 'SettlementOutcome' })
   @IsIn(Object.values(SettlementOutcome))
   outcome!: SettlementOutcome;
@@ -69,7 +106,7 @@ export class SettleBasketRowDto {
     minimum: 0,
     maximum: LINE_QUANTITY_MAX,
     description:
-      'The row’s `left` as you drew it. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap.',
+      'The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap.',
   })
   @IsInt()
   @Min(0)
@@ -79,7 +116,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`. Left out, a row with one option records that option, and its price is read for it. Required with `priceScopeId` on a row with several options: without it the settle answers 400 `validation_failed` on `itemId`.',
+      'The product of the row as you drew it: its `productId`, or another product chosen for this trip only, which does not have to be a product of any of the lines. An id the catalog does not know answers 400 `validation_failed` on `itemId`. Left out, the settle records the product the named lines count as when they agree on one, and none otherwise. Leave it out for lines that hold no product.',
   })
   @IsOptional()
   @IsUUID()
@@ -87,8 +124,9 @@ export class SettleBasketRowDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
+    deprecated: true,
     description:
-      'The price scope the row’s price was read at on your screen: the scope of the shop you picked, or of the offer the screen showed. There is no field for an amount, and there will not be: the gateway reads the price itself, as the basket’s owner.',
+      'No longer read (plan 0202). The gateway chooses the price itself, as the basket’s owner: at the shop of the settle, or the cheapest across the owner’s areas when the settle has no shop. The field is accepted for one release, so a client that still sends it is not refused.',
   })
   @IsOptional()
   @IsUUID()
@@ -97,7 +135,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in "any shop" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`.',
+      'The one shop you are standing in, when you chose one. The buy is priced at that shop, also when it is outside the basket owner’s areas, and records the shop with its chain. A shop that has no price for the product records no price and no shop. Leave it out in "any shop" mode: the buy then records the cheapest price across the owner’s areas, with no shop and no chain. On a basket started at a shop, that shop is the shop of every settle, and a different one answers 409 `basket_shop_locked`.',
   })
   @IsOptional()
   @IsUUID()
@@ -106,7 +144,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     type: [BasketAllocationDto],
     description:
-      'Which household got what. Derived oldest first when absent. Every `lineId` must belong to a list you were served a ref for.',
+      'Which household got what. Derived oldest first when absent. Every `lineId` must be one of `lineIds`.',
   })
   @IsOptional()
   @IsArray()
@@ -125,6 +163,11 @@ export class SettleBasketRowDto {
  * and the service refuses them on the other branch.
  */
 export class RevertBasketRowDto {
+  @LineIds(
+    'The list lines this revert acts on. The `rowKey` of the path must be one of them.'
+  )
+  lineIds!: string[];
+
   @ApiProperty({
     enum: ['UNITS', 'CLOSE'],
     description:
@@ -143,7 +186,8 @@ export class RevertBasketRowDto {
   @ApiPropertyOptional({
     minimum: 0,
     maximum: LINE_QUANTITY_MAX,
-    description: 'The row’s `bought` as you drew it. Required for UNITS.',
+    description:
+      'The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS.',
   })
   @IsOptional()
   @IsInt()
@@ -153,14 +197,13 @@ export class RevertBasketRowDto {
 }
 
 export class SetBasketRowDemandDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     format: 'uuid',
     description:
-      'Which household’s ask to move. Required when the row holds more than one entry, since a row of two households asks two different questions.',
+      'The list line whose ask to move, always. It is the `rowKey` of the path. It can be a line at zero on a covered list, which is how a list that holds a product at zero asks for it again.',
   })
-  @IsOptional()
   @IsUUID()
-  lineId?: string;
+  lineId!: string;
 
   @ApiProperty({
     minimum: 0,
@@ -222,9 +265,87 @@ export class AddBasketLineDto {
   @ArrayMaxSize(BASKET_LIMITS.maxOptions)
   @IsUUID('4', { each: true })
   itemIds?: string[];
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product.',
+  })
+  // As on the list's own add: only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
+}
+
+/**
+ * Change the product of basket lines (plan 0202, section 3).
+ *
+ * The body has no field for a price or a name. The gateway reads both, as it
+ * does for a settle.
+ */
+export class ChangeBasketLinesProductDto {
+  @LineIds(
+    'The list lines whose product changes: the entries of the row as you drew it. A line the basket does not cover answers 404 for the whole request, and nothing is written.'
+  )
+  lineIds!: string[];
+
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The product the lines change to. It does not have to be a product of any of them. An id the catalog does not know answers 400 `validation_failed` on `itemId`.',
+  })
+  @IsUUID()
+  itemId!: string;
+
+  @ApiProperty({
+    description:
+      'True keeps the change: the product joins the products of each line and becomes its favourite, which needs the right to edit each line, and one line that fails that answers 403 with nothing written. False holds it for this trip only: the buys of this trip are rewritten and no line is. With false and no buy in this trip nothing is written, and the answer is the lines as they are.',
+  })
+  @IsBoolean()
+  keep!: boolean;
+}
+
+/**
+ * Put the named lines of a row off for now (plan 0137; plan 0201, section 4).
+ *
+ * The body of the `PUT`. It carries no `from`, for the reason the contract
+ * gives: "not today" means the same whatever the row says is left.
+ */
+export class SkipBasketRowDto {
+  @LineIds(
+    'The list lines to put off. The `rowKey` of the path must be one of them.'
+  )
+  lineIds!: string[];
+}
+
+/**
+ * Take the skip back from the named lines (plan 0137; plan 0201, section 4).
+ *
+ * **A query and not a body**, because a body on a `DELETE` is not delivered
+ * reliably: proxies and HTTP clients are free to drop it. So the lines travel
+ * as one comma separated parameter, `?lineIds=a,b`. The parameter repeated
+ * (`?lineIds=a&lineIds=b`) is read the same way.
+ *
+ * The bounds are the ones of every other write on a row. A hundred ids are
+ * about 3,700 characters, which fits a URL.
+ */
+export class UnskipBasketRowQueryDto {
+  @LineIds(
+    'The list lines to take the skip back from, comma separated. The `rowKey` of the path must be one of them.'
+  )
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value
+  )
+  lineIds!: string[];
 }
 
 export class RenameBasketRowDto {
+  @LineIds(
+    'The list lines to rename, each on its own list. The `rowKey` of the path must be one of them. A line that has a product answers 400 `validation_failed`: a row with a product is named by the catalog.'
+  )
+  lineIds!: string[];
+
   @ApiProperty({
     minLength: 1,
     maxLength: BASKET_LIMITS.contentMaxLength,

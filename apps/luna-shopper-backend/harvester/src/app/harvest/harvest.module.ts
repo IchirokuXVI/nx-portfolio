@@ -21,6 +21,9 @@ import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
+import { HarvestScheduleService } from './harvest-schedule.service';
+import { HarvestScheduleStore } from './harvest-schedule.store';
+import { HarvestScheduleWorker } from './harvest-schedule.worker';
 import { HarvestController } from './harvest.controller';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
@@ -33,6 +36,7 @@ import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunExecutor } from './run-executor.service';
+import { HARVEST_CLOCK } from './schedule-slot';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntrySettler } from './source-entry-settle';
@@ -79,6 +83,10 @@ import { SupermarketSourceService } from './supermarket-source.service';
     HarvestRunStore,
     // Run requests saved under a name (plan 0120).
     HarvestRunPresetStore,
+    // A preset that starts by itself (plan 0206), and the clock its service
+    // and worker read, which a spec replaces.
+    HarvestScheduleStore,
+    { provide: HARVEST_CLOCK, useValue: () => new Date() },
     SupermarketSourceService,
     // STORE_DISCOVERY dispatches on the adapter too (plan 0089, section 9):
     // a chain that names its own shops is read from that chain, and everything
@@ -112,6 +120,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     RunExecutor,
     HarvestRunService,
     HarvestRunPresetService,
+    HarvestScheduleService,
+    HarvestScheduleWorker,
     DiscoveredPlaceService,
     // The one queue over the one table, and the three decisions about a row
     // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`

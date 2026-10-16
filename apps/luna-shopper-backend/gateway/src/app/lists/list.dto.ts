@@ -10,7 +10,7 @@ import {
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -164,6 +164,19 @@ export class AddLinesItemDto {
   @ArrayMaxSize(LINE_ITEM_SET_MAX)
   @IsUUID(undefined, { each: true })
   itemIds?: string[];
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is.',
+  })
+  // The value as the body spelled it. The pipe converts implicitly, and that
+  // conversion reads the string "false" as true, which here would name a line
+  // nobody named. Only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
 }
 
 /**
@@ -248,6 +261,18 @@ export class UpdateLineDto {
   quantity?: number;
 
   @ApiPropertyOptional({
+    minimum: LINE_QUANTITY_MIN,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(LINE_QUANTITY_MIN)
+  @Max(LINE_QUANTITY_MAX)
+  from?: number;
+
+  @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
     maxItems: LINE_ITEM_SET_CEILING,
@@ -272,6 +297,43 @@ export class UpdateLineDto {
   @ArrayMaxSize(LINE_ITEM_SET_CEILING)
   @IsUUID(undefined, { each: true })
   adoptItemIds?: string[];
+
+  /**
+   * `@IsOptional()` skips the validators for null as well as for an absent key,
+   * and leaves the null on the object. That is the whole mechanism here: null
+   * reaches core as "clear" and an absent key as "leave alone".
+   */
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The favourite product of the line (plan 0199). Null clears it, and an absent field leaves it alone. The id must be one of the products of the line as the set stands after this same update, so one request can add a product and make it the favourite; any other id answers 400 validation_failed. A product that leaves the line stops being the favourite.',
+  })
+  @IsOptional()
+  @IsUUID()
+  favoriteItemId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The supermarket chain the line is bought at (plan 0199). A chain and never a shop. Null clears it, and an absent field leaves it alone. It does not depend on the products of the line.',
+  })
+  @IsOptional()
+  @IsUUID()
+  preferredSupermarketId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether a person typed the name of the line (plan 0207). Absent beside a content, the line becomes named. Absent with no content, the flag stays as it is. False beside a content takes the name away, and the content is then the name of a product; a content that another line of the list holds still answers 409 line_merge_required. False alone changes the flag and leaves the name. A line that the update leaves with no product is named, whatever this says.',
+  })
+  // As on the add: only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['named'])
+  @IsOptional()
+  @IsBoolean()
+  named?: boolean;
 
   @ApiPropertyOptional({
     description:
@@ -320,7 +382,7 @@ export class SettleLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`.",
+      "Which of the line's products was bought. Recorded on the settlement as it was at the time, with its name, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. A line with several products and none named records no product and no price.",
   })
   @IsOptional()
   @IsUUID()
@@ -328,8 +390,9 @@ export class SettleLineDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
+    deprecated: true,
     description:
-      'The price scope the price on your screen was read at. There is no field for an amount, and there will not be: the gateway reads the price itself, at your own shops.',
+      'No longer read (plan 0202). The gateway chooses the price itself: at the shop you name, or the cheapest across your own areas when you name none. The field is accepted for one release, so a client that still sends it is not refused.',
   })
   @IsOptional()
   @IsUUID()
@@ -338,7 +401,7 @@ export class SettleLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      "The shop it was bought at. With `priceScopeId`, it is recorded when that scope is one of the shop's. Without one, the gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds.",
+      'The shop it was bought at. The gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, its chain, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds. Left out, the purchase records the cheapest price across your own areas, with no shop and no chain.',
   })
   @IsOptional()
   @IsUUID()

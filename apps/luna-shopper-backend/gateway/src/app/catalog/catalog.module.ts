@@ -11,6 +11,7 @@ import {
   AdminCatalogCategoriesController,
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
+  AdminCatalogLinkedImagesController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
   AdminCatalogPricePoliciesController,
@@ -23,6 +24,7 @@ import {
 import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogCategoriesController,
+  CatalogItemLookupController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationsController,
@@ -79,6 +81,9 @@ import {
     CatalogNearbyShopsController,
     CatalogSuggestController,
     CatalogItemsController,
+    // Plan 0207: the lookup, which also names the chains of its prices. The
+    // one POST under `catalog/items`, so the GET routes above cannot take it.
+    CatalogItemLookupController,
     CatalogSupermarketItemsController,
     CatalogLocationItemsController,
     // Plan 0073: the same resources for an operator, one namespace over and
@@ -89,11 +94,13 @@ import {
     AdminCatalogSupermarketsController,
     AdminCatalogLocationsController,
     AdminCatalogItemsController,
+    // The one stop for every chain photo (plan 0198).
+    AdminCatalogLinkedImagesController,
     AdminCatalogProductGroupsController,
     // Plan 0166: the tree's two levels, and the four rules catalog enforces.
     AdminCatalogCategoriesController,
     // Plan 0167: shop sections at their own id; created and listed under
-    // their chain, and a shop's list under its location.
+    // their shop (plan 0200).
     AdminCatalogSectionsController,
     // Plan 0115: the registry a person fills, and the keys the queue is asking
     // for. The second is composed from catalog and the harvester, which is why

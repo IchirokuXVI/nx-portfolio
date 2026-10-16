@@ -16,7 +16,8 @@ import {
 } from './catalog.controller';
 
 /**
- * Shop sections over real HTTP (plan 0167, section 4).
+ * Shop sections over real HTTP (plan 0167, section 4, as plan 0200 left it:
+ * a section is created under its shop, and a chain has no section route).
  *
  * Over HTTP rather than as handler calls because what has to be true is that a
  * request **reaches** the handler through the gateway's real validation pipe,
@@ -59,7 +60,7 @@ async function boot() {
               payload: Record<string, unknown>
             ) => {
               sent.push({ subject, payload });
-              return { sections: [], source: 'CHAIN' };
+              return { sections: [] };
             },
           },
         },
@@ -118,7 +119,7 @@ function send(
   });
 }
 
-describe('shop sections over HTTP (plan 0167)', () => {
+describe('shop sections over HTTP (plans 0167 and 0200)', () => {
   describe('GET /v1/catalog/locations/:id/sections is public', () => {
     it('answers with no token, and asks catalog for the shop alone', async () => {
       await withApp(async ({ origin, sent }) => {
@@ -129,7 +130,8 @@ describe('shop sections over HTTP (plan 0167)', () => {
         );
 
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ sections: [], source: 'CHAIN' });
+        // The shop's own sections, and nothing that says where they came from.
+        expect(await res.json()).toEqual({ sections: [] });
         // No userId: a guest reading a shared basket has none to send.
         expect(sent).toEqual([
           {
@@ -163,40 +165,40 @@ describe('shop sections over HTTP (plan 0167)', () => {
     });
   });
 
-  describe('a chain’s sections', () => {
-    it('creates one under its chain, with the chain from the path', async () => {
+  describe('a shop’s sections', () => {
+    it('creates one under its shop, with the shop from the path', async () => {
       await withApp(async ({ origin, sent }) => {
         const res = await send(
           origin,
           'POST',
-          `/v1/admin/catalog/supermarkets/${CHAIN}/sections`,
+          `/v1/admin/catalog/locations/${SHOP}/sections`,
           {
             slug: 'pizzas',
             name: { es: 'Pizzas' },
             categoryIds: [CATEGORY],
-            position: 2,
           }
         );
 
         expect(res.status).toBe(201);
-        expect(sent[0]).toEqual({
-          subject: SECTION_PATTERNS.create,
-          payload: {
-            userId: 'admin-1',
-            adminToken: 'token',
-            supermarketId: CHAIN,
-            slug: 'pizzas',
-            name: { es: 'Pizzas' },
-            categoryIds: [CATEGORY],
-            position: 2,
+        expect(sent).toEqual([
+          {
+            subject: SECTION_PATTERNS.create,
+            payload: {
+              userId: 'admin-1',
+              adminToken: 'token',
+              supermarketLocationId: SHOP,
+              slug: 'pizzas',
+              name: { es: 'Pizzas' },
+              categoryIds: [CATEGORY],
+            },
           },
-        });
+        ]);
       });
     });
 
-    it('accepts a section that covers no category, and refuses a repeated one', async () => {
+    it('accepts a section that covers no category, and refuses a repeated one and a place', async () => {
       await withApp(async ({ origin, sent }) => {
-        const path = `/v1/admin/catalog/supermarkets/${CHAIN}/sections`;
+        const path = `/v1/admin/catalog/locations/${SHOP}/sections`;
         const none = await send(origin, 'POST', path, {
           slug: 'middle-aisle',
           name: { es: 'Pasillo central' },
@@ -211,30 +213,46 @@ describe('shop sections over HTTP (plan 0167)', () => {
           slug: 'frozen',
           name: { es: 'Congelados' },
         });
+        // A new section goes after the last one: a create names no place.
+        const placed = await send(origin, 'POST', path, {
+          slug: 'frozen',
+          name: { es: 'Congelados' },
+          categoryIds: [],
+          position: 0,
+        });
 
         expect(none.status).toBe(201);
         expect(twice.status).toBe(400);
         expect(missing.status).toBe(400);
+        expect(placed.status).toBe(400);
         expect(sent).toHaveLength(1);
       });
     });
 
-    it('lists them under the chain, searched', async () => {
+    it('answers nothing under a chain: no section route and no pin route is left', async () => {
       await withApp(async ({ origin, sent }) => {
-        const res = await send(
-          origin,
-          'GET',
-          `/v1/admin/catalog/supermarkets/${CHAIN}/sections?query=piz&limit=10`
-        );
+        const sections = `/v1/admin/catalog/supermarkets/${CHAIN}/sections`;
+        const pins = `/v1/admin/catalog/supermarkets/${CHAIN}/item-sections`;
+        const statuses = [
+          (await send(origin, 'GET', sections)).status,
+          (
+            await send(origin, 'POST', sections, {
+              slug: 'pizzas',
+              name: { es: 'Pizzas' },
+              categoryIds: [],
+            })
+          ).status,
+          (await send(origin, 'GET', `${pins}?itemId=${PIZZA}`)).status,
+          (
+            await send(origin, 'PUT', pins, {
+              itemId: PIZZA,
+              sectionIds: [SECTION_A],
+            })
+          ).status,
+        ];
 
-        expect(res.status).toBe(200);
-        expect(sent[0].subject).toBe(SECTION_PATTERNS.list);
-        expect(sent[0].payload).toMatchObject({
-          userId: 'admin-1',
-          supermarketId: CHAIN,
-          query: 'piz',
-          limit: 10,
-        });
+        expect(statuses).toEqual([404, 404, 404, 404]);
+        expect(sent).toEqual([]);
       });
     });
 
@@ -269,7 +287,7 @@ describe('shop sections over HTTP (plan 0167)', () => {
     });
   });
 
-  describe('a shop’s list', () => {
+  describe('the order of a shop', () => {
     it('reads it behind the operator’s guard, as the public read answers it', async () => {
       await withApp(async ({ origin, sent }) => {
         const res = await send(
@@ -286,18 +304,19 @@ describe('shop sections over HTTP (plan 0167)', () => {
       });
     });
 
-    it('saves the order whole, and an empty list returns the shop to its chain', async () => {
+    it('sends the order as given, and refuses a repeated section', async () => {
       await withApp(async ({ origin, sent }) => {
         const path = `/v1/admin/catalog/locations/${SHOP}/sections`;
         const ordered = await send(origin, 'PUT', path, {
           sectionIds: [SECTION_B, SECTION_A],
         });
-        const cleared = await send(origin, 'PUT', path, { sectionIds: [] });
+        // Well formed, and it changes nothing: catalog deletes no section.
+        const empty = await send(origin, 'PUT', path, { sectionIds: [] });
         const repeated = await send(origin, 'PUT', path, {
           sectionIds: [SECTION_A, SECTION_A],
         });
 
-        expect([ordered.status, cleared.status, repeated.status]).toEqual([
+        expect([ordered.status, empty.status, repeated.status]).toEqual([
           200, 200, 400,
         ]);
         expect(sent.map((message) => message.payload['sectionIds'])).toEqual([
@@ -309,64 +328,8 @@ describe('shop sections over HTTP (plan 0167)', () => {
     });
   });
 
-  describe('pins', () => {
-    it('lists a chain’s pins by product or by section', async () => {
-      await withApp(async ({ origin, sent }) => {
-        const path = `/v1/admin/catalog/supermarkets/${CHAIN}/item-sections`;
-        expect(
-          (await send(origin, 'GET', `${path}?itemId=${PIZZA}`)).status
-        ).toBe(200);
-        expect(
-          (await send(origin, 'GET', `${path}?sectionId=${SECTION_A}`)).status
-        ).toBe(200);
-
-        expect(sent[0]).toMatchObject({
-          subject: SECTION_PATTERNS.listPins,
-          payload: { supermarketId: CHAIN, itemId: PIZZA },
-        });
-        expect(sent[1].payload).toMatchObject({
-          supermarketId: CHAIN,
-          sectionId: SECTION_A,
-        });
-        expect(sent[1].payload['itemId']).toBeUndefined();
-      });
-    });
-
-    it('replaces one product’s pins, and an empty list removes them', async () => {
-      await withApp(async ({ origin, sent }) => {
-        const path = `/v1/admin/catalog/supermarkets/${CHAIN}/item-sections`;
-        const pinned = await send(origin, 'PUT', path, {
-          itemId: PIZZA,
-          sectionIds: [SECTION_A],
-        });
-        const removed = await send(origin, 'PUT', path, {
-          itemId: PIZZA,
-          sectionIds: [],
-        });
-        const noProduct = await send(origin, 'PUT', path, {
-          sectionIds: [SECTION_A],
-        });
-
-        expect([pinned.status, removed.status, noProduct.status]).toEqual([
-          200, 200, 400,
-        ]);
-        expect(sent[0]).toEqual({
-          subject: SECTION_PATTERNS.setPins,
-          payload: {
-            userId: 'admin-1',
-            adminToken: 'token',
-            supermarketId: CHAIN,
-            itemId: PIZZA,
-            sectionIds: [SECTION_A],
-          },
-        });
-        expect(sent[1].payload['sectionIds']).toEqual([]);
-      });
-    });
-  });
-
-  describe('the preview of the rule', () => {
-    it('asks the rule for the named products, one or several', async () => {
+  describe('the preview', () => {
+    it('asks where the named products are, one or several', async () => {
       await withApp(async ({ origin, sent }) => {
         const path = `/v1/admin/catalog/locations/${SHOP}/item-sections`;
         const one = await send(origin, 'GET', `${path}?itemIds=${PIZZA}`);

@@ -5,23 +5,52 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import type {
+  BasketListRef,
   BasketParticipant,
   BasketProduct,
   BasketRow,
+  BasketRowEntry,
   ProductOffer,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { BasketRow as BasketRowComponent } from './basket-row';
 
 /**
- * The price on a row (velista `0062`, section 4).
+ * The name and the caption of a row (velista `0139`, sections 1 and 2; the price
+ * of velista `0062`, section 4).
  *
- * Three cases and they are section 8's three: a priced pick renders the caption
- * with the money string after the separator, an unpriced one renders exactly
- * the caption it rendered before, and a line with options and no pick renders
- * no price at all, because quoting the cheapest option there would put a number
- * on a product nobody has chosen.
+ * A row is one product or none. A product row is named by the product and its
+ * caption is the price, then the lists that ask. A row with no product is named
+ * by its line, has no price, and its caption is the lists.
  */
+
+function entry(
+  lineId: string,
+  listId: string | null,
+  overrides: Partial<BasketRowEntry> = {}
+): BasketRowEntry {
+  return {
+    lineId,
+    listId,
+    content: 'Leche',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
+    left: 3,
+    bought: 0,
+    asked: 3,
+    boughtElsewhere: 0,
+    state: 'WANTED',
+    awaitingApproval: false,
+    demandEditable: true,
+    version: 1,
+    ...overrides,
+  };
+}
 
 function line(overrides: Partial<BasketRow> = {}): BasketRow {
   return {
@@ -36,23 +65,11 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
-    entries: [
-      {
-        lineId: 'zl-1',
-        listId: null,
-        left: 3,
-        bought: 0,
-        asked: 3,
-        boughtElsewhere: 0,
-        state: 'WANTED',
-        awaitingApproval: false,
-        demandEditable: true,
-      },
-    ],
+    entries: [entry('zl-1', null)],
     ...overrides,
   };
 }
@@ -75,17 +92,30 @@ const product = (
   id,
   {
     id,
-    name: { en: 'Hacendado whole milk 1 L', es: 'Leche entera Hacendado 1 L' },
+    name: { en: 'Whole milk', es: 'Leche entera' },
     brand: 'Hacendado',
     size: 1,
     unit: 'LITER',
     offer: offerOf,
-  },
+  } as BasketProduct,
 ];
+
+const LISTS = new Map<string, BasketListRef>(
+  [
+    ['l-weekly', 'Weekly shop'],
+    ['l-basics', 'Basics'],
+    ['l-kitchen', 'Kitchen'],
+    ['l-pantry', 'Pantry'],
+  ].map(([listId, name]) => [
+    listId,
+    { listId, name, zoneId: 'z-home', zoneName: 'Home' },
+  ])
+);
 
 async function render(
   row: BasketRow,
-  products: ReadonlyMap<string, BasketProduct>
+  products: ReadonlyMap<string, BasketProduct>,
+  lists: ReadonlyMap<string, BasketListRef> = new Map()
 ) {
   TestBed.resetTestingModule();
 
@@ -101,7 +131,7 @@ async function render(
   fixture.componentRef.setInput('row', row);
   fixture.componentRef.setInput('people', new Map<string, BasketParticipant>());
   fixture.componentRef.setInput('products', products);
-  fixture.componentRef.setInput('lists', new Map());
+  fixture.componentRef.setInput('lists', lists);
   fixture.componentRef.setInput('busy', false);
   fixture.componentRef.setInput('notice', null);
   fixture.detectChanges();
@@ -109,83 +139,181 @@ async function render(
   return fixture;
 }
 
-const caption = (fixture: Awaited<ReturnType<typeof render>>) =>
-  (fixture.nativeElement as HTMLElement)
-    .querySelector('.product')
-    ?.textContent?.trim() ?? null;
+const host = (fixture: Awaited<ReturnType<typeof render>>) =>
+  fixture.nativeElement as HTMLElement;
 
-describe('BasketRowComponent: the price on the caption line', () => {
-  it('renders the pick with its price after the separator', async () => {
+const text = (fixture: Awaited<ReturnType<typeof render>>, selector: string) =>
+  host(fixture).querySelector(selector)?.textContent?.trim() ?? null;
+
+/** The pieces of the caption line, in order, without the drawn separators. */
+const caption = (fixture: Awaited<ReturnType<typeof render>>) => {
+  const line = host(fixture).querySelector('.caption');
+  return line === null
+    ? null
+    : [...line.children].map((piece) => piece.textContent?.trim() ?? '');
+};
+
+describe('BasketRowComponent: the name (velista 0139, sections 1 and 2)', () => {
+  it('names a product row by the product, then its brand, cut to one line', async () => {
     const fixture = await render(
-      line({ optionIds: ['i-milk'] }),
+      line({ productId: 'i-milk' }),
       new Map([product('i-milk', offer(0.95))])
     );
 
-    // The name, the brand and the money string, each after the separator the
-    // app already uses. One string on one line, in the same muted treatment the
-    // name already has. The format is absent here only because this spec's
-    // translator has no words for a unit, and a key never reaches the screen.
-    expect(caption(fixture)).toBe(
-      'Hacendado whole milk 1 L · Hacendado · €0.95'
-    );
+    // The size is absent only because this spec's translator has no words for
+    // a unit, and a key never reaches the screen.
+    expect(text(fixture, '.content .name')).toBe('Whole milk Hacendado');
+    expect(host(fixture).querySelector('.content.is-product')).not.toBeNull();
+    expect(
+      host(fixture).querySelector('.body')?.getAttribute('aria-label')
+    ).toMatch(/^Whole milk Hacendado\./);
   });
 
-  it('draws the name and the price alone for a product with no brand', async () => {
-    const [id, milk] = product('i-milk', offer(0.95));
+  it('names a row with no product by its line, which keeps wrapping', async () => {
+    const fixture = await render(line({ productId: null }), new Map());
+
+    expect(text(fixture, '.content .name')).toBe('Milk');
+    expect(host(fixture).querySelector('.content.is-product')).toBeNull();
+  });
+
+  it('names a row whose product the read could not name by its line', async () => {
+    const fixture = await render(line({ productId: 'i-gone' }), new Map());
+
+    expect(text(fixture, '.content .name')).toBe('Milk');
+    expect(host(fixture).textContent).not.toContain('0.95');
+  });
+});
+
+describe('BasketRowComponent: the caption (velista 0139, section 1)', () => {
+  it('draws the price, then the list that asks', async () => {
     const fixture = await render(
-      line({ optionIds: ['i-milk'] }),
-      new Map([[id, { ...milk, brand: null }]])
+      line({ productId: 'i-milk', entries: [entry('zl-1', 'l-weekly')] }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
     );
 
-    // A field the catalog does not know leaves no gap and no second separator.
-    expect(caption(fixture)).toBe('Hacendado whole milk 1 L · €0.95');
+    expect(caption(fixture)).toEqual(['€0.95', 'Weekly shop']);
   });
 
-  it('renders no price and no placeholder when there is no price', async () => {
+  it('names two lists and four lists, each once, with commas', async () => {
+    const two = await render(
+      line({
+        productId: 'i-milk',
+        entries: [entry('a', 'l-weekly'), entry('b', 'l-basics')],
+      }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
+    );
+    expect(caption(two)).toEqual(['€0.95', 'Weekly shop, Basics']);
+
+    const four = await render(
+      line({
+        productId: 'i-milk',
+        entries: [
+          entry('a', 'l-weekly'),
+          entry('b', 'l-basics'),
+          entry('c', 'l-kitchen'),
+          entry('d', 'l-weekly'),
+          entry('e', 'l-pantry'),
+        ],
+      }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
+    );
+    expect(caption(four)).toEqual([
+      '€0.95',
+      'Weekly shop, Basics, Kitchen, Pantry',
+    ]);
+  });
+
+  it('counts a list the reader was not served in words', async () => {
+    const fixture = await render(
+      line({
+        productId: 'i-milk',
+        entries: [entry('a', 'l-weekly'), entry('b', null)],
+      }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
+    );
+
+    // The testing translator answers the bare key.
+    expect(caption(fixture)).toEqual(['€0.95', 'basket.row.listsAndMore']);
+  });
+
+  it('says "Another list" to a guest, who is served no list', async () => {
+    const fixture = await render(
+      line({ productId: 'i-milk', entries: [entry('a', null)] }),
+      new Map([product('i-milk', offer(0.95))])
+    );
+
+    expect(caption(fixture)).toEqual(['€0.95', 'basket.row.otherLists']);
+  });
+
+  it('draws no price and no placeholder when there is none', async () => {
     const unpriced = await render(
-      line({ optionIds: ['i-milk'] }),
-      new Map([product('i-milk', null)])
+      line({ productId: 'i-milk', entries: [entry('a', 'l-weekly')] }),
+      new Map([product('i-milk', null)]),
+      LISTS
     );
     const priceless = await render(
-      line({ optionIds: ['i-milk'] }),
-      new Map([product('i-milk', offer(null))])
+      line({ productId: 'i-milk', entries: [entry('a', 'l-weekly')] }),
+      new Map([product('i-milk', offer(null))]),
+      LISTS
     );
 
-    // No placeholder, no dash, no "price unknown": a product with no price says
-    // nothing about price (section 2). A scope that carries the product with no
-    // price on it reads the same way.
-    expect(caption(unpriced)).toBe('Hacendado whole milk 1 L · Hacendado');
-    expect(caption(priceless)).toBe('Hacendado whole milk 1 L · Hacendado');
+    expect(caption(unpriced)).toEqual(['Weekly shop']);
+    expect(caption(priceless)).toEqual(['Weekly shop']);
   });
 
-  /**
-   * A row has no unchosen product to draw around any more.
-   *
-   * `pickId` was a column on the line the basket stored, and backend `0136`
-   * deleted that table: what a row names is the union of its entries' product
-   * sets, anchor first, so `optionIds[0]` **is** the product it means. "Options
-   * and no pick" is not a state the model can hold.
-   *
-   * What is left is a row that names no product at all, which is free text
-   * somebody typed and a row whose product the catalog can no longer resolve.
-   */
-  it('renders no caption at all for a row that names no product', async () => {
-    // Free text somebody typed in an aisle. There is no product entry, so the
-    // node the caption lives in is not drawn.
-    const fixture = await render(line({ optionIds: [] }), new Map());
+  it('gives a row with no product no price, and the names of its lists', async () => {
+    const fixture = await render(
+      line({
+        productId: null,
+        entries: [entry('a', 'l-weekly'), entry('b', 'l-pantry')],
+      }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
+    );
+
+    expect(caption(fixture)).toEqual(['Weekly shop, Pantry']);
+  });
+
+  it("draws no caption for a guest's row with no product and no list", async () => {
+    const fixture = await render(line({ entries: [] }), new Map());
 
     expect(caption(fixture)).toBeNull();
   });
+});
 
-  it('says the product is unknown when the catalog cannot resolve it', async () => {
-    // A basket outlives the catalog it was read against, and a row with an
-    // unnameable product is still a thing to buy: the row names an option, so
-    // the entry is drawn, and it says the product could not be named.
-    const fixture = await render(line({ optionIds: ['i-gone'] }), new Map());
-
-    expect(caption(fixture)).toBe('basket.product.none');
-    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain(
-      '0.95'
+describe('BasketRowComponent: a row bought elsewhere (velista 0142)', () => {
+  it('strikes the product name, one line, and draws no price and no control', async () => {
+    const fixture = await render(
+      line({
+        productId: 'i-milk',
+        left: 0,
+        asked: 0,
+        boughtElsewhere: 2,
+        state: 'BOUGHT_ELSEWHERE',
+        entries: [
+          entry('a', 'l-weekly', {
+            left: 0,
+            asked: 0,
+            boughtElsewhere: 2,
+            state: 'BOUGHT_ELSEWHERE',
+          }),
+        ],
+      }),
+      new Map([product('i-milk', offer(0.95))]),
+      LISTS
     );
+    expect(text(fixture, '.is-removed .content .name')).toBe(
+      'Whole milk Hacendado'
+    );
+    expect(
+      host(fixture).querySelector('.is-removed .content.is-product')
+    ).not.toBeNull();
+    expect(host(fixture).querySelector('.status')).toBeNull();
+    expect(host(fixture).querySelector('lib-quantity-reel')).toBeNull();
+    expect(host(fixture).textContent).not.toContain('0.95');
   });
 });

@@ -72,6 +72,8 @@ function row(overrides: Partial<LidlListRow> = {}): LidlListRow {
     sizeFormat: '400 g',
     listPrice: 1.69,
     ian: '80532',
+    image: null,
+    imageList: [],
     ...overrides,
   };
 }

@@ -13,17 +13,21 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
+  Basket,
   BasketSource,
   BasketTripRow,
   CORE_ENTITIES,
-  Basket,
   LineSettlement,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeCoreConfig } from './basket-config.fake';
+import { BasketCoverageService } from './basket-coverage.service';
+import { BasketReadService } from './basket-read.service';
 import { BasketService } from './basket.service';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { fakeLineClaims } from './line-claims.fake';
 
 /**
@@ -49,6 +53,11 @@ import { fakeLineClaims } from './line-claims.fake';
  * carrying `basketId`. `left` is `asked - bought` and the outcome of the newest
  * settlement decides a line the trip did not finish, which is where the lateral
  * earns its place.
+ *
+ * Since plan 0209, section 1.2, a finished basket counts **products**, as its
+ * screen does: the frozen lines are grouped by the code the read runs. Every
+ * line here has a name of its own and no product, so each is one row, and the
+ * numbers below are the ones they were when the count was of lines.
  *
  * The invariant worth protecting is the one that costs nothing to break by
  * accident: `settledLineCount` still means every finished line, and it is still
@@ -81,7 +90,8 @@ describeIntegration('a run history row (real Postgres)', () => {
     const line = await lines.save(
       lines.create({
         listId: ids.list,
-        content: 'Milk',
+        // A name of its own, so no two lines fold into one row.
+        content: `Item ${position}`,
         quantity: 0,
         position,
         createdByUserId: ids.owner,
@@ -135,18 +145,29 @@ describeIntegration('a run history row (real Postgres)', () => {
     });
     await dataSource.initialize();
 
+    const baskets = dataSource.getRepository(Basket);
     generated = new BasketService(
       dataSource,
-      dataSource.getRepository(Basket),
+      baskets,
       {} as never,
       fakeLineClaims({}).service,
       { emitToUsers: jest.fn() } as never,
       {} as never,
       dataSource.getRepository(BasketSource),
       {} as never,
-      // The open basket's counts, which this fixture never reaches: the basket
-      // below is `FINISHED`, so every number comes off its frozen rows.
-      {} as never
+      // The real read: a finished basket's counts are its frozen lines,
+      // grouped as its screen groups them (plan 0209, section 1.2). Nothing
+      // here reaches a reader, so the people, the permissions, the order and
+      // the marks are never asked.
+      new BasketReadService(
+        baskets,
+        new BasketCoverageService(baskets),
+        {} as never,
+        {} as never,
+        {} as never,
+        fakeBasketMarks(),
+        fakeCoreConfig()
+      )
     );
 
     const zone = await dataSource.getRepository(Zone).save(

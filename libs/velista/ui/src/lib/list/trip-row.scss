@@ -1,19 +1,21 @@
+@use './row-surface' as surface;
+
 :host {
   display: block;
 }
 
-// The line row's shape and height, so a fold's skeletons and its rows are the same
-// size and the fold opens to its final height once.
+// The line row's surface (velista 0145, section 1), flat on a hairline, and its old
+// height floor, so a fold's skeletons and its rows are the same size and the fold
+// opens to its final height once. The content of a trip row does not change.
 .row {
+  @include surface.row-surface;
+
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
   width: 100%;
   min-height: var(--app-line-row-height);
   padding: var(--app-space-2) var(--app-space-3);
-  background: var(--app-surface-raised);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
   font: inherit;
   color: inherit;
   text-align: start;

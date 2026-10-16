@@ -125,10 +125,22 @@ export interface AddLineRequest {
    * (velista plan 0043, section 6).
    */
   readonly itemIds?: readonly string[];
+  /**
+   * `false` for a line made from a product card, whose `content` is the name of
+   * the product and not a name somebody typed (backend `0207`, section 1.3).
+   * Omitted for typed text: the server's default names the line.
+   */
+  readonly named?: false;
 }
 
 export interface UpdateLineRequest {
   readonly content?: string;
+  /**
+   * `false` takes a line's name away (backend `0207`, section 1.3), with the name of
+   * a product as `content`, or alone to leave the stored words as they are. A write
+   * of `content` with no flag names the line.
+   */
+  readonly named?: false;
   readonly quantity?: number;
   /**
    * Replace the whole product set. An empty array clears it back to free text.
@@ -151,6 +163,13 @@ export interface UpdateLineRequest {
    * person and never back, so there is no field here that hands a product back.
    */
   readonly adoptItemIds?: readonly string[];
+  /**
+   * The favourite product of the line, or null to clear it (backend `0199`). It
+   * has to be one of the products the line holds after this same update.
+   */
+  readonly favoriteItemId?: string | null;
+  /** The supermarket of the line, a chain, or null for any (backend `0199`). */
+  readonly preferredSupermarketId?: string | null;
 }
 
 /**

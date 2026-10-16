@@ -1,6 +1,8 @@
-import type {
-  ShopMapDocument,
-  ShopMapSectionView,
+import {
+  SHOP_WALK_LIMITS,
+  type AppendShopWalkEntryRequest,
+  type ShopMapDocument,
+  type ShopMapSectionView,
 } from '@portfolio/luna-shopper/contracts';
 import { shopperView } from '@portfolio/luna-shopper/shop-map/model';
 import { readFileSync } from 'node:fs';
@@ -28,6 +30,47 @@ const SHOP_ID = '11111111-1111-4111-8111-111111111111';
 const WALK_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = new Date('2026-09-29T10:00:00.000Z');
 const SAVED_AT = new Date('2026-09-29T12:42:00.000Z');
+
+describe('ShopWalkService.append', () => {
+  /** Thrown by the database, which only an entry that passed every shape rule reaches. */
+  const REACHED = new Error('reached the database');
+  const service = new ShopWalkService(
+    {
+      transaction: async () => {
+        throw REACHED;
+      },
+    } as unknown as DataSource,
+    {} as unknown as SectionService
+  );
+  const withGuards = (count: number): AppendShopWalkEntryRequest => ({
+    userId: SHOP_ID,
+    walkId: WALK_ID,
+    id: '33333333-3333-4333-8333-333333333333',
+    baseSeq: 0,
+    kind: 'stopped',
+    at: '2026-10-08T11:00:00.000Z',
+    logFrom: 0,
+    logTo: 60000,
+    reason: 'frame-moved',
+    events: [
+      { type: 'path', points: [[0, 0, 0]] },
+      ...Array.from({ length: count }, (_, i) => ({
+        type: 'guard' as const,
+        logMs: i * 1000,
+        what: 'compass-disturbed' as const,
+        degrees: 35,
+      })),
+    ],
+  });
+
+  it('takes an entry with 50 guard events and refuses one with 51 (plan 0197)', async () => {
+    expect(SHOP_WALK_LIMITS.guardEventsMax).toBe(50);
+    await expect(service.append(withGuards(50))).rejects.toBe(REACHED);
+    await expect(service.append(withGuards(51))).rejects.toThrow(
+      'an entry holds at most 50 guard events'
+    );
+  });
+});
 
 describe('ShopWalkService.mapForLocation', () => {
   it('serves the current document once every seq filtered read has missed', async () => {

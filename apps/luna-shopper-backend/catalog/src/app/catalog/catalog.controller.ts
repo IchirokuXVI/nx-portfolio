@@ -4,6 +4,7 @@ import {
   ADMIN_DASHBOARD_PATTERNS,
   ADMIN_POSTAL_CODE_PATTERNS,
   BRAND_PATTERNS,
+  ITEM_LINKED_IMAGE_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -47,6 +48,8 @@ import {
   type DeleteBrandResult,
   type DeleteItemPricesByRunRequest,
   type DeleteItemPricesByRunResult,
+  type DisableAllLinkedImagesRequest,
+  type DisableAllLinkedImagesResult,
   type FillPackCountsRequest,
   type FillPackCountsResult,
   type FindItemByEanRequest,
@@ -59,6 +62,7 @@ import {
   type GetSupermarketLocationItemRequest,
   type ItemEanRequest,
   type ItemIdRequest,
+  type ItemLinkedImagesView,
   type ItemPage,
   type ItemPriceHistoryRequest,
   type ItemPriceHistoryView,
@@ -68,8 +72,11 @@ import {
   type ItemPriceView,
   type ItemScopePricesPage,
   type ItemView,
+  type LinkItemImagesRequest,
+  type LinkItemImagesResult,
   type ListAdminPostalCodesRequest,
   type ListBrandsRequest,
+  type ListItemLinkedImagesRequest,
   type ListItemPricesRequest,
   type ListNearbyPostalCodesRequest,
   type ListPricePoliciesRequest,
@@ -103,6 +110,7 @@ import {
   type SearchItemsRequest,
   type SearchOffersRequest,
   type SearchShopsRequest,
+  type SetSupermarketLinkedImagesRequest,
   type SetSupermarketItemAvailabilityRequest,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityRequest,
@@ -126,6 +134,8 @@ import {
   type SupermarketView,
   type TeachItemEansRequest,
   type TeachItemEansResult,
+  type UnlinkItemImagesRequest,
+  type UnlinkItemImagesResult,
   type UpdateBrandRequest,
   type UpdateBrandResult,
   type UpdateItemRequest,
@@ -144,6 +154,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { BrandService } from './brand.service';
 import { CatalogDashboardService } from './dashboard.service';
+import { ItemLinkedImageService } from './item-linked-image.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PostalCodeService } from './postal-code.service';
@@ -182,7 +193,9 @@ export class CatalogController {
     private readonly pricePolicies: PricePolicyService,
     private readonly dashboard: CatalogDashboardService,
     // Last, so a spec that builds this positionally keeps its arguments.
-    private readonly priceHistories: PriceHistoryService
+    private readonly priceHistories: PriceHistoryService,
+    // After it, for the same reason (plan 0198).
+    private readonly linkedImages: ItemLinkedImageService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -234,6 +247,48 @@ export class CatalogController {
     @Payload() req: ListSupermarketsRequest
   ): Promise<SupermarketPage> {
     return this.supermarkets.list(req);
+  }
+
+  /** Turn the photos of one chain on or off (plan 0198, section 4). */
+  @MessagePattern(SUPERMARKET_PATTERNS.setLinkedImagesEnabled)
+  setSupermarketLinkedImages(
+    @Payload() req: SetSupermarketLinkedImagesRequest
+  ): Promise<SupermarketView> {
+    return this.supermarkets.setLinkedImagesEnabled(req);
+  }
+
+  // --- Linked images: a chain photo is a link (plan 0198) ------------------
+
+  /** The harvester's: the photo each bound source row states. */
+  @MessagePattern(ITEM_LINKED_IMAGE_PATTERNS.linkBatch)
+  linkItemImages(
+    @Payload() req: LinkItemImagesRequest
+  ): Promise<LinkItemImagesResult> {
+    return this.linkedImages.linkBatch(req);
+  }
+
+  /** The harvester's: the rows that left a product or state no photo now. */
+  @MessagePattern(ITEM_LINKED_IMAGE_PATTERNS.unlink)
+  unlinkItemImages(
+    @Payload() req: UnlinkItemImagesRequest
+  ): Promise<UnlinkItemImagesResult> {
+    return this.linkedImages.unlink(req);
+  }
+
+  /** Stop every chain photo, in one request. */
+  @MessagePattern(ITEM_LINKED_IMAGE_PATTERNS.disableAll)
+  disableAllLinkedImages(
+    @Payload() req: DisableAllLinkedImagesRequest
+  ): Promise<DisableAllLinkedImagesResult> {
+    return this.linkedImages.disableAll(req);
+  }
+
+  /** Every link of one product, of chains that are off too, for an admin. */
+  @MessagePattern(ITEM_LINKED_IMAGE_PATTERNS.listByItem)
+  listItemLinkedImages(
+    @Payload() req: ListItemLinkedImagesRequest
+  ): Promise<ItemLinkedImagesView> {
+    return this.linkedImages.listByItem(req);
   }
 
   // --- Supermarket locations -----------------------------------------------

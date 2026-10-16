@@ -27,7 +27,8 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProcessedEventStore } from '../events/idempotency.store';
 import { LineClaimService } from '../baskets/line-claim.service';
 import { itemSetHash } from './item-set-hash';
-import { toLineItemSet } from './line-item-set';
+import { keptFavorite, toLineItemSet } from './line-item-set';
+import { namedOverSet } from './line-named';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
 
@@ -315,6 +316,13 @@ export class ProductGroupSyncService {
     itemIds: readonly string[]
   ): Promise<ListLine> {
     line.itemSetHash = itemSetHash([...itemIds]);
+    // A favourite that the group took off the line is cleared with it, in this
+    // transaction (plan 0199, section 2, rule 2). The chain is not touched: it
+    // does not depend on the products.
+    line.favoriteItemId = keptFavorite(line.favoriteItemId, itemIds);
+    // A group that took the last product off a line leaves it named (plan 0207,
+    // section 1.2, rule 1). Its name does not change.
+    line.named = namedOverSet(line.named, itemIds.length > 0);
     line.version += 1;
     return manager.getRepository(ListLine).save(line);
   }

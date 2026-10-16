@@ -313,6 +313,8 @@ describeIntegration('what a basket covers (real Postgres)', () => {
       expect(rows).toContainEqual({
         basketId: basket.id,
         ownerUserId: ids.owner,
+        // Which of its purchases a patch counts depends on it (plan 0204).
+        kind: basket.kind,
       });
     });
 

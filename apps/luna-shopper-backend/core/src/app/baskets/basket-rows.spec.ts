@@ -1,4 +1,9 @@
 import {
+  BASKET_RULE_ACT_SKIPPED,
+  BASKET_RULE_STATES,
+} from '@portfolio/luna-shopper/basket-rules';
+import {
+  BASKET_ACT_SKIPPED,
   BasketKind,
   BasketRowNote,
   BasketRowState,
@@ -11,20 +16,24 @@ import {
   allocateOldestFirst,
   boughtElsewhereOf,
   boughtOf,
-  groupEntries,
+  groupEntries as groupEntriesWith,
   newestSettlement,
   NO_BASKET_SKIPS,
   NO_ROW_MARKS,
   noteOf,
-  optionIdsOf,
   progressOf,
   stateOf,
+  toEntryPatch,
+  toEntryView,
   toRowView,
+  tripItemIdOf,
+  walkItemIdsOf,
   type BasketEntry,
   type BasketFacts,
   type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
+import { NO_PICKS, type BasketPicks } from './line-dedup';
 
 /**
  * The rules of a basket row, stated rather than mocked (plan 0136, section 13).
@@ -37,6 +46,17 @@ import {
 
 let seq = 0;
 
+/**
+ * The grouping as every caller with no prices asks it (plan 0201): a card, a
+ * summary, a write answer. A test about the picks of the gateway names them.
+ */
+function groupEntries(
+  entries: readonly BasketEntry[],
+  picks: BasketPicks = NO_PICKS
+) {
+  return groupEntriesWith(entries, picks);
+}
+
 function entry(over: Partial<BasketEntry> = {}): BasketEntry {
   seq += 1;
   return {
@@ -44,12 +64,16 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
     listId: 'list-a',
     content: 'Milk',
     quantity: 1,
+    version: 1,
     itemSetHash: null,
+    favoriteItemId: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     // Distinct and increasing, so `(createdAt, id)` has one answer.
     createdAt: new Date(2026, 0, 1, 0, 0, seq),
     itemIds: [],
     settlements: [],
+    // Nothing bought in this trip names a product (plan 0201, section 1).
+    tripItemId: null,
     // Nobody else bought it, which is every row before plan 0188.
     elsewhere: null,
     ...over,
@@ -67,6 +91,8 @@ function bought(
     quantity,
     settledAt: new Date(2026, 0, 1, 10, 0, seq),
     settledByParticipantId: 'p1',
+    // A buy that named no product, which is a buy of a line with none.
+    itemId: null,
     // The database answered it (plan 0137, section 4). These rules receive
     // booleans and never a clock, which is what lets a spec state "the window
     // ran out" without moving anybody's time.
@@ -115,21 +141,117 @@ const OPEN_CONTEXT = {
   marks: NO_ROW_MARKS,
 };
 
-describe('grouping (section 3.1, step 5)', () => {
+describe('grouping (plan 0201, section 2)', () => {
   it('folds two lists’ lines that name one product into one row', () => {
     // The point of the feature: "Milk" on the flat's list and on the parents'
-    // list is one thing to pick off one shelf. They merge on the **set**, which
-    // is an identity rather than a spelling, so "leche" and "Milk" meet here.
+    // list is one thing to pick off one shelf. They merge on the **product**,
+    // which is an identity rather than a spelling, so "leche" and "Milk" meet
+    // here.
     const groups = groupEntries([
-      entry({ listId: 'list-a', content: 'Milk', itemSetHash: 'h1' }),
-      entry({ listId: 'list-b', content: 'leche', itemSetHash: 'h1' }),
+      entry({ listId: 'list-a', content: 'Milk', itemIds: ['i1'] }),
+      entry({ listId: 'list-b', content: 'leche', itemIds: ['i1'] }),
     ]);
 
     expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i1');
+    expect(groups[0].key).toBe('item:i1');
     expect(groups[0].entries.map((row) => row.listId)).toEqual([
       'list-a',
       'list-b',
     ]);
+  });
+
+  it('folds two lines with different sets that count as the same product', () => {
+    // Before plan 0201 these were two rows, because the key was the whole set:
+    // the same carton stood in the basket twice.
+    const groups = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1'], itemSetHash: 'h1' }),
+      entry({ content: 'Milk', itemIds: ['i1', 'i2'], itemSetHash: 'h2' }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i1');
+  });
+
+  it('keeps two lines with the same set and different favourites apart', () => {
+    const groups = groupEntries([
+      entry({
+        itemIds: ['i1', 'i2'],
+        itemSetHash: 'h1',
+        favoriteItemId: 'i1',
+      }),
+      entry({
+        itemIds: ['i1', 'i2'],
+        itemSetHash: 'h1',
+        favoriteItemId: 'i2',
+      }),
+    ]);
+
+    expect(groups.map((group) => group.productId)).toEqual(['i1', 'i2']);
+  });
+
+  it('counts a line with several products as its first, with no picks', () => {
+    const [group] = groupEntries([entry({ itemIds: ['i2', 'i1'] })]);
+
+    expect(group.productId).toBe('i2');
+  });
+
+  it('moves a line to the row of the pick of the gateway', () => {
+    const fixed = entry({ itemIds: ['i2'] });
+    const priced = entry({ itemIds: ['i1', 'i2'] });
+
+    // With no prices the two are two rows. The gateway found `i2` cheapest for
+    // the second line, so the read that carries that pick draws one.
+    expect(groupEntries([fixed, priced])).toHaveLength(2);
+    const groups = groupEntries(
+      [fixed, priced],
+      new Map([[priced.lineId, 'i2']])
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i2');
+    expect(groups[0].anchor).toBe(fixed);
+  });
+
+  it('ignores a pick that is not a product of its line', () => {
+    const only = entry({ itemIds: ['i1', 'i2'] });
+
+    const [group] = groupEntries([only], new Map([[only.lineId, 'i9']]));
+    expect(group.productId).toBe('i1');
+  });
+
+  it('lets the favourite win over a pick', () => {
+    const only = entry({ itemIds: ['i1', 'i2'], favoriteItemId: 'i1' });
+
+    const [group] = groupEntries([only], new Map([[only.lineId, 'i2']]));
+    expect(group.productId).toBe('i1');
+  });
+
+  it('follows the product of the buy in this trip, also outside the line', () => {
+    // A change "for this trip only": the line holds `i1` and was bought as
+    // `i7`, so it stands in the row of `i7` until the trip ends.
+    const swapped = entry({
+      itemIds: ['i1'],
+      favoriteItemId: 'i1',
+      tripItemId: 'i7',
+    });
+    const other = entry({ itemIds: ['i7'] });
+
+    const groups = groupEntries(
+      [swapped, other],
+      new Map([[swapped.lineId, 'i1']])
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].productId).toBe('i7');
+  });
+
+  it('keeps a line with a product and a line with none apart', () => {
+    const groups = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1'] }),
+      entry({ content: 'Milk' }),
+    ]);
+
+    expect(groups.map((group) => group.key)).toEqual(['item:i1', 'text:milk']);
+    expect(groups[1].productId).toBeNull();
   });
 
   it('folds a free text pair by normalizeContent', () => {
@@ -143,15 +265,28 @@ describe('grouping (section 3.1, step 5)', () => {
     expect(groups).toHaveLength(1);
   });
 
-  it('keeps two different product sets apart', () => {
+  it('keeps two different products apart, whatever they are called', () => {
     const groups = groupEntries([
-      entry({ content: 'Milk', itemSetHash: 'h1' }),
-      entry({ content: 'Milk', itemSetHash: 'h2' }),
+      entry({ content: 'Milk', itemIds: ['i1'] }),
+      entry({ content: 'Milk', itemIds: ['i2'] }),
     ]);
 
-    // A hash never collides with typed text, which is what the `set:` and
-    // `text:` namespaces buy, and two different sets are two different things.
+    // A product id never collides with typed text, which is what the `item:`
+    // and `text:` namespaces buy, and two products are two different things.
     expect(groups).toHaveLength(2);
+  });
+
+  it('names the product on the row view, and null for a row by name', () => {
+    const [withProduct, byName] = groupEntries([
+      entry({ content: 'Milk', itemIds: ['i1', 'i2'] }),
+      entry({ content: 'Bread' }),
+    ]);
+
+    expect(toRowView(withProduct, OPEN_CONTEXT).productId).toBe('i1');
+    expect(toRowView(byName, OPEN_CONTEXT).productId).toBeNull();
+    expect(toRowView(withProduct, OPEN_CONTEXT)).not.toHaveProperty(
+      'optionIds'
+    );
   });
 
   it('anchors a row on its earliest line', () => {
@@ -168,36 +303,39 @@ describe('grouping (section 3.1, step 5)', () => {
 
 describe('the states of a row (plan 0130, section 4)', () => {
   it('is WANTED with nothing bought', () => {
-    expect(stateOf([entry({ quantity: 2 })], 2, 0, null, NO_FACTS)).toBe(
+    expect(stateOf([entry({ quantity: 2 })], NO_FACTS)).toBe(
       BasketRowState.WANTED
     );
   });
 
   it('is PARTLY with both above zero', () => {
-    expect(stateOf([entry({ quantity: 1 })], 1, 1, bought(1), NO_FACTS)).toBe(
-      BasketRowState.PARTLY
-    );
+    expect(
+      stateOf([entry({ quantity: 1, settlements: [bought(1)] })], NO_FACTS)
+    ).toBe(BasketRowState.PARTLY);
   });
 
   it('is DONE at zero left with something bought', () => {
-    expect(stateOf([entry({ quantity: 0 })], 0, 2, bought(2), NO_FACTS)).toBe(
-      BasketRowState.DONE
-    );
+    expect(
+      stateOf([entry({ quantity: 0, settlements: [bought(2)] })], NO_FACTS)
+    ).toBe(BasketRowState.DONE);
   });
 
   it('is NOT_AVAILABLE when the newest act says so and units remain', () => {
-    expect(stateOf([entry({ quantity: 2 })], 2, 0, closed(), NO_FACTS)).toBe(
-      BasketRowState.NOT_AVAILABLE
-    );
+    expect(
+      stateOf([entry({ quantity: 2, settlements: [closed()] })], NO_FACTS)
+    ).toBe(BasketRowState.NOT_AVAILABLE);
   });
 
   it('is DONE rather than NOT_AVAILABLE once nothing is left', () => {
     // The guard plan 0136 section 3.1 step 7 adds to the table's order. A
     // demand taken to zero after a close would otherwise leave the row claiming
     // the shop had none of something nobody is asking for.
-    expect(stateOf([entry({ quantity: 0 })], 0, 1, closed(), NO_FACTS)).toBe(
-      BasketRowState.DONE
-    );
+    expect(
+      stateOf(
+        [entry({ quantity: 0, settlements: [bought(1), closed()] })],
+        NO_FACTS
+      )
+    ).toBe(BasketRowState.DONE);
   });
 
   it('breaks a tie between two settlements of one act on the id', () => {
@@ -279,16 +417,96 @@ describe('the arithmetic (plan 0130, section 4)', () => {
     expect(toRowView(group, OPEN_CONTEXT).awaitingApproval).toBe(true);
   });
 
-  it('unions the entries’ products, anchor first and deduplicated', () => {
-    // Two households may each have attached a different carton, and the shopper
-    // at the shelf is choosing between all of them. A picker offering the same
-    // product twice is a bug the shopper sees.
-    const rows = [
-      entry({ itemIds: ['i1', 'i2'] }),
+  it('finds a row in the walk history under its product, then its sets', () => {
+    // The wire lost `optionIds` (plan 0201). The walk order still asks under
+    // every product of the lines: a shelf somebody settled under another
+    // product of the same line is still the shelf of this row.
+    const [group] = groupEntries([
+      entry({ itemIds: ['i1', 'i2'], favoriteItemId: 'i2' }),
       entry({ itemIds: ['i2', 'i3'] }),
-    ];
+    ]);
 
-    expect(optionIdsOf(rows)).toEqual(['i1', 'i2', 'i3']);
+    expect(group.productId).toBe('i2');
+    expect(walkItemIdsOf(group)).toEqual(['i2', 'i1', 'i3']);
+  });
+
+  it('finds a row bought as a product outside its lines under that product first', () => {
+    const [group] = groupEntries([
+      entry({ itemIds: ['i1'], tripItemId: 'i7' }),
+    ]);
+
+    expect(walkItemIdsOf(group)).toEqual(['i7', 'i1']);
+  });
+
+  it('finds a row by name under no product', () => {
+    const [group] = groupEntries([entry({ content: 'Bread' })]);
+
+    expect(walkItemIdsOf(group)).toEqual([]);
+  });
+});
+
+describe('the product of the latest buy in the trip (plan 0201, section 1)', () => {
+  const early = new Date(2026, 0, 1, 9, 0, 0);
+  const late = new Date(2026, 0, 1, 10, 0, 0);
+
+  it('is null with no purchase', () => {
+    expect(tripItemIdOf([])).toBeNull();
+  });
+
+  it('is the product of the newest buy', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        bought(1, { itemId: 'i2', settledAt: late }),
+      ])
+    ).toBe('i2');
+    // The order of the input does not decide.
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i2', settledAt: late }),
+        bought(1, { itemId: 'i1', settledAt: early }),
+      ])
+    ).toBe('i2');
+  });
+
+  it('breaks a tie of one instant on the id', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { id: 'b', itemId: 'i2', settledAt: early }),
+        bought(1, { id: 'a', itemId: 'i1', settledAt: early }),
+      ])
+    ).toBe('i2');
+  });
+
+  it('names nothing for "they had none"', () => {
+    // A close carries no product that was bought, also when the row names one.
+    expect(tripItemIdOf([closed({ itemId: 'i1' })])).toBeNull();
+  });
+
+  it('keeps the product of an earlier buy under a later close', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        closed({ itemId: null, settledAt: late }),
+      ])
+    ).toBe('i1');
+  });
+
+  it('skips a newer buy that named no product', () => {
+    expect(
+      tripItemIdOf([
+        bought(1, { itemId: 'i1', settledAt: early }),
+        bought(1, { itemId: null, settledAt: late }),
+      ])
+    ).toBe('i1');
+  });
+
+  it('falls back to the older buy once the newer one was taken back', () => {
+    // A reverted buy is not in the input: the read hands over what stands.
+    const standing = [bought(1, { itemId: 'i1', settledAt: early })];
+
+    expect(tripItemIdOf(standing)).toBe('i1');
+    expect(tripItemIdOf([])).toBeNull();
   });
 });
 
@@ -498,10 +716,13 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
       bought = 0
     ) =>
       stateOf(
-        [{ ...only, quantity: 2 - bought }],
-        2 - bought,
-        bought,
-        newest,
+        [
+          {
+            ...only,
+            quantity: 2 - bought,
+            settlements: newest ? [newest] : [],
+          },
+        ],
         facts(standing ? { [only.lineId]: standing } : {})
       );
 
@@ -532,19 +753,19 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
   // --- 5. the close runs out on a LIVE basket alone ------------------------
 
   it('lets a LIVE basket close run out, and holds a GENERATED one', () => {
-    const only = entry({ quantity: 2 });
-    const stale = closed({ fresh: false });
+    const only = entry({
+      quantity: 2,
+      settlements: [closed({ fresh: false })],
+    });
 
     expect(
-      stateOf([only], 2, 0, stale, {
+      stateOf([only], {
         skips: NO_BASKET_SKIPS,
         kind: BasketKind.LIVE,
       })
     ).toBe(BasketRowState.WANTED);
     // A trip's close holds until the trip is finished (plan 0130, section 4).
-    expect(stateOf([only], 2, 0, stale, NO_FACTS)).toBe(
-      BasketRowState.NOT_AVAILABLE
-    );
+    expect(stateOf([only], NO_FACTS)).toBe(BasketRowState.NOT_AVAILABLE);
   });
 
   it('leaves a run out LIVE close with no note', () => {
@@ -610,14 +831,15 @@ describe('bought through another basket (plan 0188)', () => {
   const at = new Date(2026, 0, 1, 12, 0, 0);
   const later = new Date(2026, 0, 1, 13, 0, 0);
 
-  it('is DONE with nothing left and nothing bought here', () => {
+  it('is BOUGHT_ELSEWHERE with nothing left and nothing bought here (plan 0203)', () => {
     const only = entry({
       quantity: 0,
-      elsewhere: { quantity: 2, settledAt: at },
+      elsewhere: { quantity: 2, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
 
-    expect(view.state).toBe(BasketRowState.DONE);
+    // Plan 0188 called this row `DONE`. Plan 0203 gives it a state of its own.
+    expect(view.state).toBe(BasketRowState.BOUGHT_ELSEWHERE);
     expect(view.boughtElsewhere).toBe(2);
     // This basket's own numbers keep their meaning: it bought none, and it
     // was never asked for the units somebody else took.
@@ -633,14 +855,98 @@ describe('bought through another basket (plan 0188)', () => {
       boughtElsewhere: 2,
       bought: 0,
       left: 0,
-      state: BasketRowState.DONE,
+      state: BasketRowState.BOUGHT_ELSEWHERE,
     });
+  });
+
+  it('is DONE when this basket bought some and another bought the rest', () => {
+    // The owner's answer 4: "instead of 3 now you only have to get 2". The row
+    // asked for 3, this basket bought 2, and it reads "2 of 2".
+    const only = entry({
+      quantity: 0,
+      settlements: [bought(2)],
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.DONE);
+    expect(view.bought).toBe(2);
+    expect(view.asked).toBe(2);
+    expect(view.boughtElsewhere).toBe(1);
+  });
+
+  it('is BOUGHT_ELSEWHERE over several lines only when none is left and none was bought here', () => {
+    const elsewhere = { quantity: 1, settledAt: at, throughBasket: true };
+    const both = [
+      entry({ quantity: 0, elsewhere }),
+      entry({ quantity: 0, elsewhere }),
+    ];
+    const oneLeft = [entry({ quantity: 0, elsewhere }), entry({ quantity: 1 })];
+    const oneBoughtHere = [
+      entry({ quantity: 0, elsewhere }),
+      entry({ quantity: 0, settlements: [bought(1)] }),
+    ];
+
+    expect(toRowView(groupEntries(both)[0], OPEN_CONTEXT).state).toBe(
+      BasketRowState.BOUGHT_ELSEWHERE
+    );
+    expect(toRowView(groupEntries(oneLeft)[0], OPEN_CONTEXT).state).toBe(
+      BasketRowState.WANTED
+    );
+    expect(toRowView(groupEntries(oneBoughtHere)[0], OPEN_CONTEXT).state).toBe(
+      BasketRowState.DONE
+    );
+  });
+
+  it('says BOUGHT_ON_THE_LIST when the newest outside buy had no basket', () => {
+    const only = entry({
+      quantity: 0,
+      elsewhere: { quantity: 2, settledAt: at, throughBasket: false },
+    });
+    const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
+
+    expect(view.state).toBe(BasketRowState.BOUGHT_ELSEWHERE);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_THE_LIST);
+    expect(view.noteAt).toBe(at.toISOString());
+  });
+
+  it('takes the note from the newest outside buy over the entries', () => {
+    const rows = [
+      entry({
+        quantity: 0,
+        elsewhere: { quantity: 1, settledAt: at, throughBasket: false },
+      }),
+      entry({
+        quantity: 0,
+        elsewhere: { quantity: 1, settledAt: later, throughBasket: true },
+      }),
+    ];
+    const view = toRowView(groupEntries(rows)[0], OPEN_CONTEXT);
+
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
+    expect(view.noteAt).toBe(later.toISOString());
+  });
+
+  it('keeps the note of the outside buy over a skip that still stands', () => {
+    // Nothing is left to decide about the row, so the skip says nothing, as on
+    // a row that is done.
+    const only = entry({
+      quantity: 0,
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
+    });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: facts({ [only.lineId]: skip({ fresh: false }) }),
+    });
+
+    expect(view.state).toBe(BasketRowState.BOUGHT_ELSEWHERE);
+    expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
   });
 
   it('keeps the state of today while something is left, and adds the note', () => {
     const only = entry({
       quantity: 1,
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
 
@@ -657,7 +963,7 @@ describe('bought through another basket (plan 0188)', () => {
     const only = entry({
       quantity: 1,
       settlements: [bought(1)],
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
 
@@ -669,8 +975,14 @@ describe('bought through another basket (plan 0188)', () => {
 
   it('sums the entries and dates the note by the newest purchase', () => {
     const rows = [
-      entry({ quantity: 0, elsewhere: { quantity: 2, settledAt: at } }),
-      entry({ quantity: 0, elsewhere: { quantity: 3, settledAt: later } }),
+      entry({
+        quantity: 0,
+        elsewhere: { quantity: 2, settledAt: at, throughBasket: true },
+      }),
+      entry({
+        quantity: 0,
+        elsewhere: { quantity: 3, settledAt: later, throughBasket: true },
+      }),
       entry({ quantity: 1 }),
     ];
     const view = toRowView(groupEntries(rows)[0], OPEN_CONTEXT);
@@ -686,7 +998,7 @@ describe('bought through another basket (plan 0188)', () => {
   it('lets SKIPPED_EARLIER win when both notes apply', () => {
     const only = entry({
       quantity: 1,
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const stale = skip({ fresh: false });
     const view = toRowView(groupEntries([only])[0], {
@@ -704,7 +1016,7 @@ describe('bought through another basket (plan 0188)', () => {
   it('says so on a row that is skipped now, where the skip has no note', () => {
     const only = entry({
       quantity: 1,
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], {
       ...OPEN_CONTEXT,
@@ -719,7 +1031,7 @@ describe('bought through another basket (plan 0188)', () => {
     const only = entry({
       quantity: 0,
       settlements: [bought(1)],
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
 
@@ -734,7 +1046,7 @@ describe('bought through another basket (plan 0188)', () => {
     const only = entry({
       quantity: 1,
       settlements: [closed()],
-      elsewhere: { quantity: 1, settledAt: at },
+      elsewhere: { quantity: 1, settledAt: at, throughBasket: true },
     });
     const view = toRowView(groupEntries([only])[0], OPEN_CONTEXT);
 
@@ -742,7 +1054,7 @@ describe('bought through another basket (plan 0188)', () => {
     expect(view.note).toBe(BasketRowNote.BOUGHT_ON_ANOTHER_BASKET);
   });
 
-  it('counts the row in total and in done, so progress does not fall', () => {
+  it('counts the row toward nothing (plan 0203, section 4)', () => {
     const wanted = toRowView(
       groupEntries([entry({ content: 'Bread', quantity: 1 })])[0],
       OPEN_CONTEXT
@@ -756,7 +1068,7 @@ describe('bought through another basket (plan 0188)', () => {
         entry({
           content: 'Milk',
           quantity: 0,
-          elsewhere: { quantity: 2, settledAt: at },
+          elsewhere: { quantity: 2, settledAt: at, throughBasket: true },
         }),
       ])[0],
       OPEN_CONTEXT
@@ -768,12 +1080,14 @@ describe('bought through another basket (plan 0188)', () => {
       total: 2,
       pending: 2,
     });
-    // Somebody else bought the milk. The total holds and one row is done,
-    // where before plan 0188 the row left and the total fell to one.
+    // Somebody else bought the milk before this basket bought any of it. The
+    // row stays on the screen and leaves the progress: the owner's answer 5.
+    // Plan 0188 counted it in `total` and in `done`.
+    expect(after.state).toBe(BasketRowState.BOUGHT_ELSEWHERE);
     expect(progressOf([wanted, after])).toEqual({
-      done: 1,
+      done: 0,
       unavailable: 0,
-      total: 2,
+      total: 1,
       pending: 1,
     });
   });
@@ -785,8 +1099,203 @@ describe('bought through another basket (plan 0188)', () => {
     expect(view.boughtElsewhere).toBe(0);
     expect(view.entries[0].boughtElsewhere).toBe(0);
     expect(view.note).toBeNull();
-    expect(stateOf([entry({ quantity: 0 })], 0, 0, null, NO_FACTS)).toBe(
+    expect(stateOf([entry({ quantity: 0 })], NO_FACTS)).toBe(
       BasketRowState.WANTED
     );
+  });
+});
+
+describe('what a patch and an entry both state (plan 0204)', () => {
+  it('holds the states of the shared rules and no other', () => {
+    // The one cast in `basket-rows.ts` turns the library's plain string into
+    // the contract's enum, and it is honest only while the two sets are equal.
+    expect(Object.values(BASKET_RULE_STATES).sort()).toEqual(
+      Object.values(BasketRowState).sort()
+    );
+    expect(BASKET_RULE_ACT_SKIPPED).toBe(BASKET_ACT_SKIPPED);
+  });
+
+  it('carries the version, and no act for a line nobody touched', () => {
+    const only = entry({ quantity: 2, version: 7 });
+
+    expect(toEntryPatch(only, NO_FACTS)).toEqual({
+      lineId: only.lineId,
+      version: 7,
+      left: 2,
+      bought: 0,
+      boughtElsewhere: 0,
+      state: BasketRowState.WANTED,
+      approvalStatus: LineApprovalStatus.APPROVED,
+      skipped: false,
+      closed: false,
+      act: null,
+      tripItemId: null,
+    });
+  });
+
+  it('carries the product of the buy in this trip (plan 0201, section 1)', () => {
+    // A client that holds the line in a row of another product reads the
+    // basket again. No patch can say which row the line is in now.
+    const only = entry({
+      quantity: 0,
+      itemIds: ['i1'],
+      settlements: [bought(1, { itemId: 'i7' })],
+      tripItemId: 'i7',
+    });
+
+    expect(toEntryPatch(only, NO_FACTS).tripItemId).toBe('i7');
+    expect(toEntryView(only, OPEN_CONTEXT).tripItemId).toBe('i7');
+  });
+
+  it('names no list, whoever reads it', () => {
+    // A room holds guests, and a guest is never told where a line is.
+    const patch = toEntryPatch(entry({ listId: 'list-a' }), NO_FACTS);
+
+    expect(Object.keys(patch)).not.toContain('listId');
+    expect(JSON.stringify(patch)).not.toContain('list-a');
+  });
+
+  it('states a purchase as its act', () => {
+    const settled = bought(1);
+    const only = entry({ quantity: 1, settlements: [settled] });
+
+    expect(toEntryPatch(only, NO_FACTS)).toMatchObject({
+      bought: 1,
+      state: BasketRowState.PARTLY,
+      skipped: false,
+      closed: false,
+      act: {
+        participantId: 'p1',
+        at: settled.settledAt.toISOString(),
+        outcome: SettlementOutcome.BOUGHT,
+      },
+    });
+  });
+
+  it('states a fresh skip as skipped, with the skip as its act', () => {
+    const only = entry({ quantity: 2 });
+    const standing = skip();
+
+    expect(
+      toEntryPatch(only, facts({ [only.lineId]: standing }))
+    ).toMatchObject({
+      state: BasketRowState.SKIPPED,
+      skipped: true,
+      closed: false,
+      act: {
+        participantId: 'p2',
+        at: standing.skippedAt.toISOString(),
+        outcome: BASKET_ACT_SKIPPED,
+      },
+    });
+  });
+
+  it('keeps the act of a skip that ran out, and says it is not skipped', () => {
+    const only = entry({ quantity: 2 });
+    const patch = toEntryPatch(
+      only,
+      facts({ [only.lineId]: skip({ fresh: false }) })
+    );
+
+    expect(patch.skipped).toBe(false);
+    expect(patch.state).toBe(BasketRowState.WANTED);
+    expect(patch.act?.outcome).toBe(BASKET_ACT_SKIPPED);
+  });
+
+  it('states a close that holds as closed', () => {
+    const only = entry({ quantity: 2, settlements: [closed()] });
+
+    expect(toEntryPatch(only, NO_FACTS)).toMatchObject({
+      state: BasketRowState.NOT_AVAILABLE,
+      closed: true,
+      act: { outcome: SettlementOutcome.NOT_AVAILABLE },
+    });
+  });
+
+  it('does not call a LIVE close that ran out closed', () => {
+    const only = entry({
+      quantity: 2,
+      settlements: [closed({ fresh: false })],
+    });
+
+    expect(
+      toEntryPatch(only, { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE })
+        .closed
+    ).toBe(false);
+  });
+
+  it('lets a later skip end a close, also after the skip ran out', () => {
+    // Only the newer of a skip and a close is ever standing (plan 0137,
+    // section 3.2). The skip came later, so the close says nothing any more,
+    // and the row reads as wanted with a note that it was skipped earlier.
+    const only = entry({ quantity: 2, settlements: [closed()] });
+    const stale = facts({ [only.lineId]: skip({ fresh: false }) });
+
+    expect(toEntryPatch(only, stale)).toMatchObject({
+      state: BasketRowState.WANTED,
+      skipped: false,
+      closed: false,
+    });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: stale,
+    });
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
+  });
+
+  it('serves an entry the same numbers as its patch, and the line itself', () => {
+    const only = entry({
+      quantity: 1,
+      settlements: [bought(2)],
+      version: 3,
+      content: 'Leche',
+      itemIds: ['i1', 'i2'],
+      favoriteItemId: 'i2',
+    });
+    const patch = toEntryPatch(only, NO_FACTS);
+    const view = toEntryView(only, OPEN_CONTEXT);
+
+    expect(view).toEqual({
+      ...patch,
+      // The line as its own list holds it (plan 0201, section 3).
+      content: 'Leche',
+      itemIds: ['i1', 'i2'],
+      favoriteItemId: 'i2',
+      canWrite: true,
+      demandEditable: true,
+      listId: only.listId,
+    });
+  });
+
+  it('says a reader who was not served the list may not write the line', () => {
+    const only = entry({ listId: 'list-a', itemIds: ['i1'] });
+    const view = toEntryView(only, {
+      ...OPEN_CONTEXT,
+      servedListIds: new Set<string>(),
+    });
+
+    // A guest holds no list. They still read the name and the products of the
+    // line, which every reader of the row was already told.
+    expect(view.canWrite).toBe(false);
+    expect('listId' in view).toBe(false);
+    expect(view.itemIds).toEqual(['i1']);
+  });
+
+  it('gives a row the state and the act its entries add up to', () => {
+    const first = bought(1);
+    const last = closed();
+    const group = groupEntries([
+      entry({ quantity: 1, settlements: [first] }),
+      entry({ quantity: 2, settlements: [last] }),
+    ])[0];
+    const view = toRowView(group, OPEN_CONTEXT);
+
+    // The newest purchase or close over the row is the close.
+    expect(view.state).toBe(BasketRowState.NOT_AVAILABLE);
+    expect(view.left).toBe(3);
+    expect(view.bought).toBe(1);
+    expect(view.asked).toBe(4);
+    expect(view.touchedAt).toBe(last.settledAt.toISOString());
   });
 });

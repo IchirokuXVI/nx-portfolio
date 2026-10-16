@@ -36,14 +36,18 @@ import {
   buildCategoryTree,
   EMPTY_CATEGORY_TREE,
   isOpenBasket,
+  itemShopPrices,
   type CategoryNode,
+  type LineProductPriceRead,
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
+  type RecoveryOutcome,
   type ResendOutcome,
+  type ResetPasswordOutcome,
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
@@ -435,7 +439,17 @@ export type AuthCall =
   | { readonly method: 'upgrade'; readonly email: string }
   | { readonly method: 'verifyEmail'; readonly token: string }
   | { readonly method: 'resendVerification' }
-  | { readonly method: 'forgotPassword'; readonly email: string };
+  | { readonly method: 'forgotPassword'; readonly email: string }
+  | {
+      readonly method: 'resetPassword';
+      readonly token: string;
+      readonly password: string;
+    }
+  | {
+      readonly method: 'recoverySignIn';
+      readonly token: string;
+      readonly switchAccount: boolean;
+    };
 
 /** What a faked auth service does when asked. */
 export interface FakeAuthOptions {
@@ -456,6 +470,15 @@ export interface FakeAuthOptions {
 
   /** What a password reset ask answers. The default is a send with a wait. */
   readonly forgotPassword?: ResendOutcome;
+
+  /** What spending a reset link on a new password answers. The default signs in. */
+  readonly resetPassword?: ResetPasswordOutcome;
+
+  /**
+   * What spending a reset link on a sign in answers, given whether the person agreed
+   * to leave the account on this phone. The default signs in.
+   */
+  readonly recoverySignIn?: (switchAccount: boolean) => RecoveryOutcome;
 }
 
 /**
@@ -509,6 +532,33 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
       // shared default would hide the difference rule A4 is about: the reset is one
       // per minute and the rename is five per hour.
       return options.forgotPassword ?? { state: 'sent', waitSeconds: 60 };
+    },
+
+    resetPassword: async (
+      token: string,
+      password: string
+    ): Promise<ResetPasswordOutcome> => {
+      calls.push({ method: 'resetPassword', token, password });
+      return (
+        options.resetPassword ?? {
+          state: 'signed-in',
+          tokens: tokensFor(userId, 'REGISTERED'),
+        }
+      );
+    },
+
+    recoverySignIn: async (
+      token: string,
+      recovery: { readonly switchAccount?: boolean } = {}
+    ): Promise<RecoveryOutcome> => {
+      const switchAccount = recovery.switchAccount === true;
+      calls.push({ method: 'recoverySignIn', token, switchAccount });
+      return (
+        options.recoverySignIn?.(switchAccount) ?? {
+          state: 'signed-in',
+          tokens: tokensFor(userId, 'REGISTERED'),
+        }
+      );
     },
   };
 
@@ -688,7 +738,8 @@ export type LineWriteCall =
        * acceptance criterion in its own right (velista plan 0043, section 8), and
        * the only place it can be observed is the arguments of this call.
        */
-      readonly itemIds?: readonly string[];
+      readonly itemIds?: readonly string[]; /** `false` for a line made from a card (velista `0144`), absent for typed text. */
+      readonly named?: false;
     }
   /**
    * A quantity adjustment, as the **delta** that was sent.
@@ -729,6 +780,7 @@ export type LineWriteCall =
       readonly kind: 'update';
       readonly lineId: string;
       readonly content?: string;
+      readonly named?: false;
       readonly itemIds?: readonly string[];
       /**
        * The products this edit adopted (velista plan 0065, section 4).
@@ -874,9 +926,16 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       quantity: number,
       createdByUserId: string,
       _approval: unknown,
-      itemIds?: readonly string[]
+      itemIds?: readonly string[],
+      named?: false
     ) => {
-      calls.push({ kind: 'add', content, quantity, itemIds });
+      calls.push({
+        kind: 'add',
+        content,
+        quantity,
+        itemIds,
+        ...(named === undefined ? {} : { named }),
+      });
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -886,6 +945,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         id: 'server-id',
         listId,
         content,
+        named: named !== false || (itemIds ?? []).length === 0,
         quantity,
         itemIds: [...(itemIds ?? [])],
         // Following no group, like every line the composer adds: nothing on the
@@ -893,6 +953,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         // control on a subscription no server would agree exists.
         productGroupId: null,
         groupItemIds: [],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
         position: lines().length + 1,
         approvalStatus: addedApproval,
         boughtCount: 0,
@@ -921,9 +983,12 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       lineId: string,
       patch?: {
         content?: string;
+        named?: false;
         quantity?: number;
         itemIds?: readonly string[];
         adoptItemIds?: readonly string[];
+        favoriteItemId?: string | null;
+        preferredSupermarketId?: string | null;
         confirmMerge?: boolean;
       }
     ) => {
@@ -994,12 +1059,23 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.content === undefined
                     ? {}
                     : { content: patch.content }),
+                  ...(patch.named === false
+                    ? { named: false }
+                    : patch.content === undefined
+                      ? {}
+                      : { named: true }),
                   ...(patch.quantity === undefined
                     ? {}
                     : { quantity: patch.quantity }),
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
+                  ...(patch.favoriteItemId === undefined
+                    ? {}
+                    : { favoriteItemId: patch.favoriteItemId }),
+                  ...(patch.preferredSupermarketId === undefined
+                    ? {}
+                    : { preferredSupermarketId: patch.preferredSupermarketId }),
                   // Provenance moves one way (backend plan 0070, section 3), and the
                   // double has to move it: the feedback for `Keep` is the chip
                   // changing cluster, so a double that left this alone would let a
@@ -1299,6 +1375,8 @@ export interface FakeItemNamesOptions {
    * that could only be empty could not tell a spec which one it was showing.
    */
   readonly failed?: readonly string[];
+  /** Ids the lookup has not answered about yet, which a row draws as bones. */
+  readonly pending?: readonly string[];
 }
 
 /**
@@ -1313,18 +1391,38 @@ export interface FakeItemNamesOptions {
 export function fakeItemNames(options: FakeItemNamesOptions = {}) {
   const items = options.items ?? [];
   const failed = new Set(options.failed ?? []);
+  const pending = new Set(options.pending ?? []);
   const asked: string[][] = [];
+  const refreshed: string[][] = [];
+  const itemOf = (itemId: string) =>
+    items.find((row) => row.id === itemId) ?? null;
 
   return {
-    nameOf: (itemId: string) => items.find((row) => row.id === itemId) ?? null,
+    nameOf: itemOf,
     anyFailed: (itemIds: readonly string[]) =>
       itemIds.some((itemId) => failed.has(itemId)),
+    settled: (itemId: string) => !pending.has(itemId),
+    pricesOf: (itemId: string): LineProductPriceRead => {
+      const item = itemOf(itemId);
+      if (item !== null) {
+        return itemShopPrices({ chainPrices: item.chainPrices ?? [] });
+      }
+      if (failed.has(itemId)) {
+        return null;
+      }
+      return pending.has(itemId) ? undefined : [];
+    },
     ensure: async (itemIds: readonly string[]) => {
       asked.push([...itemIds]);
+    },
+    refresh: async (itemIds: readonly string[]) => {
+      refreshed.push([...itemIds]);
     },
     prime: () => undefined,
     /** Every set that was asked for, in order, so a spec can assert one request. */
     asked,
+    /** Every set read again with its prices (velista `0145`), in order. */
+    refreshed,
   };
 }
 
@@ -1361,6 +1459,10 @@ export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
     rank: (categoryId: string) => tree().ranks.get(categoryId) ?? null,
     ensure: async () => {
       ensured += 1;
+      // A failed read asked again is in flight, as the real store's would be.
+      if (state() === 'failed') {
+        state.set('loading');
+      }
     },
     prime: (next: readonly CategoryNode[]) => {
       tree.set(buildCategoryTree(next));
@@ -1370,6 +1472,10 @@ export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
     land: (next: readonly CategoryNode[]) => {
       tree.set(buildCategoryTree(next));
       state.set('loaded');
+    },
+    /** The read failing, as the real store's does when the catalog will not answer. */
+    fail: () => {
+      state.set('failed');
     },
     /** How many times a screen asked for the tree. */
     ensured: () => ensured,

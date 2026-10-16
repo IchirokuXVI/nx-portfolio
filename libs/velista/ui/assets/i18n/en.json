@@ -170,7 +170,8 @@
       "body": "Sign in and your groups come with you, on any phone",
       "submit": "Sign in",
       "newHere": "New here?",
-      "createAccount": "Create an account"
+      "createAccount": "Create an account",
+      "forgot": "Forgot your password?"
     },
     "register": {
       "title": "Make an account",
@@ -230,6 +231,78 @@
       "shortPassword": "Passwords need at least 8 characters",
       "passwordMismatch": "Those two passwords are not the same. Check the second one",
       "tooMany": "Too many tries. Wait a minute and try again"
+    },
+    "forgot": {
+      "title": "Forgot your password?",
+      "body": "We can send you a link that gets you back in. Type the email you sign in with",
+      "submit": "Send me a link",
+      "remembered": "Remembered it?",
+      "signIn": "Sign in",
+      "sentTitle": "Look in your email",
+      "sentBody": "If {{email}} has an account with us, we have sent it a mail with a link. Mail can take a few minutes. Look in spam too",
+      "sentRule": "The link works one time, for one hour",
+      "prompt": "Nothing yet?",
+      "again": "Send another link",
+      "waiting": "You can ask for another link in {{wait}}",
+      "waitingNoWait": "Mail can take a few minutes to arrive",
+      "wrongEmail": "Wrong email?",
+      "change": "Change it"
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "body": "Saving it signs you out on every other phone, in case someone else knows the old one",
+      "field": "New password",
+      "placeholder": "Your new password",
+      "submit": "Save new password",
+      "keep": "Keep my password and sign in",
+      "keepNote": "Your other phones stay signed in",
+      "working": "Signing you in",
+      "changed": "Password changed. Other devices are signed out",
+      "held": {
+        "title": "This phone is signed in",
+        "lede": "It is signed in to this account:",
+        "body": "If your link is for another account, saving signs this one out of the phone. Nothing in it is lost. It can sign in again at any time",
+        "continue": "Save new password"
+      },
+      "guest": {
+        "title": "This phone has a guest account",
+        "lede": "It is signed in to a guest account:",
+        "noEmail": "No email",
+        "body": "A guest account has no email or password. Once you leave it, nobody can open it again",
+        "loss_one": "Its group and the lists in it stay with it. You will lose them",
+        "loss_other": "Its {{count}} groups and their lists stay with it. You will lose them",
+        "keepBefore": "To keep them,",
+        "keepLink": "add an email to this account",
+        "keepAfter": "first. Then open your link again",
+        "continue": "Continue and lose them"
+      },
+      "dead": {
+        "title": "That link has run out",
+        "body": "A link works one time, and it runs out after a while. Using one link also ends the other links we sent you. Your account is fine. Ask for a new link and use the newest mail",
+        "bodySignedIn": "A link works one time, and it runs out after a while. Using one link also ends the other links we sent you. Your account is fine",
+        "newLink": "Send me a new link",
+        "signIn": "Sign in with my password"
+      },
+      "failed": {
+        "title": "That did not work",
+        "body": "We could not reach the app just now. Try again in a moment",
+        "retry": "Try again"
+      },
+      "sheet": {
+        "close": "Close",
+        "unused": "If you close this, nothing happens to the link. It still works later",
+        "other": {
+          "title": "Sign out to use this link",
+          "lede": "This phone is signed in to another account:",
+          "body": "Your link is for a different account. To use it, we sign this one out of the phone. Nothing in it is lost, and it can sign in again at any time",
+          "continue": "Sign out and use the link"
+        },
+        "guest": {
+          "title": "This phone has a guest account",
+          "lede": "It is signed in to a guest account:",
+          "continue": "Continue and lose them"
+        }
+      }
     }
   },
   "entry": {
@@ -311,16 +384,11 @@
       "backToChains": "Back to every chain",
       "all": "All supermarkets",
       "allDetail": "Every product from every chain",
-      "any": "Any {{chain}} shop",
-      "anyDetail": "Every {{chain}} product",
-      "pricesAt": "Prices at {{shop}}",
-      "notPriced": "not priced here",
       "clear": "Show every supermarket"
     },
     "selector": {
       "supermarketAll": "Supermarket: all supermarkets. Change",
-      "supermarketAny": "Supermarket: {{chain}}, any shop. Change",
-      "supermarketShop": "Supermarket: {{chain}}, one shop. Change",
+      "supermarketChain": "Supermarket: {{chain}}. Change",
       "categoryAll": "Category: all categories. Change",
       "categoryLeaf": "Category: {{root}}, {{leaf}}. Change",
       "categoryRoot": "Category: {{root}}. Change"
@@ -481,10 +549,7 @@
     },
     "similar": {
       "title": "Similar products",
-      "titleFor": "Similar to {{name}}",
-      "failed": "Similar products did not load.",
-      "change": "Change",
-      "changeLabel": "Change to {{label}}"
+      "failed": "Similar products did not load."
     },
     "categories": {
       "title": "Categories",
@@ -506,6 +571,25 @@
       "emptyBody": "Velista has not found any yet. Clear the category to see everything.",
       "emptyChainTitle": "Nothing in {{category}} at {{chain}} yet",
       "emptyChainBody": "Velista has not found any at this shop. Choose All shops, or clear the category to see everything from {{chain}}."
+    },
+    "pick": {
+      "titleSet": "Choose products",
+      "closeSet": "Close without saving",
+      "onLine": "On this line",
+      "all": "All products",
+      "onLineLabel": "{{label}}, on this line",
+      "gone": "No longer in the catalog",
+      "save": "Save",
+      "added_one": "1 product added",
+      "added_other": "{{count}} products added",
+      "removed_one": "1 product removed",
+      "removed_other": "{{count}} products removed",
+      "first": "Choose a product first.",
+      "full": "This line holds {{count}} of {{cap}} products. Remove one first.",
+      "saveFailed": "The products could not be saved.",
+      "leaveQuestion": "Leave without saving?",
+      "leave": "Leave",
+      "stay": "Keep choosing"
     }
   },
   "home": {
@@ -619,7 +703,8 @@
       "pending": "{{pending}} of {{total}} pending",
       "done": "Nothing left",
       "notLive": "Not updating right now",
-      "back": "Back to the group"
+      "back": "Back to the group",
+      "cost": "About {{cost}} for the lines that have a price"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -881,40 +966,106 @@
       "delete": "Delete line"
     },
     "page": {
-      "where": "on {{list}}, in {{zone}}",
-      "noProducts": "No products yet",
-      "products": "PRODUCTS ON THIS LINE",
-      "addProduct": "Add a product",
-      "productsCount": "{{count}}/{{cap}}",
-      "fromGroup": "From {{name}}",
-      "fromGroupUnnamed": "From a group",
-      "addedByYou": "Added by you",
+      "where": "On {{list}}, in {{zone}}",
       "addedBy": "Added by {{who}}",
-      "keepProduct": "Keep",
-      "keepProductLabel": "Keep {{name}} on this line",
-      "productsFull": {
-        "one": "This line holds {{count}} of {{cap}} products. Remove one first.",
-        "group": "This line holds {{count}} of {{cap}} products, and {{name}} adds {{adds}}. Remove a few products first."
-      },
-      "searchProduct": "Search for a product",
-      "add": "Add",
-      "removeProduct": "Remove {{name}}",
-      "thisList": "ON THIS LIST",
-      "everywhere": "EVERYWHERE YOU SHOP",
-      "alsoOn": "ALSO ON",
-      "alsoOnPlace": "{{zone}} · {{list}}",
-      "alsoOnMore": "and more",
-      "noHistory": "Nothing bought yet",
-      "more": "Show more",
-      "prices": "Where to buy it, and for how much: drawn here once prices exist. Nothing is shown until then.",
-      "delete": "Delete this line",
-      "rate": "about how often you buy it",
-      "lastBought": "last bought, {{count}}",
-      "boughtBy": "Bought {{count}} · {{who}}",
-      "each": "{{count}} at {{price}} each",
-      "missingBy": "Not in the shop · {{who}}",
+      "addName": "Add a name",
       "you": "you",
-      "someone": "somebody"
+      "someone": "somebody",
+      "quantityLabel": "How many on the list",
+      "menu": "More for {{name}}",
+      "productsTitle": "Any of these will do",
+      "productsChange": "Change",
+      "aboutLabel": "Which one you get when you shop",
+      "about": {
+        "title": "Which one you get when you shop",
+        "any": "Any of these products will do for {{line}}. Your shopping list shows one of them.",
+        "favorite": "If you mark a favourite with the star, your shopping list always shows the favourite. It does so even when another product costs less.",
+        "cheapest": "With no favourite, it shows the cheapest one.",
+        "order": "The products here are in the same order: the favourite first, then the cheapest.",
+        "close": "Close"
+      },
+      "card": {
+        "cheapest": "CHEAPEST",
+        "noPrice": "no price",
+        "notSold": "not at {{supermarket}}",
+        "favorite": "Favourite",
+        "favoriteOn": "{{name}} is the favourite. Press to clear it",
+        "favoriteOff": "Make {{name}} the favourite"
+      },
+      "supermarket": "Supermarket",
+      "supermarketAny": "Any",
+      "history": "Buy history",
+      "historyTimes_one": "{{count}} time",
+      "historyTimes_other": "{{count}} times",
+      "historyNever": "Not yet",
+      "comments": "Comments",
+      "alsoOn": "Also on",
+      "alsoOnMore": "There are more lists than these.",
+      "loading": "Loading the line",
+      "failed": "This line could not be loaded.",
+      "retry": "Try again",
+      "toList": "Back to the list",
+      "productsNone": "No product yet",
+      "productsChoose": "Choose a product",
+      "productsWhy": "With a product, the list shows what it costs and where it is sold."
+    },
+    "menu": {
+      "rename": "Rename",
+      "renameLabel": "Rename {{name}}",
+      "addName": "Add a name",
+      "addNameLabel": "Add a name for {{name}}",
+      "delete": "Delete this line"
+    },
+    "rename": {
+      "title": "Name this line",
+      "label": "Name",
+      "note": "The name is only for this list. The product stays the same.",
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "supermarket": {
+      "title": "Where do you buy {{line}}?",
+      "body": "Pick a supermarket and the products show its prices. Everyone on {{list}} sees your choice.",
+      "any": "Any supermarket",
+      "anyHint": "The lowest price of each product",
+      "all": "All {{count}} products",
+      "some": "{{sells}} of the {{count}} products",
+      "none": "None of these products",
+      "sellsIt": "Sells it",
+      "sellsNot": "Does not sell it",
+      "notNear": "Not near you",
+      "from": "from {{price}}",
+      "other": "Another supermarket",
+      "loading": "Looking for the supermarkets near you",
+      "noContext": "The supermarkets near you could not be loaded.",
+      "firstProducts": "Counted over the first {{count}} products.",
+      "failed": "That did not save. Try again."
+    },
+    "history": {
+      "title": "Buy history",
+      "back": "Back to the line",
+      "where": "{{line}}, on {{list}}",
+      "scope": "Which purchases",
+      "thisList": "This list",
+      "everywhere": "Everywhere you shop",
+      "times_one": "{{count}} time",
+      "times_other": "{{count}} times",
+      "timesMore": "{{count}} times or more",
+      "since": "since {{month}}",
+      "bought": "bought",
+      "between": "between buys",
+      "lastPaid": "last paid for one",
+      "boughtYou": "You bought {{count}}",
+      "boughtBy": "{{who}} bought {{count}}",
+      "noneYou": "You found none",
+      "noneBy": "{{who}} found none",
+      "someone": "Somebody",
+      "onList": "on {{list}}",
+      "reverted": "Taken back",
+      "each": "{{count}} at {{price}} each",
+      "older": "Show older",
+      "empty": "Nothing bought yet.",
+      "loading": "Loading the buy history"
     },
     "confirmDelete": {
       "title": "Delete “{{name}}”?",
@@ -964,6 +1115,18 @@
       "quantityLabel": "How many of {{name}}",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"
+    },
+    "row": {
+      "noPrice": "No price",
+      "choose": "Choose a product",
+      "chooseFor": "Choose a product for {{name}}",
+      "noProduct": "No product",
+      "favorite": "Favourite",
+      "more_one": "and {{count}} more that will do",
+      "more_other": "and {{count}} more that will do",
+      "pickFor": "For {{name}}",
+      "failed": "The products on this list did not load.",
+      "retry": "Try again"
     }
   },
   "account": {
@@ -1347,14 +1510,14 @@
     },
     "line": {
       "open": "Settle {{name}}",
-      "outstanding_one": "{{count}} outstanding",
-      "outstanding_other": "{{count}} outstanding",
       "wanted": "×{{count}}",
-      "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
       "takenBack_other": "{{count}} taken back",
-      "removed": "No longer on the list"
+      "removed": "No longer on the list",
+      "boughtFromAnotherList": "Bought from another shopping list",
+      "boughtFromTheList": "Bought from the list",
+      "alreadyBought": "Already bought"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
@@ -1367,14 +1530,6 @@
       "gotSome": "{{name}} got {{count}}",
       "none": "{{name}} says they had none",
       "you": "you"
-    },
-    "elsewhere": {
-      "caption": "Bought on another basket"
-    },
-    "from": {
-      "one": "from {{first}}",
-      "two": "from {{first}} and {{second}}",
-      "more": "from {{first}} and {{count}} more"
     },
     "view": {
       "open": "Filter and order",
@@ -1472,13 +1627,18 @@
         "showAll": "Show every line"
       }
     },
+    "shopAsk": {
+      "title": "Are you buying here?",
+      "noShop": "No shop",
+      "noShopHint": "The cheapest price is recorded",
+      "note": "You can also choose the shop from the filter of your shopping list.",
+      "never": "Don't ask again",
+      "close": "Close"
+    },
     "price": {
-      "cheaperAt": "{{price}} at {{chain}}",
-      "notListedAt": "not listed at {{chain}}"
+      "cheaperAt": "{{price}} at {{chain}}"
     },
     "group": {
-      "notListed": "Not listed at {{chain}}",
-      "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
       "uncovered": "Categories we could not find in this shop",
@@ -1501,21 +1661,7 @@
       "missed_other": "{{count}} households on this line could not be updated.",
       "missedNamed": "Not updated: {{lists}}"
     },
-    "product": {
-      "change": "Change",
-      "title": "Which did you get?",
-      "hint": "Move units to the ones you got. {{name}} keeps the rest.",
-      "hintNone": "Move units to the ones you got. The rest stays without a product.",
-      "units": "{{name}}, units",
-      "none": "This line names no product",
-      "cheapest": "Cheapest",
-      "noPrice": "No price",
-      "asOf": "Prices from {{when}}",
-      "asOfStale": "Prices from {{when}}, and some may be out of date"
-    },
     "units": {
-      "askedFor": "Asked for",
-      "got": "Got",
       "askedLabel": "{{name}}, asked for",
       "gotLabel": "{{name}}, got",
       "pending": "waiting for the list to agree"
@@ -1674,15 +1820,17 @@
       "isPartly": "{{name}} is partly got"
     },
     "entries": {
-      "title": "Lists that ask for this",
       "otherList": "Another list",
-      "asks": "asks for {{count}}",
-      "got": "got {{count}}",
-      "gotLabel": "{{name}}, got"
+      "asks": "asks for {{count}}"
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",
-      "gone": "That line is no longer in this list."
+      "gone": "That line is no longer in this list.",
+      "listsAndMore_one": "{{names}} and 1 more list",
+      "listsAndMore_other": "{{names}} and {{count}} more lists",
+      "otherLists_one": "Another list",
+      "otherLists_other": "{{count}} other lists",
+      "notSoldHere": "Not sold here"
     },
     "skip": {
       "action": "Not today",
@@ -1763,25 +1911,71 @@
         "rejected": "“{{name}}” was turned down",
         "approved": "“{{name}}” was approved",
         "unknown": "“{{name}}” changed",
+        "bought": "“{{name}}” was bought. You need {{after}} now",
+        "boughtAll": "“{{name}}” was bought. You do not need it now",
+        "buyReverted": "A buy of “{{name}}” was undone. You need {{after}} now",
         "inList": "in {{list}}"
+      },
+      "origin": {
+        "anotherBasket": "Modified from a shopping list of {{name}}",
+        "anotherBasketYours": "Modified from another shopping list of yours",
+        "anotherBasketSomeone": "Modified from a shopping list of someone",
+        "list": "Bought from the list by {{name}}",
+        "listYou": "Bought from the list by you",
+        "listSomeone": "Bought from the list by someone"
       }
     },
     "shelf": {
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
     },
-    "swap": {
-      "open": "Change product",
-      "openLabel": "Change {{name}} for a similar product",
-      "title": "Change product",
-      "instead": "Instead of {{name}}",
-      "none": "There are no similar products.",
-      "failed": "The change did not save. Try again.",
-      "cancel": "Cancel",
-      "cheaper": "cheaper option"
+    "change": {
+      "one": "Change",
+      "oneLabel": "Change the product for {{name}}",
+      "all": "Change for all lists",
+      "openLabel": "There is a cheaper option than {{name}}. Change the product",
+      "cheaper": "cheaper option",
+      "title": "Change the product",
+      "titleAll_one": "Change the product for 1 list",
+      "titleAll_other": "Change the product for {{count}} lists",
+      "chosenNow": "Chosen now",
+      "notSold": "Not sold here",
+      "catalog": "Look for another one in the catalog",
+      "keep": "Keep it for next time",
+      "use": "Use this product",
+      "useAll_one": "Use it for the list",
+      "useAll_other": "Use it for the {{count}} lists",
+      "failedRead": "The products could not be loaded.",
+      "retry": "Try again",
+      "pickTitle": "Choose a product",
+      "pickClose": "Close without choosing",
+      "pickFor": "For {{list}}",
+      "pickForAll_one": "For 1 list",
+      "pickForAll_other": "For {{count}} lists"
     },
     "map": {
       "openLabel": "Map of {{shop}}"
+    },
+    "sheet": {
+      "each": "{{price}} each",
+      "toGet_one": "{{count}} to get",
+      "toGet_other": "{{count}} to get",
+      "got_one": "Got {{count}} today.",
+      "got_other": "Got {{count}} today.",
+      "gotAt_one": "Got {{count}} today at {{price}}.",
+      "gotAt_other": "Got {{count}} today at {{price}}.",
+      "gotAtShop_one": "Got {{count}} today at {{price}}, at {{shop}}.",
+      "gotAtShop_other": "Got {{count}} today at {{price}}, at {{shop}}.",
+      "askedOn_one": "Asked for on 1 list",
+      "askedOn_other": "Asked for on {{count}} lists",
+      "addElsewhere": "Add it to another list",
+      "othersLoading": "Looking at your other lists",
+      "othersFailed": "Your other lists did not load.",
+      "othersRetry": "Try again",
+      "gotAll_one": "Got it",
+      "gotAll_other": "Got all {{count}}",
+      "gotOther_one": "Got the last one",
+      "gotOther_other": "Got the other {{count}}"
     }
   },
   "getList": {
@@ -2508,5 +2702,29 @@
     "unsaved": {
       "body": "The last part of this walk is only on this phone. We keep trying to save it."
     }
+  },
+  "support": {
+    "strip": {
+      "label": "Support session",
+      "viewingAs": "Viewing as",
+      "leftHoursMinutes": "{{hours}} h {{minutes}} min left",
+      "leftHours": "{{hours}} h left",
+      "leftMinutes": "{{minutes}} min left",
+      "leftUnderMinute": "Less than a minute left",
+      "end": "End"
+    },
+    "handoff": {
+      "working": "Opening the support session",
+      "invalidTitle": "This link no longer works",
+      "invalidBody": "It was already used, or it is too old. Open a new one from the back office.",
+      "failedTitle": "The support session did not open",
+      "failedBody": "Something went wrong. The link may still work.",
+      "retry": "Try again"
+    },
+    "ended": {
+      "title": "This support session has ended",
+      "body": "You can close this tab."
+    },
+    "refused": "This cannot be done in a support session"
   }
 }

@@ -1,0 +1,87 @@
+// The two drawn choices of velista `0140`: a radio and an 18 pixel checkbox, on
+// the native controls with their own look taken off, so the keyboard, the focus
+// and what a screen reader says are the browser's own. The colour of a choice is
+// the quiet action colour, the one accent the mock draws for it.
+
+// A ring. Chosen, the ring closes to a dot of the accent colour.
+@mixin radio-dot {
+  flex: none;
+  inline-size: var(--app-choice-radio-size);
+  block-size: var(--app-choice-radio-size);
+  box-sizing: border-box;
+  margin: 0;
+  border: var(--app-choice-radio-ring) solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+
+  &:checked {
+    border: var(--app-choice-radio-chosen) solid var(--app-action-quiet-fg);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// A box, ticked in the accent colour. The tick is drawn in the surface colour,
+// which is the light one under the dark accent of the day theme and the dark one
+// under the light accent of the night theme.
+@mixin check-box {
+  flex: none;
+  display: grid;
+  place-content: center;
+  inline-size: var(--app-choice-check-size);
+  block-size: var(--app-choice-check-size);
+  box-sizing: border-box;
+  margin: 0;
+  border: var(--app-choice-radio-ring) solid var(--app-border-strong);
+  border-radius: var(--app-choice-check-radius);
+  background: var(--app-surface-raised);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+
+  &:checked {
+    border-color: var(--app-action-quiet-fg);
+    background: var(--app-action-quiet-fg);
+  }
+
+  &:checked::after {
+    content: '';
+    inline-size: var(--app-choice-tick-width);
+    block-size: var(--app-choice-tick-height);
+    border-inline-start: var(--app-choice-tick-stroke) solid
+      var(--app-surface-raised);
+    border-block-end: var(--app-choice-tick-stroke) solid
+      var(--app-surface-raised);
+    transform: translateY(-1px) rotate(-45deg);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The box of a catalog card (velista 0146): the radio's size, so a card that
+// ticks and a card that chooses one take the same room at the trailing edge.
+@mixin card-check-box {
+  @include check-box;
+
+  inline-size: var(--app-choice-radio-size);
+  block-size: var(--app-choice-radio-size);
+  border-radius: var(--app-choice-card-check-radius);
+
+  &:checked::after {
+    inline-size: var(--app-choice-card-tick-width);
+    block-size: var(--app-choice-card-tick-height);
+  }
+}

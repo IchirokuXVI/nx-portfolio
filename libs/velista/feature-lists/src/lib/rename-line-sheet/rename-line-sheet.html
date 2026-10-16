@@ -1,0 +1,116 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!saving()"
+  initialFocus="first"
+  labelledBy="rename-line-title"
+>
+  @if (gone.reason(); as reason) {
+    <lib-line-gone-notice
+      (closed)="gone.acknowledge()"
+      [reason]="reason"
+      titleId="rename-line-title"
+    />
+  } @else if (merge(); as question) {
+    <!--
+      The merge question, in place of the field (plan 0083, section 5). The fact
+      first and the question second, because the fact is what the reader did not
+      know. The third line answers the worry the question raises.
+    -->
+    <h2 class="visually-hidden" id="rename-line-title">{{ lineName() }}</h2>
+
+    <p #question class="merge-taken" tabindex="-1">
+      {{
+        'list.merge.taken'
+          | rokuT
+            : { other: question.other, otherQuantity: question.otherQuantity }
+      }}
+    </p>
+    <p class="merge-question">
+      {{ 'list.merge.question' | rokuT: { total: question.total } }}
+    </p>
+    <p class="body">{{ 'list.merge.keeps' | rokuT }}</p>
+
+    <button
+      (click)="confirmMerge()"
+      [attr.aria-busy]="saving()"
+      [disabled]="saving()"
+      class="primary"
+      type="button"
+    >
+      @if (saving()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'list.merge.confirm' | rokuT }}</span>
+    </button>
+
+    <button
+      (click)="keepEditing()"
+      [disabled]="saving()"
+      class="secondary"
+      type="button"
+    >
+      {{ 'list.merge.keepEditing' | rokuT }}
+    </button>
+  } @else {
+    <!--
+      The name sheet (plan 0144, section 4): the title, the product the line shows,
+      one field and the sentence that says what a name changes.
+    -->
+    <h2 class="title" id="rename-line-title">
+      {{ 'list.rename.title' | rokuT }}
+    </h2>
+    @if (product(); as shown) {
+      <p class="product">{{ shown }}</p>
+    }
+
+    <form (submit)="save($event)" class="form">
+      <label class="label" for="rename-line-name">
+        {{ 'list.rename.label' | rokuT }}
+      </label>
+      <input
+        (input)="onInput($event)"
+        [attr.aria-describedby]="
+          errorKey() ? 'rename-line-note rename-line-error' : 'rename-line-note'
+        "
+        [attr.maxlength]="maxLength"
+        [attr.placeholder]="productName()"
+        [value]="name()"
+        #field
+        autocomplete="off"
+        class="field"
+        enterkeyhint="done"
+        id="rename-line-name"
+        type="text"
+      />
+      <p class="note" id="rename-line-note">
+        {{ 'list.rename.note' | rokuT }}
+      </p>
+
+      @if (errorKey(); as key) {
+        <p class="error" id="rename-line-error" role="alert">
+          {{ key | rokuT: errorArgs() }}
+        </p>
+      }
+
+      <button
+        [attr.aria-busy]="saving()"
+        [disabled]="!canSave()"
+        class="primary"
+        type="submit"
+      >
+        @if (saving()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'list.rename.save' | rokuT }}</span>
+      </button>
+      <button
+        (click)="dismiss()"
+        [disabled]="saving()"
+        class="cancel"
+        type="button"
+      >
+        {{ 'list.rename.cancel' | rokuT }}
+      </button>
+    </form>
+  }
+</lib-sheet-shell>

@@ -74,6 +74,23 @@ export class LookupItemsDto {
   @ArrayMaxSize(ITEM_LOOKUP_LIMITS.maxIds)
   @IsUUID('all', { each: true })
   ids!: string[];
+
+  /**
+   * It takes no scope, no postal code and no profile (plan 0207, section 2). A
+   * reader sees the prices of the profile they shop with, which is what the
+   * catalog tab shows them.
+   */
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Answer prices with the products (plan 0207). With true, every item carries bestOffer and offers, read at the price scopes of your default profile, and the answer names the chain of each of those scopes in scopes. An item with no price there is still in the answer, with a null bestOffer. With no scope at all, every item comes back with no offer. Neither case is an error. Absent or false, the answer is the products alone.',
+  })
+  // The value as the body spelled it, so only a JSON true or false passes. The
+  // pipe would otherwise read the string "false" as true.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['prices'])
+  @IsOptional()
+  @IsBoolean()
+  prices?: boolean;
 }
 
 const LOCALIZED_TEXT_MAX_LENGTH = 200;
@@ -651,18 +668,18 @@ export class UpdateCategoryDto {
   parentId?: string | null;
 }
 
-// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+// --- Shop sections (plan 0167, as plan 0200 left it) ------------------------
 
 const SECTION_CATEGORY_IDS_DESCRIPTION =
-  'The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty, for a section that holds only pinned products. An unknown id is refused with `category_not_found`.';
+  'The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty. An unknown id is refused with `category_not_found`.';
 
-/** Create a section on the chain the route names. */
-export class CreateSupermarketSectionDto {
+/** Create a section of the shop the route names, after its last one. */
+export class CreateShopSectionDto {
   @ApiProperty({
     minLength: 1,
     maxLength: SECTION_SLUG_MAX_LENGTH,
     description:
-      'Ascii kebab case, unique within the chain (`section_slug_taken` otherwise), and written once: an edit cannot change it.',
+      'Ascii kebab case, unique within the shop (`section_slug_taken` otherwise), and written once: an edit cannot change it. Two shops of one chain can hold the same slug.',
   })
   @IsString()
   @MinLength(1)
@@ -687,28 +704,22 @@ export class CreateSupermarketSectionDto {
   // Any version: seeded categories carry version 5 ids derived from the slug.
   @IsUUID('all', { each: true })
   categoryIds!: string[];
-
-  @ApiPropertyOptional({
-    type: 'integer',
-    minimum: 0,
-    description:
-      'The chain’s default order. Absent appends after the last section.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  position?: number;
 }
 
 /** Edit a section. No slug: it is an identity, written once on create. */
-export class UpdateSupermarketSectionDto {
+export class UpdateShopSectionDto {
   @ApiPropertyOptional({ type: LocalizedTextDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   name?: LocalizedTextDto;
 
-  @ApiPropertyOptional({ type: 'integer', minimum: 0 })
+  @ApiPropertyOptional({
+    type: 'integer',
+    minimum: 0,
+    description:
+      'Moves the section to this place in its shop, from 0. The sections between its old place and its new one move by one. A place past the last one is the last one.',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -729,7 +740,7 @@ export class UpdateSupermarketSectionDto {
   categoryIds?: string[];
 }
 
-/** A shop's ordered section list, saved whole (plan 0167, section 2). */
+/** The order of a shop's own sections (plan 0200). */
 export class SetLocationSectionsDto {
   @ApiProperty({
     type: [String],
@@ -737,31 +748,10 @@ export class SetLocationSectionsDto {
     maxItems: SECTION_LIMITS.maxSectionsPerLocation,
     uniqueItems: true,
     description:
-      'The sections this shop has, in the order it is walked. An empty array deletes the shop’s own list and returns it to its chain’s default. A section of another chain is refused with `section_of_another_chain`, an unknown one with `section_not_found`.',
+      'Sections of this shop, in the order it is walked. They come first, in this order. A section of the shop that is not named is kept, after them, in the order it had. Nothing is created or deleted, so an empty array changes nothing. A section of another shop is refused with `section_of_another_shop`, an unknown one with `section_not_found`.',
   })
   @IsArray()
   @ArrayMaxSize(SECTION_LIMITS.maxSectionsPerLocation)
-  @ArrayUnique()
-  @IsUUID('all', { each: true })
-  sectionIds!: string[];
-}
-
-/** One product's pins in the chain the route names (plan 0167, section 2). */
-export class SetItemSectionPinsDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID('all')
-  itemId!: string;
-
-  @ApiProperty({
-    type: [String],
-    format: 'uuid',
-    maxItems: SECTION_LIMITS.maxPinsPerItem,
-    uniqueItems: true,
-    description:
-      'Replaces the product’s pins in this chain: "in this chain, this product is in these sections and no other". An empty array removes them, and the product returns to the rule’s other steps. A section of another chain is refused with `section_of_another_chain`.',
-  })
-  @IsArray()
-  @ArrayMaxSize(SECTION_LIMITS.maxPinsPerItem)
   @ArrayUnique()
   @IsUUID('all', { each: true })
   sectionIds!: string[];
@@ -1860,6 +1850,22 @@ export class RegisterBrandsDto {
  * One field. It is refused with `item_ean_invalid` unless it is a real
  * barcode, by the same function the product create uses.
  */
+/**
+ * Whether the photos of one chain may be shown (plan 0198, section 4).
+ */
+export class SetLinkedImagesEnabledDto {
+  @ApiProperty({
+    description:
+      'True lets a product answer the photos this chain prints for it, each as a link to the chain\'s own host. False takes them out of every product in the same transaction. The links stay saved either way.',
+  })
+  // The value as the body spelled it. The pipe converts implicitly, and that
+  // conversion reads the string "false" as true, which here would turn a
+  // chain on. Only a JSON true or false passes.
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['enabled'])
+  @IsBoolean()
+  enabled!: boolean;
+}
+
 export class AddItemEanDto {
   @ApiProperty({
     maxLength: 32,

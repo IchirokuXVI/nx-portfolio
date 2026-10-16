@@ -34,6 +34,8 @@ export {
   unavailableProduct,
 } from './lib/normalize';
 export type { NormalizeProductOptions } from './lib/normalize';
+export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
+export type { PhotoFields, PhotoRead } from './lib/photo';
 export {
   MERCADONA_STORES_TOTAL_URL,
   MERCADONA_STORES_URL,

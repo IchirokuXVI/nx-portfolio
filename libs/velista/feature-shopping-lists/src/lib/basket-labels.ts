@@ -1,14 +1,16 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketElsewhere,
+  basketRowLists,
+  basketRowProduct,
+  catalogName,
   formatVisitMoment,
-  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
+  type BasketProduct,
   type BasketRow,
   type BasketRowState,
 } from '@portfolio/velista/models';
-import type { ListPickerRow } from '@portfolio/velista/ui';
+import { productSizeText, type ListPickerRow } from '@portfolio/velista/ui';
 
 /**
  * The three sentences every row on the basket has to be able to say, in one
@@ -262,24 +264,10 @@ export function touchedCaption(
 }
 
 export function quantityCaption(
-  row: Pick<
-    BasketRow,
-    'state' | 'bought' | 'asked' | 'left' | 'boughtElsewhere'
-  >,
+  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left'>,
   translator: RokuTranslatorService,
   locale: string
 ): string {
-  const elsewhere = basketElsewhere(row);
-  if (elsewhere?.closed === true) {
-    // Closed by a purchase made through another basket (velista `0131`). This
-    // basket bought none and asks for none, so its own pair reads "0 of 0". The
-    // count is the server's `boughtElsewhere`, said on both sides because
-    // nothing is left: what was got is what there was to get.
-    return translator.t('basket.row.boughtOf', undefined, locale, {
-      bought: elsewhere.count,
-      asked: elsewhere.count,
-    });
-  }
   if (row.state === 'PARTLY') {
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
@@ -289,7 +277,9 @@ export function quantityCaption(
   if (row.state === 'DONE' || row.state === 'NOT_AVAILABLE') {
     // Both are finished, and both say what was got out of what was asked for. A
     // `NOT_AVAILABLE` row says "0 of 6", which is true and is the sentence the
-    // glyph beside it needs: the shop had none of the six.
+    // glyph beside it needs: the shop had none of the six. A row this shopping
+    // list bought two of and somebody else finished reads "2 of 2", because
+    // `asked` counts this shopping list alone (velista `0142`, section 2).
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
       asked: row.asked,
@@ -303,67 +293,94 @@ export function quantityCaption(
 }
 
 /**
- * "Bought on another basket", or null (velista `0131`).
+ * The one line under the name of a crossed out row (velista `0093`, `0142`), as
+ * a key.
  *
- * One sentence for a row closed from elsewhere and for a row that still has
- * something left. **It names nobody and says no time**: the server sends neither
- * the person nor the basket, and the row leaves when a read no longer holds it.
+ * "No longer on the list" for a `REMOVED` row. For a `BOUGHT_ELSEWHERE` row, where
+ * the buy was made, from the note of the row: through another shopping list, on
+ * the list page, or "Already bought" for any other note. **It names nobody**: who
+ * bought it is in the changes sheet, and the other shopping list is never named,
+ * because the server does not send it.
  */
-export function elsewhereCaption(
-  elsewhere: BasketElsewhere | null,
-  translator: RokuTranslatorService,
-  locale: string
-): string | null {
-  return elsewhere === null
-    ? null
-    : translator.t('basket.elsewhere.caption', undefined, locale);
+export function crossedOutNoteKey(
+  row: Pick<BasketRow, 'state' | 'note'>
+): string {
+  if (row.state === 'REMOVED') {
+    return 'basket.line.removed';
+  }
+  switch (row.note) {
+    case 'BOUGHT_ON_ANOTHER_BASKET':
+      return 'basket.line.boughtFromAnotherList';
+    case 'BOUGHT_ON_THE_LIST':
+      return 'basket.line.boughtFromTheList';
+    default:
+      return 'basket.line.alreadyBought';
+  }
 }
 
 /**
- * The "from" caption naming the households a row came from.
+ * The name a row is drawn under (velista `0139`, sections 1 and 2): the product,
+ * as the catalog cards print it, name then brand then size, on a row of one; the
+ * line's own words on a row whose lines hold no product, and on a row whose
+ * product the read could not name.
  *
- * **Null when this reader was served no list the row is on**, which is a guest,
- * and null when the row's every entry is on a list the basket did not serve. Both
- * are the same nothing to draw, and the entry's own null `listId` is what says so:
- * there is one question here since backend `0136`, and one answer to it.
- *
- * Names come from the basket's own served refs, which the caller supplies; an
- * entry whose list is not among them is dropped rather than printed.
+ * One function, for the row and the sheet's title, so the two cannot disagree.
  */
-export function originsCaption(
+export function basketRowName(
+  row: BasketRow,
+  products: ReadonlyMap<string, BasketProduct>,
+  translator: RokuTranslatorService,
+  locale: string
+): string {
+  const product = basketRowProduct(row, products);
+  if (product === null) {
+    return row.content;
+  }
+  const size = productSizeText(
+    product.size,
+    product.unit,
+    locale,
+    (key, args) => translator.t(key, undefined, locale, args)
+  );
+  return [
+    catalogName(product.name, locale),
+    product.brand?.trim() ?? '',
+    size ?? '',
+  ]
+    .filter((part) => part !== '')
+    .join(' ');
+}
+
+/**
+ * The lists that ask for a row, as its caption names them (velista `0139`,
+ * section 1): "Compra semanal, Básicos, Cocina".
+ *
+ * The lists this reader was served are named, once each, joined with commas. A
+ * list the reader was not served is counted in words and never named: "Compra
+ * semanal and 1 more list", or "Another list" for a guest, who is served none.
+ * Null for a row with no entry, which is a `REMOVED` row.
+ */
+export function listsCaption(
   row: BasketRow,
   lists: ReadonlyMap<string, BasketListRef>,
   translator: RokuTranslatorService,
   locale: string
 ): string | null {
-  const names = [
-    ...new Set(
-      row.entries
-        .map((entry) =>
-          entry.listId === null ? undefined : lists.get(entry.listId)?.name
-        )
-        .filter((name): name is string => name !== undefined && name !== '')
-    ),
-  ];
-
+  const { names, others } = basketRowLists(row, lists);
   if (names.length === 0) {
-    return null;
+    return others === 0
+      ? null
+      : translator.t('basket.row.otherLists', undefined, locale, {
+          count: others,
+        });
   }
-  if (names.length === 1) {
-    return translator.t('basket.from.one', undefined, locale, {
-      first: names[0],
-    });
-  }
-  if (names.length === 2) {
-    return translator.t('basket.from.two', undefined, locale, {
-      first: names[0],
-      second: names[1],
-    });
-  }
-  return translator.t('basket.from.more', undefined, locale, {
-    first: names[0],
-    count: names.length - 1,
-  });
+  const named = names.join(', ');
+  return others === 0
+    ? named
+    : translator.t('basket.row.listsAndMore', undefined, locale, {
+        names: named,
+        count: others,
+      });
 }
 
 /**

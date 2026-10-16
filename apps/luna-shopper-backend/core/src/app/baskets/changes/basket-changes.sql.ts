@@ -38,6 +38,13 @@ import type { CoveredLineRow } from '../basket-read.sql';
  * needed by the `COALESCE`s below **and** as a fallback when there is no cursor
  * row at all, which is every viewer's first read.
  *
+ * ## The basket is read off the participant
+ *
+ * A participant row belongs to one basket, so `"basketId"` here is the basket
+ * the viewer reads through. The rule of a buy change needs it (plan 0203,
+ * section 2), and reading it here means no caller can hand a basket that is not
+ * the participant's.
+ *
  * ## `start` is the later of joining and the basket's creation
  *
  * A person is not shown what changed before they could see the basket. For the
@@ -48,7 +55,8 @@ import type { CoveredLineRow } from '../basket-read.sql';
 const VIEWER_CTES = `
   "scope" AS (
     SELECT GREATEST(p."joinedAt", gl."generatedAt") AS "start",
-           p."userId" AS "userId"
+           p."userId" AS "userId",
+           p."basketId" AS "basketId"
     FROM "basket_participants" p
     JOIN "baskets" gl ON gl.id = p."basketId"
     WHERE p.id = $1::uuid
@@ -56,8 +64,10 @@ const VIEWER_CTES = `
   "viewer" AS (
     SELECT COALESCE(c."seenFrom", s."start") AS "from",
            COALESCE(c."seenThrough", s."start") AS "through",
+           s."start" AS "start",
            c."ackedAt" AS "ackedAt",
-           s."userId" AS "userId"
+           s."userId" AS "userId",
+           s."basketId" AS "basketId"
     FROM "scope" s
     LEFT JOIN "basket_change_cursors" c ON c."participantId" = $1::uuid
   )`;
@@ -91,6 +101,48 @@ const NOT_THIS_VIEWERS = `
       OR v."userId" IS NULL
       OR ch."actorUserId" <> v."userId"
     )`;
+
+/** The two kinds a buy writes (plan 0203, section 1), as an SQL list. */
+const BUY_KINDS = `('BOUGHT', 'BUY_REVERTED')`;
+
+/**
+ * "This viewer is shown this change" (plan 0138, section 5; plan 0203, section
+ * 2). Each change is selected by the rule of its own kind.
+ *
+ * - **A buy and a taken back buy** are shown to every basket but the one they
+ *   were made through. `IS DISTINCT FROM`, because a buy on the list page has a
+ *   null `basketId`, and null is distinct from every basket. The rule is the
+ *   same for every reader of one basket. {@link NOT_THIS_VIEWERS} does **not**
+ *   apply: a buy through one basket of an account is a change in the other
+ *   basket of the same account, and a buy on the list page is a change in the
+ *   basket of the person who made it.
+ * - **The six older kinds** keep {@link NOT_THIS_VIEWERS}.
+ */
+const SHOWN_TO_VIEWER = `
+    (CASE
+       WHEN ch.kind IN ${BUY_KINDS}
+       THEN ch."basketId" IS DISTINCT FROM v."basketId"
+       ELSE (${NOT_THIS_VIEWERS})
+     END)`;
+
+/**
+ * "This change is still marked for this viewer": unseen, or acknowledged less
+ * than the mark window ago. `windowParam` is the mark window in milliseconds.
+ *
+ * `v."ackedAt"` is null for a viewer with no cursor row, and `now() < NULL` is
+ * unknown, so the `COALESCE` answers false where a `WHERE` would have dropped
+ * the row.
+ */
+function stillMarked(windowParam: string): string {
+  return `COALESCE(
+      ch."createdAt" > v."through"
+      OR (
+        ch."createdAt" > v."from"
+        AND now() < v."ackedAt" + (${windowParam}::double precision * interval '1 millisecond')
+      ),
+      false
+    )`;
+}
 
 /** Every column of a change the folds need, aliased for the row types below. */
 const CHANGE_COLUMNS = `
@@ -137,16 +189,74 @@ export const MARKED_CHANGES_SQL = `
   CROSS JOIN "viewer" v
   WHERE ch."listId" = ANY($2::uuid[])
     AND ${WITHIN_RETENTION}
-    AND ${NOT_THIS_VIEWERS}
-    AND (
-      ch."createdAt" > v."through"
-      OR (
-        ch."createdAt" > v."from"
-        AND now() < v."ackedAt" + ($4::double precision * interval '1 millisecond')
-      )
-    )
+    AND ${SHOWN_TO_VIEWER}
+    AND ${stillMarked('$4')}
   ORDER BY ch."createdAt" DESC, ch.id DESC
   LIMIT $5
+`;
+
+/**
+ * The changes that took a line off this basket lately, one for each line,
+ * newest first (plan 0203, section 6).
+ *
+ * `$1` is the participant, `$2` the covered lists, `$3` the retention, `$4` the
+ * window a removed row lives for (`PURCHASE_SESSION_GAP_MS`), `$5` the mark
+ * window and `$6` the cap.
+ *
+ * A removed row used to live as long as its mark, so it was built from
+ * {@link MARKED_CHANGES_SQL}. It now lives for six hours from the change that
+ * removed it, whatever the viewer acknowledged, so it has a read of its own.
+ *
+ * ## Which change removed a line
+ *
+ * A delete, a quantity taken to zero, or a rejection. The before and after
+ * columns carry everything that moved whichever kind won, so the test is on
+ * the columns: a rename that also set the quantity to zero is a removal.
+ *
+ * - **Not an add.** A line that was added at zero was never in the basket.
+ * - **Not a merge.** The absorbed line names no row, and the survivor is marked.
+ * - **Not a buy.** A line that a buy took to zero is still covered while the
+ *   buy is inside its window, and it is no row after that (plan 0203, section
+ *   3). It is never a removed row.
+ *
+ * ## The newest removal of a line decides
+ *
+ * `DISTINCT ON` keeps the newest removing change of each line, and the rule of
+ * the viewer is applied **after** that. So a line that somebody took to zero,
+ * that came back, and that the viewer then deleted is not drawn for the viewer:
+ * the removal a viewer made is not drawn for that viewer, as before.
+ *
+ * The caller still asks whether the line is covered now. A line that was taken
+ * to zero and raised again is covered, and it is no removed row.
+ *
+ * `marked` is the test of {@link MARKED_CHANGES_SQL}. It decides `mark` on the
+ * row and nothing else: the row is served with or without it.
+ */
+export const REMOVING_CHANGES_SQL = `
+  WITH ${VIEWER_CTES},
+  "removing" AS (
+    SELECT DISTINCT ON (c."lineId") c.*
+    FROM "list_line_changes" c
+    CROSS JOIN "scope" s
+    WHERE c."listId" = ANY($2::uuid[])
+      AND c."createdAt" >= now() - ($3::double precision * interval '1 millisecond')
+      AND c."createdAt" >= now() - ($4::double precision * interval '1 millisecond')
+      AND c."createdAt" > s."start"
+      AND c.kind IN ('DELETED', 'QUANTITY_CHANGED', 'RENAMED', 'APPROVAL_CHANGED')
+      AND (
+        c.kind = 'DELETED'
+        OR c."quantityAfter" = 0
+        OR c."approvalAfter" = 'REJECTED'
+      )
+    ORDER BY c."lineId", c."createdAt" DESC, c.id DESC
+  )
+  SELECT ${CHANGE_COLUMNS},
+         ${stillMarked('$5')} AS "marked"
+  FROM "removing" ch
+  CROSS JOIN "viewer" v
+  WHERE ${NOT_THIS_VIEWERS}
+  ORDER BY ch."createdAt" DESC, ch.id DESC
+  LIMIT $6
 `;
 
 /**
@@ -166,7 +276,7 @@ export const UNSEEN_CHANGE_COUNT_SQL = `
     CROSS JOIN "viewer" v
     WHERE ch."listId" = ANY($2::uuid[])
       AND ${WITHIN_RETENTION}
-      AND ${NOT_THIS_VIEWERS}
+      AND ${SHOWN_TO_VIEWER}
       AND ch."createdAt" > v."through"
     LIMIT $4
   ) "capped"
@@ -176,11 +286,21 @@ export const UNSEEN_CHANGE_COUNT_SQL = `
  * One page of the changes view, newest first (section 8).
  *
  * `$1` is the participant, `$2` the covered lists, `$3` the retention, `$4` the
- * cursor row's id or null, `$5` the limit plus one.
+ * cursor row's id or null, `$5` the limit plus one, `$6` the lists this reader
+ * was served.
  *
  * **The viewer's own changes are here**, unlike in the marks above, because this
  * is a history rather than a nudge: somebody looking at what happened to their
  * basket wants to see the line they added themselves in its place in the order.
+ * The own buys of the reading basket are here too (plan 0203, section 2).
+ *
+ * ## The owner of another basket, loaded only for a reader who may know them
+ *
+ * `originOwnerUserId` is the owner of the basket that an outside buy was made
+ * through (plan 0203, section 5). The `CASE` is the redaction: it answers null
+ * unless the change is a buy through **another** basket on a list this reader
+ * was served. So a guest, who is served no list, is never handed the column. The
+ * join is on the two buy kinds alone, and a basket deleted since joins nothing.
  *
  * `unseen` is still computed per viewer, so the view can draw where the reading
  * mark falls without a second read.
@@ -191,9 +311,16 @@ export const BASKET_CHANGES_PAGE_SQL = `
          ch."actorUserId" AS "actorUserId",
          ch."actorParticipantId" AS "actorParticipantId",
          ch."basketId" AS "basketId",
+         CASE
+           WHEN ch."basketId" IS DISTINCT FROM v."basketId"
+            AND ch."listId" = ANY($6::uuid[])
+           THEN ob."ownerUserId"
+         END AS "originOwnerUserId",
          (ch."createdAt" > v."through") AS "unseen"
   FROM "list_line_changes" ch
   CROSS JOIN "viewer" v
+  LEFT JOIN "baskets" ob
+    ON ob.id = ch."basketId" AND ch.kind IN ${BUY_KINDS}
   WHERE ch."listId" = ANY($2::uuid[])
     AND ${WITHIN_RETENTION}
     AND (
@@ -225,7 +352,9 @@ export const CHANGE_LINES_SQL = `
          ll."listId" AS "listId",
          ll.content AS "content",
          ll.quantity AS "quantity",
+         ll.version AS "version",
          ll."itemSetHash" AS "itemSetHash",
+         ll."favoriteItemId" AS "favoriteItemId",
          ll."approvalStatus" AS "approvalStatus",
          ll."createdAt" AS "createdAt"
   FROM "list_lines" ll
@@ -327,6 +456,18 @@ export interface ChangePageRow extends ChangeRow {
    * with this basket was made by a participant of it.
    */
   basketId: string | null;
+  /**
+   * The owner of the basket an outside buy was made through, or null (plan
+   * 0203, section 5). Loaded only for a buy through another basket on a list
+   * this reader was served, so it needs no redaction after the query.
+   */
+  originOwnerUserId: string | null;
+}
+
+/** One row of {@link REMOVING_CHANGES_SQL}: the newest removal of one line. */
+export interface RemovingChangeRow extends Omit<ChangeRow, 'unseen'> {
+  /** Still marked for this viewer, which decides `mark` on the row. */
+  marked: boolean;
 }
 
 /**

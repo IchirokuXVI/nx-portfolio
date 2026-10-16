@@ -26,7 +26,9 @@ function build(allowed = true) {
       checkZoneStaff: jest.fn(async () => false),
       checkList: jest.fn(async () => allowed),
     } as never,
-    { stream$: stream$.asObservable() } as never
+    { stream$: stream$.asObservable() } as never,
+    // Plan 0194: no stream here belongs to a support session.
+    { isLive: jest.fn() } as never
   );
   return { controller, stream$ };
 }

@@ -1,3 +1,4 @@
+import type { BasketKind } from '@portfolio/luna-shopper/contracts';
 import { WRITABLE_LIST } from '../baskets/basket.sql';
 
 /**
@@ -70,9 +71,15 @@ export const BASKET_COVERAGE_SQL = `
  * **It ignores the claim window.** A basket past the window is finished by the
  * sweep within one tick, and until then it still shows the line, so answering
  * that it covers the list is the honest answer rather than a stale one.
+ *
+ * The kind is answered too, since plan 0204: a patch is computed for each of
+ * these baskets, the kind decides which of its purchases are in scope, and
+ * reading it here saves each patch a query for its own basket.
  */
 export const COVERING_BASKETS_SQL = `
-  SELECT gl.id AS "basketId", gl."ownerUserId" AS "ownerUserId"
+  SELECT gl.id AS "basketId",
+         gl."ownerUserId" AS "ownerUserId",
+         gl."kind" AS "kind"
   FROM "shopping_lists" sl
   JOIN "zone_memberships" m ON m."zoneId" = sl."zoneId"
   JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
@@ -119,4 +126,9 @@ export interface CoveredList {
 export interface CoveringBasket {
   basketId: string;
   ownerUserId: string;
+  /**
+   * `LIVE` or `GENERATED`. Absent from {@link BASKETS_OF_ZONE_MEMBERS_SQL},
+   * which announces that the coverage moved and computes no patch.
+   */
+  kind?: BasketKind;
 }

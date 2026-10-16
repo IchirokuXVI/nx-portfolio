@@ -1,6 +1,11 @@
-import { basketChangeSentence, type BasketChange } from './basket-changes';
-import { countableBasketRows } from './basket-view';
+import {
+  basketChangeOriginLine,
+  basketChangeSentence,
+  type BasketChange,
+  type BasketChangeActor,
+} from './basket-changes';
 import type { BasketRow, BasketRowState } from './basket-view';
+import { countableBasketRows } from './basket-view';
 
 /**
  * Which sentence a change reads as, and which rows a count is over
@@ -25,6 +30,7 @@ function change(over: Partial<BasketChange> = {}): BasketChange {
     approvalAfter: null,
     rowContent: null,
     actor: null,
+    origin: null,
     list: null,
     at: new Date('2026-09-01T09:00:00.000Z'),
     unseen: true,
@@ -45,7 +51,7 @@ function row(state: BasketRowState, rowKey = 'zl-1'): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -98,7 +104,11 @@ describe('basketChangeSentence', () => {
   it('names both spellings of a rename', () => {
     expect(
       basketChangeSentence(
-        change({ kind: 'RENAMED', contentBefore: 'Leche', contentAfter: 'Milk' })
+        change({
+          kind: 'RENAMED',
+          contentBefore: 'Leche',
+          contentAfter: 'Milk',
+        })
       )
     ).toEqual({
       key: 'basket.changes.entry.renamed',
@@ -177,9 +187,155 @@ describe('basketChangeSentence', () => {
   });
 });
 
+describe('basketChangeSentence: a buy (velista 0142, section 4)', () => {
+  it('says what is needed now after a buy that left some', () => {
+    expect(
+      basketChangeSentence(
+        change({
+          kind: 'BOUGHT',
+          contentAfter: null,
+          rowContent: 'Milk',
+          quantityBefore: 3,
+          quantityAfter: 2,
+        })
+      )
+    ).toEqual({
+      key: 'basket.changes.entry.bought',
+      args: { name: 'Milk', after: 2 },
+    });
+  });
+
+  it('has its own sentence for a buy that left nothing', () => {
+    expect(
+      basketChangeSentence(
+        change({ kind: 'BOUGHT', quantityBefore: 2, quantityAfter: 0 })
+      )
+    ).toEqual({
+      key: 'basket.changes.entry.boughtAll',
+      args: { name: 'Milk' },
+    });
+  });
+
+  it('says what is needed again after a buy was undone', () => {
+    expect(
+      basketChangeSentence(
+        change({ kind: 'BUY_REVERTED', quantityBefore: 0, quantityAfter: 3 })
+      )
+    ).toEqual({
+      key: 'basket.changes.entry.buyReverted',
+      args: { name: 'Milk', after: 3 },
+    });
+  });
+});
+
+describe('basketChangeOriginLine', () => {
+  const reader = { participantId: 'p-me', userId: 'u-me' };
+  const names: Record<string, string> = { 'u-alice': 'Alice' };
+  const nameOf = (actor: BasketChangeActor) =>
+    actor.name ??
+    (actor.userId === null ? null : (names[actor.userId] ?? null));
+  const person = (userId: string): BasketChangeActor => ({
+    participantId: null,
+    userId,
+    name: null,
+  });
+
+  it('draws nothing for a change with no origin, which keeps who and the list', () => {
+    expect(basketChangeOriginLine(change(), reader, nameOf)).toBeNull();
+  });
+
+  it('names the owner of the other shopping list', () => {
+    expect(
+      basketChangeOriginLine(
+        change({
+          kind: 'BOUGHT',
+          origin: { kind: 'ANOTHER_BASKET', owner: person('u-alice') },
+        }),
+        reader,
+        nameOf
+      )
+    ).toEqual({
+      key: 'basket.changes.origin.anotherBasket',
+      args: { name: 'Alice' },
+    });
+  });
+
+  it('tells the reader that the other shopping list is one of theirs', () => {
+    expect(
+      basketChangeOriginLine(
+        change({
+          kind: 'BOUGHT',
+          origin: { kind: 'ANOTHER_BASKET', owner: person('u-me') },
+        }),
+        reader,
+        nameOf
+      )?.key
+    ).toBe('basket.changes.origin.anotherBasketYours');
+  });
+
+  it('says someone for an owner the server withheld or the client cannot name', () => {
+    for (const owner of [null, person('u-stranger')]) {
+      expect(
+        basketChangeOriginLine(
+          change({ kind: 'BOUGHT', origin: { kind: 'ANOTHER_BASKET', owner } }),
+          reader,
+          nameOf
+        )
+      ).toEqual({
+        key: 'basket.changes.origin.anotherBasketSomeone',
+        args: {},
+      });
+    }
+  });
+
+  it('names who bought it on the list page', () => {
+    expect(
+      basketChangeOriginLine(
+        change({
+          kind: 'BOUGHT',
+          actor: person('u-alice'),
+          origin: { kind: 'LIST' },
+        }),
+        reader,
+        nameOf
+      )
+    ).toEqual({ key: 'basket.changes.origin.list', args: { name: 'Alice' } });
+  });
+
+  it('tells the reader they bought it on the list page, by either key', () => {
+    for (const actor of [
+      person('u-me'),
+      { participantId: 'p-me', userId: null, name: 'Dana' },
+    ]) {
+      expect(
+        basketChangeOriginLine(
+          change({ kind: 'BOUGHT', actor, origin: { kind: 'LIST' } }),
+          reader,
+          nameOf
+        )?.key
+      ).toBe('basket.changes.origin.listYou');
+    }
+  });
+
+  it('says someone for a list page buyer the server withheld, which is a guest’s view', () => {
+    expect(
+      basketChangeOriginLine(
+        change({ kind: 'BOUGHT', actor: null, origin: { kind: 'LIST' } }),
+        { participantId: 'p-guest', userId: null },
+        nameOf
+      )
+    ).toEqual({ key: 'basket.changes.origin.listSomeone', args: {} });
+  });
+});
+
 describe('countableBasketRows', () => {
-  it('leaves a REMOVED row out', () => {
-    const rows = [row('WANTED', 'a'), row('REMOVED', 'b'), row('DONE', 'c')];
+  it('leaves a REMOVED row and a row bought outside this shopping list out', () => {
+    const rows = [
+      row('WANTED', 'a'),
+      row('REMOVED', 'b'),
+      row('DONE', 'c'),
+      row('BOUGHT_ELSEWHERE', 'd'),
+    ];
 
     expect(countableBasketRows(rows).map((each) => each.rowKey)).toEqual([
       'a',

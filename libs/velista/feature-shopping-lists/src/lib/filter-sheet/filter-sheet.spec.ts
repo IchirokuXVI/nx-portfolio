@@ -9,7 +9,9 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  fakeCategoryStore,
   fakeShopSectionsStore,
+  provideFakeCategoryStore,
   provideFakeShopSectionsStore,
   ShopPickNotices,
   type FakeShopSectionsStore,
@@ -56,7 +58,7 @@ function line(
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -70,6 +72,7 @@ function line(
       state: 'WANTED' as const,
       awaitingApproval: false,
       demandEditable: true,
+      version: 1,
     })),
   };
 }
@@ -176,6 +179,9 @@ function render(options: {
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      // A tree that has landed, so the aisles are not held back for it (velista
+      // `0138`): until it does, the list is drawn ungrouped and the radio says so.
+      provideFakeCategoryStore(fakeCategoryStore([])),
       provideFakeShopSectionsStore(options.shopSections),
       // A fresh `Map` per test for what the sheet remembers (`0076`), rather than
       // the one `localStorage` jsdom shares with every other test in this file.
@@ -897,7 +903,6 @@ describe('FilterSheet: the aisles of the shop', () => {
 
   const DAIRY = {
     id: 'sec-dairy',
-    supermarketId: 'sm-merca',
     slug: 'dairy',
     name: { en: 'Dairy', es: 'Lácteos' },
     position: 0,

@@ -6,7 +6,7 @@ import {
   type HttpRequest,
   HttpResponse,
 } from '@angular/common/http';
-import { inject } from '@angular/core';
+import { inject, Injector } from '@angular/core';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
   APP_VERSION,
@@ -31,6 +31,7 @@ import {
 } from 'rxjs';
 import { ApiUrl } from './api-url';
 import { OPERATION, SKIP_AUTH } from './auth/http-context';
+import { ImpersonationSession } from './auth/impersonation-session';
 import { TokenStore } from './auth/token-store';
 import { newCorrelationId } from './correlation-id';
 import { GatewayError, NetworkError, toGatewayError } from './errors';
@@ -71,6 +72,10 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   const updates = inject(AppUpdates);
   const readiness = inject(BackendReadiness);
   const version = inject(APP_VERSION);
+  // The support session is looked up only when the server says it ended, and
+  // optionally, so a spec that knows nothing of support sessions needs no double for
+  // one. The app constructs the service in every tab anyway, through its initializer.
+  const injector = inject(Injector);
 
   // Stamped here rather than in `decorate`, and that is the one header that is.
   // `retryAfterRefresh` builds the second attempt from this request, so a header put
@@ -140,6 +145,14 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
           refused.code === 'not_a_participant' ||
           refused.code === 'participant_expired'
         ) {
+          return throwError(() => refused);
+        }
+
+        // The support session is over (backend `0194`). A refresh does not revive it,
+        // so none is tried: the tab drops the pair and draws the ended page
+        // (velista `0133`, target 7).
+        if (refused.code === 'impersonation_ended') {
+          injector.get(ImpersonationSession, null)?.endedByServer();
           return throwError(() => refused);
         }
 

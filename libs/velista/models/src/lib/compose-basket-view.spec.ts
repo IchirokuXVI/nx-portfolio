@@ -25,6 +25,7 @@ import {
 import type { ProductOffer } from './domain';
 import type { ProductCategory } from './product-category';
 import type { ShopSection } from './shop-section';
+import type { LocalizedName } from './shopping-profile';
 
 /**
  * One row, with one entry unless the test says otherwise.
@@ -53,7 +54,7 @@ function row(
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -70,6 +71,14 @@ function entry(
   return {
     lineId: `zl-${listId ?? 'none'}`,
     listId,
+    content: '',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left: 1,
     bought: 0,
     asked: 1,
@@ -77,6 +86,7 @@ function entry(
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
     ...over,
   };
 }
@@ -86,24 +96,64 @@ function ref(listId: string, name: string): BasketListRef {
   return { listId, name, zoneId: 'z1', zoneName: 'Home' };
 }
 
+/**
+ * The roots of the tree the fixtures sit under, by id, with their names: what
+ * `BasketViewContext.parents` is handed once the tree has landed (velista `0138`).
+ */
+const PARENTS: ReadonlyMap<string, LocalizedName> = new Map([
+  [
+    'cat-eggs-milk-and-butter',
+    { en: 'Eggs, milk, and butter', es: 'Huevos, leche y mantequilla' },
+  ],
+  ['cat-bakery', { en: 'Bakery', es: 'Panadería' }],
+  ['cat-frozen', { en: 'Frozen food', es: 'Congelados' }],
+  ['cat-other', { en: 'Other', es: 'Otros' }],
+  [
+    'cat-rice-pasta-and-pulses',
+    { en: 'Rice, pasta and pulses', es: 'Arroz, pastas y legumbres' },
+  ],
+  [
+    'cat-oils-sauces-and-spices',
+    { en: 'Oils, sauces and spices', es: 'Aceites, salsas y especias' },
+  ],
+  [
+    'cat-fruit-and-vegetables',
+    { en: 'Fruit and vegetables', es: 'Fruta y verdura' },
+  ],
+]);
+
 /** A leaf of the tree, by slug, with the id derived from it as a seed would. */
-function leaf(slug: string, en: string, es = en): ProductCategory {
-  return { id: `cat-${slug}`, parentId: 'cat-root', slug, name: { en, es } };
+function leaf(
+  slug: string,
+  parent: string,
+  en: string,
+  es = en
+): ProductCategory {
+  return {
+    id: `cat-${slug}`,
+    parentId: `cat-${parent}`,
+    slug,
+    name: { en, es },
+  };
 }
 
 const UNCATEGORISED = leaf(
   'uncategorised',
+  'other',
   'Not yet categorised',
   'Sin categoría'
 );
-const MILK_LEAF = leaf('milk', 'Milk', 'Leche');
+const MILK_LEAF = leaf('milk', 'eggs-milk-and-butter', 'Milk', 'Leche');
+const EGGS_LEAF = leaf('eggs', 'eggs-milk-and-butter', 'Eggs', 'Huevos');
 const BREAD_LEAF = leaf(
   'freshly-baked-bread',
+  'bakery',
   'Freshly baked bread',
   'Pan recién horneado'
 );
 const ICE_CREAM_LEAF = leaf(
   'ice-creams-and-ice',
+  'frozen',
   'Ice creams and ice',
   'Helados y hielo'
 );
@@ -130,6 +180,7 @@ const CONTEXT: BasketViewContext = {
   scopes: new Map(),
   shop: null,
   sections: null,
+  parents: PARENTS,
 };
 
 /** One offer at one scope, which is all the price marks read off it. */
@@ -315,7 +366,7 @@ describe('composeBasketView', () => {
   it('narrows to the search, which looks at the pick as well as the line', () => {
     const rows = [
       row('a', 'Leche'),
-      row('b', 'bread', { optionIds: ['p1'] }),
+      row('b', 'bread', { productId: 'p1' }),
       row('c', 'Cheese'),
     ];
     const context: BasketViewContext = {
@@ -443,6 +494,7 @@ describe('composeBasketView, grouped by category', () => {
     ['p-milk', product('p-milk', 'Milk', null, [MILK_LEAF])],
     ['p-bread', product('p-bread', 'Bread', null, [BREAD_LEAF])],
     ['p-cheese', product('p-cheese', 'Cheese', null, [MILK_LEAF])],
+    ['p-eggs', product('p-eggs', 'Eggs', null, [EGGS_LEAF])],
     ['p-odd', product('p-odd', 'Batteries', null, [UNCATEGORISED])],
     // The server never sends an empty list; a product whose every category was
     // unreadable arrives as one anyway.
@@ -459,50 +511,138 @@ describe('composeBasketView, grouped by category', () => {
     });
   }
 
-  it('puts every line under its product’s category, named from the data', () => {
+  it('puts every line under the parent of its product’s category, named from the tree', () => {
     const sections = grouped([
-      row('a', 'Milk', { optionIds: ['p-milk'] }),
-      row('b', 'Bread', { optionIds: ['p-bread'] }),
-      row('c', 'Cheese', { optionIds: ['p-cheese'] }),
+      row('a', 'Milk', { productId: 'p-milk' }),
+      row('b', 'Bread', { productId: 'p-bread' }),
+      row('c', 'Cheese', { productId: 'p-cheese' }),
     ]);
 
     expect(
       sections.map((part) => [
+        part.key,
         part.heading,
         part.rows.map((row) => row.row.rowKey),
       ])
     ).toEqual([
-      [{ kind: 'text', text: 'Milk' }, ['a', 'c']],
-      [{ kind: 'text', text: 'Freshly baked bread' }, ['b']],
+      [
+        'category:cat-eggs-milk-and-butter',
+        { kind: 'text', text: 'Eggs, milk, and butter' },
+        ['a', 'c'],
+      ],
+      ['category:cat-bakery', { kind: 'text', text: 'Bakery' }, ['b']],
+    ]);
+  });
+
+  it('draws two leaves of one parent under one heading, also for one product', () => {
+    const both = new Map(CATALOG).set(
+      'p-both',
+      product('p-both', 'Eggnog', null, [MILK_LEAF, EGGS_LEAF])
+    );
+    const sections = composeBasketView(
+      [
+        row('a', 'Eggs', { productId: 'p-eggs' }),
+        row('b', 'Eggnog', { productId: 'p-both' }),
+        row('c', 'Milk', { productId: 'p-milk' }),
+      ],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, products: both }
+    );
+
+    expect(
+      sections.map((part) => [part.key, part.rows.map((row) => row.row.rowKey)])
+    ).toEqual([['category:cat-eggs-milk-and-butter', ['a', 'b', 'c']]]);
+  });
+
+  it('heads a parent that holds one row, and never with a leaf', () => {
+    const sections = grouped([row('a', 'Bread', { productId: 'p-bread' })]);
+
+    expect(sections.map((part) => part.heading)).toEqual([
+      { kind: 'text', text: 'Bakery' },
+    ]);
+  });
+
+  it('draws the rows ungrouped while the tree has not landed', () => {
+    const sections = composeBasketView(
+      [
+        row('a', 'Milk', { productId: 'p-milk' }),
+        row('b', 'Bread', { productId: 'p-bread' }),
+      ],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, products: CATALOG, parents: null }
+    );
+
+    expect(
+      sections.map((part) => [
+        part.key,
+        part.heading,
+        part.rows.map((row) => row.row.rowKey),
+      ])
+    ).toEqual([['all', null, ['a', 'b']]]);
+  });
+
+  it('puts a product whose every parent the tree does not hold under No category', () => {
+    const stale = leaf('gone-leaf', 'gone-root', 'Gone');
+    const products = new Map(CATALOG)
+      .set('p-stale', product('p-stale', 'Old thing', null, [stale]))
+      .set('p-half', product('p-half', 'Half', null, [stale, BREAD_LEAF]));
+
+    const sections = composeBasketView(
+      [
+        row('a', 'Old thing', { productId: 'p-stale' }),
+        row('b', 'Half', { productId: 'p-half' }),
+      ],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, products }
+    );
+
+    expect(
+      sections.map((part) => [part.key, part.rows.map((row) => row.row.rowKey)])
+    ).toEqual([
+      // A known parent wins over a stale one: the row is under the known one only.
+      ['category:cat-bakery', ['b']],
+      ['no-category', ['a']],
     ]);
   });
 
   it('names a section in the reader’s language', () => {
     const sections = composeBasketView(
-      [row('a', 'Leche', { optionIds: ['p-milk'] })],
+      [row('a', 'Leche', { productId: 'p-milk' })],
       state({ grouping: 'category' }),
       { ...CONTEXT, locale: 'es', products: CATALOG }
     );
 
-    expect(sections[0].heading).toEqual({ kind: 'text', text: 'Leche' });
+    expect(sections[0].heading).toEqual({
+      kind: 'text',
+      text: 'Huevos, leche y mantequilla',
+    });
   });
 
   it('names a section in the other language when the reader’s is missing', () => {
-    const spanishOnly = leaf('pate-and-sobrasada', '', 'Paté y sobrasada');
+    const spanishOnly = leaf(
+      'pate-and-sobrasada',
+      'charcuterie',
+      '',
+      'Paté y sobrasada'
+    );
     const sections = composeBasketView(
-      [row('a', 'Paté', { optionIds: ['p-pate'] })],
+      [row('a', 'Paté', { productId: 'p-pate' })],
       state({ grouping: 'category' }),
       {
         ...CONTEXT,
         products: new Map([
           ['p-pate', product('p-pate', 'Paté', null, [spanishOnly])],
         ]),
+        parents: new Map(PARENTS).set('cat-charcuterie', {
+          en: '',
+          es: 'Charcutería',
+        }),
       }
     );
 
     expect(sections[0].heading).toEqual({
       kind: 'text',
-      text: 'Paté y sobrasada',
+      text: 'Charcutería',
     });
   });
 
@@ -513,19 +653,19 @@ describe('composeBasketView, grouped by category', () => {
    */
   it('gives a section the place of its first line, Not yet categorised included', () => {
     const sections = grouped([
-      row('a', 'Batteries', { optionIds: ['p-odd'] }),
-      row('b', 'Bread', { optionIds: ['p-bread'] }),
-      row('c', 'Milk', { optionIds: ['p-milk'] }),
+      row('a', 'Batteries', { productId: 'p-odd' }),
+      row('b', 'Bread', { productId: 'p-bread' }),
+      row('c', 'Milk', { productId: 'p-milk' }),
     ]);
 
     expect(sections.map((part) => part.key)).toEqual([
-      'category:cat-uncategorised',
-      'category:cat-freshly-baked-bread',
-      'category:cat-milk',
+      'category:cat-other',
+      'category:cat-bakery',
+      'category:cat-eggs-milk-and-butter',
     ]);
   });
 
-  it('draws a line in every category it has, and counts it once', () => {
+  it('draws a line under every parent its categories have, and counts it once', () => {
     const twoAisles = new Map([
       [
         'p-both',
@@ -534,14 +674,14 @@ describe('composeBasketView, grouped by category', () => {
     ]);
 
     const sections = composeBasketView(
-      [row('a', 'Yoghurt', { optionIds: ['p-both'] })],
+      [row('a', 'Yoghurt', { productId: 'p-both' })],
       state({ grouping: 'category' }),
       { ...CONTEXT, products: twoAisles }
     );
 
     expect(sections.map((part) => part.key)).toEqual([
-      'category:cat-milk',
-      'category:cat-ice-creams-and-ice',
+      'category:cat-eggs-milk-and-butter',
+      'category:cat-frozen',
     ]);
     expect(basketViewRows(sections)).toHaveLength(1);
   });
@@ -554,9 +694,9 @@ describe('composeBasketView, grouped by category', () => {
   it('puts every line with no resolved pick last, under a heading that says why', () => {
     const sections = grouped([
       row('free', 'Something for dinner'),
-      row('milk', 'Milk', { optionIds: ['p-milk'] }),
-      row('gone', 'Old thing', { optionIds: ['p-deleted'] }),
-      row('unread', 'Mystery', { optionIds: ['p-unread'] }),
+      row('milk', 'Milk', { productId: 'p-milk' }),
+      row('gone', 'Old thing', { productId: 'p-deleted' }),
+      row('unread', 'Mystery', { productId: 'p-unread' }),
     ]);
 
     const last = sections[sections.length - 1];
@@ -573,22 +713,22 @@ describe('composeBasketView, grouped by category', () => {
     ]);
   });
 
-  it('counts each section over its own lines, with a close that bought nothing apart', () => {
+  it('counts each parent over its own lines, from every leaf under it, with a close that bought nothing apart', () => {
     const sections = grouped([
       row('a', 'Milk', {
-        optionIds: ['p-milk'],
+        productId: 'p-milk',
         left: 0,
         bought: 1,
         state: 'DONE',
       }),
       row('b', 'Cheese', {
-        optionIds: ['p-cheese'],
+        productId: 'p-cheese',
         left: 1,
         bought: 0,
         state: 'NOT_AVAILABLE',
       }),
-      row('c', 'Cream', { optionIds: ['p-milk'] }),
-      row('d', 'Bread', { optionIds: ['p-bread'] }),
+      row('c', 'Eggs', { productId: 'p-eggs' }),
+      row('d', 'Bread', { productId: 'p-bread' }),
     ]);
 
     expect(sections[0].progress).toEqual({ done: 1, unavailable: 1, total: 3 });
@@ -602,9 +742,9 @@ describe('composeBasketView, grouped by category', () => {
   it('keeps the order the shop sink gave a line inside its category', () => {
     const sections = grouped(
       [
-        row('z', 'Zucchini', { optionIds: ['p-milk'] }),
-        row('a', 'Apples', { optionIds: ['p-milk'] }),
-        row('m', 'Milk', { optionIds: ['p-milk'] }),
+        row('z', 'Zucchini', { productId: 'p-milk' }),
+        row('a', 'Apples', { productId: 'p-milk' }),
+        row('m', 'Milk', { productId: 'p-milk' }),
       ],
       { order: 'alpha' }
     );
@@ -619,15 +759,15 @@ describe('composeBasketView, grouped by category', () => {
   it('narrows to the search before it groups', () => {
     const sections = composeBasketView(
       [
-        row('a', 'Milk', { optionIds: ['p-milk'] }),
-        row('b', 'Bread', { optionIds: ['p-bread'] }),
+        row('a', 'Milk', { productId: 'p-milk' }),
+        row('b', 'Bread', { productId: 'p-bread' }),
       ],
       state({ grouping: 'category' }),
       { ...CONTEXT, products: CATALOG, query: 'bread' }
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].key).toBe('category:cat-freshly-baked-bread');
+    expect(sections[0].key).toBe('category:cat-bakery');
   });
 });
 
@@ -793,7 +933,7 @@ describe('composeBasketView, grouped by list', () => {
  * that had none from a purchase.
  */
 describe('basketRowsProgress', () => {
-  it('counts states, and never a REMOVED row', () => {
+  it('counts states, and never a crossed out row', () => {
     expect(
       basketRowsProgress([
         { state: 'DONE' },
@@ -802,6 +942,7 @@ describe('basketRowsProgress', () => {
         { state: 'WANTED' },
         { state: 'SKIPPED' },
         { state: 'REMOVED' },
+        { state: 'BOUGHT_ELSEWHERE' },
       ])
     ).toEqual({ done: 1, unavailable: 1, total: 5 });
   });
@@ -984,9 +1125,9 @@ describe('resetBasketViewProperty', () => {
  * on a build that marked a line and left it where it was.
  */
 describe('composeBasketView: prices from one shop', () => {
-  const MILK = row('a', 'Milk', { optionIds: ['p-milk'] });
-  const BREAD = row('b', 'Bread', { optionIds: ['p-bread'] });
-  const EGGS = row('c', 'Eggs', { optionIds: ['p-eggs'] });
+  const MILK = row('a', 'Milk', { productId: 'p-milk' });
+  const BREAD = row('b', 'Bread', { productId: 'p-bread' });
+  const EGGS = row('c', 'Eggs', { productId: 'p-eggs' });
 
   it('marks a line another shop sells cheaper, and names the chain', () => {
     const sections = composeBasketView(
@@ -1012,39 +1153,34 @@ describe('composeBasketView: prices from one shop', () => {
       priced()
     );
 
-    const sunk = sections[1].rows[0];
-    expect(sunk.row.rowKey).toBe('c');
-    expect(sunk.priceMark).toEqual({
+    const unlisted = sections[0].rows[1];
+    expect(unlisted.row.rowKey).toBe('c');
+    expect(unlisted.priceMark).toEqual({
       kind: 'unlisted',
       chain: 'Mercadona',
       elsewhere: { price: 2.4, currency: 'EUR', chain: 'Dia' },
     });
   });
 
-  it('sinks the unlisted lines under their own heading, ungrouped', () => {
+  /** "Not sold here" replaces the sink of velista `0078` (velista `0139`, section 1). */
+  it('keeps an unlisted line where the order put it, ungrouped, with no section of its own', () => {
     const sections = composeBasketView(
       [EGGS, MILK, BREAD],
       state({ shop: MERCA }),
       priced()
     );
 
-    expect(sections).toHaveLength(2);
-    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['a', 'b']);
-    expect(sections[1].heading).toEqual({
-      kind: 'key',
-      key: 'basket.group.notListed',
-      args: { chain: 'Mercadona' },
-    });
-    expect(sections[1].hint).toBe('basket.group.notListedHint');
-    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['c']);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
+      'c',
+      'a',
+      'b',
+    ]);
+    expect(sections[0].rows[0].priceMark?.kind).toBe('unlisted');
   });
 
-  /**
-   * Grouped, the sink is the **end of each group** rather than a section of its own,
-   * which is what keeps a category's own unlisted lines inside that category.
-   */
-  it('sinks to the end of a group, keeping the relative order of what sank', () => {
-    const second = row('d', 'More eggs', { optionIds: ['p-eggs'] });
+  it('keeps an unlisted line in its place inside a group', () => {
+    const second = row('d', 'More eggs', { productId: 'p-eggs' });
 
     const sections = composeBasketView(
       [EGGS, MILK, second, BREAD],
@@ -1053,17 +1189,17 @@ describe('composeBasketView: prices from one shop', () => {
     );
 
     // One category, because every product here is on "Not yet categorised": the two
-    // sunk lines are last inside it, in the order they arrived in.
+    // unlisted lines keep the places they arrived in.
     expect(sections).toHaveLength(1);
     expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
-      'a',
-      'b',
       'c',
+      'a',
       'd',
+      'b',
     ]);
   });
 
-  it('leaves a line with no pick unmarked, and never sinks it', () => {
+  it('leaves a line with no product unmarked', () => {
     const typed = row('d', 'Something for the cat');
 
     // Milk is here so that the shop prices *something*, which is what turns the
@@ -1074,9 +1210,12 @@ describe('composeBasketView: prices from one shop', () => {
       priced()
     );
 
-    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['d', 'a']);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
+      'd',
+      'a',
+      'c',
+    ]);
     expect(sections[0].rows[0].priceMark).toBeNull();
-    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['c']);
   });
 
   /**
@@ -1147,7 +1286,7 @@ describe('composeBasketView: prices from one shop', () => {
     ).toBe(true);
   });
 
-  it('sinks a line whose product has no price at the shop, whatever its offers say', () => {
+  it('marks a line whose product has no price at the shop, whatever its offers say', () => {
     const context = priced();
     const products = new Map(context.products);
     const bread = products.get('p-bread') as BasketProduct;
@@ -1159,14 +1298,13 @@ describe('composeBasketView: prices from one shop', () => {
       products,
     });
 
-    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['a']);
-    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['b']);
-    expect(sections[1].rows[0].priceMark?.kind).toBe('unlisted');
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['b', 'a']);
+    expect(sections[0].rows[0].priceMark?.kind).toBe('unlisted');
   });
 
   /**
    * A scope the read could not name is skipped rather than drawn with its id: "1.99
-   * € at 7f3c…" is not a sentence. The line is still unlisted and still sinks.
+   * € at 7f3c…" is not a sentence. The line is still unlisted.
    */
   it('names no chain it cannot name, and says the line is unlisted anyway', () => {
     const context = priced();
@@ -1177,7 +1315,7 @@ describe('composeBasketView: prices from one shop', () => {
     });
 
     expect(sections[0].rows[0].priceMark).toBeNull();
-    expect(sections[1].rows[0].priceMark).toEqual({
+    expect(sections[0].rows[1].priceMark).toEqual({
       kind: 'unlisted',
       chain: 'Mercadona',
       elsewhere: null,
@@ -1189,7 +1327,7 @@ describe('basketPricedAtShop', () => {
   it('answers true when the shop prices something on the basket', () => {
     expect(
       basketPricedAtShop(
-        [row('a', 'Milk', { optionIds: ['p-milk'] })],
+        [row('a', 'Milk', { productId: 'p-milk' })],
         state({ shop: MERCA }),
         priced()
       )
@@ -1199,7 +1337,7 @@ describe('basketPricedAtShop', () => {
   it('answers false for a shop with no price for any line', () => {
     expect(
       basketPricedAtShop(
-        [row('c', 'Eggs', { optionIds: ['p-eggs'] })],
+        [row('c', 'Eggs', { productId: 'p-eggs' })],
         state({ shop: MERCA }),
         priced()
       )
@@ -1252,7 +1390,7 @@ describe('composeBasketView: what the shop does not have', () => {
     );
   }
 
-  it('marks a row unavailable only when every option is known missing', () => {
+  it('marks a row unavailable only when its product is known missing', () => {
     const context = world(
       stocked('p-a', false),
       stocked('p-b', false),
@@ -1260,11 +1398,11 @@ describe('composeBasketView: what the shop does not have', () => {
     );
 
     expect(
-      shelves([row('r1', 'Yogurt', { optionIds: ['p-a', 'p-b'] })], context)
+      shelves([row('r1', 'Yogurt', { productId: 'p-a' })], context)
     ).toEqual([{ kind: 'unavailable' }]);
-    // One option nobody has said anything about is not a missing row.
+    // A product nobody has said anything about is not a missing row.
     expect(
-      shelves([row('r2', 'Yogurt', { optionIds: ['p-c', 'p-a'] })], context)
+      shelves([row('r2', 'Yogurt', { productId: 'p-c' })], context)
     ).toEqual([null]);
   });
 
@@ -1274,54 +1412,20 @@ describe('composeBasketView: what the shop does not have', () => {
     expect(
       shelves(
         [
-          row('r1', 'Oat drink', { optionIds: ['p-a'] }),
-          row('r2', 'Rice', { optionIds: ['p-b'] }),
+          row('r1', 'Oat drink', { productId: 'p-a' }),
+          row('r2', 'Rice', { productId: 'p-b' }),
         ],
         context
       )
     ).toEqual([null, null]);
   });
 
-  it('offers another option in place of a default known missing, preferring one known there', () => {
-    const context = world(
-      stocked('p-danone', false),
-      stocked('p-unknown', null),
-      stocked('p-hacendado', true)
-    );
-
-    expect(
-      shelves(
-        [
-          row('r1', 'Greek yogurt', {
-            optionIds: ['p-danone', 'p-unknown', 'p-hacendado'],
-          }),
-        ],
-        context
-      )
-    ).toEqual([
-      { kind: 'instead', optionId: 'p-hacendado', replacedId: 'p-danone' },
-    ]);
-  });
-
-  it('offers an option nobody has said anything about when none is known there', () => {
-    const context = world(stocked('p-danone', false), stocked('p-other', null));
-
-    expect(
-      shelves(
-        [row('r1', 'Yogurt', { optionIds: ['p-danone', 'p-other'] })],
-        context
-      )
-    ).toEqual([
-      { kind: 'instead', optionId: 'p-other', replacedId: 'p-danone' },
-    ]);
-  });
-
   it('keeps a marked row in its place', () => {
     const context = world(stocked('p-a', true), stocked('p-b', false));
     const sections = composeBasketView(
       [
-        row('r1', 'Oat drink', { optionIds: ['p-b'] }),
-        row('r2', 'Milk', { optionIds: ['p-a'] }),
+        row('r1', 'Oat drink', { productId: 'p-b' }),
+        row('r2', 'Milk', { productId: 'p-a' }),
       ],
       state({ shop: MERCA }),
       context
@@ -1335,21 +1439,21 @@ describe('composeBasketView: what the shop does not have', () => {
     expect(sections[0].rows[0].shelf).toEqual({ kind: 'unavailable' });
   });
 
-  /** The user's answer on the mock: the price rule came first, so it sinks. */
-  it('sinks a row that is both unlisted and unavailable, and says both', () => {
+  /** Neither mark moves a row since velista `0139`. */
+  it('keeps a row that is both unlisted and unavailable in its place, and says both', () => {
     const context = world(stocked('p-a', true), stocked('p-b', false, null));
     const sections = composeBasketView(
       [
-        row('r1', 'Washing up liquid', { optionIds: ['p-b'] }),
-        row('r2', 'Milk', { optionIds: ['p-a'] }),
+        row('r1', 'Washing up liquid', { productId: 'p-b' }),
+        row('r2', 'Milk', { productId: 'p-a' }),
       ],
       state({ shop: MERCA }),
       context
     );
 
-    expect(sections[1].rows[0].row.rowKey).toBe('r1');
-    expect(sections[1].rows[0].priceMark?.kind).toBe('unlisted');
-    expect(sections[1].rows[0].shelf).toEqual({ kind: 'unavailable' });
+    expect(sections[0].rows[0].row.rowKey).toBe('r1');
+    expect(sections[0].rows[0].priceMark?.kind).toBe('unlisted');
+    expect(sections[0].rows[0].shelf).toEqual({ kind: 'unavailable' });
   });
 
   /** Availability without a single price is the one source of it today. */
@@ -1362,8 +1466,8 @@ describe('composeBasketView: what the shop does not have', () => {
     expect(
       shelves(
         [
-          row('r1', 'Rice', { optionIds: ['p-a'] }),
-          row('r2', 'Milk', { optionIds: ['p-b'] }),
+          row('r1', 'Rice', { productId: 'p-a' }),
+          row('r2', 'Milk', { productId: 'p-b' }),
         ],
         context
       )
@@ -1587,16 +1691,21 @@ describe('the usual chip', () => {
 describe('composeBasketView, grouped by aisle', () => {
   const PASTA_LEAF = leaf(
     'macaroni-spaghetti-and-dried-pasta',
+    'rice-pasta-and-pulses',
     'Macaroni, spaghetti, and dried pasta'
   );
-  const OIL_LEAF = leaf('oils', 'Oils');
-  const FROZEN_LEAF = leaf('frozen-pizzas', 'Frozen pizzas');
-  const FRUIT_LEAF = leaf('apples-and-pears', 'Apples and pears');
+  const OIL_LEAF = leaf('oils', 'oils-sauces-and-spices', 'Oils');
+  const FROZEN_LEAF = leaf('frozen-pizzas', 'frozen', 'Frozen pizzas');
+  const PEAS_LEAF = leaf('frozen-vegetables', 'frozen', 'Frozen vegetables');
+  const FRUIT_LEAF = leaf(
+    'apples-and-pears',
+    'fruit-and-vegetables',
+    'Apples and pears'
+  );
 
   function aisle(id: string, en: string, es = en): ShopSection {
     return {
       id,
-      supermarketId: 'sm-merca',
       slug: id,
       name: { en, es },
       position: 0,
@@ -1650,13 +1759,13 @@ describe('composeBasketView, grouped by aisle', () => {
 
   /** The basket in the order the server wrote it, which is the walk (`0141`). */
   const ROWS: readonly BasketRow[] = [
-    row('oil', 'Olive oil', { optionIds: ['p-oil'] }),
-    row('pizza', 'Pizza', { optionIds: ['p-pizza'] }),
-    row('pasta', 'Macaroni', { optionIds: ['p-pasta'] }),
+    row('oil', 'Olive oil', { productId: 'p-oil' }),
+    row('pizza', 'Pizza', { productId: 'p-pizza' }),
+    row('pasta', 'Macaroni', { productId: 'p-pasta' }),
     row('cat', 'Something for the cat'),
-    row('icecream', 'Ice cream', { optionIds: ['p-icecream'] }),
-    row('apple', 'Apple', { optionIds: ['p-apple'] }),
-    row('spaghetti', 'Spaghetti', { optionIds: ['p-spaghetti'] }),
+    row('icecream', 'Ice cream', { productId: 'p-icecream' }),
+    row('apple', 'Apple', { productId: 'p-apple' }),
+    row('spaghetti', 'Spaghetti', { productId: 'p-spaghetti' }),
   ];
 
   function context(over: Partial<BasketViewContext> = {}): BasketViewContext {
@@ -1704,10 +1813,16 @@ describe('composeBasketView, grouped by aisle', () => {
         // The incoming order stays inside an aisle: the pizza came first.
         ['aisle:sec-frozen', 'Frozen', ['pizza', 'icecream'], false],
         // First row's place among what is left: the oil came before the pasta.
-        ['category:cat-oils', 'Oils', ['oil'], true],
+        // Each heading is the parent, also for one row.
         [
-          'category:cat-macaroni-spaghetti-and-dried-pasta',
-          'Macaroni, spaghetti, and dried pasta',
+          'category:cat-oils-sauces-and-spices',
+          'Oils, sauces and spices',
+          ['oil'],
+          true,
+        ],
+        [
+          'category:cat-rice-pasta-and-pulses',
+          'Rice, pasta and pulses',
           ['pasta', 'spaghetti'],
           false,
         ],
@@ -1728,10 +1843,15 @@ describe('composeBasketView, grouped by aisle', () => {
       name: 'no band when no aisle holds anything on this basket',
       rows: [ROWS[0], ROWS[2], ROWS[3]],
       expected: [
-        ['category:cat-oils', 'Oils', ['oil'], false],
         [
-          'category:cat-macaroni-spaghetti-and-dried-pasta',
-          'Macaroni, spaghetti, and dried pasta',
+          'category:cat-oils-sauces-and-spices',
+          'Oils, sauces and spices',
+          ['oil'],
+          false,
+        ],
+        [
+          'category:cat-rice-pasta-and-pulses',
+          'Rice, pasta and pulses',
           ['pasta'],
           false,
         ],
@@ -1762,29 +1882,73 @@ describe('composeBasketView, grouped by aisle', () => {
     const byCategory = outline(drawn(ROWS, over));
 
     expect(byCategory).toEqual([
-      ['category:cat-oils', 'Oils', ['oil'], false],
-      ['category:cat-frozen-pizzas', 'Frozen pizzas', ['pizza'], false],
       [
-        'category:cat-macaroni-spaghetti-and-dried-pasta',
-        'Macaroni, spaghetti, and dried pasta',
+        'category:cat-oils-sauces-and-spices',
+        'Oils, sauces and spices',
+        ['oil'],
+        false,
+      ],
+      // Two leaves of one parent: frozen pizzas and ice creams.
+      ['category:cat-frozen', 'Frozen food', ['pizza', 'icecream'], false],
+      [
+        'category:cat-rice-pasta-and-pulses',
+        'Rice, pasta and pulses',
         ['pasta', 'spaghetti'],
         false,
       ],
       [
-        'category:cat-ice-creams-and-ice',
-        'Ice creams and ice',
-        ['icecream'],
+        'category:cat-fruit-and-vegetables',
+        'Fruit and vegetables',
+        ['apple'],
         false,
       ],
-      ['category:cat-apples-and-pears', 'Apples and pears', ['apple'], false],
       ['no-category', 'basket.group.noCategory', ['cat'], false],
+    ]);
+  });
+
+  /**
+   * Velista `0138`, section 2: a parent whose one leaf is in a section and whose
+   * other leaf is not. The parent heading holds only the rows the sections left.
+   */
+  it('puts a row no section covers under its parent, also when a sibling leaf is in a section', () => {
+    const products = new Map(PRODUCTS).set(
+      'p-peas',
+      inAisles(product('p-peas', 'Peas', null, [PEAS_LEAF]), [])
+    );
+
+    expect(
+      outline(
+        drawn(
+          [
+            row('pizza', 'Pizza', { productId: 'p-pizza' }),
+            row('peas', 'Peas', { productId: 'p-peas' }),
+            row('icecream', 'Ice cream', { productId: 'p-icecream' }),
+          ],
+          { products }
+        )
+      )
+    ).toEqual([
+      ['aisle:sec-pizzas', 'Pizzas', ['pizza'], false],
+      ['aisle:sec-frozen', 'Frozen', ['pizza', 'icecream'], false],
+      ['category:cat-frozen', 'Frozen food', ['peas'], true],
+    ]);
+  });
+
+  it('draws the rows ungrouped while the tree has not landed, aisles included', () => {
+    expect(outline(drawn(ROWS, { parents: null }))).toEqual([
+      [
+        'all',
+        undefined,
+        ['oil', 'pizza', 'pasta', 'cat', 'icecream', 'apple', 'spaghetti'],
+        false,
+      ],
     ]);
   });
 
   it('counts a row in two aisles under both, and once on the page', () => {
     const sections = drawn([
-      row('pizza', 'Pizza', { optionIds: ['p-pizza'], state: 'DONE' }),
-      row('icecream', 'Ice cream', { optionIds: ['p-icecream'] }),
+      row('pizza', 'Pizza', { productId: 'p-pizza', state: 'DONE' }),
+      row('icecream', 'Ice cream', { productId: 'p-icecream' }),
     ]);
 
     expect(sections.map((part) => [part.key, part.progress])).toEqual([
@@ -1826,7 +1990,12 @@ describe('composeBasketView, grouped by aisle', () => {
 
     expect(outline(drawn([ROWS[4], ROWS[5]], { products: stale }))).toEqual([
       ['aisle:sec-frozen', 'Frozen', ['icecream'], false],
-      ['category:cat-apples-and-pears', 'Apples and pears', ['apple'], true],
+      [
+        'category:cat-fruit-and-vegetables',
+        'Fruit and vegetables',
+        ['apple'],
+        true,
+      ],
     ]);
   });
 
@@ -1835,7 +2004,7 @@ describe('composeBasketView, grouped by aisle', () => {
     const sections = drawn(
       [
         row('apple', 'Apple', {
-          optionIds: ['p-apple'],
+          productId: 'p-apple',
           entries: [entry('l1')],
         }),
       ],
@@ -1863,23 +2032,23 @@ describe('composeBasketView, grouped by aisle', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * Velista `0142`: a row somebody bought outside this shopping list.
  *
- * The basket page has no section of its own for done rows: a done row stays where
- * the order put it and its section counts it. So "where done rows are drawn" is
- * the row's own place, and the two things asserted here are that the pipeline
- * does not move it and that the count it hands the row is `boughtElsewhere`.
+ * A `BOUGHT_ELSEWHERE` row goes where a `REMOVED` row goes: last, through every
+ * filter, and counted nowhere. A row that outside buys only lowered is an
+ * ordinary row with its own number, and nothing moves it.
  */
-describe('composeBasketView: bought on another basket (velista 0131)', () => {
-  const closed = (rowKey: string, content: string, listId: string | null) =>
+describe('composeBasketView: bought outside this shopping list (velista 0142)', () => {
+  const bought = (rowKey: string, content: string, listId: string | null) =>
     row(rowKey, content, {
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      mark: 'CHANGED',
       entries: [
         entry(listId, {
           lineId: `zl-${rowKey}`,
@@ -1887,14 +2056,19 @@ describe('composeBasketView: bought on another basket (velista 0131)', () => {
           bought: 0,
           asked: 0,
           boughtElsewhere: 2,
-          state: 'DONE',
+          state: 'BOUGHT_ELSEWHERE',
         }),
       ],
     });
 
-  it('keeps the row where a done row is drawn, and reads its count from boughtElsewhere', () => {
+  it('puts the row last, beside a REMOVED row, and keeps the order above it', () => {
     const sections = composeBasketView(
-      [row('a', 'Apples'), closed('b', 'Butter', null), row('c', 'Cheese')],
+      [
+        row('a', 'Apples'),
+        bought('b', 'Butter', null),
+        row('c', 'Cheese'),
+        row('d', 'Olives', { state: 'REMOVED', entries: [] }),
+      ],
       state(),
       CONTEXT
     );
@@ -1902,68 +2076,63 @@ describe('composeBasketView: bought on another basket (velista 0131)', () => {
     expect(sections).toHaveLength(1);
     expect(sections[0].rows.map((drawn) => drawn.row.content)).toEqual([
       'Apples',
-      'Butter',
       'Cheese',
+      'Butter',
+      'Olives',
     ]);
-    // Two, which is the server's number. The row's own `bought` is zero.
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 2, closed: true });
-    expect(sections[0].rows[1].row.bought).toBe(0);
   });
 
-  it('counts it as done under its heading, as the server wrote it', () => {
+  it('keeps the row past the search, the list filter and the usual filter', () => {
     const sections = composeBasketView(
       [
         row('a', 'Apples', { entries: [entry('l1')] }),
-        closed('b', 'Butter', 'l1'),
+        {
+          ...bought('b', 'Butter', 'l2'),
+          usual: { state: 'ELSEWHERE', bought: 0, of: 6 },
+        },
+      ],
+      state({ lists: new Set(['l1']), shop: MERCA, usual: true }),
+      { ...priced(), query: 'nothing matches this' }
+    );
+
+    expect(
+      sections.flatMap((part) => part.rows.map((drawn) => drawn.row.rowKey))
+    ).toEqual(['b']);
+  });
+
+  it('counts the row nowhere under its heading', () => {
+    const sections = composeBasketView(
+      [
+        row('a', 'Apples', { entries: [entry('l1')] }),
+        bought('b', 'Butter', 'l1'),
       ],
       state({ grouping: 'list' }),
       { ...CONTEXT, lists: new Map([['l1', ref('l1', 'Weekly shop')]]) }
     );
 
-    expect(sections[0].progress).toEqual({ done: 1, unavailable: 0, total: 2 });
-    // The entry's own count under a list heading.
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 2, closed: true });
+    expect(sections[0].rows).toHaveLength(2);
+    expect(sections[0].progress).toEqual({ done: 0, unavailable: 0, total: 1 });
   });
 
-  it('keeps a row with something left in its section, and does not call it closed', () => {
+  it('leaves a row with something left in its place, as the state the server sent', () => {
     const partly = row('m', 'Milk', {
       left: 1,
       boughtElsewhere: 1,
+      mark: 'CHANGED',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
     });
 
     const sections = composeBasketView(
-      [row('a', 'Apples'), partly],
+      [partly, row('a', 'Apples')],
       state(),
       CONTEXT
     );
 
     expect(sections[0].rows.map((drawn) => drawn.row.content)).toEqual([
-      'Apples',
       'Milk',
+      'Apples',
     ]);
-    expect(sections[0].rows[1].row.state).toBe('WANTED');
-    expect(sections[0].rows[1].elsewhere).toEqual({ count: 1, closed: false });
-  });
-
-  /** A row this basket bought itself is an ordinary done row, with its revert. */
-  it('does not call a row closed from elsewhere when this basket bought some of it', () => {
-    const both = row('e', 'Eggs', {
-      left: 0,
-      bought: 1,
-      boughtElsewhere: 1,
-      state: 'DONE',
-    });
-
-    const [only] = composeBasketView([both], state(), CONTEXT);
-
-    expect(only.rows[0].elsewhere).toEqual({ count: 1, closed: false });
-  });
-
-  it('hands every other row nothing', () => {
-    const [only] = composeBasketView([row('a', 'Apples')], state(), CONTEXT);
-
-    expect(only.rows[0].elsewhere).toBeNull();
+    expect(sections[0].rows[0].row.state).toBe('WANTED');
   });
 });

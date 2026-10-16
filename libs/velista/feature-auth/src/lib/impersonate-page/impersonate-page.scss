@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// A spinner while the code is traded, as on the Google callback: the page is a
+// redirect that happens to be drawn. The words are for a screen reader only.
+.working {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100%;
+  color: var(--app-text-secondary);
+}
+
+.spinner {
+  font-size: var(--app-icon-lg);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

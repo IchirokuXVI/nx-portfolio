@@ -66,6 +66,8 @@ export const SHOP_WALK_LIMITS = {
   snapshotEvery: 20,
   /** The longest a stop reason may be. */
   reasonMaxLength: 40,
+  /** The most `guard` events one entry may hold (plan 0197). */
+  guardEventsMax: 50,
 } as const;
 
 /**
@@ -95,6 +97,22 @@ export const SHOP_WALK_STOP_REASONS = [
 ] as const;
 
 export type ShopWalkStopReason = (typeof SHOP_WALK_STOP_REASONS)[number];
+
+/**
+ * What the tracking guard decided, on a `guard` event (plan 0197). The stop
+ * reason is the word a shopper facing text reads; this is the rule behind it,
+ * for the person who debugs a walk.
+ */
+export const SHOP_WALK_GUARD_KINDS = [
+  'lost',
+  'jump',
+  'turned',
+  'heading',
+  'compass-disturbed',
+  'compass-settled',
+] as const;
+
+export type ShopWalkGuardKind = (typeof SHOP_WALK_GUARD_KINDS)[number];
 
 export const SHOP_MAP_AREA_KINDS = [
   'shelf',
@@ -181,7 +199,17 @@ export type ShopWalkEvent =
   | { type: 'mark-removed'; id: string }
   | { type: 'area-put'; area: ShopMapArea }
   | { type: 'area-removed'; id: string }
-  | { type: 'section-left'; logMs: number };
+  | { type: 'section-left'; logMs: number }
+  /** What the tracking guard saw (plan 0197). The fold ignores it. */
+  | {
+      type: 'guard';
+      logMs: number;
+      what: ShopWalkGuardKind;
+      /** `turned`, `heading`, `compass-disturbed`. */
+      degrees?: number;
+      /** `jump`. */
+      metres?: number;
+    };
 
 /** One problem `validateShopMapV2` found. */
 export interface ShopMapProblem {
@@ -309,7 +337,7 @@ export interface ShopperMapView {
   bounds: { x: number; y: number; w: number; h: number };
 }
 
-/** One section name of the shown walk and the chain section it resolved to. */
+/** One section name of the shown walk and the section of the shop it resolved to. */
 export interface ShopMapSectionView {
   name: string;
   sectionId: string;
@@ -321,7 +349,7 @@ export interface ShopMapView {
   /** When the shown walk was last saved, ISO. */
   savedAt: string;
   view: ShopperMapView;
-  /** The chain sections the walk's section names resolved to, in walk order. */
+  /** The sections of the shop the walk's section names resolved to, in walk order. */
   sections: ShopMapSectionView[];
 }
 

@@ -13,6 +13,7 @@ import {
 import {
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
+  AdminCatalogLinkedImagesController,
   AdminCatalogLocationItemsController,
   AdminCatalogLocationsController,
   AdminCatalogPricePoliciesController,
@@ -23,6 +24,7 @@ import {
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 import {
+  CatalogItemLookupController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationSectionsController,
@@ -173,6 +175,8 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogLocationItemsController,
   // Plan 0167: a section at its own id.
   AdminCatalogSectionsController,
+  // Plan 0198: the one stop for every chain photo.
+  AdminCatalogLinkedImagesController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
   // One queue over one table since plan 0086. `AdminHarvestItemRefsController`
@@ -187,6 +191,7 @@ const USER_CONTROLLERS = [
   CatalogLocationsController,
   CatalogShopsController,
   CatalogItemsController,
+  CatalogItemLookupController,
   CatalogProductGroupsController,
   CatalogSuggestController,
   CatalogScopeController,
@@ -308,6 +313,28 @@ describe('the admin API is its own namespace', () => {
       expect(has('put', '/v1/admin/catalog/locations/{id}/sections')).toBe(
         true
       );
+    });
+
+    /**
+     * Plan 0200, section 4: a section belongs to a shop. It is created under
+     * its shop, and a chain has no section route and no pin route left.
+     */
+    it('creates a section under its shop, and leaves a chain no section route', () => {
+      expect(has('post', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
+      expect(has('get', '/v1/admin/catalog/locations/{id}/item-sections')).toBe(
+        true
+      );
+      for (const method of ['get', 'patch', 'delete']) {
+        expect(has(method, '/v1/admin/catalog/sections/{id}')).toBe(true);
+      }
+      expect(
+        document.paths['/v1/admin/catalog/supermarkets/{id}/sections']
+      ).toBeUndefined();
+      expect(
+        document.paths['/v1/admin/catalog/supermarkets/{id}/item-sections']
+      ).toBeUndefined();
     });
   });
 });

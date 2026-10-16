@@ -1,29 +1,36 @@
 import { Injectable } from '@angular/core';
 import {
+  basketEntryPatchOf,
   isOpenBasket,
   LINK_VISIT_HOURS,
   type Basket,
   type BasketAddLineRequest,
   type BasketChange,
+  type BasketChangeActor,
   type BasketChangeKind,
   type BasketChangeMark,
+  type BasketChangeOrigin,
   type BasketChangePage,
   type BasketDemandRequest,
+  type BasketEntryAct,
   type BasketLinkPreview,
   type BasketListRef,
+  type BasketMarks,
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
   type BasketProductAtShop,
+  type BasketProductChangeRequest,
+  type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
-  type BasketRenameResult,
   type BasketRevertRequest,
   type BasketRow,
   type BasketRowEntry,
   type BasketRowNote,
   type BasketRowResult,
   type BasketRowState,
+  type BasketRowTarget,
   type BasketSession,
   type BasketSettleRequest,
   type BasketShareLink,
@@ -33,10 +40,12 @@ import {
   type LiveBasketSummary,
   type ProductOffer,
 } from '@portfolio/velista/models';
+import { Subject } from 'rxjs';
 import { CatalogMemory } from '../catalog/catalog-memory';
 import { memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import type { BasketChangeContext } from '../mapping/basket-change-mappers';
+import type { RealtimeEvent } from '../realtime/realtime-events';
 import { memorySectionIdsAt } from '../shops/shop-sections-memory';
 import type { BasketServiceI } from './basket-service';
 
@@ -344,6 +353,13 @@ const LINK_VISIT_MS = LINK_VISIT_HOURS * 60 * 60 * 1000;
  */
 const ELSEWHERE_WINDOW_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * The account that owns the other basket a buy goes through by default. On no
+ * participant row of this basket, so the changes sheet names them from the
+ * zone's members, or says "someone".
+ */
+const OTHER_OWNER_USER_ID = 'u-lucia';
+
 /** A moment {@link LINK_VISIT_MS} after another, which is every expiry here. */
 function visitEnd(from: Date): Date {
   return new Date(from.getTime() + LINK_VISIT_MS);
@@ -410,7 +426,9 @@ interface StoredLine {
   /** What the household asks for now, which is the entry's `left`. */
   quantity: number;
   /** The products this line names, first one first. */
-  optionIds: readonly string[];
+  itemIds: readonly string[];
+  /** The favourite of the line (backend `0199`), or null. */
+  favoriteItemId?: string | null;
   /** Whether the household has agreed to it yet. */
   approved: boolean;
   /** Whether the basket's owner may change what this list asks for. */
@@ -450,6 +468,13 @@ interface StoredChange {
   readonly listId: string | null;
   /** A participant of this basket, or null for somebody this reader may not know. */
   readonly actorParticipantId: string | null;
+  /**
+   * The account behind a buy made outside this basket (backend `0203`), served
+   * only beside a list the reader was served, as the gateway serves it.
+   */
+  readonly actorUserId?: string | null;
+  /** Where a buy came from, for the two kinds of a buy. */
+  readonly origin?: ElsewhereOrigin;
   readonly at: Date;
 }
 
@@ -474,19 +499,39 @@ interface Settlement {
    * price there; this twin keeps the scope so a spec can see what was sent.
    */
   readonly priceScopeId?: string;
+  /**
+   * The product the buy names (backend `0201`, section 4). The newest standing
+   * buy of a line with one is what the line counts as for the rest of the trip.
+   */
+  readonly itemId?: string;
   reverted: boolean;
 }
+
+/**
+ * Where a buy made outside this basket came from (backend `0203`, section 5):
+ * another basket, and the account that owns it, or the zone's list page. The
+ * buyer is the account that bought, or null for a guest.
+ */
+export type ElsewhereOrigin =
+  | {
+      readonly kind: 'ANOTHER_BASKET';
+      readonly ownerUserId: string | null;
+      readonly buyerUserId: string | null;
+    }
+  | { readonly kind: 'LIST'; readonly buyerUserId: string | null };
 
 /**
  * A purchase of one covered line made through **another** basket, or through
  * none (backend `0188`).
  *
- * It carries no person and no basket, because the server loads neither: a reader
- * learns how many were bought and when, and never who bought them.
+ * It names no basket, because the server serves none. Whether it went through a
+ * basket at all is the note of the row (backend `0203`, section 3), and who made
+ * it is told by the change the buy wrote, never by the row.
  */
 interface ElsewherePurchase {
   readonly lineId: string;
-  readonly quantity: number;
+  quantity: number;
+  readonly through: ElsewhereOrigin['kind'];
   readonly at: Date;
 }
 
@@ -525,8 +570,9 @@ export class BasketMemory implements BasketServiceI {
    * Whether the reader is served the covered lists' names.
    *
    * Public and mutable so a spec, or a developer poking at the screen, can look at
-   * the guest's view and the owner's without a second fake. It replaced
-   * `seesZoneData`, which was one flag for a question that is now per entry.
+   * the guest's view and the owner's without a second fake. It replaced the old
+   * all or nothing flag, one for the whole basket, for a question that is now per
+   * entry.
    */
   servesLists = true;
 
@@ -573,7 +619,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Milk',
       quantity: 2,
-      optionIds: [
+      itemIds: [
         'item-milk-hacendado',
         'item-milk-pascual',
         'item-milk-central',
@@ -588,7 +634,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-groceries',
       content: 'Milk',
       quantity: 1,
-      optionIds: ['item-milk-hacendado'],
+      itemIds: ['item-milk-hacendado'],
       // Waiting for the household to agree, so the row draws the caption and
       // stays buyable (backend `0130`, section 3).
       approved: false,
@@ -601,7 +647,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Eggs',
       quantity: 10,
-      optionIds: ['item-eggs'],
+      itemIds: ['item-eggs'],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -612,7 +658,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Sourdough loaf',
       quantity: 1,
-      optionIds: [],
+      itemIds: [],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -626,7 +672,7 @@ export class BasketMemory implements BasketServiceI {
       listId: UNSERVED_LIST_ID,
       content: 'Eggs',
       quantity: 2,
-      optionIds: ['item-eggs'],
+      itemIds: ['item-eggs'],
       approved: true,
       // The owner of this basket cannot change what a list they do not write asks
       // for, which is the one field no client can compute.
@@ -647,7 +693,7 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Olive oil',
       quantity: 1,
-      optionIds: [],
+      itemIds: [],
       approved: true,
       demandEditable: true,
       deleted: true,
@@ -663,7 +709,21 @@ export class BasketMemory implements BasketServiceI {
       listId: 'list-weekly',
       content: 'Butter',
       quantity: 0,
-      optionIds: [],
+      itemIds: [],
+      approved: true,
+      demandEditable: true,
+      deleted: false,
+      skippedAt: null,
+    },
+    {
+      // A list that holds the eggs and asks for none (velista `0139`, section
+      // 3). Not covered, so it is no entry of any row: a line at zero with no
+      // buy is not a thing to buy. "Add it to another list" raises it.
+      id: 'zl-8',
+      listId: 'list-groceries',
+      content: 'Huevos',
+      quantity: 0,
+      itemIds: ['item-eggs'],
       approved: true,
       demandEditable: true,
       deleted: false,
@@ -679,24 +739,158 @@ export class BasketMemory implements BasketServiceI {
    * be outside the six hours on every day but one.
    */
   private _elsewhere: ElsewherePurchase[] = [
-    { lineId: 'zl-7', quantity: 1, at: new Date() },
+    { lineId: 'zl-7', quantity: 1, through: 'ANOTHER_BASKET', at: new Date() },
   ];
 
   /**
-   * Somebody buys units of one line through another basket (velista `0131`).
+   * Somebody buys units of one line outside this basket (velista `0131`, `0142`):
+   * through another basket, or on the list page.
    *
    * A knob and not a part of `BasketServiceI`, for {@link servesLists}'s reason:
    * no route of this basket can do it, so a spec that needs the row calls this.
    * The list asks for that many fewer, never below zero, as it does after any
-   * purchase.
+   * purchase, and the buy is a `BOUGHT` change of the line (backend `0203`,
+   * section 1). A buy that moves no quantity writes no change.
    */
-  buyElsewhere(lineId: string, quantity: number): void {
+  buyElsewhere(
+    lineId: string,
+    quantity: number,
+    origin: ElsewhereOrigin = {
+      kind: 'ANOTHER_BASKET',
+      ownerUserId: OTHER_OWNER_USER_ID,
+      buyerUserId: OTHER_OWNER_USER_ID,
+    }
+  ): void {
     const line = this._lines.find((held) => held.id === lineId);
     if (line === undefined) {
       return;
     }
-    this._elsewhere.push({ lineId, quantity, at: this.now() });
+    const before = line.quantity;
+    this._elsewhere.push({
+      lineId,
+      quantity,
+      through: origin.kind,
+      at: this.now(),
+    });
     line.quantity = Math.max(0, line.quantity - quantity);
+    this._moved(lineId);
+    this._recordBuy('BOUGHT', line, before, origin);
+    this._announce([lineId], true);
+  }
+
+  /**
+   * The other basket takes back units it bought of one line (backend `0203`,
+   * section 1): the list asks for them again, and the revert is a
+   * `BUY_REVERTED` change. A knob for {@link buyElsewhere}'s reason.
+   *
+   * Only a buy through another basket can be taken back, because no route takes
+   * back a buy made on the list page (backend `0203`, "What the build decided",
+   * point 10).
+   */
+  revertElsewhere(
+    lineId: string,
+    quantity: number,
+    origin: Extract<ElsewhereOrigin, { kind: 'ANOTHER_BASKET' }> = {
+      kind: 'ANOTHER_BASKET',
+      ownerUserId: OTHER_OWNER_USER_ID,
+      buyerUserId: OTHER_OWNER_USER_ID,
+    }
+  ): void {
+    const line = this._lines.find((held) => held.id === lineId);
+    const purchase = [...this._elsewhere]
+      .reverse()
+      .find(
+        (held) => held.lineId === lineId && held.through === 'ANOTHER_BASKET'
+      );
+    if (line === undefined || purchase === undefined) {
+      return;
+    }
+    const units = Math.min(quantity, purchase.quantity);
+    const before = line.quantity;
+    purchase.quantity -= units;
+    this._elsewhere = this._elsewhere.filter((held) => held.quantity > 0);
+    line.quantity += units;
+    this._moved(lineId);
+    this._recordBuy('BUY_REVERTED', line, before, origin);
+    this._announce([lineId], true);
+  }
+
+  // --- The basket's room -----------------------------------------------------
+
+  /**
+   * What the server announces to this basket's room after a write (backend
+   * `0204`; velista `0143`, section 7): `basket.linesChanged`, with the state of
+   * each line for the writes that only move numbers, and the ids alone for the
+   * rest. Nothing subscribes in the running app, where the room is a socket. A
+   * spec hands these to the store as its socket would.
+   */
+  readonly events = new Subject<
+    Extract<RealtimeEvent, { type: 'basket.linesChanged' }>
+  >();
+
+  /**
+   * The patch of each named line as this basket reads it now, or the ids alone.
+   * A line no row holds any more has no patch, which the client reads as a line
+   * that left the basket.
+   */
+  private _announce(
+    lineIds: readonly string[],
+    marksMoved: boolean,
+    withEntries = true
+  ): void {
+    const held = new Map(
+      this._rows()
+        .flatMap((row) => row.entries)
+        .map((entry) => [entry.lineId, entry])
+    );
+    const entries = withEntries
+      ? lineIds.flatMap((lineId) => {
+          const entry = held.get(lineId);
+          return entry === undefined ? [] : [basketEntryPatchOf(entry)];
+        })
+      : null;
+    this.events.next({
+      type: 'basket.linesChanged',
+      lineIds: [...lineIds],
+      entries,
+      marksMoved,
+    });
+  }
+
+  /** `list_lines.version` rises: the line itself was written. */
+  private _moved(lineId: string): void {
+    this._versions.set(lineId, (this._versions.get(lineId) ?? 1) + 1);
+  }
+
+  /** The version of each line, from 1. See {@link _moved}. */
+  private readonly _versions = new Map<string, number>();
+
+  /** A buy or a revert made outside this basket, newest first in the log. */
+  private _recordBuy(
+    kind: 'BOUGHT' | 'BUY_REVERTED',
+    line: StoredLine,
+    before: number,
+    origin: ElsewhereOrigin
+  ): void {
+    if (line.quantity === before) {
+      return;
+    }
+    this._changes.unshift({
+      id: `chg-buy-${this._changes.length + 1}`,
+      kind,
+      lineId: line.id,
+      contentBefore: null,
+      contentAfter: null,
+      quantityBefore: before,
+      quantityAfter: line.quantity,
+      approvalBefore: null,
+      approvalAfter: null,
+      listId: line.listId,
+      actorParticipantId: null,
+      actorUserId: origin.buyerUserId,
+      origin,
+      at: this.now(),
+    });
   }
 
   /**
@@ -981,6 +1175,40 @@ export class BasketMemory implements BasketServiceI {
     };
   }
 
+  /** The full read without the catalog half, as backend `0205` answers it. */
+  async getBasketRows(basketId: string, locationId?: string): Promise<Basket> {
+    const basket = await this.getBasket(basketId, locationId);
+    return { ...basket, products: new Map(), scopes: new Map(), shop: null };
+  }
+
+  /**
+   * The marks of each covered line and the banner's numbers (backend `0204`,
+   * section 6). A line takes `ADDED` when an unseen change added it, and
+   * `CHANGED` for any other unseen change. A removed line is not here.
+   */
+  async getMarks(): Promise<BasketMarks> {
+    const unseen = this._unseen();
+    const covered = new Set(
+      this._rows()
+        .flatMap((row) => row.entries)
+        .map((entry) => entry.lineId)
+    );
+    const lines = new Map<string, BasketChangeMark>();
+    for (const change of unseen) {
+      if (!covered.has(change.lineId)) {
+        continue;
+      }
+      if (change.kind === 'ADDED' || !lines.has(change.lineId)) {
+        lines.set(change.lineId, change.kind === 'ADDED' ? 'ADDED' : 'CHANGED');
+      }
+    }
+    return {
+      unseenChangeCount: Math.min(unseen.length, 99),
+      newestUnseenChangeId: unseen[0]?.id ?? null,
+      lines,
+    };
+  }
+
   async getLiveSummary(): Promise<LiveBasketSummary> {
     const rows = this._rows();
     return {
@@ -992,18 +1220,19 @@ export class BasketMemory implements BasketServiceI {
 
   async settle(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketSettleRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     this._requireFrom(body.from, row.left);
 
     if (body.outcome === 'NOT_AVAILABLE') {
       // A close holds no units and names no entry: the shop had none of it, for
       // everybody who asked.
-      this._write(row.entries[0]?.lineId ?? rowKey, 'NOT_AVAILABLE', 0);
-      return this._result(rowKey);
+      this._write(row.entries[0]?.lineId ?? target.rowKey, 'NOT_AVAILABLE', 0);
+      this._announce(target.lineIds, true);
+      return this._result(target.lineIds);
     }
 
     const quantity = body.quantity ?? row.left;
@@ -1016,28 +1245,36 @@ export class BasketMemory implements BasketServiceI {
         ? body.allocations
         : this._divide(row, quantity);
 
+    // The product the lines agree on when the settle names none (backend `0201`,
+    // "What the build decided", point 12).
+    const agreed = new Set(row.entries.map((entry) => this._productOf(entry)));
+    const itemId =
+      body.itemId ?? (agreed.size === 1 ? [...agreed][0] : undefined);
+
     for (const allocation of allocations) {
       if (allocation.quantity > 0) {
         this._write(
           allocation.lineId,
           'BOUGHT',
           allocation.quantity,
-          body.priceScopeId
+          body.priceScopeId,
+          itemId ?? undefined
         );
       }
     }
 
-    return this._result(rowKey);
+    this._announce(target.lineIds, true);
+    return this._result(target.lineIds);
   }
 
   async revert(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRevertRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
-    const lineIds = new Set(row.entries.map((entry) => entry.lineId));
+    const row = this._requireLines(target);
+    const lineIds = new Set(target.lineIds);
 
     if (body.target === 'CLOSE') {
       const close = this._standing()
@@ -1049,7 +1286,8 @@ export class BasketMemory implements BasketServiceI {
         throw this._refuse('validation_failed', 400, 'Nothing to take back');
       }
       close.reverted = true;
-      return this._result(rowKey);
+      this._announce(target.lineIds, true);
+      return this._result(target.lineIds);
     }
 
     this._requireFrom(body.from, row.bought);
@@ -1069,6 +1307,7 @@ export class BasketMemory implements BasketServiceI {
       if (left <= 0) {
         break;
       }
+      this._moved(act.lineId);
       if (act.quantity <= left) {
         left -= act.quantity;
         act.reverted = true;
@@ -1083,12 +1322,14 @@ export class BasketMemory implements BasketServiceI {
         quantity: act.quantity - left,
         by: this.me.id,
         at: act.at,
+        ...(act.itemId === undefined ? {} : { itemId: act.itemId }),
         reverted: false,
       });
       left = 0;
     }
 
-    return this._result(rowKey);
+    this._announce(target.lineIds, true);
+    return this._result(target.lineIds);
   }
 
   /**
@@ -1101,9 +1342,12 @@ export class BasketMemory implements BasketServiceI {
    * the `from` every other write carries: a row already bought or already closed
    * is not one anybody is walking past.
    */
-  async skip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async skip(
+    _basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     if (row.left === 0) {
       throw this._refuse(
         'conflict',
@@ -1117,18 +1361,24 @@ export class BasketMemory implements BasketServiceI {
       line.skippedAt = at;
     }
 
-    return this._result(rowKey);
+    // A skip moves no version (backend `0204`, review point 1).
+    this._announce(target.lineIds, false);
+    return this._result(target.lineIds);
   }
 
   /** Take the skip back. The same fact, unset. */
-  async unskip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async unskip(
+    _basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     for (const line of this._livesOf(row)) {
       line.skippedAt = null;
     }
 
-    return this._result(rowKey);
+    this._announce(target.lineIds, false);
+    return this._result(target.lineIds);
   }
 
   /**
@@ -1139,22 +1389,23 @@ export class BasketMemory implements BasketServiceI {
    * `forbidden`, and a quantity that is not a whole number is a validation
    * failure. A kinder fake would let a screen ship that never drew any of them.
    *
-   * A row whose every entry asks for nothing, and which nothing was bought of,
-   * **leaves the basket**. The answer's row is null there, which is what
-   * `toBasketRowResult` reads out of the server's emptied row.
+   * A line that asks for nothing, and which nothing was bought of, **leaves the
+   * basket**: it is absent from the answer. And a line at zero that the basket
+   * does not draw is raised here (backend `0201`, "What the build decided", point
+   * 2), which is how "Add it to another list" asks a list for a product it holds.
    */
   async setDemand(
     _basketId: string,
-    rowKey: string,
     body: BasketDemandRequest
   ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
-    const entry = row.entries.find((held) => held.lineId === body.lineId);
-    const line = this._lines.find((held) => held.id === body.lineId);
-    if (entry === undefined || line === undefined) {
-      throw this._refuse('validation_failed', 400, 'That line is not here');
+    const line = this._lines.find(
+      (held) => held.id === body.lineId && !held.deleted
+    );
+    if (line === undefined) {
+      throw this._refuse('not_found', 404, 'No such row on this basket');
     }
+    const entry = this._entry(line);
     if (!entry.demandEditable) {
       throw this._refuse(
         'forbidden',
@@ -1172,7 +1423,109 @@ export class BasketMemory implements BasketServiceI {
     this._requireFrom(body.from, entry.left);
 
     line.quantity = body.quantity;
-    return this._result(rowKey);
+    this._moved(line.id);
+    this._announce([line.id], true);
+    return this._result([line.id]);
+  }
+
+  /**
+   * Take another product on these lines (backend `0202`, section 3).
+   *
+   * Every standing buy of a named line with another product is replaced by one of
+   * the new product, at the same moment and for the same quantity, so the line
+   * counts as the new product for the rest of the trip. With `keep` the product
+   * joins each line and becomes its favourite. A guest is refused, as the gateway
+   * refuses one, and so is a `keep` on a line the reader may not write.
+   */
+  async changeProduct(
+    _basketId: string,
+    body: BasketProductChangeRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    if (this.me.kind === 'GUEST') {
+      throw this._refuse('forbidden', 403, 'Guests cannot change a product');
+    }
+    const lines = body.lineIds.map((lineId) =>
+      this._lines.find((held) => held.id === lineId && !held.deleted)
+    );
+    if (lines.some((line) => line === undefined)) {
+      throw this._refuse('not_found', 404, 'Row not found');
+    }
+    const held = lines as StoredLine[];
+    if (body.keep && held.some((line) => !this._entry(line).canWrite)) {
+      throw this._refuse('forbidden', 403, 'This list cannot be edited');
+    }
+
+    for (const line of held) {
+      for (const act of this._standing()) {
+        if (
+          act.lineId !== line.id ||
+          act.outcome !== 'BOUGHT' ||
+          act.itemId === body.itemId
+        ) {
+          continue;
+        }
+        act.reverted = true;
+        this._settlements.push({
+          ...act,
+          id: (this._settlementId += 1),
+          itemId: body.itemId,
+          reverted: false,
+        });
+      }
+      if (body.keep) {
+        line.itemIds = line.itemIds.includes(body.itemId)
+          ? line.itemIds
+          : [...line.itemIds, body.itemId];
+        line.favoriteItemId = body.itemId;
+        this._moved(line.id);
+      }
+    }
+
+    // A change of product moves a line between rows, so it sends the ids alone.
+    this._announce(body.lineIds, true, false);
+    return this._result(body.lineIds);
+  }
+
+  /**
+   * The covered lists that could take a product (backend `0201`, section 5).
+   *
+   * Every served list with no covered line counting as that product. A list
+   * holding a line with the product among its products names it, at zero or
+   * not. A guest is refused, as the gateway refuses one.
+   */
+  async productLists(
+    _basketId: string,
+    itemId: string
+  ): Promise<readonly BasketProductList[]> {
+    if (this.me.kind === 'GUEST') {
+      throw this._refuse('forbidden', 403, 'Guests cannot add to a list');
+    }
+    if (!this.servesLists) {
+      return [];
+    }
+    const asking = new Set(
+      this._rows()
+        .filter((row) => row.productId === itemId)
+        .flatMap((row) => row.entries.map((entry) => entry.listId))
+    );
+    return LISTS.filter((ref) => !asking.has(ref.listId)).map((ref) => {
+      const line = this._lines.find(
+        (held) =>
+          !held.deleted &&
+          held.listId === ref.listId &&
+          held.itemIds.includes(itemId)
+      );
+      return {
+        listId: ref.listId,
+        listName: ref.name,
+        zoneId: ref.zoneId,
+        zoneName: ref.zoneName,
+        lineId: line?.id ?? null,
+        lineName: line?.content ?? null,
+        quantity: line?.quantity ?? null,
+      };
+    });
   }
 
   /**
@@ -1213,12 +1566,14 @@ export class BasketMemory implements BasketServiceI {
         !line.deleted &&
         line.listId === body.targetListId &&
         normalizeContent(line.content) === key &&
-        productSetKey(line.optionIds) === wanted
+        productSetKey(line.itemIds) === wanted
     );
 
     if (held !== undefined) {
       held.quantity += quantity;
-      return this._result(held.id);
+      this._moved(held.id);
+      this._announce([held.id], true, false);
+      return this._result([held.id]);
     }
 
     const line: StoredLine = {
@@ -1226,7 +1581,7 @@ export class BasketMemory implements BasketServiceI {
       listId: body.targetListId,
       content,
       quantity,
-      optionIds: body.itemIds === undefined ? [] : [...body.itemIds],
+      itemIds: body.itemIds === undefined ? [] : [...body.itemIds],
       // Every list this fake serves auto approves, which is the ordinary case.
       // The `zl-2` fixture is where a screen meets a line waiting for one.
       approved: true,
@@ -1235,25 +1590,39 @@ export class BasketMemory implements BasketServiceI {
       skippedAt: null,
     };
     this._lines.push(line);
-    return this._result(line.id);
+    this._announce([line.id], true, false);
+    return this._result([line.id]);
   }
 
+  /**
+   * Rename the named lines (backend `0113`), refused for a line that holds a
+   * product: a row with a product is named by the catalog (backend `0201`).
+   */
   async renameRow(
     _basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult> {
+  ): Promise<BasketRowResult> {
     this._requireLive();
-    const row = this._requireRow(rowKey);
+    const row = this._requireLines(target);
     const content = body.content.trim();
     if (content === '') {
       throw this._refuse('validation_failed', 400, 'A line needs a name');
+    }
+    if (row.entries.some((entry) => entry.itemIds.length > 0)) {
+      throw this._refuse(
+        'validation_failed',
+        400,
+        'A line with a product is named by the catalog'
+      );
     }
 
     const name = normalizeContent(content);
     const folds = this._rows().find(
       (other) =>
-        other.rowKey !== rowKey && normalizeContent(other.content) === name
+        other.rowKey !== row.rowKey &&
+        other.productId === null &&
+        normalizeContent(other.content) === name
     );
 
     if (folds !== undefined && body.confirmMerge !== true) {
@@ -1264,27 +1633,17 @@ export class BasketMemory implements BasketServiceI {
       );
     }
 
+    const named = new Set(target.lineIds);
     for (const line of this._lines) {
-      if (row.entries.some((entry) => entry.lineId === line.id)) {
+      if (named.has(line.id)) {
         line.content = content;
+        this._moved(line.id);
       }
     }
 
-    // The earliest line survives, so after a fold the row is keyed by whichever
-    // of the two came first, which may not be the one the request named.
-    const survivor = this._rows().find(
-      (other) => normalizeContent(other.content) === name
-    );
-    if (survivor === undefined) {
-      throw this._refuse('not_found', 404, 'That row is no longer here');
-    }
-
-    const result = await this._result(survivor.rowKey);
-    return {
-      ...result,
-      replacedRowKey: survivor.rowKey === rowKey ? null : rowKey,
-      absorbedRowKey: survivor.rowKey === rowKey ? null : rowKey,
-    };
+    // A rename can merge rows, so it sends the ids alone.
+    this._announce(target.lineIds, true, false);
+    return this._result(target.lineIds);
   }
 
   async suggest(
@@ -1483,14 +1842,26 @@ export class BasketMemory implements BasketServiceI {
    * the plan's table states them. It is the one arithmetic this scope is allowed,
    * because this class stands in for the server.
    *
-   * The merge key is the normalized content, which is what the server groups by.
+   * The merge key is the product a line counts as, or its normalized content
+   * when it holds none, which is what the server groups by (backend `0201`,
+   * section 2). This twin reads no price, so a line counts as its buy in this
+   * trip, its favourite or its first product, which is what core does alone.
    * A deleted line still forms a row, because a row every entry has left is
    * `REMOVED` and that is information about the basket rather than nothing.
    */
   private _rows(): readonly BasketRow[] {
     const groups = new Map<string, StoredLine[]>();
     for (const line of this._lines) {
-      const key = normalizeContent(line.content);
+      if (!line.deleted && !this._covered(line)) {
+        // A line at zero with no buy is not covered (backend `0130`), so it is
+        // no entry of any row. A list raised from zero brings it back.
+        continue;
+      }
+      const product = this._lineProduct(line);
+      const key =
+        product === null
+          ? `text:${normalizeContent(line.content)}`
+          : `item:${product}`;
       const held = groups.get(key);
       if (held === undefined) {
         groups.set(key, [line]);
@@ -1515,7 +1886,7 @@ export class BasketMemory implements BasketServiceI {
       // (backend `0188`, target 4).
       const skipNote = this._note(lines, bought);
       const note: BasketRowNote | null =
-        skipNote ?? (boughtElsewhere > 0 ? 'BOUGHT_ON_ANOTHER_BASKET' : null);
+        skipNote ?? (boughtElsewhere > 0 ? this._elsewhereNote(live) : null);
 
       // **A row nothing asks for and nothing was bought of is not a thing to
       // buy**, so it leaves the view (backend `0136`). That is what a demand
@@ -1539,6 +1910,7 @@ export class BasketMemory implements BasketServiceI {
       rows.push({
         rowKey: anchor.id,
         content: anchor.content,
+        productId: live.length === 0 ? null : this._lineProduct(anchor),
         left,
         bought,
         asked: bought + left,
@@ -1561,9 +1933,6 @@ export class BasketMemory implements BasketServiceI {
         // the row it names to have been built.
         mark: null,
         awaitingApproval: entries.some((entry) => entry.awaitingApproval),
-        // First seen order, anchor first, which is what the server promises and
-        // what makes `optionIds[0]` the product the row means.
-        optionIds: [...new Set(live.flatMap((line) => line.optionIds))],
         touchedBy: newest?.by ?? null,
         touchedAt: newest?.at ?? null,
         entries,
@@ -1613,18 +1982,79 @@ export class BasketMemory implements BasketServiceI {
     });
   }
 
-  /** The row one line ended up in, by the anchor rule, or null when it is gone. */
+  /** The row one line ended up in, or null when it is gone. */
   private _rowKeyOf(lineId: string, rows: readonly BasketRow[]): string | null {
     const line = this._lines.find((held) => held.id === lineId);
     if (line === undefined) {
       return null;
     }
 
+    const held = rows.find((candidate) =>
+      candidate.entries.some((entry) => entry.lineId === lineId)
+    );
+    if (held !== undefined) {
+      return held.rowKey;
+    }
+    // A line that left the coverage, which only a `REMOVED` row still names.
     const key = normalizeContent(line.content);
     const row = rows.find(
-      (candidate) => normalizeContent(candidate.content) === key
+      (candidate) =>
+        candidate.state === 'REMOVED' &&
+        normalizeContent(candidate.content) === key
     );
     return row?.rowKey ?? null;
+  }
+
+  /**
+   * The product a line counts as with no prices (backend `0201`, section 1,
+   * steps 1, 2, 4 and 5): its buy in this trip, its favourite, its first.
+   */
+  private _lineProduct(line: StoredLine): string | null {
+    const trip = this._tripItemOf(line.id);
+    if (trip !== null) {
+      return trip;
+    }
+    const favorite = line.favoriteItemId ?? null;
+    if (favorite !== null && line.itemIds.includes(favorite)) {
+      return favorite;
+    }
+    return line.itemIds[0] ?? null;
+  }
+
+  /** The product of the newest standing buy of a line that names one, or null. */
+  private _tripItemOf(lineId: string): string | null {
+    const buy = this._standing()
+      .filter(
+        (act) =>
+          act.lineId === lineId &&
+          act.outcome === 'BOUGHT' &&
+          act.itemId !== undefined
+      )
+      .pop();
+    return buy?.itemId ?? null;
+  }
+
+  /** The product an entry counts as, for a settle that names none. */
+  private _productOf(entry: BasketRowEntry): string | null {
+    const line = this._lines.find((held) => held.id === entry.lineId);
+    return line === undefined ? null : this._lineProduct(line);
+  }
+
+  /**
+   * Whether the basket covers a live line: it asks for something, or this basket
+   * or another bought some of it in scope (backend `0130`, section 4).
+   */
+  private _covered(line: StoredLine): boolean {
+    if (line.quantity > 0) {
+      return true;
+    }
+    const bought = this._standing().some(
+      (act) => act.lineId === line.id && act.outcome === 'BOUGHT'
+    );
+    return (
+      bought ||
+      this._recentElsewhere().some((purchase) => purchase.lineId === line.id)
+    );
   }
 
   /**
@@ -1666,17 +2096,64 @@ export class BasketMemory implements BasketServiceI {
       approvalBefore: change.approvalBefore,
       approvalAfter: change.approvalAfter,
       rowContent: rowKey === null ? null : context.contentFor(rowKey),
-      actor:
-        change.actorParticipantId === null
-          ? null
-          : {
-              participantId: change.actorParticipantId,
-              userId: null,
-              name: context.nameFor(change.actorParticipantId, null),
-            },
+      actor: this._actorOf(change, listId, context),
+      origin: this._originOf(change, listId, context),
       list: listId === null ? null : context.listFor(listId),
       at: change.at,
       unseen: unseen.has(change.id),
+    };
+  }
+
+  /**
+   * Who made a change: a participant of this basket, or an account served only
+   * beside a list the reader was served (backend `0138`, section 8).
+   */
+  private _actorOf(
+    change: StoredChange,
+    listId: string | null,
+    context: BasketChangeContext
+  ): BasketChangeActor | null {
+    if (change.actorParticipantId !== null) {
+      return {
+        participantId: change.actorParticipantId,
+        userId: null,
+        name: context.nameFor(change.actorParticipantId, null),
+      };
+    }
+    const userId = change.actorUserId ?? null;
+    return userId === null || listId === null
+      ? null
+      : { participantId: null, userId, name: context.nameFor(null, userId) };
+  }
+
+  /**
+   * Where a buy came from (backend `0203`, section 5). The owner of the other
+   * basket is served by the rule of an account, so a reader served no list, which
+   * is a guest, is told nobody.
+   */
+  private _originOf(
+    change: StoredChange,
+    listId: string | null,
+    context: BasketChangeContext
+  ): BasketChangeOrigin | null {
+    const origin = change.origin;
+    if (origin === undefined) {
+      return null;
+    }
+    if (origin.kind === 'LIST') {
+      return { kind: 'LIST' };
+    }
+    const owner = origin.ownerUserId;
+    return {
+      kind: 'ANOTHER_BASKET',
+      owner:
+        owner === null || listId === null
+          ? null
+          : {
+              participantId: null,
+              userId: owner,
+              name: context.nameFor(null, owner),
+            },
     };
   }
 
@@ -1689,14 +2166,29 @@ export class BasketMemory implements BasketServiceI {
       .filter((purchase) => purchase.lineId === line.id)
       .reduce((sum, purchase) => sum + purchase.quantity, 0);
 
+    // Null for a list this reader was not served, which is the whole of the
+    // redaction: the client knows how much and never where.
+    const listId =
+      this.servesLists && LISTS.some((ref) => ref.listId === line.listId)
+        ? line.listId
+        : null;
+    const newest = this._newestOn([line]);
+    const skipStands = this._skipStands([line]);
+
     return {
       lineId: line.id,
-      // Null for a list this reader was not served, which is the whole of the
-      // redaction: the client knows how much and never where.
-      listId:
-        this.servesLists && LISTS.some((ref) => ref.listId === line.listId)
-          ? line.listId
-          : null,
+      listId,
+      content: line.content,
+      itemIds: line.itemIds,
+      favoriteItemId: line.favoriteItemId ?? null,
+      // The reader writes the lists they are served, and only those (backend
+      // `0201`, "What the build decided", point 8).
+      canWrite: listId !== null && this.me.kind !== 'GUEST',
+      tripItemId: this._tripItemOf(line.id),
+      skipped: skipStands && line.quantity > 0,
+      closed: newest?.outcome === 'NOT_AVAILABLE',
+      act: this._actOf(line, newest),
+      version: this._versions.get(line.id) ?? 1,
       left: line.quantity,
       bought,
       asked: bought + line.quantity,
@@ -1705,6 +2197,31 @@ export class BasketMemory implements BasketServiceI {
       awaitingApproval: !line.approved,
       demandEditable: line.demandEditable,
     };
+  }
+
+  /** The newest act of this basket on a line: a skip, or a settlement. */
+  private _actOf(
+    line: StoredLine,
+    newest: Settlement | undefined
+  ): BasketEntryAct | null {
+    const skipped = line.skippedAt;
+    if (
+      skipped !== null &&
+      (newest === undefined || skipped.getTime() > newest.at.getTime())
+    ) {
+      return {
+        participantId: this.me.id,
+        at: skipped.toISOString(),
+        outcome: 'SKIPPED',
+      };
+    }
+    return newest === undefined
+      ? null
+      : {
+          participantId: newest.by,
+          at: newest.at.toISOString(),
+          outcome: newest.outcome,
+        };
   }
 
   /**
@@ -1733,10 +2250,14 @@ export class BasketMemory implements BasketServiceI {
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    // Nothing left, and somebody bought it: this basket, or another one lately
-    // (backend `0188`, target 5).
-    if (left === 0 && (bought > 0 || boughtElsewhere > 0)) {
+    // Nothing left, and this basket bought some of it.
+    if (left === 0 && bought > 0) {
       return 'DONE';
+    }
+    // Nothing left, none of it bought here, and somebody bought it lately
+    // through another basket or on the list page (backend `0203`, section 3).
+    if (left === 0 && boughtElsewhere > 0) {
+      return 'BOUGHT_ELSEWHERE';
     }
     if (left > 0 && bought > 0) {
       return 'PARTLY';
@@ -1758,6 +2279,26 @@ export class BasketMemory implements BasketServiceI {
     );
   }
 
+  /**
+   * Which kind of outside buy the newest one on these lines was (backend `0203`,
+   * section 3): through another basket, or on the list page.
+   */
+  private _elsewhereNote(lines: readonly StoredLine[]): BasketRowNote {
+    const ids = new Set(lines.map((line) => line.id));
+    const newest = this._recentElsewhere()
+      .filter((purchase) => ids.has(purchase.lineId))
+      .reduce<ElsewherePurchase | null>(
+        (held, purchase) =>
+          held === null || purchase.at.getTime() >= held.at.getTime()
+            ? purchase
+            : held,
+        null
+      );
+    return newest?.through === 'LIST'
+      ? 'BOUGHT_ON_THE_LIST'
+      : 'BOUGHT_ON_ANOTHER_BASKET';
+  }
+
   /** The newest purchase another basket made on these lines, or null. */
   private _newestElsewhereAt(lines: readonly StoredLine[]): Date | null {
     const ids = new Set(lines.map((line) => line.id));
@@ -1777,8 +2318,11 @@ export class BasketMemory implements BasketServiceI {
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
     }
-    if (line.quantity === 0 && (bought > 0 || boughtElsewhere > 0)) {
+    if (line.quantity === 0 && bought > 0) {
       return 'DONE';
+    }
+    if (line.quantity === 0 && boughtElsewhere > 0) {
+      return 'BOUGHT_ELSEWHERE';
     }
     if (line.quantity > 0 && bought > 0) {
       return 'PARTLY';
@@ -1853,7 +2397,10 @@ export class BasketMemory implements BasketServiceI {
    * disagree, which is the one thing a spec over this is for.
    */
   private _progress(rows: readonly BasketRow[]): BasketProgress {
-    const counted = rows.filter((row) => row.state !== 'REMOVED');
+    // A buy made outside the basket counts for nothing in it (backend `0203`).
+    const counted = rows.filter(
+      (row) => row.state !== 'REMOVED' && row.state !== 'BOUGHT_ELSEWHERE'
+    );
     return {
       done: counted.filter((row) => row.state === 'DONE').length,
       unavailable: counted.filter((row) => row.state === 'NOT_AVAILABLE')
@@ -1875,7 +2422,8 @@ export class BasketMemory implements BasketServiceI {
     lineId: string,
     outcome: 'BOUGHT' | 'NOT_AVAILABLE',
     quantity: number,
-    priceScopeId?: string
+    priceScopeId?: string,
+    itemId?: string
   ): void {
     this._settlements.push({
       id: (this._settlementId += 1),
@@ -1885,6 +2433,7 @@ export class BasketMemory implements BasketServiceI {
       by: this.me.id,
       at: new Date(),
       ...(priceScopeId === undefined ? {} : { priceScopeId }),
+      ...(itemId === undefined ? {} : { itemId }),
       reverted: false,
     });
 
@@ -1895,6 +2444,7 @@ export class BasketMemory implements BasketServiceI {
         // never below zero: buying three of a line that says two is allowed, and
         // the extra unit is recorded rather than subtracted twice.
         line.quantity = Math.max(0, line.quantity - quantity);
+        this._moved(lineId);
       }
     }
   }
@@ -1947,53 +2497,51 @@ export class BasketMemory implements BasketServiceI {
   }
 
   /**
-   * What every write answers: the row as it now stands, and the counts.
+   * What every write answers: the named lines as they now stand (backend `0201`,
+   * section 4).
    *
-   * **A row that is no longer there answers null rather than a 404.** A demand
-   * taken to zero on a row nothing was bought of takes the row out of the view,
-   * and that is the write succeeding: the list now asks for nothing, which is
-   * what was asked for. A 404 here would report a failure to somebody whose
-   * change landed.
+   * **A line that left the basket is absent**, which is a demand taken to zero
+   * on a line nothing was bought of. That is the write succeeding: the list now
+   * asks for nothing, which is what was asked for.
    */
-  private async _result(rowKey: string): Promise<BasketRowResult> {
-    const rows = this._rows();
-    const row =
-      rows.find((held) => held.rowKey === rowKey) ??
-      rows.find((held) =>
-        held.entries.some((entry) => entry.lineId === rowKey)
-      ) ??
-      null;
-
-    return {
-      row,
-      progress: this._progress(rows),
-      pending: this._pending(rows),
-      replacedRowKey: null,
-      skippedCount: 0,
-    };
+  private async _result(lineIds: readonly string[]): Promise<BasketRowResult> {
+    const wanted = new Set(lineIds);
+    const entries = this._rows()
+      .flatMap((row) => row.entries)
+      .filter((entry) => wanted.has(entry.lineId));
+    return { entries, skippedCount: 0 };
   }
 
   // --- Internals -------------------------------------------------------------
 
   /**
-   * The row a key addresses: by its own key, then by any entry's line id.
+   * The named lines, as one row, or a refusal (backend `0201`, section 4).
    *
-   * The second lookup is the server's rule and not a convenience (backend `0136`):
-   * a row whose anchor was just bought to zero must not turn the next tap on the
-   * same row into a not found.
+   * Every named line must be an entry of a row of this basket, else the whole
+   * write is the one "Row not found" of the server, and the key must be one of
+   * them. The numbers a write checks `from` against are the sums over the named
+   * lines, so the answer is a row of exactly those entries.
    */
-  private _requireRow(rowKey: string): BasketRow {
+  private _requireLines(target: BasketRowTarget): BasketRow {
     const rows = this._rows();
-    const row =
-      rows.find((held) => held.rowKey === rowKey) ??
-      rows.find((held) =>
-        held.entries.some((entry) => entry.lineId === rowKey)
-      );
+    const named = new Set(target.lineIds);
+    const entries = rows
+      .flatMap((row) => row.entries)
+      .filter((entry) => named.has(entry.lineId));
+    const host = rows.find((row) =>
+      row.entries.some((entry) => entry.lineId === target.rowKey)
+    );
 
-    if (row === undefined) {
+    if (
+      host === undefined ||
+      entries.length !== named.size ||
+      !named.has(target.rowKey)
+    ) {
       throw this._refuse('not_found', 404, 'No such row on this basket');
     }
-    return row;
+    const left = entries.reduce((sum, entry) => sum + entry.left, 0);
+    const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
+    return { ...host, entries, left, bought, asked: left + bought };
   }
 
   /**

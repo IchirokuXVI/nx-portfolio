@@ -120,6 +120,8 @@ export class CarrefourDetailRunner implements CatalogRunner {
             packCount: row.packCount,
             categoryPath: row.categoryPath,
             url: row.url,
+            // The crawl's address, carried for the same reason (plan 0198).
+            imageUrl: row.imageUrl,
             observedAt,
             extra: null,
             // The crawl already wrote this chain's prices, and the next one

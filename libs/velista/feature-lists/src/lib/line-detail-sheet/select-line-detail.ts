@@ -2,6 +2,7 @@ import {
   ESTIMATE_MIN_PURCHASES,
   ESTIMATE_ROUGH_TO,
   inLocale,
+  lineName,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -9,6 +10,7 @@ import {
   type Line,
   type LineDetailVm,
   type LineIndicator,
+  type LineProductPriceRead,
   type LineSettlement,
 } from '@portfolio/velista/models';
 
@@ -51,6 +53,8 @@ export interface LineDetailInput {
    * library.
    */
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
+  /** The prices of a product, for the product the line shows (velista `0145`). */
+  readonly pricesOf?: (itemId: string) => LineProductPriceRead;
   /**
    * Whether the name lookup failed, as opposed to answering with nothing.
    *
@@ -96,7 +100,13 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
 
   return {
     lineId: line.id,
-    content: line.content,
+    // The name the line is drawn with (velista `0144`).
+    content: lineName(
+      line,
+      (itemId) => input.itemNameOf(itemId)?.name ?? null,
+      input.locale,
+      input.pricesOf
+    ).text,
     quantity: line.quantity,
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,

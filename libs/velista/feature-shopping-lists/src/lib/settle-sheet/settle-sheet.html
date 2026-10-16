@@ -95,119 +95,59 @@
       }
 
       <!--
-        What is left, or what happened. A finished line is still tappable on purpose
-        (plan 0043, section 3.2), so this sheet opens on one, and "0 outstanding" is
-        a true sentence that answers the wrong question: the person opened it to see
-        what they bought.
+        Under the title: the price of one, and how many are left to get (velista
+        0139, section 3). A finished row says what happened instead: it is still
+        tappable on purpose (plan 0043, section 3.2), and "0 to get" would answer
+        the wrong question.
       -->
-      @if (finished()) {
-        @if (whatHappened(); as caption) {
-          <p class="happened">{{ caption }}</p>
+      <!--
+        A row somebody bought outside this shopping list draws none of the three
+        (velista 0142, section 1): the lists below, each at 0 and "Already
+        bought", are the whole of its sheet.
+      -->
+      @if (!boughtElsewhere()) {
+        @if (subtitle(); as sub) {
+          <p class="subtitle">{{ sub }}</p>
         }
-      } @else {
-        <p class="outstanding">
-          {{ 'basket.line.outstanding' | rokuT: { count: outstanding() } }}
-        </p>
+        @if (finished()) {
+          @if (whatHappened(); as caption) {
+            <p class="happened">{{ caption }}</p>
+          }
+        }
+
+        <!--
+          What this basket got of these lines, in one quiet line with no
+          container (velista 0139, section 3).
+        -->
+        @if (gotToday(); as got) {
+          <p class="happened">{{ got }}</p>
+        }
       }
 
       <!--
-        Somebody bought it through another basket (velista 0131), in the words the
-        row underneath uses. On a row closed that way this is all that happened,
-        and nothing here takes it back: the settle targets are off because nothing
-        is left, and the "got" number below is plain text.
+        The lists that ask, each with its quantity, and the lists that could
+        (velista 0139, section 3). It reads the basket's own row, and the read of
+        the other lists that the sheet made for its product.
       -->
-      @if (boughtElsewhere(); as said) {
-        <p class="happened">{{ said }}</p>
-      }
-
-      <!--
-        Which one is in the trolley (velista 0092, section 5).
-
-        The pane behind this used to **split** the row between products. It asks
-        one question now: which did you get? The answer travels with the settle as
-        `itemId` and is stored nowhere before it, because a product belongs on the
-        purchase it was bought as.
-
-        Three shapes, and they are the three answers. A chosen product, or a row
-        with one option, is a card with its picture, name and price; either way, a
-        row of several options offers the way in. A row of several with nothing
-        chosen says so and offers no price, because quoting the first would name a
-        product nobody picked up.
-      -->
-      @if (productCard(); as product) {
-        <lib-settle-product
-          (changeRequested)="openPane('product')"
-          [busy]="busy()"
-          [canChange]="canChooseProduct()"
-          [product]="product"
-        />
-      } @else if (canChooseProduct()) {
-        <div class="product">
-          <span class="product-name is-missing">
-            {{ 'basket.line.free' | rokuT }}
-          </span>
-          <button
-            (click)="openPane('product')"
-            [disabled]="busy()"
-            class="product-change"
-            type="button"
-          >
-            {{ 'basket.product.change' | rokuT }}
-          </button>
-        </div>
-      }
-
-      <!--
-        What each household asked for and got (velista `0090`, section 9.2).
-
-        Directly under the product entry and above the settle buttons, which is where
-        `0073` put its predecessor: the shopper has already opened this sheet, and the
-        rows they used to have to find on a second sheet are the next thing under it.
-
-        **It reads the basket's own row** and fetches nothing, so it has no loading
-        state and no failure of its own: the numbers arrived with the basket. Drawn
-        when there is something to say, which is more than one entry or one whose
-        list this reader was served.
-      -->
-      @if (canSeeEntries()) {
+      @if (row(); as held) {
         <lib-row-entries
-          (allocated)="allocate($event)"
+          (changed)="changeLine($event)"
+          (changedAll)="changeAll()"
           (demanded)="demand($event)"
+          (raised)="raise($event)"
+          (retry)="retryOthers()"
           [busy]="busy()"
+          [changeable]="changeable()"
           [finished]="basketFinished()"
           [lists]="lists()"
-          [row]="row()!"
+          [others]="others()"
+          [row]="held"
         />
       }
 
       <!--
-        **Nothing to settle means no settle target** (plan 0052, section 7.1).
-
-        This whole group used to be drawn unconditionally, so a finished line offered
-        two buttons that both failed: the plural rule picked `all_other` for a count
-        of zero and the primary read "Got all 0", and pressing either it or "They had
-        none" sent a settle core refuses, because `basket-settle.service.ts`
-        throws when `outstanding === 0`.
-
-        A control you may not use is not drawn (`0030`). The partial control was
-        already conditional on `outstanding() > 1` and would have gone with it
-        anyway; the two that were not are the two that were reported. What stays on a
-        finished line is the product and its change control, because swapping the
-        pick is a correction of the record and is still allowed, the list summary,
-        and the history control, for a reader entitled to it.
-
-        Since velista 0057 there is a second way to have nothing to settle, and
-        `canSettle` is where the two meet: this **line** is done, or the whole
-        **trip** is. The second takes the controls off every line at once, including
-        the ones nobody settled, which stay on their households' lists as they are.
-      -->
-      <!--
-        Back on the list (velista 0092, section 3.1).
-
-        **Above** the buying actions on a skipped row, because it is the one thing
-        that is specifically about the state this row is in. The three below it
-        stay: a person who skipped the bread and then found it buys it, and the
-        server ends the skip with the purchase rather than asking for this first.
+        Back on the list (velista 0092, section 3.1), above the buying actions on
+        a skipped row, because it is the one thing about the state this row is in.
       -->
       @if (isSkipped()) {
         <div class="actions">
@@ -223,15 +163,24 @@
       }
 
       <!--
-        No "Got all" and no "Got some" here. The row on the basket page buys the
-        whole line, and the "got" reel above buys part of it.
+        **Nothing to settle means no settle target** (plan 0052, section 7.1), and
+        a finished trip takes them all away (velista 0057).
+
+        "Got all 6", or "Got the other 4" once some of it is bought, then "They
+        had none" in the quiet role, because it closes the row without claiming
+        anything was bought. "Not today" keeps its place after it.
       -->
       @if (canSettle()) {
         <div class="actions">
-          <!--
-            Quiet, because this closes the line without claiming anything was
-            bought (section 7).
-          -->
+          <button
+            (click)="settleAll()"
+            [disabled]="busy()"
+            class="primary"
+            type="button"
+          >
+            {{ gotAllLabel() }}
+          </button>
+
           <button
             (click)="settleNone()"
             [disabled]="busy()"
@@ -242,16 +191,8 @@
           </button>
 
           <!--
-            Not today (velista 0092, section 3.1).
-
-            After "They had none" and in the same quiet role, because the two
-            neighbours are the two things a shopper says about a row they are not
-            buying — and they are **two buttons with two names, never one
-            toggle** (section 11): the shop had none of it, or they walked past
-            it. The first is a fact about the shop and the second is a decision,
-            and only the second is theirs to take back.
-
-            No list moves either way. A skip is recorded against the trip.
+            Not today (velista 0092, section 3.1): two buttons with two names, never
+            one toggle. The shop had none of it, or the shopper walked past it.
           -->
           @if (canSkip()) {
             <button
@@ -267,65 +208,15 @@
       }
 
       <!--
-        What happened to this line, for a reader entitled to it (plan 0049, section
-        1.1). Not drawn for a guest, who holds no account to authenticate the read
-        with, and not drawn for a participant who has lost WRITE: `canReadHistory`
-        follows the served list refs, which are the server's answer on the last read.
-
-        Below the settle targets and outside the actions group, because it is a thing
-        to read rather than a thing to do, and the thumb reaching for the big button
-        must not find this one.
+        What happened to this line, for a reader entitled to it (plan 0049,
+        section 1.1). Below the settle targets, because it is a thing to read
+        rather than a thing to do.
       -->
       @if (canReadHistory()) {
         <button (click)="openPane('history')" class="link" type="button">
           {{ 'basket.history.open' | rokuT }}
         </button>
       }
-    }
-
-    <!--
-      Which one did you get? (velista 0092, section 5.)
-
-      A radio group and not a list of buttons: it is one choice among several with
-      one of them current, which is exactly what a radio group is, and it is what
-      gives a keyboard the arrow keys through the options for free.
-
-      The order is the **server's** and is never re-sorted here, least of all by
-      price: it is the anchor's product first and then the rest as the entries
-      named them, which is the order the row above has been drawing. Sorting by
-      price would rearrange the list every time somebody changed shops.
-    -->
-    @case ('product') {
-      <fieldset class="options">
-        <legend class="pane-title">{{ 'basket.product.title' | rokuT }}</legend>
-
-        @for (option of options(); track option.itemId) {
-          <label class="option">
-            <input
-              (change)="chooseProduct(option.itemId)"
-              [checked]="option.chosen"
-              [disabled]="busy()"
-              name="settle-product"
-              type="radio"
-            />
-            <!--
-              The same card as the chosen product on the settle pane: picture,
-              name, brand and size, and the price with where it is from. The
-              price says "No price" where the shop this screen is pricing at
-              does not list the product.
-            -->
-            <lib-settle-product
-              [chosen]="option.chosen"
-              [product]="option.card"
-              class="option-card"
-            />
-          </label>
-        }
-      </fieldset>
-
-      <button (click)="openPane('settle')" class="quiet" type="button">
-        {{ 'basket.settle.cancel' | rokuT }}
-      </button>
     }
 
     @case ('merge') {

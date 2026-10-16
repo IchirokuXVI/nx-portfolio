@@ -92,6 +92,12 @@ export interface CarrefourProduct {
   measureUnit: string | null;
   /** The product page path, relative to the origin, or null. */
   path: string | null;
+  /**
+   * The card's `images`, as printed and not yet checked (plan 0198), or null
+   * for a card that printed none. `photoAddress` reads it and answers the
+   * address a row may hold.
+   */
+  images: { desktop?: string; mobile?: string } | null;
   /** The category this run saw it in, root first. */
   categoryPath: string[];
 }

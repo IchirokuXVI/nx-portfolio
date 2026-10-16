@@ -4,11 +4,13 @@ The catalog is populated by running the harvester **locally** and moving the
 result, rather than by harvesting from a cluster. Plan 0038 kept the harvester out
 of staging and production, and that part is no longer true: `values.staging.yaml`
 and `values.production.yaml` both set `enabled: true` and `harvestEnabled: true`.
-What a cluster runs is still narrow. Every chain's `supermarket_sources` row is off
-(plan 0083), so no storefront is fetched there. The clusters run store discovery,
-which is two requests, and leaflet imports, which are none. A catalog discovery run
-is 4,383 HTTP requests over about eighteen minutes, and it still happens here
-against the compose stack, where the development machine has room for it.
+Every chain's `supermarket_sources` row is off by default (plan 0083), so a cluster
+fetches no storefront until the owner turns that chain's row on from the back
+office, and a schedule (plan 0206) needs the row of its chain left on. With the rows
+off, the clusters run store discovery, which is two requests, and leaflet imports,
+which are none. A catalog discovery run is 4,383 HTTP requests over about eighteen
+minutes, and it still happens here against the compose stack, where the development
+machine has room for it.
 
 So the flow is: harvest here, export the catalog data, restore it there.
 

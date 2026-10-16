@@ -170,7 +170,8 @@
       "body": "Entra y tus grupos te acompañan, en cualquier teléfono",
       "submit": "Entrar",
       "newHere": "¿Es tu primera vez?",
-      "createAccount": "Crear una cuenta"
+      "createAccount": "Crear una cuenta",
+      "forgot": "¿Has olvidado tu contraseña?"
     },
     "register": {
       "title": "Crea una cuenta",
@@ -230,6 +231,78 @@
       "shortPassword": "Las contraseñas necesitan al menos 8 caracteres",
       "passwordMismatch": "Las dos contraseñas no coinciden. Revisa la segunda",
       "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo"
+    },
+    "forgot": {
+      "title": "¿Has olvidado tu contraseña?",
+      "body": "Te podemos enviar un enlace para volver a entrar. Escribe el correo con el que entras",
+      "submit": "Envíame un enlace",
+      "remembered": "¿Ya te acuerdas?",
+      "signIn": "Entrar",
+      "sentTitle": "Mira tu correo",
+      "sentBody": "Si {{email}} tiene una cuenta con nosotros, le hemos enviado un correo con un enlace. Puede tardar unos minutos. Mira también en spam",
+      "sentRule": "El enlace sirve una vez, durante una hora",
+      "prompt": "¿Aún nada?",
+      "again": "Envía otro enlace",
+      "waiting": "Puedes pedir otro enlace en {{wait}}",
+      "waitingNoWait": "El correo puede tardar unos minutos en llegar",
+      "wrongEmail": "¿Correo equivocado?",
+      "change": "Cámbialo"
+    },
+    "reset": {
+      "title": "Elige una contraseña nueva",
+      "body": "Al guardarla se cierra tu sesión en los demás teléfonos, por si alguien conoce la antigua",
+      "field": "Contraseña nueva",
+      "placeholder": "Tu contraseña nueva",
+      "submit": "Guardar contraseña nueva",
+      "keep": "Mantener mi contraseña y entrar",
+      "keepNote": "Tus otros teléfonos siguen con la sesión abierta",
+      "working": "Entrando",
+      "changed": "Contraseña cambiada. Se ha cerrado la sesión en los demás dispositivos",
+      "held": {
+        "title": "Este teléfono tiene una sesión abierta",
+        "lede": "Tiene abierta esta cuenta:",
+        "body": "Si tu enlace es de otra cuenta, al guardar se cierra esta en el teléfono. No se pierde nada de ella. Puede volver a entrar cuando quiera",
+        "continue": "Guardar contraseña nueva"
+      },
+      "guest": {
+        "title": "Este teléfono tiene una cuenta de invitado",
+        "lede": "Tiene abierta una cuenta de invitado:",
+        "noEmail": "Sin correo",
+        "body": "Una cuenta de invitado no tiene correo ni contraseña. Cuando sales de ella, nadie puede volver a abrirla",
+        "loss_one": "Su grupo y las listas que tiene se quedan en ella. Los perderás",
+        "loss_other": "Sus {{count}} grupos y sus listas se quedan en ella. Los perderás",
+        "keepBefore": "Para conservarlos,",
+        "keepLink": "añade un correo a esta cuenta",
+        "keepAfter": "antes. Después abre tu enlace otra vez",
+        "continue": "Seguir y perderlos"
+      },
+      "dead": {
+        "title": "Ese enlace ha caducado",
+        "body": "Un enlace sirve una vez y caduca al poco tiempo. Al usar un enlace también dejan de servir los demás que te enviamos. Tu cuenta está bien. Pide un enlace nuevo y usa el correo más reciente",
+        "bodySignedIn": "Un enlace sirve una vez y caduca al poco tiempo. Al usar un enlace también dejan de servir los demás que te enviamos. Tu cuenta está bien",
+        "newLink": "Envíame un enlace nuevo",
+        "signIn": "Entrar con mi contraseña"
+      },
+      "failed": {
+        "title": "No ha funcionado",
+        "body": "Ahora mismo no podemos conectar. Inténtalo de nuevo en un momento",
+        "retry": "Intentar de nuevo"
+      },
+      "sheet": {
+        "close": "Cerrar",
+        "unused": "Si cierras esto, al enlace no le pasa nada. Seguirá sirviendo más tarde",
+        "other": {
+          "title": "Cierra la sesión para usar este enlace",
+          "lede": "Este teléfono tiene abierta otra cuenta:",
+          "body": "Tu enlace es de otra cuenta. Para usarlo, cerramos esta en el teléfono. No se pierde nada de ella, y puede volver a entrar cuando quiera",
+          "continue": "Cerrar sesión y usar el enlace"
+        },
+        "guest": {
+          "title": "Este teléfono tiene una cuenta de invitado",
+          "lede": "Tiene abierta una cuenta de invitado:",
+          "continue": "Seguir y perderlos"
+        }
+      }
     }
   },
   "entry": {
@@ -311,16 +384,11 @@
       "backToChains": "Volver a todas las cadenas",
       "all": "Todos los supermercados",
       "allDetail": "Todos los productos de todas las cadenas",
-      "any": "Cualquier tienda de {{chain}}",
-      "anyDetail": "Todos los productos de {{chain}}",
-      "pricesAt": "Precios en {{shop}}",
-      "notPriced": "sin precio aquí",
       "clear": "Ver todos los supermercados"
     },
     "selector": {
       "supermarketAll": "Supermercado: todos los supermercados. Cambiar",
-      "supermarketAny": "Supermercado: {{chain}}, cualquier tienda. Cambiar",
-      "supermarketShop": "Supermercado: {{chain}}, una tienda. Cambiar",
+      "supermarketChain": "Supermercado: {{chain}}. Cambiar",
       "categoryAll": "Categoría: todas las categorías. Cambiar",
       "categoryLeaf": "Categoría: {{root}}, {{leaf}}. Cambiar",
       "categoryRoot": "Categoría: {{root}}. Cambiar"
@@ -481,10 +549,7 @@
     },
     "similar": {
       "title": "Productos similares",
-      "titleFor": "Similares a {{name}}",
-      "failed": "No se han podido cargar los productos similares.",
-      "change": "Cambiar",
-      "changeLabel": "Cambiar por {{label}}"
+      "failed": "No se han podido cargar los productos similares."
     },
     "categories": {
       "title": "Categorías",
@@ -506,6 +571,25 @@
       "emptyBody": "Velista aún no ha encontrado nada. Quita la categoría para verlo todo.",
       "emptyChainTitle": "Todavía no hay nada en {{category}} en {{chain}}",
       "emptyChainBody": "Velista aún no ha encontrado nada en esta tienda. Elige Todas las tiendas, o quita la categoría para ver todo lo de {{chain}}."
+    },
+    "pick": {
+      "titleSet": "Elige productos",
+      "closeSet": "Cerrar sin guardar",
+      "onLine": "En esta línea",
+      "all": "Todos los productos",
+      "onLineLabel": "{{label}}, en esta línea",
+      "gone": "Ya no está en el catálogo",
+      "save": "Guardar",
+      "added_one": "1 producto añadido",
+      "added_other": "{{count}} productos añadidos",
+      "removed_one": "1 producto quitado",
+      "removed_other": "{{count}} productos quitados",
+      "first": "Elige antes un producto.",
+      "full": "Esta línea tiene {{count}} de {{cap}} productos. Quita uno primero.",
+      "saveFailed": "No se pudieron guardar los productos.",
+      "leaveQuestion": "¿Salir sin guardar?",
+      "leave": "Salir",
+      "stay": "Seguir eligiendo"
     }
   },
   "home": {
@@ -619,7 +703,8 @@
       "pending": "{{pending}} de {{total}} pendientes",
       "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
-      "back": "Volver al grupo"
+      "back": "Volver al grupo",
+      "cost": "Unos {{cost}} por las líneas que tienen precio"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -881,40 +966,106 @@
       "delete": "Borrar línea"
     },
     "page": {
-      "where": "en {{list}}, de {{zone}}",
-      "noProducts": "Aún sin productos",
-      "products": "PRODUCTOS DE ESTA LÍNEA",
-      "addProduct": "Añadir un producto",
-      "productsCount": "{{count}}/{{cap}}",
-      "fromGroup": "De {{name}}",
-      "fromGroupUnnamed": "De un grupo",
-      "addedByYou": "Añadidos por ti",
-      "addedBy": "Añadido por {{who}}",
-      "keepProduct": "Conservar",
-      "keepProductLabel": "Conservar {{name}} en esta línea",
-      "productsFull": {
-        "one": "Esta línea tiene {{count}} de {{cap}} productos. Quita alguno primero.",
-        "group": "Esta línea tiene {{count}} de {{cap}} productos y {{name}} añade {{adds}}. Quita algunos productos primero."
+      "where": "En {{list}}, en {{zone}}",
+      "addedBy": "Añadida por {{who}}",
+      "addName": "Ponerle un nombre",
+      "you": "ti",
+      "someone": "alguien",
+      "quantityLabel": "Cuántos hay en la lista",
+      "menu": "Más opciones de {{name}}",
+      "productsTitle": "Vale cualquiera de estos",
+      "productsChange": "Cambiar",
+      "aboutLabel": "Cuál te toca comprar",
+      "about": {
+        "title": "Cuál te toca comprar",
+        "any": "Para {{line}} vale cualquiera de estos productos. Tu lista de la compra muestra uno de ellos.",
+        "favorite": "Si marcas un favorito con la estrella, tu lista de la compra muestra siempre el favorito. Lo hace aunque otro producto cueste menos.",
+        "cheapest": "Si no hay favorito, muestra el más barato.",
+        "order": "Aquí los productos van en ese mismo orden: primero el favorito, después el más barato.",
+        "close": "Cerrar"
       },
-      "searchProduct": "Buscar un producto",
-      "add": "Añadir",
-      "removeProduct": "Quitar {{name}}",
-      "thisList": "EN ESTA LISTA",
-      "everywhere": "DONDE SEA QUE COMPRES",
-      "alsoOn": "TAMBIÉN EN",
-      "alsoOnPlace": "{{zone}} · {{list}}",
-      "alsoOnMore": "y más",
-      "noHistory": "Todavía no se ha comprado nada",
-      "more": "Ver más",
-      "prices": "Dónde comprarlo y por cuánto: aparecerá aquí cuando haya precios. Hasta entonces no se muestra nada.",
-      "delete": "Borrar esta línea",
-      "rate": "cada cuánto lo compras",
-      "lastBought": "última vez, {{count}}",
-      "boughtBy": "Comprado {{count}} · {{who}}",
+      "card": {
+        "cheapest": "EL MÁS BARATO",
+        "noPrice": "sin precio",
+        "notSold": "no está en {{supermarket}}",
+        "favorite": "Favorito",
+        "favoriteOn": "{{name}} es el favorito. Pulsa para quitarlo",
+        "favoriteOff": "Marcar {{name}} como favorito"
+      },
+      "supermarket": "Supermercado",
+      "supermarketAny": "Cualquiera",
+      "history": "Historial de compras",
+      "historyTimes_one": "{{count}} vez",
+      "historyTimes_other": "{{count}} veces",
+      "historyNever": "Todavía no",
+      "comments": "Comentarios",
+      "alsoOn": "También en",
+      "alsoOnMore": "Hay más listas que estas.",
+      "loading": "Cargando la línea",
+      "failed": "No se ha podido cargar esta línea.",
+      "retry": "Reintentar",
+      "toList": "Volver a la lista",
+      "productsNone": "Todavía no hay producto",
+      "productsChoose": "Elige un producto",
+      "productsWhy": "Con un producto, la lista muestra lo que cuesta y dónde se vende."
+    },
+    "menu": {
+      "rename": "Cambiar el nombre",
+      "renameLabel": "Cambiar el nombre de {{name}}",
+      "addName": "Ponerle un nombre",
+      "addNameLabel": "Ponerle un nombre a {{name}}",
+      "delete": "Borrar esta línea"
+    },
+    "rename": {
+      "title": "Ponle un nombre a esta línea",
+      "label": "Nombre",
+      "note": "El nombre es solo para esta lista. El producto sigue siendo el mismo.",
+      "save": "Guardar",
+      "cancel": "Cancelar"
+    },
+    "supermarket": {
+      "title": "¿Dónde compras {{line}}?",
+      "body": "Elige un supermercado y los productos muestran sus precios. Todos los que usan {{list}} ven tu elección.",
+      "any": "Cualquier supermercado",
+      "anyHint": "El precio más bajo de cada producto",
+      "all": "Los {{count}} productos",
+      "some": "{{sells}} de los {{count}} productos",
+      "none": "Ninguno de estos productos",
+      "sellsIt": "Lo vende",
+      "sellsNot": "No lo vende",
+      "notNear": "No está cerca de ti",
+      "from": "desde {{price}}",
+      "other": "Otro supermercado",
+      "loading": "Buscando los supermercados que tienes cerca",
+      "noContext": "No se han podido cargar los supermercados que tienes cerca.",
+      "firstProducts": "Contado con los primeros {{count}} productos.",
+      "failed": "No se ha guardado. Inténtalo otra vez."
+    },
+    "history": {
+      "title": "Historial de compras",
+      "back": "Volver a la línea",
+      "where": "{{line}}, en {{list}}",
+      "scope": "Qué compras",
+      "thisList": "Esta lista",
+      "everywhere": "Todas tus compras",
+      "times_one": "{{count}} vez",
+      "times_other": "{{count}} veces",
+      "timesMore": "{{count}} veces o más",
+      "since": "desde {{month}}",
+      "bought": "comprado",
+      "between": "entre compras",
+      "lastPaid": "último precio por uno",
+      "boughtYou": "Compraste {{count}}",
+      "boughtBy": "{{who}} compró {{count}}",
+      "noneYou": "No encontraste ninguno",
+      "noneBy": "{{who}} no encontró ninguno",
+      "someone": "Alguien",
+      "onList": "en {{list}}",
+      "reverted": "Deshecho",
       "each": "{{count}} a {{price}} cada uno",
-      "missingBy": "No había · {{who}}",
-      "you": "tú",
-      "someone": "alguien"
+      "older": "Ver más antiguas",
+      "empty": "Todavía no se ha comprado nada.",
+      "loading": "Cargando el historial de compras"
     },
     "confirmDelete": {
       "title": "¿Borrar “{{name}}”?",
@@ -964,6 +1115,18 @@
       "quantityLabel": "Cuántos de {{name}}",
       "more": "Ver más sugerencias",
       "added": "{{name}} añadido a la lista"
+    },
+    "row": {
+      "noPrice": "Sin precio",
+      "choose": "Elige un producto",
+      "chooseFor": "Elige un producto para {{name}}",
+      "noProduct": "Sin producto",
+      "favorite": "Favorito",
+      "more_one": "y {{count}} más que también vale",
+      "more_other": "y {{count}} más que también valen",
+      "pickFor": "Para {{name}}",
+      "failed": "Los productos de esta lista no se cargaron.",
+      "retry": "Reintentar"
     }
   },
   "account": {
@@ -1347,14 +1510,14 @@
     },
     "line": {
       "open": "Registrar {{name}}",
-      "outstanding_one": "queda {{count}}",
-      "outstanding_other": "quedan {{count}}",
       "wanted": "×{{count}}",
-      "free": "Sin producto elegido",
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
       "takenBack_other": "{{count}} devueltos",
-      "removed": "Ya no está en la lista"
+      "removed": "Ya no está en la lista",
+      "boughtFromAnotherList": "Comprado desde otra lista de la compra",
+      "boughtFromTheList": "Comprado desde la lista",
+      "alreadyBought": "Ya está comprado"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
@@ -1367,14 +1530,6 @@
       "gotSome": "{{name}} consiguió {{count}}",
       "none": "{{name}} dice que no había",
       "you": "tú"
-    },
-    "elsewhere": {
-      "caption": "Comprado en otra cesta"
-    },
-    "from": {
-      "one": "de {{first}}",
-      "two": "de {{first}} y {{second}}",
-      "more": "de {{first}} y {{count}} más"
     },
     "view": {
       "open": "Filtrar y ordenar",
@@ -1472,13 +1627,18 @@
         "showAll": "Mostrar todas las líneas"
       }
     },
+    "shopAsk": {
+      "title": "¿Estás comprando aquí?",
+      "noShop": "Sin tienda",
+      "noShopHint": "Se guarda el precio más barato",
+      "note": "También puedes elegir la tienda en el filtro de tu lista de la compra.",
+      "never": "No volver a preguntar",
+      "close": "Cerrar"
+    },
     "price": {
-      "cheaperAt": "{{price}} en {{chain}}",
-      "notListedAt": "no está en {{chain}}"
+      "cheaperAt": "{{price}} en {{chain}}"
     },
     "group": {
-      "notListed": "No está en {{chain}}",
-      "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
       "uncovered": "Categorías que no encontramos en esta tienda",
@@ -1501,21 +1661,7 @@
       "missed_other": "No se han podido actualizar {{count}} casas de esta línea.",
       "missedNamed": "Sin actualizar: {{lists}}"
     },
-    "product": {
-      "change": "Cambiar",
-      "title": "¿Cuáles has cogido?",
-      "hint": "Reparte las unidades entre los que has cogido. {{name}} se queda con el resto.",
-      "hintNone": "Reparte las unidades entre los que has cogido. El resto se queda sin producto.",
-      "units": "{{name}}, unidades",
-      "none": "Esta línea no nombra ningún producto",
-      "cheapest": "Más barato",
-      "noPrice": "Sin precio",
-      "asOf": "Precios de {{when}}",
-      "asOfStale": "Precios de {{when}}, y alguno puede estar desactualizado"
-    },
     "units": {
-      "askedFor": "Pedido",
-      "got": "Conseguido",
       "askedLabel": "{{name}}, pedido",
       "gotLabel": "{{name}}, conseguido",
       "pending": "esperando a que la lista lo acepte"
@@ -1674,15 +1820,17 @@
       "isPartly": "{{name}} está conseguido en parte"
     },
     "entries": {
-      "title": "Listas que lo piden",
       "otherList": "Otra lista",
-      "asks": "pide {{count}}",
-      "got": "{{count}} conseguidos",
-      "gotLabel": "{{name}}, conseguidos"
+      "asks": "pide {{count}}"
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
-      "gone": "Esa línea ya no está en esta lista."
+      "gone": "Esa línea ya no está en esta lista.",
+      "listsAndMore_one": "{{names}} y 1 lista más",
+      "listsAndMore_other": "{{names}} y {{count}} listas más",
+      "otherLists_one": "Otra lista",
+      "otherLists_other": "Otras {{count}} listas",
+      "notSoldHere": "No lo venden aquí"
     },
     "skip": {
       "action": "Hoy no",
@@ -1763,25 +1911,71 @@
         "rejected": "«{{name}}» se ha rechazado",
         "approved": "«{{name}}» se ha aprobado",
         "unknown": "«{{name}}» ha cambiado",
+        "bought": "Se compró «{{name}}». Ahora necesitas {{after}}",
+        "boughtAll": "Se compró «{{name}}». Ya no lo necesitas",
+        "buyReverted": "Se deshizo una compra de «{{name}}». Ahora necesitas {{after}}",
         "inList": "en {{list}}"
+      },
+      "origin": {
+        "anotherBasket": "Modificado desde una lista de la compra de {{name}}",
+        "anotherBasketYours": "Modificado desde otra de tus listas de la compra",
+        "anotherBasketSomeone": "Modificado desde la lista de la compra de alguien",
+        "list": "Comprado desde la lista por {{name}}",
+        "listYou": "Comprado desde la lista por ti",
+        "listSomeone": "Comprado desde la lista por alguien"
       }
     },
     "shelf": {
       "unavailable": "No disponible en esta tienda",
       "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
     },
-    "swap": {
-      "open": "Cambiar producto",
-      "openLabel": "Cambiar {{name}} por un producto similar",
-      "title": "Cambiar producto",
-      "instead": "En lugar de {{name}}",
-      "none": "No hay productos similares.",
-      "failed": "El cambio no se ha guardado. Inténtalo de nuevo.",
-      "cancel": "Cancelar",
-      "cheaper": "otro más barato"
+    "change": {
+      "one": "Cambiar",
+      "oneLabel": "Cambiar el producto de {{name}}",
+      "all": "Cambiar en todas las listas",
+      "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
+      "cheaper": "otro más barato",
+      "title": "Cambiar el producto",
+      "titleAll_one": "Cambiar el producto en 1 lista",
+      "titleAll_other": "Cambiar el producto en {{count}} listas",
+      "chosenNow": "Elegido ahora",
+      "notSold": "No lo venden aquí",
+      "catalog": "Buscar otro en el catálogo",
+      "keep": "Guardarlo para la próxima vez",
+      "use": "Usar este producto",
+      "useAll_one": "Usarlo en la lista",
+      "useAll_other": "Usarlo en las {{count}} listas",
+      "failedRead": "No se han podido cargar los productos.",
+      "retry": "Volver a intentarlo",
+      "pickTitle": "Elige un producto",
+      "pickClose": "Cerrar sin elegir",
+      "pickFor": "Para {{list}}",
+      "pickForAll_one": "Para 1 lista",
+      "pickForAll_other": "Para {{count}} listas"
     },
     "map": {
       "openLabel": "Mapa de {{shop}}"
+    },
+    "sheet": {
+      "each": "{{price}} la unidad",
+      "toGet_one": "Falta {{count}}",
+      "toGet_other": "Faltan {{count}}",
+      "got_one": "Hoy se ha cogido {{count}}.",
+      "got_other": "Hoy se han cogido {{count}}.",
+      "gotAt_one": "Hoy se ha cogido {{count}} a {{price}}.",
+      "gotAt_other": "Hoy se han cogido {{count}} a {{price}}.",
+      "gotAtShop_one": "Hoy se ha cogido {{count}} a {{price}}, en {{shop}}.",
+      "gotAtShop_other": "Hoy se han cogido {{count}} a {{price}}, en {{shop}}.",
+      "askedOn_one": "Lo pide 1 lista",
+      "askedOn_other": "Lo piden {{count}} listas",
+      "addElsewhere": "Añadirlo a otra lista",
+      "othersLoading": "Mirando tus otras listas",
+      "othersFailed": "No se han podido cargar tus otras listas.",
+      "othersRetry": "Volver a intentarlo",
+      "gotAll_one": "Ya lo tengo",
+      "gotAll_other": "Ya tengo los {{count}}",
+      "gotOther_one": "Ya tengo el que falta",
+      "gotOther_other": "Ya tengo los {{count}} que faltan"
     }
   },
   "getList": {
@@ -2508,5 +2702,29 @@
     "unsaved": {
       "body": "La última parte de este recorrido solo está en este móvil. Seguimos intentando guardarla."
     }
+  },
+  "support": {
+    "strip": {
+      "label": "Sesión de soporte",
+      "viewingAs": "Viendo como",
+      "leftHoursMinutes": "Quedan {{hours}} h {{minutes}} min",
+      "leftHours": "Quedan {{hours}} h",
+      "leftMinutes": "Quedan {{minutes}} min",
+      "leftUnderMinute": "Queda menos de un minuto",
+      "end": "Terminar"
+    },
+    "handoff": {
+      "working": "Abriendo la sesión de soporte",
+      "invalidTitle": "Este enlace ya no funciona",
+      "invalidBody": "Ya se usó o es demasiado antiguo. Abre uno nuevo desde el panel de administración.",
+      "failedTitle": "La sesión de soporte no se abrió",
+      "failedBody": "Algo ha fallado. Puede que el enlace aún funcione.",
+      "retry": "Reintentar"
+    },
+    "ended": {
+      "title": "Esta sesión de soporte ha terminado",
+      "body": "Puedes cerrar esta pestaña."
+    },
+    "refused": "Esto no se puede hacer en una sesión de soporte"
   }
 }

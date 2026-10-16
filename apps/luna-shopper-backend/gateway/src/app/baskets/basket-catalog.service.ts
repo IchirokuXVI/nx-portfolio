@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
   BASKET_PATTERNS,
+  ITEM_LOOKUP_LIMITS,
   ITEM_PATTERNS,
   SECTION_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
+  type BasketLinePick,
+  type BasketPriceChoice,
+  type BasketPriceChoicesView,
   type BasketPriceScopeView,
   type BasketResult,
   type BasketScopeLocationView,
@@ -11,8 +15,11 @@ import {
   type BasketView,
   type CatalogScopeView,
   type CatalogSuggestResponse,
+  type GetBasketPriceChoicesRequest,
+  type GetBasketRequest,
   type GetItemsRequest,
   type GetItemsResult,
+  type GetLiveBasketRequest,
   type ItemSectionsAtLocationRequest,
   type ItemSectionsAtLocationView,
   type ItemView,
@@ -35,6 +42,7 @@ import {
   type ShopperSelection,
 } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
+import { picksOf } from './basket-picks';
 import {
   atShopOf,
   quotedScopeOf,
@@ -55,6 +63,43 @@ const NO_REFUSALS: ShopRefusalIds = {
 };
 
 /**
+ * What the gateway priced before it read the rows (plan 0201, section 1).
+ *
+ * The picks go to core on the read. The rest goes to {@link
+ * BasketCatalogService.compose}, so that the composition asks nothing a
+ * second time: not the resolution of the owner's profile, and not a product
+ * that was already read at the same scopes.
+ */
+export interface BasketReadPrices {
+  /** The cheapest product of each line that has one priced product or more. */
+  picks: BasketLinePick[];
+  /** What the owner's profile resolved to, or undefined when it did not. */
+  resolved: CatalogScopeView | undefined;
+  /** The scopes {@link items} were priced at. */
+  priceScopeIds: string[];
+  /** Every product of the priced lines, with the offer of every scope. */
+  items: ItemView[];
+}
+
+/**
+ * The rows of a basket as core answered them, and what the gateway learned to
+ * ask for them (plan 0205, section 3).
+ *
+ * The rows read answers `basket` and stops. The full read hands the other two
+ * to {@link BasketCatalogService.compose}, so nothing is asked a second time.
+ */
+export interface BasketRowsRead {
+  basket: BasketView;
+  /**
+   * What core answered `basket.searchScope` with: null when that failed, and
+   * undefined when the read did not need to ask.
+   */
+  searchScope: BasketSearchScope | null | undefined;
+  /** What was priced before the rows, or null when nothing was. */
+  prices: BasketReadPrices | null;
+}
+
+/**
  * The catalog half of a basket, composed at the gateway (plan 0066).
  *
  * Core holds the basket and references products by an opaque `itemId`; catalog
@@ -65,10 +110,17 @@ const NO_REFUSALS: ShopRefusalIds = {
  * ## Why the names travel with the basket
  *
  * Every catalog route needs an account token and the reader may be a guest who
- * has none. A row's options are catalog products and never zone data (plan 0051,
+ * has none. A row's product is a catalog product and never zone data (plan 0051,
  * section 6.1), so a guest is entitled to the names; carrying them here is how
  * they get them without a second public catalog surface, and it makes the whole
- * screen one request rather than one plus a fan out over every option.
+ * screen one request rather than one plus a fan out over every row.
+ *
+ * ## The gateway chooses the cheapest product
+ *
+ * A row is a product since plan 0201, and a line with several products and no
+ * favourite counts as the cheapest of them. Core never sees a price, so the
+ * read asks core which lines need one, prices them here ({@link pricesFor}),
+ * and hands core an item id for each on the read of the rows.
  *
  * ## It fails empty, never loudly
  *
@@ -123,7 +175,12 @@ export class BasketCatalogService {
      * here. The read at a shop asks it first, to learn the basket's own shop
      * before the rows, and a second ask would be the same round trip twice.
      */
-    searchScope?: BasketSearchScope | null
+    searchScope?: BasketSearchScope | null,
+    /**
+     * What {@link pricesFor} read before the rows (plan 0201), or null when it
+     * priced nothing. Its resolution and its products are reused here.
+     */
+    prices?: BasketReadPrices | null
   ): Promise<BasketResult> {
     const own = basket.supermarketLocationId ?? null;
     if (own && locationId && locationId !== own) {
@@ -132,26 +189,26 @@ export class BasketCatalogService {
       );
     }
     const shopId = own ?? locationId ?? null;
-    const itemIds = [...new Set(basket.rows.flatMap((row) => row.optionIds))];
+    const itemIds = productIdsOf(basket);
 
     const [owner, shop, sections] = await Promise.all([
       searchScope === undefined
         ? this.ownerScopeOf(basket.id, participantId)
-        : this.ownerScopeFrom(searchScope),
+        : prices && searchScope
+          ? // The pricing before the rows already resolved the profile.
+            { scope: searchScope, view: prices.resolved }
+          : this.ownerScopeFrom(searchScope),
       shopId ? this.shopAt(shopId, itemIds) : Promise.resolve(null),
       // Plan 0167: which of the shop's sections each product is in. Beside the
       // shop rather than after it, because neither needs the other.
       shopId ? this.sectionsAt(shopId, itemIds) : Promise.resolve(null),
     ]);
     const resolved = owner?.view;
-    const quoted = shop ? quotedScopeOf(shop) : null;
-    const priceScopeIds = [
-      ...new Set([
-        ...(resolved?.priceScopeIds ?? []),
-        ...(quoted ? [quoted] : []),
-      ]),
-    ];
-    const products = await this.productsOf(basket, priceScopeIds);
+    const priceScopeIds = scopesOfRead(
+      resolved,
+      shop ? quotedScopeOf(shop) : null
+    );
+    const products = await this.productsOf(basket, priceScopeIds, prices);
 
     // The profile's postal codes and refusals, read once for both halves that
     // need them: the refusals trim the shops a scope lists, and the codes say
@@ -195,6 +252,95 @@ export class BasketCatalogService {
   }
 
   /**
+   * The rows of a basket as one participant reads them, and what was learned
+   * on the way (plan 0201, section 1; plan 0205, section 3).
+   *
+   * The first half of the full read, and the whole of the rows read. In order:
+   * the shop of the read beside the lines that need a price, then the prices
+   * of those lines, then core's read of the rows with a pick for each.
+   *
+   * A basket started at another shop refuses `locationId` with
+   * `basket_shop_locked`, before anything is priced.
+   */
+  async rowsOf(
+    basketId: string,
+    participantId: string,
+    locationId: string | undefined
+  ): Promise<BasketRowsRead> {
+    // Beside each other, because neither needs the other. A basket started at
+    // another shop is refused by the first, before anything is priced.
+    const [{ searchScope, supermarketId, shopId, shop }, choices] =
+      await Promise.all([
+        this.readShopOf(basketId, participantId, locationId),
+        this.priceChoicesOf(basketId, participantId),
+      ]);
+    const prices = await this.pricesFor(
+      choices?.lines ?? [],
+      searchScope,
+      shopId,
+      shop
+    );
+    const req: GetBasketRequest = {
+      basketId,
+      participantId,
+      ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
+    };
+    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
+    // Asked of core's own view too, so the lock holds when the question about
+    // the shop above failed. The composition asks it the same way, and the
+    // rows read has no composition to ask it.
+    const own = basket.supermarketLocationId ?? null;
+    if (own && locationId && locationId !== own) {
+      throw new BasketShopLockedException(
+        'This basket was started at another shop'
+      );
+    }
+    return { basket, searchScope, prices };
+  }
+
+  /**
+   * The same for the permanent basket of an account, which core creates the
+   * first time it is asked (plan 0136, section 4).
+   *
+   * `locationId` is the shop the device chose, which is the only way the shop
+   * of a `LIVE` basket reaches the server (plan 0163; velista 0091, section
+   * 7). The permanent basket never has one of its own, so it is never locked.
+   */
+  async liveRowsOf(
+    userId: string,
+    locationId: string | undefined
+  ): Promise<BasketRowsRead> {
+    // Beside each other, because neither needs the other. The shop gives its
+    // chain, so each row says whether it is usually bought there (plan 0165).
+    // The other question creates the basket and answers the lines whose
+    // product only a price can choose (plan 0201, section 1).
+    const [shop, choices] = await Promise.all([
+      locationId ? this.shopAt(locationId, []) : null,
+      this.livePriceChoicesOf(userId),
+    ]);
+    // Asked here only when a line needs a price, because the scopes that
+    // count are the owner's. Otherwise the composition asks it, as it always
+    // did, and the rows read does not ask it at all.
+    const searchScope =
+      choices && choices.lines.length > 0
+        ? await this.searchScopeOf(choices.basketId, choices.participantId)
+        : undefined;
+    const prices =
+      choices && searchScope !== undefined
+        ? await this.pricesFor(choices.lines, searchScope, locationId, shop)
+        : null;
+    const supermarketId = shop?.supermarket.id;
+    const req: GetLiveBasketRequest = {
+      userId,
+      ...(supermarketId ? { supermarketId } : {}),
+      ...picksOn(prices),
+    };
+    const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
+    return { basket, searchScope, prices };
+  }
+
+  /**
    * The read's shop and its chain, learned **before** core is asked for the
    * rows (plan 0165).
    *
@@ -210,6 +356,11 @@ export class BasketCatalogService {
    *
    * **It never throws otherwise.** A chain catalog cannot name costs the read
    * its `usual` half and nothing else: every row then carries null.
+   *
+   * The shop itself is handed back too (plan 0201). Its quoted scope is the
+   * one scope whose prices count when the read chooses the cheapest product of
+   * a line, and asking catalog for the shop again would be the same round trip
+   * twice.
    */
   async readShopOf(
     basketId: string,
@@ -218,6 +369,10 @@ export class BasketCatalogService {
   ): Promise<{
     searchScope: BasketSearchScope | null;
     supermarketId: string | undefined;
+    /** The shop of the read, or undefined when it has none. */
+    shopId: string | undefined;
+    /** That shop as catalog named it, or null. */
+    shop: ShopAvailabilityView | null;
   }> {
     const searchScope = await this.searchScopeOf(basketId, participantId);
     const own = searchScope?.supermarketLocationId ?? null;
@@ -227,20 +382,115 @@ export class BasketCatalogService {
       );
     }
     const shopId = own ?? locationId;
+    // The shop alone, with no products, which is the smallest question
+    // `shopAvailability` answers.
+    const shop = shopId ? await this.shopAt(shopId, []) : null;
     return {
       searchScope,
-      supermarketId: shopId ? await this.chainOf(shopId) : undefined,
+      supermarketId: shop?.supermarket.id,
+      shopId,
+      shop,
     };
   }
 
   /**
-   * The chain a shop belongs to, or undefined when catalog cannot say (plan
-   * 0165). The shop alone, with no products, which is the smallest question
-   * `shopAvailability` answers.
+   * The lines of a basket that need a price to know their product (plan 0201,
+   * section 1), or null when core could not say.
+   *
+   * **It never throws.** Null costs the read its picks and nothing else: every
+   * such line then counts as its first product.
    */
-  async chainOf(supermarketLocationId: string): Promise<string | undefined> {
-    const shop = await this.shopAt(supermarketLocationId, []);
-    return shop?.supermarket.id;
+  async priceChoicesOf(
+    basketId: string,
+    participantId: string
+  ): Promise<BasketPriceChoicesView | null> {
+    const req: GetBasketPriceChoicesRequest = { basketId, participantId };
+    try {
+      return await this.nats.send<BasketPriceChoicesView>(
+        BASKET_PATTERNS.priceChoices,
+        req
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The same question for the permanent basket of an account, which core
+   * creates the first time it is asked. The answer names the basket and the
+   * reader, which the live read learns here and nowhere earlier.
+   *
+   * **It never throws**, like {@link priceChoicesOf}.
+   */
+  async livePriceChoicesOf(
+    userId: string
+  ): Promise<BasketPriceChoicesView | null> {
+    try {
+      return await this.nats.send<BasketPriceChoicesView>(
+        BASKET_PATTERNS.livePriceChoices,
+        { userId }
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The cheapest product of each line that needs a price, read before the rows
+   * (plan 0201, section 1, step 3). Null when nothing was priced.
+   *
+   * ## Which prices count
+   *
+   * With a shop of the read, only the prices at the quoted scope of that shop.
+   * A product with no price there is not a candidate, and a shop catalog could
+   * not name counts no price at all. With no shop, the scopes the owner's
+   * profile resolves to.
+   *
+   * ## What is asked
+   *
+   * One `item.getMany` over the distinct products of the lines, in batches
+   * under its limit. It asks for the scopes and the offers that {@link compose}
+   * asks for, so the composition reuses these products and asks catalog only
+   * for the ones it lacks.
+   *
+   * **It fails empty, never loudly.** No scopes, a catalog that cannot answer,
+   * or a profile that no longer resolves all answer null. Core then reads the
+   * basket with no picks, and each such line counts as its first product.
+   */
+  async pricesFor(
+    lines: readonly BasketPriceChoice[],
+    searchScope: BasketSearchScope | null,
+    shopId: string | undefined,
+    shop: ShopAvailabilityView | null
+  ): Promise<BasketReadPrices | null> {
+    if (lines.length === 0) {
+      return null;
+    }
+    const resolved = searchScope
+      ? await this.describeScopes(searchScope)
+      : undefined;
+    const quoted = shop ? quotedScopeOf(shop) : null;
+    const counted = shopId
+      ? quoted
+        ? [quoted]
+        : []
+      : (resolved?.priceScopeIds ?? []);
+    if (counted.length === 0) {
+      return null;
+    }
+    const priceScopeIds = scopesOfRead(resolved, quoted);
+    const ids = [...new Set(lines.flatMap((line) => line.itemIds))];
+    try {
+      const items = await this.itemsOf(ids, priceScopeIds);
+      return {
+        picks: picksOf(lines, items, counted),
+        resolved,
+        priceScopeIds,
+        items,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -270,8 +520,9 @@ export class BasketCatalogService {
   }
 
   /**
-   * Which of the shop's sections each product is in, by the rule of plan 0167
-   * section 3, keyed by product id; or null.
+   * Which of the shop's own sections each product is in, keyed by product id;
+   * or null. A shop with no sections of its own answers an empty list for
+   * every product: nothing is read from its chain (plan 0200).
    *
    * **One call per read, never one per product**: catalog answers every
    * product in one statement. A basket with no products asks nothing.
@@ -306,34 +557,78 @@ export class BasketCatalogService {
   }
 
   /**
-   * The products every row names, in one catalog round trip, priced at the
-   * basket's scopes when there are any.
+   * The product of every row, and nothing else (plan 0201, section 3), priced
+   * at the basket's scopes when there are any. In the order of the rows.
+   *
+   * A product {@link pricesFor} already read at the same scopes is reused, and
+   * catalog is asked only for the others. When that pricing chose every
+   * product the rows name, catalog is not asked at all.
+   *
+   * **It never throws.** A catalog that cannot answer costs the read the
+   * products it did not already hold.
    */
   async productsOf(
     basket: BasketView,
-    priceScopeIds: string[] | undefined
+    priceScopeIds: string[] | undefined,
+    prices?: BasketReadPrices | null
   ): Promise<ItemView[]> {
-    const ids = [...new Set(basket.rows.flatMap((row) => row.optionIds))];
+    const ids = productIdsOf(basket);
     if (ids.length === 0) {
       return [];
     }
 
-    const req: GetItemsRequest =
-      priceScopeIds && priceScopeIds.length > 0
-        ? // Plan 0109, section 3: every scope's offer rather than the cheapest
-          // alone, so the screen can answer "what does this shop charge" as well
-          // as "what will this cost".
-          { ids, priceScopeIds, offers: 'all' }
-        : { ids };
-    try {
-      const found = await this.nats.send<GetItemsResult>(
-        ITEM_PATTERNS.getMany,
-        req
-      );
-      return found.items;
-    } catch {
-      return [];
+    const scopes = priceScopeIds ?? [];
+    const byId = new Map<string, ItemView>();
+    // Reused only when the scopes are the same ones. A product priced at
+    // other scopes carries other offers, and is read again.
+    if (prices && sameScopes(prices.priceScopeIds, scopes)) {
+      for (const item of prices.items) {
+        byId.set(item.id, item);
+      }
     }
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      try {
+        for (const item of await this.itemsOf(missing, scopes)) {
+          byId.set(item.id, item);
+        }
+      } catch {
+        // The products already held are still drawn.
+      }
+    }
+    return ids.flatMap((id) => {
+      const item = byId.get(id);
+      return item ? [item] : [];
+    });
+  }
+
+  /**
+   * Several products by id, priced at these scopes when there are any.
+   *
+   * In batches of {@link ITEM_LOOKUP_LIMITS.maxIds}, asked together. **It
+   * throws when one batch fails**, and each caller decides what that costs.
+   */
+  private async itemsOf(
+    ids: readonly string[],
+    priceScopeIds: readonly string[]
+  ): Promise<ItemView[]> {
+    const batches: string[][] = [];
+    for (let at = 0; at < ids.length; at += ITEM_LOOKUP_LIMITS.maxIds) {
+      batches.push(ids.slice(at, at + ITEM_LOOKUP_LIMITS.maxIds));
+    }
+    const found = await Promise.all(
+      batches.map((batch) => {
+        const req: GetItemsRequest =
+          priceScopeIds.length > 0
+            ? // Plan 0109, section 3: every scope's offer rather than the
+              // cheapest alone, so the screen can answer "what does this shop
+              // charge" as well as "what will this cost".
+              { ids: batch, priceScopeIds: [...priceScopeIds], offers: 'all' }
+            : { ids: batch };
+        return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, req);
+      })
+    );
+    return found.flatMap((result) => result.items);
   }
 
   /**
@@ -454,7 +749,7 @@ export class BasketCatalogService {
   }
 
   /** Core's `basket.searchScope`, or null when core could not answer it. */
-  private async searchScopeOf(
+  async searchScopeOf(
     basketId: string,
     participantId: string
   ): Promise<BasketSearchScope | null> {
@@ -562,6 +857,52 @@ export class BasketCatalogService {
       return null;
     }
   }
+}
+
+/**
+ * The picks a read of the rows carries, when the pricing chose any.
+ *
+ * Absent rather than empty when nothing was priced, so a basket with no line
+ * that needs a price sends core the request it always sent.
+ */
+function picksOn(prices: BasketReadPrices | null): {
+  picks?: BasketLinePick[];
+} {
+  return prices && prices.picks.length > 0 ? { picks: prices.picks } : {};
+}
+
+/**
+ * The product of every row, each one time, in the order of the rows (plan
+ * 0201, section 3). A row whose lines hold no product names none.
+ */
+function productIdsOf(basket: BasketView): string[] {
+  return [
+    ...new Set(
+      basket.rows.flatMap((row) => (row.productId ? [row.productId] : []))
+    ),
+  ];
+}
+
+/**
+ * The scopes a read prices at: what the owner's profile resolves to, and the
+ * quoted scope of the read's shop when it has one (plan 0163, section 2).
+ */
+function scopesOfRead(
+  resolved: CatalogScopeView | undefined,
+  quoted: string | null
+): string[] {
+  return [
+    ...new Set([
+      ...(resolved?.priceScopeIds ?? []),
+      ...(quoted ? [quoted] : []),
+    ]),
+  ];
+}
+
+/** Whether two lists name the same scopes, in any order. */
+function sameScopes(a: readonly string[], b: readonly string[]): boolean {
+  const held = new Set(a);
+  return a.length === b.length && b.every((id) => held.has(id));
 }
 
 /** The refusals of a selection, or none when it could not be read. */

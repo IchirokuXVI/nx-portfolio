@@ -11,7 +11,7 @@ import {
   RefreshToken,
   User,
 } from '../entities';
-import { TokenGrantService } from '../tokens/token-grant.service';
+import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
 
@@ -92,7 +92,7 @@ function build() {
   const service = new IdentityService(
     dataSource as never,
     { issueTokens: jest.fn(), revokeAllForUser: jest.fn() } as never,
-    new TokenGrantService(),
+    new InMemoryTokenGrantService(),
     { hash: jest.fn(), verify: jest.fn() } as never,
     {} as never,
     {} as never,

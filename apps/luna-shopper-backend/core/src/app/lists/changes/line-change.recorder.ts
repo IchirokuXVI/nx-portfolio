@@ -26,6 +26,10 @@ import { ListLine, ListLineChange } from '../../entities';
  * sites disagreeing about whether an edit that renamed a line and changed its
  * quantity is a rename or a quantity change.
  *
+ * {@link bought} and {@link buyReverted} are the two kinds of plan 0203. A buy
+ * is not an edit: it never reopens an approval and never moves a text, so each
+ * has a method of its own that fills the quantity pair and nothing else.
+ *
  * ## `createdAt` is left to the database
  *
  * The insert omits the column, so `DEFAULT now()` writes it: the transaction's
@@ -117,6 +121,80 @@ export class LineChangeRecorder {
       quantityBefore: line.quantity,
       approvalBefore: line.approvalStatus,
     });
+  }
+
+  /**
+   * A buy lowered how many are left of a line (plan 0203, section 1).
+   *
+   * Only the quantity pair is filled. **Nothing is written when the two
+   * quantities are equal**: a buy of a line that was already at zero moved
+   * nothing that another basket reads, and "they had none" moves no quantity at
+   * all.
+   *
+   * It answers whether a row was written, because the caller tells the other
+   * baskets to read their marks only when one was.
+   */
+  async bought(
+    manager: EntityManager,
+    list: ListRef,
+    lineId: string,
+    quantityBefore: number,
+    quantityAfter: number,
+    actor: LineChangeActor
+  ): Promise<boolean> {
+    return this.quantityMoved(
+      manager,
+      list,
+      lineId,
+      LineChangeKind.BOUGHT,
+      quantityBefore,
+      quantityAfter,
+      actor
+    );
+  }
+
+  /**
+   * A buy was taken back, so more are left of a line again (plan 0203, section
+   * 1). The same shape and the same rule as {@link bought}.
+   */
+  async buyReverted(
+    manager: EntityManager,
+    list: ListRef,
+    lineId: string,
+    quantityBefore: number,
+    quantityAfter: number,
+    actor: LineChangeActor
+  ): Promise<boolean> {
+    return this.quantityMoved(
+      manager,
+      list,
+      lineId,
+      LineChangeKind.BUY_REVERTED,
+      quantityBefore,
+      quantityAfter,
+      actor
+    );
+  }
+
+  /** The row of a buy or of a taken back buy, unless nothing moved. */
+  private async quantityMoved(
+    manager: EntityManager,
+    list: ListRef,
+    lineId: string,
+    kind: LineChangeKind,
+    quantityBefore: number,
+    quantityAfter: number,
+    actor: LineChangeActor
+  ): Promise<boolean> {
+    if (quantityBefore === quantityAfter) {
+      return false;
+    }
+    await this.write(manager, list, lineId, actor, {
+      kind,
+      quantityBefore,
+      quantityAfter,
+    });
+    return true;
   }
 
   /** One insert, through the caller's manager, with the columns it was given. */

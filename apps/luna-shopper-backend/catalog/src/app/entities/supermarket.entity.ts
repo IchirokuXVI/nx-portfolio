@@ -50,4 +50,26 @@ export class Supermarket extends BaseEntity {
    */
   @Column({ type: 'uuid', nullable: true })
   defaultPriceScopeId!: string | null;
+
+  /**
+   * Whether the photos this chain prints for its products may be shown (plan
+   * 0198, section 4). The record that we may show them, held chain by chain,
+   * and false until a person turns it on.
+   *
+   * It decides what a client is given and never what is kept: the links in
+   * `item_linked_images` stay when it is false, so turning a chain on again
+   * needs no harvest.
+   *
+   * Written only by `SupermarketService.setLinkedImagesEnabled` and by
+   * `ItemLinkedImageService.disableAll`, each with an `UPDATE` of its own in
+   * the transaction that also rewrites `items.linkedImages`. The ORM is told
+   * never to write it, so an edit of the chain's name that loaded the row a
+   * moment before a stop cannot turn the chain on again when it saves.
+   *
+   * It is here and not on the harvester's `supermarket_sources` because
+   * catalog answers the read. A chain that asks us to stop showing its photos
+   * is not the same event as one that asks us to stop reading its prices.
+   */
+  @Column({ type: 'boolean', default: false, update: false })
+  linkedImagesEnabled!: boolean;
 }

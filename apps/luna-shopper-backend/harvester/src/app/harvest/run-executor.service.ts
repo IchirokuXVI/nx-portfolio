@@ -35,6 +35,13 @@ import { StoreDiscoveryRunner } from './store-discovery.runner';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 /**
+ * The `error` of a run the shutdown hook stopped (plan 0206, section 7), so
+ * the run page says why. It wins over the message of whatever the abort made
+ * the runner throw.
+ */
+export const SHUTDOWN_STOPPED_RUN = 'Stopped because the harvester shut down.';
+
+/**
  * Dispatches a run to its runner, and owns everything they have in common:
  * the shared token bucket, the abort signal, and the finalizer.
  *
@@ -51,6 +58,11 @@ export class RunExecutor implements OnApplicationShutdown {
   private readonly logger = new Logger(RunExecutor.name);
   /** runId -> the controller whose signal every request of that run holds. */
   private readonly inFlight = new Map<string, AbortController>();
+  /**
+   * The runs the shutdown hook aborted, as opposed to the ones a person did.
+   * Kept apart because the run's own row cannot say so until it finishes.
+   */
+  private readonly stoppedByShutdown = new Set<string>();
 
   constructor(
     @InjectRepository(SourceCatalogEntry)
@@ -123,6 +135,7 @@ export class RunExecutor implements OnApplicationShutdown {
       sizeUnit: row.sizeUnit ?? null,
       sizeFormat: row.sizeFormat,
       packCount: row.packCount ?? null,
+      imageUrl: row.imageUrl ?? null,
       categoryPath: row.categoryPath ?? [],
     }));
   }
@@ -536,17 +549,13 @@ export class RunExecutor implements OnApplicationShutdown {
       await this.store.finish(
         runId,
         status,
-        status === HarvestRunStatus.FAILED
-          ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
+        this.shutdownSentence(runId, status) ??
+          (status === HarvestRunStatus.FAILED
+            ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
               `which is over the ${settings.failureRatio} threshold.`
-          : undefined
+            : undefined)
       );
-      if (source) {
-        await this.sources.recordRunFinished(
-          source,
-          status === HarvestRunStatus.COMPLETED
-        );
-      }
+      await this.recordVerdict(source, status);
       return status;
     } catch (error) {
       // Whatever the run managed before it died is still worth keeping.
@@ -554,10 +563,12 @@ export class RunExecutor implements OnApplicationShutdown {
       const status = controller.signal.aborted
         ? HarvestRunStatus.ABORTED
         : HarvestRunStatus.FAILED;
-      await this.store.finish(runId, status, describeError(error).message);
-      if (source) {
-        await this.sources.recordRunFinished(source, false);
-      }
+      await this.store.finish(
+        runId,
+        status,
+        this.shutdownSentence(runId, status) ?? describeError(error).message
+      );
+      await this.recordVerdict(source, status);
       this.logger.error(
         `Harvest run ${runId} ended as ${status}: ${describeError(error).message}`
       );
@@ -565,7 +576,40 @@ export class RunExecutor implements OnApplicationShutdown {
     } finally {
       clearInterval(pollAbort);
       this.inFlight.delete(runId);
+      this.stoppedByShutdown.delete(runId);
     }
+  }
+
+  /**
+   * What a finished run says about its source (plan 0206, section 6).
+   *
+   * **An abort says nothing about the chain**, whether a person stopped the
+   * run or a deploy did, so an `ABORTED` run leaves the counter as it was.
+   * Counting it let three releases in a week stop every schedule of a chain
+   * whose runs had all been fine.
+   */
+  private async recordVerdict(
+    source: SupermarketSource | null | undefined,
+    status: HarvestRunStatus
+  ): Promise<void> {
+    if (!source || status === HarvestRunStatus.ABORTED) {
+      return;
+    }
+    await this.sources.recordRunFinished(
+      source,
+      status === HarvestRunStatus.COMPLETED
+    );
+  }
+
+  /** The shutdown sentence for a run the shutdown hook stopped, else null. */
+  private shutdownSentence(
+    runId: string,
+    status: HarvestRunStatus
+  ): string | null {
+    return status === HarvestRunStatus.ABORTED &&
+      this.stoppedByShutdown.has(runId)
+      ? SHUTDOWN_STOPPED_RUN
+      : null;
   }
 
   /**
@@ -594,6 +638,11 @@ export class RunExecutor implements OnApplicationShutdown {
   onApplicationShutdown(): void {
     for (const [runId, controller] of this.inFlight) {
       this.logger.warn(`Shutting down: aborting harvest run ${runId}`);
+      // A run a person already stopped keeps that as its reason: its
+      // `abortRequestedAt` says so, and it is not interrupted.
+      if (!controller.signal.aborted) {
+        this.stoppedByShutdown.add(runId);
+      }
       controller.abort();
     }
   }
@@ -656,6 +705,14 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0191: the pairs behind `pricesConflicted`, named. Two rows of the
     // chain are bound to one product and state two amounts at one scope.
     priceConflicts: written.priceConflicts,
+    // Plan 0198: the photo links this run sent to catalog for its bound rows.
+    // A link is saved whatever the switch of the chain says.
+    imagesLinked: written.imagesLinked,
+    imagesMoved: written.imagesMoved,
+    imagesUnchanged: written.imagesUnchanged,
+    imagesRejected: written.imagesRejected,
+    imagesUnlinked: written.imagesUnlinked,
+    imageLinksFailed: written.imageLinksFailed,
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
     placesImported: written.placesImported,

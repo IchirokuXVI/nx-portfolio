@@ -1,12 +1,27 @@
 <!--
   The one page header (velista 0130), outside the scroller, so it never scrolls
   away. The catalog is a tab and has no way back, so it wears the tab's own glyph.
+  Opened to choose (velista 0140, section 3), it closes instead and says so.
 -->
-<lib-page-header [title]="'catalog.title' | rokuT">
-  <lib-product-icon pageHeaderIcon />
-</lib-page-header>
+@if (pickKind === null) {
+  <lib-page-header [title]="'catalog.title' | rokuT">
+    <lib-product-icon pageHeaderIcon />
+  </lib-page-header>
+} @else {
+  <lib-page-header
+    (back)="closePick()"
+    [attr.inert]="asking() ? '' : null"
+    [backLabel]="
+      (pickSet ? 'catalog.pick.closeSet' : 'basket.change.pickClose') | rokuT
+    "
+    [title]="
+      (pickSet ? 'catalog.pick.titleSet' : 'basket.change.pickTitle') | rokuT
+    "
+    leading="close"
+  />
+}
 
-<div class="page">
+<div [attr.inert]="asking() ? '' : null" class="page">
   <!--
     The tools (velista 0134, section 2), held at the top while the list scrolls
     under them: the field, and one row of two selectors.
@@ -57,22 +72,19 @@
 
   <!--
     The line that heads the list (section 3): where the prices are from, and the
-    order. Only one note shows: the shop, else the chain, else the postal code.
+    order. Only one note shows: the chain, else the postal code.
   -->
   <div class="head">
     @if (tools().note; as note) {
       <span class="head-note">
         @switch (note.kind) {
-          @case ('shop') {
-            {{ 'catalog.supermarket.pricesAt' | rokuT: { shop: note.shop } }}
-          }
           @case ('chain') {
             @if (note.postalCode; as code) {
               {{
                 'catalog.head.chainNear' | rokuT: { chain: note.chain, code }
               }}
             } @else {
-              {{ 'catalog.supermarket.any' | rokuT: { chain: note.chain } }}
+              {{ note.chain }}
             }
           }
           @default {
@@ -133,6 +145,31 @@
       }
     }
 
+    <!--
+      The products of the line first, ticked, with nothing searched or chosen
+      (velista 0146, section 3). Drawn while the read is out: they are the line's,
+      not the read's.
+    -->
+    @if (lineFirst()) {
+      <h2 class="pick-heading">{{ 'catalog.pick.onLine' | rokuT }}</h2>
+      <ul class="rows">
+        @for (card of lineCards(); track card.id) {
+          <li>
+            @if (card.row; as row) {
+              <lib-product-row
+                (chosen)="choose($event)"
+                [choice]="choiceOf(row.id)"
+                [row]="row"
+              />
+            } @else {
+              <lib-product-row-skeleton />
+            }
+          </li>
+        }
+      </ul>
+      <h2 class="pick-heading">{{ 'catalog.pick.all' | rokuT }}</h2>
+    }
+
     @switch (status()) {
       @case ('loading') {
         <div aria-hidden="true" class="rows">
@@ -164,9 +201,11 @@
               <li>
                 <lib-product-row
                   (added)="addProduct(row)"
+                  (chosen)="choose($event)"
                   (lineStepped)="stepLine(row, $event)"
                   (opened)="open($event)"
                   [add]="addOf(row.id)"
+                  [choice]="choiceOf(row.id)"
                   [row]="row"
                 />
               </li>
@@ -253,49 +292,99 @@
   </section>
 </div>
 
-<!--
+@if (pickKind !== null) {
+  <!--
+    What the product is for, and the one button (velista 0140, section 3). In
+    place of the line that names the list the plus adds to: nothing here adds.
+  -->
+  @if (pickBar(); as bar) {
+    <!--
+      Why a press did nothing: no product chosen yet, or the line is full
+      (velista 0146, sections 2 and 3).
+    -->
+    <p
+      [attr.inert]="asking() ? '' : null"
+      aria-live="polite"
+      class="pick-note"
+      role="status"
+    >
+      @if (pickNote(); as note) {
+        {{ note.key | rokuT: note.args }}
+      }
+    </p>
+    @if (saveFailed()) {
+      <p [attr.inert]="asking() ? '' : null" class="adds-failed" role="alert">
+        <span class="adds-failed-text">{{
+          'catalog.pick.saveFailed' | rokuT
+        }}</span>
+        <button (click)="usePick()" class="adds-failed-retry" type="button">
+          {{ 'catalog.error.retry' | rokuT }}
+        </button>
+      </p>
+    }
+    <lib-choosing-bar
+      (used)="usePick()"
+      [action]="bar.action"
+      [attr.inert]="asking() ? '' : null"
+      [disabled]="bar.disabled"
+      [forDetail]="bar.detail"
+      [forLabel]="bar.label"
+    />
+  }
+  @if (asking()) {
+    <lib-leave-question
+      (leave)="leave()"
+      (stay)="stay()"
+      [leaveLabel]="'catalog.pick.leave' | rokuT"
+      [question]="'catalog.pick.leaveQuestion' | rokuT"
+      [stayLabel]="'catalog.pick.stay' | rokuT"
+    />
+  }
+} @else {
+  <!--
   A write that failed, said once (section 4.1). The count is already back where it
   was, and this is what says why.
 -->
-<p aria-live="polite" class="add-failed" role="status">
-  @if (addFailed()) {
-    {{ 'catalog.add.failed' | rokuT }}
-  }
-</p>
+  <p aria-live="polite" class="add-failed" role="status">
+    @if (addFailed()) {
+      {{ 'catalog.add.failed' | rokuT }}
+    }
+  </p>
 
-<!--
+  <!--
   Which list the plus adds to (section 4.2), between the page and the tab bar.
   Absent for a guest and for a person with no list they can write to, who see no
   plus either.
 -->
-@if (addsProblem(); as problem) {
-  <!--
+  @if (addsProblem(); as problem) {
+    <!--
     The lists, or the lines of the chosen one, did not load. Said where the line
     would be, with a second try, so it is not mistaken for having no list.
   -->
-  <p class="adds-failed" role="alert">
-    <span class="adds-failed-text">{{
-      (problem === 'lists'
-        ? 'catalog.adding.failedLists'
-        : 'catalog.adding.failedLines'
-      ) | rokuT: { list: addTarget()?.name ?? '' }
-    }}</span>
-    <button (click)="retryAdds()" class="adds-failed-retry" type="button">
-      {{ 'catalog.error.retry' | rokuT }}
-    </button>
-  </p>
-}
-<!--
+    <p class="adds-failed" role="alert">
+      <span class="adds-failed-text">{{
+        (problem === 'lists'
+          ? 'catalog.adding.failedLists'
+          : 'catalog.adding.failedLines'
+        ) | rokuT: { list: addTarget()?.name ?? '' }
+      }}</span>
+      <button (click)="retryAdds()" class="adds-failed-retry" type="button">
+        {{ 'catalog.error.retry' | rokuT }}
+      </button>
+    </p>
+  }
+  <!--
   The line stays while only the lines of the chosen list failed: it is the one
   way to another list, and the plus still adds to the list it names.
 -->
-@if (addTarget(); as target) {
-  <lib-adding-bar
-    (countPressed)="openAdded()"
-    (listPressed)="openLists()"
-    [count]="addedCount()"
-    [list]="target.name"
-  />
+  @if (addTarget(); as target) {
+    <lib-adding-bar
+      (countPressed)="openAdded()"
+      (listPressed)="openLists()"
+      [count]="addedCount()"
+      [list]="target.name"
+    />
+  }
 }
 
 <!-- The two sheets of section 4, child routes over the list. -->

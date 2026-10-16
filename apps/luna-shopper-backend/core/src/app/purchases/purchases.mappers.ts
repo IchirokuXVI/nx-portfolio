@@ -57,6 +57,7 @@ export function toPurchaseRowView(row: PurchaseLineRow): PurchaseRowView {
   return {
     id: row.id,
     itemId: row.itemId,
+    itemSnapshot: row.itemSnapshot ?? null,
     outcome:
       row.outcome === SettlementOutcome.BOUGHT
         ? SettlementOutcome.BOUGHT

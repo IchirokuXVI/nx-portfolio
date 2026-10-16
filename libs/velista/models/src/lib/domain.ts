@@ -228,7 +228,20 @@ export interface ShoppingListSummary extends ShoppingList {
 export interface Line {
   readonly id: string;
   readonly listId: string;
+  /**
+   * What the line says. Required on the wire and always sent: a line made from a
+   * product carries the name the product had then, and the server reads it.
+   *
+   * **Not what a screen draws.** {@link lineName} decides that, from this and
+   * {@link named}.
+   */
   readonly content: string;
+  /**
+   * Whether a person gave the line its name (backend `0207`, section 1). False is a
+   * line made from a product, whose `content` nobody typed, and a screen then draws
+   * the name of the product instead. A line with no product is always named.
+   */
+  readonly named: boolean;
   /**
    * How many of this the household wants **right now**, and the line's only
    * state (velista plan 0043, section 1).
@@ -327,6 +340,18 @@ export interface Line {
    * with {@link claimed} to tell them apart.
    */
   readonly claimedByUserId: string | null;
+  /**
+   * The one product of the line the household wants, or null (velista `0135`,
+   * section 3.1; backend `0199`). Always one of {@link itemIds}: the server clears
+   * it in the write that takes that product off the line.
+   */
+  readonly favoriteItemId: string | null;
+  /**
+   * The supermarket the line is bought at, or null for any (velista `0135`,
+   * section 3.2). A chain and never a shop. It is on the line, so everyone who
+   * reads the list sees the same one.
+   */
+  readonly preferredSupermarketId: string | null;
   readonly createdByUserId: string;
   readonly approvedByUserId: string | null;
   readonly version: number;

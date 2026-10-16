@@ -249,6 +249,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
             "content": {
@@ -518,6 +528,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
             "content": {
@@ -576,6 +596,16 @@
           },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -698,6 +728,229 @@
             }
           }
         },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/impersonation/exchange": {
+      "post": {
+        "operationId": "ImpersonationController_exchange_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeImpersonationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.impersonation.exchange` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.AuthTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`impersonation_code_invalid` — That support link is no longer valid. Start the session again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/impersonation/end": {
+      "post": {
+        "operationId": "ImpersonationController_end_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `auth.impersonation.end` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.auth.impersonation.end.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`impersonation_ended` — This support session has ended.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`not_impersonating` — This is not a support session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/recovery-sign-in": {
+      "post": {
+        "operationId": "RecoverySignInController_recoverySignIn_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverySignInDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.recoverySignIn` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.RecoverySignInResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_other_account` — This link belongs to another account than the one signed in here. Sign out of this one to use it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
         "tags": [
           "auth"
         ]
@@ -1528,6 +1781,236 @@
         ]
       }
     },
+    "/v1/admin/users/{id}/send-password-reset": {
+      "post": {
+        "operationId": "AdminUsersController_sendPasswordReset_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRecoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `adminUser.sendPasswordReset` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-users.SendAdminPasswordResetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_needs_email` — This account has no email address, so it has no password to reset.\n\n`recovery_needs_password` — This account signs in with Google and has no password to reset.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/recovery-links": {
+      "post": {
+        "operationId": "AdminUsersController_createRecoveryLinks_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRecoveryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `adminUser.createRecoveryLinks` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-users.CreateAdminRecoveryLinksResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`recovery_needs_email` — This account has no email address, so it has no password to reset.\n\n`recovery_needs_password` — This account signs in with Google and has no password to reset.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
     "/v1/admin/users/{id}/roles": {
       "put": {
         "operationId": "AdminUsersController_setRoles_v1",
@@ -1624,6 +2107,197 @@
           },
           "500": {
             "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/impersonation": {
+      "get": {
+        "operationId": "AdminImpersonationController_status_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `auth.impersonation.status` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/impersonation.ImpersonationStatusView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/impersonation": {
+      "post": {
+        "operationId": "AdminImpersonationController_start_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartImpersonationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session, and the URL that hands it to the app. The code in the fragment of `url` is good for sixty seconds and for one use.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/impersonation.StartImpersonationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.\n\n`impersonation_disabled` — Support sessions are switched off on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5525,7 +6199,7 @@
             }
           },
           "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
+            "description": "`forbidden` — You do not have permission to do that.\n\n`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7489,7 +8163,7 @@
             }
           },
           "409": {
-            "description": "`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8773,6 +9447,83 @@
         ]
       }
     },
+    "/v1/baskets/live/rows": {
+      "get": {
+        "operationId": "BasketLiveController_liveRows_v1",
+        "parameters": [
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows, the lists, the people, the progress and the marks of the basket, with no products, no price scopes and no shop. For a client that already holds those from the full read and reads again after an event. The prices such a client draws are as old as its last full read: it makes a full read when the page opens, when the app comes back and when the socket reconnects, and a price changes when a harvest runs. When a row names a product the client does not hold, it makes the full read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/live/summary": {
       "get": {
         "operationId": "BasketLiveController_summary_v1",
@@ -9350,6 +10101,194 @@
         ]
       }
     },
+    "/v1/baskets/{id}/rows": {
+      "get": {
+        "operationId": "BasketController_rows_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rows, the lists, the people, the progress and the marks of the basket, with no products, no price scopes and no shop. For a client that already holds those from the full read and reads again after an event. The prices such a client draws are as old as its last full read: it makes a full read when the page opens, when the app comes back and when the socket reconnects, and a price changes when a harvest runs. When a row names a product the client does not hold, it makes the full read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/products/{itemId}/lists": {
+      "get": {
+        "operationId": "BasketController_productLists_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.productLists` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketProductListsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}/rows/{rowKey}/settle": {
       "post": {
         "operationId": "BasketController_settle_v1",
@@ -9424,6 +10363,116 @@
           },
           "409": {
             "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/lines/product": {
+      "post": {
+        "operationId": "BasketController_changeProduct_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeBasketLinesProductDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.lines.product` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9823,6 +10872,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipBasketRowDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The `basket.row.skip` contract response.",
@@ -9830,6 +10889,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -9907,6 +10976,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "lineIds",
+            "required": true,
+            "in": "query",
+            "description": "The list lines to take the skip back from, comma separated. The `rowKey` of the path must be one of them.",
+            "schema": {
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
           }
         ],
         "responses": {
@@ -9916,6 +11001,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketRowResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -10126,6 +11221,76 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketChangePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/changes/marks": {
+      "get": {
+        "operationId": "BasketController_marks_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.changes.marks` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketMarksView"
                 }
               }
             }
@@ -11794,7 +12959,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The shop’s sections in its order, each with the categories it covers. `source` is `LOCATION` when the shop has a list of its own and `CHAIN` when it inherits its chain’s. An unknown shop is a 404.",
+            "description": "The sections of the shop in its order, each with the categories it covers. Empty when the shop has no sections of its own: nothing is read from its chain. An unknown shop is a 404.",
             "content": {
               "application/json": {
                 "schema": {
@@ -14183,102 +15348,6 @@
         ]
       }
     },
-    "/v1/catalog/items/lookup": {
-      "post": {
-        "operationId": "CatalogItemsController_lookup_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LookupItemsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `item.getMany` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.item.getMany.response"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "catalog"
-        ]
-      }
-    },
     "/v1/catalog/items/{id}": {
       "get": {
         "operationId": "CatalogItemsController_get_v1",
@@ -14568,6 +15637,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemPriceHistoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/items/lookup": {
+      "post": {
+        "operationId": "CatalogItemLookupController_lookup_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The products that exist, in no promised order. An id that names nothing is absent. With prices true, every item carries bestOffer and offers, and scopes names the chain of each scope those offers quote.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemLookupResponse"
                 }
               }
             }
@@ -15303,6 +16468,111 @@
         ]
       }
     },
+    "/v1/admin/catalog/supermarkets/{id}/linked-images": {
+      "put": {
+        "operationId": "AdminCatalogSupermarketsController_setLinkedImages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLinkedImagesEnabledDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `supermarket.setLinkedImagesEnabled` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.SupermarketView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/supermarkets/{id}/locations": {
       "post": {
         "operationId": "AdminCatalogSupermarketsController_createLocation_v1",
@@ -15508,431 +16778,6 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-catalog"
-        ]
-      }
-    },
-    "/v1/admin/catalog/supermarkets/{id}/sections": {
-      "post": {
-        "operationId": "AdminCatalogSupermarketsController_createSection_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSupermarketSectionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `section.create` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketSectionView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-catalog"
-        ]
-      },
-      "get": {
-        "operationId": "AdminCatalogSupermarketsController_listSections_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "query",
-            "required": false,
-            "in": "query",
-            "description": "Only the sections whose name, in either content language, or whose slug contains this text.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `section.list` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketSectionPage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-catalog"
-        ]
-      }
-    },
-    "/v1/admin/catalog/supermarkets/{id}/item-sections": {
-      "get": {
-        "operationId": "AdminCatalogSupermarketsController_listItemSections_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "itemId",
-            "required": false,
-            "in": "query",
-            "description": "Only this product’s pins in the chain.",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "name": "sectionId",
-            "required": false,
-            "in": "query",
-            "description": "Only the products pinned to this section, each with all of its pins in the chain.",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `section.listPins` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/catalog.ItemSectionPinsPage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "admin-catalog"
-        ]
-      },
-      "put": {
-        "operationId": "AdminCatalogSupermarketsController_setItemSections_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetItemSectionPinsDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The `section.setPins` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/catalog.ItemSectionPinsView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16337,6 +17182,119 @@
           "admin-catalog"
         ]
       },
+      "post": {
+        "operationId": "AdminCatalogLocationsController_createSection_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShopSectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `section.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopSectionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      },
       "put": {
         "operationId": "AdminCatalogLocationsController_setSections_v1",
         "parameters": [
@@ -16467,7 +17425,7 @@
             "name": "itemIds",
             "required": true,
             "in": "query",
-            "description": "Repeatable. The products to answer the rule of plan 0167, section 3 for, at this shop.",
+            "description": "Repeatable. The products to place in the sections of this shop.",
             "schema": {
               "minItems": 1,
               "maxItems": 50,
@@ -17516,6 +18474,167 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/linked-images": {
+      "get": {
+        "operationId": "AdminCatalogItemsController_listLinkedImages_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `itemLinkedImage.listByItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemLinkedImagesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/linked-images/disable-all": {
+      "post": {
+        "operationId": "AdminCatalogLinkedImagesController_disableAll_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `itemLinkedImage.disableAll` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.itemLinkedImage.disableAll.response"
                 }
               }
             }
@@ -18682,7 +19801,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketSectionView"
+                  "$ref": "#/components/schemas/catalog.ShopSectionView"
                 }
               }
             }
@@ -18764,7 +19883,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateSupermarketSectionDto"
+                "$ref": "#/components/schemas/UpdateShopSectionDto"
               }
             }
           }
@@ -18775,7 +19894,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/catalog.SupermarketSectionView"
+                  "$ref": "#/components/schemas/catalog.ShopSectionView"
                 }
               }
             }
@@ -22195,6 +23314,16 @@
               }
             }
           },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -23351,6 +24480,30 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "scheduleId",
+            "required": false,
+            "in": "query",
+            "description": "The runs one schedule started (plan 0206). A deleted schedule still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "trigger",
+            "required": false,
+            "in": "query",
+            "description": "The runs of one trigger: MANUAL for a person, SCHEDULED for a schedule, SYSTEM for the postal code queue.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "SCHEDULED",
+                "SYSTEM"
+              ]
+            }
           }
         ],
         "responses": {
@@ -24363,6 +25516,573 @@
           },
           "501": {
             "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules": {
+      "get": {
+        "operationId": "AdminHarvestSchedulesController_list_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "One chain’s schedules. Absent lists every chain’s.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "presetId",
+            "required": false,
+            "in": "query",
+            "description": "The schedules of one preset.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestSchedulePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHarvestSchedulesController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHarvestScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `harvestSchedule.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules/{id}": {
+      "get": {
+        "operationId": "AdminHarvestSchedulesController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "put": {
+        "operationId": "AdminHarvestSchedulesController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHarvestScheduleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestSchedulesController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/schedules/{id}/enabled": {
+      "put": {
+        "operationId": "AdminHarvestSchedulesController_setEnabled_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetHarvestScheduleEnabledDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `harvestSchedule.setEnabled` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26859,6 +28579,30 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "scheduleId",
+            "required": false,
+            "in": "query",
+            "description": "The runs one schedule started (plan 0206). A deleted schedule still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "trigger",
+            "required": false,
+            "in": "query",
+            "description": "The runs of one trigger: MANUAL for a person, SCHEDULED for a schedule, SYSTEM for the postal code queue.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "SCHEDULED",
+                "SYSTEM"
+              ]
+            }
           }
         ],
         "responses": {
@@ -27682,6 +29426,34 @@
           "password"
         ]
       },
+      "ExchangeImpersonationDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "RecoverySignInDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The raw token from either link of the mail."
+          },
+          "switchAccount": {
+            "type": "boolean",
+            "description": "True when the caller is signed in as another account and agreed to leave it. Without it, that case answers 409 `recovery_other_account` and spends nothing."
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
       "AdminLoginDto": {
         "type": "object",
         "properties": {
@@ -27705,6 +29477,15 @@
           "locale": {
             "type": "string",
             "description": "Locale for the confirmation email; defaults to the request locale."
+          }
+        }
+      },
+      "AdminRecoveryDto": {
+        "type": "object",
+        "properties": {
+          "locale": {
+            "type": "string",
+            "description": "Locale for the mail the person gets; defaults to the request locale."
           }
         }
       },
@@ -27750,6 +29531,32 @@
         },
         "required": [
           "roles"
+        ]
+      },
+      "StartImpersonationDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "BUG_REPORT",
+              "SUPPORT_REQUEST",
+              "TESTING",
+              "OTHER"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Required for the reason `OTHER`, and refused for every other reason."
+          },
+          "locale": {
+            "type": "string",
+            "description": "The locale of the page the URL opens; defaults to the request locale."
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "UpdateAdminZoneDto": {
@@ -28006,6 +29813,11 @@
               "format": "uuid"
             }
           },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is."
+          },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
@@ -28036,6 +29848,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207). Send false when the content is the name of a product and nobody chose it. False is kept only when the line holds a product: a line with no product is always named. An add that raises a line that is already on the list leaves the flag of that line as it is."
           }
         },
         "required": [
@@ -28085,6 +29902,12 @@
             "minimum": 0,
             "maximum": 100000
           },
+          "from": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given."
+          },
           "itemIds": {
             "maxItems": 500,
             "description": "Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order. The real bound is max(100, what the line currently holds) and is applied in core, which is the only layer that can see the second half of it: a line a growing group has carried past 100 has to stay editable, or it could never be shrunk back under the cap (plan 0070, section 7.2).",
@@ -28102,6 +29925,22 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "favoriteItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The favourite product of the line (plan 0199). Null clears it, and an absent field leaves it alone. The id must be one of the products of the line as the set stands after this same update, so one request can add a product and make it the favourite; any other id answers 400 validation_failed. A product that leaves the line stops being the favourite."
+          },
+          "preferredSupermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The supermarket chain the line is bought at (plan 0199). A chain and never a shop. Null clears it, and an absent field leaves it alone. It does not depend on the products of the line."
+          },
+          "named": {
+            "type": "boolean",
+            "description": "Whether a person typed the name of the line (plan 0207). Absent beside a content, the line becomes named. Absent with no content, the flag stays as it is. False beside a content takes the name away, and the content is then the name of a product; a content that another line of the list holds still answers 409 line_merge_required. False alone changes the flag and leaves the name. A line that the update leaves with no product is named, whatever this says."
           },
           "confirmMerge": {
             "type": "boolean",
@@ -28158,17 +29997,18 @@
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`."
+            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, with its name, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. A line with several products and none named records no product and no price."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The price scope the price on your screen was read at. There is no field for an amount, and there will not be: the gateway reads the price itself, at your own shops."
+            "deprecated": true,
+            "description": "No longer read (plan 0202). The gateway chooses the price itself: at the shop you name, or the cheapest across your own areas when you name none. The field is accepted for one release, so a client that still sends it is not refused."
           },
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The shop it was bought at. With `priceScopeId`, it is recorded when that scope is one of the shop's. Without one, the gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds."
+            "description": "The shop it was bought at. The gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, its chain, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds. Left out, the purchase records the cheapest price across your own areas, with no shop and no chain."
           }
         },
         "required": [
@@ -28296,6 +30136,17 @@
       "SettleBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines this settle acts on: the entries of the row as you drew it. The `rowKey` of the path must be one of them. A line the basket does not cover, or on a list you were not served, answers 404.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "outcome": {
             "allOf": [
               {
@@ -28313,25 +30164,26 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "The row’s `left` as you drew it. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap."
+            "description": "The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap."
           },
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`. Left out, a row with one option records that option, and its price is read for it. Required with `priceScopeId` on a row with several options: without it the settle answers 400 `validation_failed` on `itemId`."
+            "description": "The product of the row as you drew it: its `productId`, or another product chosen for this trip only, which does not have to be a product of any of the lines. An id the catalog does not know answers 400 `validation_failed` on `itemId`. Left out, the settle records the product the named lines count as when they agree on one, and none otherwise. Leave it out for lines that hold no product."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The price scope the row’s price was read at on your screen: the scope of the shop you picked, or of the offer the screen showed. There is no field for an amount, and there will not be: the gateway reads the price itself, as the basket’s owner."
+            "deprecated": true,
+            "description": "No longer read (plan 0202). The gateway chooses the price itself, as the basket’s owner: at the shop of the settle, or the cheapest across the owner’s areas when the settle has no shop. The field is accepted for one release, so a client that still sends it is not refused."
           },
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in \"any shop\" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`."
+            "description": "The one shop you are standing in, when you chose one. The buy is priced at that shop, also when it is outside the basket owner’s areas, and records the shop with its chain. A shop that has no price for the product records no price and no shop. Leave it out in \"any shop\" mode: the buy then records the cheapest price across the owner’s areas, with no shop and no chain. On a basket started at a shop, that shop is the shop of every settle, and a different one answers 409 `basket_shop_locked`."
           },
           "allocations": {
-            "description": "Which household got what. Derived oldest first when absent. Every `lineId` must belong to a list you were served a ref for.",
+            "description": "Which household got what. Derived oldest first when absent. Every `lineId` must be one of `lineIds`.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BasketAllocationDto"
@@ -28339,13 +30191,55 @@
           }
         },
         "required": [
+          "lineIds",
           "outcome",
           "from"
+        ]
+      },
+      "ChangeBasketLinesProductDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines whose product changes: the entries of the row as you drew it. A line the basket does not cover answers 404 for the whole request, and nothing is written.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The product the lines change to. It does not have to be a product of any of them. An id the catalog does not know answers 400 `validation_failed` on `itemId`."
+          },
+          "keep": {
+            "type": "boolean",
+            "description": "True keeps the change: the product joins the products of each line and becomes its favourite, which needs the right to edit each line, and one line that fails that answers 403 with nothing written. False holds it for this trip only: the buys of this trip are rewritten and no line is. With false and no buy in this trip nothing is written, and the answer is the lines as they are."
+          }
+        },
+        "required": [
+          "lineIds",
+          "itemId",
+          "keep"
         ]
       },
       "RevertBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines this revert acts on. The `rowKey` of the path must be one of them.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "target": {
             "type": "string",
             "enum": [
@@ -28363,10 +30257,11 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000,
-            "description": "The row’s `bought` as you drew it. Required for UNITS."
+            "description": "The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS."
           }
         },
         "required": [
+          "lineIds",
           "target"
         ]
       },
@@ -28376,7 +30271,7 @@
           "lineId": {
             "type": "string",
             "format": "uuid",
-            "description": "Which household’s ask to move. Required when the row holds more than one entry, since a row of two households asks two different questions."
+            "description": "The list line whose ask to move, always. It is the `rowKey` of the path. It can be a line at zero on a covered list, which is how a list that holds a product at zero asks for it again."
           },
           "quantity": {
             "type": "number",
@@ -28391,6 +30286,7 @@
           }
         },
         "required": [
+          "lineId",
           "quantity",
           "from"
         ]
@@ -28398,6 +30294,17 @@
       "RenameBasketRowDto": {
         "type": "object",
         "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines to rename, each on its own list. The `rowKey` of the path must be one of them. A line that has a product answers 400 `validation_failed`: a row with a product is named by the catalog.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "content": {
             "type": "string",
             "minLength": 1,
@@ -28409,7 +30316,27 @@
           }
         },
         "required": [
+          "lineIds",
           "content"
+        ]
+      },
+      "SkipBasketRowDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "The list lines to put off. The `rowKey` of the path must be one of them.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "lineIds"
         ]
       },
       "AddBasketLineDto": {
@@ -28437,6 +30364,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "named": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product."
           }
         },
         "required": [
@@ -28647,6 +30579,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "prices": {
+            "type": "boolean",
+            "default": false,
+            "description": "Answer prices with the products (plan 0207). With true, every item carries bestOffer and offers, read at the price scopes of your default profile, and the answer names the chain of each of those scopes in scopes. An item with no price there is still in the answer, with a null bestOffer. With no scope at all, every item comes back with no offer. Neither case is an error. Absent or false, the answer is the products alone."
           }
         },
         "required": [
@@ -28720,6 +30657,18 @@
           }
         }
       },
+      "SetLinkedImagesEnabledDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True lets a product answer the photos this chain prints for it, each as a link to the chain's own host. False takes them out of every product in the same transaction. The links stay saved either way."
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
       "CreateSupermarketLocationDto": {
         "type": "object",
         "properties": {
@@ -28781,63 +30730,6 @@
             "maxLength": 32
           }
         }
-      },
-      "CreateSupermarketSectionDto": {
-        "type": "object",
-        "properties": {
-          "slug": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80,
-            "description": "Ascii kebab case, unique within the chain (`section_slug_taken` otherwise), and written once: an edit cannot change it."
-          },
-          "name": {
-            "$ref": "#/components/schemas/LocalizedTextDto"
-          },
-          "categoryIds": {
-            "maxItems": 50,
-            "uniqueItems": true,
-            "description": "The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty, for a section that holds only pinned products. An unknown id is refused with `category_not_found`.",
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "position": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "The chain’s default order. Absent appends after the last section."
-          }
-        },
-        "required": [
-          "slug",
-          "name",
-          "categoryIds"
-        ]
-      },
-      "SetItemSectionPinsDto": {
-        "type": "object",
-        "properties": {
-          "itemId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "sectionIds": {
-            "maxItems": 20,
-            "uniqueItems": true,
-            "description": "Replaces the product’s pins in this chain: \"in this chain, this product is in these sections and no other\". An empty array removes them, and the product returns to the rule’s other steps. A section of another chain is refused with `section_of_another_chain`.",
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        },
-        "required": [
-          "itemId",
-          "sectionIds"
-        ]
       },
       "UpdateSupermarketLocationDto": {
         "type": "object",
@@ -28901,13 +30793,42 @@
           }
         }
       },
+      "CreateShopSectionDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Ascii kebab case, unique within the shop (`section_slug_taken` otherwise), and written once: an edit cannot change it. Two shops of one chain can hold the same slug."
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedTextDto"
+          },
+          "categoryIds": {
+            "maxItems": 50,
+            "uniqueItems": true,
+            "description": "The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty. An unknown id is refused with `category_not_found`.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "categoryIds"
+        ]
+      },
       "SetLocationSectionsDto": {
         "type": "object",
         "properties": {
           "sectionIds": {
             "maxItems": 200,
             "uniqueItems": true,
-            "description": "The sections this shop has, in the order it is walked. An empty array deletes the shop’s own list and returns it to its chain’s default. A section of another chain is refused with `section_of_another_chain`, an unknown one with `section_not_found`.",
+            "description": "Sections of this shop, in the order it is walked. They come first, in this order. A section of the shop that is not named is kept, after them, in the order it had. Nothing is created or deleted, so an empty array changes nothing. A section of another shop is refused with `section_of_another_shop`, an unknown one with `section_not_found`.",
             "type": "array",
             "items": {
               "type": "string",
@@ -29408,7 +31329,7 @@
           }
         }
       },
-      "UpdateSupermarketSectionDto": {
+      "UpdateShopSectionDto": {
         "type": "object",
         "properties": {
           "name": {
@@ -29416,12 +31337,13 @@
           },
           "position": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Moves the section to this place in its shop, from 0. The sections between its old place and its new one move by one. A place past the last one is the last one."
           },
           "categoryIds": {
             "maxItems": 50,
             "uniqueItems": true,
-            "description": "Replaces the whole set. Absent leaves it alone. The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty, for a section that holds only pinned products. An unknown id is refused with `category_not_found`.",
+            "description": "Replaces the whole set. Absent leaves it alone. The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty. An unknown id is refused with `category_not_found`.",
             "type": "array",
             "items": {
               "type": "string",
@@ -30410,6 +32332,89 @@
             ]
           }
         }
+      },
+      "CreateHarvestScheduleDto": {
+        "type": "object",
+        "properties": {
+          "presetId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The preset the schedule starts. It never changes: to point at another, delete the schedule and create one. An unknown preset answers 404."
+          },
+          "timeOfDay": {
+            "type": "string",
+            "example": "03:00",
+            "description": "The time of day, `HH:mm` on a 24 hour clock, in `timezone`."
+          },
+          "daysOfWeek": {
+            "example": [
+              1,
+              4
+            ],
+            "description": "The days it fires, 1 for Monday to 7 for Sunday, one to seven different days.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "Europe/Madrid",
+            "description": "An IANA name. Absent is Europe/Madrid."
+          },
+          "acknowledgedAutomaticFetch": {
+            "type": "boolean",
+            "description": "Must be true. A schedule fetches the chain with nobody asking, and the person who sets one up is told so first: this field says the warning was shown. Only a JSON true passes."
+          }
+        },
+        "required": [
+          "presetId",
+          "timeOfDay",
+          "daysOfWeek",
+          "acknowledgedAutomaticFetch"
+        ]
+      },
+      "UpdateHarvestScheduleDto": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "Europe/Madrid",
+            "description": "An IANA name. Absent is Europe/Madrid."
+          },
+          "timeOfDay": {
+            "type": "string",
+            "example": "03:00"
+          },
+          "daysOfWeek": {
+            "example": [
+              1,
+              4
+            ],
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "SetHarvestScheduleEnabledDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True takes the next slot from now. False clears it and keeps the last outcome as the history. Only a JSON true or false passes."
+          },
+          "acknowledgedAutomaticFetch": {
+            "type": "boolean",
+            "description": "Must be true to switch a schedule on, as on a create. Only a JSON true passes."
+          }
+        },
+        "required": [
+          "enabled"
+        ]
       },
       "ImportHarvestDocumentDto": {
         "type": "object",
@@ -32577,6 +34582,46 @@
         ],
         "additionalProperties": false
       },
+      "admin-users.CreateAdminRecoveryLinksResult": {
+        "type": "object",
+        "properties": {
+          "resetUrl": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opens the page that chooses a new password."
+          },
+          "signInUrl": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Opens the page that signs in and keeps the password. The same token as `resetUrl`."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When both links stop working: 24 hours after they were made."
+          }
+        },
+        "required": [
+          "resetUrl",
+          "signInUrl",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "admin-users.SendAdminPasswordResetResult": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the mailed links stop working: one hour after the mail."
+          }
+        },
+        "required": [
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
       "admin.AdminDashboardResponse": {
         "type": "object",
         "description": "What the back office opens to. Each block is `null` when that service did not answer, and the response is still 200: one stopped service costs its own block rather than the whole page.",
@@ -32780,6 +34825,45 @@
           "state"
         ],
         "additionalProperties": false
+      },
+      "auth.RecoverySignInResult": {
+        "description": "What the sign in did. `SIGNED_IN` carries the new token pair. `ALREADY_SIGNED_IN` carries none: the bearer already belongs to the account of the link, its session stays as it is, and the link no longer works.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "SIGNED_IN"
+                ]
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/auth.AuthTokens"
+              }
+            },
+            "required": [
+              "outcome",
+              "tokens"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "ALREADY_SIGNED_IN"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "auth.RetryAfterResult": {
         "type": "object",
@@ -33098,6 +35182,51 @@
           }
         ]
       },
+      "basket.BasketChangeOrigin": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ANOTHER_BASKET"
+                ]
+              },
+              "owner": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/basket.BasketChangeActorView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "owner"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "LIST"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "basket.BasketChangePage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -33219,6 +35348,16 @@
                 "type": "null"
               }
             ]
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketChangeOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -33233,7 +35372,32 @@
           "quantityAfter",
           "approvalBefore",
           "approvalAfter",
-          "actor"
+          "actor",
+          "origin"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketEntryAct": {
+        "type": "object",
+        "properties": {
+          "participantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.BasketEntryActOutcome"
+          }
+        },
+        "required": [
+          "participantId",
+          "at",
+          "outcome"
         ],
         "additionalProperties": false
       },
@@ -33342,6 +35506,23 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketLineMark": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mark": {
+            "$ref": "#/components/schemas/enums.BasketRowMark"
+          }
+        },
+        "required": [
+          "lineId",
+          "mark"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketListRef": {
         "type": "object",
         "properties": {
@@ -33365,6 +35546,33 @@
           "name",
           "zoneId",
           "zoneName"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketMarksView": {
+        "type": "object",
+        "properties": {
+          "unseenChangeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "newestUnseenChangeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketLineMark"
+            }
+          }
+        },
+        "required": [
+          "unseenChangeCount",
+          "newestUnseenChangeId",
+          "lines"
         ],
         "additionalProperties": false
       },
@@ -33480,6 +35688,69 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketProductListsView": {
+        "type": "object",
+        "properties": {
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketProductListView"
+            }
+          }
+        },
+        "required": [
+          "lists"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketProductListView": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listName": {
+            "type": "string"
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "lineId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lineName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        },
+        "required": [
+          "listId",
+          "listName",
+          "zoneId",
+          "zoneName",
+          "lineId",
+          "lineName",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketProductView": {
         "type": "object",
         "properties": {
@@ -33501,6 +35772,34 @@
               "string",
               "null"
             ]
+          },
+          "imageSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemImageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemImageView"
+            }
           },
           "sku": {
             "type": [
@@ -33590,6 +35889,10 @@
           "name",
           "brand",
           "imageUrl",
+          "imageSource",
+          "imageSupermarketId",
+          "ownImageUrl",
+          "images",
           "sku",
           "ean",
           "eans",
@@ -33751,9 +36054,9 @@
             "type": "string",
             "minLength": 1
           },
-          "listId": {
-            "type": "string",
-            "minLength": 1
+          "version": {
+            "type": "integer",
+            "minimum": 0
           },
           "left": {
             "type": "integer",
@@ -33773,17 +36076,71 @@
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           },
+          "skipped": {
+            "type": "boolean"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "act": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketEntryAct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tripItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "canWrite": {
+            "type": "boolean"
+          },
           "demandEditable": {
             "type": "boolean"
           }
         },
         "required": [
           "lineId",
+          "version",
           "left",
           "bought",
           "boughtElsewhere",
           "state",
           "approvalStatus",
+          "skipped",
+          "closed",
+          "act",
+          "tripItemId",
+          "content",
+          "itemIds",
+          "favoriteItemId",
+          "canWrite",
           "demandEditable"
         ],
         "additionalProperties": false
@@ -33791,8 +36148,11 @@
       "basket.BasketRowResult": {
         "type": "object",
         "properties": {
-          "row": {
-            "$ref": "#/components/schemas/basket.BasketRowView"
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketRowEntryView"
+            }
           },
           "progress": {
             "$ref": "#/components/schemas/basket.BasketProgress"
@@ -33800,14 +36160,10 @@
           "skippedCount": {
             "type": "integer",
             "minimum": 0
-          },
-          "replacedRowKey": {
-            "type": "string",
-            "minLength": 1
           }
         },
         "required": [
-          "row",
+          "entries",
           "progress"
         ],
         "additionalProperties": false
@@ -33845,6 +36201,12 @@
           },
           "content": {
             "type": "string"
+          },
+          "productId": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "left": {
             "type": "integer",
@@ -33894,13 +36256,6 @@
           "awaitingApproval": {
             "type": "boolean"
           },
-          "optionIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
           "touchedBy": {
             "type": [
               "string",
@@ -33933,6 +36288,7 @@
         "required": [
           "rowKey",
           "content",
+          "productId",
           "left",
           "bought",
           "asked",
@@ -33942,7 +36298,6 @@
           "noteAt",
           "mark",
           "awaitingApproval",
-          "optionIds",
           "touchedBy",
           "touchedAt",
           "entries",
@@ -34130,6 +36485,95 @@
           "id",
           "kind",
           "progress"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.BasketStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketRowView"
+            }
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketListRef"
+            }
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+            }
+          },
+          "me": {
+            "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/basket.BasketProgress"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "servesLocations": {
+            "type": "boolean"
+          },
+          "unseenChangeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "newestUnseenChangeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "createdAt",
+          "rows",
+          "lists",
+          "participants",
+          "me",
+          "progress",
+          "truncated",
+          "servesLocations",
+          "unseenChangeCount",
+          "newestUnseenChangeId",
+          "supermarketLocationId"
         ],
         "additionalProperties": false
       },
@@ -34918,6 +37362,104 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ItemImageView": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "$ref": "#/components/schemas/enums.ItemImageSource"
+          },
+          "supermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "source",
+          "supermarketId"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLinkedImagesView": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemLinkedImageView"
+            }
+          }
+        },
+        "required": [
+          "images"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLinkedImageView": {
+        "type": "object",
+        "properties": {
+          "sourceEntryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "firstLinkedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sourceEntryId",
+          "supermarketId",
+          "url",
+          "enabled",
+          "firstLinkedAt",
+          "lastSeenAt"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemLookupResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PriceScopeChainView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemOfferView": {
         "type": "object",
         "properties": {
@@ -35517,55 +38059,6 @@
         ],
         "additionalProperties": false
       },
-      "catalog.ItemSectionPinsPage": {
-        "type": "object",
-        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
-        "additionalProperties": false,
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/catalog.ItemSectionPinsView"
-            }
-          },
-          "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "catalog.ItemSectionPinsView": {
-        "type": "object",
-        "properties": {
-          "supermarketId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "itemId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sectionIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        },
-        "required": [
-          "supermarketId",
-          "itemId",
-          "sectionIds"
-        ],
-        "additionalProperties": false
-      },
       "catalog.ItemSectionsAtLocationEntry": {
         "type": "object",
         "properties": {
@@ -35594,9 +38087,6 @@
       "catalog.ItemSectionsAtLocationView": {
         "type": "object",
         "properties": {
-          "source": {
-            "$ref": "#/components/schemas/enums.LocationSectionsSource"
-          },
           "items": {
             "type": "array",
             "items": {
@@ -35605,8 +38095,46 @@
           }
         },
         "required": [
-          "source",
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemSnapshot": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "defaultUnit": {
+            "$ref": "#/components/schemas/enums.UnitOfMeasure"
+          }
+        },
+        "required": [
+          "name",
+          "brand",
+          "unitSize",
+          "packCount",
+          "defaultUnit"
         ],
         "additionalProperties": false
       },
@@ -35631,6 +38159,34 @@
               "string",
               "null"
             ]
+          },
+          "imageSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemImageSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "imageSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ownImageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemImageView"
+            }
           },
           "sku": {
             "type": [
@@ -35703,6 +38259,10 @@
           "name",
           "brand",
           "imageUrl",
+          "imageSource",
+          "imageSupermarketId",
+          "ownImageUrl",
+          "images",
           "sku",
           "ean",
           "eans",
@@ -35775,16 +38335,12 @@
           "sections": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/catalog.SupermarketSectionView"
+              "$ref": "#/components/schemas/catalog.ShopSectionView"
             }
-          },
-          "source": {
-            "$ref": "#/components/schemas/enums.LocationSectionsSource"
           }
         },
         "required": [
-          "sections",
-          "source"
+          "sections"
         ],
         "additionalProperties": false
       },
@@ -36787,7 +39343,7 @@
             "items": {
               "$ref": "#/components/schemas/catalog.ShopMapSectionView"
             },
-            "description": "The chain sections the walk’s section names resolved to, in walk order."
+            "description": "The sections of the shop the walk’s section names resolved to, in walk order."
           }
         },
         "required": [
@@ -36962,6 +39518,49 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ShopSectionView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The place of the section in the order of its shop. No two sections of a shop share one."
+          },
+          "categoryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Roots and leaves, as written. A root covers every one of its children."
+          }
+        },
+        "required": [
+          "id",
+          "supermarketLocationId",
+          "slug",
+          "name",
+          "position",
+          "categoryIds"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ShopView": {
         "type": "object",
         "properties": {
@@ -37097,8 +39696,40 @@
           },
           {
             "$ref": "#/components/schemas/catalog.ShopWalkSectionLeftEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkGuardEvent"
           }
         ]
+      },
+      "catalog.ShopWalkGuardEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "guard"
+            ]
+          },
+          "logMs": {
+            "type": "number"
+          },
+          "what": {
+            "$ref": "#/components/schemas/enums.ShopWalkGuardKind"
+          },
+          "degrees": {
+            "type": "number"
+          },
+          "metres": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "type",
+          "logMs",
+          "what"
+        ],
+        "additionalProperties": false
       },
       "catalog.ShopWalkListView": {
         "type": "object",
@@ -37817,76 +40448,6 @@
           }
         }
       },
-      "catalog.SupermarketSectionPage": {
-        "type": "object",
-        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
-        "additionalProperties": false,
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/catalog.SupermarketSectionView"
-            }
-          },
-          "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "catalog.SupermarketSectionView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "supermarketId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "slug": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
-          },
-          "name": {
-            "$ref": "#/components/schemas/catalog.LocalizedText"
-          },
-          "position": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "categoryIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "description": "Roots and leaves, as written. A root covers every one of its children."
-          },
-          "locationCount": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "The shops of the chain this section is present at: the ones whose own list names it, plus the ones with no list of their own. Present on the back office reads of a section, absent inside a shop’s list."
-          }
-        },
-        "required": [
-          "id",
-          "supermarketId",
-          "slug",
-          "name",
-          "position",
-          "categoryIds"
-        ],
-        "additionalProperties": false
-      },
       "catalog.SupermarketView": {
         "type": "object",
         "properties": {
@@ -37921,6 +40482,9 @@
               "null"
             ]
           },
+          "linkedImagesEnabled": {
+            "type": "boolean"
+          },
           "locationCount": {
             "type": "integer",
             "minimum": 0,
@@ -37933,7 +40497,8 @@
           "logoUrl",
           "websiteUrl",
           "externalBrandKey",
-          "defaultPriceScopeId"
+          "defaultPriceScopeId",
+          "linkedImagesEnabled"
         ],
         "additionalProperties": false
       },
@@ -38098,6 +40663,14 @@
           "EMAIL"
         ]
       },
+      "enums.BasketEntryActOutcome": {
+        "type": "string",
+        "enum": [
+          "BOUGHT",
+          "NOT_AVAILABLE",
+          "SKIPPED"
+        ]
+      },
       "enums.BasketKind": {
         "type": "string",
         "enum": [
@@ -38117,7 +40690,8 @@
         "type": "string",
         "enum": [
           "SKIPPED_EARLIER",
-          "BOUGHT_ON_ANOTHER_BASKET"
+          "BOUGHT_ON_ANOTHER_BASKET",
+          "BOUGHT_ON_THE_LIST"
         ]
       },
       "enums.BasketRowState": {
@@ -38126,6 +40700,7 @@
           "WANTED",
           "PARTLY",
           "DONE",
+          "BOUGHT_ELSEWHERE",
           "NOT_AVAILABLE",
           "SKIPPED",
           "REMOVED"
@@ -38236,6 +40811,25 @@
           "AVAILABILITY"
         ]
       },
+      "enums.HarvestScheduleBlock": {
+        "type": "string",
+        "enum": [
+          "HARVEST_DISABLED",
+          "SCHEDULER_DISABLED",
+          "SOURCE_DISABLED",
+          "SOURCE_FAILING"
+        ]
+      },
+      "enums.HarvestScheduleOutcome": {
+        "type": "string",
+        "enum": [
+          "STARTED",
+          "SKIPPED_LATE",
+          "SKIPPED_FAILING",
+          "REFUSED",
+          "SKIPPED_BUSY"
+        ]
+      },
       "enums.HarvestWarningCode": {
         "type": "string",
         "enum": [
@@ -38252,6 +40846,13 @@
           "SCOPE_KIND_MISMATCH",
           "DETAIL_SKIPPED_UNKNOWN",
           "PRICE_SOLD_ANOTHER_WAY"
+        ]
+      },
+      "enums.ItemImageSource": {
+        "type": "string",
+        "enum": [
+          "OWNER",
+          "CHAIN"
         ]
       },
       "enums.ItemPriceWrittenBy": {
@@ -38287,7 +40888,9 @@
           "RENAMED",
           "MERGED",
           "DELETED",
-          "APPROVAL_CHANGED"
+          "APPROVAL_CHANGED",
+          "BOUGHT",
+          "BUY_REVERTED"
         ]
       },
       "enums.LineSuggestionReason": {
@@ -38313,13 +40916,6 @@
           "CONVERSATION",
           "ONLY_LIST",
           "ASKED"
-        ]
-      },
-      "enums.LocationSectionsSource": {
-        "type": "string",
-        "enum": [
-          "LOCATION",
-          "CHAIN"
         ]
       },
       "enums.MembershipStatus": {
@@ -38449,7 +41045,6 @@
       "enums.SectionRuleStep": {
         "type": "string",
         "enum": [
-          "PINNED",
           "COVERED",
           "NONE"
         ]
@@ -38500,6 +41095,17 @@
           "rewound",
           "confirmed",
           "discarded"
+        ]
+      },
+      "enums.ShopWalkGuardKind": {
+        "type": "string",
+        "enum": [
+          "lost",
+          "jump",
+          "turned",
+          "heading",
+          "compass-disturbed",
+          "compass-settled"
         ]
       },
       "enums.ShopWalkStopReason": {
@@ -39281,6 +41887,9 @@
                 "type": "null"
               }
             ]
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
           }
         },
         "required": [
@@ -39453,6 +42062,18 @@
               "string",
               "null"
             ]
+          },
+          "scheduleId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interrupted": {
+            "type": "boolean"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
           }
         },
         "required": [
@@ -39523,6 +42144,182 @@
           "page",
           "name",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestScheduleLastRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.HarvestRunStatus"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requestedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestSchedulePage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestScheduleView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.HarvestScheduleView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presetId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "presetName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeOfDay": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 5,
+            "description": "HH:mm on a 24 hour clock, such as 03:00."
+          },
+          "daysOfWeek": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "minItems": 1,
+            "maxItems": 7,
+            "uniqueItems": true
+          },
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextRunAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blockedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestScheduleBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSlotAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestScheduleOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastOutcomeAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastOutcomeNote": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.HarvestScheduleLastRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/harvest.RunEstimate"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "presetId",
+          "presetName",
+          "supermarketId",
+          "timeOfDay",
+          "daysOfWeek",
+          "timezone",
+          "enabled",
+          "nextRunAt",
+          "blockedBy",
+          "lastSlotAt",
+          "lastOutcome",
+          "lastOutcomeAt",
+          "lastOutcomeNote",
+          "lastRun",
+          "estimate",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       },
@@ -39635,6 +42432,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -39739,6 +42542,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -40240,6 +43044,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -40336,6 +43146,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -40350,6 +43161,33 @@
           "decidedAt",
           "prices",
           "brandMatches"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.RunEstimate": {
+        "type": "object",
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "PRESET",
+              "SOURCE",
+              "DEFAULT"
+            ]
+          },
+          "samples": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seconds",
+          "basis",
+          "samples"
         ],
         "additionalProperties": false
       },
@@ -40667,6 +43505,12 @@
               "null"
             ]
           },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "extra": {
             "type": [
               "object",
@@ -40756,6 +43600,7 @@
           "packCount",
           "categoryPath",
           "url",
+          "imageUrl",
           "extra",
           "timesSeen",
           "firstSeenAt",
@@ -41268,6 +44113,51 @@
         ],
         "additionalProperties": false
       },
+      "impersonation.ImpersonationStatusView": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
+      "impersonation.StartImpersonationView": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "codeExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "codeTtlMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "sessionId",
+          "url",
+          "codeExpiresAt",
+          "codeTtlMs",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
       "list.AddLineResult": {
         "type": "object",
         "properties": {
@@ -41441,6 +44331,110 @@
           }
         }
       },
+      "list.LineSettlementHistoryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "settledByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revertedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pricePaidCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "pricePaidCurrency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 3
+          },
+          "priceScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemSnapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "lineId",
+          "listId",
+          "itemId",
+          "outcome",
+          "quantity",
+          "settledByUserId",
+          "settledByParticipantId",
+          "settledAt",
+          "revertedAt",
+          "pricePaidCents",
+          "pricePaidCurrency",
+          "priceScopeId",
+          "supermarketLocationId",
+          "itemSnapshot"
+        ],
+        "additionalProperties": false
+      },
       "list.LineSettlementPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -41453,7 +44447,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/list.LineSettlementView"
+              "$ref": "#/components/schemas/list.LineSettlementHistoryView"
             }
           },
           "nextCursor": {
@@ -41681,6 +44675,21 @@
               "minLength": 1
             }
           },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
           "position": {
             "type": "integer"
           },
@@ -41741,6 +44750,9 @@
           "itemSetHash",
           "productGroupId",
           "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
           "position",
           "approvalStatus",
           "createdByUserId",
@@ -42158,6 +45170,21 @@
               "minLength": 1
             }
           },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
           "position": {
             "type": "integer"
           },
@@ -42222,6 +45249,9 @@
           "itemSetHash",
           "productGroupId",
           "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
           "position",
           "approvalStatus",
           "createdByUserId",
@@ -42339,6 +45369,18 @@
         ],
         "additionalProperties": false
       },
+      "msg.auth.impersonation.end.response": {
+        "type": "object",
+        "properties": {
+          "ended": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ended"
+        ],
+        "additionalProperties": false
+      },
       "msg.basket.participant.revoke.response": {
         "type": "object",
         "properties": {
@@ -42395,7 +45437,7 @@
         ],
         "additionalProperties": false
       },
-      "msg.item.getMany.response": {
+      "msg.item.updateMany.response": {
         "type": "object",
         "properties": {
           "items": {
@@ -42410,17 +45452,22 @@
         ],
         "additionalProperties": false
       },
-      "msg.item.updateMany.response": {
+      "msg.itemLinkedImage.disableAll.response": {
         "type": "object",
         "properties": {
+          "supermarkets": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The chains that were on and are off now."
+          },
           "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/catalog.ItemView"
-            }
+            "type": "integer",
+            "minimum": 0,
+            "description": "The products that showed a chain photo and show none now."
           }
         },
         "required": [
+          "supermarkets",
           "items"
         ],
         "additionalProperties": false
@@ -42642,7 +45689,7 @@
               "category_in_use",
               "category_not_found",
               "section_not_found",
-              "section_of_another_chain",
+              "section_of_another_shop",
               "section_slug_taken",
               "location_external_ref_taken",
               "catalog_location_exclusive",
@@ -42652,6 +45699,14 @@
               "walk_changed",
               "shop_map_invalid",
               "shop_map_too_large",
+              "impersonation_disabled",
+              "impersonation_code_invalid",
+              "impersonation_ended",
+              "impersonation_not_allowed",
+              "not_impersonating",
+              "recovery_other_account",
+              "recovery_needs_email",
+              "recovery_needs_password",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
@@ -43075,6 +46130,16 @@
               "null"
             ]
           },
+          "itemSnapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "outcome": {
             "$ref": "#/components/schemas/enums.SettlementOutcome"
           },
@@ -43142,6 +46207,7 @@
         "required": [
           "id",
           "itemId",
+          "itemSnapshot",
           "outcome",
           "quantity",
           "pricePaid",

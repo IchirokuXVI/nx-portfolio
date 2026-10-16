@@ -8,43 +8,43 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { sectionSource } from './catalog-sources';
 
-/** One aisle of one chain, as the gateway describes it. */
-export type Section = Wire.CatalogSupermarketSectionView;
+/** One section of one shop, as the gateway describes it. */
+export type Section = Wire.CatalogShopSectionView;
 
 /**
- * A chain's sections (backend plan 0167, admin plan 0037, target 1).
+ * The sections of a shop (backend plan 0200, admin plan 0063).
  *
- * A **section** is the chain's own name for an aisle, mapped onto the app's
- * categories: Mercadona's "Charcutería" wall, LIDL's bakery by the entrance.
- * Its categories are what it holds, a root meaning every category inside it,
- * and it may hold none at all: an aisle of whatever is on offer this week has
- * only the products somebody pinned to it.
+ * A **section** is a shop's own name for an aisle, mapped onto the app's
+ * categories: Córdoba Centro's "Charcutería" wall, a bakery by the entrance.
+ * Its categories are what it holds, a root meaning every category inside it.
+ * It may hold none, and then no product is in it. A section belongs to one
+ * shop: two shops of a chain hold different ones, and nothing is shared.
  *
- * **Two URLs, like shops.** A chain's sections are listed and created under
- * the chain, at `/supermarkets/{id}/sections`, and one is read, changed and
- * deleted at `/sections/{id}`. So the chain is required before the list can
- * be read, and it is fixed once the section exists.
+ * **Two URLs, like shops.** A shop's sections are listed and created under
+ * the shop, at `/locations/{id}/sections`, and one is read, changed and
+ * deleted at `/sections/{id}`. So the shop is required before the list can be
+ * read, and it is fixed once the section exists.
  *
- * **The slug is written once.** It is how a file naming a chain's aisles will
- * address them, and two sections called "Frescos" in one chain is a mistake
- * worth refusing, so the chain refuses a slug it already holds.
+ * **The slug is written once and is unique in its shop.** Two shops of one
+ * chain can both have `fruteria`. One shop cannot have it twice.
  *
- * **The list is the chain's Sections tab** (admin plan 0042), which is
- * `chain-sections.ts`: it reads these in order, says what each covers by name,
- * moves one up or down and deletes one, with a confirmation that says what
- * goes with a section. This descriptor is the form behind that tab, at
- * `/chains/{chainId}/sections/new` and `/chains/{chainId}/sections/{id}`.
+ * **The list is the shop's Sections tab**, `location-sections.ts`: it reads
+ * these in order, says what each covers by name, reorders them and deletes
+ * one, with a confirmation that says what goes with a section. This
+ * descriptor is the form behind that tab, at
+ * `/chains/{chainId}/shops/{shopId}/sections/new` and `.../sections/{id}`.
+ * Its order is not a field: a new section goes last, and the tab moves it.
  */
 export const SECTIONS = defineResource<Section>({
   name: 'sections',
   segment: 'sections',
   labels: { one: 'catalog.sections.one', many: 'catalog.sections.many' },
 
-  // The chain is in the address.
+  // The shop is in the address.
   parent: {
-    resource: 'supermarkets',
-    param: 'chainId',
-    filter: 'supermarketId',
+    resource: 'locations',
+    param: 'shopId',
+    filter: 'supermarketLocationId',
   },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
@@ -58,9 +58,9 @@ export const SECTIONS = defineResource<Section>({
     },
     {
       kind: 'reference',
-      name: 'supermarketId',
-      label: 'catalog.sections.supermarketId',
-      resource: 'supermarkets',
+      name: 'supermarketLocationId',
+      label: 'catalog.sections.supermarketLocationId',
+      resource: 'locations',
       required: true,
       // In the URL a section is created at, and no update carries it.
       editable: 'create',
@@ -84,48 +84,25 @@ export const SECTIONS = defineResource<Section>({
       editable: 'create',
     },
     {
-      kind: 'number',
-      name: 'position',
-      label: 'catalog.sections.position',
-      help: 'catalog.sections.positionHelp',
-      integer: true,
-      min: 0,
-    },
-    {
       kind: 'references',
       name: 'categoryIds',
       label: 'catalog.sections.categoryIds',
       help: 'catalog.sections.categoryIdsHelp',
       resource: 'categories',
-      // A chain maps a few dozen categories at most, so one cached resolve per
+      // A shop maps a few dozen categories at most, so one cached resolve per
       // id names the chips and the column.
       nameLookup: true,
       // Not a null: an empty list is an ordinary answer, a section that holds
-      // only pinned products. Declared so that a create sends it, because the
+      // no product yet. Declared so that a create sends it, because the
       // gateway requires the list and the form leaves an empty field out.
       nullable: true,
-    },
-    {
-      kind: 'number',
-      name: 'locationCount',
-      label: 'catalog.sections.locationCount',
-      help: 'catalog.sections.locationCountHelp',
-      editable: false,
     },
   ],
 
   list: {
-    columns: ['position', 'name', 'slug', 'categoryIds', 'locationCount'],
-    compact: ['slug', 'categoryIds', 'locationCount'],
+    columns: ['name', 'slug', 'categoryIds'],
+    compact: ['slug', 'categoryIds'],
   },
-
-  filters: [
-    {
-      kind: 'search',
-      param: 'query',
-      label: 'catalog.sections.filter.query',
-    },
-  ],
 
   // Said under the field the refusal is about.
   errorFields: {
@@ -133,7 +110,7 @@ export const SECTIONS = defineResource<Section>({
     category_not_found: 'categoryIds',
   },
 
-  // No delete here: the chain's Sections tab deletes, with a confirmation
+  // No delete here: the shop's Sections tab deletes, with a confirmation
   // that names what goes with it, and a generic "this row will be deleted"
   // would not.
   actions: { create: true, edit: true },

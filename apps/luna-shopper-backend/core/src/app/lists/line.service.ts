@@ -70,12 +70,14 @@ import {
   operatorActor,
   snapshotOf,
   type LineChangeActor,
+  type LineSnapshot,
   type ListRef,
 } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 import { lineIdentities, normalizeContent } from './line-content';
 import {
   EMPTY_LINE_ITEM_SET,
+  keptFavorite,
   toLineItemSet,
   type LineItemSet,
 } from './line-item-set';
@@ -85,6 +87,7 @@ import {
   LineMergeService,
   mergedItemIds,
 } from './line-merge.service';
+import { namedAfterEdit, namedOnAdd } from './line-named';
 import { ListAccessService } from './list-access.service';
 import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
@@ -198,11 +201,29 @@ interface LineEdit {
   itemIds?: string[];
   adoptItemIds?: string[];
   /**
+   * The favourite product and the chain (plan 0199). Null clears, and absent
+   * leaves alone. The operator path names neither.
+   */
+  favoriteItemId?: string | null;
+  preferredSupermarketId?: string | null;
+  /**
+   * Whether a person typed the name (plan 0207, section 1.3). Absent beside a
+   * `content` names the line, and absent alone leaves the flag as it is. The
+   * operator path never names it, so the edit of an operator is the first case.
+   */
+  named?: boolean;
+  /**
    * Whether a rename that collides may merge (plan 0112, section 2). Only a
    * member's edit can say so: the operator path names no such field, so an
    * operator's colliding rename is refused rather than merged or duplicated.
    */
   confirmMerge?: boolean;
+  /**
+   * The quantity the client saw (plan 0209, section 2.2). When present, the
+   * quantity of the line as the lock reads it must equal it, or the edit is
+   * refused with `stale_quantity`. The operator path never names it.
+   */
+  from?: number;
 }
 
 /**
@@ -232,8 +253,54 @@ interface LineWriter {
   ): Promise<T>;
 }
 
+/**
+ * Whether an edit names the quantity of a line and nothing else about it (plan
+ * 0204, section 3).
+ *
+ * An edit that also names the text, the products, the favourite, the chain or
+ * the flag of plan 0207 is not one, even when it leaves them as they were: the
+ * question is what the request may have moved, and the answer has to be safe
+ * without a comparison.
+ */
+function movesQuantityAlone(req: LineEdit): boolean {
+  return (
+    req.quantity !== undefined &&
+    req.content === undefined &&
+    req.itemIds === undefined &&
+    (req.adoptItemIds ?? []).length === 0 &&
+    req.favoriteItemId === undefined &&
+    req.preferredSupermarketId === undefined &&
+    req.named === undefined
+  );
+}
+
+/**
+ * The `from` bargain of an edit (plan 0209, section 2.2), asked of the row the
+ * lock read and never of the caller's.
+ *
+ * The refusal is the one the basket's demand route answers for a stale `from`
+ * (`addQuantity` with `expect`), word for word: a client reads both the same
+ * way. Absent, the edit writes the value it was given, as it always did.
+ */
+function assertFrom(req: LineEdit, line: ListLine): void {
+  if (req.from !== undefined && line.quantity !== req.from) {
+    throw new StaleQuantityException(
+      'Somebody else changed this while you were looking at it',
+      { messageArgs: { current: line.quantity } }
+    );
+  }
+}
+
 /** What a write inside a transaction leaves in the trail, or nothing. */
 type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
+
+/** An edit applied to the line object and not written yet. */
+interface PreparedEdit {
+  /** The line as it stood, for the change row. */
+  before: LineSnapshot;
+  /** The product set to write, or nothing when the edit leaves the set alone. */
+  set: { next?: string[]; adopt: string[] } | undefined;
+}
 
 /**
  * Who tells the baskets, for one call of the private line event helper (plan
@@ -243,8 +310,13 @@ type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
  * `'caller'` is the two writes whose announcement cannot be built from one line
  * — a batch, which is one event for the whole write, and a merge, whose event
  * names the line that went as well as the one that stayed.
+ *
+ * `'moved'` is a write that changed the quantity of one line and nothing else
+ * about it (plan 0204, section 3). The helper announces it with what the line
+ * reads now in each covering basket, so none of them reads again, and says that
+ * the marks moved, because such a write records a change.
  */
-type Announcer = 'here' | 'caller';
+type Announcer = 'here' | 'caller' | 'moved';
 
 @Injectable()
 export class LineService {
@@ -371,6 +443,93 @@ export class LineService {
       }
     }
     return [...new Set(itemIds)];
+  }
+
+  /**
+   * Write the favourite product and the chain of an edit onto the line, in
+   * memory (plan 0199, section 2).
+   *
+   * `nextItemIds` is the set this same edit replaces the products with, or
+   * `undefined` when the edit leaves the set alone. An adoption leaves it alone:
+   * it changes who owns a product and not which products the line holds (rule
+   * 3).
+   *
+   * ## The favourite
+   *
+   * - **An id** must be one of the products as the set stands after this edit
+   *   (rule 1). So the set is `nextItemIds` when the edit names one, and the
+   *   stored rows otherwise. One request can thus add a product and make it the
+   *   favourite.
+   * - **Null** clears it.
+   * - **Absent** leaves it alone, unless this edit took that product off the
+   *   line. Then it is cleared (rule 2).
+   *
+   * ## The chain
+   *
+   * Written when the edit names it and never otherwise (rule 4). It does not
+   * depend on the products, so no set, empty or not, clears it.
+   *
+   * It only assigns. Every refusal here happens before the caller writes a row,
+   * and a caller that is refused discards the object.
+   */
+  private async applyLineChoices(
+    line: ListLine,
+    req: LineEdit,
+    nextItemIds: readonly string[] | undefined,
+    manager?: EntityManager
+  ): Promise<void> {
+    const favorite = this.validateReference(
+      req.favoriteItemId,
+      'favoriteItemId'
+    );
+    const supermarket = this.validateReference(
+      req.preferredSupermarketId,
+      'preferredSupermarketId'
+    );
+
+    if (supermarket !== undefined) {
+      line.preferredSupermarketId = supermarket;
+    }
+
+    if (favorite === undefined) {
+      if (nextItemIds !== undefined) {
+        line.favoriteItemId = keptFavorite(line.favoriteItemId, nextItemIds);
+      }
+      return;
+    }
+    if (favorite !== null) {
+      const held =
+        nextItemIds ?? (await this.itemSetOf(line.id, manager)).itemIds;
+      if (!held.includes(favorite)) {
+        throw new ValidationException(
+          'favoriteItemId must be one of the products of the line',
+          { messageArgs: { field: 'favoriteItemId' } }
+        );
+      }
+    }
+    line.favoriteItemId = favorite;
+  }
+
+  /**
+   * An optional, nullable catalog id of an edit: `undefined`, null or a UUID.
+   *
+   * The gateway checks the same shape. It is checked here again because core is
+   * also reached in process, and because the value is written to a `uuid`
+   * column, where a wrong shape is an error of the database and not a refusal.
+   */
+  private validateReference(
+    value: string | null | undefined,
+    field: 'favoriteItemId' | 'preferredSupermarketId'
+  ): string | null | undefined {
+    if (value === undefined || value === null) {
+      return value;
+    }
+    if (typeof value !== 'string' || !isUuid(value)) {
+      throw new ValidationException(`${field} must be a valid reference`, {
+        messageArgs: { field },
+      });
+    }
+    return value;
   }
 
   /**
@@ -659,6 +818,8 @@ export class LineService {
     );
     if (announces === 'here') {
       void this.baskets.linesChanged(line.listId, [line.id]);
+    } else if (announces === 'moved') {
+      void this.baskets.linesMoved(line.listId, [line.id], true);
     }
   }
 
@@ -1052,6 +1213,11 @@ export class LineService {
    * approval question differently from a single add. The two flags are resolved
    * once per request by the caller, because they are properties of the adder and
    * of the list rather than of the item.
+   *
+   * It also decides the flag of plan 0207 for both: `named: false` is kept only
+   * on a line that holds a product. A batch item that folds into a line this
+   * batch creates contributes its quantity alone, so the flag of the created
+   * line is the flag of the first item that named it.
    */
   private newLine(
     item: AddLinesItem,
@@ -1065,6 +1231,7 @@ export class LineService {
       listId,
       productGroupId,
       content: item.content,
+      named: namedOnAdd(item.named, (item.itemIds ?? []).length > 0),
       quantity: this.validateQuantity(item.quantity ?? 1),
       // The digest is a property of the set alone, so it can be stamped on the
       // row before the join rows exist (plan 0048, section 1.1).
@@ -1107,6 +1274,24 @@ export class LineService {
       throw new NotFoundException('List not found');
     }
     return list;
+  }
+
+  /**
+   * One line, read under `pessimistic_write` in the caller's transaction (plan
+   * 0209, section 2.1). A miss means it was deleted after the read outside.
+   */
+  private async lockLine(
+    manager: EntityManager,
+    lineId: string
+  ): Promise<ListLine> {
+    const line = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!line) {
+      throw new NotFoundException('Line not found');
+    }
+    return line;
   }
 
   /**
@@ -1249,6 +1434,9 @@ export class LineService {
    * somebody asking for more of it has not changed what they agreed to.
    *
    * ## What it leaves alone
+   *
+   * The flag of plan 0207: an add that raises a line leaves `named` as that
+   * line has it (section 1.3), whatever the request said about the name.
    *
    * The line's products and its group. An add only reaches here for a line
    * that already means what the request means ({@link lineIdentities}), so there
@@ -1501,8 +1689,68 @@ export class LineService {
       );
     }
 
+    // **One transaction for both shapes of edit, since plan 0138.** The set and
+    // the line have to move together, or a stored hash outlives the rows it
+    // summarises; the change and the line have to move together for the reason
+    // the recorder gives about itself. The second applies to a quantity only
+    // edit as much as to a product one, so the path that used to save the row on
+    // its own is gone.
+    //
+    // **The line is read again under the lock** (plan 0209, section 2.1), as
+    // `applyRename` and `addQuantity` read it. The object read before the
+    // transaction answered the access check and nothing else: a settle that
+    // landed after that read would otherwise be overwritten by a save of the
+    // row as it stood before the purchase.
+    return this.announce(
+      list,
+      await writer.transaction(async (manager, record) => {
+        const locked = await this.lockLine(manager, line.id);
+        // Asked again of the row the lock read, since its approval may have
+        // moved since the check outside.
+        this.authorizeEdit(req, locked, permissions);
+        assertFrom(req, locked);
+        const prepared = await this.prepareEdit(
+          locked,
+          list,
+          req,
+          permissions,
+          manager
+        );
+        return this.writePreparedEdit(
+          manager,
+          locked,
+          list,
+          prepared,
+          actor,
+          record
+        );
+      }),
+      // The quantity alone moved, so the baskets are sent the numbers and do
+      // not read again (plan 0204, section 3). A name, a product set, a
+      // favourite or a chain is something a room must not carry or core does
+      // not hold, and those edits send the ids as before.
+      movesQuantityAlone(req) ? 'moved' : 'here'
+    );
+  }
+
+  /**
+   * Apply an edit that does not rename to the line object, and say what the
+   * write has to do. It writes nothing.
+   *
+   * `manager` is the transaction of a caller that already holds one, which is
+   * {@link keepProductWithin}. Every read here then goes through it, because a
+   * read through this service's own repositories would take a second
+   * connection while the caller holds the first.
+   */
+  private async prepareEdit(
+    line: ListLine,
+    list: ShoppingList,
+    req: LineEdit,
+    permissions: ReadonlySet<ListPermission>,
+    manager?: EntityManager
+  ): Promise<PreparedEdit> {
     // Read before any of the three fields below is written, which is the move
-    // `updateAsOperator` already makes for the audit trail one line above it.
+    // `updateAsOperator` already makes for the audit trail.
     const before = snapshotOf(line);
 
     if (req.content !== undefined) {
@@ -1520,6 +1768,9 @@ export class LineService {
     // allowed, and at 104 an update to 105 is not.
     const adoptItemIds = req.adoptItemIds ?? [];
     const touchesSet = req.itemIds !== undefined || adoptItemIds.length > 0;
+    const lineItems = manager
+      ? manager.getRepository(ListLineItem)
+      : this.lineItems;
     const nextItemIds =
       req.itemIds === undefined
         ? undefined
@@ -1527,44 +1778,114 @@ export class LineService {
             req.itemIds,
             Math.max(
               LINE_ITEM_SET_MAX,
-              await this.lineItems.count({ where: { lineId: line.id } })
+              await lineItems.count({ where: { lineId: line.id } })
             )
           );
     if (nextItemIds !== undefined) {
       line.itemSetHash = itemSetHash(nextItemIds);
     }
+    // The favourite and the chain (plan 0199). Neither is part of the hash.
+    await this.applyLineChoices(line, req, nextItemIds, manager);
+    // Whether a person typed the name (plan 0207, section 1.2). The hash is
+    // null exactly while the line holds no product, and it already says what
+    // this edit leaves.
+    line.named = namedAfterEdit(line.named, req, line.itemSetHash !== null);
     this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
-    // **One transaction for both shapes of edit, since plan 0138.** The set and
-    // the line have to move together, or a stored hash outlives the rows it
-    // summarises; the change and the line have to move together for the reason
-    // the recorder gives about itself. The second applies to a quantity only
-    // edit as much as to a product one, so the path that used to save the row on
-    // its own is gone.
-    //
-    // An adoption alone takes the set branch too (plan 0070, section 9): it
-    // writes no product and moves no hash, but it does rewrite rows.
-    return this.announce(
-      list,
-      await writer.transaction(async (manager, record) => {
-        const written = await this.writeEdit(
-          manager,
-          line,
-          touchesSet ? { next: nextItemIds, adopt: adoptItemIds } : undefined,
-          record
-        );
-        await this.changes.edited(
-          manager,
-          this.listRef(list),
-          line.id,
-          before,
-          snapshotOf(written.line),
-          actor
-        );
-        return written;
-      })
+    return {
+      before,
+      // An adoption alone takes the set branch too (plan 0070, section 9): it
+      // writes no product and moves no hash, but it does rewrite rows.
+      set: touchesSet ? { next: nextItemIds, adopt: adoptItemIds } : undefined,
+    };
+  }
+
+  /** Write a prepared edit and its change row, through the caller's manager. */
+  private async writePreparedEdit(
+    manager: EntityManager,
+    line: ListLine,
+    list: ShoppingList,
+    prepared: PreparedEdit,
+    actor: LineChangeActor,
+    record?: RecordLine
+  ): Promise<WrittenLine> {
+    const written = await this.writeEdit(manager, line, prepared.set, record);
+    await this.changes.edited(
+      manager,
+      this.listRef(list),
+      line.id,
+      prepared.before,
+      snapshotOf(written.line),
+      actor
     );
+    return written;
+  }
+
+  /**
+   * Keep a product on a line: add it to the products of the line when it is not
+   * one of them, and make it the favourite (plan 0202, section 3).
+   *
+   * **It is {@link update} without its transaction and without its
+   * announcement.** A change of product from the basket rewrites the buys of
+   * the trip and writes the line, and the two must commit together or not at
+   * all. So this runs inside the transaction of that write, on the line object
+   * that write locked, and the caller announces with {@link announceKept} after
+   * its commit.
+   *
+   * Everything else is the edit a person makes on the line page:
+   *
+   * - **The permissions** are {@link authorizeEdit}'s, asked of the actor. A
+   *   caller who may not edit the products of the line is refused with
+   *   `forbidden`, and the refusal rolls back whatever the caller's transaction
+   *   wrote before it.
+   * - **The approval** moves as {@link reopenAfterEdit} says. A writer who adds
+   *   a product to an approved line puts it back in front of whoever approves
+   *   it.
+   * - **The change row** is the recorder's own.
+   * - **The bound on the products of a line** is `validateItemIds`'s.
+   *
+   * It answers null when the line already holds the product as its favourite:
+   * nothing is written, and no version moves. The permission is asked first, so
+   * an actor who may not edit the line is refused even then.
+   */
+  async keepProductWithin(
+    manager: EntityManager,
+    line: ListLine,
+    list: ShoppingList,
+    itemId: string,
+    permissions: ReadonlySet<ListPermission>,
+    actor: LineChangeActor
+  ): Promise<WrittenLine | null> {
+    const held = (await this.itemSetOf(line.id, manager)).itemIds;
+    const holds = held.includes(itemId);
+    const edit: LineEdit = {
+      favoriteItemId: itemId,
+      ...(holds ? {} : { itemIds: [...held, itemId] }),
+    };
+    this.authorizeEdit(edit, line, permissions);
+    if (holds && line.favoriteItemId === itemId) {
+      return null;
+    }
+    const prepared = await this.prepareEdit(
+      line,
+      list,
+      edit,
+      permissions,
+      manager
+    );
+    return this.writePreparedEdit(manager, line, list, prepared, actor);
+  }
+
+  /**
+   * Announce what {@link keepProductWithin} wrote, after the caller's commit.
+   *
+   * The ordinary `line.updated` to the zone, and the ids to every basket that
+   * covers the list: a product set and a favourite are things a room does not
+   * carry, so each basket reads again (plan 0204, section 3).
+   */
+  announceKept(list: ShoppingList, written: WrittenLine): LineView {
+    return this.announce(list, written, 'here');
   }
 
   /**
@@ -1628,6 +1949,9 @@ export class LineService {
         // Asked again of the row as it stands under the lock, since its approval
         // may have moved since the check outside.
         this.authorizeEdit(req, line, permissions);
+        // The quantity the client saw, against the row the lock read (plan
+        // 0209, section 2.2).
+        assertFrom(req, line);
         // The row as the lock read it, which is what the change compares against:
         // the object outside this transaction was read before anybody else's
         // write could have landed on it.
@@ -1644,6 +1968,12 @@ export class LineService {
                     .count({ where: { lineId: line.id } })
                 )
               );
+        // The favourite and the chain (plan 0199), against the set the renamed
+        // line will hold after the edit. In memory, and ahead of every refusal
+        // below, so a favourite outside that set is refused before anything is
+        // written. When the rename merges, the merge decides between the two
+        // lines (section 2, rule 6) from what is assigned here.
+        await this.applyLineChoices(line, req, nextItemIds, manager);
 
         // A concurrent rename can have given this line the name already, and then
         // there is nothing to collide with. Asked of the fresh row, because
@@ -1664,6 +1994,12 @@ export class LineService {
           if (nextItemIds !== undefined) {
             line.itemSetHash = itemSetHash(nextItemIds);
           }
+          // After the hash, which then says what this edit leaves (plan 0207).
+          line.named = namedAfterEdit(
+            line.named,
+            req,
+            line.itemSetHash !== null
+          );
           this.reopenAfterEdit(line, locked, permissions);
           line.version += 1;
           const written = await this.writeEdit(
@@ -1724,6 +2060,11 @@ export class LineService {
         if (quantity !== undefined) {
           line.quantity = quantity;
         }
+        // The rule of this write, on the renamed line (plan 0207, section 1.3).
+        // The merge then names the survivor when either line is named: a rename
+        // with no flag leaves it named, and `named: false` leaves it with the
+        // flag of the line the name already belonged to.
+        line.named = namedAfterEdit(line.named, req, lineItemIds.length > 0);
         const [survivor, absorbed] = isEarlierLine(line, target)
           ? [line, target]
           : [target, line];
@@ -2100,6 +2441,9 @@ export class LineService {
         const line = await load(step.lineId);
         const before = snapshotOf(line);
         line.content = plan.content;
+        // A basket row rename sends a name and no flag, so a person typed it
+        // (plan 0207, section 1.2, rule 2).
+        line.named = true;
         this.reopenAfterEdit(line, plan.list, plan.permissions);
         line.version += 1;
         const saved = await repo.save(line);
@@ -2122,8 +2466,10 @@ export class LineService {
       const absorbedBefore = snapshotOf(absorbed);
       // The renamed line carries the new spelling into the merge, which keeps it
       // only when the renamed line is the survivor (plan 0112, section 3).
-      (survivor.id === step.renamedId ? survivor : absorbed).content =
-        plan.content;
+      const renamed = survivor.id === step.renamedId ? survivor : absorbed;
+      renamed.content = plan.content;
+      // Rule 2 of plan 0207, as in the step above. The merge reads it.
+      renamed.named = true;
       // The merge records its own step, as it does for a single line's rename.
       await this.merges.merge(manager, survivor, absorbed, {
         list: listRef,
@@ -2233,11 +2579,12 @@ export class LineService {
    *
    * ## The read is inside the write
    *
-   * `update` needs no lock because the value it writes is one the caller chose. A
-   * delta is computed from what the row says, so a concurrent write between the
-   * read and the write is an update that vanishes with nothing logged and nothing
-   * errored, which is what the API forced on every caller that wanted "two more"
-   * and had to fetch, compute and `PATCH` to get it (section 2).
+   * A delta is computed from what the row says, so a concurrent write between
+   * the read and the write is an update that vanishes with nothing logged and
+   * nothing errored, which is what the API forced on every caller that wanted
+   * "two more" and had to fetch, compute and `PATCH` to get it (section 2). So
+   * the row is read under the lock it is written with, as `update` also reads
+   * it since plan 0209.
    *
    * ## A negative delta is allowed
    *
@@ -2311,7 +2658,8 @@ export class LineService {
       return written;
     });
 
-    return this.announce(list, written);
+    // A delta moves the quantity and nothing else (plan 0204, section 3).
+    return this.announce(list, written, 'moved');
   }
 
   /**
@@ -2398,11 +2746,12 @@ export class LineService {
   /**
    * The write half of an edit, in whatever transaction its caller opened.
    *
-   * It never opens one of its own, because the two callers need different ones:
-   * {@link update} opens one only when it is also rewriting the product set, and
-   * {@link addQuantity} is already inside one because a delta has to read under
-   * the lock it writes with. The event is returned rather than emitted, so the
-   * caller announces it after its commit, as everywhere else here.
+   * It never opens one of its own, because every caller already holds one:
+   * {@link update} opens one for every edit since plan 0138 and reads the line
+   * under its lock since plan 0209, and {@link addQuantity} reads under the lock
+   * it writes with because a delta is computed from the row. The event is
+   * returned rather than emitted, so the caller announces it after its commit,
+   * as everywhere else here.
    *
    * `record` is how an operator's edit leaves a trail without this method having
    * to know whose edit it is: the row is saved through the caller's manager
@@ -2528,7 +2877,14 @@ export class LineService {
       decides &&
       req.content === undefined &&
       req.itemIds === undefined &&
-      req.adoptItemIds === undefined
+      req.adoptItemIds === undefined &&
+      // Guarded as `itemIds` is (plan 0199, section 2, rule 5): a request that
+      // names either one drops through to the write check.
+      req.favoriteItemId === undefined &&
+      req.preferredSupermarketId === undefined &&
+      // The flag of plan 0207 is about the name, so it is guarded as the
+      // content is.
+      req.named === undefined
     ) {
       return;
     }
@@ -2833,6 +3189,11 @@ export class LineService {
       {
         itemSetHash: null,
         productGroupId: null,
+        // A line with no products has no favourite (plan 0199, section 2, rule
+        // 2). The chain stays, because only an update clears it.
+        favoriteItemId: null,
+        // And it is named (plan 0207, section 1.2, rule 1).
+        named: true,
         deletedByUserId,
       }
     );

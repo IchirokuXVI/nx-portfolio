@@ -13,9 +13,13 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, IsNull, MoreThanOrEqual } from 'typeorm';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../baskets/line-claim.service';
+import {
+  actorOf,
+  LineChangeRecorder,
+} from '../lists/changes/line-change.recorder';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { boughtOfRow, lockEntries } from './basket-row-resolver';
 import {
@@ -59,7 +63,10 @@ export class BasketRevertService {
     private readonly dataSource: DataSource,
     private readonly context: BasketWriteContext,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // A taken back buy that gives units back is a change of its line (plan
+    // 0203, section 1). Last, so no positional construction has to shift.
+    private readonly changes: LineChangeRecorder
   ) {}
 
   async revert(req: RevertBasketRowRequest): Promise<BasketRowResult> {
@@ -70,7 +77,8 @@ export class BasketRevertService {
       );
     }
 
-    const row = await opened.row(req.rowKey);
+    // The lines the request names, and no others (plan 0201, section 4).
+    const row = await opened.row(req.rowKey, req.lineIds);
     if (req.target === 'UNITS') {
       if (!Number.isInteger(req.units) || req.units <= 0) {
         throw new ValidationException('units must be a positive whole number', {
@@ -89,6 +97,9 @@ export class BasketRevertService {
     const announcements: ZoneAnnouncement[] = [];
     /** Entries whose line was deleted since, so no units went back. */
     let skippedCount = 0;
+    // The lines this call gave units back to, each of which got a change row.
+    const recorded = new Set<string>();
+    const actor = actorOf({ via: opened.via() });
 
     await this.dataSource.transaction(async (manager) => {
       const zoneLines = manager.getRepository(ListLine);
@@ -187,6 +198,13 @@ export class BasketRevertService {
                 supermarketLocationId: candidate.supermarketLocationId,
                 // The chain goes with the shop it names (plan 0163).
                 supermarketId: candidate.supermarketId,
+                // What the product was called is copied with the product
+                // (plan 0202): the units that still stand were bought under
+                // that name.
+                itemSnapshot: candidate.itemSnapshot,
+                // Not a correction. The row above was given back in part, so
+                // a history shows it marked, and this is what still stands.
+                replacesSettlementId: null,
               })
             );
           }
@@ -211,9 +229,27 @@ export class BasketRevertService {
         }
         const units = restored.get(lineId) ?? 0;
         if (units > 0) {
+          const before = zoneLine.quantity;
           zoneLine.quantity += units;
           zoneLine.version += 1;
           await zoneLines.save(zoneLine);
+          // One change row for each line that got units back, in this
+          // transaction (plan 0203, section 1). Taking back "they had none"
+          // moves no quantity and writes none.
+          const wrote = await this.changes.buyReverted(
+            manager,
+            {
+              id: zoneLine.listId,
+              zoneId: opened.zoneOf(zoneLine.listId),
+            },
+            zoneLine.id,
+            before,
+            zoneLine.quantity,
+            actor
+          );
+          if (wrote) {
+            recorded.add(zoneLine.id);
+          }
         }
         announcements.push({
           zoneId: opened.zoneOf(zoneLine.listId),
@@ -269,7 +305,13 @@ export class BasketRevertService {
       );
     }
 
-    return this.answer(opened, req.rowKey, announcements, skippedCount);
+    return this.answer(
+      opened,
+      row.entries.map((entry) => entry.lineId),
+      announcements,
+      skippedCount,
+      recorded
+    );
   }
 
   /**
@@ -282,15 +324,17 @@ export class BasketRevertService {
    */
   private async answer(
     opened: OpenBasketWrite,
-    rowKey: string,
+    /** Every line the request named, which is what the answer states. */
+    lineIds: readonly string[],
     announcements: readonly ZoneAnnouncement[],
-    skippedCount: number
+    skippedCount: number,
+    recorded: ReadonlySet<string>
   ): Promise<BasketRowResult> {
-    const lineIds = announcements.map((entry) => entry.line.id);
-    await opened.announceLinesChanged(
+    opened.announceLinesMoved(
       announcements.map((entry) => ({
         listId: entry.listId,
         lineId: entry.line.id,
+        recorded: recorded.has(entry.line.id),
       }))
     );
     await this.claims.announceReleased(
@@ -300,7 +344,7 @@ export class BasketRevertService {
         lineId: entry.line.id,
       }))
     );
-    const result = await opened.result(lineIds, rowKey);
+    const result = await opened.result(lineIds);
     return skippedCount > 0 ? { ...result, skippedCount } : result;
   }
 }

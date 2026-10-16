@@ -104,7 +104,8 @@ describeIntegration('what every write records (real Postgres)', () => {
       listAccess,
       fakeLineClaims().service,
       { emit: jest.fn() } as never,
-      announcer
+      announcer,
+      new LineChangeRecorder()
     );
 
     const zones = dataSource.getRepository(Zone);
@@ -358,18 +359,52 @@ describeIntegration('what every write records (real Postgres)', () => {
       });
     });
 
-    it('records nothing for a settle or a reorder', async () => {
-      // A purchase is not a change of what the household asks for (plan 0130,
-      // section 11, decision 12), and a reorder moves `position`, which a basket
-      // computes for itself. The revert and the skip are the basket's own writes
-      // and are proven in `basket-changes.integration.spec.ts`.
+    it('records a buy on the list page as BOUGHT, with the account and no basket (plan 0203)', async () => {
       const listId = await list('Purchases');
       const milk = await line(listId, 'Milk', 2);
-      const bread = await line(listId, 'Bread', 1);
 
       await settlements.settle({
         userId: ids.owner,
         lineId: milk.id,
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+      });
+
+      const recorded = await changesOf(listId);
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0]).toMatchObject({
+        kind: LineChangeKind.BOUGHT,
+        lineId: milk.id,
+        zoneId: ids.zone,
+        quantityBefore: 2,
+        quantityAfter: 1,
+        contentBefore: null,
+        contentAfter: null,
+        approvalBefore: null,
+        approvalAfter: null,
+        actorUserId: ids.owner,
+        actorParticipantId: null,
+        basketId: null,
+      });
+    });
+
+    it('records nothing for "they had none", a buy of a line at zero or a reorder', async () => {
+      // None of them moves the quantity of a line (plan 0203, section 1), and
+      // a reorder moves `position`, which a basket computes for itself. The
+      // revert and the skip are the basket's own writes and are proven in
+      // `basket-changes.integration.spec.ts`.
+      const listId = await list('Purchases');
+      const milk = await line(listId, 'Milk', 2);
+      const bread = await line(listId, 'Bread', 0);
+
+      await settlements.settle({
+        userId: ids.owner,
+        lineId: milk.id,
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+      });
+      await settlements.settle({
+        userId: ids.owner,
+        lineId: bread.id,
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
       });

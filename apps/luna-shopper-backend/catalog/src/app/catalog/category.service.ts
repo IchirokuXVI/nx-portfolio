@@ -63,7 +63,7 @@ interface CategoryListCursor extends Record<string, unknown> {
  * | R1 | a parent that is itself a child, or a parent given to a root that has children | `category_too_deep` |
  * | R2 | a product on a root, or a child holding products made a root | `category_not_a_leaf` |
  * | R3 | a product with no category | `item_needs_a_category` |
- * | R4 | deleting a category that has children or products, or that a shop section covers (plan 0167) | `category_in_use` |
+ * | R4 | deleting a category that has children or products, or that a section of a shop covers (plan 0200) | `category_in_use` |
  *
  * R1, R2 and R4 are held by the database too (the triggers and the two
  * `ON DELETE RESTRICT` keys of the migration), because the seed, the migration
@@ -271,8 +271,16 @@ export class CategoryService {
   }
 
   /**
-   * Refused while the category has children or products, or while a shop
-   * section covers it (R4, and plan 0167, section 2).
+   * Refused while the category has children or products, or while a section
+   * of a shop covers it (R4, and plan 0200, section 1).
+   *
+   * **The sections of a chain no longer hold a category** (plan 0200). Their
+   * table, `section_categories`, is read by nothing, and it keeps its rows and
+   * its `ON DELETE RESTRICT` key until release task 0004 empties it. A dead
+   * row there would refuse this delete with nothing a person can do about it,
+   * so the delete removes the dead rows of this one category first, in the
+   * same transaction. The plan that drops the four old tables removes that
+   * statement with them.
    */
   async delete(req: CategoryIdRequest): Promise<{ id: string }> {
     const actor = await this.admin.requireAdmin(req);
@@ -281,7 +289,7 @@ export class CategoryService {
       `SELECT (
          EXISTS (SELECT 1 FROM "categories" c WHERE c."parentId" = $1)
          OR EXISTS (SELECT 1 FROM "item_categories" ic WHERE ic."categoryId" = $1)
-         OR EXISTS (SELECT 1 FROM "section_categories" sc WHERE sc."categoryId" = $1)
+         OR EXISTS (SELECT 1 FROM "shop_section_categories" sc WHERE sc."categoryId" = $1)
        ) AS "held"`,
       [row.id]
     )) as { held: boolean }[];
@@ -291,7 +299,13 @@ export class CategoryService {
       );
     }
     try {
-      await this.audit.write(actor, (tx) => tx.delete(Category, row));
+      await this.audit.write(actor, async (tx) => {
+        await tx.manager.query(
+          `DELETE FROM "section_categories" WHERE "categoryId" = $1`,
+          [row.id]
+        );
+        await tx.delete(Category, row);
+      });
     } catch (error) {
       throw asTreeViolation(error);
     }
@@ -635,11 +649,11 @@ export function asTreeViolation(error: unknown): unknown {
   ) {
     return tooDeep('');
   }
-  // A shop section covering the category holds it too (plan 0167, section 2).
+  // A section of a shop covering the category holds it too (plan 0200).
   const onCategory =
     constraint === 'fk_item_categories_category' ||
     constraint === 'fk_categories_parent' ||
-    constraint === 'fk_section_categories_category';
+    constraint === 'fk_shop_section_categories_category';
   if (code === PG_FOREIGN_KEY_VIOLATION && onCategory) {
     // Postgres words the two directions differently: a delete of a row still
     // pointed at, or an insert naming a row that is not there.

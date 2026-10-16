@@ -42,6 +42,9 @@ const SOURCES = readdirSync(LIB).filter(
 const WRITES: Readonly<Record<string, string>> = {
   deleteUser: 'users.ts',
   resendVerification: 'users.ts',
+  sendPasswordReset: 'users.ts',
+  createRecoveryLinks: 'users.ts',
+  startImpersonation: 'users.ts',
   deleteZone: 'zones.ts',
   regenerateJoinCode: 'zones.ts',
   setZoneDeletionMark: 'zones.ts',
@@ -110,6 +113,7 @@ describe('where an action of the shoppers screens is declared', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'resend-verification',
+        'open-as-user',
         'give-role-admin',
         'take-role-admin',
         'give-role-premium',

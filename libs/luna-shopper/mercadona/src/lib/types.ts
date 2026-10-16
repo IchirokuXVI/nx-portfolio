@@ -72,6 +72,11 @@ export interface MercadonaProduct {
   /** False when the detail call answered 404: not stocked in this warehouse. */
   available: boolean;
   sourceUrl: string | null;
+  /**
+   * `thumbnail`, as printed and not yet checked (plan 0198). `photoAddress`
+   * reads it and answers the address a row may hold.
+   */
+  thumbnail: string | null;
   observedAt: Date;
 }
 
@@ -93,6 +98,8 @@ export interface MercadonaListProduct {
   displayName: string;
   packaging: string | null;
   shareUrl: string | null;
+  /** As on {@link MercadonaProduct.thumbnail}: the listing carries the field. */
+  thumbnail: string | null;
   published: boolean;
   /** As on {@link MercadonaProduct.soldByWeight}: the listing carries the field. */
   soldByWeight: boolean;

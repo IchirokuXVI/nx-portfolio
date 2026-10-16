@@ -4,7 +4,6 @@ import type { FranchiseButton } from '@portfolio/velista/models';
 import type { ShopGroup, ShopRow } from './shop-list';
 import {
   ShopPicker,
-  type ShopPickerAny,
   type ShopPickerNear,
   type ShopPickerState,
 } from './shop-picker';
@@ -55,13 +54,6 @@ const GROUPS: readonly ShopGroup[] = [
   },
 ];
 
-const ANY: ShopPickerAny = {
-  title: 'All supermarkets',
-  detail: 'Every product from every chain',
-  logo: { logoUrl: null, name: '', store: true },
-  checked: true,
-};
-
 async function render(options: {
   readonly openKey?: string | null;
   readonly query?: string;
@@ -70,7 +62,6 @@ async function render(options: {
   readonly pickedId?: string | null;
   readonly pickedChain?: string | null;
   readonly state?: ShopPickerState;
-  readonly anyRow?: ShopPickerAny | null;
   readonly searchPending?: boolean;
 }): Promise<ComponentFixture<ShopPicker>> {
   TestBed.resetTestingModule();
@@ -89,7 +80,6 @@ async function render(options: {
   fixture.componentRef.setInput('pickedId', options.pickedId ?? null);
   fixture.componentRef.setInput('pickedChain', options.pickedChain ?? null);
   fixture.componentRef.setInput('state', options.state ?? 'ready');
-  fixture.componentRef.setInput('anyRow', options.anyRow ?? null);
   fixture.componentRef.setInput(
     'searchPending',
     options.searchPending ?? false
@@ -193,11 +183,9 @@ describe('ShopPicker', () => {
         { key: 'search', heading: '', code: null, shops: [shop('loc-1')] },
       ],
       matchCount: 1,
-      anyRow: ANY,
     });
 
     expect(element(fixture).querySelector('lib-franchise-buttons')).toBeNull();
-    expect(element(fixture).querySelector('.any')).toBeNull();
     expect(element(fixture).querySelector('.result-count')).not.toBeNull();
     expect(element(fixture).querySelectorAll('.row')).toHaveLength(1);
     expect(element(fixture).querySelector('.heading')).toBeNull();
@@ -254,46 +242,6 @@ describe('ShopPicker', () => {
 });
 
 /**
- * The any row (velista `0124`): only the catalog asks for one, with its own words,
- * at the top of the root and at the top of a chain.
- */
-describe('ShopPicker, the any row', () => {
-  it('draws none unless the host asks', async () => {
-    const fixture = await render({});
-
-    expect(element(fixture).querySelector('.any')).toBeNull();
-  });
-
-  it('draws the host’s words above the search at the root, checked when it is the choice', async () => {
-    const fixture = await render({ anyRow: ANY });
-
-    const any = element(fixture).querySelector('.any') as HTMLElement;
-    expect(any.textContent).toContain('All supermarkets');
-    expect(any.textContent).toContain('Every product from every chain');
-    expect(any.querySelector<HTMLInputElement>('input')?.checked).toBe(true);
-    const search = element(fixture).querySelector('.search') as HTMLElement;
-    expect(
-      any.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-  });
-
-  it('draws it above a chain’s shops and reports a choice of it', async () => {
-    const fixture = await render({
-      openKey: 'merca',
-      anyRow: { ...ANY, title: 'Any Mercadona shop', checked: false },
-    });
-    let chosen = 0;
-    fixture.componentInstance.anyChosen.subscribe(() => (chosen += 1));
-
-    const any = element(fixture).querySelector('.any') as HTMLElement;
-    expect(any.textContent).toContain('Any Mercadona shop');
-    any.querySelector<HTMLInputElement>('input')?.click();
-
-    expect(chosen).toBe(1);
-  });
-});
-
-/**
  * "Near me" and the recent shops (velista `0103`). The container works out what
  * the device and the server said and hands it over as `near`; the body draws the
  * candidates nearest first, one line per reason, and one line per failure.
@@ -301,10 +249,9 @@ describe('ShopPicker, the any row', () => {
 describe('ShopPicker, near me and recent shops', () => {
   async function renderNear(
     near: ShopPickerNear,
-    recent: readonly ShopRow[] = [],
-    anyRow: ShopPickerAny | null = null
+    recent: readonly ShopRow[] = []
   ): Promise<ComponentFixture<ShopPicker>> {
-    const fixture = await render({ anyRow });
+    const fixture = await render({});
     fixture.componentRef.setInput('near', near);
     fixture.componentRef.setInput('recent', recent);
     fixture.detectChanges();
@@ -379,24 +326,6 @@ describe('ShopPicker, near me and recent shops', () => {
       }
     }
   );
-
-  it('draws the candidates above the any row', async () => {
-    const fixture = await renderNear(
-      {
-        state: 'answered',
-        reason: 'AMBIGUOUS',
-        candidates: [candidate('n', '1 m')],
-      },
-      [],
-      ANY
-    );
-
-    const any = element(fixture).querySelector('.any') as HTMLElement;
-    expect(
-      nearSection(fixture).compareDocumentPosition(any) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-  });
 
   it('says there is no shop within the radius in one line, with no empty box', async () => {
     const fixture = await renderNear({
@@ -481,5 +410,96 @@ describe('ShopPicker, near me and recent shops', () => {
     expect(element(fixture).textContent).not.toContain(
       'basket.view.shop.recent.heading'
     );
+  });
+});
+
+/**
+ * What the question at the first buy of a trip adds (velista `0141`): "No shop" as
+ * a row of its own, and a selected shop that answers one press.
+ */
+describe('ShopPicker, the question at the first buy', () => {
+  function candidate(id: string, distance: string) {
+    return {
+      ...shop(id),
+      aside: { text: distance, kind: 'distance' as const },
+    };
+  }
+
+  async function renderAsk(
+    options: { readonly pickChecked?: boolean; readonly query?: string } = {}
+  ): Promise<ComponentFixture<ShopPicker>> {
+    const fixture = await render({
+      pickedId: 'near-1',
+      query: options.query ?? '',
+    });
+    fixture.componentRef.setInput('near', {
+      state: 'answered',
+      reason: null,
+      candidates: [candidate('near-1', '40 m'), candidate('near-2', '210 m')],
+    });
+    fixture.componentRef.setInput('offerNoShop', true);
+    fixture.componentRef.setInput('pickChecked', options.pickChecked ?? true);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('draws "No shop" with its second line, under the shops near you', async () => {
+    const fixture = await renderAsk();
+
+    const row = element(fixture).querySelector('.no-shop') as HTMLElement;
+    expect(row.textContent).toContain('basket.shopAsk.noShop');
+    expect(row.textContent).toContain('basket.shopAsk.noShopHint');
+    const near = element(fixture).querySelector('.near-region') as HTMLElement;
+    expect(
+      near.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('reports "No shop" as its own output', async () => {
+    const fixture = await renderAsk();
+    let none = 0;
+    const picked: string[] = [];
+    fixture.componentInstance.noShop.subscribe(() => none++);
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    (
+      element(fixture).querySelector('.no-shop-radio') as HTMLInputElement
+    ).click();
+
+    expect(none).toBe(1);
+    expect(picked).toEqual([]);
+  });
+
+  it('draws no "No shop" while a word is searched, nor unless asked to', async () => {
+    const searched = await renderAsk({ query: 'tejares' });
+    expect(element(searched).querySelector('.no-shop')).toBeNull();
+
+    const plain = await render({});
+    expect(element(plain).querySelector('.no-shop')).toBeNull();
+  });
+
+  it('picks the selected shop with one press on it', async () => {
+    const fixture = await renderAsk();
+    const picked: string[] = [];
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    const radios =
+      element(fixture).querySelectorAll<HTMLInputElement>('.near-region input');
+    expect(radios[0].checked).toBe(true);
+    radios[0].click();
+
+    expect(picked).toEqual(['near-1']);
+  });
+
+  it('leaves a press on the checked shop alone without pickChecked, as the filter does', async () => {
+    const fixture = await renderAsk({ pickChecked: false });
+    const picked: string[] = [];
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    element(fixture)
+      .querySelectorAll<HTMLInputElement>('.near-region input')[0]
+      .click();
+
+    expect(picked).toEqual([]);
   });
 });

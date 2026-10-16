@@ -10,7 +10,7 @@ import {
 import { BrandWordmark } from '../brand/brand-wordmark';
 import { CheckIcon, ClockIcon } from '../icons/icons';
 
-/** Which of the two things happened to the confirmation link. */
+/** Which of the two things happened to the link. */
 export type OutcomeTone = 'confirmed' | 'expired';
 
 /**
@@ -46,8 +46,15 @@ export class OutcomeScreen {
   readonly title = input.required<string>();
   readonly body = input.required<string>();
 
-  /** The one action, which is always into the app. */
-  readonly actionLabel = input.required<string>();
+  /**
+   * The one action. Into the app on a confirmation link; on a dead reset link it asks
+   * for a new one (velista `0148`), with a quieter way on projected as `outcomeFooter`.
+   *
+   * Null draws no button. The two pages of a support session are dead ends on purpose
+   * (velista `0133`): the link that no longer works, and the session that has ended,
+   * offer no way into the app.
+   */
+  readonly actionLabel = input<string | null>(null);
 
   readonly action = output<void>();
 

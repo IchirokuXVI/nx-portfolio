@@ -3,7 +3,7 @@ import {
   restrictRowToServedLists,
   toBasket,
   toBasketMergeRequired,
-  toBasketRenameResult,
+  toBasketProductLists,
   toBasketRow,
   toBasketRowResult,
 } from './basket-mappers';
@@ -47,7 +47,7 @@ const ROW = {
   noteAt: null,
   mark: null,
   awaitingApproval: false,
-  optionIds: ['i-milk'],
+  productId: 'i-milk',
   touchedBy: null,
   touchedAt: null,
   entries: [ENTRY],
@@ -310,64 +310,166 @@ describe('restrictRowToServedLists', () => {
   });
 });
 
-describe('toBasketRowResult', () => {
-  const RESULT = {
-    row: ROW,
-    progress: { done: 1, unavailable: 0, total: 3, pending: 2 },
-  };
-
-  it('reads the row, the counts and the lifted pending', () => {
-    const result = toBasketRowResult(RESULT);
-
-    expect(result?.row.rowKey).toBe('zl-1');
-    expect(result?.progress).toEqual({ done: 1, unavailable: 0, total: 3 });
-    expect(result?.pending).toBe(2);
+describe('toBasketRow: a row is a product (velista 0139)', () => {
+  it('reads the product of a row with one', () => {
+    expect(toBasketRow(ROW)?.productId).toBe('i-milk');
   });
 
-  /** Absent on the wire when nothing happened, and null and zero here. */
-  it('reads an absent replacedRowKey and skippedCount as null and zero', () => {
-    const result = toBasketRowResult(RESULT);
-
-    expect(result?.replacedRowKey).toBeNull();
-    expect(result?.skippedCount).toBe(0);
+  it('reads a row with no product as null, and an old optionIds as no product', () => {
+    expect(toBasketRow({ ...ROW, productId: null })?.productId).toBeNull();
+    const { productId: _productId, ...old } = ROW;
     expect(
-      toBasketRowResult({ ...RESULT, replacedRowKey: 'zl-9', skippedCount: 2 })
-    ).toMatchObject({ replacedRowKey: 'zl-9', skippedCount: 2 });
+      toBasketRow({ ...old, optionIds: ['i-milk'] })?.productId
+    ).toBeNull();
   });
 
-  /**
-   * The store folds the answer whole and patches nothing, so an answer it cannot
-   * fold is one it must not half apply: the caller reads the basket again instead.
-   */
-  it('refuses an answer whose row or counts cannot be read', () => {
-    expect(toBasketRowResult({ ...RESULT, row: null })).toBeNull();
-    expect(toBasketRowResult({ ...RESULT, progress: null })).toBeNull();
+  it('reads the new fields of an entry', () => {
+    const act = {
+      participantId: 'p-1',
+      at: '2026-10-14T10:00:00.000Z',
+      outcome: 'BOUGHT',
+    };
+    const [entry] =
+      toBasketRow({
+        ...ROW,
+        entries: [
+          {
+            ...ENTRY,
+            content: 'Leche para el café',
+            itemIds: ['i-milk', 'i-oat', 7],
+            favoriteItemId: 'i-oat',
+            canWrite: true,
+            tripItemId: 'i-milk',
+            skipped: true,
+            closed: true,
+            act,
+          },
+        ],
+      })?.entries ?? [];
+
+    expect(entry).toMatchObject({
+      content: 'Leche para el café',
+      itemIds: ['i-milk', 'i-oat'],
+      favoriteItemId: 'i-oat',
+      canWrite: true,
+      tripItemId: 'i-milk',
+      skipped: true,
+      closed: true,
+      act,
+    });
+  });
+
+  it('reads the missing fields of an older entry as the quiet answer', () => {
+    const [entry] = toBasketRow(ROW)?.entries ?? [];
+
+    expect(entry).toMatchObject({
+      content: '',
+      itemIds: [],
+      favoriteItemId: null,
+      canWrite: false,
+      tripItemId: null,
+      skipped: false,
+      closed: false,
+      act: null,
+    });
+  });
+
+  it('reads an act with no instant as none', () => {
+    const [entry] =
+      toBasketRow({
+        ...ROW,
+        entries: [
+          { ...ENTRY, act: { participantId: 'p-1', outcome: 'BOUGHT' } },
+        ],
+      })?.entries ?? [];
+
+    expect(entry.act).toBeNull();
+  });
+
+  it('keeps an entry with no list, and its list id null', () => {
+    const [entry] =
+      toBasketRow({ ...ROW, entries: [{ ...ENTRY, listId: undefined }] })
+        ?.entries ?? [];
+
+    expect(entry.listId).toBeNull();
+  });
+
+  it('reads BOUGHT_ELSEWHERE as a state of its own', () => {
+    expect(toBasketRow({ ...ROW, state: 'BOUGHT_ELSEWHERE' })?.state).toBe(
+      'BOUGHT_ELSEWHERE'
+    );
   });
 });
 
-describe('toBasketRenameResult', () => {
-  /**
-   * The same shape every write on a row answers, with the wire's `replacedRowKey`
-   * named for what a rename does with it: the earliest line survives a merge, so
-   * the row the request addressed can be the one that went away.
-   */
-  it('names the absorbed row by the key the request used', () => {
-    expect(
-      toBasketRenameResult({
-        row: ROW,
-        progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
-        replacedRowKey: 'zl-9',
-      })
-    ).toMatchObject({ absorbedRowKey: 'zl-9', replacedRowKey: 'zl-9' });
+describe('toBasketRowResult', () => {
+  const RESULT = {
+    entries: [ENTRY],
+    progress: { done: 1, unavailable: 0, total: 3, pending: 2 },
+  };
+
+  it('reads the lines of the write, and no progress', () => {
+    const result = toBasketRowResult(RESULT);
+
+    expect(result?.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
+    expect(result).not.toHaveProperty('progress');
   });
 
-  it('answers a null absorbed row when nothing merged', () => {
+  it('reads an absent skippedCount as zero', () => {
+    expect(toBasketRowResult(RESULT)?.skippedCount).toBe(0);
     expect(
-      toBasketRenameResult({
-        row: ROW,
-        progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
-      })?.absorbedRowKey
-    ).toBeNull();
+      toBasketRowResult({ ...RESULT, skippedCount: 2 })?.skippedCount
+    ).toBe(2);
+  });
+
+  /** An empty array is an answer: every named line left the basket. */
+  it('reads an empty entries array as an answer', () => {
+    expect(toBasketRowResult({ entries: [] })?.entries).toEqual([]);
+  });
+
+  it('refuses an answer with no entries array, and drops an entry it cannot read', () => {
+    expect(toBasketRowResult({ ...RESULT, entries: null })).toBeNull();
+    expect(toBasketRowResult(null)).toBeNull();
+    expect(
+      toBasketRowResult({ entries: [ENTRY, { listId: 'l-1' }] })?.entries
+    ).toHaveLength(1);
+  });
+});
+
+describe('toBasketProductLists', () => {
+  const LIST = {
+    listId: 'l-2',
+    listName: 'Despensa',
+    zoneId: 'z-1',
+    zoneName: 'Casa',
+    lineId: 'zl-8',
+    lineName: 'Leche',
+    quantity: 0,
+  };
+
+  it('reads a list with its line at zero', () => {
+    expect(toBasketProductLists({ lists: [LIST] })).toEqual([LIST]);
+  });
+
+  it('reads a list with no line as three nulls', () => {
+    expect(
+      toBasketProductLists({
+        lists: [{ ...LIST, lineId: null, lineName: null, quantity: null }],
+      })
+    ).toEqual([{ ...LIST, lineId: null, lineName: null, quantity: null }]);
+  });
+
+  it('drops the line fields together when the line has no id', () => {
+    expect(
+      toBasketProductLists({ lists: [{ ...LIST, lineId: null }] })?.[0]
+    ).toMatchObject({ lineId: null, lineName: null, quantity: null });
+  });
+
+  it('drops a list it cannot name, and refuses a body with no lists', () => {
+    expect(
+      toBasketProductLists({ lists: [LIST, { ...LIST, listName: null }] })
+    ).toHaveLength(1);
+    expect(toBasketProductLists({})).toBeNull();
+    expect(toBasketProductLists(null)).toBeNull();
   });
 });
 
@@ -508,34 +610,43 @@ describe('toBasketMergeRequired', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * A row somebody bought outside this shopping list (velista `0131`, `0142`;
+ * backend `0203`).
  *
- * Backend `0188` keeps the row and says how many were bought elsewhere. Before
- * this build read the field, such a row arrived as a done row saying "0 of 0".
+ * The state `BOUGHT_ELSEWHERE` and the note that says where the buy came from.
  */
-describe('toBasketRow: bought on another basket (velista 0131)', () => {
+describe('toBasketRow: bought outside this shopping list (velista 0142)', () => {
   const ELSEWHERE = {
     ...ROW,
     left: 0,
     bought: 0,
     asked: 0,
     boughtElsewhere: 2,
-    state: 'DONE',
+    state: 'BOUGHT_ELSEWHERE',
     note: 'BOUGHT_ON_ANOTHER_BASKET',
     noteAt: '2026-10-04T10:00:00.000Z',
+    mark: 'CHANGED',
     entries: [
-      { ...ENTRY, left: 0, bought: 0, boughtElsewhere: 2, state: 'DONE' },
+      {
+        ...ENTRY,
+        left: 0,
+        bought: 0,
+        boughtElsewhere: 2,
+        state: 'BOUGHT_ELSEWHERE',
+      },
     ],
   };
 
-  it('reads the count on the row and on each entry', () => {
+  it('reads the state and the count on the row and on each entry', () => {
     const row = toBasketRow(ELSEWHERE);
 
+    expect(row?.state).toBe('BOUGHT_ELSEWHERE');
+    expect(row?.entries[0].state).toBe('BOUGHT_ELSEWHERE');
+    expect(row?.mark).toBe('CHANGED');
     expect(row?.boughtElsewhere).toBe(2);
     expect(row?.entries[0].boughtElsewhere).toBe(2);
     // This basket's own numbers keep their meaning beside it.
     expect(row?.bought).toBe(0);
-    expect(row?.state).toBe('DONE');
   });
 
   it('maps the note, and keeps the moment behind it', () => {
@@ -543,6 +654,25 @@ describe('toBasketRow: bought on another basket (velista 0131)', () => {
 
     expect(row?.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
     expect(row?.noteAt).toEqual(new Date('2026-10-04T10:00:00.000Z'));
+  });
+
+  it('maps a buy on the list page to its own note', () => {
+    expect(
+      toBasketRow({ ...ELSEWHERE, note: 'BOUGHT_ON_THE_LIST' })?.note
+    ).toBe('BOUGHT_ON_THE_LIST');
+  });
+
+  /** Backend `0203` keeps a removed row for six hours, with no mark once it was seen. */
+  it('reads a REMOVED row with no mark', () => {
+    const row = toBasketRow({
+      ...ROW,
+      state: 'REMOVED',
+      mark: null,
+      entries: [],
+    });
+
+    expect(row?.state).toBe('REMOVED');
+    expect(row?.mark).toBeNull();
   });
 
   /** A gateway without backend `0188` behind it sends no such field. */

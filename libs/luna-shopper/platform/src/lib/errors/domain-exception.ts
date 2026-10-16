@@ -518,8 +518,8 @@ export const CATEGORY_UNKNOWN_DETAIL = 'unknown';
 
 /**
  * An id named no shop section (plan 0167, section 4). It publishes what
- * matched nothing under {@link SECTION_UNKNOWN_DETAIL}, a list, because a
- * shop's list and a pin each name several.
+ * matched nothing under {@link SECTION_UNKNOWN_DETAIL}, a list, because the
+ * order of a shop names several.
  */
 export class SectionNotFoundException extends DomainException {
   readonly code = ERROR_CODES.SECTION_NOT_FOUND;
@@ -527,18 +527,18 @@ export class SectionNotFoundException extends DomainException {
 }
 
 /**
- * A shop's list or a pin named a section of another chain (plan 0167, section
- * 1). It publishes the offending sections under
- * {@link SECTION_OTHER_CHAIN_DETAIL}, a list, so the back office can say which
- * ones rather than only that one of them was wrong.
+ * The order of a shop named a section of another shop (plan 0200). It
+ * publishes the offending sections under {@link SECTION_OTHER_SHOP_DETAIL}, a
+ * list, so the back office can say which ones rather than only that one of
+ * them was wrong.
  */
-export class SectionOfAnotherChainException extends DomainException {
-  readonly code = ERROR_CODES.SECTION_OF_ANOTHER_CHAIN;
+export class SectionOfAnotherShopException extends DomainException {
+  readonly code = ERROR_CODES.SECTION_OF_ANOTHER_SHOP;
   override readonly exposesDetails = true;
 }
 
 /**
- * The chain already has a section with this slug (plan 0167, section 1). It
+ * The shop already has a section with this slug (plan 0167, section 1). It
  * publishes the holder's id under {@link SECTION_SLUG_HOLDER_DETAIL}, for the
  * reason {@link BrandKeyTakenException} publishes its holder: the back office's
  * next act is to open it.
@@ -629,6 +629,52 @@ export class ShopMapTooLargeException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** Support sessions are switched off in this deployment (plan 0194). */
+export class ImpersonationDisabledException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_DISABLED;
+}
+
+/**
+ * The handoff code of a support session was not accepted (plan 0194). Thrown
+ * for every reason alike. See `ERROR_CODES.IMPERSONATION_CODE_INVALID`.
+ */
+export class ImpersonationCodeInvalidException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_CODE_INVALID;
+}
+
+/** The token belongs to a support session that is over (plan 0194). */
+export class ImpersonationEndedException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_ENDED;
+}
+
+/** A support session called a route that only the person may use (plan 0194). */
+export class ImpersonationNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.IMPERSONATION_NOT_ALLOWED;
+}
+
+/** The token that asked to end a support session belongs to none (plan 0194). */
+export class NotImpersonatingException extends DomainException {
+  readonly code = ERROR_CODES.NOT_IMPERSONATING;
+}
+
+/**
+ * A live sign in link was opened by another signed in account, which did not
+ * agree to leave (plan 0210). Nothing was spent.
+ */
+export class RecoveryOtherAccountException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_OTHER_ACCOUNT;
+}
+
+/** An operator asked for a reset grant for an account with no address (plan 0210). */
+export class RecoveryNeedsEmailException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_NEEDS_EMAIL;
+}
+
+/** An operator asked for a reset grant for a Google only account (plan 0210). */
+export class RecoveryNeedsPasswordException extends DomainException {
+  readonly code = ERROR_CODES.RECOVERY_NEEDS_PASSWORD;
+}
+
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
 export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
 
@@ -648,10 +694,10 @@ export const PERMISSION_REQUIRED_DETAIL = 'permission';
 export const SECTION_UNKNOWN_DETAIL = 'unknown';
 
 /**
- * The `details` key a {@link SectionOfAnotherChainException} lists the
- * sections of another chain under.
+ * The `details` key a {@link SectionOfAnotherShopException} lists the
+ * sections of another shop under.
  */
-export const SECTION_OTHER_CHAIN_DETAIL = 'sectionIds';
+export const SECTION_OTHER_SHOP_DETAIL = 'sectionIds';
 
 /**
  * The `details` key a {@link SectionSlugTakenException} names the section

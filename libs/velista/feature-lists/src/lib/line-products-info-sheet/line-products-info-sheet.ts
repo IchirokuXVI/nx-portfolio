@@ -1,0 +1,87 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { LineStore } from '@portfolio/velista/data-access';
+import { SheetNavigation } from '@portfolio/velista/platform';
+import { SheetShell } from '@portfolio/velista/ui';
+import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { lineUrls } from '../line-page/line-urls';
+import { watchLineName } from '../line-page/line-name';
+
+/**
+ * What the info button beside "Any of these will do" says (velista `0137`,
+ * section 3).
+ *
+ * A line can hold several products and a shopper is shown one. Four sentences say
+ * which: the favourite when the line has one, whatever it costs, and the cheapest
+ * when it has none. The cards of the line page are in that same order, so the
+ * first card is the answer.
+ *
+ * **It never says "basket".** The app calls that screen "Shopping list", in the
+ * bar at the foot and in its own title, and a sheet that explained one word with
+ * another nobody has seen would explain nothing.
+ *
+ * Words only, and nothing to write, so it holds no state of its own.
+ */
+@Component({
+  selector: 'lib-line-products-info-sheet',
+  imports: [RokuTranslatorPipe, SheetShell, LineGoneNotice],
+  template: `
+    <lib-sheet-shell (dismiss)="dismiss()" labelledBy="line-products-info-title">
+      @if (gone.reason(); as reason) {
+        <lib-line-gone-notice
+          (closed)="gone.acknowledge()"
+          [reason]="reason"
+          titleId="line-products-info-title"
+        />
+      } @else {
+        <h2 class="title" id="line-products-info-title">
+          {{ 'list.page.about.title' | rokuT }}
+        </h2>
+
+        <p class="say">
+          {{ 'list.page.about.any' | rokuT: { line: lineName() } }}
+        </p>
+        <p class="say">{{ 'list.page.about.favorite' | rokuT }}</p>
+        <p class="say">{{ 'list.page.about.cheapest' | rokuT }}</p>
+        <p class="say">{{ 'list.page.about.order' | rokuT }}</p>
+
+        <button (click)="dismiss()" class="secondary" type="button">
+          {{ 'list.page.about.close' | rokuT }}
+        </button>
+      }
+    </lib-sheet-shell>
+  `,
+  styleUrl: './line-products-info-sheet.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class LineProductsInfoSheet {
+  private readonly _lines = inject(LineStore);
+  private readonly _sheet = inject(SheetNavigation);
+  private readonly _urls = lineUrls();
+
+  readonly gone = watchLineGone({
+    listId: this._urls.listId,
+    lineId: this._urls.lineId,
+    close: () => this.dismiss(),
+  });
+
+  /** The line the sentences are about, or nothing while it has not arrived. */
+  private readonly _name = watchLineName(() =>
+    this._lines
+      .linesIn(this._urls.listId())
+      .find((line) => line.id === this._urls.lineId())
+  );
+
+  /** The name the line is drawn with (velista `0144`). */
+  readonly lineName = computed(() => this._name()?.text ?? '');
+
+  /** Close, Escape, the scrim, and the back button all arrive here. */
+  async dismiss(): Promise<void> {
+    await this._sheet.dismiss(this._urls.line());
+  }
+}

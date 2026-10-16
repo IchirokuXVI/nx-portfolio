@@ -124,6 +124,18 @@ export class AppHistory {
   }
 
   /**
+   * Where this entry stands among the ones this document pushed: `-1` for the
+   * entry the document loaded on, `0` for the first push above it, and so on.
+   *
+   * A screen that sends somebody through several pages and wants them back
+   * records this before it leaves, and `PageNavigation.backTo` walks back to it.
+   * Unwatched it is always `-1`, which makes every such walk fall back to its URL.
+   */
+  depth(): number {
+    return this._cursor;
+  }
+
+  /**
    * A popstate is applied here rather than on the way out, because the browser has
    * already moved by the time it is announced and the navigation it starts may never
    * end: a guard can redirect it, and the redirect replaces the entry we have already

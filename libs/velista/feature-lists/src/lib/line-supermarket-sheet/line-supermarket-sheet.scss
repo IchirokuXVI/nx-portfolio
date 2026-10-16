@@ -1,0 +1,80 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+.body {
+  margin-block-end: var(--app-space-4);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+}
+
+// The whole row is the target, so the tap area is the supermarket and not the dot.
+// Hairlines and no card: the sheet is already the container.
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: calc(var(--app-touch-target) + var(--app-space-5));
+  padding-block: var(--app-space-3);
+  cursor: pointer;
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+
+  &.is-waiting {
+    cursor: default;
+  }
+
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The native radio, kept: it is what makes this a group to a screen reader and to
+// the arrow keys. The checked dot is the one mark of the choice.
+.control {
+  flex: none;
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  margin: 0;
+  accent-color: var(--app-action-quiet-fg);
+}
+
+.what {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.name {
+  display: block;
+  font-size: var(--app-text-base);
+  line-height: 1.2;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  display: block;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.price {
+  flex: none;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+// What the rows could not say: still reading, or counted over part of the line.
+.note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}

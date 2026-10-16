@@ -1,0 +1,249 @@
+@use '../list-page' as page;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// The one scroll container. The page header is the item of the host before it.
+.page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 0;
+  padding-block-end: var(--app-space-8);
+  overflow-y: auto;
+}
+
+.content {
+  padding-inline: var(--app-space-5);
+}
+
+.where {
+  margin: var(--app-space-5) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+// The two scopes. The pressed one is the raised surface on the sunken track, and it
+// says so with `aria-pressed`, so the state is not carried by the surface alone.
+.scopes {
+  display: flex;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-5);
+  padding: var(--app-space-2);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.scope {
+  flex: 1;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+
+  &[aria-pressed='true'] {
+    border-color: var(--app-border-subtle);
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+
+  @include page.focus-ring;
+}
+
+// Three figures side by side, a hairline between them and no box around them.
+.facts {
+  display: flex;
+  margin: var(--app-space-6) 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    flex: 1;
+    min-inline-size: 0;
+    padding-inline-start: var(--app-space-4);
+    border-inline-start: 1px solid var(--app-border-subtle);
+
+    &:first-child {
+      padding-inline-start: 0;
+      border-inline-start: 0;
+    }
+  }
+}
+
+.fact-value {
+  display: block;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+.fact-label {
+  display: block;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.month {
+  margin-block-start: var(--app-space-7);
+}
+
+.month-title {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--app-text-primary);
+}
+
+// One card for each month. The rows are separated inside it by hairlines.
+.card {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+
+  li + li {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: calc(var(--app-touch-target) + var(--app-space-5));
+  padding: var(--app-space-3) var(--app-space-5);
+}
+
+// The day of the month, in a column of its own so the sentences line up.
+.day {
+  flex: none;
+  inline-size: var(--app-space-7);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
+.what {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.sentence {
+  display: block;
+  line-height: 1.2;
+  color: var(--app-text-primary);
+
+  // "Found none": the danger text, and the words say it too.
+  &.is-none {
+    color: var(--app-status-danger-fg);
+  }
+}
+
+.product {
+  display: block;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.price {
+  flex: none;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+// A purchase somebody took back stays in the history, quieter, and says so in
+// words. Never struck through, which would read as deleted.
+.row.is-reverted {
+  .sentence,
+  .price {
+    color: var(--app-text-muted);
+  }
+}
+
+.older {
+  display: block;
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-4);
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include page.focus-ring;
+}
+
+.empty {
+  margin: var(--app-space-7) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.bones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-7);
+}
+
+.bone {
+  display: block;
+  block-size: calc(var(--app-touch-target) + var(--app-space-5));
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bone {
+    animation: pulse var(--app-motion-slow) var(--app-motion-ease) infinite
+      alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.55;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

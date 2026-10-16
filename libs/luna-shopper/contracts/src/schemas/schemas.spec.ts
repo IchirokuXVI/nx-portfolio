@@ -34,6 +34,10 @@ import {
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../lib/messages/harvest.messages';
 import {
+  IMPERSONATION_EVENTS,
+  IMPERSONATION_PATTERNS,
+} from '../lib/messages/impersonation.messages';
+import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
@@ -47,7 +51,10 @@ import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
 } from '../lib/messages/zone.messages';
+import { buildAsyncApiDocument } from './asyncapi';
+import { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
 import {
+  AUTH_SCHEMA_IDS,
   createContractsAjv,
   eventContracts,
   messageContracts,
@@ -55,7 +62,9 @@ import {
   validateMessageRequest,
   validateMessageResponse,
 } from './index';
+import { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
+import { validateSchema } from './validator';
 
 /** A product's leaf as every item view carries it (plan 0166, section 3). */
 const MILK_CATEGORY = {
@@ -78,6 +87,8 @@ describe('contract schemas', () => {
       ...Object.values(ADMIN_AUTH_PATTERNS),
       // The back office's own reads and named actions (plan 0074).
       ...Object.values(ADMIN_USER_PATTERNS),
+      // Support sessions (plan 0194).
+      ...Object.values(IMPERSONATION_PATTERNS),
       ...Object.values(ADMIN_ZONE_PATTERNS),
       ...Object.values(ADMIN_MEMBERSHIP_PATTERNS),
       ...Object.values(ADMIN_LIST_PATTERNS),
@@ -127,6 +138,7 @@ describe('contract schemas', () => {
 
     const allEventNames = [
       ...Object.values(IDENTITY_EVENTS),
+      ...Object.values(IMPERSONATION_EVENTS),
       ...Object.values(RealtimeEvent),
       ...Object.values(POSTAL_CODE_EVENTS),
     ];
@@ -152,6 +164,50 @@ describe('contract schemas', () => {
           accessToken: 'a',
           refreshToken: 'r',
         }).valid
+      ).toBe(true);
+    });
+
+    it('a support session: the start, the exchange and the act claim (plan 0194)', () => {
+      const ajv = createContractsAjv();
+      const claims = ajv.getSchema(AUTH_SCHEMA_IDS.accessTokenClaims);
+      const act = { sub: 'admin', sid: 'session', until: 1_800_000_000 };
+
+      // An ordinary token has no `act`, and a token of a session has all three.
+      expect(claims?.({ sub: 'u', kind: 'REGISTERED' })).toBe(true);
+      expect(claims?.({ sub: 'u', kind: 'REGISTERED', act })).toBe(true);
+      expect(
+        claims?.({ sub: 'u', kind: 'REGISTERED', act: { sub: 'admin' } })
+      ).toBe(false);
+
+      expect(
+        validateMessageRequest('auth.impersonation.start', {
+          userId: 'admin',
+          adminToken: 't',
+          targetUserId: 'u',
+          reason: 'OTHER',
+          note: 'reproducing a report',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('auth.impersonation.start', {
+          userId: 'admin',
+          targetUserId: 'u',
+          reason: 'CURIOSITY',
+        }).valid
+      ).toBe(false);
+      // The exchange answers the pair every other flow answers.
+      expect(
+        validateMessageResponse('auth.impersonation.exchange', {
+          userId: 'u',
+          kind: 'REGISTERED',
+          username: 'Quiet Lantern',
+          accessToken: 'a',
+          refreshToken: 'r',
+        }).valid
+      ).toBe(true);
+      // The end may name no session: an ordinary token carries none.
+      expect(
+        validateMessageRequest('auth.impersonation.end', { userId: 'u' }).valid
       ).toBe(true);
     });
 
@@ -312,6 +368,11 @@ describe('contract schemas', () => {
             // reason (plan 0070, section 9): a hand made line says so.
             productGroupId: null,
             groupItemIds: [],
+            // A new line names no favourite and no chain (plan 0199, rule 7).
+            favoriteItemId: null,
+            preferredSupermarketId: null,
+            // A line with no product is always named (plan 0207, rule 1).
+            named: true,
             position: 1,
             approvalStatus: 'PENDING',
             createdByUserId: 'u',
@@ -351,6 +412,12 @@ describe('contract schemas', () => {
             // (plan 0070, section 9).
             productGroupId: '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52',
             groupItemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
+            // The one product is the favourite, and the line names a chain
+            // (plan 0199, section 1).
+            favoriteItemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+            preferredSupermarketId: '5d0e7a91-3c44-4b1e-9f27-000000000001',
+            // Made from that product, and nobody typed its name (plan 0207).
+            named: false,
             position: 1,
             approvalStatus: 'APPROVED',
             createdByUserId: 'u',
@@ -418,9 +485,138 @@ describe('contract schemas', () => {
               pricePaidCurrency: null,
               priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
               supermarketLocationId: null,
+              // A free text line names no product, so it has no name of one
+              // to copy (plan 0202, section 4).
+              itemSnapshot: null,
             },
           ],
           nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    // Plan 0202, section 4: a history serves what the product was called when
+    // it was bought, beside its id.
+    const settlementRow = (itemSnapshot: unknown) => ({
+      id: 's',
+      lineId: 'l',
+      listId: 'li',
+      itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+      outcome: 'BOUGHT',
+      quantity: 2,
+      settledByUserId: 'u',
+      settledByParticipantId: null,
+      settledAt: '2026-01-01T00:00:00.000Z',
+      revertedAt: null,
+      pricePaidCents: 95,
+      pricePaidCurrency: 'EUR',
+      priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+      supermarketLocationId: null,
+      itemSnapshot,
+    });
+
+    it('line.settlements response with the name of the product (plan 0202)', () => {
+      expect(
+        validateMessageResponse('line.settlements', {
+          items: [
+            settlementRow({
+              name: { en: 'Whole milk', es: 'Leche entera' },
+              brand: 'Hacendado',
+              unitSize: 1,
+              packCount: 6,
+              defaultUnit: 'LITER',
+            }),
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('refuses a snapshot that carries a field the copy does not have', () => {
+      expect(
+        validateMessageResponse('line.settlements', {
+          items: [
+            settlementRow({
+              name: { en: 'Whole milk' },
+              brand: null,
+              unitSize: null,
+              packCount: null,
+              defaultUnit: 'UNIT',
+              sku: 'not copied',
+            }),
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('basket.lines.product request, as the gateway builds it', () => {
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: ['l1', 'l2'],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: false,
+          itemSnapshot: {
+            name: { es: 'Leche entera' },
+            brand: null,
+            unitSize: 1,
+            packCount: null,
+            defaultUnit: 'LITER',
+          },
+          prices: [
+            {
+              priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+              pricePaidCents: 95,
+              pricePaidCurrency: 'EUR',
+            },
+          ],
+          paid: {
+            priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+            supermarketLocationId: null,
+            pricePaidCents: 95,
+            pricePaidCurrency: 'EUR',
+          },
+        }).valid
+      ).toBe(true);
+      // The three the gateway writes are optional: a change with no buy to
+      // rewrite sends none of them.
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: ['l1'],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: true,
+        }).valid
+      ).toBe(true);
+      // No line named is no write.
+      expect(
+        validateMessageRequest('basket.lines.product', {
+          basketId: 'b',
+          participantId: 'p',
+          userId: 'u',
+          lineIds: [],
+          itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          keep: true,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('basket.searchScope response with the buys of the trip (plan 0202)', () => {
+      expect(
+        validateMessageResponse('basket.searchScope', {
+          ownerUserId: 'u',
+          profileId: null,
+          servesLocations: true,
+          supermarketLocationId: null,
+          tripBuys: {
+            priceScopeIds: ['b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73'],
+            unscoped: true,
+          },
         }).valid
       ).toBe(true);
     });
@@ -488,6 +684,7 @@ describe('contract schemas', () => {
       const row = {
         rowKey: 'l-1',
         content: 'Milk',
+        productId: null,
         left: 1,
         bought: 0,
         asked: 1,
@@ -497,43 +694,48 @@ describe('contract schemas', () => {
         noteAt: null,
         mark: null,
         awaitingApproval: false,
-        optionIds: [],
         touchedBy: null,
         touchedAt: null,
         entries: [],
       };
-      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      // Asked of the row itself. The answer of a write carried a row before
+      // plan 0201, and it carries the entries of its lines now.
       const answer = (usual: unknown) =>
-        validateMessageResponse('basket.row.settle', {
-          row: { ...row, usual },
-          progress,
-        }).valid;
+        validateSchema(BASKET_SCHEMA_IDS.rowView, { ...row, usual }).valid;
 
       expect(answer(null)).toBe(true);
       expect(answer({ state: 'HERE', bought: 2, of: 6 })).toBe(true);
       expect(answer({ state: 'NEVER_BOUGHT', bought: 0, of: 0 })).toBe(true);
       expect(answer({ state: 'NO_SHOP_KNOWN', bought: 0, of: 3 })).toBe(true);
       // Required and nullable, so "no shop" is never mistaken for "not told".
-      expect(
-        validateMessageResponse('basket.row.settle', { row, progress }).valid
-      ).toBe(false);
+      expect(validateSchema(BASKET_SCHEMA_IDS.rowView, row).valid).toBe(false);
       // Counts only: seven is past the window, and nothing else may ride along.
       expect(answer({ state: 'HERE', bought: 7, of: 7 })).toBe(false);
 
       // What another basket bought is required on a row and on each entry, and
       // the note that says so is one of the two a row may carry (plan 0188).
       const elsewhere = (over: Record<string, unknown>) =>
-        validateMessageResponse('basket.row.settle', {
-          row: { ...row, usual: null, ...over },
-          progress,
+        validateSchema(BASKET_SCHEMA_IDS.rowView, {
+          ...row,
+          usual: null,
+          ...over,
         }).valid;
       const entry = {
         lineId: 'l-1',
+        version: 4,
         left: 0,
         bought: 0,
         boughtElsewhere: 2,
         state: 'DONE',
         approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: null,
+        tripItemId: null,
+        content: 'Milk',
+        itemIds: [],
+        favoriteItemId: null,
+        canWrite: true,
         demandEditable: true,
       };
       expect(
@@ -557,6 +759,365 @@ describe('contract schemas', () => {
       expect(
         answer({ state: 'HERE', bought: 1, of: 1, supermarketId: 's-1' })
       ).toBe(false);
+    });
+
+    it('a basket row is a product, and a write names its lines (plan 0201)', () => {
+      const entry = {
+        lineId: 'l-1',
+        version: 4,
+        left: 1,
+        bought: 1,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: null,
+        tripItemId: 'i-9',
+        content: 'Milk',
+        itemIds: ['i-1', 'i-2'],
+        favoriteItemId: null,
+        canWrite: false,
+        demandEditable: true,
+      };
+      const row = {
+        rowKey: 'l-1',
+        content: 'Milk',
+        productId: 'i-9',
+        left: 1,
+        bought: 1,
+        asked: 2,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        note: null,
+        noteAt: null,
+        mark: null,
+        awaitingApproval: false,
+        touchedBy: null,
+        touchedAt: null,
+        entries: [entry],
+        usual: null,
+      };
+      const rowValid = (over: Record<string, unknown>) =>
+        validateSchema(BASKET_SCHEMA_IDS.rowView, { ...row, ...over }).valid;
+
+      expect(rowValid({})).toBe(true);
+      expect(rowValid({ productId: null })).toBe(true);
+      // Required and nullable: a row by name says so.
+      expect(rowValid({ productId: undefined })).toBe(false);
+      // The union of the product sets left the wire.
+      expect(rowValid({ optionIds: ['i-1'] })).toBe(false);
+      for (const field of [
+        'content',
+        'itemIds',
+        'favoriteItemId',
+        'canWrite',
+        'tripItemId',
+      ]) {
+        expect(rowValid({ entries: [{ ...entry, [field]: undefined }] })).toBe(
+          false
+        );
+      }
+      // Redaction by absence: only an entry on a served list names it.
+      expect(rowValid({ entries: [{ ...entry, listId: 'list-1' }] })).toBe(
+        true
+      );
+
+      // What a write answers: the lines, the progress, and no row.
+      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      const result = (payload: unknown) =>
+        validateMessageResponse('basket.row.settle', payload).valid;
+      expect(result({ entries: [entry], progress })).toBe(true);
+      // A line that left the basket is absent, so no entry is an answer.
+      expect(result({ entries: [], progress })).toBe(true);
+      expect(result({ entries: [entry], progress, skippedCount: 1 })).toBe(
+        true
+      );
+      expect(result({ progress })).toBe(false);
+      expect(result({ entries: [entry], progress, row })).toBe(false);
+      expect(
+        result({ entries: [entry], progress, replacedRowKey: 'l-2' })
+      ).toBe(false);
+
+      // Every write names its lines, one at least and each one time.
+      const settle = (over: Record<string, unknown>) =>
+        validateMessageRequest('basket.row.settle', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          rowKey: 'l-1',
+          lineIds: ['l-1', 'l-2'],
+          outcome: 'BOUGHT',
+          quantity: 1,
+          from: 2,
+          ...over,
+        }).valid;
+      expect(settle({})).toBe(true);
+      expect(settle({ itemId: 'i-9' })).toBe(true);
+      expect(settle({ lineIds: undefined })).toBe(false);
+      expect(settle({ lineIds: [] })).toBe(false);
+      expect(settle({ lineIds: ['l-1', 'l-1'] })).toBe(false);
+      expect(
+        settle({ lineIds: Array.from({ length: 100 }, (_, i) => `l-${i}`) })
+      ).toBe(true);
+      expect(
+        settle({ lineIds: Array.from({ length: 101 }, (_, i) => `l-${i}`) })
+      ).toBe(false);
+
+      const named = { basketId: 'b-1', participantId: 'p-1', rowKey: 'l-1' };
+      expect(
+        validateMessageRequest('basket.row.revert', {
+          ...named,
+          target: 'CLOSE',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.revert', {
+          ...named,
+          lineIds: ['l-1'],
+          target: 'CLOSE',
+        }).valid
+      ).toBe(true);
+      // Both directions of a skip share one schema, which plan 0201
+      // registered: it was declared before and left out of the list.
+      for (const pattern of ['basket.row.skip', 'basket.row.unskip']) {
+        expect(
+          validateMessageRequest(pattern, { ...named, lineIds: ['l-1'] }).valid
+        ).toBe(true);
+        expect(validateMessageRequest(pattern, { ...named }).valid).toBe(false);
+      }
+      expect(
+        validateMessageRequest('basket.row.rename', {
+          ...named,
+          userId: 'u-1',
+          content: 'Oat milk',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.rename', {
+          ...named,
+          userId: 'u-1',
+          lineIds: ['l-1'],
+          content: 'Oat milk',
+        }).valid
+      ).toBe(true);
+      // A change of demand names its one line, always.
+      expect(
+        validateMessageRequest('basket.row.demand', {
+          ...named,
+          quantity: 2,
+          from: 0,
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('basket.row.demand', {
+          ...named,
+          lineId: 'l-1',
+          quantity: 2,
+          from: 0,
+        }).valid
+      ).toBe(true);
+
+      // The read carries the picks of the gateway.
+      const picks = [{ lineId: 'l-1', itemId: 'i-2' }];
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          picks,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live', { userId: 'u-1', picks }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          picks: [{ lineId: 'l-1' }],
+        }).valid
+      ).toBe(false);
+
+      // The lines that need a price.
+      expect(
+        validateMessageRequest('basket.priceChoices', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live.priceChoices', { userId: 'u-1' })
+          .valid
+      ).toBe(true);
+      const choices = {
+        basketId: 'b-1',
+        participantId: 'p-1',
+        lines: [{ lineId: 'l-1', itemIds: ['i-1', 'i-2'] }],
+      };
+      for (const pattern of [
+        'basket.priceChoices',
+        'basket.live.priceChoices',
+      ]) {
+        expect(validateMessageResponse(pattern, choices).valid).toBe(true);
+        expect(
+          validateMessageResponse(pattern, { ...choices, lines: [] }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse(pattern, { lines: choices.lines }).valid
+        ).toBe(false);
+      }
+
+      // The lists that can still take a product.
+      expect(
+        validateMessageRequest('basket.productLists', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+          itemId: 'i-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.productLists', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(false);
+      const list = {
+        listId: 'list-1',
+        listName: 'Weekly',
+        zoneId: 'z-1',
+        zoneName: 'Flat',
+        lineId: 'l-1',
+        lineName: 'Milk',
+        quantity: 0,
+      };
+      const lists = (over: Record<string, unknown>) =>
+        validateMessageResponse('basket.productLists', {
+          lists: [{ ...list, ...over }],
+        }).valid;
+      expect(lists({})).toBe(true);
+      // A list that holds no line with the product.
+      expect(lists({ lineId: null, lineName: null, quantity: null })).toBe(
+        true
+      );
+      expect(lists({ quantity: -1 })).toBe(false);
+      expect(lists({ zoneName: undefined })).toBe(false);
+      expect(
+        validateMessageResponse('basket.productLists', { lists: [] }).valid
+      ).toBe(true);
+    });
+
+    it('a basket event states what moved on its lines, and an entry what a patch needs (plan 0204)', () => {
+      const patch = {
+        lineId: 'l-1',
+        version: 4,
+        left: 2,
+        bought: 1,
+        boughtElsewhere: 0,
+        state: 'PARTLY',
+        approvalStatus: 'APPROVED',
+        skipped: false,
+        closed: false,
+        act: {
+          participantId: 'p-1',
+          at: '2026-10-13T10:00:00.000Z',
+          outcome: 'BOUGHT',
+        },
+        // The product of the buy, which can move the line to another row (plan
+        // 0201, section 1). Required, and null when no buy named one.
+        tripItemId: 'i-1',
+      };
+      const event = (payload: unknown) =>
+        validateSchema(BASKET_SCHEMA_IDS.linesChangedEvent, payload).valid;
+
+      // An envelope written before the plan has the ids alone, and still reads.
+      expect(event({ lineIds: ['l-1'] })).toBe(true);
+      expect(event({ lineIds: [] })).toBe(true);
+      expect(event({ lineIds: ['l-1'], entries: [patch] })).toBe(true);
+      expect(
+        event({ lineIds: ['l-1', 'l-2'], entries: [patch], marksMoved: true })
+      ).toBe(true);
+      // A skip is an act that is no settlement, and nobody may be its actor.
+      expect(
+        event({
+          lineIds: ['l-1'],
+          entries: [
+            {
+              ...patch,
+              skipped: true,
+              state: 'SKIPPED',
+              act: { ...patch.act, participantId: null, outcome: 'SKIPPED' },
+            },
+          ],
+        })
+      ).toBe(true);
+      expect(
+        event({ lineIds: ['l-1'], entries: [{ ...patch, act: null }] })
+      ).toBe(true);
+      expect(
+        event({ lineIds: ['l-1'], entries: [{ ...patch, tripItemId: null }] })
+      ).toBe(true);
+
+      // A room holds guests: a patch names no list, no basket and no account,
+      // and it says nothing that only one reader may be told.
+      for (const leaked of [
+        { listId: 'list-1' },
+        { zoneId: 'z-1' },
+        { basketId: 'b-1' },
+        { userId: 'u-1' },
+        { demandEditable: true },
+        { content: 'Milk' },
+        // What an entry gained with plan 0201 and a room may not carry.
+        { canWrite: true },
+        { itemIds: ['i-1'] },
+        { favoriteItemId: 'i-1' },
+      ]) {
+        expect(
+          event({ lineIds: ['l-1'], entries: [{ ...patch, ...leaked }] })
+        ).toBe(false);
+      }
+      expect(event({ lineIds: ['l-1'], basketId: 'b-1' })).toBe(false);
+      // Every value of a patch is stated: a patch with a field left out could
+      // not be applied without guessing.
+      for (const field of Object.keys(patch)) {
+        expect(
+          event({
+            lineIds: ['l-1'],
+            entries: [{ ...patch, [field]: undefined }],
+          })
+        ).toBe(false);
+      }
+      expect(
+        event({
+          lineIds: ['l-1'],
+          entries: [{ ...patch, act: { ...patch.act, outcome: 'RETURNED' } }],
+        })
+      ).toBe(false);
+
+      // The marks alone: the two numbers of a read, and a mark for each line.
+      expect(
+        validateMessageRequest('basket.changes.marks', {
+          basketId: 'b-1',
+          participantId: 'p-1',
+        }).valid
+      ).toBe(true);
+      const marks = (over: Record<string, unknown>) =>
+        validateMessageResponse('basket.changes.marks', {
+          unseenChangeCount: 2,
+          newestUnseenChangeId: 'c-9',
+          lines: [
+            { lineId: 'l-1', mark: 'ADDED' },
+            { lineId: 'l-2', mark: 'CHANGED' },
+          ],
+          ...over,
+        }).valid;
+      expect(marks({})).toBe(true);
+      expect(
+        marks({ unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] })
+      ).toBe(true);
+      expect(marks({ lines: [{ lineId: 'l-1', mark: 'NEW' }] })).toBe(false);
+      expect(
+        marks({ lines: [{ lineId: 'l-1', mark: 'ADDED', listId: 'x' }] })
+      ).toBe(false);
+      expect(marks({ rows: [] })).toBe(false);
     });
 
     it('supermarketLocation.shopAvailability answers a shop and its three availability states (plan 0163)', () => {
@@ -594,6 +1155,7 @@ describe('contract schemas', () => {
             websiteUrl: null,
             externalBrandKey: null,
             defaultPriceScopeId: null,
+            linkedImagesEnabled: false,
           },
           availability: [
             { itemId: 'i-1', available: true },
@@ -830,6 +1392,120 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('line.update request takes a favourite and a chain, each an id, a null or absent (plan 0199)', () => {
+      const base = { userId: 'u', lineId: 'l' };
+      // Absent leaves both alone, and is the request every older client sends.
+      expect(validateMessageRequest('line.update', base).valid).toBe(true);
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          favoriteItemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+          preferredSupermarketId: '5d0e7a91-3c44-4b1e-9f27-000000000001',
+        }).valid
+      ).toBe(true);
+      // Null clears, so it is a value the request may carry.
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          favoriteItemId: null,
+          preferredSupermarketId: null,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('line.update', { ...base, favoriteItemId: 7 })
+          .valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('line.update', {
+          ...base,
+          preferredSupermarketId: ['chain'],
+        }).valid
+      ).toBe(false);
+    });
+
+    it('a line without its favourite or its chain is not a LineView (plan 0199)', () => {
+      const line = {
+        id: 'l',
+        listId: 'li',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: [],
+        itemSetHash: null,
+        productGroupId: null,
+        groupItemIds: [],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
+        named: true,
+        position: 1,
+        approvalStatus: 'PENDING',
+        createdByUserId: 'u',
+        approvedByUserId: null,
+        version: 1,
+        boughtCount: 0,
+        lastSettlementOutcome: null,
+        claimed: false,
+        claimedByUserId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      expect(validateMessageResponse('line.update', line).valid).toBe(true);
+      // `named` since plan 0207: required for the reason the other two are.
+      for (const field of [
+        'favoriteItemId',
+        'preferredSupermarketId',
+        'named',
+      ]) {
+        const { [field]: _dropped, ...without } = line as Record<
+          string,
+          unknown
+        >;
+        expect(validateMessageResponse('line.update', without).valid).toBe(
+          false
+        );
+      }
+      // A boolean and nothing else: null would read as "not named" on a client.
+      expect(
+        validateMessageResponse('line.update', { ...line, named: null }).valid
+      ).toBe(false);
+    });
+
+    it('every write of a line takes an optional boolean `named` (plan 0207)', () => {
+      const add = { userId: 'u', listId: 'li', content: 'Oat drink' };
+      const requests: [string, Record<string, unknown>][] = [
+        ['line.add', add],
+        ['line.addMany', { userId: 'u', listId: 'li', items: [] }],
+        ['line.update', { userId: 'u', lineId: 'l' }],
+        [
+          'basket.line.add',
+          {
+            basketId: 'b',
+            participantId: 'p',
+            userId: 'u',
+            targetListId: 'li',
+            content: 'Oat drink',
+          },
+        ],
+      ];
+      for (const [pattern, base] of requests) {
+        const withFlag = (named: unknown) =>
+          pattern === 'line.addMany'
+            ? { ...base, items: [{ content: 'Oat drink', named }] }
+            : { ...base, named };
+        const without =
+          pattern === 'line.addMany'
+            ? { ...base, items: [{ content: 'Oat drink' }] }
+            : base;
+
+        expect(validateMessageRequest(pattern, without).valid).toBe(true);
+        expect(validateMessageRequest(pattern, withFlag(false)).valid).toBe(
+          true
+        );
+        expect(validateMessageRequest(pattern, withFlag('no')).valid).toBe(
+          false
+        );
+      }
+    });
+
     it('catalog item.create request + item.search response (plan 0012)', () => {
       expect(
         validateMessageRequest('item.create', {
@@ -847,6 +1523,10 @@ describe('contract schemas', () => {
               name: { en: 'Milk', es: 'Leche' },
               brand: null,
               imageUrl: null,
+              imageSource: null,
+              imageSupermarketId: null,
+              ownImageUrl: null,
+              images: [],
               sku: null,
               ean: null,
               eans: [],
@@ -896,6 +1576,10 @@ describe('contract schemas', () => {
           name: { en: 'Milk', es: 'Leche' },
           brand: null,
           imageUrl: null,
+          imageSource: null,
+          imageSupermarketId: null,
+          ownImageUrl: null,
+          images: [],
           sku: null,
           ean: null,
           eans: [],
@@ -1031,30 +1715,42 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    describe('shop sections (plan 0167)', () => {
+    describe('shop sections (plan 0167, as plan 0200 left it)', () => {
       const section = {
         id: 's-pizzas',
-        supermarketId: 'mercadona',
+        supermarketLocationId: 'loc-1',
         slug: 'pizzas',
         name: { es: 'Pizzas' },
         position: 3,
         categoryIds: ['c-pizzas'],
       };
 
-      it('a section covers roots and leaves, and may cover none', () => {
+      it('a section belongs to a shop, covers roots and leaves, and may cover none', () => {
         const create = (fields: Record<string, unknown>) =>
           validateMessageRequest('section.create', {
             userId: 'owner',
-            supermarketId: 'mercadona',
+            supermarketLocationId: 'loc-1',
             slug: 'frozen',
             name: { en: 'Frozen', es: 'Congelados' },
             ...fields,
           }).valid;
         expect(create({ categoryIds: ['c-frozen', 'c-pizzas'] })).toBe(true);
-        // The middle aisle of whatever is on offer: pins only.
-        expect(create({ categoryIds: [], position: 0 })).toBe(true);
+        // What a map walk creates: an aisle that covers nothing yet.
+        expect(create({ categoryIds: [] })).toBe(true);
         expect(create({})).toBe(false);
         expect(create({ categoryIds: ['c-frozen', 'c-frozen'] })).toBe(false);
+        // A new section goes after the last one, so a create names no place.
+        expect(create({ categoryIds: [], position: 0 })).toBe(false);
+        // A chain has no sections.
+        expect(
+          validateMessageRequest('section.create', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            slug: 'frozen',
+            name: { es: 'Congelados' },
+            categoryIds: [],
+          }).valid
+        ).toBe(false);
 
         // The slug is an identity: an edit cannot carry one.
         expect(
@@ -1073,39 +1769,44 @@ describe('contract schemas', () => {
           }).valid
         ).toBe(false);
 
-        // The back office's reads carry the shop count; nothing requires it.
+        expect(validateMessageResponse('section.get', section).valid).toBe(
+          true
+        );
+        expect(validateMessageResponse('section.create', section).valid).toBe(
+          true
+        );
+        // The chain id and the shop count left with the chain's sections.
+        const { supermarketLocationId: _shop, ...ofNoShop } = section;
+        expect(
+          validateMessageResponse('section.get', {
+            ...ofNoShop,
+            supermarketId: 'mercadona',
+          }).valid
+        ).toBe(false);
         expect(
           validateMessageResponse('section.get', {
             ...section,
             locationCount: 12,
           }).valid
-        ).toBe(true);
-        expect(validateMessageResponse('section.create', section).valid).toBe(
-          true
-        );
-        expect(
-          validateMessageResponse('section.list', {
-            items: [{ ...section, locationCount: 0 }],
-            nextCursor: null,
-          }).valid
-        ).toBe(true);
-        expect(
-          validateMessageRequest('section.list', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            query: 'piz',
-          }).valid
-        ).toBe(true);
+        ).toBe(false);
         expect(
           validateMessageResponse('section.delete', { id: 's-pizzas' }).valid
         ).toBe(true);
       });
 
-      it('a shop’s list is read with no account, and says whose list it is', () => {
+      it('a shop’s list is read with no account, and carries no source', () => {
         expect(
           validateMessageRequest('section.forLocation', {
             supermarketLocationId: 'loc-1',
           }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.forLocation', {
+            sections: [section],
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.forLocation', { sections: [] }).valid
         ).toBe(true);
         for (const source of ['LOCATION', 'CHAIN']) {
           expect(
@@ -1113,14 +1814,8 @@ describe('contract schemas', () => {
               sections: [section],
               source,
             }).valid
-          ).toBe(true);
+          ).toBe(false);
         }
-        expect(
-          validateMessageResponse('section.forLocation', {
-            sections: [],
-            source: 'NONE',
-          }).valid
-        ).toBe(false);
 
         const put = (sectionIds: unknown) =>
           validateMessageRequest('section.setForLocation', {
@@ -1129,53 +1824,20 @@ describe('contract schemas', () => {
             sectionIds,
           }).valid;
         expect(put(['s-pizzas', 's-frozen'])).toBe(true);
-        // Empty returns the shop to its chain's default.
+        // Empty orders nothing, and is still a well formed request.
         expect(put([])).toBe(true);
         expect(put(['s-pizzas', 's-pizzas'])).toBe(false);
         expect(put(undefined)).toBe(false);
       });
 
-      it('a pin names a product and sections of one chain; empty removes it', () => {
-        const pin = (sectionIds: unknown) =>
-          validateMessageRequest('section.setPins', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            itemId: 'i-pizza',
-            sectionIds,
-          }).valid;
-        expect(pin(['s-pizzas'])).toBe(true);
-        expect(pin([])).toBe(true);
-        expect(pin(['s-pizzas', 's-pizzas'])).toBe(false);
-        expect(
-          validateMessageResponse('section.setPins', {
-            supermarketId: 'mercadona',
-            itemId: 'i-pizza',
-            sectionIds: [],
-          }).valid
-        ).toBe(true);
-
-        expect(
-          validateMessageRequest('section.listPins', {
-            userId: 'owner',
-            supermarketId: 'mercadona',
-            sectionId: 's-pizzas',
-          }).valid
-        ).toBe(true);
-        expect(
-          validateMessageResponse('section.listPins', {
-            items: [
-              {
-                supermarketId: 'mercadona',
-                itemId: 'i-pizza',
-                sectionIds: ['s-pizzas'],
-              },
-            ],
-            nextCursor: null,
-          }).valid
-        ).toBe(true);
+      it('no subject lists the sections of a chain, and none pins a product', () => {
+        const subjects = Object.values(SECTION_PATTERNS) as string[];
+        expect(subjects).not.toContain('section.list');
+        expect(subjects).not.toContain('section.listPins');
+        expect(subjects).not.toContain('section.setPins');
       });
 
-      it('the rule answers many products at one shop, naming the step', () => {
+      it('the read answers many products at one shop, and no product is pinned', () => {
         expect(
           validateMessageRequest('section.itemsAtLocation', {
             supermarketLocationId: 'loc-1',
@@ -1189,13 +1851,18 @@ describe('contract schemas', () => {
         ).toBe(false);
         const answer = (step: string) =>
           validateMessageResponse('section.itemsAtLocation', {
-            source: 'CHAIN',
             items: [{ itemId: 'i-pizza', sectionIds: [], step }],
           }).valid;
-        expect(answer('PINNED')).toBe(true);
         expect(answer('COVERED')).toBe(true);
         expect(answer('NONE')).toBe(true);
+        expect(answer('PINNED')).toBe(false);
         expect(answer('GUESSED')).toBe(false);
+        expect(
+          validateMessageResponse('section.itemsAtLocation', {
+            source: 'CHAIN',
+            items: [],
+          }).valid
+        ).toBe(false);
       });
 
       it('a basket product at a shop may carry its sections, and need not', () => {
@@ -1207,6 +1874,10 @@ describe('contract schemas', () => {
           name: { es: 'Pizza' },
           brand: null,
           imageUrl: null,
+          imageSource: null,
+          imageSupermarketId: null,
+          ownImageUrl: null,
+          images: [],
           sku: null,
           ean: null,
           eans: [],
@@ -1289,6 +1960,10 @@ describe('contract schemas', () => {
               name: { en: 'Milk', es: 'Leche' },
               brand: 'Pascual',
               imageUrl: null,
+              imageSource: null,
+              imageSupermarketId: null,
+              ownImageUrl: null,
+              images: [],
               sku: null,
               ean: null,
               eans: [],
@@ -2113,5 +2788,160 @@ describe('what a shop picker row needs (plan 0170)', () => {
     expect(answer([shop])).toBe(true);
     expect(answer([noSections])).toBe(false);
     expect(answer([noLogo])).toBe(false);
+  });
+});
+
+/** Every `$ref` anywhere under a value, depth first. */
+function refsIn(value: unknown, into: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      refsIn(item, into);
+    }
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, inner] of Object.entries(value)) {
+      if (key === '$ref' && typeof inner === 'string') {
+        into.push(inner);
+      } else {
+        refsIn(inner, into);
+      }
+    }
+  }
+  return into;
+}
+
+describe('the AsyncAPI document (plan 0209, section 3.3)', () => {
+  const document = buildAsyncApiDocument() as {
+    channels: Record<string, { subscribe?: { message: { payload: unknown } } }>;
+    components: { schemas: Record<string, unknown> };
+  };
+
+  it('resolves every $ref it holds to one of its own schemas', () => {
+    const refs = refsIn(document);
+    expect(refs.length).toBeGreaterThan(0);
+    const missing = [...new Set(refs)].filter(
+      (ref) => !(ref in document.components.schemas)
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('names the payload of each basket event, and of no other event', () => {
+    const payloadOf = (event: string) =>
+      document.channels[event]?.subscribe?.message.payload;
+    expect(payloadOf(RealtimeEvent.BasketLinesChanged)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope,
+    });
+    expect(payloadOf(RealtimeEvent.BasketUpdated)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope,
+    });
+    // Each envelope's payload is the event's own schema.
+    const envelopePayload = (id: string) =>
+      (
+        document.components.schemas[id] as {
+          properties: { payload: unknown };
+        }
+      ).properties.payload;
+    expect(
+      envelopePayload(DOMAIN_EVENT_SCHEMA_IDS.basketLinesChangedEnvelope)
+    ).toEqual({ $ref: BASKET_SCHEMA_IDS.linesChangedEvent });
+    expect(
+      envelopePayload(DOMAIN_EVENT_SCHEMA_IDS.basketUpdatedEnvelope)
+    ).toEqual({ $ref: BASKET_SCHEMA_IDS.updatedEvent });
+    // Every other domain event still has a payload of any shape.
+    expect(payloadOf(RealtimeEvent.LineAdded)).toEqual({
+      $ref: DOMAIN_EVENT_SCHEMA_IDS.domainEventEnvelope,
+    });
+  });
+
+  it('checks the payload of a basket event against its schema', () => {
+    const envelope = {
+      event: RealtimeEvent.BasketUpdated,
+      eventId: 'e-1',
+      userIds: ['u-1'],
+      basketIds: ['b-1'],
+      payload: {
+        basketId: 'b-1',
+        kind: 'GENERATED',
+        name: null,
+        status: 'FINISHED',
+      },
+    };
+    expect(validateEvent(RealtimeEvent.BasketUpdated, envelope).valid).toBe(
+      true
+    );
+    // The header of a basket names its sources, which a guest may not see.
+    expect(
+      validateEvent(RealtimeEvent.BasketUpdated, {
+        ...envelope,
+        payload: { ...envelope.payload, sources: [] },
+      }).valid
+    ).toBe(false);
+    expect(
+      validateEvent(RealtimeEvent.BasketLinesChanged, {
+        ...envelope,
+        event: RealtimeEvent.BasketLinesChanged,
+        payload: { lineIds: ['l-1'], marksMoved: true },
+      }).valid
+    ).toBe(true);
+    expect(
+      validateEvent(RealtimeEvent.BasketLinesChanged, {
+        ...envelope,
+        event: RealtimeEvent.BasketLinesChanged,
+        payload: { lineIds: ['l-1'], listId: 'list-1' },
+      }).valid
+    ).toBe(false);
+  });
+
+  it('no longer declares the single basketId on the envelope', () => {
+    expect(
+      validateEvent(RealtimeEvent.LineAdded, {
+        event: RealtimeEvent.LineAdded,
+        eventId: 'e-1',
+        basketId: 'b-1',
+        payload: {},
+      }).valid
+    ).toBe(false);
+  });
+});
+
+describe('a basket request carries no default target list (plan 0209, section 3.1)', () => {
+  it('refuses defaultTargetListId on basket.create and basket.update', () => {
+    expect(validateMessageRequest('basket.create', { userId: 'u' }).valid).toBe(
+      true
+    );
+    expect(
+      validateMessageRequest('basket.create', {
+        userId: 'u',
+        defaultTargetListId: null,
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageRequest('basket.update', {
+        userId: 'u',
+        basketId: 'b',
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('basket.update', {
+        userId: 'u',
+        basketId: 'b',
+        defaultTargetListId: 'l',
+      }).valid
+    ).toBe(false);
+  });
+});
+
+describe('a line edit may say what it saw (plan 0209, section 2.2)', () => {
+  it('takes an optional whole number from 0', () => {
+    const edit = { userId: 'u', lineId: 'l', quantity: 3 };
+    expect(validateMessageRequest('line.update', edit).valid).toBe(true);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: 0 }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: -1 }).valid
+    ).toBe(false);
+    expect(
+      validateMessageRequest('line.update', { ...edit, from: 1.5 }).valid
+    ).toBe(false);
   });
 });

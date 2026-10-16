@@ -207,9 +207,27 @@ $app-content-max: 480px;
   // A catalog product's picture on its row (velista 0100, section 3): big enough to
   // tell two cartons apart, and still under the two lines of text beside it.
   --app-product-thumb-size: 52px;
+  // The picture on a row of a list (velista 0145, section 3). The size of a touch
+  // target, because on a line with no product the same square is the button that
+  // chooses one, and the two must not change the row's shape. Its corner is between
+  // the small and the middle radius, as the mock draws it.
+  --app-line-picture-size: var(--app-touch-target);
+  --app-line-picture-radius: 10px;
+  // A row of a list with its two lines: the name and the price, then the product.
+  // Its own token rather than a change to --app-line-row-height, which nine other
+  // components read as the height of one line of a list.
+  --app-line-row-two-line-height: 68px;
+  // How few letters of a product's name survive on a row before its brand and size
+  // start to give way (section 3).
+  --app-line-product-name-min: 4ch;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;
+  // A product of a line, as one card of the rail on the line page (velista 0135,
+  // section 3). The width leaves a third card cut by the edge of a phone, which is
+  // what says the row scrolls. The picture is as tall as the mock draws it.
+  --app-line-product-card-width: 156px;
+  --app-line-product-card-image: 96px;
   // The ring that separates one stacked avatar from the one behind it. Not a
   // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
   --app-avatar-ring: 2px;
@@ -280,6 +298,22 @@ $app-content-max: 480px;
   // width from "0" to "12" or a column of them ripples as the numbers move.
   --app-quantity-width: 52px;
   --app-quantity-height: 40px;
+
+  // The two drawn choices of velista `0140`: a radio ring that closes to a dot, and
+  // the owner's "more stylized and a bit smaller" checkbox, an 18px box ticked in a
+  // 9 by 5 stroke. Their whole row is the target, so neither is a touch target.
+  --app-choice-radio-size: 24px;
+  --app-choice-radio-ring: 1.5px;
+  --app-choice-radio-chosen: 7px;
+  --app-choice-check-size: 18px;
+  --app-choice-check-radius: 6px;
+  --app-choice-tick-width: 9px;
+  --app-choice-tick-height: 5px;
+  --app-choice-tick-stroke: 2px;
+  // The box of a catalog card (velista 0146), as large as the radio beside it.
+  --app-choice-card-check-radius: 7px;
+  --app-choice-card-tick-width: 11px;
+  --app-choice-card-tick-height: 6px;
   // Narrower inside a preview row, which is 38px tall and is a picture rather than a
   // control.
   --app-preview-quantity-width: 34px;
@@ -422,6 +456,21 @@ $app-content-max: 480px;
   // which it never draws over because no card is up while one is open.
   --app-tour-z: 8;
 
+  // The strip of a support session (velista `0133`): the first thing on every screen
+  // while an operator has the app open as a user. Over **every** cover, the sheet's
+  // scrim (10), the account lost panel (20), the tour (8) and the connection screen
+  // (100), because "End" has to work under each of them.
+  --app-support-strip-z: 200;
+  // One row, a touch target tall, plus the top inset, which the strip takes for the
+  // screen while it is up (see `app-layout.scss`). The bar's reason for its own name
+  // for the inset holds here: nothing redefines it.
+  --app-support-strip-row: var(--app-touch-target);
+  --app-support-strip-safe-top: env(safe-area-inset-top, 0px);
+  // How much of the viewport the strip takes. `0px` while no strip is drawn, so every
+  // rule that subtracts it from `100svh` is the same rule in an ordinary tab. The app
+  // root redefines it while the strip is up, and only there.
+  --app-support-strip-height: 0px;
+
   // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
   // in `_themes.scss`; its geometry is not, and is the same in both.
   //
@@ -437,7 +486,8 @@ $app-content-max: 480px;
   --app-sheet-handle-height: 5px;
   // How far a sheet is allowed to grow before it scrolls inside itself. Anything
   // taller than this stops being a sheet over a page and becomes a page.
-  --app-sheet-max-height: 86svh;
+  // Less the strip of a support session, so a full sheet never reaches under it.
+  --app-sheet-max-height: calc(86svh - var(--app-support-strip-height));
 
   // The ambient glow's geometry, which is theme independent the way the sheet's is:
   // Day paints nothing there, but where it would be painted is the same. The values

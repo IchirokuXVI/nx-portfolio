@@ -8,7 +8,11 @@ import { Injectable, signal } from '@angular/core';
  * saying the account is secured and naming the address. Both are drawn in the second
  * frame of their artboard (plan 0009, section 2).
  */
-export type AccountNoticeKind = 'registered' | 'upgraded' | 'deleted';
+export type AccountNoticeKind =
+  | 'registered'
+  | 'upgraded'
+  | 'deleted'
+  | 'passwordChanged';
 
 export interface AccountNoticeState {
   readonly kind: AccountNoticeKind;
@@ -64,6 +68,15 @@ export class AccountNotice {
    */
   setDeleted(): void {
     this._notice.set({ kind: 'deleted', email: '' });
+  }
+
+  /**
+   * Called by the reset page, immediately before navigating home (velista `0148`):
+   * "Password changed. Other devices are signed out." No address, for `setDeleted`'s
+   * reason: the sentence names none.
+   */
+  setPasswordChanged(): void {
+    this._notice.set({ kind: 'passwordChanged', email: '' });
   }
 
   /** The dashboard has said it. It does not say it twice. */

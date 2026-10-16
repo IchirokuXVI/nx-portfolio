@@ -30,6 +30,7 @@ import { THROTTLE_LIMITS, UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { RefuseImpersonation } from '../auth/refuse-impersonation.decorator';
 import { asRejectedCredentials } from '../auth/remote-problem';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
@@ -368,12 +369,19 @@ export class ZoneController {
   }
 
   @Post(':id/members/:membershipId/transfer-ownership')
+  // A support session cannot give a household away (plan 0194): only the new
+  // owner can give it back.
+  @RefuseImpersonation()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiContractResponse(ZONE_PATTERNS.transferOwnership, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, membership: true })
+  @ApiProblemResponses({
+    auth: true,
+    membership: true,
+    impersonation: 'refused',
+  })
   transferOwnership(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,

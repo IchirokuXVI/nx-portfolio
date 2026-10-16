@@ -310,6 +310,14 @@ function checkShape(
 
   operations.forEach((operation, index) => {
     const outcome = outcomes[index];
+    // The type promises these fields, and nothing on the way here enforces
+    // it: the gateway checks types and not kinds, and other callers check
+    // nothing. Every check below reads one of them, so this runs first.
+    const missing = missingField(operation);
+    if (missing !== null) {
+      fail(outcome, BulkOperationErrorCode.MALFORMED_OPERATION, missing);
+      return;
+    }
     if (operation.op === 'createGroup') {
       if (refs.has(operation.ref)) {
         fail(
@@ -383,6 +391,53 @@ function checkShape(
   return outcomes;
 }
 
+/**
+ * The sentence for the first field an operation's kind requires and it lacks,
+ * or null when it carries them all.
+ *
+ * It reads the operation as a plain record, because the point is to catch the
+ * operations whose shape the type only claims.
+ */
+function missingField(operation: unknown): string | null {
+  if (typeof operation !== 'object' || operation === null) {
+    return 'An operation is an object.';
+  }
+  const fields = operation as Record<string, unknown>;
+  if (fields['op'] === 'createGroup') {
+    for (const name of ['ref', 'slug', 'referenceUnit']) {
+      if (!isFilled(fields[name])) {
+        return `A createGroup operation needs ${name}.`;
+      }
+    }
+    if (typeof fields['name'] !== 'object' || fields['name'] === null) {
+      return 'A createGroup operation needs name.';
+    }
+    return null;
+  }
+  if (fields['op'] === 'assignItem') {
+    if (!isFilled(fields['itemId'])) {
+      return 'An assignItem operation needs itemId.';
+    }
+    const expected = fields['expect'];
+    if (typeof expected !== 'object' || expected === null) {
+      return 'An assignItem operation needs expect.';
+    }
+    const groupId = (expected as Record<string, unknown>)['productGroupId'];
+    if (groupId !== null && typeof groupId !== 'string') {
+      return (
+        'An assignItem operation needs expect.productGroupId, a group id or ' +
+        'null for no group.'
+      );
+    }
+    return null;
+  }
+  return 'op must be createGroup or assignItem.';
+}
+
+function isFilled(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0;
+}
+
 function refuseIfAnyFailed(outcomes: ProductGroupAssignmentOutcome[]): void {
   if (outcomes.some((outcome) => outcome.error !== null)) {
     throw new BatchRefused(outcomes);
@@ -392,10 +447,12 @@ function refuseIfAnyFailed(outcomes: ProductGroupAssignmentOutcome[]): void {
 function blankOutcome(
   operation: ProductGroupAssignmentOperation
 ): ProductGroupAssignmentOutcome {
+  // A malformed operation reaches here too, so a field it left out is echoed
+  // as null rather than as undefined.
   return {
     op: operation.op,
-    ref: operation.op === 'createGroup' ? operation.ref : null,
-    itemId: operation.op === 'assignItem' ? operation.itemId : null,
+    ref: operation.op === 'createGroup' ? (operation.ref ?? null) : null,
+    itemId: operation.op === 'assignItem' ? (operation.itemId ?? null) : null,
     groupId: null,
     applied: false,
     error: null,

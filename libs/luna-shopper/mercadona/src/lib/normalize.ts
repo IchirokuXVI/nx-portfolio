@@ -79,6 +79,7 @@ function toListProduct(
     displayName: readString(raw, 'display_name') ?? '',
     packaging: readString(raw, 'packaging'),
     shareUrl: readString(raw, 'share_url'),
+    thumbnail: readString(raw, 'thumbnail'),
     published: readBoolean(raw, 'published') ?? true,
     soldByWeight,
     unitSize: soldByWeight ? null : readUnitSize(price),
@@ -145,6 +146,7 @@ export function normalizeProduct(
     // here: the client turns it into null and the caller records unavailable.
     available: readBoolean(raw, 'published') ?? true,
     sourceUrl: readString(raw, 'share_url'),
+    thumbnail: readString(raw, 'thumbnail'),
     observedAt: options.observedAt ?? new Date(),
   };
 }
@@ -510,6 +512,7 @@ export function unavailableProduct(
     currency: 'EUR',
     available: false,
     sourceUrl: null,
+    thumbnail: null,
     observedAt,
   };
 }

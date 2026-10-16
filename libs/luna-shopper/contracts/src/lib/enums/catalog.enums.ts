@@ -202,3 +202,24 @@ export enum NearbyShopNoPick {
   AMBIGUOUS = 'AMBIGUOUS',
   OUTSIDE_PROFILE = 'OUTSIDE_PROFILE',
 }
+
+/**
+ * Where a photo of a product came from (plan 0198, section 3.1).
+ *
+ * The kind, which is what tells a client that a photo is not ours. Which
+ * chain a `CHAIN` photo came from is `supermarketId` beside it, because
+ * permission to show is held chain by chain.
+ *
+ * Plan 0127 adds its open databases to this enum when it is picked up.
+ */
+export enum ItemImageSource {
+  /** The owner chose it: `items.imageUrl`. */
+  OWNER = 'OWNER',
+  /**
+   * A link to a photo on a chain's own host, as the chain printed it. No
+   * server of ours fetched it and no copy is kept. A client draws it with
+   * `referrerpolicy="no-referrer"` and its own placeholder when the load
+   * fails.
+   */
+  CHAIN = 'CHAIN',
+}

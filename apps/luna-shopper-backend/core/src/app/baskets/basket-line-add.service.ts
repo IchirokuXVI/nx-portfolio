@@ -8,14 +8,14 @@ import {
   type BasketSearchScopeRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  ForbiddenException,
   BasketFinishedException,
+  ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ProfileService } from '../profiles/profile.service';
+import { BasketProductChangeService } from './basket-product-change.service';
 import { servesLocations } from './basket-redaction';
-import { optionIdsOf } from './basket-rows';
 import { resolvePick } from './basket-settle.service';
 import { BasketWriteContext } from './basket-write.context';
 
@@ -56,7 +56,11 @@ export class BasketLineAddService {
     private readonly context: BasketWriteContext,
     private readonly lines: LineService,
     private readonly profiles: ProfileService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Where the buys of a trip were priced, which the gateway asks before a
+    // change of product (plan 0202, section 3). Last, so no positional
+    // construction in a spec has to shift an argument.
+    private readonly productChange: BasketProductChangeService
   ) {}
 
   async add(req: AddBasketLineRequest): Promise<BasketRowResult> {
@@ -94,6 +98,9 @@ export class BasketLineAddService {
       content: req.content,
       quantity: req.quantity,
       itemIds: req.itemIds,
+      // Whether a person typed the name, as it arrived (plan 0207, section
+      // 1.3). `LineService.add` keeps the two rules about it.
+      named: req.named,
       // The basket the line arrived through, on the change record (plan 0138,
       // section 4). Here the actor and the authorized account are the same
       // person, because adding is the one gesture that is not delegated, and the
@@ -105,7 +112,7 @@ export class BasketLineAddService {
     // No announcement of its own (plan 0139, section 3). The add went through
     // `LineService.add`, which announces to every basket covering the list, and
     // this basket is one of them: it had to cover the list to add to it.
-    return opened.result([added.line.id], added.line.id);
+    return opened.result([added.line.id]);
   }
 
   /**
@@ -122,9 +129,7 @@ export class BasketLineAddService {
    * stores none and resolves the owner's default on every request, because a
    * basket that never ends cannot freeze a profile its owner goes on editing.
    */
-  async searchScope(
-    req: BasketSearchScopeRequest
-  ): Promise<BasketSearchScope> {
+  async searchScope(req: BasketSearchScopeRequest): Promise<BasketSearchScope> {
     // Resolved rather than read straight off the row, so a revoked participant
     // cannot use the basket as an open catalog proxy after being thrown out.
     const opened = await this.context.open(req);
@@ -132,7 +137,11 @@ export class BasketLineAddService {
     // what the gateway has to price (plan 0151, section 1). `resolvePick` is
     // the settle's own rule, called the way the settle calls it, so the price
     // and the settlement cannot name two different products.
-    const row = req.rowKey === undefined ? null : await opened.row(req.rowKey);
+    const row =
+      req.lineIds === undefined || req.lineIds.length === 0
+        ? null
+        : await opened.row(req.lineIds[0], req.lineIds);
+    const picked = row === null ? null : resolvePick(row, undefined);
     return {
       ownerUserId: opened.basket.ownerUserId,
       profileId:
@@ -154,11 +163,19 @@ export class BasketLineAddService {
       ...(row === null
         ? {}
         : {
+            // The lines agree on one product or the settle records none
+            // (plan 0201), so there is never a second product to choose from.
             pick: {
-              pickedItemId: resolvePick(row, undefined),
-              optionCount: optionIdsOf(row.entries).length,
+              pickedItemId: picked,
+              optionCount: picked === null ? 0 : 1,
             },
           }),
+      // Where the buys a change of product will rewrite were priced (plan
+      // 0202, section 3). The gateway reads a price at each of those scopes
+      // before it asks for the change, because core reads none.
+      ...(row !== null && req.tripBuys === true
+        ? { tripBuys: await this.productChange.tripBuysOf(opened, row) }
+        : {}),
     };
   }
 }

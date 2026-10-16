@@ -6,6 +6,7 @@ import {
   brandKey,
   HarvestRunMode,
   HarvestRunStatus,
+  ITEM_LINKED_IMAGE_BATCH_MAX,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
@@ -44,7 +45,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
@@ -630,9 +631,10 @@ export class SourceEntryService {
       // The row's count unless the request names one (plan 0162).
       packCount:
         req.packCount === undefined ? (entry.packCount ?? null) : req.packCount,
-      // Never from the chain (plan 0038, section 5.7): `imageUrl` comes from
-      // Open Food Facts or the owner, and is never rehosted from a supermarket's
-      // own photography.
+      // The owner's column, so never the chain's address (plan 0198). The
+      // photo the row states goes to catalog as a link after the bind, where
+      // it names its chain and the switch of that chain decides whether a
+      // shopper is given it.
       imageUrl: null,
       sku: null,
       categoryIds,
@@ -688,7 +690,10 @@ export class SourceEntryService {
     entry.decidedAt = new Date();
     // name, brand and sizeFormat are deliberately untouched (D8).
     const saved = await this.entries.save(entry);
-    await this.afterLeaving(left, saved, null, async () => undefined);
+    // The row names no product now, so its photo link goes (plan 0198).
+    await this.afterLeaving(left, saved, null, () =>
+      left === null ? Promise.resolve() : this.unlinkPhoto(saved)
+    );
     return toSourceCatalogEntryView(saved);
   }
 
@@ -1069,11 +1074,25 @@ export class SourceEntryService {
    * once, at its own door.
    */
   async deleteUndecidedFrom(runId: string): Promise<number> {
-    const result = await this.entries.delete({
+    const doomed = {
       firstRunId: runId,
       lastRunId: runId,
       status: In(QUEUED),
+    };
+    // A deleted row can hold no photo link (plan 0198). An undecided row is
+    // bound to nothing, so it normally holds none. The message is sent
+    // before the delete all the same, so a revert that fails here and is
+    // asked again still knows which rows to name.
+    const rows = await this.entries.find({
+      where: { ...doomed, imageUrl: Not(IsNull()) },
+      select: { id: true },
     });
+    for (let i = 0; i < rows.length; i += ITEM_LINKED_IMAGE_BATCH_MAX) {
+      await this.catalog.unlinkItemImages(
+        rows.slice(i, i + ITEM_LINKED_IMAGE_BATCH_MAX).map((row) => row.id)
+      );
+    }
+    const result = await this.entries.delete(doomed);
     return result.affected ?? 0;
   }
 
@@ -1252,7 +1271,52 @@ export class SourceEntryService {
   ): Promise<PriceWriteOutcome> {
     const outcome = await this.priceWriter.writeNamed(entry);
     await this.availability.writeForEntries([entry]);
+    await this.linkPhoto(entry);
     return outcome;
+  }
+
+  /**
+   * Send catalog the photo the bound row states, as a link (plan 0198,
+   * section 3). The last thing a bind owes, after the prices and the
+   * availability.
+   *
+   * The link is keyed on the row, so a row that was accepted onto another
+   * product moves its link there with this one message. A row that states no
+   * photo sends nothing. The link is saved whatever the switch of the chain
+   * says, and `items.imageUrl` is not written.
+   */
+  private async linkPhoto(entry: SourceCatalogEntry): Promise<void> {
+    if (!entry.itemId || !entry.imageUrl) {
+      return;
+    }
+    const { rejected } = await this.catalog.linkItemImages([
+      {
+        sourceEntryId: entry.id,
+        itemId: entry.itemId,
+        supermarketId: entry.supermarketId,
+        url: entry.imageUrl,
+        runId: entry.lastRunId ?? null,
+      },
+    ]);
+    for (const rejection of rejected) {
+      // The bind stands. The address stays on the row, and the next run
+      // sends it again.
+      this.logger.warn(
+        `Row ${entry.id}, bound to ${entry.itemId}: catalog did not save ` +
+          `its photo link (${rejection.reason}).`
+      );
+    }
+  }
+
+  /**
+   * Remove the photo link of a row that left its product (plan 0198). A row
+   * that states no photo held none, and sends nothing.
+   */
+  private async unlinkPhoto(entry: SourceCatalogEntry): Promise<void> {
+    if (!entry.imageUrl) {
+      return;
+    }
+    await this.catalog.unlinkItemImages([entry.id]);
   }
 
   /**

@@ -8,6 +8,7 @@ import type {
   TripRowOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { ItemSnapshot } from './catalog.messages';
 
 /**
  * Shopping list, line, and comment message contracts (plan 0007). The gateway
@@ -308,6 +309,39 @@ export interface LineView {
    * adoption gesture is what moves an id out of it for good.
    */
   groupItemIds: string[];
+  /**
+   * The one product of {@link itemIds} the household wants, or null (plan 0199,
+   * section 1).
+   *
+   * On the line and not on a product, because a product here is an id and not an
+   * object. It is always one of `itemIds`: every write that takes that product
+   * off the line clears this in the same transaction (section 2, rule 2).
+   *
+   * Not part of the identity of a line. Two lines that differ only here are the
+   * same line, so it is in neither {@link itemSetHash} nor the merge key.
+   */
+  favoriteItemId: string | null;
+  /**
+   * The chain this line is bought at, or null (plan 0199, section 1). A
+   * supermarket and never a shop.
+   *
+   * An opaque catalog id, exactly as an `itemId` is: core never asks the catalog
+   * whether it exists. It does not depend on the products, so it stays when the
+   * set changes and when the set becomes empty. Only an update clears it.
+   */
+  preferredSupermarketId: string | null;
+  /**
+   * Whether a person typed the name of this line (plan 0207, section 1).
+   *
+   * False means that {@link content} is the name a product had when the line
+   * was made, and no person chose it. `content` is present and is read as
+   * before in both cases: this is a fact beside the name and not a second name.
+   *
+   * **A line with no product is always named**, so a reader that draws the
+   * product in place of the name of a line that is not named always has one.
+   * Every line that existed before this plan says true.
+   */
+  named: boolean;
   /**
    * A digest of the sorted distinct {@link itemIds}, or null while the set is
    * empty (plan 0048, section 1.1).
@@ -642,6 +676,8 @@ export interface AddLineRequest {
    * composer.
    */
   productGroupId?: string;
+  /** The same flag {@link AddLinesItem} carries. */
+  named?: boolean;
 }
 
 /**
@@ -669,6 +705,15 @@ export interface AddLinesItem {
   quantity?: number;
   /** The same product set {@link AddLineRequest} carries. */
   itemIds?: string[];
+  /**
+   * Whether a person typed {@link content} (plan 0207, section 1.3). Absent
+   * means true, which is what every caller written before the flag sends.
+   *
+   * False is kept only when the line holds a product: a line with no product
+   * is always named. An add that raises a line that is already there leaves the
+   * flag of that line as it is.
+   */
+  named?: boolean;
 }
 
 /**
@@ -705,6 +750,14 @@ export interface UpdateLineRequest {
   content?: string;
   quantity?: number;
   /**
+   * The quantity the client saw (plan 0209, section 2.2). When present, the
+   * line must still hold it when the edit reads the line under its lock, or
+   * the edit is refused with `stale_quantity` and writes nothing, as the
+   * basket's demand route refuses a stale `from`. Absent, the edit writes
+   * what it was given.
+   */
+  from?: number;
+  /**
    * Replace the line's product set (plan 0048, section 1.1). An empty array
    * clears it and returns the line to free text.
    *
@@ -734,6 +787,36 @@ export interface UpdateLineRequest {
    * ever settle a product onto the person holding the line.
    */
   adoptItemIds?: string[];
+  /**
+   * The favourite product of the line (plan 0199, section 2).
+   *
+   * **Null clears it, and an absent field leaves it alone.** An id must be one
+   * of the products of the line as the set stands after this same update, so one
+   * request can add a product and make it the favourite. Any other id is refused
+   * with `validation_failed`.
+   */
+  favoriteItemId?: string | null;
+  /**
+   * The chain the line is bought at (plan 0199, section 2). Null clears it, and
+   * an absent field leaves it alone. Opaque: core checks its shape and nothing
+   * else.
+   */
+  preferredSupermarketId?: string | null;
+  /**
+   * Whether a person typed the name of the line (plan 0207, section 1.3).
+   *
+   * - **Absent with `content`**: the line becomes named. A write of a name
+   *   that says nothing else means a person typed it.
+   * - **Absent with no `content`**: the flag stays as it is.
+   * - **False with `content`**: the name is taken away, and `content` is the
+   *   name of a product. A new name that another line holds still collides as
+   *   every rename does.
+   * - **False alone**: the flag changes and the name stays.
+   *
+   * A line that this update leaves with no product is named, whatever this
+   * says.
+   */
+  named?: boolean;
   /**
    * Merge this line with the line the new name already belongs to (plan 0112,
    * section 2).
@@ -874,9 +957,10 @@ export interface SettlePick {
   /** The product a settle with no `itemId` records, or null. */
   pickedItemId: string | null;
   /**
-   * How many products the row or line offers. Several and no `itemId` is
-   * refused when the caller named a scope (section 2), because a price cannot
-   * be read for a product nobody named.
+   * How many products the row or line offers. With several and no `itemId`
+   * the settle records no product, so the gateway reads no price and no name
+   * for it. Until plan 0202 that case was refused when the caller named a
+   * scope. No caller's scope is read any more, so nothing is refused.
    */
   optionCount: number;
 }
@@ -912,6 +996,16 @@ export interface SettleLineRequest {
    * showed no price.
    */
   paid?: SettlementPaid;
+  /**
+   * What the product was called when it was bought (plan 0202, section 1).
+   *
+   * Written by the **gateway**, which read the product for its price, and never
+   * by a client. Beside {@link paid} and not inside it, because a product with
+   * no price anywhere still has a name, and `paid` cannot be sent without a
+   * scope. Absent when catalog did not answer in time. Core stores it only on a
+   * settlement that records a product.
+   */
+  itemSnapshot?: ItemSnapshot | null;
   /**
    * The units bought. Required for `BOUGHT`, and refused for `NOT_AVAILABLE`,
    * whose settlement is always zero.
@@ -1020,6 +1114,27 @@ export interface LineSettlementView {
    * section 4.4), and null on every row written before that plan.
    */
   supermarketLocationId: string | null;
+}
+
+/**
+ * A settlement as a history serves it (plan 0202, section 4).
+ *
+ * {@link LineSettlementView} with what the product was called when it was
+ * bought. It is its own view because `LineSettlementView` is also half of the
+ * payload of {@link RealtimeEvent.LineSettled}, and plan 0202 changes no event.
+ *
+ * **A history never serves a row that a correction replaced.** Changing the
+ * product of a buy from the basket marks the old row reverted and writes a new
+ * one beside it. The old row was not given back, so it is left out, and the new
+ * row stands at the same `settledAt`. A plain revert is served marked, as
+ * before.
+ */
+export interface LineSettlementHistoryView extends LineSettlementView {
+  /**
+   * Null on a free text buy, on a buy from before plan 0202, and when catalog
+   * did not answer in time.
+   */
+  itemSnapshot: ItemSnapshot | null;
 }
 
 /**
@@ -1465,7 +1580,7 @@ export interface ListSuggestionsRequest {
 }
 
 export type ListPage = Paginated<ListView>;
-export type LineSettlementPage = Paginated<LineSettlementView>;
+export type LineSettlementPage = Paginated<LineSettlementHistoryView>;
 export type LinePage = Paginated<LineView>;
 export type CommentPage = Paginated<CommentView>;
 

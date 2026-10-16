@@ -26,13 +26,30 @@
   <p class="progress-line">{{ 'list.empty.short' | rokuT }}</p>
 } @else {
   <p class="progress-line">
-    @if (header().wantedCount === 0) {
-      {{ 'list.header.done' | rokuT }}
-    } @else {
-      {{
-        'list.header.pending'
-          | rokuT: { pending: header().wantedCount, total: header().lineCount }
-      }}
+    <span>
+      @if (header().wantedCount === 0) {
+        {{ 'list.header.done' | rokuT }}
+      } @else {
+        {{
+          'list.header.pending'
+            | rokuT
+              : { pending: header().wantedCount, total: header().lineCount }
+        }}
+      }
+    </span>
+
+    <!--
+      What the pending lines cost (velista 0145, section 6): plain text that opens
+      nothing, and its words for a screen reader say it is an estimate for the
+      lines that have a price.
+    -->
+    @if (header().cost; as cost) {
+      <span class="cost">
+        <span aria-hidden="true">~{{ cost }}</span>
+        <span class="visually-hidden">{{
+          'list.header.cost' | rokuT: { cost: cost }
+        }}</span>
+      </span>
     }
   </p>
 

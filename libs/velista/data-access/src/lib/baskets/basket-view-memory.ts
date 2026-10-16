@@ -30,6 +30,9 @@ export { hasExpired, type Remembered, type ViewLifetime } from '../view-memory';
  * is broken. So the first kind is kept and the second never is, and `lists` and the
  * query are not in this record and will not be added to it.
  *
+ * Velista `0141` adds a fourth, which neither moves nor hides a line: that the
+ * shop question of a trip was answered with no shop.
+ *
  * ## Why each property carries its own date
  *
  * One of the three is worth keeping for a while rather than for ever: "prices from
@@ -56,6 +59,12 @@ export interface BasketViewMemory {
    * at most one choice because it expired within two hours anyway.
    */
   readonly location?: Remembered<string>;
+  /**
+   * That the shop question was answered for this trip with no shop (velista
+   * `0141`): "No shop", or the sheet closed. With the lifetime of {@link location},
+   * because both are about one trip. A shop chosen there is kept as `location`.
+   */
+  readonly shopAnswered?: Remembered<true>;
 }
 
 /**
@@ -74,6 +83,9 @@ export const LEGACY_SHOP_KEY = 'shop';
  */
 export type RememberedProperty = Exclude<keyof BasketViewMemory, 'version'>;
 
+/** One trip: how long a chosen shop, and an answer about the shop, are kept. */
+const TRIP_MS = 2 * 60 * 60 * 1000;
+
 /**
  * How long each property is worth keeping, and **the only place the numbers live.**
  *
@@ -87,7 +99,8 @@ export const BASKET_VIEW_LIFETIME_MS: Readonly<
 > = {
   order: null,
   grouping: null,
-  location: 2 * 60 * 60 * 1000,
+  location: TRIP_MS,
+  shopAnswered: TRIP_MS,
 };
 
 /** Every property, for the readers that walk the record. */
@@ -95,6 +108,7 @@ export const REMEMBERED_PROPERTIES: readonly RememberedProperty[] = [
   'order',
   'grouping',
   'location',
+  'shopAnswered',
 ];
 
 /**
@@ -139,10 +153,15 @@ export function toBasketViewMemory(raw: unknown): BasketViewMemory | null {
     typeof value === 'string' && value !== '' ? value : null
   );
 
+  const shopAnswered = readRemembered(raw['shopAnswered'], (value) =>
+    value === true ? true : null
+  );
+
   if (
     order === UNREADABLE ||
     grouping === UNREADABLE ||
-    location === UNREADABLE
+    location === UNREADABLE ||
+    shopAnswered === UNREADABLE
   ) {
     return null;
   }
@@ -152,6 +171,7 @@ export function toBasketViewMemory(raw: unknown): BasketViewMemory | null {
     ...(order === undefined ? {} : { order }),
     ...(grouping === undefined ? {} : { grouping }),
     ...(location === undefined ? {} : { location }),
+    ...(shopAnswered === undefined ? {} : { shopAnswered }),
   };
 }
 

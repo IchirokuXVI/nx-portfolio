@@ -45,6 +45,15 @@ export const ADMIN_USERS_SCHEMA_IDS = {
   resendVerificationRequest: schemaId(
     'msg/adminUser.resendVerification/request'
   ),
+  // The reset grant, mailed or handed to the operator (plan 0210).
+  sendPasswordResetRequest: schemaId('msg/adminUser.sendPasswordReset/request'),
+  sendPasswordResetResult: schemaId('admin-users/SendAdminPasswordResetResult'),
+  createRecoveryLinksRequest: schemaId(
+    'msg/adminUser.createRecoveryLinks/request'
+  ),
+  createRecoveryLinksResult: schemaId(
+    'admin-users/CreateAdminRecoveryLinksResult'
+  ),
   updateRequest: schemaId('msg/adminUser.update/request'),
   setRolesRequest: schemaId('msg/adminUser.setRoles/request'),
 } as const;
@@ -158,6 +167,62 @@ const resendVerificationRequest = object(
   ['userId', 'targetUserId']
 );
 
+const sendPasswordResetRequest = object(
+  ADMIN_USERS_SCHEMA_IDS.sendPasswordResetRequest,
+  {
+    ...adminCredentialProperties,
+    targetUserId: nonEmptyString(),
+    locale: string(),
+  },
+  ['userId', 'targetUserId']
+);
+
+const sendPasswordResetResult = object(
+  ADMIN_USERS_SCHEMA_IDS.sendPasswordResetResult,
+  {
+    expiresAt: string({
+      format: 'date-time',
+      description:
+        'When the mailed links stop working: one hour after the mail.',
+    }),
+  },
+  ['expiresAt']
+);
+
+const createRecoveryLinksRequest = object(
+  ADMIN_USERS_SCHEMA_IDS.createRecoveryLinksRequest,
+  {
+    ...adminCredentialProperties,
+    targetUserId: nonEmptyString(),
+    locale: string(),
+  },
+  ['userId', 'targetUserId']
+);
+
+/**
+ * The two links of one grant (plan 0210, target state 8). Both carry the same
+ * token, so the first one used ends the other. Nothing else holds them: not a
+ * log line, not the audit trail, not an event.
+ */
+const createRecoveryLinksResult = object(
+  ADMIN_USERS_SCHEMA_IDS.createRecoveryLinksResult,
+  {
+    resetUrl: nonEmptyString({
+      description: 'Opens the page that chooses a new password.',
+    }),
+    signInUrl: nonEmptyString({
+      description:
+        'Opens the page that signs in and keeps the password. The same token as `resetUrl`.',
+    }),
+    expiresAt: string({
+      format: 'date-time',
+      description:
+        'When both links stop working: 24 hours after they were made.',
+    }),
+  },
+  ['resetUrl', 'signInUrl', 'expiresAt']
+);
+
 /**
  * The two editable fields, and no third (plan 0077, section 3).
  *
@@ -208,6 +273,10 @@ export const adminUsersSchemas: JsonSchema[] = [
   resolveManyRequest,
   deleteRequest,
   resendVerificationRequest,
+  sendPasswordResetRequest,
+  sendPasswordResetResult,
+  createRecoveryLinksRequest,
+  createRecoveryLinksResult,
   updateRequest,
   setRolesRequest,
 ];
@@ -237,6 +306,14 @@ export const adminUsersMessageContracts: Record<
   [ADMIN_USER_PATTERNS.resendVerification]: {
     request: ADMIN_USERS_SCHEMA_IDS.resendVerificationRequest,
     response: AUTH_SCHEMA_IDS.retryAfterResult,
+  },
+  [ADMIN_USER_PATTERNS.sendPasswordReset]: {
+    request: ADMIN_USERS_SCHEMA_IDS.sendPasswordResetRequest,
+    response: ADMIN_USERS_SCHEMA_IDS.sendPasswordResetResult,
+  },
+  [ADMIN_USER_PATTERNS.createRecoveryLinks]: {
+    request: ADMIN_USERS_SCHEMA_IDS.createRecoveryLinksRequest,
+    response: ADMIN_USERS_SCHEMA_IDS.createRecoveryLinksResult,
   },
   // The detail view, because a rename is the moment an operator wants to see the
   // whole account again, and the two extra fields on it are the ones that answer

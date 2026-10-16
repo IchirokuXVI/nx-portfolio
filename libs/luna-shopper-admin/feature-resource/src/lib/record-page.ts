@@ -45,6 +45,7 @@ import {
   recordChildCount,
   recordTabs,
   toCell,
+  type ActionOutcome,
   type AnyResourceDescriptor,
   type FieldDescriptor,
   type NamedAction,
@@ -61,6 +62,7 @@ import {
   type PageTab,
 } from '@portfolio/luna-shopper-admin/ui';
 import { TrashIcon } from '@portfolio/shared/ui';
+import { ActionOutcomeDialog } from './action-outcome-dialog';
 import { gatewayErrorKey } from './gateway-error-key';
 import { RECORD_CONTEXT, type RecordContext } from './record-context';
 import type { LeaveAware } from './record-leave-guard';
@@ -142,6 +144,7 @@ const ADDED_STATE = 'added';
     RouterLink,
     RouterOutlet,
     RokuTranslatorPipe,
+    ActionOutcomeDialog,
     CautionLine,
     ConfirmDialog,
     PageHeader,
@@ -254,6 +257,16 @@ const ADDED_STATE = 'added';
       }
       <!-- Built again for another record, so nothing under the header can
            go on showing the one before. -->
+      <!-- What a named action said once it went through (backend plan 0210).
+           Above the record and every tab, as a refusal is, and in the tone
+           of a save. -->
+      @if (done(); as said) {
+        <lib-caution-line
+          [text]="said.key | rokuT: said.args ?? {}"
+          tone="saved"
+          data-action-done
+        />
+      }
       @for (key of keys(); track key) {
         @if (tabbed) {
           <!-- Above the tab that is open, whichever it is: an action of the
@@ -360,6 +373,16 @@ const ADDED_STATE = 'added';
           data-action-question
         />
       }
+    }
+
+    @if (panel(); as shown) {
+      <lib-action-outcome-dialog
+        (closed)="panel.set(null)"
+        [headingArgs]="{ name: title() }"
+        [headingKey]="shown.heading"
+        [inputs]="shown.inputs"
+        [panel]="shown.panel"
+      />
     }
   `,
   styles: `
@@ -656,6 +679,19 @@ export class RecordPage implements LeaveAware {
    * another tab.
    */
   readonly refusal = signal<RecordRefusal | null>(null);
+  /**
+   * What a named action said once it went through (backend plan 0210): one
+   * line, drawn where a refusal is and gone with the same things.
+   */
+  readonly done = signal<Extract<ActionOutcome, { kind: 'line' }> | null>(null);
+  /**
+   * The panel a named action answered with, drawn in a dialog. This signal is
+   * the only holder of what it was handed, so closing it drops that: the
+   * recovery links of a person are gone from the page once the dialog is.
+   */
+  readonly panel = signal<Extract<ActionOutcome, { kind: 'panel' }> | null>(
+    null
+  );
 
   /** The body of the page, once it is drawn. */
   private readonly _view = viewChild(RecordView);
@@ -920,6 +956,7 @@ export class RecordPage implements LeaveAware {
         if (tab !== this._tab) {
           this._tab = tab;
           this.refusal.set(null);
+          this.done.set(null);
         }
       }
     });
@@ -978,6 +1015,7 @@ export class RecordPage implements LeaveAware {
    */
   edit(fromAddress = false): void {
     this.refusal.set(null);
+    this.done.set(null);
     const store = this.store();
     const details = this._tabPaths.get(RECORD_DETAILS_TAB);
     if (details === undefined && !fromAddress) {
@@ -1161,8 +1199,10 @@ export class RecordPage implements LeaveAware {
 
     this.working.set(true);
     this.refusal.set(null);
+    this.done.set(null);
+    let outcome: ActionOutcome | void;
     try {
-      await action.run(row);
+      outcome = await action.run(row);
     } catch (error) {
       this.refusal.set(this._refusalOf(toGatewayError(error), row));
       return;
@@ -1177,6 +1217,13 @@ export class RecordPage implements LeaveAware {
       return;
     }
     await store.load();
+    // After the read, so that the panel is drawn over the record as it now
+    // stands, and so that nothing the read starts can take it away.
+    if (outcome?.kind === 'panel') {
+      this.panel.set(outcome);
+    } else if (outcome?.kind === 'line') {
+      this.done.set(outcome);
+    }
   }
 
   /** The record the address names now, opened from the start. */
@@ -1201,6 +1248,8 @@ export class RecordPage implements LeaveAware {
     this.asking.set(null);
     this.refusal.set(null);
     this.refusedDelete.set(null);
+    this.done.set(null);
+    this.panel.set(null);
     this._seen = this._version();
     // Under `untracked`, so that a read it starts and the signals it writes
     // belong to no reader that happens to be running.

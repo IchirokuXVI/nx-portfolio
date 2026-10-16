@@ -1,16 +1,24 @@
-import type {
-  Line,
-  LineAction,
-  LineEditScope,
-  LineIndicator,
-  LineRowVm,
-  LineWriteState,
-  ListAbilitiesVm,
-  ListHeaderVm,
-  ListPageState,
-  ListPermission,
-  ListViewerVm,
-  ShoppingListSummary,
+import {
+  catalogName,
+  lineShownProduct,
+  listCost,
+  type CatalogItem,
+  type Line,
+  type LineAction,
+  type LineEditScope,
+  type LineIndicator,
+  type LineName,
+  type LineProductPrice,
+  type LineProductPriceRead,
+  type LineRowProduct,
+  type LineRowVm,
+  type LineWriteState,
+  type ListAbilitiesVm,
+  type ListHeaderVm,
+  type ListPageState,
+  type ListPermission,
+  type ListViewerVm,
+  type ShoppingListSummary,
 } from '@portfolio/velista/models';
 
 /**
@@ -92,10 +100,38 @@ export interface ListStateInput {
    * draws no detail on any row.
    */
   readonly detailOf?: (itemId: string) => string | null;
+  /**
+   * The name a line is drawn with, through `lineName` (velista `0144`), or absent
+   * for its `content`. A line with no name of its own draws its product's name.
+   */
+  readonly nameOfLine?: (line: Line) => Pick<LineName, 'text' | 'own'>;
+  /**
+   * The products of the lines and their prices (velista `0145`), or absent for rows
+   * drawn without a catalog. Resolved by the container, which holds the catalog,
+   * the reader's language and the translator.
+   */
+  readonly catalog?: ListStateCatalog;
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
   readonly gone: 'deleted' | 'unshared' | null;
+}
+
+/** What the rows of a list read of the catalog (velista `0145`, sections 2 and 7). */
+export interface ListStateCatalog {
+  /** The catalog's record of a product, or null while not loaded, gone or failed. */
+  readonly itemOf: (itemId: string) => CatalogItem | null;
+  /** Whether the lookup has answered about a product: found, gone or failed. */
+  readonly settled: (itemId: string) => boolean;
+  /** Whether the read of a product failed. */
+  readonly failed: (itemId: string) => boolean;
+  /** The prices of a product near the reader, as `lineProductPrices` reads them. */
+  readonly pricesOf: (itemId: string) => LineProductPriceRead;
+  readonly locale: string;
+  /** "Hacendado · 1 L", or null with neither. */
+  readonly brandSizeOf: (item: CatalogItem) => string | null;
+  /** A price in the reader's language. */
+  readonly formatMoney: (amount: number, currency: string | null) => string;
 }
 
 /**
@@ -176,6 +212,7 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
       ? lines.filter((line) => line.quantity > 0).length
       : (list?.wantedCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
+    cost: counted ? costOf(lines, input.catalog) : null,
     viewers: input.viewers,
     live: input.live,
   };
@@ -257,10 +294,16 @@ function toRow(
   const awaiting = line.approvalStatus === 'PENDING';
   const rejected = line.approvalStatus === 'REJECTED';
   const claimedBy = input.claims.get(line.id) ?? null;
+  const name = input.nameOfLine?.(line) ?? null;
 
   return {
     id: line.id,
-    content: line.content,
+    content: name?.text ?? line.content,
+    named: name?.own ?? true,
+    product:
+      input.catalog === undefined
+        ? undefined
+        : rowProduct(line, input.catalog, canChooseProduct(line, abilities)),
     // One product is the only case with one format and one brand to state. It is
     // what tells two lines of the same name apart.
     detail:
@@ -299,6 +342,94 @@ function toRow(
     // reader cannot see. Advisory either way, and it locks nothing (section 3).
     editor: input.reordering ? null : input.editorOf(line.id),
   };
+}
+
+/**
+ * The product a row shows and how it draws it (velista `0145`, sections 2, 3 and 7).
+ *
+ * The product is `lineShownProduct`, the first card of the line page. Until the
+ * lookup has answered about it the row draws bones; a failed read draws the row's
+ * name and no product.
+ */
+function rowProduct(
+  line: Line,
+  catalog: ListStateCatalog,
+  canChoose: boolean
+): LineRowProduct {
+  const shown = shownProductOf(line, catalog);
+  if (shown === null) {
+    return { kind: 'none', canChoose };
+  }
+  if (!catalog.settled(shown.itemId)) {
+    return { kind: 'loading' };
+  }
+
+  const item = catalog.itemOf(shown.itemId);
+  if (item === null && catalog.failed(shown.itemId)) {
+    return { kind: 'unread' };
+  }
+
+  const offer = shown.kind === 'priced' ? shown.offer : null;
+  return {
+    kind: 'shown',
+    itemId: shown.itemId,
+    name:
+      item === null ? null : nonEmpty(catalogName(item.name, catalog.locale)),
+    brandSize: item === null ? null : catalog.brandSizeOf(item),
+    imageUrl: item?.imageUrl ?? null,
+    favorite: line.favoriteItemId === shown.itemId,
+    others: line.itemIds.length - 1,
+    price:
+      offer === null || offer.price === null
+        ? null
+        : catalog.formatMoney(offer.price, offer.currency),
+  };
+}
+
+/** `lineShownProduct` over the catalog's prices, or null for a line with none. */
+function shownProductOf(
+  line: Line,
+  catalog: ListStateCatalog
+): LineProductPrice | null {
+  return lineShownProduct(line, catalog.pricesOf);
+}
+
+/**
+ * What the pending lines cost (section 6), formatted, or null with no priced line
+ * or no catalog.
+ */
+function costOf(
+  lines: readonly Line[],
+  catalog: ListStateCatalog | undefined
+): string | null {
+  if (catalog === undefined) {
+    return null;
+  }
+  const cost = listCost(
+    lines.map((line) => {
+      const shown = line.quantity > 0 ? shownProductOf(line, catalog) : null;
+      return {
+        quantity: line.quantity,
+        offer: shown?.kind === 'priced' ? shown.offer : null,
+      };
+    })
+  );
+  return cost === null ? null : catalog.formatMoney(cost.amount, cost.currency);
+}
+
+/**
+ * Whether the reader may choose the product of a line from its row (section 5):
+ * the rule the products page has, `MANAGE`, or `WRITE` on a line nobody approved.
+ */
+function canChooseProduct(line: Line, abilities: ListAbilitiesVm): boolean {
+  return (
+    abilities.canManage ||
+    (abilities.canWrite && line.approvalStatus !== 'APPROVED')
+  );
+}
+
+function nonEmpty(value: string): string | null {
+  return value.trim() === '' ? null : value;
 }
 
 /**

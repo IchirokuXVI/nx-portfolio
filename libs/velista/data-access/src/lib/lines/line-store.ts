@@ -456,7 +456,8 @@ export class LineStore {
       readonly canDecide: boolean;
       readonly autoApproveLines: boolean;
     },
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<
     | { readonly state: 'added'; readonly line: Line }
     | { readonly state: 'failed'; readonly error: unknown }
@@ -466,6 +467,8 @@ export class LineStore {
       id: clientKey,
       listId,
       content,
+      // As the server will answer it (backend `0207`, section 1.2).
+      named: named !== false || (itemIds ?? []).length === 0,
       quantity,
       itemIds: [...(itemIds ?? [])],
       // Following no group until the server says otherwise. An optimistic row that
@@ -474,6 +477,8 @@ export class LineStore {
       // drawing them a beat late (backend plan 0070, section 9).
       productGroupId: null,
       groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
       position: this._nextPosition(listId),
       approvalStatus:
         approval.canDecide || approval.autoApproveLines
@@ -497,7 +502,7 @@ export class LineStore {
     this._note(clientKey, { outcome: 'pending', byUserId: null });
 
     const outcome = await this._mutations.run(null, () =>
-      this._lines.addLine(listId, content, quantity, itemIds)
+      this._lines.addLine(listId, content, quantity, itemIds, named)
     );
 
     this._clearNote(clientKey);
@@ -536,9 +541,12 @@ export class LineStore {
     lineId: string,
     changes: {
       content?: string;
+      named?: false;
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateOutcome> {
@@ -1375,6 +1383,8 @@ export class LineStore {
     return {
       ...incoming,
       content: claims('content') ? local.content : incoming.content,
+      // Claimed with the words: one edit of the name writes both (velista `0144`).
+      named: claims('content') ? local.named : incoming.named,
       quantity: claims('quantity') ? local.quantity : incoming.quantity,
       approvalStatus: claims('approvalStatus')
         ? local.approvalStatus
@@ -1532,9 +1542,12 @@ export class LineStore {
 /** What one edit may carry, which is not the same as what it changes. */
 interface LineChanges {
   readonly content?: string;
+  readonly named?: false;
   readonly quantity?: number;
   readonly itemIds?: readonly string[];
   readonly adoptItemIds?: readonly string[];
+  readonly favoriteItemId?: string | null;
+  readonly preferredSupermarketId?: string | null;
 }
 
 /**
@@ -1549,7 +1562,10 @@ interface LineChanges {
  */
 function claimedBy(changes: LineChanges): readonly string[] {
   const fields: string[] = [];
-  if (changes.content !== undefined) {
+  // The name is one field to claim, its words and its flag together (velista
+  // `0144`): `content` with no flag names the line, and `named: false` alone takes
+  // the name away and leaves the words.
+  if (changes.content !== undefined || changes.named !== undefined) {
     fields.push('content');
   }
   if (changes.quantity !== undefined) {
@@ -1562,6 +1578,13 @@ function claimedBy(changes: LineChanges): readonly string[] {
   }
   if (changes.adoptItemIds !== undefined) {
     fields.push('groupItemIds');
+  }
+  // A set that drops the favourite clears it, so a write of the set claims it too.
+  if (changes.favoriteItemId !== undefined || changes.itemIds !== undefined) {
+    fields.push('favoriteItemId');
+  }
+  if (changes.preferredSupermarketId !== undefined) {
+    fields.push('preferredSupermarketId');
   }
   return [...new Set(fields)];
 }
@@ -1584,8 +1607,13 @@ function applyLineChanges(line: Line, changes: LineChanges): Line {
   return {
     ...line,
     ...(changes.content === undefined ? {} : { content: changes.content }),
+    named: namedAfter(line, changes),
     ...(changes.quantity === undefined ? {} : { quantity: changes.quantity }),
     ...(changes.itemIds === undefined ? {} : { itemIds: changes.itemIds }),
+    favoriteItemId: favoriteAfter(line, changes),
+    ...(changes.preferredSupermarketId === undefined
+      ? {}
+      : { preferredSupermarketId: changes.preferredSupermarketId }),
     // Provenance moves one way and nothing here moves it back (backend plan 0070,
     // section 3). A product that left the set leaves this too: it is not on the line
     // for anybody to own.
@@ -1597,6 +1625,34 @@ function applyLineChanges(line: Line, changes: LineChanges): Line {
               !adopting.has(itemId) && (stillOn === null || stillOn.has(itemId))
           ),
   };
+}
+
+/**
+ * The favourite as the server will leave it (backend plan 0199, section 2): the
+ * one this write names, and never a product the same write takes off the line.
+ */
+function favoriteAfter(line: Line, changes: LineChanges): string | null {
+  const wanted =
+    changes.favoriteItemId === undefined
+      ? line.favoriteItemId
+      : changes.favoriteItemId;
+  const itemIds = changes.itemIds ?? line.itemIds;
+  return wanted !== null && itemIds.includes(wanted) ? wanted : null;
+}
+
+/**
+ * The flag as the server will leave it (backend `0207`, section 1.2): a line with no
+ * product is named, `named: false` takes the name away, and a write of `content`
+ * with no flag names the line.
+ */
+function namedAfter(line: Line, changes: LineChanges): boolean {
+  if ((changes.itemIds ?? line.itemIds).length === 0) {
+    return true;
+  }
+  if (changes.named === false) {
+    return false;
+  }
+  return changes.content !== undefined ? true : line.named;
 }
 
 /** Whether a failure is the gateway refusing a write for lack of access. */

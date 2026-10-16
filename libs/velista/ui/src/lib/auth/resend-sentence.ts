@@ -77,8 +77,26 @@ export class ResendSentence {
    * still wants to confirm at all.
    */
   readonly promptKey = input<
-    'auth.resend.prompt' | 'auth.resend.promptExpired'
+    'auth.resend.prompt' | 'auth.resend.promptExpired' | 'auth.forgot.prompt'
   >('auth.resend.prompt');
+
+  /**
+   * The words of the action and of the sent state.
+   *
+   * The forgot password page (velista `0148`) draws this sentence after the **first**
+   * send, where "Sent again" would be false, and it asks for a link rather than a
+   * confirmation. The defaults are the confirmation email's words, so the three
+   * screens that drew it before are unchanged.
+   */
+  readonly actionKey = input<'auth.resend.action' | 'auth.forgot.again'>(
+    'auth.resend.action'
+  );
+  readonly sentKey = input<'auth.resend.sent' | 'auth.forgot.waiting'>(
+    'auth.resend.sent'
+  );
+  readonly sentNoWaitKey = input<
+    'auth.resend.sentNoWait' | 'auth.forgot.waitingNoWait'
+  >('auth.resend.sentNoWait');
 
   readonly resend = output<void>();
 

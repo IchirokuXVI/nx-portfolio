@@ -388,9 +388,16 @@ export class CatalogAddStore {
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
     try {
-      const result = await this._lines.addLineResult(listId, product.name, 1, [
-        product.itemId,
-      ]);
+      // Not named: the words are the product's (velista `0144`, section 3), and
+      // they are still sent, because the server needs them and `sameLineName`
+      // reads them.
+      const result = await this._lines.addLineResult(
+        listId,
+        product.name,
+        1,
+        [product.itemId],
+        false
+      );
       if (generation !== this._generation) {
         return;
       }

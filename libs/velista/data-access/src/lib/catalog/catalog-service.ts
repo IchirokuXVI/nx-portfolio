@@ -8,6 +8,15 @@ import type {
 } from '@portfolio/velista/models';
 import { CatalogApi } from './catalog-api';
 
+/** What a lookup of products asks for beside the products (backend `0207`). */
+export interface ItemLookupOptions {
+  /**
+   * Every chain's price at the reader's own scopes, in `CatalogItem.chainPrices`
+   * (velista `0145`, section 7). Absent or false, the products alone.
+   */
+  readonly prices?: boolean;
+}
+
 /**
  * What the composer offers after three characters (velista plan 0043, section 6).
  *
@@ -75,7 +84,10 @@ export interface CatalogServiceI {
    * asked for once per set and its answer is still wanted when it arrives. An option
    * accepted and never honoured is the shape this plan exists to remove.
    */
-  itemsByIds(itemIds: readonly string[]): Promise<readonly CatalogItem[] | null>;
+  itemsByIds(
+    itemIds: readonly string[],
+    options?: ItemLookupOptions
+  ): Promise<readonly CatalogItem[] | null>;
 
   /**
    * What the catalog calls a set of **groups** (velista plan 0065, section 2.1).

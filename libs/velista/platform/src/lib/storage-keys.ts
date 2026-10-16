@@ -70,6 +70,15 @@ export const StorageKeys = {
    */
   boughtShop: `bought-shop:${APP_KEY}`,
   /**
+   * That this device answered "Don't ask again" to the shop question at the first
+   * buy of a trip (velista `0141`).
+   *
+   * One flag for the device and every shopping list on it, with no expiry: the
+   * answer is about the person, not about a trip. Nothing turns it back on except
+   * clearing the app's data, and the filter still chooses a shop.
+   */
+  shopAskOff: `shop-ask-off:${APP_KEY}`,
+  /**
    * The last shop map opened, with the basket lines it was opened with (velista
    * `0121`, target 6), so the map opens in a shop with poor signal.
    *
@@ -113,6 +122,18 @@ export const StorageKeys = {
    * for as long as the tab is open.
    */
   updateAttempt: `update-attempt:${APP_KEY}`,
+  /**
+   * That this tab holds a support session: an operator opened the app as a user
+   * (velista `0133`, backend `0194`).
+   *
+   * In `sessionStorage`, and that is the whole design. The marker scopes the session
+   * to one tab: while it is there, `BrowserFacade` keeps every other key of this
+   * object in `sessionStorage` too, so the account of the operator in
+   * `localStorage` is neither read nor written. `ImpersonationState` reads it one
+   * time as the document starts. The handoff page writes it and the end of the
+   * session removes it, and each one then leaves the document behind.
+   */
+  supportSession: `support-session:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

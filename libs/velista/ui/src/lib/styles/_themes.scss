@@ -111,6 +111,12 @@ $app-status-line: 26%;
   // keeping apart on a screen where the amber button is the thing being focused.
   --app-focus-ring: var(--app-sky-400);
 
+  // The strip of a support session (velista `0133`): the ink of the theme as its
+  // ground and the ground of the theme as its text, so it is dark on Day and light on
+  // Night, and nothing on it is amber, which stays the colour of an action.
+  --app-support-strip-bg: var(--app-text-primary);
+  --app-support-strip-fg: var(--app-surface-ground);
+
   // Rule T2: the label on an action fill is always dark ink. Amber with white
   // text is about 1.9:1 and fails badly; amber with ink-950 is about 11:1. The
   // token exists so this cannot be gotten wrong by accident.
@@ -210,6 +216,12 @@ $app-status-line: 26%;
   // white card is 1.7:1. This is two ramp steps below `border-subtle` on purpose.
   --app-border-strong: var(--app-neutral-500);
   --app-focus-ring: var(--app-sky-600);
+
+  // The strip of a support session (velista `0133`): the ink of the theme as its
+  // ground and the ground of the theme as its text, so it is dark on Day and light on
+  // Night, and nothing on it is amber, which stays the colour of an action.
+  --app-support-strip-bg: var(--app-text-primary);
+  --app-support-strip-fg: var(--app-surface-ground);
 
   // Identical to Night on purpose (section 4.3). The most important control in
   // the app looks the same wherever the user is, which is worth more than theme

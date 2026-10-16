@@ -48,6 +48,7 @@ export * from './lib/messages/basket-sharing.messages';
 export * from './lib/messages/basket.messages';
 export * from './lib/messages/catalog.messages';
 export * from './lib/messages/harvest.messages';
+export * from './lib/messages/impersonation.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
 export * from './lib/messages/profile.messages';

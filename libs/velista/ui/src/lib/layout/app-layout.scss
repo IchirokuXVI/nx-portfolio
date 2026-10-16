@@ -147,6 +147,23 @@
   --app-safe-bottom: 0px;
 }
 
+// **The strip of a support session takes the top inset** (velista `0133`), the bar's
+// rule for the bottom one turned upside down. While it is up, `--app-safe-top` is zero
+// for everything below it, so the header does not clear the notch under a strip that
+// already has, and the strip reads `--app-support-strip-safe-top`, which nothing
+// redefines.
+//
+// The height is what every rule that names `100svh` subtracts. Here it needs no
+// subtraction: the frame stays one small viewport tall, the strip is its first item,
+// and the column below it is shorter by exactly the strip, so the bar stays on the
+// screen and the page slot gives up the room.
+:host(.support-up) {
+  --app-support-strip-height: calc(
+    var(--app-support-strip-row) + var(--app-support-strip-safe-top)
+  );
+  --app-safe-top: 0px;
+}
+
 // A theme is a class on the app root that redefines the semantic colour layer,
 // and nothing else (section 4). Both are always present in the stylesheet; which
 // one wins is the class the component binds.

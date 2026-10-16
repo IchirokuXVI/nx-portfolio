@@ -295,6 +295,11 @@ export function isOpenBasket(status: string): boolean {
  * `SKIPPED` arrives with backend `0137` and `REMOVED` with `0138`, so those plans
  * change which value a row carries rather than changing this shape.
  *
+ * `BOUGHT_ELSEWHERE` arrives with backend `0203`: nothing is left, this basket
+ * bought none of it, and somebody bought it lately through another basket or on
+ * the list page. Velista `0142` draws it crossed out, as a `REMOVED` row is, and
+ * it counts toward nothing on the page (`isCrossedOutRow`).
+ *
  * `WANTED` is the fallback because it is the one state that hides nothing. A row
  * this build cannot classify is still a thing to buy, and drawing it as wanted
  * costs a caption where reading it as `DONE` would take it off somebody's screen.
@@ -303,6 +308,7 @@ export const BASKET_ROW_STATES = [
   'WANTED',
   'PARTLY',
   'DONE',
+  'BOUGHT_ELSEWHERE',
   'NOT_AVAILABLE',
   'SKIPPED',
   'REMOVED',
@@ -314,11 +320,11 @@ export const BASKET_ROW_STATE_FALLBACK: BasketRowState = 'WANTED';
  * A fact about a row's past worth saying beside it (backend `0130`, section 4).
  *
  * A union rather than a boolean, so the wire shape did not move when the second
- * one arrived. `BOUGHT_ON_ANOTHER_BASKET` is that second one (velista `0131`;
- * backend `0188`): somebody bought some of the row lately through another basket,
- * or through none. `SKIPPED_EARLIER` wins when both apply, by the server, so the
- * caption for a purchase made elsewhere is drawn from `boughtElsewhere` and never
- * from this.
+ * one arrived. The two `BOUGHT_ON_*` notes say where the newest buy made outside
+ * this basket came from (backend `0203`, section 3): `BOUGHT_ON_ANOTHER_BASKET`
+ * through another shopping list, `BOUGHT_ON_THE_LIST` on the zone's list page.
+ * `SKIPPED_EARLIER` wins over both, by the server. A `BOUGHT_ELSEWHERE` row draws
+ * its words from these (velista `0142`, section 1).
  *
  * **There is no fallback**, unlike {@link BASKET_ROW_STATES}, and the difference is
  * the point: a state every row has must resolve to something, while a note is a
@@ -329,6 +335,7 @@ export const BASKET_ROW_STATE_FALLBACK: BasketRowState = 'WANTED';
 export const BASKET_ROW_NOTES = [
   'SKIPPED_EARLIER',
   'BOUGHT_ON_ANOTHER_BASKET',
+  'BOUGHT_ON_THE_LIST',
 ] as const;
 export type BasketRowNote = (typeof BASKET_ROW_NOTES)[number];
 

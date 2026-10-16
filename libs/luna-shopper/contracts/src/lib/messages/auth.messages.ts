@@ -1,5 +1,9 @@
 import type { Permission } from '../enums/account-role.enums';
-import type { UserKind, UsernamePropagation } from '../enums/auth.enums';
+import type {
+  RecoverySignInOutcome,
+  UserKind,
+  UsernamePropagation,
+} from '../enums/auth.enums';
 
 /**
  * Auth service message contracts (plan 0005).
@@ -25,6 +29,12 @@ export const AUTH_PATTERNS = {
   forgotPassword: 'auth.forgotPassword',
   /** Spend a reset link: set the new password and sign in. */
   resetPassword: 'auth.resetPassword',
+  /**
+   * Spend the same grant as a sign in, and keep the password (plan 0210,
+   * target state 5). One grant carries both links, and spending either ends
+   * it.
+   */
+  recoverySignIn: 'auth.recoverySignIn',
   /** Exchange a refresh token for a fresh token pair (rotates). */
   refresh: 'auth.refresh',
   /** Upgrade a temporary user into a registered one, in place. */
@@ -93,6 +103,16 @@ export interface MintParticipantTokenResult {
   socketTokenExpiresAt: string;
 }
 
+/** Who acts behind the `sub` of a support session token (plan 0194). */
+export interface ImpersonationActorClaim {
+  /** An `admin_users.id`. */
+  sub: string;
+  /** An `impersonation_sessions.id`. */
+  sid: string;
+  /** The deadline of the session, in seconds since the epoch. */
+  until: number;
+}
+
 /** The claims carried inside the signed access token. */
 export interface AccessTokenClaims {
   /** userId. */
@@ -107,6 +127,12 @@ export interface AccessTokenClaims {
    * fail. Every token signed since carries it, empty or not.
    */
   perms?: Permission[];
+  /**
+   * Present only on a token of a support session (plan 0194): the operator who
+   * opened the app as this user. It is the actor claim of RFC 8693, so `sub`
+   * stays the user. A reader treats its absence as "not a support session".
+   */
+  act?: ImpersonationActorClaim;
   iat?: number;
   exp?: number;
 }
@@ -199,6 +225,39 @@ export interface ResetPasswordRequest {
   token: string;
   password: string;
 }
+
+/**
+ * Spend a reset grant as a sign in, and keep the password (plan 0210, target
+ * state 5).
+ *
+ * `token` and `switchAccount` come from the body. `callerUserId` and
+ * `supportSession` are set by the gateway from the verified bearer, never from
+ * a body, because both decide what the grant does: the owner of the grant who
+ * is already signed in is told so and keeps the session, and a support session
+ * is refused outright.
+ */
+export interface RecoverySignInRequest {
+  /** The raw token from the link (auth stores only its hash). */
+  token: string;
+  /**
+   * The caller is signed in as somebody else and agreed to leave that session
+   * for the account of the grant. Anything but `true` leaves it in place and
+   * answers `recovery_other_account`.
+   */
+  switchAccount?: boolean;
+  /** The account of the bearer, when the request carried one. */
+  callerUserId?: string;
+  /** The bearer belongs to a support session (plan 0194). */
+  supportSession?: boolean;
+}
+
+/**
+ * What a sign in with a reset grant did (plan 0210, target state 5). A token
+ * pair comes back only when the caller is now signed in as somebody new.
+ */
+export type RecoverySignInResult =
+  | { outcome: RecoverySignInOutcome.SIGNED_IN; tokens: AuthTokens }
+  | { outcome: RecoverySignInOutcome.ALREADY_SIGNED_IN };
 
 export interface RefreshRequest {
   refreshToken: string;

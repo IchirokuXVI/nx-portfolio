@@ -18,8 +18,10 @@ import {
   orderedRoles,
   type AccountRole,
   type DirectoryServiceI,
+  type ImpersonationSession,
   type LineApproval,
 } from './directory-service';
+import type { PasswordResetSent, RecoveryLinks } from './recovery-links';
 
 /** A join code, in the shape the real one has. */
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -57,6 +59,68 @@ export class DirectoryMemory implements DirectoryServiceI {
 
   async resendVerification(): Promise<void> {
     // Nothing to imitate. The effect is an email, and an email is not a row.
+  }
+
+  /**
+   * The mail is not imitated, and the refusals are: a guest and an account
+   * with no password are refused the way auth refuses them (backend plan
+   * 0210), so the screen that explains a refusal can be driven here too.
+   */
+  async sendPasswordReset(userId: string): Promise<PasswordResetSent> {
+    await this._refuseRecovery(userId);
+    return { expiresAt: inHours(1) };
+  }
+
+  /**
+   * Two links in the shape the real ones have, on a host that is not one.
+   * Nothing opens them in this mode, and a link that looked real would be a
+   * link somebody pasted somewhere.
+   */
+  async createRecoveryLinks(userId: string): Promise<RecoveryLinks> {
+    await this._refuseRecovery(userId);
+    const resetUrl = `https://velista.invalid/auth/reset-password?token=memory-${randomJoinCode()}`;
+    return {
+      resetUrl,
+      signInUrl: `${resetUrl}&mode=sign-in`,
+      expiresAt: inHours(24),
+    };
+  }
+
+  /**
+   * Allowed, so that the dialog can be driven with no backend. The real
+   * switch is off by default; this mode has no switch.
+   */
+  async impersonationEnabled(): Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * A link in the shape of the real one, on a host that is not one, so that
+   * nothing it opens looks like the app. An account that is gone is refused
+   * with the 404 the gateway gives.
+   */
+  async startImpersonation(userId: string): Promise<ImpersonationSession> {
+    await this._users().read(userId);
+    return {
+      sessionId: `memory-${randomJoinCode()}`,
+      url: `https://velista.invalid/en/auth/impersonate#code=memory-${randomJoinCode()}`,
+      codeExpiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      codeTtlMs: 60 * 1000,
+      expiresAt: inHours(2),
+    };
+  }
+
+  private async _refuseRecovery(userId: string): Promise<void> {
+    const user = await this._users().read(userId);
+    const refusal =
+      user['email'] === null || user['email'] === undefined
+        ? 'recovery_needs_email'
+        : user['hasPassword'] !== true
+          ? 'recovery_needs_password'
+          : null;
+    if (refusal !== null) {
+      throw new GatewayError({ code: refusal, status: 409, correlationId: '' });
+    }
   }
 
   /**
@@ -275,6 +339,11 @@ function linesOf(list: ResourceRow): ResourceRow[] {
 }
 
 /** A code in the shipped alphabet, which excludes the letters that read as digits. */
+/** An instant some hours from now, as the gateway writes one. */
+function inHours(hours: number): string {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+}
+
 function randomJoinCode(): string {
   let code = '';
   for (let index = 0; index < JOIN_CODE_LENGTH; index += 1) {

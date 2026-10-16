@@ -1,0 +1,38 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+// The acts as rows with a hairline between them, and none above the first: the
+// title is their heading.
+.acts {
+  margin: var(--app-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+
+  li + li {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.act {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: calc(var(--app-touch-target) + var(--app-space-4));
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  text-align: start;
+  cursor: pointer;
+
+  // The one act that discards a history. The danger text, and its own words say
+  // what it does, so the colour is never the only signal.
+  &.is-danger {
+    color: var(--app-status-danger-fg);
+  }
+
+  @include sheet-form.focus-ring;
+}

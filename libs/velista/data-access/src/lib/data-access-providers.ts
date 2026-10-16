@@ -5,6 +5,8 @@ import { ApiUrl } from './api-url';
 import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
+import { ImpersonationSession } from './auth/impersonation-session';
+import { PendingRecoveryLink } from './auth/pending-recovery-link';
 import { SessionStore } from './auth/session-store';
 import { SessionValidation } from './auth/session-validation';
 import { TokenStore } from './auth/token-store';
@@ -12,6 +14,7 @@ import { BasketListMemory } from './baskets/basket-list-memory';
 import { BasketListStore } from './baskets/basket-list-store';
 import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
+import { HeldProductChoices } from './baskets/held-product-choices';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
 import { CatalogAddStore } from './catalog/catalog-add-store';
@@ -20,6 +23,7 @@ import { CategoryStore } from './catalog/category-store';
 import { GroupMembers } from './catalog/group-members';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
+import { ProductPickStore } from './catalog/product-pick-store';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { ContactMemory } from './contacts/contact-memory';
@@ -215,6 +219,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   SessionStore,
   AccountMemory,
   AccountNotice,
+  // Velista `0148`: a sign in link waiting on the home sheet's question.
+  PendingRecoveryLink,
   AssistantMemory,
   ConnectionRecovery,
   AuthMemory,
@@ -238,6 +244,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   MappingSettingsStore,
   GroupMembers,
   CatalogAddStore,
+  ProductPickStore,
+  HeldProductChoices,
   GroupNames,
   ItemNames,
   MemberNames,
@@ -259,4 +267,5 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LiveBasketStore,
   StartupProbe,
   SessionValidation,
+  ImpersonationSession,
 ];

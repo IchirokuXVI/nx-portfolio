@@ -19,7 +19,6 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BoughtShopMemory,
-  GatewayError,
   ItemNames,
   LineStore,
   ListStore,
@@ -33,7 +32,11 @@ import {
   catalogName,
   LINE_CONTENT_MAX_LENGTH,
   LINE_QUANTITY_MAX,
+  lineName,
+  lineNameChange,
+  lineNameRefused,
   type BasketShop,
+  type Line,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import {
@@ -55,6 +58,11 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import {
+  mergeProductsMaxOf,
+  mergeQuestionOf,
+  type MergeQuestion,
+} from '../line-merge-question';
 import { listErrorKey } from '../list-error-copy';
 import {
   actionsFor,
@@ -70,18 +78,6 @@ import { selectLineDetail } from './select-line-detail';
  * (velista `0114`), a pane in its place rather than a sheet over it.
  */
 type Step = 'summary' | 'howMany' | 'shop';
-
-/**
- * The merge question, as the refusal stated it (velista plan 0083, section 5).
- *
- * `total` is worked out here rather than sent, from the amount the save carried and
- * the other line's, capped as the server caps the sum (backend plan 0112, section 3).
- */
-export interface MergeQuestion {
-  readonly other: string;
-  readonly otherQuantity: number;
-  readonly total: number;
-}
 
 /**
  * What the app knows about one line, and the only place a purchase is recorded
@@ -233,7 +229,7 @@ export class LineDetailSheet {
    * A realtime update to the line redraws the fields only while they still hold these
    * values, so an update never overwrites what the reader typed (section 4).
    */
-  private _shown: { content: string; quantity: number } | null = null;
+  private _shown: { field: string; quantity: number } | null = null;
 
   /** How many the how many step is offering to record. */
   readonly howMany = signal(1);
@@ -352,6 +348,38 @@ export class LineDetailSheet {
     this._lines.commentCountOf(this.lineId())
   );
 
+  /**
+   * The name the line is drawn with, and what its field starts with (velista
+   * `0144`). The names of the products are asked for by this sheet already.
+   */
+  private readonly _name = computed(() => {
+    const line = this._line();
+    return line === undefined
+      ? null
+      : lineName(
+          line,
+          (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
+          this._localeStore.locale(),
+          this._itemNames.pricesOf
+        );
+  });
+
+  /** The product's name, as the hint of an empty name field. */
+  readonly productName = computed(() => this._name()?.productName ?? null);
+
+  /**
+   * What the name field would send, or null when it sends nothing (velista `0144`,
+   * section 4): text names the line, and an empty field on a named line that holds a
+   * product takes the name away.
+   */
+  private readonly _nameChange = computed(() => {
+    const line = this._line();
+    const name = this._name();
+    return line === undefined || name === null
+      ? null
+      : lineNameChange(line, name, this.name());
+  });
+
   /** Whether the name or the amount differs from the line as it now stands. */
   readonly changed = computed(() => {
     const line = this._line();
@@ -359,14 +387,21 @@ export class LineDetailSheet {
       return false;
     }
     return (
-      this.name().trim() !== line.content ||
+      this._nameChange() !== null ||
       (this.scope() === 'full' && this.amount() !== line.quantity)
     );
   });
 
-  readonly canSave = computed(
-    () => this.changed() && this.name().trim() !== '' && !this.submitting()
-  );
+  readonly canSave = computed(() => {
+    const line = this._line();
+    return (
+      line !== undefined &&
+      this.changed() &&
+      // A line with no product needs words: there is no product to be called by.
+      !lineNameRefused(line, this.name()) &&
+      !this.submitting()
+    );
+  });
 
   /**
    * Whether to say that the save will put the line back to awaiting approval (plan
@@ -389,29 +424,34 @@ export class LineDetailSheet {
    */
   private readonly _seed = effect(() => {
     const line = this._line();
+    const drawn = this._name();
     // Not while a save is out. The store renames the row as the request leaves and
     // puts the old name back on a refusal, and neither is an update from somebody
     // else: redrawing from them would replace what the reader typed with the old name
     // the moment a merge question is asked. The effect runs again when the save ends,
     // against the line as it then stands.
-    if (line === undefined || this.saving()) {
+    if (line === undefined || drawn === null || this.saving()) {
       return;
     }
 
     untracked(() => {
+      // Empty for a line with no name of its own (velista `0144`, section 5). It
+      // can move once the products' names land and show that a name is a
+      // product's, and the field follows while nobody has typed in it.
+      const field = drawn.field;
       const shown = this._shown;
       const name = this.name();
       const amount = this.amount();
-      const matchesLine = name === line.content && amount === line.quantity;
+      const matchesLine = name === field && amount === line.quantity;
       const clean =
         shown === null ||
         matchesLine ||
-        (name === shown.content && amount === shown.quantity);
+        (name === shown.field && amount === shown.quantity);
 
       if (clean) {
-        this.name.set(line.content);
+        this.name.set(field);
         this.amount.set(line.quantity);
-        this._shown = { content: line.content, quantity: line.quantity };
+        this._shown = { field, quantity: line.quantity };
       }
     });
   });
@@ -437,6 +477,7 @@ export class LineDetailSheet {
       // this used to read (section 1). Against a real catalog every one of its ids
       // missed, and this sheet told the reader their line had no products.
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
+      pricesOf: this._itemNames.pricesOf,
       namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
@@ -669,12 +710,12 @@ export class LineDetailSheet {
       return;
     }
 
-    const content = this.name().trim();
     const quantity = this.amount();
     // Only what changed. In `content` scope the quantity is never sent, because the
     // server refuses a body naming it on an approved line even when it is unchanged.
+    // The name is `lineNameChange`: text, or the name taken away (velista `0144`).
     const changes = {
-      ...(content !== line.content ? { content } : {}),
+      ...(this._nameChange() ?? {}),
       ...(scope === 'full' && quantity !== line.quantity ? { quantity } : {}),
       ...(confirmMerge ? { confirmMerge: true } : {}),
     };
@@ -700,12 +741,10 @@ export class LineDetailSheet {
     this._stopEditing();
     // From the answer, not from what was typed: a merge sums the two amounts and keeps
     // the survivor's own spelling, so the fields must show the line as it now stands.
-    this.name.set(outcome.line.content);
+    const field = this._fieldOf(outcome.line);
+    this.name.set(field);
     this.amount.set(outcome.line.quantity);
-    this._shown = {
-      content: outcome.line.content,
-      quantity: outcome.line.quantity,
-    };
+    this._shown = { field, quantity: outcome.line.quantity };
 
     if (outcome.line.id !== this.lineId()) {
       // This line was the one absorbed. The survivor is the line that remains, so the
@@ -724,6 +763,16 @@ export class LineDetailSheet {
     }
   }
 
+  /** What the name field holds for a line as it stands (velista `0144`). */
+  private _fieldOf(line: Line): string {
+    return lineName(
+      line,
+      (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
+      this._localeStore.locale(),
+      this._itemNames.pricesOf
+    ).field;
+  }
+
   /** What a refused save draws (sections 4 and 5). */
   private _refused(error: unknown, amount: number): void {
     const question = mergeQuestionOf(error, amount);
@@ -739,7 +788,7 @@ export class LineDetailSheet {
     this.saveErrorKey.set(
       listErrorKey(error, 'lines.write') ?? 'list.detail.failed'
     );
-    const max = maxOf(error);
+    const max = mergeProductsMaxOf(error);
     this.saveErrorArgs.set(max === null ? undefined : { max });
   }
 
@@ -843,50 +892,4 @@ export class LineDetailSheet {
       )
     );
   }
-}
-
-/**
- * The question a `line_merge_required` refusal asks, or null for any other failure.
- *
- * Mapped from `unknown` (rule D4): a refusal whose details this build cannot read is
- * not a question the sheet can ask, and falls through to the generic sentence.
- */
-export function mergeQuestionOf(
-  error: unknown,
-  amount: number
-): MergeQuestion | null {
-  if (
-    !(error instanceof GatewayError) ||
-    error.code !== 'line_merge_required'
-  ) {
-    return null;
-  }
-
-  const other = error.details?.['otherContent'];
-  const otherQuantity = error.details?.['otherQuantity'];
-  if (
-    typeof other !== 'string' ||
-    typeof otherQuantity !== 'number' ||
-    !Number.isFinite(otherQuantity)
-  ) {
-    return null;
-  }
-
-  return {
-    other,
-    otherQuantity,
-    total: Math.min(LINE_QUANTITY_MAX, amount + otherQuantity),
-  };
-}
-
-/** The bound a `line_merge_too_many_products` refusal names, or null. */
-function maxOf(error: unknown): number | null {
-  if (
-    !(error instanceof GatewayError) ||
-    error.code !== 'line_merge_too_many_products'
-  ) {
-    return null;
-  }
-  const max = error.details?.['max'];
-  return typeof max === 'number' && Number.isFinite(max) ? max : null;
 }

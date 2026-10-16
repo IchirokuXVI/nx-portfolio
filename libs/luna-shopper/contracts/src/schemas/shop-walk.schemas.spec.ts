@@ -5,7 +5,10 @@ import {
 } from '@portfolio/luna-shopper/shop-map/model';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SHOP_WALK_PATTERNS } from '../lib/messages/shop-walk.messages';
+import {
+  SHOP_WALK_GUARD_KINDS,
+  SHOP_WALK_PATTERNS,
+} from '../lib/messages/shop-walk.messages';
 import { SHOP_WALK_SCHEMA_IDS } from './messages/shop-walk.schemas';
 import {
   validateMessageRequest,
@@ -71,6 +74,47 @@ describe('shop walk schemas (plan 0168)', () => {
       validateMessageResponse(SHOP_WALK_PATTERNS.mapForLocation, { map: null })
         .valid
     ).toBe(true);
+  });
+
+  it('accepts a guard event of every kind, and refuses one it does not know (plan 0197)', () => {
+    const append = (event: unknown) =>
+      validateMessageRequest(SHOP_WALK_PATTERNS.append, {
+        userId: 'u1',
+        walkId: 'w1',
+        id: 'e1',
+        baseSeq: 0,
+        kind: 'stopped',
+        at: '2026-10-08T11:00:00.000Z',
+        logFrom: 0,
+        logTo: 10,
+        reason: 'frame-moved',
+        events: [event],
+      }).valid;
+    const guard = { type: 'guard', logMs: 5 };
+
+    expect(SHOP_WALK_GUARD_KINDS).toEqual([
+      'lost',
+      'jump',
+      'turned',
+      'heading',
+      'compass-disturbed',
+      'compass-settled',
+    ]);
+    for (const what of SHOP_WALK_GUARD_KINDS) {
+      expect({ what, valid: append({ ...guard, what }) }).toEqual({
+        what,
+        valid: true,
+      });
+    }
+    expect(append({ ...guard, what: 'turned', degrees: 158.4 })).toBe(true);
+    expect(append({ ...guard, what: 'jump', metres: 3.4 })).toBe(true);
+
+    expect(append({ ...guard, what: 'frame-moved' })).toBe(false);
+    expect(append(guard)).toBe(false);
+    expect(append({ type: 'guard', what: 'lost' })).toBe(false);
+    expect(append({ ...guard, what: 'turned', degrees: '158' })).toBe(false);
+    // No raw sensor sample rides along.
+    expect(append({ ...guard, what: 'heading', samples: [1, 2] })).toBe(false);
   });
 
   it('refuses an event of no known type and an unknown kind', () => {

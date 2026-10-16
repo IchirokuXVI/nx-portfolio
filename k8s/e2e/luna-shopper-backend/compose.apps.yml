@@ -95,10 +95,11 @@ services:
       GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
       GOOGLE_CLIENT_SECRET: e2e-client-secret
       GOOGLE_CALLBACK_URL: http://localhost:3000/v1/auth/google/callback
-      # Where the callback sends the browser back. `{locale}` is substituted with
-      # the locale the flow started in; the app lives under a path that follows
-      # the locale segment, so a plain prefix could not express it.
-      APP_BASE_URL: http://localhost:4200/{locale}/velista
+      # Where the callback and the support handoff send the browser: velista on
+      # its own origin, the shape the clusters use (`https://velista.app/{locale}`)
+      # and the origin MAIL_VERIFY_BASE_URL below names. `{locale}` is
+      # substituted with a supported locale.
+      APP_BASE_URL: http://localhost:4205/{locale}
       # The byte cap the spoken turn route's multipart interceptor enforces
       # (plan 0041). The gateway is where an upload is actually refused, so the
       # number has to be here as well as on the assistant.
@@ -206,6 +207,10 @@ services:
       ADMIN_LOGIN_LOCKOUT_WINDOW: 15m
       ADMIN_DEV_AUTOLOGIN: 'false'
       ADMIN_DEV_AUTOLOGIN_USERNAME: dev-admin
+      # Support sessions (plan 0194). On here, so the e2e gate can walk one.
+      # Auth alone reads it. It defaults to false, and this tier states its
+      # environment by hand, so it is named here.
+      IMPERSONATION_ENABLED: 'true'
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_USER: ''
@@ -217,8 +222,8 @@ services:
       # `localeGuard` inserts one and keeps the query string, so the link opens
       # in the reader's own language.
       MAIL_VERIFY_BASE_URL: http://localhost:4205/auth/verify
-      # Placeholder. Nothing in the app routes a reset token yet.
-      MAIL_RESET_BASE_URL: http://localhost:4205/reset-password
+      # The reset page of velista plan 0148. Both links of the mail start here.
+      MAIL_RESET_BASE_URL: http://localhost:4205/auth/reset-password
       GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
       GOOGLE_CLIENT_SECRET: e2e-client-secret
       GOOGLE_CALLBACK_URL: http://localhost:3000/auth/google/callback

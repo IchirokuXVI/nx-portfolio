@@ -83,6 +83,9 @@ function buildOps(entries: readonly WalkEntry[]): Op[] {
       return last;
     };
     for (const event of entry.events) {
+      // No operation, and no log time for the event after it: a log folds the
+      // same with its `guard` events and without them, at every log time.
+      if (event.type === 'guard') continue;
       if (event.type === 'path') {
         for (const [logMs, x, y] of event.points) {
           ops.push({ type: 'point', t: timeOf(logMs), entry: k, x, y, opens });

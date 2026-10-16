@@ -2,8 +2,11 @@ import {
   ITEM_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_LOCATION_PATTERNS,
+  UnitOfMeasure,
   type CatalogScopeView,
+  type GetItemsRequest,
   type ItemOfferView,
+  type ItemSnapshot,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
@@ -11,18 +14,25 @@ import {
   pricedItemId,
   SETTLE_PRICE_BUDGET_MS,
   SettlePriceService,
-  shopPricedItemId,
+  snapshotOf,
+  type RewritePriceInput,
   type SettlePriceInput,
 } from './settle-price.service';
 
 /**
- * What a settle cost, read by the gateway (plan 0143, section 9).
+ * What a settle cost and what its product was called, read by the gateway
+ * (plan 0143, section 9; plan 0202, sections 1 to 3).
  *
- * The one property every test here serves is the one the plan states twice:
+ * The one property every test here serves is the one plan 0143 states twice:
  * **a price never fails a settle, and never delays one past its budget.** So
  * each way of not knowing a price is its own case, because "never fails" is a
  * list of cases rather than a single assertion, and each one ends in nulls and
- * a `SettlementPaid` the settle can send.
+ * an answer the settle can send.
+ *
+ * Since plan 0202 the gateway chooses the price. No scope a client sends is
+ * read: a settle at a shop records the price of that shop, and a settle with
+ * no shop records the cheapest price across the owner's scopes. The same read
+ * answers what the product is called.
  */
 
 const OWNER = 'u-owner';
@@ -49,14 +59,37 @@ const offer = (
   unitPriceLabel: null,
   unitBasis: null,
   observedAt: '2026-09-01T08:00:00.000Z',
-  sourceKind: PriceSourceKind.CHAIN,
+  sourceKind: PriceSourceKind.OFFICIAL_API,
   priceCopiedFromScopeId: null,
   stale: false,
   ...extra,
 });
 
-const product = (offers: ItemOfferView[]): ItemView =>
-  ({ id: ITEM, offers }) as ItemView;
+/** What a buy copies of the product below (plan 0202, section 1). */
+const SNAPSHOT: ItemSnapshot = {
+  name: { en: 'Milk', es: 'Leche' },
+  brand: 'Hacendado',
+  unitSize: 1,
+  packCount: 6,
+  defaultUnit: UnitOfMeasure.LITER,
+};
+
+/**
+ * One product as catalog answers it. `offers` is what an `offers: 'all'` read
+ * carries and `bestOffer` what an `offers: 'best'` read does, so one fixture
+ * serves both reads. `categoryId` is here to be left out of the snapshot.
+ */
+const product = (
+  offers: ItemOfferView[],
+  bestOffer: ItemOfferView | null = offers[0] ?? null
+): ItemView =>
+  ({
+    id: ITEM,
+    ...SNAPSHOT,
+    categoryId: 'cat-dairy',
+    offers,
+    bestOffer,
+  }) as unknown as ItemView;
 
 /** Two scopes, one chain each, which is what the owner's profile reaches. */
 const resolution = (): CatalogScopeView => ({
@@ -68,6 +101,10 @@ const resolution = (): CatalogScopeView => ({
       postalCode: '14013',
       origin: 'POSTAL_CODE',
       approximate: false,
+      supermarketLocationId: null,
+      priority: 0,
+      quoted: true,
+      priced: true,
     },
     {
       priceScopeId: OTHER_SCOPE,
@@ -75,6 +112,10 @@ const resolution = (): CatalogScopeView => ({
       postalCode: '14013',
       origin: 'POSTAL_CODE',
       approximate: false,
+      supermarketLocationId: null,
+      priority: 0,
+      quoted: true,
+      priced: true,
     },
   ],
   coverage: [],
@@ -84,23 +125,26 @@ const resolution = (): CatalogScopeView => ({
 });
 
 interface World {
-  /** What catalog answers the priced lookup with, a throw, or silence. */
+  /** What catalog answers the product read with, a throw, or silence. */
   readonly items?: ItemView[] | 'throws' | 'never answers';
   /** What the resolver answers with, a throw, or silence. */
   readonly resolves?: CatalogScopeView | 'throws' | 'never answers';
   /**
    * The scope stack catalog answers for SHOP (plan 0163), or a throw. The shop
-   * is kept exactly when the settle's scope is in it.
+   * is priced at the first scope of it.
    */
   readonly shopStack?: string[] | 'throws';
 }
 
 function build(world: World = {}) {
   const calls: string[] = [];
-  const send = jest.fn(async (subject: string) => {
+  /** Every product read, as it was asked. */
+  const lookups: GetItemsRequest[] = [];
+  const send = jest.fn(async (subject: string, payload?: unknown) => {
     calls.push(subject);
     switch (subject) {
       case ITEM_PATTERNS.getMany:
+        lookups.push(payload as GetItemsRequest);
         if (world.items === 'throws') {
           throw new Error('catalog unreachable');
         }
@@ -109,7 +153,14 @@ function build(world: World = {}) {
           // what a catalog that stopped answering looks like from here.
           return new Promise(() => undefined);
         }
-        return { items: world.items ?? [product([offer(SCOPE, 0.95)])] };
+        return {
+          items: (world.items ?? [product([offer(SCOPE, 0.95)])]).map((item) =>
+            // Catalog reads no price for a request that names no scope.
+            (payload as GetItemsRequest).priceScopeIds === undefined
+              ? { ...item, offers: undefined, bestOffer: undefined }
+              : item
+          ),
+        };
       case SUPERMARKET_LOCATION_PATTERNS.shopAvailability:
         if (world.shopStack === 'throws') {
           throw new Error('catalog unreachable');
@@ -132,288 +183,372 @@ function build(world: World = {}) {
     }
   });
 
-  const describe = jest.fn(async () => {
-    if (world.resolves === 'throws') {
-      throw new Error('core slow');
+  const describe = jest.fn(
+    async (_userId: string, _options: { profileId?: string }) => {
+      if (world.resolves === 'throws') {
+        throw new Error('core slow');
+      }
+      if (world.resolves === 'never answers') {
+        return new Promise<CatalogScopeView>(() => undefined);
+      }
+      return world.resolves ?? resolution();
     }
-    if (world.resolves === 'never answers') {
-      return new Promise<CatalogScopeView>(() => undefined);
-    }
-    return world.resolves ?? resolution();
-  });
+  );
 
   return {
     service: new SettlePriceService({ send } as never, { describe } as never),
     calls,
+    lookups,
     describe,
   };
 }
 
-/** The ordinary settle: the owner's scope, one product, one shop. */
+/** The ordinary settle: the owner's scopes, one product, no shop. */
 const input = (extra: Partial<SettlePriceInput> = {}): SettlePriceInput => ({
   userId: OWNER,
   profileId: PROFILE,
   itemId: ITEM,
-  priceScopeId: SCOPE,
   supermarketLocationId: undefined,
   servedLocations: false,
   ...extra,
 });
 
-describe('the price a settle records (plan 0143, section 4.2)', () => {
-  it('records what one unit cost, and the scope it was read at', async () => {
-    const w = build();
+/** The same settle at SHOP, by a reader who is served shops. */
+const atShop = (extra: Partial<SettlePriceInput> = {}): SettlePriceInput =>
+  input({ supermarketLocationId: SHOP, servedLocations: true, ...extra });
 
-    expect(await w.service.read(input())).toEqual({
-      priceScopeId: SCOPE,
-      supermarketLocationId: null,
-      supermarketId: null,
-      // Catalog holds currency units with two decimals; the column is the
-      // minor unit.
-      pricePaidCents: 95,
-      pricePaidCurrency: 'EUR',
+describe('what a settle with no shop records (plan 0202, section 2)', () => {
+  it('records the cheapest price across the owner’s scopes, its scope, and no shop and no chain', async () => {
+    const w = build({
+      items: [product([], offer(OTHER_SCOPE, 0.89))],
+    });
+
+    expect(await w.service.choose(input())).toEqual({
+      paid: {
+        priceScopeId: OTHER_SCOPE,
+        // The scope of the cheapest price is not where the person stood.
+        supermarketLocationId: null,
+        supermarketId: null,
+        // Catalog holds currency units with two decimals; the column is the
+        // minor unit.
+        pricePaidCents: 89,
+        pricePaidCurrency: 'EUR',
+      },
+      itemSnapshot: SNAPSHOT,
     });
   });
 
-  it('rounds to the cent rather than truncating', async () => {
-    const w = build({ items: [product([offer(SCOPE, 2.675)])] });
+  // `offers: 'best'` is catalog's own answer to "the cheapest across these
+  // scopes", so no price is compared in the gateway.
+  it('asks catalog for that one product at the owner’s scopes, and for the best offer', async () => {
+    const w = build();
 
-    expect((await w.service.read(input()))?.pricePaidCents).toBe(268);
+    await w.service.choose(input());
+
+    expect(w.describe).toHaveBeenCalledWith(OWNER, { profileId: PROFILE });
+    expect(w.lookups).toEqual([
+      { ids: [ITEM], priceScopeIds: [SCOPE, OTHER_SCOPE], offers: 'best' },
+    ]);
+    expect(w.calls).toEqual([ITEM_PATTERNS.getMany]);
+  });
+
+  it('rounds to the cent rather than truncating', async () => {
+    const w = build({ items: [product([], offer(SCOPE, 2.675))] });
+
+    expect((await w.service.choose(input())).paid?.pricePaidCents).toBe(268);
   });
 
   // It is the number the screen showed, which is the whole definition of the
   // column: what was paid as far as anybody knew at the shelf.
   it('records a stale offer', async () => {
     const w = build({
-      items: [product([offer(SCOPE, 1.2, { stale: true })])],
+      items: [product([], offer(SCOPE, 1.2, { stale: true }))],
     });
 
-    expect((await w.service.read(input()))?.pricePaidCents).toBe(120);
+    expect((await w.service.choose(input())).paid?.pricePaidCents).toBe(120);
   });
 
-  it('asks catalog for that one product at that one scope', async () => {
-    const w = build();
+  describe('it records no price, and still the name', () => {
+    it.each([
+      ['no scope of the owner prices the product', product([], null)],
+      ['the best offer has no amount', product([], offer(SCOPE, null))],
+    ])('when %s', async (_name, item) => {
+      const w = build({ items: [item] });
 
-    await w.service.read(input());
+      expect(await w.service.choose(input())).toEqual({
+        paid: null,
+        itemSnapshot: SNAPSHOT,
+      });
+    });
 
-    expect(w.calls).toContain(ITEM_PATTERNS.getMany);
+    // A profile emptied or deleted since, or a core that did not answer. No
+    // scope resolves, so the read is for the name alone: it carries no scopes
+    // and no `offers`.
+    it('when the resolver throws, and the product is read with no scopes', async () => {
+      const w = build({ resolves: 'throws' });
+
+      expect(await w.service.choose(input())).toEqual({
+        paid: null,
+        itemSnapshot: SNAPSHOT,
+      });
+      expect(w.lookups).toEqual([{ ids: [ITEM] }]);
+    });
   });
 
   describe('it records nothing at all', () => {
-    it('when the client named no scope, without asking catalog', async () => {
-      const w = build();
-
-      expect(await w.service.read(input({ priceScopeId: undefined }))).toBe(
-        null
-      );
-      expect(w.calls).toEqual([]);
-      expect(w.describe).not.toHaveBeenCalled();
-    });
-
-    // The profile can have changed between the read that drew the screen and
-    // the tap, and the shopper can neither see that nor fix it. So it is null
-    // and never an error.
-    it('when the scope is not one the owner’s profile resolves to', async () => {
-      const w = build();
-
-      expect(
-        await w.service.read(
-          input({ priceScopeId: 'ffffffff-1111-4111-8111-111111111111' })
-        )
-      ).toBe(null);
-    });
-
-    it('when the resolver throws', async () => {
-      const w = build({ resolves: 'throws' });
-
-      expect(await w.service.read(input())).toBe(null);
-    });
-  });
-
-  describe('it keeps the scope and records no price', () => {
+    // A free text line, and a line with several products of which the caller
+    // named none (`pricedItemId`, below).
     it.each([
-      ['the offer has no price', [product([offer(SCOPE, null)])]],
-      ['the scope quoted nothing', [product([offer(OTHER_SCOPE, 1.1)])]],
-      ['the product is absent from the answer', []],
+      ['with no shop', input({ itemId: undefined })],
+      ['at a shop', atShop({ itemId: undefined })],
+    ])(
+      'when no product was named or picked, %s, without asking catalog',
+      async (_name, settle) => {
+        const w = build();
+
+        expect(await w.service.choose(settle)).toEqual({
+          paid: null,
+          itemSnapshot: null,
+        });
+        expect(w.calls).toEqual([]);
+        expect(w.describe).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([
+      ['catalog throws', 'throws' as const],
+      ['the product is absent from the answer', [] as ItemView[]],
     ])('when %s', async (_name, items) => {
       const w = build({ items });
 
-      expect(await w.service.read(input())).toEqual({
-        priceScopeId: SCOPE,
-        supermarketLocationId: null,
-        supermarketId: null,
-        pricePaidCents: null,
-        pricePaidCurrency: null,
-      });
-    });
-
-    // Plan 0151 moved this case. It used to cover a caller that left `itemId`
-    // out on a row of one product as well, which is what the DTO tells a
-    // caller to do, and that settle stored the product and no price. The
-    // routes now ask core which product the row records (`pricedItemId`,
-    // below), so an undefined `itemId` reaches this service only when core
-    // picked none either: a free text row. That record still has no price.
-    it('when no product was named or picked (a free text row), without asking catalog', async () => {
-      const w = build();
-
-      const paid = await w.service.read(input({ itemId: undefined }));
-
-      expect(paid).toMatchObject({
-        priceScopeId: SCOPE,
-        pricePaidCents: null,
-        pricePaidCurrency: null,
-      });
-      expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
-    });
-
-    it('when catalog throws', async () => {
-      const w = build({ items: 'throws' });
-
-      expect(await w.service.read(input())).toMatchObject({
-        priceScopeId: SCOPE,
-        pricePaidCents: null,
+      expect(await w.service.choose(input())).toEqual({
+        paid: null,
+        itemSnapshot: null,
       });
     });
   });
+});
 
-  describe('the shop (section 4.4)', () => {
-    it('is recorded with its chain when it belongs to the scope and the reader is served shops', async () => {
-      const w = build();
-
-      const paid = await w.service.read(
-        input({ supermarketLocationId: SHOP, servedLocations: true })
-      );
-
-      expect(paid?.supermarketLocationId).toBe(SHOP);
-      expect(paid?.supermarketId).toBe(CHAIN);
-      expect(paid?.pricePaidCents).toBe(95);
+/**
+ * A settle at a shop (plan 0163, section 5; plan 0202, section 2).
+ *
+ * The price is the one the basket shows there: the offer at the shop's quoted
+ * scope, which is the first of its stack. A shop outside the owner's profile is
+ * priced like one inside it. Every way of not finding a price there records no
+ * price **and no shop**, and the cheapest price of the owner's scopes is never
+ * used in its place.
+ */
+describe('what a settle at a shop records (plan 0202, section 2)', () => {
+  it("records the price at the shop's quoted scope, with the shop and its chain", async () => {
+    const w = build({
+      shopStack: [FAR_SCOPE, SCOPE],
+      items: [product([offer(FAR_SCOPE, 1.1), offer(SCOPE, 0.95)])],
     });
 
-    // Plan 0163, section 5: the resolution is the owner's scopes plus the
-    // stack of the settle's shop, so a shop no profile reaches is priced and
-    // recorded like any other.
-    it('prices and records a shop outside the owner’s profile, at its own stack', async () => {
-      const w = build({
-        shopStack: [FAR_SCOPE],
-        items: [product([offer(FAR_SCOPE, 1.1)])],
-      });
-
-      const paid = await w.service.read(
-        input({
-          priceScopeId: FAR_SCOPE,
-          supermarketLocationId: SHOP,
-          servedLocations: true,
-        })
-      );
-
-      expect(paid).toEqual({
+    expect(await w.service.choose(atShop())).toEqual({
+      paid: {
         priceScopeId: FAR_SCOPE,
         supermarketLocationId: SHOP,
         supermarketId: CHAIN,
         pricePaidCents: 110,
         pricePaidCurrency: 'EUR',
+      },
+      itemSnapshot: SNAPSHOT,
+    });
+  });
+
+  it('reads the shop, then the product at that one scope with every offer, and never the profile', async () => {
+    const w = build({ shopStack: [FAR_SCOPE, SCOPE] });
+
+    await w.service.choose(atShop());
+
+    expect(w.calls).toEqual([
+      SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+      ITEM_PATTERNS.getMany,
+    ]);
+    expect(w.lookups).toEqual([
+      { ids: [ITEM], priceScopeIds: [FAR_SCOPE], offers: 'all' },
+    ]);
+    // The scope is the shop's and not the profile's.
+    expect(w.describe).not.toHaveBeenCalled();
+  });
+
+  it('rounds to the cent rather than truncating', async () => {
+    const w = build({ items: [product([offer(SCOPE, 2.675)])] });
+
+    expect((await w.service.choose(atShop())).paid?.pricePaidCents).toBe(268);
+  });
+
+  describe('it records no price and no shop, and still the name', () => {
+    // The product is priced at SCOPE, which the owner's profile reaches. That
+    // price is not the price of this shop, so it is not recorded.
+    it('when the product has no price at the quoted scope, whatever the owner’s scopes say', async () => {
+      const w = build({
+        shopStack: [FAR_SCOPE, SCOPE],
+        items: [product([offer(SCOPE, 0.95)])],
+      });
+
+      expect(await w.service.choose(atShop())).toEqual({
+        paid: null,
+        itemSnapshot: SNAPSHOT,
+      });
+      expect(w.describe).not.toHaveBeenCalled();
+    });
+
+    it('when the offer there has no amount', async () => {
+      const w = build({ items: [product([offer(SCOPE, null)])] });
+
+      expect(await w.service.choose(atShop())).toEqual({
+        paid: null,
+        itemSnapshot: SNAPSHOT,
       });
     });
 
-    it('refuses a scope outside both the profile and the shop, as before', async () => {
-      const w = build({ shopStack: [FAR_SCOPE] });
+    it.each([
+      ['catalog cannot answer for the shop', 'throws' as const],
+      ['the shop has no scope at all', [] as string[]],
+    ])('when %s', async (_name, shopStack) => {
+      const w = build({ shopStack });
 
-      expect(
-        await w.service.read(
-          input({
-            priceScopeId: 'ffffffff-1111-4111-8111-111111111111',
-            supermarketLocationId: SHOP,
-            servedLocations: true,
-          })
-        )
-      ).toBe(null);
-    });
-
-    it('is dropped when the shop is not in the scope, and the price still stands', async () => {
-      const w = build({ shopStack: [OTHER_SCOPE] });
-
-      const paid = await w.service.read(
-        input({ supermarketLocationId: SHOP, servedLocations: true })
-      );
-
-      expect(paid?.supermarketLocationId).toBe(null);
-      expect(paid?.pricePaidCents).toBe(95);
+      expect(await w.service.choose(atShop())).toEqual({
+        paid: null,
+        itemSnapshot: SNAPSHOT,
+      });
+      // The read is then for the name alone.
+      expect(w.lookups).toEqual([{ ids: [ITEM] }]);
+      expect(w.describe).not.toHaveBeenCalled();
     });
 
     // What a reader may not be told, they may not write into a household's
     // history either. A street and a time say where somebody was standing.
-    it('is dropped from a reader who is not served shops, without asking', async () => {
+    it('when the reader is not served shops, without asking for the shop', async () => {
       const w = build();
 
-      const paid = await w.service.read(
-        input({ supermarketLocationId: SHOP, servedLocations: false })
-      );
-
-      expect(paid?.supermarketLocationId).toBe(null);
-      expect(w.calls).not.toContain(
-        SUPERMARKET_LOCATION_PATTERNS.shopAvailability
-      );
-    });
-
-    it('is dropped when catalog cannot answer for the shop, and the price still stands', async () => {
-      const w = build({ shopStack: 'throws' });
-
-      const paid = await w.service.read(
-        input({ supermarketLocationId: SHOP, servedLocations: true })
-      );
-
-      expect(paid).toMatchObject({
-        supermarketLocationId: null,
-        supermarketId: null,
-        pricePaidCents: 95,
-      });
+      expect(
+        await w.service.choose(atShop({ servedLocations: false }))
+      ).toEqual({ paid: null, itemSnapshot: SNAPSHOT });
+      expect(w.calls).toEqual([ITEM_PATTERNS.getMany]);
+      expect(w.describe).not.toHaveBeenCalled();
     });
   });
 
-  /**
-   * A catalog that never answers (section 4.5).
-   *
-   * Nest's NATS client waits for ever, so without a budget of its own a price
-   * lookup holds a settle until the proxy cuts it at fifteen seconds. The
-   * budget is a `Promise.race` against a timer, and the lookup that lost the
-   * race is left to finish and its result dropped.
-   */
-  it('gives up inside its budget with the scope and nulls', async () => {
+  it.each([
+    ['catalog throws', 'throws' as const],
+    ['the product is absent from the answer', [] as ItemView[]],
+  ])('records nothing at all when %s', async (_name, items) => {
+    const w = build({ items });
+
+    expect(await w.service.choose(atShop())).toEqual({
+      paid: null,
+      itemSnapshot: null,
+    });
+  });
+});
+
+/**
+ * What a buy copies of its product (plan 0202, section 1).
+ *
+ * Five fields, under the names the view uses. The name is the whole localized
+ * object, because a buy has no reader yet.
+ */
+describe('the name a settle records (plan 0202, section 1)', () => {
+  it('copies the name in every locale, the brand, the size, the pack count and the unit, and nothing else', () => {
+    const view = product([offer(SCOPE, 0.95)]);
+
+    const snapshot = snapshotOf(view);
+
+    expect(snapshot).toEqual(SNAPSHOT);
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'brand',
+      'defaultUnit',
+      'name',
+      'packCount',
+      'unitSize',
+    ]);
+    // A copy, so the buy does not share an object with the answer it read.
+    expect(snapshot.name).not.toBe(view.name);
+  });
+
+  it('writes null for a brand, a size and a pack count the product does not have', () => {
+    expect(
+      snapshotOf({
+        id: ITEM,
+        name: { en: 'Milk' },
+        defaultUnit: UnitOfMeasure.UNIT,
+      } as unknown as ItemView)
+    ).toEqual({
+      name: { en: 'Milk' },
+      brand: null,
+      unitSize: null,
+      packCount: null,
+      defaultUnit: UnitOfMeasure.UNIT,
+    });
+  });
+});
+
+/**
+ * A catalog that never answers (plan 0143, section 4.5).
+ *
+ * Nest's NATS client waits for ever, so without a budget of its own a price
+ * lookup holds a settle until the proxy cuts it at fifteen seconds. The budget
+ * is a `Promise.race` against a timer, and the lookup that lost the race is
+ * left to finish and its result dropped.
+ *
+ * Since plan 0202 a settle that gave up records nothing at all. Before it, the
+ * scope the client had named was kept, and no client names one any more.
+ */
+describe('the budget of a settle (plan 0143, section 4.5)', () => {
+  it.each([
+    ['catalog never answers for the product', { items: 'never answers' }],
+    ['the resolver never answers', { resolves: 'never answers' }],
+  ] as [string, World][])(
+    'gives up inside its budget with nothing at all when %s',
+    async (_name, world) => {
+      jest.useFakeTimers();
+      try {
+        const w = build(world);
+
+        const pending = w.service.choose(input());
+        let settled = false;
+        void pending.then(() => {
+          settled = true;
+        });
+        // Not before the budget: a catalog that answers late is waited for.
+        await jest.advanceTimersByTimeAsync(SETTLE_PRICE_BUDGET_MS - 1);
+        expect(settled).toBe(false);
+        jest.advanceTimersByTime(1);
+
+        expect(await pending).toEqual({ paid: null, itemSnapshot: null });
+      } finally {
+        jest.useRealTimers();
+      }
+    }
+  );
+
+  it('asks catalog for no product while the scopes are not resolved', async () => {
     jest.useFakeTimers();
     try {
-      const w = build({ items: 'never answers' });
+      const w = build({ resolves: 'never answers' });
 
-      const pending = w.service.read(input());
-      // The resolver's promise has to settle before the timer can be the last
-      // thing outstanding, which is what these two flushes are.
-      await Promise.resolve();
-      await Promise.resolve();
+      const pending = w.service.choose(input());
       jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS);
+      await pending;
 
-      expect(await pending).toEqual({
-        priceScopeId: SCOPE,
-        supermarketLocationId: null,
-        supermarketId: null,
-        pricePaidCents: null,
-        pricePaidCurrency: null,
-      });
+      expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
     } finally {
       jest.useRealTimers();
     }
   });
 
-  // Plan 0151, section 4: before step 2 passed, the scope is only what the
-  // client said, and plan 0143 step 5 says "null otherwise".
-  it('gives up with nothing at all when the scope was not resolved in time', async () => {
+  it('gives up at a shop too, with no shop recorded', async () => {
     jest.useFakeTimers();
     try {
-      const w = build({ resolves: 'never answers' });
+      const w = build({ items: 'never answers' });
 
-      const pending = w.service.read(input());
-      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS);
+      const pending = w.service.choose(atShop());
+      await jest.advanceTimersByTimeAsync(SETTLE_PRICE_BUDGET_MS);
 
-      expect(await pending).toBe(null);
-      expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
+      expect(await pending).toEqual({ paid: null, itemSnapshot: null });
     } finally {
       jest.useRealTimers();
     }
@@ -421,7 +556,8 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
 });
 
 /**
- * The product a settle's price is read for (plan 0151, sections 1 and 2).
+ * The product a settle is priced and named for (plan 0151, sections 1 and 2;
+ * plan 0202).
  *
  * Core answers `pick` with its own rule, so these cases check only what the
  * gateway does with the answer, and never how a row reaches one.
@@ -449,141 +585,318 @@ describe('pricedItemId', () => {
     expect(pricedItemId(undefined, undefined)).toBeUndefined();
   });
 
-  it('refuses several products with none named, as validation_failed on itemId', () => {
-    let thrown: unknown;
-    try {
-      pricedItemId(undefined, { pickedItemId: null, optionCount: 2 });
-    } catch (error) {
-      thrown = error;
+  // Until plan 0202 this case threw `validation_failed` on `itemId`, on the
+  // ground that a scope named by the caller says it saw a price for one
+  // product. No caller's scope is read any more, so nothing says that.
+  it.each([
+    ['core picked none', null],
+    // Core never answers a pick beside several options. If it did, several
+    // options still mean no product.
+    ['core named one all the same', ITEM],
+  ])(
+    'is no product, and never a refusal, on several products with none named, when %s (plan 0202)',
+    (_name, pickedItemId) => {
+      expect(
+        pricedItemId(undefined, { pickedItemId, optionCount: 2 })
+      ).toBeUndefined();
     }
-
-    expect(thrown).toBeInstanceOf(ValidationException);
-    expect((thrown as ValidationException).code).toBe('validation_failed');
-    expect((thrown as ValidationException).messageArgs).toEqual({
-      field: 'itemId',
-    });
-  });
+  );
 });
 
 /**
- * A settle that names a shop and no scope (velista `0114`).
+ * What a change of product records on the buys it rewrites (plan 0202,
+ * section 3).
  *
- * The zone list's "I bought this" says where and never at what price, so the
- * scope is the shop's own most specific one, kept only when the product has a
- * price there, the way the basket works out the scope it shows at a shop. Every
- * way of not resolving ends in null: no price, and no shop either.
+ * A rewritten buy keeps the place of the buy it replaces. So the new product
+ * is priced at each scope those buys recorded, in one catalog read, and a buy
+ * that recorded no scope is priced as a settle is.
  */
-describe('the price a settle at a shop with no scope records (velista 0114)', () => {
-  const atShop = (
-    extra: Partial<Omit<SettlePriceInput, 'priceScopeId'>> = {}
-  ): Omit<SettlePriceInput, 'priceScopeId'> => ({
+describe('what a change of product records (plan 0202, section 3)', () => {
+  const rewrite = (
+    extra: Partial<RewritePriceInput> = {}
+  ): RewritePriceInput => ({
     userId: OWNER,
-    profileId: undefined,
+    profileId: PROFILE,
     itemId: ITEM,
-    supermarketLocationId: SHOP,
+    supermarketLocationId: undefined,
     servedLocations: true,
+    priceScopeIds: [],
+    unscoped: false,
     ...extra,
   });
 
-  it("resolves the shop's most specific scope, and records it with the shop, its chain and the price", async () => {
-    const w = build({
-      shopStack: [FAR_SCOPE, SCOPE],
-      items: [product([offer(FAR_SCOPE, 1.1), offer(SCOPE, 0.95)])],
-    });
+  it('asks catalog nothing when the trip holds no buy to rewrite', async () => {
+    const w = build();
 
-    expect(await w.service.readAtShop(atShop())).toEqual({
-      priceScopeId: FAR_SCOPE,
-      supermarketLocationId: SHOP,
-      supermarketId: CHAIN,
-      pricePaidCents: 110,
-      pricePaidCurrency: 'EUR',
+    expect(await w.service.chooseForRewrite(rewrite())).toEqual({
+      paid: null,
+      itemSnapshot: null,
+      prices: [],
     });
-    // A scope worked out from the shop is the shop's, not the profile's, so
-    // the profile is never asked.
+    expect(w.calls).toEqual([]);
     expect(w.describe).not.toHaveBeenCalled();
   });
 
-  it('records nothing when the product has no price at that scope', async () => {
+  it('prices the product at each scope the buys recorded, in one read', async () => {
     const w = build({
-      shopStack: [FAR_SCOPE, SCOPE],
-      items: [product([offer(SCOPE, 0.95)])],
+      items: [product([offer(SCOPE, 0.95), offer(FAR_SCOPE, 1.105)])],
     });
 
-    expect(await w.service.readAtShop(atShop())).toBeNull();
+    expect(
+      await w.service.chooseForRewrite(
+        rewrite({ priceScopeIds: [SCOPE, FAR_SCOPE] })
+      )
+    ).toEqual({
+      prices: [
+        { priceScopeId: SCOPE, pricePaidCents: 95, pricePaidCurrency: 'EUR' },
+        {
+          priceScopeId: FAR_SCOPE,
+          // Rounded to the cent, as a settle is.
+          pricePaidCents: 111,
+          pricePaidCurrency: 'EUR',
+        },
+      ],
+      // Every buy recorded a scope, so nothing is chosen the way a settle
+      // chooses.
+      paid: null,
+      itemSnapshot: SNAPSHOT,
+    });
+    expect(w.lookups).toEqual([
+      { ids: [ITEM], priceScopeIds: [SCOPE, FAR_SCOPE], offers: 'all' },
+    ]);
+    expect(w.describe).not.toHaveBeenCalled();
   });
 
-  it('records nothing when the offer there has no amount', async () => {
+  it('asks for a scope once, however many buys recorded it', async () => {
+    const w = build();
+
+    await w.service.chooseForRewrite(
+      rewrite({ priceScopeIds: [SCOPE, FAR_SCOPE, SCOPE] })
+    );
+
+    expect(w.lookups).toEqual([
+      { ids: [ITEM], priceScopeIds: [SCOPE, FAR_SCOPE], offers: 'all' },
+    ]);
+  });
+
+  // Core keeps the scope and the shop of such a buy and writes no price.
+  it('leaves out a scope with no amount, and an offer at a scope that was not asked', async () => {
     const w = build({
-      shopStack: [SCOPE],
-      items: [product([offer(SCOPE, null)])],
+      items: [
+        product([
+          offer(SCOPE, null),
+          offer(FAR_SCOPE, 1.1),
+          offer(OTHER_SCOPE, 0.5),
+        ]),
+      ],
     });
 
-    expect(await w.service.readAtShop(atShop())).toBeNull();
+    const chosen = await w.service.chooseForRewrite(
+      rewrite({ priceScopeIds: [SCOPE, FAR_SCOPE] })
+    );
+
+    expect(chosen.prices).toEqual([
+      {
+        priceScopeId: FAR_SCOPE,
+        pricePaidCents: 110,
+        pricePaidCurrency: 'EUR',
+      },
+    ]);
   });
 
-  it('records nothing for a shop catalog cannot answer for', async () => {
-    const w = build({ shopStack: 'throws' });
+  describe('a buy that recorded no scope', () => {
+    it('is priced as a settle with no shop is, beside the scoped read', async () => {
+      const w = build({
+        items: [product([offer(FAR_SCOPE, 1.1)], offer(OTHER_SCOPE, 0.89))],
+      });
 
-    expect(await w.service.readAtShop(atShop())).toBeNull();
+      expect(
+        await w.service.chooseForRewrite(
+          rewrite({ priceScopeIds: [FAR_SCOPE], unscoped: true })
+        )
+      ).toEqual({
+        prices: [
+          {
+            priceScopeId: FAR_SCOPE,
+            pricePaidCents: 110,
+            pricePaidCurrency: 'EUR',
+          },
+        ],
+        paid: {
+          priceScopeId: OTHER_SCOPE,
+          supermarketLocationId: null,
+          supermarketId: null,
+          pricePaidCents: 89,
+          pricePaidCurrency: 'EUR',
+        },
+        itemSnapshot: SNAPSHOT,
+      });
+      expect(w.lookups).toHaveLength(2);
+      expect(w.lookups).toContainEqual({
+        ids: [ITEM],
+        priceScopeIds: [FAR_SCOPE],
+        offers: 'all',
+      });
+      expect(w.lookups).toContainEqual({
+        ids: [ITEM],
+        priceScopeIds: [SCOPE, OTHER_SCOPE],
+        offers: 'best',
+      });
+    });
+
+    it("is priced at the basket's shop when it has one", async () => {
+      const w = build({
+        shopStack: [FAR_SCOPE],
+        items: [product([offer(FAR_SCOPE, 1.1)])],
+      });
+
+      const chosen = await w.service.chooseForRewrite(
+        rewrite({ supermarketLocationId: SHOP, unscoped: true })
+      );
+
+      expect(chosen.paid).toEqual({
+        priceScopeId: FAR_SCOPE,
+        supermarketLocationId: SHOP,
+        supermarketId: CHAIN,
+        pricePaidCents: 110,
+        pricePaidCurrency: 'EUR',
+      });
+      expect(w.describe).not.toHaveBeenCalled();
+    });
+
+    // No scoped read was made, so the name is the one the other lookup read.
+    it('answers the name from that lookup when no buy recorded a scope', async () => {
+      const w = build();
+
+      expect(
+        await w.service.chooseForRewrite(rewrite({ unscoped: true }))
+      ).toEqual({
+        prices: [],
+        paid: {
+          priceScopeId: SCOPE,
+          supermarketLocationId: null,
+          supermarketId: null,
+          pricePaidCents: 95,
+          pricePaidCurrency: 'EUR',
+        },
+        itemSnapshot: SNAPSHOT,
+      });
+      expect(w.lookups).toEqual([
+        { ids: [ITEM], priceScopeIds: [SCOPE, OTHER_SCOPE], offers: 'best' },
+      ]);
+    });
   });
 
-  it('records nothing for a shop with no scope at all', async () => {
-    const w = build({ shopStack: [] });
-
-    expect(await w.service.readAtShop(atShop())).toBeNull();
-  });
-
-  it('records nothing on a free text line, and never asks for a price', async () => {
-    const w = build();
+  // The product of a buy is still corrected: core rewrites it with no price
+  // and no name.
+  it.each([
+    ['catalog throws', 'throws' as const],
+    ['catalog does not know the product', [] as ItemView[]],
+  ])('answers no price and no name when %s', async (_name, items) => {
+    const w = build({ items });
 
     expect(
-      await w.service.readAtShop(atShop({ itemId: undefined }))
-    ).toBeNull();
-    expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
+      await w.service.chooseForRewrite(
+        rewrite({ priceScopeIds: [SCOPE], unscoped: true })
+      )
+    ).toEqual({ paid: null, itemSnapshot: null, prices: [] });
   });
 
-  it('asks nothing for a reader who is not served shops', async () => {
-    const w = build();
-
-    expect(
-      await w.service.readAtShop(atShop({ servedLocations: false }))
-    ).toBeNull();
-    expect(w.calls).toEqual([]);
-  });
-
-  it('gives up inside its budget with nothing at all', async () => {
+  it('gives up inside its budget with no price and no name', async () => {
     jest.useFakeTimers();
     try {
       const w = build({ items: 'never answers' });
 
-      const pending = w.service.readAtShop(atShop());
-      await Promise.resolve();
-      await Promise.resolve();
-      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS);
+      const pending = w.service.chooseForRewrite(
+        rewrite({ priceScopeIds: [SCOPE], unscoped: true })
+      );
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await jest.advanceTimersByTimeAsync(SETTLE_PRICE_BUDGET_MS - 1);
+      expect(settled).toBe(false);
+      jest.advanceTimersByTime(1);
 
-      expect(await pending).toBeNull();
+      expect(await pending).toEqual({
+        paid: null,
+        itemSnapshot: null,
+        prices: [],
+      });
     } finally {
       jest.useRealTimers();
     }
   });
 });
 
-describe('the product a shop only settle is priced for (velista 0114)', () => {
-  it('is the one the caller named', () => {
-    expect(shopPricedItemId(ITEM, { pickedItemId: null, optionCount: 2 })).toBe(
-      ITEM
-    );
+/**
+ * An `itemId` catalog does not know, told apart from a catalog that is slow
+ * (plan 0201, section 4, and point 3 of its review).
+ *
+ * The product of a settle can be on none of its lines, so core cannot check
+ * the id. Only one answer refuses the buy: catalog answered, and the product
+ * is not there. Everything else lets the settle through, because somebody at a
+ * shelf with a slow catalog still bought the thing.
+ *
+ * The change of product of plan 0202 asks the same question of its `itemId`.
+ */
+describe('a settle whose itemId catalog does not know (plan 0201)', () => {
+  it('lets a product catalog knows through', async () => {
+    const w = build();
+
+    await expect(w.service.refuseUnknownItem(ITEM)).resolves.toBeUndefined();
+    // Catalog alone is asked: no scopes are resolved to know a product.
+    expect(w.calls).toEqual([ITEM_PATTERNS.getMany]);
+    expect(w.describe).not.toHaveBeenCalled();
   });
 
-  it("is core's pick on a line with one product", () => {
-    expect(
-      shopPricedItemId(undefined, { pickedItemId: ITEM, optionCount: 1 })
-    ).toBe(ITEM);
+  it('refuses a product catalog answered without, as a 400 on itemId', async () => {
+    const w = build({ items: [] });
+
+    const refused = w.service.refuseUnknownItem(ITEM);
+
+    await expect(refused).rejects.toBeInstanceOf(ValidationException);
+    await expect(refused).rejects.toMatchObject({
+      code: 'validation_failed',
+      messageArgs: { field: 'itemId' },
+    });
   });
 
-  it('is none, and never a refusal, on a line with several and none named', () => {
-    expect(
-      shopPricedItemId(undefined, { pickedItemId: null, optionCount: 2 })
-    ).toBeUndefined();
+  it('refuses when catalog answered other products and not this one', async () => {
+    const w = build({
+      items: [{ id: 'another-product', offers: [] } as unknown as ItemView],
+    });
+
+    await expect(w.service.refuseUnknownItem(ITEM)).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+  });
+
+  it('lets the settle through when catalog fails', async () => {
+    const w = build({ items: 'throws' });
+
+    await expect(w.service.refuseUnknownItem(ITEM)).resolves.toBeUndefined();
+  });
+
+  it('lets the settle through when catalog does not answer inside the budget', async () => {
+    jest.useFakeTimers();
+    try {
+      const w = build({ items: 'never answers' });
+
+      const pending = w.service.refuseUnknownItem(ITEM);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      // Not before the budget: a catalog that answers late is waited for.
+      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS - 1);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      jest.advanceTimersByTime(1);
+
+      expect(await pending).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

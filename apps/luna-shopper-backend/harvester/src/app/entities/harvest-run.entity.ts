@@ -218,4 +218,15 @@ export class HarvestRun extends BaseEntity {
   @Index('ix_harvest_runs_preset')
   @Column({ type: 'uuid', nullable: true })
   presetId!: string | null;
+
+  /**
+   * The schedule that started this run (plan 0206, section 9), null for every
+   * run a person or the postal code queue started.
+   *
+   * No foreign key, for the reason `presetId` has none: deleting a schedule
+   * leaves its runs as they were.
+   */
+  @Index('ix_harvest_runs_schedule')
+  @Column({ type: 'uuid', nullable: true })
+  scheduleId!: string | null;
 }

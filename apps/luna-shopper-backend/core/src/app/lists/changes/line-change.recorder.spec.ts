@@ -261,3 +261,82 @@ describe('snapshotOf', () => {
     });
   });
 });
+
+describe('a buy and a taken back buy (plan 0203, section 1)', () => {
+  const VIA = { userId: null, participantId: 'p-1', basketId: 'b-1' };
+
+  it('writes one BOUGHT row with the quantity pair and no other', async () => {
+    const rows: Record<string, unknown>[] = [];
+
+    const wrote = await new LineChangeRecorder().bought(
+      managerOver(rows),
+      LIST,
+      'll-1',
+      3,
+      1,
+      VIA
+    );
+
+    expect(wrote).toBe(true);
+    expect(rows).toEqual([
+      {
+        zoneId: 'z-1',
+        listId: 'l-1',
+        lineId: 'll-1',
+        kind: LineChangeKind.BOUGHT,
+        contentBefore: null,
+        contentAfter: null,
+        quantityBefore: 3,
+        quantityAfter: 1,
+        approvalBefore: null,
+        approvalAfter: null,
+        mergedIntoLineId: null,
+        // A guest: a participant and a basket, and no account.
+        actorUserId: null,
+        actorParticipantId: 'p-1',
+        basketId: 'b-1',
+      },
+    ]);
+  });
+
+  it('writes one BUY_REVERTED row with the quantity pair and no other', async () => {
+    const rows: Record<string, unknown>[] = [];
+
+    const wrote = await new LineChangeRecorder().buyReverted(
+      managerOver(rows),
+      LIST,
+      'll-1',
+      0,
+      2,
+      ACTOR
+    );
+
+    expect(wrote).toBe(true);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: LineChangeKind.BUY_REVERTED,
+      quantityBefore: 0,
+      quantityAfter: 2,
+      contentBefore: null,
+      approvalAfter: null,
+      // A buy on the list page: an account and no basket.
+      actorUserId: 'u-1',
+      actorParticipantId: null,
+      basketId: null,
+    });
+  });
+
+  it('writes nothing when the two quantities are equal', async () => {
+    const rows: Record<string, unknown>[] = [];
+    const recorder = new LineChangeRecorder();
+
+    // A buy of a line that was already at zero, and "they had none".
+    expect(
+      await recorder.bought(managerOver(rows), LIST, 'll-1', 0, 0, VIA)
+    ).toBe(false);
+    expect(
+      await recorder.buyReverted(managerOver(rows), LIST, 'll-1', 2, 2, VIA)
+    ).toBe(false);
+    expect(rows).toEqual([]);
+  });
+});

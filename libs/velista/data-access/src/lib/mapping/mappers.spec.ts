@@ -9,6 +9,7 @@ import {
   toCatalogSuggestions,
   toComment,
   toItemLists,
+  toItemLookup,
   toLine,
   toLineSettlement,
   toListAccessEntries,
@@ -306,6 +307,8 @@ describe('toLine', () => {
     // plan 0070, section 9).
     productGroupId: 'group-milk',
     groupItemIds: ['item-milk'],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     position: 3,
     approvalStatus: 'APPROVED',
     // The two derived indicators, which replaced the trip status (backend plan 0047,
@@ -315,6 +318,7 @@ describe('toLine', () => {
     // The third one (backend plan 0052, section 4), which the other two cannot
     // stand in for: bought is history and this is right now.
     claimed: true,
+    named: true,
     claimedByUserId: 'u9',
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
@@ -323,6 +327,14 @@ describe('toLine', () => {
 
   it('maps a well formed line', () => {
     expect(toLine(valid)).toEqual(valid);
+  });
+
+  it('reads whether a person named the line, and names it for anything but false (velista 0144)', () => {
+    expect(toLine({ ...valid, named: false })?.named).toBe(false);
+    expect(toLine({ ...valid, named: true })?.named).toBe(true);
+    expect(toLine({ ...valid, named: undefined })?.named).toBe(true);
+    expect(toLine({ ...valid, named: 'false' })?.named).toBe(true);
+    expect(toLine({ ...valid, named: 0 })?.named).toBe(true);
   });
 
   it('drops a line with no list id, since it cannot be placed', () => {
@@ -376,6 +388,8 @@ describe('toLine', () => {
       ...valid,
       productGroupId: undefined,
       groupItemIds: undefined,
+      favoriteItemId: null,
+      preferredSupermarketId: null,
     });
 
     expect(bare?.productGroupId).toBeNull();
@@ -1395,6 +1409,19 @@ describe('toCatalogSuggestions', () => {
     );
     expect(names).not.toContain(undefined);
     expect(names).toHaveLength(3);
+  });
+
+  it('reads the lookup with prices the same way (velista 0145)', () => {
+    const items = toItemLookup({ items: [milk], scopes: body.scopes });
+    expect(
+      items?.[0]?.chainPrices.map((one) => [one.chain.id, one.offer.price])
+    ).toEqual([
+      ['mercadona', 1.19],
+      ['dia', 1.29],
+      ['lidl', null],
+    ]);
+    expect(toItemLookup({ items: [milk] })?.[0]?.chainPrices).toEqual([]);
+    expect(toItemLookup('nope')).toBeNull();
   });
 
   it('names no chain at all when the map is absent or empty', () => {

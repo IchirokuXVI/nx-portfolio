@@ -21,6 +21,7 @@ import {
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
 import { BehaviorSubject } from 'rxjs';
+import { pathFromRootAt } from '../catalog-route.testing';
 import { CategoryChildrenPage } from './category-children-page';
 
 async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
@@ -35,7 +36,9 @@ async function render(
   current: string | null = null,
   tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES),
   /** What else the tab was narrowed by when it opened this page. */
-  rest: Record<string, string> = {}
+  rest: Record<string, string> = {},
+  /** The page that opened the picker. The tab by default. */
+  opener = '/velista/en/catalog'
 ) {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
@@ -54,7 +57,11 @@ async function render(
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { paramMap: params, queryParamMap: query },
+          snapshot: {
+            paramMap: params,
+            queryParamMap: query,
+            pathFromRoot: pathFromRootAt(`${opener}/categories/${parentSlug}`),
+          },
           paramMap: new BehaviorSubject(params),
           queryParamMap: new BehaviorSubject(query),
         },
@@ -140,12 +147,11 @@ describe('CategoryChildrenPage (velista 0119)', () => {
       undefined,
       {
         chain: 'chain-deza',
-        shop: 'location-deza-1',
         q: 'leche',
         order: 'price',
       }
     );
-    const rest = '&chain=chain-deza&shop=location-deza-1&q=leche&order=price';
+    const rest = '&chain=chain-deza&q=leche&order=price';
     const [everything, children] = cards(fixture);
 
     expect(everything?.[0]?.getAttribute('href')).toBe(
@@ -175,6 +181,26 @@ describe('CategoryChildrenPage (velista 0119)', () => {
     );
     (back as HTMLButtonElement).click();
     expect(pages.back).toHaveBeenCalledWith('/velista/en/catalog');
+  });
+
+  it('comes back to the catalog that chooses when that is what opened it (velista 0140)', async () => {
+    const opener = '/velista/en/zones/z1/lists/l1/lines/zl-1/product';
+    const { fixture, pages } = await render(
+      'eggs-milk-and-butter',
+      null,
+      fakeCategoryStore(MEMORY_CATEGORIES),
+      { q: 'leche' },
+      opener
+    );
+
+    const everything = cards(fixture)[0]?.[0];
+    expect(everything?.getAttribute('href')).toBe(
+      `${opener}?category=eggs-milk-and-butter&q=leche`
+    );
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('lib-page-header button.lead')
+      ?.click();
+    expect(pages.back).toHaveBeenCalledWith(`${opener}?q=leche`);
   });
 
   it('sends a slug that is not a root to the page of parents, in place', async () => {

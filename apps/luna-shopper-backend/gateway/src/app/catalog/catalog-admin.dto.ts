@@ -347,42 +347,6 @@ export class AdminListCategoriesQueryDto extends PageQueryDto {
 
 // --- Shop sections (plan 0167, section 4) -----------------------------------
 
-/** One chain's sections, in `position` order. */
-export class AdminListSupermarketSectionsQueryDto extends PageQueryDto {
-  @ApiPropertyOptional({
-    description:
-      'Only the sections whose name, in either content language, or whose slug contains this text.',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  query?: string;
-}
-
-/**
- * The pins of one chain. Both filters are optional and combine as AND:
- * `itemId` is one product's pins, `sectionId` the products pinned to one
- * section, and neither is every pin in the chain.
- */
-export class AdminListItemSectionPinsQueryDto extends PageQueryDto {
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description: 'Only this product’s pins in the chain.',
-  })
-  @IsOptional()
-  @IsUUID('all')
-  itemId?: string;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description:
-      'Only the products pinned to this section, each with all of its pins in the chain.',
-  })
-  @IsOptional()
-  @IsUUID('all')
-  sectionId?: string;
-}
-
 /**
  * How many products one preview may name. The back office previews one
  * product at a time; the bound keeps the query string short.
@@ -398,7 +362,7 @@ export class AdminItemSectionsAtLocationQueryDto {
     minItems: 1,
     maxItems: SECTION_PREVIEW_MAX_ITEMS,
     description:
-      'Repeatable. The products to answer the rule of plan 0167, section 3 for, at this shop.',
+      'Repeatable. The products to place in the sections of this shop.',
   })
   @Transform(asArray)
   @IsArray()

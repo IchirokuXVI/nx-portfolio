@@ -68,10 +68,15 @@ export {
 export {
   ACCOUNT_ROLES,
   DIRECTORY_SERVICE,
+  IMPERSONATION_REASONS,
   orderedRoles,
   type AccountRole,
   type DirectoryServiceI,
+  type ImpersonationReason,
+  type ImpersonationSession,
 } from './lib/directory/directory-service';
+export { ImpersonationStore } from './lib/directory/impersonation-store';
+export { type RecoveryLinks } from './lib/directory/recovery-links';
 export {
   GatewayError,
   notFoundError,

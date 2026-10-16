@@ -40,6 +40,7 @@ import {
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
+import { watchLineName } from '../line-page/line-name';
 import { listErrorKey } from '../list-error-copy';
 import { selectAbilities } from '../select-list-state';
 
@@ -205,12 +206,11 @@ export class CommentsSheet {
   );
 
   /** What the sheet is titled: the line it is about, by name. */
-  readonly lineName = computed(
-    () =>
-      this._lines
-        .linesIn(this.listId())
-        .find((line) => line.id === this.lineId())?.content ?? ''
+  private readonly _name = watchLineName(() =>
+    this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
+
+  readonly lineName = computed(() => this._name()?.text ?? '');
 
   /** Oldest first, so the conversation reads downwards and ends at the newest line. */
   readonly comments = computed<readonly CommentRowVm[]>(() => {
@@ -398,7 +398,12 @@ export class CommentsSheet {
     }
   }
 
-  /** Cancel, Escape, the scrim, and the back button all arrive here. */
+  /**
+   * Cancel, Escape, the scrim, and the back button all arrive here.
+   *
+   * The sheet covers the list, or the line page (velista `0135`, section 2). The
+   * fallback is the page it covers, which the route says.
+   */
   async dismiss(): Promise<void> {
     await this._sheet.dismiss(
       appPath(
@@ -407,7 +412,10 @@ export class CommentsSheet {
         'zones',
         this.zoneId(),
         'lists',
-        this.listId()
+        this.listId(),
+        ...(this._route.snapshot.data['overLinePage'] === true
+          ? ['lines', this.lineId()]
+          : [])
       )
     );
   }

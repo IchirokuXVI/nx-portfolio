@@ -6,11 +6,14 @@ import type {
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
+  BasketMarks,
   BasketParticipant,
+  BasketProductChangeRequest,
+  BasketProductList,
   BasketRenameRequest,
-  BasketRenameResult,
   BasketRevertRequest,
   BasketRowResult,
+  BasketRowTarget,
   BasketSession,
   BasketSettleRequest,
   BasketShareLink,
@@ -27,8 +30,9 @@ import {
 import {
   toBasket,
   toBasketLinkPreview,
+  toBasketMarks,
   toBasketParticipant,
-  toBasketRenameResult,
+  toBasketProductLists,
   toBasketRowResult,
   toBasketSession,
   toBasketShareLink,
@@ -186,6 +190,30 @@ export class BasketApi implements BasketServiceI {
     return required(toBasket(body), 'basket.live');
   }
 
+  async getBasketRows(basketId: string, locationId?: string): Promise<Basket> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._basket(basketId)}/rows`, {
+        ...this._participantOptions(basketId, 'basket.rows'),
+        ...atShop(locationId),
+      })
+    );
+
+    // The full answer without `products`, `scopes` and `shop` (backend `0205`),
+    // which the mapper reads as empty. The store keeps its own.
+    return required(toBasket(body), 'basket.rows');
+  }
+
+  async getMarks(basketId: string): Promise<BasketMarks> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._basket(basketId)}/changes/marks`,
+        this._participantOptions(basketId, 'basket.changes.marks')
+      )
+    );
+
+    return required(toBasketMarks(body), 'basket.changes.marks');
+  }
+
   /** The three numbers the dashboard card draws, with no rows behind them. */
   async getLiveSummary(): Promise<LiveBasketSummary> {
     const body = await firstValueFrom(
@@ -205,16 +233,17 @@ export class BasketApi implements BasketServiceI {
    * `quantity` on a `NOT_AVAILABLE`, so a key present and empty is a refusal
    * where an absent one is the branch the caller meant.
    *
-   * The allocations are copied rather than passed through, because the caller's
-   * array can be a signal's value on a live pane and this request is
+   * The allocations and the lines are copied rather than passed through, because
+   * the caller's array can be a signal's value on a live pane and this request is
    * asynchronous.
    */
   async settle(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketSettleRequest
   ): Promise<BasketRowResult> {
     const request: Record<string, unknown> = {
+      lineIds: [...target.lineIds],
       outcome: body.outcome,
       from: body.from,
     };
@@ -242,7 +271,7 @@ export class BasketApi implements BasketServiceI {
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._row(basketId, rowKey)}/settle`,
+        `${this._row(basketId, target.rowKey)}/settle`,
         request,
         this._participantOptions(basketId, 'basket.settle')
       )
@@ -265,17 +294,18 @@ export class BasketApi implements BasketServiceI {
    */
   async revert(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRevertRequest
   ): Promise<BasketRowResult> {
+    const lineIds = [...target.lineIds];
     const request =
       body.target === 'UNITS'
-        ? { target: 'UNITS', units: body.units, from: body.from }
-        : { target: 'CLOSE' };
+        ? { lineIds, target: 'UNITS', units: body.units, from: body.from }
+        : { lineIds, target: 'CLOSE' };
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._row(basketId, rowKey)}/revert`,
+        `${this._row(basketId, target.rowKey)}/revert`,
         request,
         this._participantOptions(basketId, 'basket.revert')
       )
@@ -287,20 +317,26 @@ export class BasketApi implements BasketServiceI {
   /**
    * Put a row off for now, and take that back (backend `0137`).
    *
-   * **No body on either**, which is not an omission: a skip is a fact with no
-   * parameters. It carries no `from` because it has no number to be stale
-   * about, and `PUT` rather than `POST` because skipping an already skipped row
-   * is the state that was asked for and not a second act.
+   * **The lines and nothing else.** A skip is a fact with no parameters but the
+   * lines it is about (backend `0201`). It carries no `from` because it has no
+   * number to be stale about, and `PUT` rather than `POST` because skipping an
+   * already skipped row is the state that was asked for and not a second act.
+   * The `DELETE` names its lines in the query string, because a body on a
+   * `DELETE` is not delivered reliably by every client and proxy (backend `0201`,
+   * "What the build decided", point 19).
    *
    * The participant credential, because every participant may skip, a guest
    * included: it is a smaller act than a settle, which every participant
    * already may.
    */
-  async skip(basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async skip(
+    basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     const answer = await firstValueFrom(
       this._http.put<unknown>(
-        `${this._row(basketId, rowKey)}/skip`,
-        {},
+        `${this._row(basketId, target.rowKey)}/skip`,
+        { lineIds: [...target.lineIds] },
         this._participantOptions(basketId, 'basket.skip')
       )
     );
@@ -309,12 +345,15 @@ export class BasketApi implements BasketServiceI {
   }
 
   /** The same route, the opposite verb. See {@link skip}. */
-  async unskip(basketId: string, rowKey: string): Promise<BasketRowResult> {
+  async unskip(
+    basketId: string,
+    target: BasketRowTarget
+  ): Promise<BasketRowResult> {
     const answer = await firstValueFrom(
-      this._http.delete<unknown>(
-        `${this._row(basketId, rowKey)}/skip`,
-        this._participantOptions(basketId, 'basket.skip')
-      )
+      this._http.delete<unknown>(`${this._row(basketId, target.rowKey)}/skip`, {
+        ...this._participantOptions(basketId, 'basket.skip'),
+        params: new HttpParams().set('lineIds', target.lineIds.join(',')),
+      })
     );
 
     return required(toBasketRowResult(answer), 'basket.skip');
@@ -323,25 +362,65 @@ export class BasketApi implements BasketServiceI {
   /**
    * Change what one list asks for (velista `0092`, section 6).
    *
-   * `lineId` always goes out, although the server requires it only on a row of
-   * several entries: the control is drawn per entry, so there is always one to
-   * name, and leaving the server to guess on a single entry row would be one
-   * entry away from moving a list nobody pointed at.
+   * Sent under its own line, which is both the key of the path and the body's
+   * `lineId` (backend `0201`, section 4). The line need not be a row the basket
+   * draws: a list that holds the product at zero is raised this way.
    */
   async setDemand(
     basketId: string,
-    rowKey: string,
     body: BasketDemandRequest
   ): Promise<BasketRowResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._row(basketId, rowKey)}/demand`,
+        `${this._row(basketId, body.lineId)}/demand`,
         { lineId: body.lineId, quantity: body.quantity, from: body.from },
         this._participantOptions(basketId, 'basket.demand')
       )
     );
 
     return required(toBasketRowResult(answer), 'basket.demand');
+  }
+
+  /**
+   * Take another product on these lines (velista `0140`, section 4).
+   *
+   * Under the participant credential like every write here. The gateway refuses a
+   * guest, so the page offers this to an account alone.
+   */
+  async changeProduct(
+    basketId: string,
+    body: BasketProductChangeRequest
+  ): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(basketId)}/lines/product`,
+        { lineIds: [...body.lineIds], itemId: body.itemId, keep: body.keep },
+        this._participantOptions(basketId, 'basket.changeProduct')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.changeProduct');
+  }
+
+  /**
+   * The covered lists that could take a product (backend `0201`, section 5).
+   *
+   * Thrown on failure rather than emptied, unlike the search: an empty answer is
+   * "no list can take it", which hides the disclosure, while a failure is a row
+   * with a retry.
+   */
+  async productLists(
+    basketId: string,
+    itemId: string
+  ): Promise<readonly BasketProductList[]> {
+    const answer = await firstValueFrom(
+      this._http.get<unknown>(
+        `${this._basket(basketId)}/products/${encodeURIComponent(itemId)}/lists`,
+        this._participantOptions(basketId, 'basket.productLists')
+      )
+    );
+
+    return required(toBasketProductLists(answer), 'basket.productLists');
   }
 
   /**
@@ -363,6 +442,10 @@ export class BasketApi implements BasketServiceI {
     };
     if (body.itemIds !== undefined && body.itemIds.length > 0) {
       request['itemIds'] = [...body.itemIds];
+      // Only with a product, and only ever `false` (backend `0207`).
+      if (body.named === false) {
+        request['named'] = false;
+      }
     }
 
     const answer = await firstValueFrom(
@@ -385,23 +468,26 @@ export class BasketApi implements BasketServiceI {
    */
   async renameRow(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult> {
-    const request: Record<string, unknown> = { content: body.content };
+  ): Promise<BasketRowResult> {
+    const request: Record<string, unknown> = {
+      lineIds: [...target.lineIds],
+      content: body.content,
+    };
     if (body.confirmMerge === true) {
       request['confirmMerge'] = true;
     }
 
     const answer = await firstValueFrom(
       this._http.patch<unknown>(
-        this._row(basketId, rowKey),
+        this._row(basketId, target.rowKey),
         request,
         this._participantOptions(basketId, 'basket.renameRow')
       )
     );
 
-    return required(toBasketRenameResult(answer), 'basket.renameRow');
+    return required(toBasketRowResult(answer), 'basket.renameRow');
   }
 
   /**

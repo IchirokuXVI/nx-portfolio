@@ -1,4 +1,7 @@
-import { SettlementOutcome } from '@portfolio/luna-shopper/contracts';
+import {
+  SettlementOutcome,
+  type ItemSnapshot,
+} from '@portfolio/luna-shopper/contracts';
 import {
   Column,
   CreateDateColumn,
@@ -264,4 +267,38 @@ export class LineSettlement {
    */
   @Column({ type: 'uuid', nullable: true })
   supermarketId!: string | null;
+
+  /**
+   * What the product of {@link itemId} was called when this was settled (plan
+   * 0202, section 1).
+   *
+   * {@link itemId} names a product in another service, and that product can be
+   * renamed, merged or removed afterwards. Then the id names something else or
+   * nothing. So the gateway, which reads the product for its price, hands over
+   * its name, its brand and its size, and they are copied here.
+   *
+   * Null for a free text buy, for every row written before that plan, and when
+   * catalog did not answer inside the budget of the price read. Core never
+   * reads a field of it: it is stored and served.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  itemSnapshot!: ItemSnapshot | null;
+
+  /**
+   * The settlement this row stands in for, or null (plan 0202, section 3).
+   *
+   * A change of product from the basket does not edit a buy. It marks the buy
+   * reverted and writes this row beside it, with the same line, quantity,
+   * person and {@link settledAt}, and the new product. This column is what
+   * tells that correction from a buy somebody took back: a history leaves out a
+   * reverted row that another row names here.
+   *
+   * No foreign key. Both rows are of one line, and they leave with it.
+   */
+  @Index('ux_settlements_replaces', {
+    unique: true,
+    where: '"replacesSettlementId" IS NOT NULL',
+  })
+  @Column({ type: 'uuid', nullable: true })
+  replacesSettlementId!: string | null;
 }

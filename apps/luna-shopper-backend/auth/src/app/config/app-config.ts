@@ -86,6 +86,12 @@ export const authValidationSchema = Joi.object({
   ADMIN_DEV_AUTOLOGIN: Joi.boolean().default(false),
   ADMIN_DEV_AUTOLOGIN_USERNAME: Joi.string().allow('').default(''),
 
+  // Support sessions (plan 0194): an operator opens the app as a user. Off
+  // unless a deployment turns it on. While it is off, no session starts, no
+  // code is exchanged and no token of a session passes a check. The one
+  // switch is here, and the gateway has none, so the two cannot disagree.
+  IMPERSONATION_ENABLED: Joi.boolean().default(false),
+
   // Google OAuth (login with Google). Optional, and mirroring the gateway's
   // schema exactly (plan 0026, section 3.2).
   //
@@ -189,6 +195,11 @@ export interface AuthConfig {
     /** The existing admin a development autologin issues a token for. */
     devAutologinUsername: string;
   };
+  /** Support sessions (plan 0194). */
+  impersonation: {
+    /** `IMPERSONATION_ENABLED`. False unless a deployment says otherwise. */
+    enabled: boolean;
+  };
   google: {
     clientId: string;
     clientSecret: string;
@@ -283,6 +294,9 @@ export const authConfiguration = registerAs(
       participantTokenTtl: process.env.PARTICIPANT_TOKEN_TTL ?? '15m',
     },
     admin: adminConfig(),
+    impersonation: {
+      enabled: process.env.IMPERSONATION_ENABLED === 'true',
+    },
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',

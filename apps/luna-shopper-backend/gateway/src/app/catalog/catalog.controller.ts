@@ -25,6 +25,7 @@ import {
   type CategoryTreeView,
   type GetItemsRequest,
   type GetItemsResult,
+  type ItemLookupResponse,
   type ItemPage,
   type ItemPriceHistoryRequest,
   type ItemPriceHistoryView,
@@ -59,13 +60,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import { errorCodeOf } from '../auth/remote-problem';
 import {
+  ApiComposedResponse,
   ApiContractResponse,
   ApiProblemResponses,
   componentRef,
   hoistContractSchema,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
-import { CatalogSuggestService } from './catalog-suggest.service';
+import {
+  CatalogSuggestService,
+  productScopeIds,
+} from './catalog-suggest.service';
 import {
   CatalogListQueryDto,
   ListPriceScopesQueryDto,
@@ -271,7 +276,8 @@ export class CatalogLocationsController {
 
 /**
  * A shop's sections, in its order (plan 0167, section 4): the aisles of the
- * shop you are in, which velista `0120` draws the basket by.
+ * shop you are in, which velista `0120` draws the basket by. They are the
+ * shop's own, and a shop with none answers an empty list (plan 0200).
  *
  * **Public: no guard and no token**, and its own controller for that reason,
  * because a guard is carried by the controller and every other read here
@@ -293,7 +299,7 @@ export class CatalogLocationSectionsController {
   @Get(':id/sections')
   @ApiContractResponse(SECTION_PATTERNS.forLocation, {
     description:
-      'The shop’s sections in its order, each with the categories it covers. `source` is `LOCATION` when the shop has a list of its own and `CHAIN` when it inherits its chain’s. An unknown shop is a 404.',
+      'The sections of the shop in its order, each with the categories it covers. Empty when the shop has no sections of its own: nothing is read from its chain. An unknown shop is a 404.',
   })
   @ApiProblemResponses({ notFound: true })
   sections(@UuidParam('id') id: string): Promise<LocationSectionsView> {
@@ -534,49 +540,6 @@ export class CatalogItemsController {
   }
 
   /**
-   * Several known products, in one round trip (plan 0053, section 1).
-   *
-   * A line carries a **set** of products (`0048`'s `itemSetHash` hashes that
-   * set), so resolving one line's names through `GET :id` is one request per
-   * product from a sheet that opens on a tap. That is what velista shipped a
-   * fixture instead of, and what this exists to replace.
-   *
-   * Three things about its shape:
-   *
-   * - **Unknown ids are omitted, not an error.** A line can outlive a product. A
-   *   sheet that fails to open because one of five products was withdrawn is a
-   *   worse failure than a sheet that names four, so the caller matches the
-   *   answer back by id and draws what it got.
-   * - **Unscoped**, exactly as reading one product is: a line may reference an
-   *   item nobody near the caller sells, and the product existing and the price
-   *   being absent are different answers.
-   * - **`POST` for a read**, which is the one uncomfortable thing here and is
-   *   forced by the cap. Five hundred UUIDs is roughly eighteen kilobytes of
-   *   query string, comfortably past Node's sixteen kilobyte header limit, so a
-   *   `GET` carrying repeated `id` parameters would answer 431 at exactly the
-   *   size the contract says is allowed. The ids go in the body instead.
-   *
-   * It therefore answers **201**, like every other POST in this gateway, and
-   * nothing is created. 200 would read better, and so would it on
-   * `POST /v1/assistant`; the whole surface follows Nest's default statuses with
-   * no `@HttpCode` anywhere and `openapi-document.spec.ts` enforces that as a
-   * house rule, so breaking it here to be tidier would cost a red test and a
-   * precedent.
-   *
-   * Account authenticated, and **not** the guest path. A basket's composition
-   * stays inside the participant authenticated surface where velista `0044` put
-   * it: a guest reaching a general catalog route is a wider hole than a guest
-   * reading the names in the basket they were invited to.
-   */
-  @Post('lookup')
-  @ApiContractResponse(ITEM_PATTERNS.getMany, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true })
-  lookup(@Body() dto: LookupItemsDto): Promise<GetItemsResult> {
-    const req: GetItemsRequest = { ids: dto.ids };
-    return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, req);
-  }
-
-  /**
    * One known product, **unscoped and deliberately so** (plan 0049, section 3).
    *
    * This is how a list line renders its product, and a line can reference an
@@ -661,6 +624,120 @@ export class CatalogItemsController {
       ITEM_PATTERNS.priceHistory,
       req
     );
+  }
+}
+
+/**
+ * Several known products, in one round trip (plan 0053, section 1).
+ *
+ * A line carries a **set** of products (`0048`'s `itemSetHash` hashes that
+ * set), so resolving one line's names through `GET :id` is one request per
+ * product from a sheet that opens on a tap. That is what velista shipped a
+ * fixture instead of, and what this exists to replace.
+ *
+ * Three things about its shape:
+ *
+ * - **Unknown ids are omitted, not an error.** A line can outlive a product. A
+ *   sheet that fails to open because one of five products was withdrawn is a
+ *   worse failure than a sheet that names four, so the caller matches the
+ *   answer back by id and draws what it got.
+ * - **Unscoped**, exactly as reading one product is: a line may reference an
+ *   item nobody near the caller sells, and the product existing and the price
+ *   being absent are different answers.
+ * - **`POST` for a read**, which is the one uncomfortable thing here and is
+ *   forced by the cap. Five hundred UUIDs is roughly eighteen kilobytes of
+ *   query string, comfortably past Node's sixteen kilobyte header limit, so a
+ *   `GET` carrying repeated `id` parameters would answer 431 at exactly the
+ *   size the contract says is allowed. The ids go in the body instead.
+ *
+ * It therefore answers **201**, like every other POST in this gateway, and
+ * nothing is created. 200 would read better, and so would it on
+ * `POST /v1/assistant`; the whole surface follows Nest's default statuses with
+ * no `@HttpCode` anywhere and `openapi-document.spec.ts` enforces that as a
+ * house rule, so breaking it here to be tidier would cost a red test and a
+ * precedent.
+ *
+ * Account authenticated, and **not** the guest path. A basket's composition
+ * stays inside the participant authenticated surface where velista `0044` put
+ * it: a guest reaching a general catalog route is a wider hole than a guest
+ * reading the names in the basket they were invited to.
+ *
+ * ## With `prices: true` it answers prices too (plan 0207, section 2)
+ *
+ * The rows of a list draw a price beside each product, and
+ * `GET :id/offers` answers one product for each request. So the lookup
+ * reads the price scopes of the **default profile** of the caller, as the
+ * browse read does with no selector, and asks the same message with those
+ * scopes and `offers: 'all'`. It is still one read for many ids, under the
+ * same bound.
+ *
+ * - **The products are still not scoped.** The scopes decide which prices are
+ *   attached and never which products come back. A product with no price
+ *   there is in the answer with a null `bestOffer`, and a caller with no
+ *   scope gets every product with no offer. Neither is an error.
+ * - **The answer names the chain of each scope**, in `scopes`, the shape the
+ *   dropdown of the composer answers. An offer carries a scope id and no
+ *   chain, and a second request for the chains is what this saves.
+ * - **The request takes no scope, postal code or profile.** A reader sees the
+ *   prices of the profile they shop with.
+ *
+ * It is still not gated by membership of a list. It answers products, and
+ * the request names them.
+ *
+ * ## A controller of its own, on the path of {@link CatalogItemsController}
+ *
+ * The priced read names the chain of each scope, which the other reads of
+ * that controller do not, so it takes one more service than they do. The two
+ * do not collide: this is the only `POST` under `catalog/items`.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/items', version: '1' })
+export class CatalogItemLookupController {
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService,
+    private readonly suggestions: CatalogSuggestService
+  ) {}
+
+  @Post('lookup')
+  @ApiComposedResponse(CATALOG_SCHEMA_IDS.itemLookupResponse, {
+    status: HttpStatus.CREATED,
+    description:
+      'The products that exist, in no promised order. An id that names nothing is absent. With prices true, every item carries bestOffer and offers, and scopes names the chain of each scope those offers quote.',
+  })
+  @ApiProblemResponses({ body: true })
+  async lookup(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: LookupItemsDto
+  ): Promise<ItemLookupResponse> {
+    if (dto.prices !== true) {
+      const req: GetItemsRequest = { ids: dto.ids };
+      return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, req);
+    }
+    // `describe` and not `forRead`, for the reason the suggest route gives:
+    // the answer names the chains, and `forRead` throws them away. The empty
+    // query is the default profile.
+    const resolved = await this.scopes.describe(user.userId, {});
+    const req: GetItemsRequest = {
+      ids: dto.ids,
+      priceScopeIds: resolved.priceScopeIds,
+      offers: 'all',
+    };
+    const { items } = await this.nats.send<GetItemsResult>(
+      ITEM_PATTERNS.getMany,
+      req
+    );
+    return {
+      items,
+      scopes: await this.suggestions.chainsOf(
+        user.userId,
+        productScopeIds(items),
+        resolved
+      ),
+    };
   }
 }
 

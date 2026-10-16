@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type { ShopSections } from '@portfolio/velista/models';
+import type { ShopSection } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous } from '../auth/http-context';
@@ -19,7 +19,7 @@ export class ShopSectionsApi implements ShopSectionsServiceI {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);
 
-  async sections(locationId: string): Promise<ShopSections | null> {
+  async sections(locationId: string): Promise<readonly ShopSection[] | null> {
     try {
       const body = await firstValueFrom(
         this._http.get<unknown>(
@@ -36,7 +36,7 @@ export class ShopSectionsApi implements ShopSectionsServiceI {
     } catch (error) {
       // An unknown shop has no sections, and asking again would not give it any.
       return error instanceof GatewayError && error.code === 'not_found'
-        ? { sections: [], source: 'CHAIN' }
+        ? []
         : null;
     }
   }

@@ -136,7 +136,8 @@ export class LineMemory implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<LineAddResult> {
     this._require(listId, 'WRITE');
 
@@ -149,7 +150,7 @@ export class LineMemory implements LineServiceI {
     );
     if (existing === undefined) {
       return {
-        line: await this.addLine(listId, content, quantity, itemIds),
+        line: await this.addLine(listId, content, quantity, itemIds, named),
         merged: false,
       };
     }
@@ -171,7 +172,8 @@ export class LineMemory implements LineServiceI {
     listId: string,
     content: string,
     quantity?: number,
-    itemIds?: readonly string[]
+    itemIds?: readonly string[],
+    named?: false
   ): Promise<Line> {
     const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
@@ -185,6 +187,9 @@ export class LineMemory implements LineServiceI {
       id: newId(),
       listId,
       content,
+      // The two rules of backend `0207`, section 1.2: a line with no product is
+      // named whatever the add says, and an add with no flag names the line.
+      named: named !== false || (itemIds ?? []).length === 0,
       quantity: quantity ?? 1,
       itemIds: [...(itemIds ?? [])],
       // A hand made set. The composer sends the products a group offered rather
@@ -194,6 +199,8 @@ export class LineMemory implements LineServiceI {
       // subscription no server would agree exists.
       productGroupId: null,
       groupItemIds: [],
+      favoriteItemId: null,
+      preferredSupermarketId: null,
       // One past the highest, never `length`. Deletes leave gaps and a list whose
       // positions collide is the bug rule L4 is about.
       position: existing.reduce((top, l) => Math.max(top, l.position), 0) + 1,
@@ -237,9 +244,12 @@ export class LineMemory implements LineServiceI {
     lineId: string,
     changes: {
       content?: string;
+      named?: false;
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      favoriteItemId?: string | null;
+      preferredSupermarketId?: string | null;
       confirmMerge?: boolean;
     }
   ): Promise<LineUpdateResult> {
@@ -249,7 +259,11 @@ export class LineMemory implements LineServiceI {
 
     if (!permissions.includes('MANAGE')) {
       if (approved) {
-        if (!permissions.includes('DECIDE') || changes.content !== undefined) {
+        if (
+          !permissions.includes('DECIDE') ||
+          changes.content !== undefined ||
+          changes.named !== undefined
+        ) {
           throw memoryFailure('forbidden', 403);
         }
       } else if (!permissions.includes('WRITE')) {
@@ -279,6 +293,15 @@ export class LineMemory implements LineServiceI {
       throw memoryFailure('validation_failed', 400);
     }
 
+    // The favourite is one of the products, as the set stands after this same
+    // update (backend plan 0199, section 2, rule 1).
+    if (
+      typeof changes.favoriteItemId === 'string' &&
+      !(changes.itemIds ?? line.itemIds).includes(changes.favoriteItemId)
+    ) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
     this._maybeFail();
 
     const other = this._collision(line, changes.content);
@@ -302,6 +325,7 @@ export class LineMemory implements LineServiceI {
     const updated = this._patch(lineId, (current) => ({
       ...current,
       content: changes.content ?? current.content,
+      named: namedAfter(current, changes),
       quantity: changes.quantity ?? current.quantity,
       // Undefined leaves the set alone; an empty array clears it to free text.
       itemIds:
@@ -310,6 +334,12 @@ export class LineMemory implements LineServiceI {
       // product off the catalog's side and nothing puts it back. A product removed
       // from the set leaves that side too, because it is no longer on the line.
       groupItemIds: adopted(current, changes),
+      // A favourite that leaves the set is cleared in the same write (rule 2).
+      favoriteItemId: keptFavorite(current, changes),
+      preferredSupermarketId:
+        changes.preferredSupermarketId === undefined
+          ? current.preferredSupermarketId
+          : changes.preferredSupermarketId,
       ...(current.approvalStatus === 'REJECTED'
         ? {
             approvalStatus: 'PENDING' as LineApprovalStatus,
@@ -352,11 +382,17 @@ export class LineMemory implements LineServiceI {
   private _merge(
     line: Line,
     other: Line,
-    changes: { content?: string; quantity?: number }
+    changes: {
+      content?: string;
+      named?: false;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
   ): LineUpdateResult {
     const renamed: Line = {
       ...line,
       content: changes.content ?? line.content,
+      named: namedAfter(line, changes),
       quantity: changes.quantity ?? line.quantity,
     };
     const [survivor, absorbed] =
@@ -369,6 +405,8 @@ export class LineMemory implements LineServiceI {
         survivor.quantity + absorbed.quantity
       ),
       itemIds: [...new Set([...survivor.itemIds, ...absorbed.itemIds])],
+      // Named when either line is, as `LineMergeService.merge` decides it.
+      named: survivor.named || absorbed.named,
       approvalStatus:
         survivor.approvalStatus === 'APPROVED' ||
         absorbed.approvalStatus === 'APPROVED'
@@ -878,6 +916,19 @@ function order(lines: readonly Line[], by: LineOrder): readonly Line[] {
   return lines;
 }
 
+/** The favourite after a write: the one named, if the set still holds it. */
+function keptFavorite(
+  line: Line,
+  changes: { itemIds?: readonly string[]; favoriteItemId?: string | null }
+): string | null {
+  const wanted =
+    changes.favoriteItemId === undefined
+      ? line.favoriteItemId
+      : changes.favoriteItemId;
+  const itemIds = changes.itemIds ?? line.itemIds;
+  return wanted !== null && itemIds.includes(wanted) ? wanted : null;
+}
+
 /**
  * The catalog's side of a line after one edit (backend plan 0070, section 3).
  *
@@ -892,6 +943,8 @@ function adopted(
   changes: {
     itemIds?: readonly string[];
     adoptItemIds?: readonly string[];
+    favoriteItemId?: string | null;
+    preferredSupermarketId?: string | null;
   }
 ): readonly string[] {
   const adopting = new Set(changes.adoptItemIds ?? []);
@@ -944,4 +997,29 @@ function memoryFailure(
     correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
     detail: 'produced by LineMemory, no request was sent',
   });
+}
+
+/**
+ * The flag after an edit, by the two rules of backend `0207`, section 1.2.
+ *
+ * 1. A line with no product is named, whatever the edit says.
+ * 2. A write of `content` with no flag names the line.
+ *
+ * `named: false` takes the name away, with or without `content`.
+ */
+function namedAfter(
+  line: Line,
+  changes: {
+    readonly content?: string;
+    readonly named?: false;
+    readonly itemIds?: readonly string[];
+  }
+): boolean {
+  if ((changes.itemIds ?? line.itemIds).length === 0) {
+    return true;
+  }
+  if (changes.named === false) {
+    return false;
+  }
+  return changes.content !== undefined ? true : line.named;
 }

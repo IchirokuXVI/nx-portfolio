@@ -1,0 +1,74 @@
+// What the choice is for, and the one button (velista 0140, section 3). On the
+// raised surface on a hairline, as the adding bar of the tab is, and clear of the
+// home indicator because no bar of tabs sits under it.
+:host {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-4)
+    calc(var(--app-space-3) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+.for {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.for-label,
+.for-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.for-label {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+.for-detail {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.use {
+  flex: none;
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-on-action);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover:not([aria-disabled='true']) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active:not([aria-disabled='true']) {
+    background: var(--app-action-bg-pressed);
+  }
+
+  // Unavailable as the mock draws it (`btn off`): the sunken surface and the
+  // secondary ink, which keeps its contrast where a faded accent loses it.
+  &[aria-disabled='true'] {
+    background: var(--app-surface-sunken);
+    color: var(--app-text-secondary);
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

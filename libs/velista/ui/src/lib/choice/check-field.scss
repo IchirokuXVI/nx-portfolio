@@ -1,0 +1,23 @@
+@use '../styles/choice' as choice;
+
+:host {
+  display: block;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  cursor: pointer;
+}
+
+.box {
+  @include choice.check-box;
+}
+
+.words {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

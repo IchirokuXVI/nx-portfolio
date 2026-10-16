@@ -17,6 +17,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import { ImpersonationGate } from '../auth/impersonation-gate';
 import { JwtStrategy } from '../auth/jwt.strategy';
 import { bodyParserProblems, jsonBodyParsers } from '../harvest/import-body';
 import { NatsClient } from '../messaging/nats-client';
@@ -64,6 +65,9 @@ async function boot(publicKey: string) {
     ],
     providers: [
       JwtStrategy,
+      // What the strategy asks auth through for a token of a support session
+      // (plan 0194). No token here is one, so it is never called.
+      ImpersonationGate,
       {
         provide: ConfigService,
         useValue: { getOrThrow: () => ({ authJwtPublicKey: publicKey }) },
@@ -226,6 +230,22 @@ describe('shop walks over HTTP (plan 0168)', () => {
         },
       },
     ]);
+  });
+
+  it('forwards a guard event untouched (plan 0197)', async () => {
+    const events = [
+      { type: 'path', points: [[0, 0, 0]] },
+      { type: 'guard', logMs: 400, what: 'turned', degrees: 158.4 },
+      { type: 'guard', logMs: 900, what: 'jump', metres: 3.25 },
+      { type: 'guard', logMs: 1000, what: 'lost' },
+    ];
+    const res = await call('POST', `/v1/catalog/walks/${WALK}/entries`, {
+      bearer: token('mapper-2', ['shopMap.record']),
+      body: { ...entry(), kind: 'stopped', reason: 'frame-moved', events },
+    });
+    expect(res.status).toBe(201);
+    expect(app.sent).toHaveLength(1);
+    expect(app.sent[0].payload['events']).toEqual(events);
   });
 
   it.each([

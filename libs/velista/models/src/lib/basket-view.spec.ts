@@ -1,8 +1,14 @@
-import type { BasketProduct } from './basket-view';
+import type {
+  BasketListRef,
+  BasketProduct,
+  BasketRowEntry,
+} from './basket-view';
 import {
+  basketRowLists,
   basketRowProduct,
   basketSettleShop,
   basketShelfMark,
+  isCrossedOutRow,
   offerAt,
   shownOffer,
   shownPriceScope,
@@ -168,55 +174,117 @@ describe('basketShelfMark', () => {
   });
   const products = new Map<string, BasketProduct>([
     ['p-gone', { ...product([], at(false)), id: 'p-gone' }],
-    ['p-also-gone', { ...product([], at(false)), id: 'p-also-gone' }],
     ['p-there', { ...product([], at(true)), id: 'p-there' }],
+    ['p-unknown', { ...product([], at(null)), id: 'p-unknown' }],
   ]);
 
   it('says nothing while the products do not describe the chosen shop', () => {
     expect(
-      basketShelfMark({ optionIds: ['p-gone'] }, products, false)
+      basketShelfMark({ productId: 'p-gone' }, products, false)
     ).toBeNull();
   });
 
-  it('marks a row whose every option is known missing', () => {
-    expect(
-      basketShelfMark({ optionIds: ['p-gone', 'p-also-gone'] }, products, true)
-    ).toEqual({ kind: 'unavailable' });
+  it('marks a row whose product is known missing', () => {
+    expect(basketShelfMark({ productId: 'p-gone' }, products, true)).toEqual({
+      kind: 'unavailable',
+    });
   });
 
-  it('offers the option known there in place of a missing default', () => {
+  it('says nothing for a product there, one nobody spoke of, or no product', () => {
     expect(
-      basketShelfMark({ optionIds: ['p-gone', 'p-there'] }, products, true)
-    ).toEqual({ kind: 'instead', optionId: 'p-there', replacedId: 'p-gone' });
-  });
-
-  it('says nothing when the default is there, whatever the others are', () => {
-    expect(
-      basketShelfMark({ optionIds: ['p-there', 'p-gone'] }, products, true)
+      basketShelfMark({ productId: 'p-there' }, products, true)
     ).toBeNull();
+    expect(
+      basketShelfMark({ productId: 'p-unknown' }, products, true)
+    ).toBeNull();
+    expect(basketShelfMark({ productId: null }, products, true)).toBeNull();
   });
 });
 
 describe('basketRowProduct', () => {
   const milk = product([offer('s-dia', 0.79)]);
-  const products = new Map([
-    ['p-milk', milk],
-    ['p-oat', { ...milk, id: 'p-oat' }],
-  ]);
+  const products = new Map([['p-milk', milk]]);
 
-  it('answers a choice still among the options, the only option, or nothing', () => {
+  it("answers the row's one product, or nothing", () => {
+    expect(basketRowProduct({ productId: 'p-milk' }, products)?.id).toBe(
+      'p-milk'
+    );
+    expect(basketRowProduct({ productId: null }, products)).toBeNull();
+    expect(basketRowProduct({ productId: 'p-gone' }, products)).toBeNull();
+  });
+});
+
+describe('basketRowLists', () => {
+  const lists = new Map<string, BasketListRef>(
+    [
+      ['l-weekly', 'Compra semanal'],
+      ['l-basics', 'Básicos'],
+      ['l-kitchen', 'Cocina'],
+      ['l-pantry', 'Despensa'],
+    ].map(([listId, name]) => [
+      listId,
+      { listId, name, zoneId: 'z-home', zoneName: 'Casa' },
+    ])
+  );
+  const entries = (...listIds: (string | null)[]) => ({
+    entries: listIds.map(
+      (listId, at) => ({ lineId: `line-${at}`, listId }) as BasketRowEntry
+    ),
+  });
+
+  it('names one list', () => {
+    expect(basketRowLists(entries('l-weekly'), lists)).toEqual({
+      names: ['Compra semanal'],
+      others: 0,
+    });
+  });
+
+  it('names two lists in the order of the entries', () => {
+    expect(basketRowLists(entries('l-basics', 'l-weekly'), lists)).toEqual({
+      names: ['Básicos', 'Compra semanal'],
+      others: 0,
+    });
+  });
+
+  it('names four lists, each once', () => {
     expect(
-      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, 'p-oat')
-        ?.id
-    ).toBe('p-oat');
-    expect(
-      basketRowProduct({ optionIds: ['p-milk'] }, products, null)?.id
-    ).toBe('p-milk');
-    expect(
-      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, null)
-    ).toBeNull();
-    expect(
-      basketRowProduct({ optionIds: ['p-milk'] }, products, 'p-gone')?.id
-    ).toBe('p-milk');
+      basketRowLists(
+        entries('l-weekly', 'l-basics', 'l-kitchen', 'l-weekly', 'l-pantry'),
+        lists
+      )
+    ).toEqual({
+      names: ['Compra semanal', 'Básicos', 'Cocina', 'Despensa'],
+      others: 0,
+    });
+  });
+
+  it('counts a list the reader was not served and never names it', () => {
+    expect(basketRowLists(entries('l-weekly', null), lists)).toEqual({
+      names: ['Compra semanal'],
+      others: 1,
+    });
+    expect(basketRowLists(entries(null, null), lists)).toEqual({
+      names: [],
+      others: 2,
+    });
+  });
+});
+
+describe('isCrossedOutRow', () => {
+  it('crosses out a REMOVED row and a row bought outside this shopping list', () => {
+    expect(isCrossedOutRow({ state: 'REMOVED' })).toBe(true);
+    expect(isCrossedOutRow({ state: 'BOUGHT_ELSEWHERE' })).toBe(true);
+  });
+
+  it('crosses out nothing a shopper still acts on', () => {
+    for (const state of [
+      'WANTED',
+      'PARTLY',
+      'DONE',
+      'NOT_AVAILABLE',
+      'SKIPPED',
+    ] as const) {
+      expect(isCrossedOutRow({ state })).toBe(false);
+    }
   });
 });

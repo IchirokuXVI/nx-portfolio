@@ -2,13 +2,15 @@ import type { RokuTranslatorService } from '@portfolio/localization/rokutranslat
 import type {
   BasketListRef,
   BasketParticipant,
+  BasketProduct,
   BasketRow,
   BasketRowEntry,
 } from '@portfolio/velista/models';
 import {
-  elsewhereCaption,
+  basketRowName,
+  crossedOutNoteKey,
   listPickerRows,
-  originsCaption,
+  listsCaption,
   participantInitials,
   participantName,
   quantityCaption,
@@ -76,7 +78,7 @@ function row(over: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
@@ -92,6 +94,14 @@ function entry(
   return {
     lineId: `zl-${listId ?? 'none'}`,
     listId,
+    content: 'Milk',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left: 3,
     bought: 0,
     asked: 3,
@@ -99,6 +109,7 @@ function entry(
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
     ...over,
   };
 }
@@ -455,81 +466,113 @@ describe('quantityCaption', () => {
  * The old pair of nulls, absent against present and empty, is not representable
  * any more.
  */
-describe('originsCaption', () => {
+describe('listsCaption', () => {
   const lists = new Map([
     ['list-a', ref('list-a', 'Weekly shop')],
     ['list-b', ref('list-b', 'Groceries')],
+    ['list-c', ref('list-c', 'Kitchen')],
+    ['list-d', ref('list-d', 'Pantry')],
   ]);
 
-  it('says nothing to a reader served no list at all, which is a guest', () => {
+  it('names one list', () => {
     expect(
-      originsCaption(
-        row({ entries: [entry('list-a')] }),
-        new Map(),
-        translator,
-        'en'
-      )
-    ).toBeNull();
+      listsCaption(row({ entries: [entry('list-a')] }), lists, translator, 'en')
+    ).toBe('Weekly shop');
   });
 
-  it('says nothing when every entry is on a list nobody was served', () => {
+  it('names two lists with a comma, in the order of the entries', () => {
     expect(
-      originsCaption(row({ entries: [entry(null)] }), lists, translator, 'en')
-    ).toBeNull();
-  });
-
-  it('names one household', () => {
-    expect(
-      originsCaption(
-        row({ entries: [entry('list-a')] }),
+      listsCaption(
+        row({ entries: [entry('list-b'), entry('list-a')] }),
         lists,
         translator,
         'en'
       )
-    ).toBe('basket.from.one:{"first":"Weekly shop"}');
+    ).toBe('Groceries, Weekly shop');
   });
 
-  it('names two, and counts beyond that', () => {
+  it('names four lists, each once', () => {
     expect(
-      originsCaption(
-        row({ entries: [entry('list-a'), entry('list-b')] }),
-        lists,
-        translator,
-        'en'
-      )
-    ).toBe('basket.from.two:{"first":"Weekly shop","second":"Groceries"}');
-  });
-
-  /**
-   * A basket outlives the lists it covers. A raw uuid in a caption is worse than
-   * a shorter caption, and printing one would also be printing a household's id
-   * in the one form nobody can read.
-   */
-  it('drops an entry whose list it cannot name rather than printing an id', () => {
-    expect(
-      originsCaption(
-        row({ entries: [entry('list-a'), entry('list-gone')] }),
-        lists,
-        translator,
-        'en'
-      )
-    ).toBe('basket.from.one:{"first":"Weekly shop"}');
-  });
-
-  it('counts one household once, however many lines it asked on', () => {
-    expect(
-      originsCaption(
+      listsCaption(
         row({
           entries: [
             entry('list-a', { lineId: 'zl-1' }),
+            entry('list-b'),
             entry('list-a', { lineId: 'zl-2' }),
+            entry('list-c'),
+            entry('list-d'),
           ],
         }),
         lists,
         translator,
         'en'
       )
-    ).toBe('basket.from.one:{"first":"Weekly shop"}');
+    ).toBe('Weekly shop, Groceries, Kitchen, Pantry');
+  });
+
+  it('counts a list the reader was not served in words, and never names it', () => {
+    expect(
+      listsCaption(
+        row({ entries: [entry('list-a'), entry(null)] }),
+        lists,
+        translator,
+        'en'
+      )
+    ).toBe('basket.row.listsAndMore:{"names":"Weekly shop","count":1}');
+  });
+
+  it('says "Another list" to a guest, who is served none', () => {
+    expect(
+      listsCaption(row({ entries: [entry(null)] }), new Map(), translator, 'en')
+    ).toBe('basket.row.otherLists:{"count":1}');
+  });
+
+  it('drops a list id it cannot name rather than printing it', () => {
+    expect(
+      listsCaption(
+        row({ entries: [entry('list-gone')] }),
+        lists,
+        translator,
+        'en'
+      )
+    ).toBe('basket.row.otherLists:{"count":1}');
+  });
+
+  it('says nothing for a row with no entry', () => {
+    expect(
+      listsCaption(row({ entries: [] }), lists, translator, 'en')
+    ).toBeNull();
+  });
+});
+
+describe('basketRowName', () => {
+  const milk: BasketProduct = {
+    id: 'p-milk',
+    name: { en: '', es: 'Leche semidesnatada' },
+    brand: 'Hacendado',
+    imageUrl: null,
+    productGroupId: null,
+    size: 1,
+    unit: 'LITER',
+    offer: null,
+    offers: [],
+    atShop: null,
+    categories: [],
+    sectionIds: null,
+  };
+  const products = new Map([[milk.id, milk]]);
+
+  it('names a product row by the product, its brand and its size', () => {
+    expect(
+      basketRowName(row({ productId: 'p-milk' }), products, translator, 'en')
+    ).toBe('Leche semidesnatada Hacendado list.add.size.LITER:{"size":"1"}');
+  });
+
+  it('names a row with no product, and one the read could not name, by its line', () => {
+    expect(basketRowName(row(), products, translator, 'en')).toBe('Milk');
+    expect(
+      basketRowName(row({ productId: 'p-gone' }), products, translator, 'en')
+    ).toBe('Milk');
   });
 });
 
@@ -667,50 +710,56 @@ describe('listPickerRows', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket.
+ * Velista `0142`: a row somebody bought outside this shopping list.
  *
- * This basket's own pair on such a row is zero and zero, so before this the done
- * row said "0 of 0".
+ * A row this shopping list bought part of reads its own numbers, and outside
+ * buys never enter the count. A crossed out row says why in one line.
  */
-describe('a row bought on another basket (velista 0131)', () => {
-  it('reads the done row\u2019s count from boughtElsewhere, never from bought', () => {
+describe('a row bought outside this shopping list (velista 0142)', () => {
+  it('reads 2 of 2 on a row this shopping list bought two of and somebody else finished', () => {
     expect(
       quantityCaption(
-        { state: 'DONE', bought: 0, asked: 0, left: 0, boughtElsewhere: 2 },
+        { state: 'DONE', bought: 2, asked: 2, left: 0 },
         translator,
         'en'
       )
     ).toBe('basket.row.boughtOf:{"bought":2,"asked":2}');
   });
 
-  it('leaves a row this basket bought itself saying its own numbers', () => {
-    expect(
-      quantityCaption(
-        { state: 'DONE', bought: 3, asked: 3, left: 0, boughtElsewhere: 1 },
-        translator,
-        'en'
-      )
-    ).toBe('basket.row.boughtOf:{"bought":3,"asked":3}');
-  });
-
   it('leaves a row with something left saying what is left', () => {
     expect(
       quantityCaption(
-        { state: 'WANTED', bought: 0, asked: 3, left: 3, boughtElsewhere: 1 },
+        { state: 'WANTED', bought: 0, asked: 2, left: 2 },
         translator,
         'en'
       )
-    ).toBe('basket.line.wanted:{"count":3}');
+    ).toBe('basket.line.wanted:{"count":2}');
   });
 
-  /** It names nobody and says no time, so the sentence takes no value at all. */
-  it('says one sentence with nothing in it', () => {
-    expect(elsewhereCaption({ count: 2, closed: true }, translator, 'en')).toBe(
-      'basket.elsewhere.caption'
-    );
+  it('says where a crossed out row was bought, from its note', () => {
     expect(
-      elsewhereCaption({ count: 1, closed: false }, translator, 'en')
-    ).toBe('basket.elsewhere.caption');
-    expect(elsewhereCaption(null, translator, 'en')).toBeNull();
+      crossedOutNoteKey({
+        state: 'BOUGHT_ELSEWHERE',
+        note: 'BOUGHT_ON_ANOTHER_BASKET',
+      })
+    ).toBe('basket.line.boughtFromAnotherList');
+    expect(
+      crossedOutNoteKey({
+        state: 'BOUGHT_ELSEWHERE',
+        note: 'BOUGHT_ON_THE_LIST',
+      })
+    ).toBe('basket.line.boughtFromTheList');
+    expect(
+      crossedOutNoteKey({ state: 'BOUGHT_ELSEWHERE', note: 'SKIPPED_EARLIER' })
+    ).toBe('basket.line.alreadyBought');
+    expect(crossedOutNoteKey({ state: 'BOUGHT_ELSEWHERE', note: null })).toBe(
+      'basket.line.alreadyBought'
+    );
+  });
+
+  it('keeps "No longer on the list" for a REMOVED row', () => {
+    expect(crossedOutNoteKey({ state: 'REMOVED', note: null })).toBe(
+      'basket.line.removed'
+    );
   });
 });

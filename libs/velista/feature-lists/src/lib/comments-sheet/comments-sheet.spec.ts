@@ -11,6 +11,7 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
@@ -49,6 +50,9 @@ function line(): Line {
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    named: true,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,
@@ -215,6 +219,7 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
+      provideFakeItemNames(),
       provideFakeListStore(
         fakeListStore({ lists: [list(permissions)], state: 'loaded' })
       ),
@@ -249,7 +254,7 @@ function route() {
 
   return {
     paramMap: of(map),
-    snapshot: { paramMap: map, parent: null },
+    snapshot: { paramMap: map, parent: null, data: {} },
     parent: null,
   };
 }

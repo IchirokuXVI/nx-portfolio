@@ -13,8 +13,9 @@ import { NearbyShopsService } from './nearby-shops.service';
  *
  * What a double can prove is the shape of the call and the grouping of what
  * comes back: one statement for any number of shops, and each shop's rows in
- * the order the statement answered them. That the statement itself applies the
- * rule of `section.forLocation` is `section.integration.spec.ts`'s to prove.
+ * the order the statement answered them. That the statement itself reads the
+ * sections of each shop and of nothing else (plan 0200) is
+ * `section.integration.spec.ts`'s to prove.
  */
 const shopId = (n: number) =>
   `ac700000-0000-4000-a000-${String(n).padStart(12, '0')}`;
@@ -22,23 +23,19 @@ const CHAIN = 'ac700000-0000-4000-a000-0000000c4a17';
 
 interface Row {
   locationId: string;
-  own: boolean;
   id: string | null;
-  supermarketId: string | null;
   slug: string | null;
   name: { es: string } | null;
   position: number | string | null;
 }
 
-function section(locationId: string, n: number, own = false): Row {
+function section(locationId: string, n: number): Row {
   return {
     locationId,
-    own,
     id: `5ec70000-0000-4000-a000-${String(n).padStart(12, '0')}`,
-    supermarketId: CHAIN,
     slug: `s${n}`,
     name: { es: `Pasillo ${n}` },
-    // node-postgres answers an int column as a number and a bigint as text.
+    // A driver may answer a number as text, and the reader takes both.
     position: String(n),
   };
 }
@@ -46,9 +43,7 @@ function section(locationId: string, n: number, own = false): Row {
 function none(locationId: string): Row {
   return {
     locationId,
-    own: false,
     id: null,
-    supermarketId: null,
     slug: null,
     name: null,
     position: null,
@@ -71,7 +66,7 @@ describe('presentSectionsOf', () => {
     const ids = Array.from({ length: 30 }, (_, i) => shopId(i));
     const rows = ids.flatMap((id, i) =>
       i === 0
-        ? [section(id, 2, true), section(id, 1, true)]
+        ? [section(id, 2), section(id, 1)]
         : i === 1
           ? [none(id)]
           : [section(id, 1)]
@@ -84,15 +79,28 @@ describe('presentSectionsOf', () => {
     expect(calls[0].sql).toBe(PRESENT_SECTIONS_SQL);
     expect(calls[0].parameters).toEqual([ids]);
     expect(present.size).toBe(30);
-    expect(present.get(ids[0])).toEqual({
-      source: 'LOCATION',
-      rows: [
-        expect.objectContaining({ slug: 's2', position: 2 }),
-        expect.objectContaining({ slug: 's1', position: 1 }),
-      ],
-    });
-    expect(present.get(ids[1])).toEqual({ source: 'CHAIN', rows: [] });
-    expect(present.get(ids[2])?.source).toBe('CHAIN');
+    expect(present.get(ids[0])).toEqual([
+      {
+        id: section(ids[0], 2).id,
+        supermarketLocationId: ids[0],
+        slug: 's2',
+        name: { es: 'Pasillo 2' },
+        position: 2,
+      },
+      expect.objectContaining({ slug: 's1', position: 1 }),
+    ]);
+    // A shop that exists and has no sections has an entry, and it is empty.
+    expect(present.get(ids[1])).toEqual([]);
+    expect(present.get(ids[2])).toHaveLength(1);
+    // Nothing says where a list came from: a shop has its own sections or none.
+    expect(present.get(ids[0])).not.toHaveProperty('source');
+  });
+
+  it('reads the sections of the shops, and none of the tables of a chain', () => {
+    expect(PRESENT_SECTIONS_SQL).toContain('"shop_sections"');
+    expect(PRESENT_SECTIONS_SQL).not.toMatch(
+      /supermarket_sections|location_sections|section_categories|supermarket_item_sections/
+    );
   });
 
   it('sends no malformed id, no repeat, and nothing at all for no shops', async () => {

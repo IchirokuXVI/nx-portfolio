@@ -2,11 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_CHANGE_LIMITS,
+  BasketChangeOriginKind,
+  BUY_CHANGE_KINDS,
   type AcknowledgeBasketChangesRequest,
   type BasketChangeActorView,
+  type BasketChangeOrigin,
   type BasketChangePage,
   type BasketChangesAcknowledged,
   type BasketChangeView,
+  type BasketMarksView,
+  type GetBasketMarksRequest,
   type ListBasketChangesRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -16,9 +21,9 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { ListLineChange } from '../../entities';
+import { isFrozenBasket } from '../basket-line-facts';
 import { BasketReadService } from '../basket-read.service';
 import { BasketWriteContext } from '../basket-write.context';
-import { mergeKey } from '../line-dedup';
 import {
   ACKNOWLEDGE_CHANGES_SQL,
   BASKET_CHANGES_PAGE_SQL,
@@ -28,7 +33,12 @@ import {
   type ChangePageRow,
   type ViewerStartRow,
 } from './basket-changes.sql';
-import { BasketMarksReader } from './basket-marks.reader';
+import {
+  BasketMarksReader,
+  departedLinesOf,
+  foldBasketMarks,
+  type LineKeyOf,
+} from './basket-marks.reader';
 
 /**
  * What a changes cursor carries: the boundary row's id, and nothing else.
@@ -85,23 +95,40 @@ export class BasketChangesService {
         this.marks.retention,
         cursor?.id ?? null,
         limit + 1,
+        // The lists this reader was served, which is what lets the statement
+        // load the owner of another basket for them and for nobody else (plan
+        // 0203, section 5). Empty for a guest.
+        [...opened.servedListIds],
       ]
     );
 
     const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
-    // The rows a client can act on: the covered lines, grouped exactly as the
-    // basket read groups them, so a `rowKey` here names the row that read drew.
-    const covered = await this.read.coveredLinesOf(
+    const held = hasMore ? rows.slice(0, limit) : rows;
+    // A finished trip carries no marks (plan 0209, decision 5), so nothing on
+    // its history is unseen. The history itself is still listed.
+    const page = isFrozenBasket(opened.basket)
+      ? held.map((row) => ({ ...row, unseen: false }))
+      : held;
+    // The rows a client can act on: the covered lines, keyed as core keys them
+    // with no picks (plan 0201). A change about a covered line names that line,
+    // so the picks of a read cannot move it to a row this did not name.
+    const { lines: covered, keys } = await this.read.keyedLinesOf(
       opened.basket,
       opened.coveredListIds
     );
-    const anchors = anchorsOf(covered);
     const lines = await this.linesOf(page, covered);
+    const coveredIds = new Set(covered.map((line) => line.id));
+    await this.read.keyDeparted(
+      keys,
+      [...lines.values()].filter((line) => !coveredIds.has(line.id))
+    );
+    const anchors = anchorsOf(covered, keys.keyOf);
 
     const items = page.map((row) =>
       toChangeView(row, {
         anchors,
+        coveredIds,
+        keyOf: keys.keyOf,
         lines,
         basketId: opened.basket.id,
         servedListIds: opened.servedListIds,
@@ -111,6 +138,65 @@ export class BasketChangesService {
     return {
       items,
       nextCursor: hasMore && last ? encodeCursor({ id: last.id }) : null,
+    };
+  }
+
+  /**
+   * The marks and the count alone (plan 0204, section 6).
+   *
+   * What a client reads after an event said `marksMoved`: it holds the rows
+   * already, so it is answered the one thing a room could not carry, which is
+   * what **this viewer** has not seen yet.
+   *
+   * It reads the coverage, the covered lines with their products and this
+   * basket's purchases of them, and the marked changes. No row is built, so it
+   * asks for no walk history, no person and no list name, and the gateway asks
+   * the catalog nothing.
+   *
+   * ## What a mark belongs to (plan 0201)
+   *
+   * A mark belongs to the **key of a row**, and the key is the product the
+   * lines of the row count as, or their name when they hold none (it was the
+   * product set before). Every covered line of that key is answered with the
+   * mark. So a client that folds the marks of the lines of a row, `ADDED` over
+   * `CHANGED`, gets the mark of that row.
+   *
+   * **The keys here are the ones core builds with no picks.** For a line with
+   * several products and no favourite the full read can use another product.
+   * The difference shows in one case only: a line left the coverage and its
+   * mark was passed to the covered lines that share its product. A change of
+   * a covered line marks that line whatever its row is.
+   *
+   * **A removed row is not here**: its lines left the coverage, and a removal
+   * sends ids alone.
+   *
+   * **A finished trip answers no marks** (plan 0209, decision 5), as the full
+   * read does: what changed on a list after the trip is not something its rows
+   * show.
+   */
+  async marksOf(req: GetBasketMarksRequest): Promise<BasketMarksView> {
+    const opened = await this.context.open(req);
+    if (opened.coveredListIds.length === 0 || isFrozenBasket(opened.basket)) {
+      return { unseenChangeCount: 0, newestUnseenChangeId: null, lines: [] };
+    }
+    const { lines: covered, keys } = await this.read.keyedLinesOf(
+      opened.basket,
+      opened.coveredListIds
+    );
+    const changes = await this.marks.changesFor(
+      opened.participant.id,
+      opened.coveredListIds,
+      covered
+    );
+    await this.read.keyDeparted(keys, departedLinesOf(changes, covered));
+    const marks = foldBasketMarks(changes, covered, keys.keyOf);
+    return {
+      unseenChangeCount: marks.unseenChangeCount,
+      newestUnseenChangeId: marks.newestUnseenChangeId,
+      lines: covered.flatMap((line) => {
+        const mark = marks.byKey.get(keys.keyOf(line));
+        return mark ? [{ lineId: line.id, mark }] : [];
+      }),
     };
   }
 
@@ -156,10 +242,10 @@ export class BasketChangesService {
     }
 
     return {
-      unseenChangeCount: await this.marks.countFor(
-        opened.participant.id,
-        covered
-      ),
+      // Zero for a finished trip, which the full read counts nothing on.
+      unseenChangeCount: isFrozenBasket(opened.basket)
+        ? 0
+        : await this.marks.countFor(opened.participant.id, covered),
       // A duration, never a moment (section 6). The client may run a timer for it;
       // it never compares its own clock to a time the server sent.
       marksLapseInMs: this.marks.markWindow,
@@ -200,19 +286,19 @@ export function clampChangePage(requested?: number): number {
 }
 
 /**
- * The line that names each row, by the row's merge key.
+ * The oldest covered line of each key.
  *
- * The covered lines arrive ordered by `("createdAt", id)`, which is what makes the
- * first line of a group its anchor: the oldest ask for a thing names the row (plan
- * 0136). Written here rather than reusing `groupEntries`, because this needs the
- * anchor of a key and not the group behind it.
+ * The covered lines arrive ordered by `("createdAt", id)`, so the first line of
+ * a key is its oldest. Written here rather than reusing `groupEntries`, because
+ * this needs one line of a key and not the group behind it.
  */
 export function anchorsOf(
-  covered: readonly ChangeLineRow[]
+  covered: readonly ChangeLineRow[],
+  keyOf: LineKeyOf
 ): Map<string, string> {
   const anchors = new Map<string, string>();
   for (const line of covered) {
-    const key = mergeKey(line);
+    const key = keyOf(line);
     if (!anchors.has(key)) {
       anchors.set(key, line.id);
     }
@@ -222,8 +308,12 @@ export function anchorsOf(
 
 /** What a change view needs about the basket it is being read through. */
 interface ChangeViewContext {
-  /** Merge key to the line that names its row. */
+  /** The key of a row to its oldest covered line. */
   anchors: ReadonlyMap<string, string>;
+  /** The lines the basket draws now. */
+  coveredIds: ReadonlySet<string>;
+  /** The key of the row a line is in, as core keys it with no picks. */
+  keyOf: LineKeyOf;
   /** Every line this page names, deleted ones included. */
   lines: ReadonlyMap<string, ChangeLineRow>;
   /** This basket, so a change made **through it** names its participant. */
@@ -259,6 +349,7 @@ export function toChangeView(
     approvalBefore: row.approvalBefore,
     approvalAfter: row.approvalAfter,
     actor: actorViewOf(row, context),
+    origin: originOf(row, context),
   };
   // Redaction by absence (plan 0130, section 6). The field is omitted rather than
   // nulled, so a reader cannot tell "a list you may not see" from "no list".
@@ -267,16 +358,18 @@ export function toChangeView(
   }
   return view;
 }
-
 /**
- * The row this change's line is in now, or null.
+ * A covered line of the row this change is about, or null (plan 0201).
+ *
+ * **The line itself when the basket draws it.** A client finds the row that
+ * holds that line among its entries. Before plan 0201 this was the anchor of
+ * the row, which a read with picks can no longer be told from here.
  *
  * A merge resolves through the **survivor**, because the absorbed line names no
- * row and the row the change is about is the one that is still there. A deleted
- * line whose name another household still asks for resolves to that household's
- * row, which is the same answer the mark gives it. A line in no covered row at
- * all, which is what a removal usually is, carries null: the disabled row the
- * basket read draws lasts as long as the mark, and this history outlives it.
+ * row. A line that left the coverage resolves to the oldest covered line that
+ * shares its key, which is the row the mark was passed to. A line in no covered
+ * row at all, which is what a removal usually is, carries null: the disabled
+ * row the basket read draws lasts six hours, and this history outlives it.
  */
 function rowKeyOf(
   row: ChangePageRow,
@@ -289,7 +382,43 @@ function rowKeyOf(
   if (!named) {
     return null;
   }
-  return context.anchors.get(mergeKey(named)) ?? null;
+  if (context.coveredIds.has(named.id)) {
+    return named.id;
+  }
+  return context.anchors.get(context.keyOf(named)) ?? null;
+}
+
+/**
+ * Where a buy came from, when it was not made through this basket (plan 0203,
+ * section 5).
+ *
+ * - `LIST`: the buy names no basket, so it was made on the zone list page.
+ * - `ANOTHER_BASKET`: it names a basket that is not this one. `owner` is the
+ *   owner of that basket, and the statement loaded it only beside a served
+ *   list, so it is null for a guest and for a basket that was deleted since.
+ * - null for a buy of this basket, which has its participant in `actor`, and
+ *   for every change that is not a buy.
+ *
+ * **No basket id leaves here.** The row holds one, and this reads it to compare
+ * and for nothing else.
+ */
+function originOf(
+  row: ChangePageRow,
+  context: ChangeViewContext
+): BasketChangeOrigin | null {
+  if (!BUY_CHANGE_KINDS.includes(row.kind)) {
+    return null;
+  }
+  if (row.basketId === context.basketId) {
+    return null;
+  }
+  if (row.basketId === null) {
+    return { kind: BasketChangeOriginKind.LIST };
+  }
+  return {
+    kind: BasketChangeOriginKind.ANOTHER_BASKET,
+    owner: row.originOwnerUserId ? { userId: row.originOwnerUserId } : null,
+  };
 }
 
 /**

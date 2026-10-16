@@ -241,12 +241,13 @@ erDiagram
     baskets {
         uuid id PK
         uuid ownerUserId "auth user ref"
+        BasketKind kind "GENERATED or LIVE, no default"
         varchar name "nullable, null renders the generation date"
-        BasketStatus status "default DRAFT"
+        BasketStatus status "default OPEN"
         timestamptz generatedAt
-        jsonb sourceSnapshot "zones, lists and profile the run used"
-        uuid defaultTargetListId "nullable, no FK"
+        uuid pricingProfileId "nullable, no FK"
         varchar idempotencyKey "nullable"
+        uuid supermarketLocationId "nullable, no FK, catalog ref"
     }
     basket_lines {
         uuid id PK

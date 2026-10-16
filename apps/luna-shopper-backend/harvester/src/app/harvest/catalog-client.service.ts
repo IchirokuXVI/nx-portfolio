@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   CATEGORY_PATTERNS,
+  ITEM_LINKED_IMAGE_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -25,10 +26,12 @@ import {
   type FindItemsByEansResult,
   type HeldItemPrice,
   type ItemEanPair,
+  type ItemLinkedImageLink,
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
   type LeftItemPrice,
+  type LinkItemImagesResult,
   type LocalizedText,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
@@ -45,6 +48,7 @@ import {
   type SupermarketPage,
   type SupermarketView,
   type TeachItemEansResult,
+  type UnlinkItemImagesResult,
   type UpdateSupermarketLocationRequest,
   type WithdrawItemPricesResult,
   type WithdrawSupermarketItemsResult,
@@ -428,6 +432,35 @@ export class CatalogClient {
       userId: this.actor(),
       itemId,
       ean,
+    });
+  }
+
+  /**
+   * The photo each bound row states, saved in catalog as a link keyed on the
+   * row (plan 0198, section 3). At most `ITEM_LINKED_IMAGE_BATCH_MAX` rows.
+   *
+   * Sent whatever the switch of the chain says: catalog keeps the link and
+   * decides by itself whether a shopper is given it. An entry catalog could
+   * not save is named in `rejected` and does not fail the call.
+   */
+  linkItemImages(
+    entries: ItemLinkedImageLink[]
+  ): Promise<LinkItemImagesResult> {
+    return this.send(ITEM_LINKED_IMAGE_PATTERNS.linkBatch, {
+      userId: this.actor(),
+      entries,
+    });
+  }
+
+  /**
+   * Remove the links of rows that left their product, state no photo any
+   * more, or were deleted (plan 0198). A row that holds no link is not an
+   * error.
+   */
+  unlinkItemImages(sourceEntryIds: string[]): Promise<UnlinkItemImagesResult> {
+    return this.send(ITEM_LINKED_IMAGE_PATTERNS.unlink, {
+      userId: this.actor(),
+      sourceEntryIds,
     });
   }
 

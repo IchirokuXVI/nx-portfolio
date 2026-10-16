@@ -31,6 +31,8 @@ export interface BackfillEntry {
   sizeFormat: string | null;
   /** The count the crawl read (plan 0162), carried for the same reason. */
   packCount: number | null;
+  /** The photo address the crawl read (plan 0198), carried for the same reason. */
+  imageUrl: string | null;
   categoryPath: string[];
 }
 

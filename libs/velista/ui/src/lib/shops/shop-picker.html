@@ -62,7 +62,9 @@
               [groups]="nearGroups()"
               [mixed]="true"
               [mode]="'pick'"
+              [pickChecked]="pickChecked()"
               [pickedId]="pickedId()"
+              [showAbout]="showAbout()"
               groupName="shop-pick-near"
             />
           }
@@ -92,35 +94,39 @@
 
 @if (openKey() === null) {
   <!--
-    The catalog's any row (velista 0124): All supermarkets. Under the Near me
-    answer, because a person pressing Near me is asking where they are, and gone
-    while a search is typed, when the matches are the whole answer.
+    "No shop" (velista 0141), a row of its own under the shops near the device,
+    where the question at the first buy offers it. The filter offers no shop with
+    its own row, so it never sets this. Gone while a search is typed.
+  -->
+  @if (offerNoShop() && !searching()) {
+    <div class="card no-shop">
+      <label class="no-shop-row">
+        <lib-chain-logo [logo]="noShopLogo" />
+        <span class="no-shop-body">
+          <span class="no-shop-title">{{
+            'basket.shopAsk.noShop' | rokuT
+          }}</span>
+          <span class="no-shop-hint">
+            {{ 'basket.shopAsk.noShopHint' | rokuT }}
+          </span>
+        </span>
+        <input
+          (change)="noShop.emit()"
+          class="no-shop-radio"
+          name="shop-pick-none"
+          type="radio"
+        />
+      </label>
+    </div>
+  }
+
+  <!--
+    The shops this person bought at recently, newest first (velista 0103), which
+    are also the usual shops (0124). Not drawn when there are none, never for a
+    guest, whom nobody asks, and gone while a search is typed, when the matches are
+    the whole answer.
   -->
   @if (!searching()) {
-    @if (anyRow(); as any) {
-      <div class="card any-card">
-        <label class="any">
-          <lib-chain-logo [logo]="any.logo" class="any-logo" />
-          <span class="any-text">
-            <span class="any-title">{{ any.title }}</span>
-            <span class="any-detail">{{ any.detail }}</span>
-          </span>
-          <input
-            (change)="anyChosen.emit()"
-            [attr.name]="anyName()"
-            [checked]="any.checked"
-            class="any-radio"
-            type="radio"
-          />
-        </label>
-      </div>
-    }
-
-    <!--
-      The shops this person bought at recently, newest first (velista 0103), which
-      are also the usual shops (0124). Not drawn when there are none, and never for
-      a guest, whom nobody asks.
-    -->
     @if (recentGroups().length > 0) {
       <section class="section">
         <h3 class="section-heading">
@@ -136,7 +142,9 @@
           [groups]="recentGroups()"
           [mixed]="true"
           [mode]="'pick'"
+          [pickChecked]="pickChecked()"
           [pickedId]="pickedId()"
+          [showAbout]="showAbout()"
           groupName="shop-pick-recent"
         />
       </section>
@@ -200,7 +208,9 @@
         [groups]="matches()"
         [mixed]="true"
         [mode]="'pick'"
+        [pickChecked]="pickChecked()"
         [pickedId]="pickedId()"
+        [showAbout]="showAbout()"
       />
     }
   } @else {
@@ -213,29 +223,9 @@
   }
 } @else {
   <!--
-    One chain's screen: the host draws its head, and this draws the any row, if
-    the host asked for one, then the chain's shops under their postal codes. No
-    logo on the rows, because the head carries it.
+    One chain's screen: the host draws its head, and this draws the chain's shops
+    under their postal codes. No logo on the rows, because the head carries it.
   -->
-  @if (anyRow(); as any) {
-    <div class="card any-card">
-      <label class="any">
-        <lib-chain-logo [logo]="any.logo" class="any-logo" />
-        <span class="any-text">
-          <span class="any-title">{{ any.title }}</span>
-          <span class="any-detail">{{ any.detail }}</span>
-        </span>
-        <input
-          (change)="anyChosen.emit()"
-          [attr.name]="anyName()"
-          [checked]="any.checked"
-          class="any-radio"
-          type="radio"
-        />
-      </label>
-    </div>
-  }
-
   @if (state() === 'loading') {
     <p aria-live="polite" class="note" role="status">
       <lib-spinner-icon class="spinner" />
@@ -249,7 +239,9 @@
       (pick)="picked.emit($event)"
       [groups]="groups()"
       [mode]="'pick'"
+      [pickChecked]="pickChecked()"
       [pickedId]="pickedId()"
+      [showAbout]="showAbout()"
       class="chain-shops"
     />
   }

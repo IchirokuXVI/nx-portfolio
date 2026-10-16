@@ -2,6 +2,8 @@ import { InitialAuthSchema1756000000000 } from './1756000000000-InitialAuthSchem
 import { AdminUsers1772400000000 } from './1772400000000-AdminUsers';
 import { AuthAudit1772500000000 } from './1772500000000-AuthAudit';
 import { UserRoles1772600000000 } from './1772600000000-UserRoles';
+import { ImpersonationSessions1772700000000 } from './1772700000000-ImpersonationSessions';
+import { RecoveryGrants1772800000000 } from './1772800000000-RecoveryGrants';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -29,4 +31,10 @@ export const AUTH_MIGRATIONS = [
   // A column on `users` with a default, so every existing row starts with no
   // role (plan 0175).
   UserRoles1772600000000,
+  // One new table and one nullable column on `refresh_tokens` (plan 0194).
+  // It only adds, so no existing row changes.
+  ImpersonationSessions1772700000000,
+  // Three columns on `password_resets` (plan 0210). It only adds, and every
+  // existing row reads as a self service grant.
+  RecoveryGrants1772800000000,
 ];

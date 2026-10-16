@@ -26,7 +26,12 @@ import {
   CATALOG_BROWSE_SERVICE,
   CatalogAddStore,
   CategoryStore,
+  ItemNames,
+  LineStore,
+  ProductPickStore,
   type CatalogBrowseServiceI,
+  type ProductPickKind,
+  type ProductPickRequest,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -35,10 +40,11 @@ import {
   catalogToolsView,
   categoryName,
   chainOfScope,
+  productSetChange,
+  productSetChanged,
   scopesOfChain,
   unpricedStart,
   type CatalogBrowseContext,
-  type CatalogLocation,
   type CatalogOrder,
   type CatalogProduct,
 } from '@portfolio/velista/models';
@@ -46,13 +52,17 @@ import {
   appPath,
   BrowserFacade,
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
+  PageNavigation,
   productPagePath,
   sheetSegments,
 } from '@portfolio/velista/platform';
 import {
   AddingBar,
   CatalogSelectors,
+  ChoosingBar,
   CloseIcon,
+  LeaveQuestion,
   OrderMenu,
   PageHeader,
   ProductIcon,
@@ -61,11 +71,14 @@ import {
   productRowView,
   SearchIcon,
   type ProductRowAdd,
+  type ProductRowChoice,
   type ProductRowLineStep,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
+import { routePath } from '../catalog-opener';
 import { categoryChoice } from '../category-choice';
+import { lineProductCard, rebaseProductSet, tickProduct } from '../pick-set';
 import { rowAdds } from '../row-adds';
 import {
   CATALOG_PARAMS,
@@ -82,11 +95,28 @@ export const CATALOG_SEARCH_DEBOUNCE_MS = 300;
 /** One page of products. Enough to fill a tall phone twice over. */
 export const CATALOG_PAGE_SIZE = 30;
 
+/** What the live region at the foot of the catalog that chooses says, or null. */
+interface PickNote {
+  readonly key: string;
+  readonly args?: Record<string, unknown>;
+}
+
+/** A product of the line drawn first in the kind `set`, or a bone while it is read. */
+interface LineCard {
+  readonly id: string;
+  readonly row: ProductRowView | null;
+}
+
 /** The skeleton rows drawn while the first page is on its way. */
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 type ListStatus = 'loading' | 'ready' | 'failed';
 type MoreStatus = 'idle' | 'loading' | 'failed';
+
+/** Two lists of products, the same in the same order. */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, at) => id === b[at]);
+}
 
 /**
  * The second tab: every product from every supermarket (velista `0100`).
@@ -116,16 +146,15 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * When the lists cannot be read the line says so and offers a second try. Without
  * that a failed read looked exactly like having no list.
  *
- * ## A chain narrows the products and the prices, and a shop narrows them further
+ * ## A chain narrows the products and the prices
  *
- * The Supermarket selector opens the shop picker as a page of its own (velista
- * `0124`). A chain is enough and a shop is optional.
+ * The Supermarket selector opens the supermarket picker as a page of its own
+ * (velista `0124`). A chain is the whole choice: the catalog is never narrowed to
+ * one shop.
  *
  * With a chain, `soldBy` narrows which products are listed (backend `0146`), and
  * the chain's own scopes are sent as the price scopes, so every price on the screen
- * is what that chain charges here. With a shop, the read sends `locationId` alone
- * (backend `0170`) and is priced at that one shop, and a product it has no price
- * for says so rather than vanishing. With neither, the read resolves the person's
+ * is what that chain charges here. Without one, the read resolves the person's
  * profile and each row shows the cheapest of their shops.
  *
  * ## No postal code is not an empty catalog (`0069`, section 2)
@@ -145,19 +174,53 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * ## State lives in the URL, not in a store
  *
  * The pages of products are about the screen that is open and are thrown away with
- * it. Every filter is the URL's: the category, the chain, the shop, and the text and
- * the order too (`?q=`, `?order=`). The pickers are pages of their own, so the tab is
+ * it. Every filter is the URL's: the category, the chain, and the text and the
+ * order too (`?q=`, `?order=`). The pickers are pages of their own, so the tab is
  * destroyed while one is open, and a filter held only in a signal here came back
  * reset from choosing a supermarket or a category. The text and the order are
  * written in place of the entry as they change, so a pop back onto the tab finds
  * them as well. A visit from the bar opens the tab plain, as before.
+ *
+ * ## The same page opens to choose (velista `0140`, section 3)
+ *
+ * Under `…/lines/:lineId/product` the route's data names a kind
+ * (`CATALOG_PICK_DATA`), and the page chooses one product for a line instead of
+ * adding to a list. Everything above, the tools, the order, the cards, the states,
+ * is the tab's, so a rule of the tab that changes later reaches both. Four things
+ * differ, so nobody takes one for the other: the header closes and says "Choose a
+ * product", the bar of tabs is not drawn (the route's chrome), a bar at the foot
+ * names what the product is for, and nothing on the page adds to a list. A press on
+ * a card chooses it and opens nothing.
+ *
+ * What the caller handed over and the product chosen so far are in
+ * `ProductPickStore`, because the pickers are pages and this component is gone
+ * while one is open. The pickers are declared under this page's route, so they
+ * come back to it. Close and "Use this product" walk back past every entry the
+ * pickers added, to the screen that opened the page.
+ *
+ * ## Or the whole set of a line (velista `0146`, section 3)
+ *
+ * Under `…/lines/:lineId/products` the kind is `set`: a tick in place of the
+ * radio, the products of the line ticked on arrival and, with nothing searched
+ * or chosen, drawn first under "On this line". The page holds the set and not
+ * the cards: a product of the line that the read does not find keeps its place
+ * in what is saved. The set is in `ProductPickStore`, for the request's reason.
+ *
+ * **Save is the page's own write**, one `updateLine` with the whole set, and not
+ * an answer the caller writes, because a failed save keeps the page open with the
+ * ticks as they were. It sends no `adoptItemIds` (the owner, 2026-10-15): a
+ * product of the group left ticked stays the group's. Leaving with a change asks
+ * first, from the close, Escape and the back of the browser, which reaches the
+ * page through {@link CatalogPage.canLeave} on the route's guard.
  */
 @Component({
   selector: 'lib-catalog-page',
   imports: [
     AddingBar,
     CatalogSelectors,
+    ChoosingBar,
     CloseIcon,
+    LeaveQuestion,
     OrderMenu,
     PageHeader,
     ProductIcon,
@@ -169,6 +232,7 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
     SearchIcon,
   ],
   providers: [CatalogContext],
+  host: { '(document:keydown.escape)': 'onEscape($event)' },
   templateUrl: './catalog-page.html',
   styleUrl: './catalog-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -186,8 +250,104 @@ export class CatalogPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _categories = inject(CategoryStore);
   private readonly _adds = inject(CatalogAddStore);
+  private readonly _pick = inject(ProductPickStore);
+  private readonly _pages = inject(PageNavigation);
 
   protected readonly skeletonRows = SKELETON_ROWS;
+
+  /**
+   * What the page chooses, by its route, or null for the catalog tab (velista
+   * `0140`, section 3).
+   */
+  protected readonly pickKind: ProductPickKind | null =
+    (this._route.snapshot?.data?.[CATALOG_PICK_DATA] as
+      | ProductPickKind
+      | undefined) ?? null;
+
+  /** The line the route of the catalog that chooses names. */
+  private readonly _pickLineId: string | null =
+    this._route.snapshot?.paramMap?.get('lineId') ?? null;
+
+  /**
+   * What the screen that opened the page handed it, for this line and this
+   * kind, or null. A request for the other kind on the same line is not this
+   * page's to answer.
+   */
+  protected readonly pickRequest = computed<ProductPickRequest | null>(() => {
+    const request = this._pick.request();
+    return this.pickKind !== null &&
+      request !== null &&
+      request.kind === this.pickKind &&
+      request.lineId === this._pickLineId
+      ? request
+      : null;
+  });
+
+  /** The product chosen so far in the catalog that chooses. */
+  protected readonly pickChosen = this._pick.chosen;
+
+  /** Whether the page chooses the whole set of a line (velista `0146`). */
+  protected readonly pickSet = this.pickKind === 'set';
+
+  /**
+   * The products of the line, named and priced, and the line itself, which Save
+   * writes. Asked for only by the kind that chooses a set: the tab and the kind
+   * that chooses one read neither.
+   */
+  private readonly _itemNames = this.pickSet ? inject(ItemNames) : null;
+  private readonly _lines = this.pickSet ? inject(LineStore) : null;
+
+  /**
+   * The products of the line the bar compares the set to: what it arrived
+   * with, or what it holds after another device changed it while the page was
+   * open (the effect in the constructor moves it).
+   */
+  private readonly _pickBefore = computed<readonly string[]>(() =>
+    this.pickRequest() === null ? [] : this._pick.base()
+  );
+
+  /**
+   * The line as `LineStore` holds it now, the store the line page reads, or
+   * null when the store does not hold it. Realtime keeps it current while the
+   * page is open.
+   */
+  private readonly _liveLine = computed(() => {
+    const listId = this._route.snapshot?.paramMap?.get('listId') ?? '';
+    return (
+      this._lines
+        ?.linesIn(listId)
+        .find((line) => line.id === this._pickLineId) ?? null
+    );
+  });
+
+  /** The page is gone: a save that settles later neither navigates nor sets. */
+  private _destroyed = false;
+
+  /** The set ticked so far. */
+  protected readonly ticked = this._pick.ticked;
+
+  /** What the set gained and lost since the page opened. */
+  private readonly _pickChange = computed(() =>
+    productSetChange(this._pickBefore(), this.ticked())
+  );
+
+  protected readonly pickChanged = computed(() =>
+    productSetChanged(this._pickChange())
+  );
+
+  /** What the live region at the foot says: why a press did nothing. */
+  protected readonly pickNote = signal<PickNote | null>(null);
+
+  /** A save of the set is out. */
+  protected readonly saving = signal(false);
+
+  /** The last save of the set failed: said with a second try, the ticks kept. */
+  protected readonly saveFailed = signal(false);
+
+  /** "Leave without saving?" is up. */
+  protected readonly asking = signal(false);
+  private _leaving: Promise<boolean> | null = null;
+  private _answerLeave: ((leave: boolean) => void) | null = null;
 
   /** The list the plus adds to, or null for somebody with none to write to. */
   protected readonly addTarget = this._adds.target;
@@ -218,12 +378,6 @@ export class CatalogPage {
   /** The chosen chain's id, from `?chain=`, or null for every supermarket. */
   protected readonly chain = signal<string | null>(null);
 
-  /** The chosen shop's id, from `?shop=`, or null for any shop of the chain. */
-  protected readonly shop = signal<string | null>(null);
-
-  /** The chosen shop, named, once `GET /v1/catalog/locations/:id` answers. */
-  protected readonly location = signal<CatalogLocation | null>(null);
-
   protected readonly order = signal<CatalogOrder>(defaultCatalogOrder(''));
 
   protected readonly context = signal<CatalogBrowseContext | null>(null);
@@ -239,9 +393,6 @@ export class CatalogPage {
    * one is on its way the field is ahead of the URL, so the URL does not overrule it.
    */
   private _writes = 0;
-
-  /** Set when the tab is left, so an answer arriving later writes no URL. */
-  private _destroyed = false;
 
   private readonly _products = signal<readonly CatalogProduct[]>([]);
   private readonly _cursor = signal<string | null>(null);
@@ -267,8 +418,8 @@ export class CatalogPage {
 
   /**
    * The chosen chain's name. From the chains near the person, else from every
-   * chain the app knows: a shop from Recent or Near me can be outside the person's
-   * areas, and its chain is still worth naming.
+   * chain the app knows: a link can name a chain outside the person's areas, and
+   * it is still worth naming.
    */
   protected readonly chosenChainName = computed(() => {
     const id = this.chain();
@@ -280,30 +431,6 @@ export class CatalogPage {
     return name === null ? '' : catalogName(name, this._locale());
   });
 
-  /** The chosen shop in words: its own name, else its street, else its town. */
-  protected readonly shopName = computed(() => {
-    const location = this.location();
-    if (location === null) {
-      return '';
-    }
-    const label =
-      location.label === null
-        ? ''
-        : catalogName(location.label, this._locale());
-    return label || location.address?.trim() || location.city?.trim() || '';
-  });
-
-  /** Where the tab is priced: "Calle Mayor 3, Córdoba". */
-  protected readonly shopPlace = computed(() => {
-    const location = this.location();
-    const name = this.shopName();
-    if (location === null || name === '') {
-      return '';
-    }
-    const town = location.city?.trim() ?? '';
-    return town !== '' && town !== name ? `${name}, ${town}` : name;
-  });
-
   /** What the two selectors and the line that heads the list say. */
   protected readonly tools = computed(() => {
     const choice = this.choice();
@@ -312,8 +439,6 @@ export class CatalogPage {
       chainId: this.chain(),
       chainName: this.chosenChainName(),
       chainLogoUrl: this.chosenChain()?.logoUrl ?? null,
-      shopChosen: this.shop() !== null,
-      shopPlace: this.shopPlace(),
       category:
         choice === null
           ? null
@@ -345,15 +470,8 @@ export class CatalogPage {
    */
   private readonly _categoryPath = computed(() => {
     const choice = this.choice();
-    return choice === null
-      ? appPath(this._locale(), this._basePath, 'catalog', 'categories')
-      : appPath(
-          this._locale(),
-          this._basePath,
-          'catalog',
-          'categories',
-          choice.root.slug
-        );
+    const pickers = `${this._ownPath()}/${CATALOG_PATHS.categoryPicker}`;
+    return choice === null ? pickers : `${pickers}/${choice.root.slug}`;
   });
 
   /**
@@ -366,7 +484,6 @@ export class CatalogPage {
     return {
       category: this.categorySlug(),
       chain: this.chain(),
-      shop: this.shop(),
       query: typed.trim() === '' ? null : typed,
       order: order === defaultCatalogOrder(typed) ? null : order,
     };
@@ -390,18 +507,13 @@ export class CatalogPage {
     appPath(this._locale(), this._basePath, 'account', 'profiles')
   );
 
-  /**
-   * The products as they are priced on this screen. A shop's read is priced at
-   * that shop by the server, so there is no other chain's price to strip from it.
-   */
+  /** The products as they are priced on this screen. */
   private readonly _shown = computed<readonly CatalogProduct[]>(() => {
     const context = this.context();
     const chosen = this.chain();
-    return this.shop() !== null
-      ? this._products()
-      : this._products().map((product) =>
-          this._pricedBy(product, context, chosen)
-        );
+    return this._products().map((product) =>
+      this._pricedBy(product, context, chosen)
+    );
   });
 
   /**
@@ -410,26 +522,149 @@ export class CatalogPage {
    * where they start.
    */
   protected readonly unpricedAt = computed(() =>
-    unpricedStart(this.order(), this._shown())
+    unpricedStart(this.order(), this._listed())
   );
+
+  /**
+   * Whether the products of the line are drawn first, under their own heading
+   * (velista `0146`, section 3): in the kind `set`, with nothing searched and no
+   * supermarket or category chosen. Otherwise a product of the line is drawn only
+   * where the read finds it, in the order of the results.
+   */
+  protected readonly lineFirst = computed(
+    () =>
+      this.pickSet &&
+      this._pickBefore().length > 0 &&
+      this.query().trim() === '' &&
+      this.chain() === null &&
+      this.categorySlug() === null
+  );
+
+  /**
+   * The products the list draws: all of them, or with the products of the line
+   * drawn first, the others. A product is never drawn twice.
+   */
+  private readonly _listed = computed<readonly CatalogProduct[]>(() => {
+    const shown = this._shown();
+    if (!this.lineFirst()) {
+      return shown;
+    }
+    const first = new Set(this._pickBefore());
+    return shown.filter((product) => !first.has(product.id));
+  });
+
+  /**
+   * The products of the line as cards, in the order the line holds them. One the
+   * lookup has not answered for is a bone. One the catalog no longer holds, or
+   * that could not be read, is a card with no price under a name that says so,
+   * so it can still be taken off the line.
+   */
+  protected readonly lineCards = computed<readonly LineCard[]>(() => {
+    const names = this._itemNames;
+    if (!this.lineFirst() || names === null) {
+      return [];
+    }
+    const locale = this._locale();
+    this._translator.loaded();
+    const context = this.context();
+    const translate = (key: string, args?: Record<string, unknown>) =>
+      this._translator.t(key, undefined, locale, args);
+    return this._pickBefore().map((itemId) => {
+      const item = names.nameOf(itemId);
+      if (item !== null) {
+        return {
+          id: itemId,
+          row: this._onLine(
+            productRowView(lineProductCard(item), {
+              locale,
+              chainChosen: false,
+              translate,
+              chainOf: (scope) => this._chainName(context, scope, locale),
+            })
+          ),
+        };
+      }
+      if (!names.settled(itemId)) {
+        return { id: itemId, row: null };
+      }
+      const name = translate(
+        names.anyFailed([itemId])
+          ? 'list.detail.unnamedProduct'
+          : 'catalog.pick.gone'
+      );
+      return {
+        id: itemId,
+        row: this._onLine({
+          id: itemId,
+          name,
+          detail: null,
+          imageUrl: null,
+          price: null,
+          caption: null,
+          stale: false,
+          label: name,
+          summary: null,
+        }),
+      };
+    });
+  });
+
+  /** The two lines of the bar at the foot, and its button. */
+  protected readonly pickBar = computed(() => {
+    const request = this.pickRequest();
+    if (request === null) {
+      return null;
+    }
+    const locale = this._locale();
+    this._translator.loaded();
+    const translate = (key: string, args?: Record<string, unknown>) =>
+      this._translator.t(key, undefined, locale, args);
+    if (!this.pickSet) {
+      return {
+        label: request.forLabel,
+        detail: request.forDetail,
+        action: translate('basket.change.use'),
+        disabled: this.pickChosen() === null,
+      };
+    }
+    // With a change, what it is (section 3), and only the half that is not zero
+    // when one of them is.
+    const { added, removed } = this._pickChange();
+    const counts = [
+      ...(added.length > 0
+        ? [translate('catalog.pick.added', { count: added.length })]
+        : []),
+      ...(removed.length > 0
+        ? [translate('catalog.pick.removed', { count: removed.length })]
+        : []),
+    ];
+    return {
+      label: counts[0] ?? request.forLabel,
+      detail: counts.length > 0 ? (counts[1] ?? '') : request.forDetail,
+      action: translate('catalog.pick.save'),
+      // One button, the same with a change and without (the owner). Only a save
+      // already out holds it.
+      disabled: this.saving(),
+    };
+  });
 
   protected readonly rows = computed<readonly ProductRowView[]>(() => {
     const locale = this._locale();
     // Read so the rows are drawn again once the words arrive.
     this._translator.loaded();
     const context = this.context();
-    const shopChosen = this.shop() !== null;
-    const chainChosen = this.chain() !== null || shopChosen;
+    const chainChosen = this.chain() !== null;
 
-    return this._shown().map((product) =>
-      productRowView(product, {
-        locale,
-        chainChosen,
-        shopChosen,
-        translate: (key, args) =>
-          this._translator.t(key, undefined, locale, args),
-        chainOf: (scope) => this._chainName(context, scope, locale),
-      })
+    return this._listed().map((product) =>
+      this._onLine(
+        productRowView(product, {
+          locale,
+          chainChosen,
+          translate: (key, args) =>
+            this._translator.t(key, undefined, locale, args),
+          chainOf: (scope) => this._chainName(context, scope, locale),
+        })
+      )
     );
   });
 
@@ -446,7 +681,7 @@ export class CatalogPage {
     this.hasMore() ? 'catalog.countMore' : 'catalog.count'
   );
 
-  protected readonly count = computed(() => this._products().length);
+  protected readonly count = computed(() => this._listed().length);
 
   /**
    * The field says where it searches (rule P5): every supermarket, a chain, a
@@ -494,7 +729,7 @@ export class CatalogPage {
   constructor() {
     // The URL is the choice (0119 target 5, 0124 target 8). The first emission is
     // the arrival and starts the first page; a later one is a chip being cleared,
-    // the picker returning a chain or a shop, or a link landing on this same page.
+    // the picker returning a chain, or a link landing on this same page.
     const params = this._route.queryParamMap.subscribe((map) =>
       this._readChoice(catalogChoiceOf(map))
     );
@@ -504,8 +739,48 @@ export class CatalogPage {
       this._clearDebounce();
     });
 
+    // Another device changed the line while the page is open: the set moves
+    // onto what the line holds now, with the person's own ticks and unticks
+    // carried over, so the ticks drawn are what Save writes. Not while a save is
+    // out: the store's optimistic copy of that write is not news.
+    if (this.pickSet) {
+      effect(() => {
+        const live = this._liveLine()?.itemIds;
+        if (
+          live === undefined ||
+          this.pickRequest() === null ||
+          this.saving()
+        ) {
+          return;
+        }
+        untracked(() => {
+          const base = this._pick.base();
+          if (sameIds(base, live)) {
+            return;
+          }
+          this._pick.rebase(live, rebaseProductSet(base, this.ticked(), live));
+          void this._itemNames?.ensure(live);
+        });
+      });
+    }
+
     void this._context.load().then((context) => this.context.set(context));
-    void this._adds.ensure();
+    // The catalog that chooses adds to nothing, so it reads no list to add to.
+    if (this.pickKind === null) {
+      void this._adds.ensure();
+    } else if (this.pickRequest() === null) {
+      // Nothing opened it: a reload, or a link. There is no caller to answer, so
+      // the page goes to the list the line is on, or for a set the line page, in
+      // place of this entry. The line page opens the set only for a person who
+      // may change it, so a reader who reaches the URL lands there as well.
+      void this._router.navigateByUrl(this._pickFallback(), {
+        replaceUrl: true,
+      });
+    } else if (this._itemNames !== null) {
+      // The names and prices of the products the line arrived with, through the
+      // line page's own lookup, which usually holds them already.
+      void this._itemNames.ensure(this._pickBefore());
+    }
 
     // A failed write is said once (section 4.1): the store counts them, and each
     // new one raises the sentence until the next press takes it down.
@@ -519,10 +794,259 @@ export class CatalogPage {
     });
   }
 
-  /** What a row's trailing control draws, or null for a row with no plus. */
+  /**
+   * What a row's trailing control draws, or null for a row with no plus. The
+   * catalog that chooses draws none: nothing on it adds to a list.
+   */
   protected addOf(itemId: string): ProductRowAdd | null {
+    if (this.pickKind !== null) {
+      return null;
+    }
     const adds = this._rowAdds();
     return adds.byItem.get(itemId) ?? adds.plain;
+  }
+
+  /**
+   * The radio of a row in the catalog that chooses one, its tick in the catalog
+   * that chooses a set, or null in the tab.
+   */
+  protected choiceOf(itemId: string): ProductRowChoice | null {
+    if (this.pickKind === null) {
+      return null;
+    }
+    return this.pickSet
+      ? {
+          name: 'catalog-pick',
+          checked: this.ticked().includes(itemId),
+          multiple: true,
+        }
+      : { name: 'catalog-pick', checked: this.pickChosen() === itemId };
+  }
+
+  /**
+   * A press on a card in the catalog that chooses: that product is the choice,
+   * or in a set, ticked or taken out. A tick past the cap is refused and said.
+   */
+  protected choose(itemId: string): void {
+    this.pickNote.set(null);
+    if (!this.pickSet) {
+      this._pick.choose(itemId);
+      return;
+    }
+    if (this.saving()) {
+      return;
+    }
+    const tick = tickProduct(this.ticked(), itemId, this._pickBefore());
+    if (tick.kind === 'full') {
+      this.pickNote.set({ key: 'catalog.pick.full', args: { ...tick.full } });
+      return;
+    }
+    this._pick.tick(tick.ticked);
+  }
+
+  /**
+   * The button of the bar. "Use this product": the answer is left for the screen
+   * that opened the page, and the page goes back to it past every entry the
+   * pickers added. With nothing chosen it says why (velista `0146`, section 2).
+   * "Save": the set is written.
+   */
+  protected usePick(): void {
+    const request = this.pickRequest();
+    if (request === null) {
+      return;
+    }
+    if (this.pickSet) {
+      void this._saveSet(request);
+      return;
+    }
+    if (this.pickChosen() === null) {
+      this.pickNote.set({ key: 'catalog.pick.first' });
+      return;
+    }
+    if (this._pick.use()) {
+      void this._pages.backTo(request.returnDepth, request.returnUrl);
+    }
+  }
+
+  /**
+   * Close, and Escape: back to the screen that opened the page, with nothing
+   * changed. A set with a change asks first (velista `0146`, section 4).
+   */
+  protected async closePick(): Promise<void> {
+    const request = this.pickRequest();
+    if (request === null) {
+      void this._router.navigateByUrl(this._pickFallback(), {
+        replaceUrl: true,
+      });
+      return;
+    }
+    if (this.pickSet) {
+      // A save that is out decides where the page goes. Leaving now would offer
+      // to discard a set that may already be written.
+      if (this.saving()) {
+        return;
+      }
+      // Asked before the walk back, never from inside it: the guard then finds
+      // the set ended and lets the walk through.
+      if (this.pickChanged() && !(await this._ask())) {
+        return;
+      }
+      this._pick.end();
+    } else {
+      this._pick.cancel();
+    }
+    void this._pages.backTo(request.returnDepth, request.returnUrl);
+  }
+
+  /**
+   * Escape on the catalog that chooses, wherever the focus is, unless something
+   * on the page takes it first: the field clears itself, and the order menu and
+   * the question close themselves.
+   */
+  protected onEscape(event: Event): void {
+    const target = event.target as Element | null;
+    if (
+      this.pickKind === null ||
+      this.asking() ||
+      event.defaultPrevented ||
+      target?.closest?.(
+        'input, textarea, lib-order-menu, .cdk-overlay-container, [aria-modal="true"]'
+      ) != null
+    ) {
+      return;
+    }
+    void this.closePick();
+  }
+
+  /**
+   * Whether a navigation may leave the page, asked by the route's guard
+   * (velista `0146`, section 4). Its own pickers are under its path and are not a
+   * leaving. With a change in the set it asks first, and the navigation waits
+   * for the answer.
+   */
+  canLeave(nextUrl: string): boolean | Promise<boolean> {
+    if (!this.pickSet || this.pickRequest() === null) {
+      return true;
+    }
+    // While a save is out nothing leaves, not even to a picker: the save goes
+    // back to the line page itself once it lands, and keeps the page on a
+    // failure.
+    if (this.saving()) {
+      return false;
+    }
+    const own = this._ownPath();
+    const path = nextUrl.split(/[?#]/)[0];
+    if (path === own || path.startsWith(`${own}/`)) {
+      return true;
+    }
+    if (!this.pickChanged()) {
+      this._pick.end();
+      return true;
+    }
+    return this._ask().then((leave) => {
+      if (leave) {
+        this._pick.end();
+      }
+      return leave;
+    });
+  }
+
+  /** "Keep choosing". */
+  protected stay(): void {
+    this._answered(false);
+  }
+
+  /** "Leave". */
+  protected leave(): void {
+    this._answered(true);
+  }
+
+  /** "Leave without saving?", asked once however many ways ask it at once. */
+  private _ask(): Promise<boolean> {
+    if (this._leaving === null) {
+      this.asking.set(true);
+      this._leaving = new Promise<boolean>((resolve) => {
+        this._answerLeave = resolve;
+      });
+    }
+    return this._leaving;
+  }
+
+  private _answered(leave: boolean): void {
+    this.asking.set(false);
+    const answer = this._answerLeave;
+    this._answerLeave = null;
+    this._leaving = null;
+    answer?.(leave);
+  }
+
+  /**
+   * Save (velista `0146`, section 3). With no change, back to the line and
+   * nothing sent. With one, the whole set in one write, with the favourite
+   * cleared in the same write when the set no longer holds it, and no
+   * `adoptItemIds`. A failed save keeps the page and the ticks, and says so.
+   *
+   * The set written is built from the line as the store holds it now: what it
+   * holds, less what the person unticked, plus what the person ticked. A
+   * product another device added while the page was open is kept, and the
+   * favourite is the one the line holds now.
+   */
+  private async _saveSet(request: ProductPickRequest): Promise<void> {
+    const lines = this._lines;
+    if (this.saving() || lines === null) {
+      return;
+    }
+    this.pickNote.set(null);
+    this.saveFailed.set(false);
+
+    const line = this._liveLine();
+    const live = line?.itemIds ?? this._pickBefore();
+    const itemIds = rebaseProductSet(this._pickBefore(), this.ticked(), live);
+    if (!productSetChanged(productSetChange(live, itemIds))) {
+      this._pick.end();
+      void this._pages.backTo(request.returnDepth, request.returnUrl);
+      return;
+    }
+
+    const favorite = line?.favoriteItemId ?? null;
+    this.saving.set(true);
+    const outcome = await lines.updateLine(request.lineId, {
+      itemIds,
+      ...(favorite !== null && !itemIds.includes(favorite)
+        ? { favoriteItemId: null }
+        : {}),
+    });
+    if (this._destroyed) {
+      // Nothing on the page is left to answer. A written set still ends the
+      // request, so a later visit does not open on it.
+      if (outcome.state !== 'failed') {
+        this._pick.end();
+      }
+      return;
+    }
+    this.saving.set(false);
+    if (outcome.state === 'failed') {
+      this.saveFailed.set(true);
+      return;
+    }
+    this._pick.end();
+    void this._pages.backTo(request.returnDepth, request.returnUrl);
+  }
+
+  /** A card of a product of the line says so to a screen reader, as the mock does. */
+  private _onLine(row: ProductRowView): ProductRowView {
+    if (!this.pickSet || !this._pickBefore().includes(row.id)) {
+      return row;
+    }
+    return {
+      ...row,
+      label: this._translator.t(
+        'catalog.pick.onLineLabel',
+        undefined,
+        this._locale(),
+        { label: row.label }
+      ),
+    };
   }
 
   /** The plus on a row: one of this product on the chosen list. */
@@ -588,7 +1112,7 @@ export class CatalogPage {
    */
   protected openSupermarket(): void {
     const url = this._router.parseUrl(
-      appPath(this._locale(), this._basePath, 'catalog', 'supermarket')
+      `${this._ownPath()}/${CATALOG_PATHS.supermarketPicker}`
     );
     url.queryParams = catalogQueryOf(this._choice());
     void this._router.navigateByUrl(url);
@@ -597,7 +1121,7 @@ export class CatalogPage {
   /** Its cross: every supermarket again, pushed like the category's cross. */
   protected clearSupermarket(): void {
     void this._router.navigateByUrl(
-      this._tabUrl({ ...this._choice(), chain: null, shop: null })
+      this._tabUrl({ ...this._choice(), chain: null })
     );
   }
 
@@ -692,7 +1216,6 @@ export class CatalogPage {
   /** A choice arriving from the URL. The same choice again changes nothing. */
   private _readChoice(choice: CatalogChoice): void {
     const held = this._choice();
-    const shopChanged = choice.shop !== this.shop();
     // The text and the order are read on arrival and on a pop onto another entry
     // of the tab. The page's own write of them is not news to it.
     const typedHere = this._urlRead && this._writes > 0;
@@ -704,7 +1227,6 @@ export class CatalogPage {
       this._urlRead &&
       choice.category === this.categorySlug() &&
       choice.chain === this.chain() &&
-      !shopChanged &&
       !wordsChanged
     ) {
       return;
@@ -712,7 +1234,6 @@ export class CatalogPage {
     this._urlRead = true;
     this.categorySlug.set(choice.category);
     this.chain.set(choice.chain);
-    this.shop.set(choice.shop);
     if (wordsChanged) {
       const words = choice.query ?? '';
       this._clearDebounce();
@@ -720,43 +1241,7 @@ export class CatalogPage {
       this.query.set(words);
       this.order.set(choice.order ?? defaultCatalogOrder(words));
     }
-    if (shopChanged) {
-      this._readLocation(choice.shop);
-    }
     void this._firstPage();
-  }
-
-  /**
-   * The chosen shop's words, for the note on the line that heads the list. A shop named without its
-   * chain takes the chain from the shop, so a hand typed link still says whose.
-   *
-   * The chain it takes is written into the URL too, in place of this entry. The URL
-   * is the choice, and a signal holding a chain the URL does not would read the next
-   * emission (a sheet closing onto `?shop=` alone, say) as a different
-   * choice: the chain dropped again and the first page read for nothing.
-   */
-  private _readLocation(shopId: string | null): void {
-    this.location.set(null);
-    if (shopId === null) {
-      return;
-    }
-    void this._browse.location(shopId).then((location) => {
-      // A tab left before the answer must not replace whatever page came next.
-      if (this._destroyed || location === null || this.shop() !== shopId) {
-        return;
-      }
-      this.location.set(location);
-      if (this.chain() === null) {
-        this.chain.set(location.supermarketId);
-        // The current URL, whatever covers the tab, with the choice as it now is.
-        const url = this._router.parseUrl(this._router.url);
-        url.queryParams = {
-          ...url.queryParams,
-          ...catalogQueryOf(this._choice()),
-        };
-        void this._router.navigateByUrl(url, { replaceUrl: true });
-      }
-    });
   }
 
   /**
@@ -799,13 +1284,44 @@ export class CatalogPage {
     return url;
   }
 
-  private _tabPath(): string {
-    return appPath(this._locale(), this._basePath, 'catalog');
+  /**
+   * This page's own path: the tab's, or in the catalog that chooses the path of
+   * its route, which names the line. The pickers are opened under it and come back
+   * to it, and a cleared chip lands on it.
+   */
+  private _ownPath(): string {
+    return this.pickKind === null
+      ? appPath(this._locale(), this._basePath, CATALOG_PATHS.tab)
+      : routePath(this._route.snapshot);
   }
 
-  /** The tab with this choice in its URL. */
+  /**
+   * Where the catalog that chooses goes with no screen to go back to: the list
+   * its line is on, which is the fallback velista `0146` names for the same page,
+   * or for the set of a line, the line page (section 4).
+   */
+  private _pickFallback(): string {
+    const params = this._route.snapshot.paramMap;
+    const list = [
+      'zones',
+      params.get('zoneId') ?? '',
+      'lists',
+      params.get('listId') ?? '',
+    ];
+    return this.pickSet
+      ? appPath(
+          this._locale(),
+          this._basePath,
+          ...list,
+          'lines',
+          params.get('lineId') ?? ''
+        )
+      : appPath(this._locale(), this._basePath, ...list);
+  }
+
+  /** This page with this choice in its URL. */
   private _tabUrl(choice: CatalogChoice) {
-    const url = this._router.parseUrl(this._tabPath());
+    const url = this._router.parseUrl(this._ownPath());
     url.queryParams = catalogQueryOf(choice);
     return url;
   }
@@ -837,12 +1353,9 @@ export class CatalogPage {
     }
 
     // A chain's prices come from its own scopes, so the context has to be known
-    // before the read. With no chain the read resolves the profile by itself, and
-    // a shop's read is priced by the server at that shop.
+    // before the read. With no chain the read resolves the profile by itself.
     const context =
-      this.chain() === null || this.shop() !== null
-        ? this.context()
-        : await this._context.load();
+      this.chain() === null ? this.context() : await this._context.load();
     if (generation !== this._generation) {
       return;
     }
@@ -865,21 +1378,6 @@ export class CatalogPage {
     context: CatalogBrowseContext | null = this.context()
   ) {
     const chain = this.chain();
-    const shop = this.shop();
-    if (shop !== null) {
-      // One shop (backend `0170`): the server takes its chain and its scope from
-      // the shop and refuses either beside it, so neither is sent.
-      return {
-        query: this.query(),
-        order: this.order(),
-        soldBy: null,
-        categoryId: this.choice()?.node.id ?? null,
-        priceScopeIds: [],
-        locationId: shop,
-        cursor,
-        limit: CATALOG_PAGE_SIZE,
-      };
-    }
     return {
       query: this.query(),
       order: this.order(),

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   CarrefourBlockedError,
   CarrefourClient,
+  photoAddressRead,
   type CarrefourCappedCategory,
   type CarrefourCategory,
   type CarrefourProduct,
@@ -10,6 +11,7 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 
@@ -226,6 +228,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         packCount: product.packCount,
         categoryPath: product.categoryPath,
         url: product.path,
+        // The card's `images.desktop`, else `images.mobile` (plan 0198).
+        imageUrl: photoOf(photoAddressRead(product), product.externalId),
         observedAt,
         extra: null,
         // An empty array is a card with no readable price. Carrefour names no

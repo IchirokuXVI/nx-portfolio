@@ -1,105 +1,59 @@
 import {
-  inLocale,
-  LINE_ITEM_SET_MAX,
+  catalogName,
+  lineCardOrder,
+  lineName,
   type AlsoOnVm,
   type CatalogItem,
-  type HistorySectionVm,
+  type Line,
   type LinePageVm,
-  type LineProductChipVm,
-  type LineProductClusterVm,
-  type LineSettlement,
-  type ProductGroup,
+  type LineProductCardVm,
+  type LineProductPrice,
+  type LineProductPriceRead,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import {
-  estimateFrom,
-  toSettlementRow,
-  type LineDetailInput,
-} from '../line-detail-sheet/select-line-detail';
+import { formatMoney } from '@portfolio/velista/platform';
+import { productDetailText } from '@portfolio/velista/ui';
 
 /**
- * What the line page draws (velista plan 0043, section 5.3).
+ * What the line page draws (velista plan `0135`, section 2).
  *
- * The two rules worth naming, because both are absences and an absence is the thing a
- * refactor removes without noticing:
+ * Pure, and free of Angular: the page reads the stores and hands their answers
+ * in, with the translator as a function, because a selector holds no translator.
  *
- * - **The cross list history is null, not empty, on a line with no products.** It is
- *   keyed on the line's product set, so a free text line cannot have one; drawing it
- *   empty would say the reader has never bought this anywhere, when in fact nobody has
- *   said what "this" is. That is the argument for the composer's suggestions.
- * - **`alsoOn` is null until something can answer it, and is then drawn only when it
- *   is complete.** It was derived from whatever lists the session happened to hold,
- *   which under reported by construction and drew nothing when empty, so "nobody
- *   asked" and "no other list has this" were one picture (velista plan 0047, section
- *   5). Backend plan 0053 section 3 adds the query. Empty still draws nothing once
- *   there is one, because "no other list has this" is not information anybody came
- *   here for, but that is a different absence and the two must not be collapsed again.
+ * Three absences are rules here and not gaps:
+ *
+ * - **No cards on a line of free text**, and then no supermarket row either. The
+ *   supermarket prices the products, and there is none to price.
+ * - **`alsoOn` is null until something answered it** (velista plan 0047, section 5).
+ *   "Nobody asked" and "no other list has this" are opposite answers.
+ * - **A price that was not read is `loading`, never "no price".** The card draws a
+ *   bone, because saying a product has no price before anybody looked is a guess.
  */
-export interface LinePageInput
-  extends Pick<
-    LineDetailInput,
-    | 'line'
-    | 'settlements'
-    | 'itemNameOf'
-    | 'namesUnavailable'
-    | 'nameOf'
-    | 'callerUserId'
-    | 'locale'
-  > {
+export interface LinePageInput {
+  readonly line: Line | undefined;
   readonly list: ShoppingListSummary | undefined;
   readonly zoneName: string | null;
-  /**
-   * The cross list history, already unioned over the line's products, or undefined
-   * when it has not been read.
-   */
-  readonly itemSettlements: readonly LineSettlement[] | undefined;
-  /**
-   * Which list each settlement was on, for the cross list section's rows.
-   *
-   * A lookup rather than a name on the settlement, because a settlement carries a
-   * `listId` and the names live in `ListStore`. Null for a list this reader cannot see
-   * the name of, which the row draws as nothing rather than as an id.
-   */
-  readonly listNameOf: (listId: string) => string | null;
-  /**
-   * The reader's other lists still wanting this line's products, or null when nobody
-   * has asked (velista plan 0047, section 5).
-   *
-   * Answered by backend plan 0053 section 3, one request per product, merged by the
-   * container. Null is a line with no product, or an answer that has not arrived or did
-   * not come back; an empty `places` is the real answer that nothing else wants it. The
-   * derivation this page used to make from whatever the session had loaded could not
-   * tell those apart, which is what the query exists to fix.
-   */
+  /** The catalog's record of a product, or null while it has not answered. */
+  readonly itemNameOf: (itemId: string) => CatalogItem | null;
+  readonly namesUnavailable: boolean;
+  /** A member's name in this group, or null for somebody it cannot name. */
+  readonly nameOf: (userId: string) => string | null;
+  readonly callerUserId: string | null;
+  readonly locale: string;
+  /** The prices of one product near the reader. See {@link LineProductPriceRead}. */
+  readonly priceOf: (itemId: string) => LineProductPriceRead;
+  /** The name of a supermarket, in any language it has, or null if nobody can name it. */
+  readonly supermarketNameOf: (supermarketId: string) => string | null;
   readonly alsoOn: AlsoOnVm | null;
-  /** Whether the line's own history has a further page to fetch. */
-  readonly hasMoreSettlements: boolean;
-  /** Whether the cross list history has a further page to fetch. */
-  readonly hasMoreItemSettlements: boolean;
+  readonly commentCount: number | null;
+  /** Whether this caller may change the products, the favourite and the supermarket. */
   readonly canEdit: boolean;
-  readonly canDelete: boolean;
-  /** Whether a product is being added or removed right now. */
-  readonly busy: boolean;
-  /**
-   * What the group this line follows is called, or null (velista plan 0065, 2.1).
-   *
-   * Null covers three things and the heading draws all of them the same way: the
-   * lookup has not answered yet, it answered and the group is gone, and it failed.
-   * The reader is owed the same sentence in each case, which is `From a group`:
-   * `From ` with an empty name is the shape this null exists to make impossible.
-   */
-  readonly groupNameOf: (groupId: string) => ProductGroup | null;
-  /**
-   * The two words this screen has for a person it is not naming (velista plan 0066,
-   * section 4): what to call the reader, and what to call somebody the zone cannot name.
-   *
-   * Already translated, because a selector holds no translator and this one is worth
-   * keeping free of Angular. The three way branch that picks between them and a real
-   * name stays here rather than in the template, which is the point: a caption assembled
-   * in a template is a caption assembled again the next time somebody needs it.
-   */
-  readonly youLabel: string;
-  readonly someoneLabel: string;
+  /** Whether this caller may move the number. `DECIDE`. */
+  readonly canStep: boolean;
+  /** Whether this caller may change the name of the line, as the menu decides it. */
+  readonly canRename: boolean;
+  /** The translator, already bound to {@link locale}. */
+  readonly translate: (key: string, args?: Record<string, unknown>) => string;
 }
 
 export function selectLinePage(input: LinePageInput): LinePageVm | null {
@@ -108,175 +62,148 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     return null;
   }
 
-  const thisList: HistorySectionVm = {
-    scope: 'thisList',
-    // Every row on this section is this list by construction, so naming it in each
-    // one would be noise. The cross list section is the opposite: the whole point of
-    // it is that the rows come from different places.
-    rows: (input.settlements ?? []).map((settlement) =>
-      toSettlementRow(settlement, input, null)
-    ),
-    loading: input.settlements === undefined,
-    // From the page the store actually holds, rather than the literal `false` that
-    // made the whole control unreachable (velista plan 0047, section 4). `Show more`
-    // exists in both locales and was read by nothing.
-    hasMore: input.hasMoreSettlements,
-  };
-
-  const everywhere: HistorySectionVm | null =
-    line.itemIds.length === 0
-      ? null
-      : {
-          scope: 'everywhere',
-          rows: (input.itemSettlements ?? []).map((settlement) =>
-            toSettlementRow(
-              settlement,
-              input,
-              input.listNameOf(settlement.listId)
-            )
-          ),
-          loading: input.itemSettlements === undefined,
-          hasMore: input.hasMoreItemSettlements,
-        };
-
-  const purchases = (input.settlements ?? []).filter(
-    (settlement) => settlement.outcome === 'BOUGHT'
+  // The favourite, then the cheapest (velista `0137`, section 2): the order the
+  // basket is meant to choose in. The first card is the product the line shows,
+  // and the row of the list shows it too: one function for both (velista `0145`).
+  const cards = lineCardOrder(line, input.priceOf).map((price) =>
+    cardOf(price.itemId, price, line, input)
   );
 
-  const fromGroup = new Set(line.groupItemIds);
-  const products: readonly LineProductChipVm[] = line.itemIds.map((itemId) => {
-    const item: CatalogItem | null = input.itemNameOf(itemId);
-    const source = fromGroup.has(itemId) ? 'group' : 'user';
-    return {
-      itemId,
-      name: item === null ? null : inLocale(item.name, input.locale),
-      brand: item?.brand ?? null,
-      removable: input.canEdit && !input.busy,
-      source,
-      // Only what the catalog put there has anything to adopt, and adoption is an
-      // edit like any other on this screen: offered where the reader may edit, inert
-      // while a write is in flight (section 4).
-      adoptable: source === 'group' && input.canEdit && !input.busy,
-    };
-  });
+  const name = lineName(
+    line,
+    (itemId) => input.itemNameOf(itemId)?.name ?? null,
+    input.locale,
+    input.priceOf
+  );
 
   return {
     lineId: line.id,
-    content: line.content,
+    content: name.text,
+    canAddName: !name.own && input.canRename,
     quantity: line.quantity,
     listName: input.list?.name ?? null,
     zoneName: input.zoneName,
-    products,
-    clusters: clustersOf(products, line.productGroupId, input),
-    // Always once the line has any, and never on a line with none: a counter over an
-    // empty set is a number with nothing to count, and the sentence above it already
-    // says the line has no products (section 3.1).
-    counter:
-      products.length === 0
+    addedBy: addedByOf(line.createdByUserId, input),
+    canStep: input.canStep,
+    cards,
+    namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
+    supermarket:
+      line.itemIds.length === 0
         ? null
         : {
-            count: products.length,
-            cap: LINE_ITEM_SET_MAX,
-            // Neither number is clamped, and this is what a screen reads rather than
-            // comparing them itself. `104/100` is a legitimate state that the
-            // catalog's own sync produces (backend plan 0070, section 7.2).
-            overCap: products.length > LINE_ITEM_SET_MAX,
+            name: supermarketLabel(line.preferredSupermarketId, input),
+            canChange: input.canEdit,
           },
-    namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
-    // The sheet's own function, imported rather than reimplemented. Both screens
-    // compute this from the same history and must give the same answer: a sheet
-    // saying "every 11 days" over a page saying "every 12" would cost the number the
-    // only thing it has, which is that somebody trusts it.
-    estimate: estimateFrom(purchases),
-    lastPurchase: thisList.rows.find((row) => row.outcome === 'BOUGHT') ?? null,
-    thisList,
-    everywhere,
+    boughtCount: line.boughtCount,
+    commentCount: input.commentCount,
     alsoOn: input.alsoOn,
-    addedBy: addedByOf(line.createdByUserId, input),
     canEdit: input.canEdit,
-    canDelete: input.canDelete,
   };
 }
 
 /**
- * What to call the person who put this line on the list (velista plan 0066, section 4).
- *
- * Three cases and one of them covers two situations. The reader gets their own word;
- * an id the zone resolves gets that name; an id it does not, and the empty string a
- * line older than the field carries, both get "somebody". Those last two are an author
- * who left the zone and a line from a server that predated `createdByUserId`, and a
- * reader is owed the same sentence for each.
- *
- * Not the same question as `list.page.addedByYou`, which heads the cluster of products
- * a person put on the line rather than the catalog (velista plan 0065). Two things named
- * "added by you" on one screen meaning different things is worth avoiding by naming, so
- * this caption's key is `list.page.addedBy` and it never appears without its argument.
+ * The supermarket of a line as a word: its name, the word for one nobody can
+ * name, or null for "Any".
  */
-function addedByOf(
-  createdByUserId: string,
-  input: Pick<
-    LinePageInput,
-    'callerUserId' | 'nameOf' | 'youLabel' | 'someoneLabel'
-  >
-): string {
-  if (createdByUserId === '') {
-    return input.someoneLabel;
+export function supermarketLabel(
+  supermarketId: string | null,
+  input: Pick<LinePageInput, 'supermarketNameOf' | 'translate'>
+): string | null {
+  if (supermarketId === null) {
+    return null;
   }
-  if (createdByUserId === input.callerUserId) {
-    return input.youLabel;
-  }
-  return input.nameOf(createdByUserId) ?? input.someoneLabel;
+  return (
+    input.supermarketNameOf(supermarketId) ??
+    input.translate('list.supermarket.other')
+  );
+}
+
+function cardOf(
+  itemId: string,
+  price: LineProductPrice,
+  line: Line,
+  input: LinePageInput
+): LineProductCardVm {
+  const item = input.itemNameOf(itemId);
+  const offer = price.offer;
+
+  return {
+    itemId,
+    name: item === null ? null : catalogName(item.name, input.locale),
+    detail:
+      item === null
+        ? null
+        : productDetailText(item, input.locale, input.translate),
+    imageUrl: item?.imageUrl ?? null,
+    priceKind: price.kind,
+    price:
+      offer !== null && offer.price !== null
+        ? formatMoney(offer.price, offer.currency, input.locale)
+        : null,
+    caption: captionOf(
+      price,
+      item,
+      line.preferredSupermarketId !== null,
+      input
+    ),
+    cheapest: price.cheapest,
+    favorite: line.favoriteItemId === itemId,
+  };
 }
 
 /**
- * The products split by who put them there, or null (velista plan 0065, section 2).
+ * The line under the price: "Mercadona · 5,38 € / L".
  *
- * **Null on a line that follows no group**, which is every line backend `0048` ever
- * created and every line the composer adds without choosing one. There is nothing to
- * tell apart on those, so the page draws the flat run of chips that ships today and
- * nothing regresses for any of them.
- *
- * Where there is a binding, an **empty cluster is omitted rather than drawn empty**,
- * so a line whose products are all the catalog's has one heading and a line whose
- * products have all been adopted has the other. One heading over the only run of
- * chips there is reads as a statement about the line, which is the case section 2 is
- * about: immediately after somebody picks Milk every product is the catalog's, and a
- * mark on every chip would distinguish nothing.
- *
- * The catalog's cluster comes first, because it is the one whose contents somebody
- * else is changing.
+ * With a supermarket chosen for the line the chain is left out, because every
+ * card would repeat the name the row under the cards already says.
  */
-function clustersOf(
-  products: readonly LineProductChipVm[],
-  productGroupId: string | null,
-  input: Pick<LinePageInput, 'groupNameOf' | 'locale'>
-): readonly LineProductClusterVm[] | null {
-  if (productGroupId === null || products.length === 0) {
+function captionOf(
+  price: LineProductPrice,
+  item: CatalogItem | null,
+  chosen: boolean,
+  input: Pick<LinePageInput, 'locale' | 'translate'>
+): string | null {
+  const offer = price.offer;
+  if (offer === null) {
     return null;
   }
 
-  const group = input.groupNameOf(productGroupId);
-  const name = group === null ? '' : inLocale(group.name, input.locale);
+  const basis = item?.unitBasis ?? null;
+  const unit =
+    offer.unitPrice !== null && basis !== null
+      ? input.translate(`catalog.unit.${basis}`, {
+          price: formatMoney(offer.unitPrice, offer.currency, input.locale),
+        })
+      : null;
+  const chain =
+    chosen || price.chain === null
+      ? null
+      : catalogName(price.chain, input.locale);
 
-  const clusters: LineProductClusterVm[] = [
-    {
-      source: 'group',
-      // Two keys, and never one key with an empty argument. A group whose name did
-      // not resolve is owed `From a group`; `From ` is the sentence the unnamed
-      // product chip already refuses to draw, and the reader gets the same words
-      // whether the lookup failed or the group is gone.
-      headingKey:
-        name === '' ? 'list.page.fromGroupUnnamed' : 'list.page.fromGroup',
-      headingArgs: name === '' ? {} : { name },
-      products: products.filter((product) => product.source === 'group'),
-    },
-    {
-      source: 'user',
-      headingKey: 'list.page.addedByYou',
-      headingArgs: {},
-      products: products.filter((product) => product.source === 'user'),
-    },
-  ];
+  const parts = [chain, unit].filter(
+    (part): part is string => part !== null && part !== ''
+  );
+  return parts.length === 0 ? null : parts.join(' · ');
+}
 
-  return clusters.filter((cluster) => cluster.products.length > 0);
+/**
+ * What to call the person who put this line on the list (velista plan 0066,
+ * section 4).
+ *
+ * The reader gets their own word. An id the group resolves gets that name. An id
+ * it does not, and the empty string a line older than the field carries, both
+ * get "somebody": an author who left the group and a line from a server that
+ * predates the field are owed the same sentence.
+ */
+function addedByOf(
+  createdByUserId: string,
+  input: Pick<LinePageInput, 'callerUserId' | 'nameOf' | 'translate'>
+): string {
+  if (createdByUserId === '') {
+    return input.translate('list.page.someone');
+  }
+  if (createdByUserId === input.callerUserId) {
+    return input.translate('list.page.you');
+  }
+  return input.nameOf(createdByUserId) ?? input.translate('list.page.someone');
 }

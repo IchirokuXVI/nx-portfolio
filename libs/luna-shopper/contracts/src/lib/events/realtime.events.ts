@@ -1,5 +1,5 @@
-import type { BasketKind } from '../enums/basket.enums';
-import type { BasketStatus } from '../enums/basket.enums';
+import type { BasketKind, BasketStatus } from '../enums/basket.enums';
+import type { BasketEntryPatch } from '../messages/basket.messages';
 
 /**
  * Domain events core publishes for the realtime fan out (plan 0006, section 9;
@@ -253,12 +253,14 @@ export enum RealtimeEvent {
    * shop, and until plan 0139 no basket heard about it. Core works out which
    * baskets cover the list a write touched and names them all on one envelope.
    *
-   * ## Why it carries line ids and nothing else
+   * ## What it carries
    *
-   * A basket room holds guests, and a basket row names how much each household
-   * asks for. A broadcast cannot be projected per socket, so it carries the
-   * least privileged view there is (plan 0130, section 6): the ids of the list
-   * lines that moved, which name no household and no quantity.
+   * A basket room holds guests, and a broadcast cannot be projected per socket,
+   * so it carries the least privileged view there is (plan 0130, section 6).
+   * That view is the ids of the list lines that moved and, since plan 0204, the
+   * numbers of each of them: a guest reads `left`, `bought` and the state of
+   * every entry on every read. What a guest is never told is **where**, so a
+   * payload names no list, no zone, no household and no account.
    *
    * ## Why the basket is on the envelope and not in the payload
    *
@@ -287,10 +289,11 @@ export enum RealtimeEvent {
 }
 
 /**
- * What {@link RealtimeEvent.BasketLinesChanged} carries (plan 0136, section 8).
+ * What {@link RealtimeEvent.BasketLinesChanged} carries (plan 0136, section 8;
+ * plan 0204, section 2).
  *
- * Ids only, on purpose. See the event's own comment for why a basket room may
- * not be told more than this.
+ * See the event's own comment for why a basket room may not be told more than
+ * this.
  */
 export interface BasketLinesChangedEvent {
   /**
@@ -303,6 +306,29 @@ export interface BasketLinesChangedEvent {
    * the basket again.
    */
   lineIds: string[];
+  /**
+   * The state of each line, as the **addressed basket** reads it now (plan
+   * 0204).
+   *
+   * Sent by a write that only moves numbers, in an envelope addressed to one
+   * basket. Present only when every line of `lineIds` has a patch or left the
+   * basket: a line with no patch is at zero with no purchase that keeps it a
+   * row, and a client removes its entry.
+   *
+   * **Absent means: read the basket again.** That is every other write, a write
+   * over more lines than `BASKET_LIMITS.patchMaxLines`, a patch that could not
+   * be computed, and every envelope written before this field existed.
+   *
+   * The envelope also reaches the `user:` room of the basket's owner, where
+   * nothing names the basket. So only a socket that joined one basket's room
+   * may apply these entries.
+   */
+  entries?: BasketEntryPatch[];
+  /**
+   * The write recorded a change that this basket is shown (plan 0138), so its
+   * marks moved. A client reads `GET /v1/baskets/:id/changes/marks`.
+   */
+  marksMoved?: boolean;
 }
 
 /**
@@ -316,12 +342,7 @@ export interface BasketUpdatedEvent {
   basketId: string;
   kind: BasketKind;
   name: string | null;
-  /**
-   * The plan writes this field's type as `BasketStatus`. The enum is called
-   * {@link BasketStatus} today and renaming it is plan 0144's, along with
-   * the rooms and the remaining `basket.*` names, so this is the one name
-   * it has rather than a second one.
-   */
+  /** {@link BasketStatus}, the name plan 0144 gave the enum. */
   status: BasketStatus;
 }
 

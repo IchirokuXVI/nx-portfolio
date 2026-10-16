@@ -26,7 +26,6 @@ import type {
   UpdateAdminListLineRequest,
   UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { BasketStatus } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
@@ -122,7 +121,7 @@ export class AdminListService {
     // import, never a `type` one: a `type` import on a constructor dependency
     // erases its DI token.
     private readonly generated: BasketService,
-    // The rows of an **open** basket, unredacted: an operator reads what the
+    // The rows of a basket, unredacted: an operator reads what the
     // shopper reads.
     private readonly basketRead: BasketReadService
   ) {}
@@ -513,15 +512,16 @@ export class AdminListService {
   /**
    * One basket and its rows (plan 0136, section 7.5).
    *
-   * **Two sources, split on the status**, as the history counts are. An `OPEN`
-   * basket has nothing written down anywhere, so the operator is shown what the
-   * shopper is shown, unredacted: `BasketReadService.openRows` composes it from
-   * the lines the basket covers. A basket that is over answers from
-   * `basket_trip_rows`, which its finish froze, against the settlements standing
-   * under its own id.
+   * **One source for every status.** The operator is shown what the shopper
+   * is shown, unredacted: `BasketReadService.unredactedRows` composes it. An
+   * `OPEN` basket reads the lines it covers, and a basket that is over reads
+   * `basket_trip_rows`, which its finish froze (plan 0209, section 1.1). Both
+   * are grouped into one row per product, which is what `lineCount` counts,
+   * so the count and the rows shown agree. Before plan 0209 a finished basket
+   * showed one row per line here.
    *
-   * The field is still called `lines`, because the route is, and renaming a wire
-   * field is plan 0144's.
+   * The field is still called `lines`. Plan 0144 renamed the generated list to
+   * the basket and left this wire field as it was.
    */
   async getBasket(req: GetAdminBasketRequest): Promise<AdminBasketDetailView> {
     await this.gate.requireAdmin(req);
@@ -546,45 +546,22 @@ export class AdminListService {
     };
   }
 
-  /** The rows an operator is shown, whichever half of the split answers them. */
-  private async rowsOfBasket(
-    basket: Basket
-  ): Promise<AdminBasketRowView[]> {
-    if (basket.status === BasketStatus.OPEN) {
-      const open = await this.basketRead.openRows(basket);
-      const linesOf = (row: (typeof open)[number]) => [
-        ...new Set([row.rowKey, ...row.entries.map((entry) => entry.lineId)]),
-      ];
-      const settled = await this.settlementsOf(
-        basket.id,
-        open.flatMap(linesOf)
-      );
-      return open.map((row) => ({
-        rowKey: row.rowKey,
-        content: row.content,
-        left: row.left,
-        bought: row.bought,
-        asked: row.asked,
-        settlements: bySettledAt(
-          linesOf(row).flatMap((lineId) => settled.get(lineId) ?? [])
-        ),
-      }));
-    }
-    const rows = await this.baskets.query<FrozenRow[]>(
-      FINISHED_BASKET_ROWS_SQL,
-      [basket.id]
-    );
-    const settled = await this.settlementsOf(
-      basket.id,
-      rows.map((row) => row.lineId)
-    );
+  /** The rows an operator is shown, with the settlements of each. */
+  private async rowsOfBasket(basket: Basket): Promise<AdminBasketRowView[]> {
+    const rows = await this.basketRead.unredactedRows(basket);
+    const linesOf = (row: (typeof rows)[number]) => [
+      ...new Set([row.rowKey, ...row.entries.map((entry) => entry.lineId)]),
+    ];
+    const settled = await this.settlementsOf(basket.id, rows.flatMap(linesOf));
     return rows.map((row) => ({
-      rowKey: row.lineId,
+      rowKey: row.rowKey,
       content: row.content,
-      left: Math.max(row.asked - row.bought, 0),
+      left: row.left,
       bought: row.bought,
       asked: row.asked,
-      settlements: settled.get(row.lineId) ?? [],
+      settlements: bySettledAt(
+        linesOf(row).flatMap((lineId) => settled.get(lineId) ?? [])
+      ),
     }));
   }
 
@@ -659,45 +636,6 @@ export class AdminListService {
     }
     return byBasket;
   }
-}
-
-/**
- * The frozen rows of one finished basket, with what was bought of each. `$1` is
- * the basket.
- *
- * One row per zone line, as `basket_trip_rows` is, and `left` is derived rather
- * than stored, exactly as `trips.mappers.ts` derives it. The text comes from the
- * line itself, because a trip row carries none: a basket never had text of its
- * own that the list did not have first.
- *
- * Every camelCase column is quoted by hand, for the reason the SQL in
- * `basket.sql.ts` gives at length: TypeORM does not rewrite
- * `alias.property` inside a raw select expression.
- */
-const FINISHED_BASKET_ROWS_SQL = `
-  SELECT r."lineId" AS "lineId",
-         ll.content AS "content",
-         r."asked" AS "asked",
-         COALESCE((
-           SELECT SUM(s."quantity")
-           FROM "line_settlements" s
-           WHERE s."basketId" = r."basketId"
-             AND s."lineId" = r."lineId"
-             AND s."revertedAt" IS NULL
-             AND s."outcome" = 'BOUGHT'
-         ), 0)::int AS "bought"
-  FROM "basket_trip_rows" r
-  JOIN "list_lines" ll ON ll.id = r."lineId"
-  WHERE r."basketId" = $1::uuid
-  ORDER BY ll."createdAt", ll.id
-`;
-
-/** One row of {@link FINISHED_BASKET_ROWS_SQL}. */
-interface FrozenRow {
-  lineId: string;
-  content: string;
-  asked: number;
-  bought: number;
 }
 
 /**

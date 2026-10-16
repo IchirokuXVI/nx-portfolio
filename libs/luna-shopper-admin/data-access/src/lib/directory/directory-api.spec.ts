@@ -89,6 +89,158 @@ describe('DirectoryApi', () => {
     http.verify();
   });
 
+  it('mails a reset grant and reads when its links stop working', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.sendPasswordReset(USER, 'es');
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/send-password-reset`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ locale: 'es' });
+    request.flush({ expiresAt: '2026-10-14T20:30:00.000Z', extra: 'ignored' });
+
+    await expect(done).resolves.toEqual({
+      expiresAt: '2026-10-14T20:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it('creates the recovery links and reads them into this app’s own shape', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.createRecoveryLinks(USER);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/recovery-links`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    request.flush({
+      resetUrl: 'https://velista.app/auth/reset-password?token=t',
+      signInUrl: 'https://velista.app/auth/reset-password?token=t&mode=sign-in',
+      expiresAt: '2026-10-15T19:30:00.000Z',
+      tokenHash: 'never-passed-through',
+    });
+
+    await expect(done).resolves.toEqual({
+      resetUrl: 'https://velista.app/auth/reset-password?token=t',
+      signInUrl: 'https://velista.app/auth/reset-password?token=t&mode=sign-in',
+      expiresAt: '2026-10-15T19:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it('refuses an answer it cannot read rather than draw half a link', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.createRecoveryLinks(USER);
+    http
+      .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/recovery-links`)
+      .flush({ resetUrl: 'javascript:alert(1)', signInUrl: 3 });
+
+    await expect(done).rejects.toThrow('recovery-links');
+    http.verify();
+  });
+
+  /** Admin plan 0062: whether support sessions exist here. */
+  it.each([
+    [{ enabled: true }, true],
+    [{ enabled: false }, false],
+    [{ enabled: 'true' }, false],
+    [null, false],
+  ])('reads the switch of support sessions from %j', async (body, enabled) => {
+    const { directory, http } = setUp();
+
+    const done = directory.impersonationEnabled();
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/impersonation`
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush(body);
+
+    await expect(done).resolves.toBe(enabled);
+    http.verify();
+  });
+
+  it('starts a support session with the reason as its code', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.startImpersonation(USER, {
+      reason: 'OTHER',
+      note: 'Checking the basket',
+      locale: 'en',
+    });
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`
+    );
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      reason: 'OTHER',
+      note: 'Checking the basket',
+      locale: 'en',
+    });
+    request.flush({
+      sessionId: 's-1',
+      url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+      codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      codeTtlMs: 45_000,
+      expiresAt: '2026-10-15T21:30:00.000Z',
+      code: 'never-passed-through',
+    });
+
+    await expect(done).resolves.toEqual({
+      sessionId: 's-1',
+      url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+      codeExpiresAt: '2026-10-15T19:31:00.000Z',
+      codeTtlMs: 45_000,
+      expiresAt: '2026-10-15T21:30:00.000Z',
+    });
+    http.verify();
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['not a number', '60000'],
+    ['zero', 0],
+    ['not whole', 1.5],
+  ])(
+    'reads a code lifetime that is %s as sixty seconds, for an older gateway',
+    async (_case, codeTtlMs) => {
+      const { directory, http } = setUp();
+
+      const done = directory.startImpersonation(USER, { reason: 'TESTING' });
+      http
+        .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`)
+        .flush({
+          sessionId: 's-1',
+          url: 'https://staging.velista.app/en/auth/impersonate#code=c',
+          codeExpiresAt: '2026-10-15T19:31:00.000Z',
+          codeTtlMs,
+          expiresAt: '2026-10-15T21:30:00.000Z',
+        });
+
+      await expect(done).resolves.toMatchObject({ codeTtlMs: 60_000 });
+      http.verify();
+    }
+  );
+
+  it('refuses a session answer whose link is not a web address', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.startImpersonation(USER, { reason: 'TESTING' });
+    http
+      .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/impersonation`)
+      .flush({
+        sessionId: 's-1',
+        url: 'javascript:alert(1)',
+        codeExpiresAt: '2026-10-15T19:31:00.000Z',
+        expiresAt: '2026-10-15T21:30:00.000Z',
+      });
+
+    await expect(done).rejects.toThrow('impersonation');
+    http.verify();
+  });
+
   /**
    * The whole set with a PUT (backend plan 0175), in the order the server
    * lists roles, so a set sent in any order reads back as it was sent.

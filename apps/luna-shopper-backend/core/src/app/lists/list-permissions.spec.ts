@@ -268,7 +268,8 @@ function world(options: {
     listAccess,
     fakeLineClaims().service,
     publisher,
-    announcer
+    announcer,
+    fakeLineChanges().recorder
   );
 
   const commentRepo = {

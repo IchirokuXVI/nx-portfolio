@@ -8,32 +8,41 @@ import {
   untracked,
 } from '@angular/core';
 import {
+  applyBasketMarks,
+  applyBasketPatch,
   BASKET_ACCESS_ENDED_FALLBACK,
-  basketShelfMark,
+  BASKET_PATCH_READ,
+  basketEntryPatchOf,
+  basketProgressOf,
+  foldBasketEntries,
   isOpenBasket,
+  regroupBasketEntries,
+  withHeldChoices,
   type Basket,
   type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
   type BasketDemandRequest,
+  type BasketEntryPatch,
   type BasketListRef,
   type BasketLoad,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketProductChangeRequest,
+  type BasketProductList,
   type BasketProgress,
   type BasketRenameRequest,
-  type BasketRenameResult,
   type BasketRevertRequest,
   type BasketRow,
   type BasketRowResult,
+  type BasketRowTarget,
   type BasketSettleRequest,
   type BasketShareLink,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { AppResumed } from '@portfolio/velista/platform';
 import { endedReasonOf, GatewayError, hasResponse } from '../errors';
-import { restrictRowToServedLists } from '../mapping/basket-mappers';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -41,16 +50,35 @@ import {
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
+import { CoalescedRead } from './coalesced-read';
+import {
+  HeldProductChoices,
+  type HeldProductChoice,
+} from './held-product-choices';
 
 /**
- * How long a refetch waits, so a burst of events costs one request.
- *
- * Four people in a shop settling lines produce a stream of broadcasts, and the two
- * events that cannot be applied without asking (a participant moving, the basket
- * itself changing) would otherwise be one request each. `BasketListStore` coalesces
- * on the same reasoning and the same order of delay.
+ * How long the reads that events ask for gather after a read (velista `0143`,
+ * section 5). The first ask after this much quiet reads at once.
  */
-const REFRESH_DEBOUNCE_MS = 1500;
+const EVENT_READ_QUIET_MS = 1500;
+
+/** The most a read that an event asked for waits, however many follow. */
+const EVENT_READ_CEILING_MS = 3000;
+
+/** How long a marks read waits, so the marks of a burst cost one request. */
+const MARKS_WAIT_MS = 300;
+
+/**
+ * The full read, or the rows read of backend `0205`, which leaves out the
+ * products, the scopes and the shop.
+ */
+type BasketReadKind = 'full' | 'rows';
+
+/** The lines of one event or write answer, kept while a read is out. */
+interface HeldPatch {
+  readonly lineIds: readonly string[];
+  readonly entries: readonly BasketEntryPatch[];
+}
 
 /**
  * One shared basket, as the screen in a shop reads and changes it (plan 0044).
@@ -70,21 +98,29 @@ const REFRESH_DEBOUNCE_MS = 1500;
  * The server joins it to the basket's room on connect, so two people working through
  * one list in a shop see each other's settles with no reload and no request.
  *
- * **Every event is a reason to read again, and none is a thing to merge.** That is
- * the change velista `0090` made, and it follows from the basket storing no rows:
- * a broadcast into a basket room is redacted to the least privileged reader in it,
- * so it carries line ids and no numbers (backend `0130`, section 6), and a row is a
- * group the server computes out of lines this client cannot see. There is nothing
- * a client holding ids can honestly do but ask.
+ * **An event that carries the state of its lines is applied, with no request**
+ * (velista `0143`, which reverses the rule of velista `0090` that every event is a
+ * reason to read again). Since backend `0204` an envelope addressed to one basket
+ * carries each line as that basket reads it, with nothing a guest does not already
+ * read. `applyBasketPatch` puts the lines into the rows held and rebuilds each row
+ * it touched with `@portfolio/luna-shopper/basket-rules`, the rules core calls, and
+ * counts the header with them. The held choices of velista `0140` are applied over
+ * the result in {@link rows}, in the order a read uses.
  *
- * ## The three reasons to read again
+ * Only this socket's events are applied. It joined one basket's room and no other,
+ * while the owner's account room hears the envelopes of every basket they own with
+ * no basket named (backend `0204`, "What the build decided", point 7).
  *
- * A **write's** answer is folded, and that is the only path that does not read: it
- * carries the row and the counts, so there is nothing to ask for.
+ * ## When it still reads
  *
- * `basket.linesChanged`, `basket.updated` and a participant moving are **coalesced**,
- * because four people in a shop produce a stream of them and the answer to all of
- * them is the same one request.
+ * A **write's** answer is applied with the same function as an event, and no read
+ * follows it (velista `0143`, section 6). A rename, an add and a change of product
+ * can move a line between rows, so their answer is folded as before and read after.
+ *
+ * An event with no entries, an event the patch cannot apply, `basket.updated` and a
+ * participant moving read the **rows** (backend `0205`): the first after a quiet
+ * time at once, the rest gathered, never more than 3000 ms late. See
+ * {@link CoalescedRead}.
  *
  * The socket coming **back** and the app coming back are read **at once**, because
  * each is a single edge after a gap in which anything may have happened, and a
@@ -119,6 +155,9 @@ export class BasketStore {
   /** The app coming back, which is one of the two edges that read again. */
   private readonly _resumed = inject(AppResumed);
 
+  /** The products chosen for this trip on this device (velista `0140`). */
+  private readonly _choices = inject(HeldProductChoices);
+
   private readonly _basket = signal<Basket | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
   private readonly _error = signal<unknown>(null);
@@ -132,7 +171,6 @@ export class BasketStore {
   /** See {@link adding}. */
   private readonly _adding = signal(false);
   /** See {@link chosen}. */
-  private readonly _chosen = signal<ReadonlyMap<string, string>>(new Map());
   /** See {@link handedOver}. The counter is what lets one sentence be said twice. */
   private readonly _handedOver = signal<{
     readonly text: string;
@@ -158,8 +196,30 @@ export class BasketStore {
    */
   private _leaving = false;
 
-  /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
-  private _refreshAt: ReturnType<typeof setTimeout> | null = null;
+  /** The reads events ask for (velista `0143`, section 5). */
+  private readonly _eventReads = new CoalescedRead(
+    () => this._eventRead(),
+    EVENT_READ_QUIET_MS,
+    EVENT_READ_CEILING_MS
+  );
+
+  /**
+   * The patches applied while a read is out, oldest first, or null when no read
+   * is out. The answer of that read can be older than they are, so they are
+   * applied to it again when it lands, by the version rule (velista `0143`,
+   * section 5).
+   */
+  private _heldPatches: HeldPatch[] | null = null;
+
+  /** How many reads have applied their answer. A marks read checks it. */
+  private _landed = 0;
+
+  /** The marks read waiting to go out, or null. See {@link _askMarks}. */
+  private _marksAt: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a marks read is out. */
+  private _marksOut = false;
+  /** Whether marks moved again while a marks read was out. */
+  private _marksAgain = false;
 
   /**
    * The counter values the resync effect last acted on.
@@ -193,8 +253,11 @@ export class BasketStore {
   /** The read {@link refresh} has out, or null. See {@link _read}. */
   private _reading: Promise<void> | null = null;
 
-  /** Whether somebody asked to refresh while {@link _reading} was already out. */
-  private _queued = false;
+  /**
+   * What somebody asked for while {@link _reading} was already out: nothing, the
+   * rows, or the full read. A full read answers an ask for the rows too.
+   */
+  private _queued: 'none' | BasketReadKind = 'none';
 
   constructor() {
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
@@ -204,30 +267,24 @@ export class BasketStore {
     const subscription = this._socket.events.subscribe((event) => {
       switch (event.type) {
         case 'basket.linesChanged':
-          // Ids and nothing else (backend `0130`, section 6), so there is nothing
-          // to merge: a line id does not say which row holds it, and a row is a
-          // group the server computes. Coalesced, because a shop full of people
-          // settling rows is a stream of these and one read answers all of them.
-          //
           // The event arrives only on a socket pinned to one basket, so it needs
-          // no id check: unlike the events it replaced, it carries no basket id
-          // to check against.
-          this._scheduleRefresh();
+          // no id check, and its entries are this basket's (velista `0143`).
+          this._linesChanged(event.lineIds, event.entries, event.marksMoved);
           return;
 
         case 'basket.participantJoined':
         case 'basket.participantLeft':
           // The participant list is redacted per reader and carries a device for some
-          // of them, so it is refetched rather than assembled from a broadcast that
+          // of them, so it is read again rather than assembled from a broadcast that
           // was redacted to somebody else.
-          this._scheduleRefresh();
+          this._eventReads.ask();
           return;
 
         case 'basket.updated':
           // The name or the status moved. The payload is a summary and this store
           // holds the whole basket, so there is nothing here to merge.
           if (event.list.id === this._id) {
-            this._scheduleRefresh();
+            this._eventReads.ask();
           }
           return;
 
@@ -253,7 +310,7 @@ export class BasketStore {
         this._id !== null &&
         event.basketId === this._id
       ) {
-        this._cancelRefresh();
+        this._cancelReads();
         this._sessions.forget(this._id);
         // The event says the reader is off the basket and never why: its
         // payload is the basket id alone (backend `0140`, section 7 emits it
@@ -296,7 +353,7 @@ export class BasketStore {
     inject(DestroyRef).onDestroy(() => {
       subscription.unsubscribe();
       access.unsubscribe();
-      this._cancelRefresh();
+      this._cancelReads();
     });
   }
 
@@ -381,73 +438,38 @@ export class BasketStore {
   readonly adding = this._adding.asReadonly();
 
   /**
-   * Which product somebody said they got, per row (velista `0092`, section 5).
-   *
-   * **In memory for the visit, and never stored.** Backend `0136` deleted the
-   * stored pick: a basket holds no lines, so there is nowhere to keep one, and
-   * the only place a product belongs is on the purchase it was bought as. This is
-   * what replaces it on the screen, and it is deliberately as short lived as the
-   * page: a choice made in one aisle is not a fact about the household's list.
-   *
-   * Keyed on the row key, which can move under an open sheet. A choice lost to a
-   * re-key is a choice somebody makes again, which is cheaper than a choice
-   * quietly attached to a row it was not made on.
-   */
-  readonly chosen = this._chosen.asReadonly();
-
-  /**
-   * Say which product was got, for this row, for this visit.
-   *
-   * It writes nothing to the server, and that is the whole design: a product is
-   * recorded when it is **bought**, as `itemId` on the settle, and never before
-   * (velista `0092`, section 5).
-   */
-  choose(rowKey: string, itemId: string): void {
-    const next = new Map(this._chosen());
-    next.set(rowKey, itemId);
-    this._chosen.set(next);
-  }
-
-  /**
    * The product id a `BOUGHT` settle on this row carries, or undefined.
    *
    * **The one place the rule lives**, because three controls send a settle: the
-   * row's glyph, the row's reel and the sheet's three buttons. A rule copied
-   * three times is three chances for one of them to record a purchase against no
-   * product while the screen says otherwise.
-   *
-   * Two ways to have one. Somebody chose, and the choice is still one of the
-   * row's own options, which a re-key or a refetch can end. Or the row has
-   * exactly one option, which is not a choice at all: there was nothing to
-   * choose between, and the row has been drawing that product all along.
-   *
-   * Undefined otherwise, which is a row of several options nobody has chosen
-   * from, and a free text row. The settle then names no product, which is the
-   * honest record: nobody said which.
+   * row's glyph, the row's reel and the sheet's buttons. Since backend `0201` it
+   * is the row's own product: a row is one product, so there is nothing left to
+   * choose between, and a row whose lines hold none names none.
    */
   itemIdFor(rowKey: string): string | undefined {
+    return this.rowFor(rowKey)?.productId ?? undefined;
+  }
+
+  /**
+   * What a write on a row names: its key and **every line it gathers** (backend
+   * `0201`, section 4; velista `0139`, section 4).
+   *
+   * Every entry, served or not. A guest is served no list, and the server reads
+   * "a line of the actor" as "a covered line" so that who may settle does not
+   * change (backend `0201`, "What the build decided", point 10). Naming only the
+   * served entries would leave a guest nothing to send.
+   *
+   * Null for a row this store does not hold, which is a write with nothing to
+   * name: the caller sends nothing.
+   */
+  targetOf(rowKey: string): BasketRowTarget | null {
     const row = this.rowFor(rowKey);
-    if (row === null) {
-      return undefined;
+    if (row === null || row.entries.length === 0) {
+      return null;
     }
-
-    const held = this._chosen().get(rowKey);
-    if (held !== undefined && row.optionIds.includes(held)) {
-      return held;
-    }
-    if (row.optionIds.length === 1) {
-      return row.optionIds[0];
-    }
-
-    // The third way, since velista `0102`: at a shop that is known not to have the
-    // row's default, the option the row offers instead. The row names it, so the
-    // settle buys it; a person who chose is the first case and wins over this.
-    const shelf = basketShelfMark(
-      row,
-      this.products(),
-      this.shopRead() !== null
-    );
-    return shelf?.kind === 'instead' ? shelf.optionId : undefined;
+    return {
+      rowKey: row.rowKey,
+      lineIds: row.entries.map((entry) => entry.lineId),
+    };
   }
 
   /**
@@ -543,9 +565,38 @@ export class BasketStore {
     });
   });
 
-  /** The rows, in the order the server sent them, which is the order to walk. */
-  readonly rows = computed<readonly BasketRow[]>(
-    () => this._basket()?.rows ?? []
+  /** The choices this device holds on this basket, by line id. */
+  private readonly _held = computed<ReadonlyMap<string, HeldProductChoice>>(
+    () => this._choices.heldOn(this._basket()?.id ?? null)
+  );
+
+  /**
+   * The rows, in the order the server sent them, which is the order to walk.
+   *
+   * With the products this device chose for this trip put on their lines and the
+   * lines grouped again by the shared rule (velista `0140`, section 4). The row is
+   * drawn under the chosen product here and nowhere else, and every write and
+   * settle of the page reads the row from here, so the next buy names it.
+   */
+  readonly rows = computed<readonly BasketRow[]>(() => {
+    const basket = this._basket();
+    if (basket === null) {
+      return [];
+    }
+    const held = this._held();
+    if (held.size === 0) {
+      return basket.rows;
+    }
+    return withHeldChoices(
+      basket.rows,
+      new Map([...held].map(([lineId, choice]) => [lineId, choice.itemId])),
+      new Set(basket.lists.map((ref) => ref.listId))
+    );
+  });
+
+  /** Whether {@link rows} differ from the read, because a held choice moved a line. */
+  private readonly _regrouped = computed(
+    () => this.rows() !== (this._basket()?.rows ?? [])
   );
 
   /**
@@ -566,9 +617,24 @@ export class BasketStore {
    * `BasketViewStore` were both doing: two identities for one map means a row is
    * redrawn whenever either of them is recomputed for an unrelated reason.
    */
-  readonly products = computed<ReadonlyMap<string, BasketProduct>>(
-    () => this._basket()?.products ?? new Map()
-  );
+  readonly products = computed<ReadonlyMap<string, BasketProduct>>(() => {
+    const read = this._basket()?.products ?? new Map<string, BasketProduct>();
+    // A product held for this trip that no row of the read draws is drawn from
+    // what the change sheet had to hand. The read's own wins wherever it has one.
+    const missing = [...this._held().values()].filter(
+      (choice) => choice.product !== null && !read.has(choice.itemId)
+    );
+    if (missing.length === 0) {
+      return read;
+    }
+    const products = new Map(read);
+    for (const choice of missing) {
+      if (choice.product !== null) {
+        products.set(choice.itemId, choice.product);
+      }
+    }
+    return products;
+  });
 
   /** What this basket is (backend `0133`, section 2). Velista `0091` reads it. */
   readonly kind = computed(() => this._basket()?.kind ?? 'UNKNOWN');
@@ -600,16 +666,18 @@ export class BasketStore {
   readonly finished = computed(() => this._basket() !== null && !this.isOpen());
 
   /**
-   * How many rows still have something to do, **by the server** (backend `0130`,
-   * section 4).
+   * How many rows still have something to do (backend `0130`, section 4).
    *
-   * What the finish sheet warns about and what `allSettled` reads. It used to be
-   * `total - done - unavailable` computed here, which is the same arithmetic the
-   * server now does and sends: a `SKIPPED` row is pending, and this side has no
-   * way to know that. Nothing in this scope subtracts one count from another
-   * (velista `0060`, section 4).
+   * What the finish sheet warns about and what `allSettled` reads. The read's
+   * number, and after a write the same rule counted over the rows held
+   * (`progressOf` of `@portfolio/luna-shopper/basket-rules`, backend `0201`), so a
+   * `SKIPPED` row is pending here exactly as it is on the server.
    */
-  readonly pending = computed(() => this._basket()?.pending ?? 0);
+  readonly pending = computed(() =>
+    this._regrouped()
+      ? basketProgressOf(this.rows()).pending
+      : (this._basket()?.pending ?? 0)
+  );
 
   /** Everybody on the basket, for the presence row and for attribution. */
   readonly participants = computed<readonly BasketParticipant[]>(
@@ -629,7 +697,9 @@ export class BasketStore {
   /**
    * How much of this basket has been got, for the header's "4 of 12" line.
    *
-   * **The server's, never recounted** (backend `0130`, section 4). Rows and not
+   * The read's count, and after a write the shared rule's count over the rows
+   * held (backend `0201`, "What the build decided", point 1): the progress a
+   * write answers is core's count with no prices, and can be one off. Rows and not
    * units, which is how `0047` counts a zone list: "four things done out of
    * twelve" is what somebody in a shop is tracking, and a basket of one row asking
    * for twelve tins would otherwise read as almost finished.
@@ -637,8 +707,10 @@ export class BasketStore {
    * Zeroed before the first read, which draws as a basket with nothing in it for
    * the moment there is nothing in it.
    */
-  readonly progress = computed<BasketProgress>(
-    () => this._basket()?.progress ?? { done: 0, unavailable: 0, total: 0 }
+  readonly progress = computed<BasketProgress>(() =>
+    this._regrouped()
+      ? basketProgressOf(this.rows()).progress
+      : (this._basket()?.progress ?? { done: 0, unavailable: 0, total: 0 })
   );
 
   /**
@@ -777,7 +849,7 @@ export class BasketStore {
    */
   leave(): void {
     this._socket.close();
-    this._cancelRefresh();
+    this._cancelReads();
     this._id = null;
     // Cleared beside the id, and a read still out reads both: under `live` the
     // address is the only thing that says whose read it was.
@@ -789,16 +861,14 @@ export class BasketStore {
     // an answer nothing will apply, and the bump makes that answer stale even in
     // the one case the id check cannot see, which is the same basket opened again.
     this._reading = null;
-    this._queued = false;
+    this._queued = 'none';
+    this._heldPatches = null;
     this._changed();
     this._link.set(null);
     this._accessEnded.set(null);
     this._present.set([]);
     this._busyRows.set(new Set());
     this._adding.set(false);
-    // The choices are about **this** basket's rows, and they were never stored:
-    // they go with it rather than following the next one into a shop.
-    this._chosen.set(new Map());
     // The shop is the device's and outlives the basket in `BasketViewStore`'s
     // record, which puts it back on the next one. This store asks nothing of a
     // basket it has let go.
@@ -827,6 +897,14 @@ export class BasketStore {
    * when the read failed. See {@link _generation} for what out of date means here.
    */
   async refresh(): Promise<void> {
+    await this._refresh('full');
+  }
+
+  /**
+   * {@link refresh}, for either read. `rows` is the read of backend `0205`, which
+   * an event asks for (velista `0143`, section 5).
+   */
+  private async _refresh(kind: BasketReadKind): Promise<void> {
     const id = this._id;
     // Null with a `live` address is the one read that has no id yet: the caller's
     // own basket, before the answer that names it. Null with no address at all is
@@ -837,7 +915,9 @@ export class BasketStore {
 
     const reading = this._reading;
     if (reading !== null) {
-      this._queued = true;
+      if (this._queued !== 'full') {
+        this._queued = kind;
+      }
       await reading;
       return;
     }
@@ -847,13 +927,22 @@ export class BasketStore {
     // read still recorded that has in fact finished, and queue behind it forever.
     // The identity check is what lets {@link leave} disown a read: a newer one is
     // already recorded by the time an abandoned one gets here.
-    const started = this._read(id).finally(() => {
+    const started = this._read(id, kind).finally(() => {
       if (this._reading === started) {
         this._reading = null;
+        this._heldPatches = null;
       }
     });
     this._reading = started;
     await started;
+  }
+
+  /**
+   * The read an event asked for: the rows, once a basket is held to keep the
+   * products of. See {@link CoalescedRead} for when it goes out.
+   */
+  private async _eventRead(): Promise<void> {
+    await this._refresh(this._basket() === null ? 'full' : 'rows');
   }
 
   /**
@@ -867,10 +956,13 @@ export class BasketStore {
    * A failure ends it, keeping {@link _fail}'s treatment, and so does the screen
    * letting this basket go while the read was out.
    */
-  private async _read(id: string | null): Promise<void> {
+  private async _read(id: string | null, first: BasketReadKind): Promise<void> {
+    let kind = first;
     for (;;) {
       const generation = this._generation;
-      this._queued = false;
+      this._queued = 'none';
+      // The patches applied from here on are put on this answer when it lands.
+      this._heldPatches = [];
 
       // The device's shop, unless the basket held is one started at a shop: the
       // server reads that one at its own, and sending anything else is refused.
@@ -884,10 +976,21 @@ export class BasketStore {
         // A null id is the caller's own basket, which this read is what names:
         // it is the first read of a `live` page and no later one, because the
         // id is recorded below and every refresh after it goes out by id.
-        basket =
-          id === null
-            ? await this._service.getLiveBasket(at)
-            : await this._service.getBasket(id, at);
+        if (id === null) {
+          basket = await this._service.getLiveBasket(at);
+        } else if (kind === 'rows') {
+          const rows = await this._service.getBasketRows(id, at);
+          const kept = this._withCatalog(rows);
+          if (kept === null) {
+            // A row names a product this store does not hold: one a line that
+            // somebody added since counts as. Only the full read names it.
+            kind = 'full';
+            continue;
+          }
+          basket = kept;
+        } else {
+          basket = await this._service.getBasket(id, at);
+        }
       } catch (error) {
         if (at !== undefined && isShopLocked(error)) {
           // The basket turned out to be started at a shop of its own (velista
@@ -923,14 +1026,57 @@ export class BasketStore {
         this._socket.open(basket.id);
       }
 
-      this._basket.set(basket);
+      // The patches that arrived while this was out, by the version rule: one
+      // older than what the answer holds is dropped. When the rule cannot tell,
+      // the answer is drawn and read once more.
+      let applied = basket;
+      let again = false;
+      for (const held of this._heldPatches ?? []) {
+        const next = applyBasketPatch(applied, held.lineIds, held.entries);
+        if (next === BASKET_PATCH_READ) {
+          again = true;
+          break;
+        }
+        applied = next;
+      }
+
+      this._basket.set(again ? basket : applied);
+      this._pruneHeld(again ? basket : applied);
+      this._landed += 1;
       this._state.set('ready');
       this._error.set(null);
 
-      if (!this._queued) {
+      if (again && this._queued === 'none') {
+        this._queued = 'rows';
+      }
+      if (this._queued === 'none') {
         return;
       }
+      kind = this._queued;
     }
+  }
+
+  /**
+   * A rows answer with the products, the scopes and the shop this store holds, or
+   * null when a row names a product it does not hold (backend `0205`).
+   */
+  private _withCatalog(rows: Basket): Basket | null {
+    const held = this._basket();
+    if (held === null) {
+      return null;
+    }
+    const missing = rows.rows.some(
+      (row) => row.productId !== null && !held.products.has(row.productId)
+    );
+    if (missing) {
+      return null;
+    }
+    return {
+      ...rows,
+      products: held.products,
+      scopes: held.scopes,
+      shop: held.shop,
+    };
   }
 
   /**
@@ -969,11 +1115,9 @@ export class BasketStore {
     rowKey: string,
     body: BasketSettleRequest
   ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.settle(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.settle(id, target, body)
+    );
   }
 
   /**
@@ -987,11 +1131,9 @@ export class BasketStore {
     rowKey: string,
     body: BasketRevertRequest
   ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.revert(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.revert(id, target, body)
+    );
   }
 
   /**
@@ -1010,9 +1152,9 @@ export class BasketStore {
    * The ceiling the reel offers is `row.asked`, which is read and never computed.
    *
    * `at` is where the purchase happened and what was bought: the scope of the price
-   * the row drew (velista `0095`, section 6), the shop the person is buying at and
-   * the option the row offered in place of a missing default (velista `0102`). Only
-   * the settling direction sends it: a revert names no scope and no shop.
+   * the row drew (velista `0095`, section 6), the shop the person is buying at
+   * (velista `0102`) and the row's product (velista `0139`). Only the settling
+   * direction sends it: a revert names no scope and no shop.
    */
   async setLeft(
     rowKey: string,
@@ -1064,12 +1206,13 @@ export class BasketStore {
   async renameRow(
     rowKey: string,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.renameRow(id, rowKey, body);
-      this._fold(result, rowKey);
-      return result;
-    });
+  ): Promise<BasketRowResult | null> {
+    // A rename changes a name a patch does not carry, and can merge two rows.
+    return this._rowWrite(
+      rowKey,
+      (id, target) => this._service.renameRow(id, target, body),
+      false
+    );
   }
 
   /**
@@ -1084,42 +1227,160 @@ export class BasketStore {
    * is the server's answer rather than this side's arithmetic.
    */
   async skip(rowKey: string): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.skip(id, rowKey);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.skip(id, target)
+    );
   }
 
   /** The same fact, unset. See {@link skip}. */
   async unskip(rowKey: string): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.unskip(id, rowKey);
-      this._fold(result, rowKey);
-      return result;
-    });
+    return this._rowWrite(rowKey, (id, target) =>
+      this._service.unskip(id, target)
+    );
   }
 
   /**
    * Change what one list asks for (velista `0092`, section 6).
    *
    * The one write here that changes a household's list rather than recording
-   * what a trip did, and the answer is folded like any other: the row comes back
-   * with new numbers, or `null` when nothing is left to buy of it and nothing
-   * was bought this trip, in which case {@link _fold} drops it.
-   *
-   * The caller reads `result.row === null` to know which happened. It is not a
+   * what a trip did, and the answer is folded like any other: the line comes
+   * back with new numbers, or is absent when nothing is left to buy of it and
+   * nothing was bought this trip, in which case {@link _fold} takes it off its
+   * row. The caller reads {@link lineLeft} to know which happened. It is not a
    * failure: the list now asks for nothing, which is what was asked for.
+   *
+   * Named by its line alone (backend `0201`, section 4), which need not be a row
+   * of this basket: a list that holds the product at zero is raised this way,
+   * and its line then joins the row of the product.
    */
-  async setDemand(
-    rowKey: string,
-    body: BasketDemandRequest
-  ): Promise<BasketRowResult | null> {
-    return this._write(rowKey, async (id) => {
-      const result = await this._service.setDemand(id, rowKey, body);
-      this._fold(result, rowKey);
+  async setDemand(body: BasketDemandRequest): Promise<BasketRowResult | null> {
+    const busyKey = this.rowFor(body.lineId)?.rowKey ?? body.lineId;
+    return this._write(busyKey, async (id) => {
+      const result = await this._service.setDemand(id, body);
+      this._fold(result, [body.lineId]);
       return result;
     });
+  }
+
+  /**
+   * Whether the server states a buy of this line in this trip (backend `0201`,
+   * section 1): its latest standing buy named a product. Read off the basket as it
+   * was read, never off a choice this device holds.
+   */
+  hasTripBuy(lineId: string): boolean {
+    return (this._basket()?.rows ?? []).some((row) =>
+      row.entries.some(
+        (entry) => entry.lineId === lineId && entry.tripItemId !== null
+      )
+    );
+  }
+
+  /**
+   * Take another product on these lines (velista `0140`, section 4).
+   *
+   * - **`keep`**: one write, and each line holds the product as its favourite.
+   * - **No `keep`**: the lines with a buy in this trip are written, so the buys
+   *   take the new product and the lines follow it until the trip ends. The rest
+   *   are held on this device, with nothing sent, until their first buy names it.
+   *
+   * The answer moves each line to the row of its product with the shared rule,
+   * and the basket is read again as after every write. False when the write
+   * failed: nothing is held then either, so the row stays as it was, and
+   * {@link error} holds the refusal.
+   *
+   * @param product What the row draws for a held choice, see `HeldProductChoice`.
+   */
+  async changeProduct(
+    rowKey: string,
+    body: BasketProductChangeRequest,
+    product: BasketProduct | null
+  ): Promise<boolean> {
+    const id = this._basket()?.id ?? null;
+    if (id === null || body.lineIds.length === 0) {
+      return false;
+    }
+    const sent = body.keep
+      ? body.lineIds
+      : body.lineIds.filter((lineId) => this.hasTripBuy(lineId));
+    const kept = body.lineIds.filter((lineId) => !sent.includes(lineId));
+
+    if (sent.length > 0) {
+      const result = await this._write(rowKey, (basketId) =>
+        this._service.changeProduct(basketId, { ...body, lineIds: sent })
+      );
+      if (result === null) {
+        return false;
+      }
+      this._choices.release(id, sent);
+      this._regroup(result, sent);
+    }
+    // A line taken back to the product the read already draws for it holds
+    // nothing: the row is the server's again (velista `0149`).
+    const rows = this._basket()?.rows ?? [];
+    const home = kept.filter((lineId) =>
+      rows.some(
+        (row) =>
+          row.productId === body.itemId &&
+          row.entries.some(
+            (entry) => entry.lineId === lineId && entry.tripItemId === null
+          )
+      )
+    );
+    this._choices.release(id, home);
+    this._choices.hold(
+      id,
+      kept.filter((lineId) => !home.includes(lineId)),
+      { itemId: body.itemId, product }
+    );
+    return true;
+  }
+
+  /**
+   * Let go of every choice held on this basket that the stored read has spent
+   * (velista `0149`): a line the read no longer names, or a line whose entry
+   * carries a buy of its own, which the server answers from now on.
+   *
+   * Reads `basket.rows`, the server's answer, and never {@link rows}, whose
+   * entries carry the held product as their `tripItemId`.
+   */
+  private _pruneHeld(basket: Basket): void {
+    if (this._choices.heldOn(basket.id).size === 0) {
+      return;
+    }
+    const unbought = new Set<string>();
+    const bought = new Set<string>();
+    for (const row of basket.rows) {
+      for (const entry of row.entries) {
+        (entry.tripItemId === null ? unbought : bought).add(entry.lineId);
+      }
+    }
+    this._choices.retain(
+      basket.id,
+      (lineId) => unbought.has(lineId) && !bought.has(lineId)
+    );
+  }
+
+  /**
+   * The covered lists that could take a product, or null when the read failed
+   * (backend `0201`, section 5; velista `0139`, section 3).
+   *
+   * A read and not a write, so a failure here moves nothing: the basket on screen
+   * stays, and the sheet says the lists did not load with a retry beside it.
+   */
+  async productLists(
+    itemId: string
+  ): Promise<readonly BasketProductList[] | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+    try {
+      const lists = await this._service.productLists(id, itemId);
+      // A basket let go or switched while the read was out answers for none.
+      return this._id === id ? lists : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1132,10 +1393,8 @@ export class BasketStore {
    *
    * It is folded rather than appended, because the add goes through the target
    * list's ordinary rules and can land on a line the list already held (backend
-   * `0091`). So the answer is a row that may already be on the screen, under a
-   * key nobody named, and {@link _fold} puts it where it belongs. The key it is
-   * folded against is the answer's own: there is no earlier row for this write
-   * to replace.
+   * `0091`). So the answer is a line that may already be on the screen, and
+   * {@link _fold} puts it into the row of its product, or makes it a row.
    */
   async addLine(body: BasketAddLineRequest): Promise<BasketRowResult | null> {
     const id = this._id;
@@ -1146,10 +1405,8 @@ export class BasketStore {
     this._adding.set(true);
     try {
       const result = await this._service.addLine(id, body);
-      // Folded against the answer's **own** key, because there is no earlier row
-      // this write replaces: an add either makes a row or raises one that was
-      // already there, and either way the answer names it.
-      this._fold(result, result.row?.rowKey ?? '');
+      // An add makes a line this client does not hold, which only a read names.
+      this._fold(result, [], false);
       return result;
     } catch (error) {
       this._fail(id, error);
@@ -1177,100 +1434,112 @@ export class BasketStore {
   }
 
   /**
+   * Whether a write's answer took this line out of the basket: it named the line,
+   * and the line is not among the lines it answered (backend `0201`, section 4).
+   * A demand taken to zero on a line nothing was bought of is the one write that
+   * does it.
+   */
+  lineLeft(result: BasketRowResult, lineId: string): boolean {
+    return !result.entries.some((entry) => entry.lineId === lineId);
+  }
+
+  /**
+   * One write on a row, by the lines of the row this store holds.
+   *
+   * Null without a write when the store holds no such row, which is a row that
+   * left under an open sheet: there is nothing to name.
+   */
+  private async _rowWrite(
+    rowKey: string,
+    send: (id: string, target: BasketRowTarget) => Promise<BasketRowResult>,
+    patchable = true
+  ): Promise<BasketRowResult | null> {
+    const target = this.targetOf(rowKey);
+    if (target === null) {
+      return null;
+    }
+    return this._write(target.rowKey, async (id) => {
+      const result = await send(id, target);
+      this._fold(result, target.lineIds, patchable);
+      return result;
+    });
+  }
+
+  /**
    * Fold one write's answer into the basket. **The single place a write lands.**
    *
-   * It replaces the row by key and takes the counts whole. It **never patches a
-   * number**: every number on this screen is one the server sent, so there is
-   * nothing here to add up and nothing to get wrong.
+   * The answer is lines and no row (backend `0201`, section 4), so
+   * `foldBasketEntries` puts each line back into the row that holds it and
+   * rebuilds that row with the rules core uses. **It never works out a number of
+   * its own**: every sum and state is `@portfolio/luna-shopper/basket-rules`'s
+   * answer over the entries the server sent.
    *
-   * Three things it has to get right, and they are three:
+   * The header is counted here over the rows held, with the same rules
+   * (`progressOf`), and not taken from the answer: the write's progress is
+   * core's count with no prices and can be one off the read (backend `0201`,
+   * "What the build decided", point 1).
    *
-   * - **The answered row may carry a new key.** A rename that merged, or an anchor
-   *   that was bought to zero, moves it. So the row named by `rowKey` is dropped
-   *   and the answered row is put back in its place, which keeps the position the
-   *   shopper is looking at.
-   * - **`replacedRowKey` names a second row that went away**, which is the row a
-   *   rename folded this one into, or out of. It is dropped too.
-   * - **The row's list ids are gated here**, because the answer carries no refs to
-   *   gate them against. It is the same function `toBasket` uses, so a row that
-   *   arrived through a write and a row that arrived through a read cannot
-   *   disagree about which lists this reader may name.
+   * A write that only moves numbers is applied as a patch and is not followed by
+   * a read (velista `0143`, section 6). Any other answer, or one the patch cannot
+   * apply, is folded as above and the rows are read after it: the read is where a
+   * row the client cannot place comes from, with its product named.
+   *
+   * @param patchable False for a write that can change a name or a row, which a
+   *   patch does not carry: a rename and an add.
    */
-  private _fold(result: BasketRowResult, rowKey: string): void {
+  private _fold(
+    result: BasketRowResult,
+    named: readonly string[],
+    patchable = true
+  ): void {
     const held = this._basket();
     if (held === null) {
       return;
     }
 
-    if (result.row === null) {
-      // **The write took the row out of the basket**, which only a demand
-      // lowered to zero can do (velista `0092`, section 6.2). It is dropped by
-      // the key the request used, and by `replacedRowKey` where the server
-      // named a second one, exactly as a surviving row's old keys are dropped
-      // below. The counts still come from the answer: the row going away is
-      // what changed them.
-      const dropped = new Set(
-        [rowKey, result.replacedRowKey].filter(
-          (key): key is string => key !== null
-        )
-      );
-      this._basket.set({
-        ...held,
-        rows: held.rows.filter((current) => !dropped.has(current.rowKey)),
-        progress: result.progress,
-        pending: result.pending,
-      });
-      this._changed();
+    // The answer of a write that only moves numbers is applied with the same
+    // function as an event, so the row and the count are right before the event
+    // of the same write lands and changes nothing. No read follows it (velista
+    // `0143`, section 6).
+    if (patchable) {
+      const lineIds = [
+        ...new Set([...named, ...result.entries.map((entry) => entry.lineId)]),
+      ];
+      if (this._applyPatch(lineIds, result.entries.map(basketEntryPatchOf))) {
+        return;
+      }
+    }
+
+    const served = new Set(held.lists.map((ref) => ref.listId));
+    const rows = foldBasketEntries(held.rows, result.entries, named, served);
+    const { progress, pending } = basketProgressOf(rows);
+    const stored = { ...held, rows, progress, pending };
+    this._basket.set(stored);
+    this._pruneHeld(stored);
+    this._changed();
+    this._eventReads.ask();
+  }
+
+  /**
+   * Fold the answer of a change of product: the lines move to the rows of the
+   * products they count as now (`regroupBasketEntries`), which {@link _fold}
+   * does not do, because no other write changes a product. The rest is
+   * {@link _fold}'s.
+   */
+  private _regroup(result: BasketRowResult, named: readonly string[]): void {
+    const held = this._basket();
+    if (held === null) {
       return;
     }
 
     const served = new Set(held.lists.map((ref) => ref.listId));
-    const row = withHeldUsual(
-      restrictRowToServedLists(result.row, served),
-      held.rows,
-      rowKey
-    );
-    const gone = new Set(
-      [rowKey, result.replacedRowKey].filter(
-        (key): key is string => key !== null
-      )
-    );
-    gone.delete(row.rowKey);
-
-    let placed = false;
-    const rows: BasketRow[] = [];
-    for (const current of held.rows) {
-      if (current.rowKey === row.rowKey) {
-        rows.push(row);
-        placed = true;
-        continue;
-      }
-      if (gone.has(current.rowKey)) {
-        // The row the request named, under the key it had. The answered row takes
-        // its place, so the position the shopper is looking at is kept.
-        if (!placed) {
-          rows.push(row);
-          placed = true;
-        }
-        continue;
-      }
-      rows.push(current);
-    }
-
-    if (!placed) {
-      // A row this basket did not hold, which a re-key can produce: the read that
-      // would have carried it is still out. The end is the only honest place for
-      // it, and the read that follows puts it where the server says.
-      rows.push(row);
-    }
-
-    this._basket.set({
-      ...held,
-      rows,
-      progress: result.progress,
-      pending: result.pending,
-    });
+    const rows = regroupBasketEntries(held.rows, result.entries, served, named);
+    const { progress, pending } = basketProgressOf(rows);
+    const stored = { ...held, rows, progress, pending };
+    this._basket.set(stored);
+    this._pruneHeld(stored);
     this._changed();
+    this._eventReads.ask();
   }
 
   // --- The owner's share sheet ----------------------------------------------
@@ -1455,25 +1724,110 @@ export class BasketStore {
   }
 
   /**
-   * Re-read the basket shortly, once, however many events asked for it.
+   * A `basket.linesChanged` of this basket's room (velista `0143`).
    *
-   * Quiet: it never moves {@link state} to `loading`, so a shop full of people
-   * settling lines does not replace a readable screen with a skeleton every second.
-   * A failure leaves what is on screen alone, for {@link _fail}'s reason.
+   * With entries, they are applied to the rows held, with no request. Without
+   * them, or when the patch cannot be applied, the rows are read: see
+   * {@link CoalescedRead}. Quiet either way: neither moves {@link state} to
+   * `loading`, and a failed read leaves what is on screen alone.
+   *
+   * A read that is out when the patch lands gets it again on its answer, which can
+   * be older than the patch.
    */
-  private _scheduleRefresh(): void {
-    this._cancelRefresh();
-    this._refreshAt = setTimeout(() => {
-      this._refreshAt = null;
-      void this.refresh();
-    }, REFRESH_DEBOUNCE_MS);
+  private _linesChanged(
+    lineIds: readonly string[],
+    entries: readonly BasketEntryPatch[] | null,
+    marksMoved: boolean
+  ): void {
+    if (entries === null) {
+      // The read brings the marks too.
+      this._eventReads.ask();
+      return;
+    }
+    if (!this._applyPatch(lineIds, entries)) {
+      this._eventReads.ask();
+      return;
+    }
+    if (marksMoved) {
+      this._askMarks();
+    }
   }
 
-  private _cancelRefresh(): void {
-    if (this._refreshAt !== null) {
-      clearTimeout(this._refreshAt);
-      this._refreshAt = null;
+  /**
+   * Apply one patch to the basket held, and keep it for a read that is out.
+   * False when only a read can say what is true.
+   */
+  private _applyPatch(
+    lineIds: readonly string[],
+    entries: readonly BasketEntryPatch[]
+  ): boolean {
+    const held = this._basket();
+    if (held === null) {
+      // The first read is out, and it gets this patch when it lands.
+      this._heldPatches?.push({ lineIds, entries });
+      return this._heldPatches !== null;
     }
+    const next = applyBasketPatch(held, lineIds, entries);
+    if (next === BASKET_PATCH_READ) {
+      return false;
+    }
+    this._heldPatches?.push({ lineIds, entries });
+    if (next !== held) {
+      this._basket.set(next);
+      this._pruneHeld(next);
+    }
+    return true;
+  }
+
+  /**
+   * Read the marks shortly, once for a burst (velista `0143`, section 4).
+   *
+   * A failure is silent: the next read brings them.
+   */
+  private _askMarks(): void {
+    if (this._marksOut) {
+      this._marksAgain = true;
+      return;
+    }
+    this._marksAt ??= setTimeout(() => {
+      this._marksAt = null;
+      void this._readMarks();
+    }, MARKS_WAIT_MS);
+  }
+
+  private async _readMarks(): Promise<void> {
+    const id = this._id;
+    if (id === null) {
+      return;
+    }
+    const landed = this._landed;
+    this._marksOut = true;
+    this._marksAgain = false;
+    try {
+      const marks = await this._service.getMarks(id);
+      const held = this._basket();
+      // A read that landed meanwhile brought marks at least as new.
+      if (this._id === id && this._landed === landed && held !== null) {
+        this._basket.set(applyBasketMarks(held, marks));
+      }
+    } catch {
+      // Silent, by section 4: the next read brings the marks.
+    } finally {
+      this._marksOut = false;
+    }
+    if (this._marksAgain && this._id === id) {
+      this._askMarks();
+    }
+  }
+
+  /** Forget every read and marks read that was waiting. One that is out lands. */
+  private _cancelReads(): void {
+    this._eventReads.cancel();
+    if (this._marksAt !== null) {
+      clearTimeout(this._marksAt);
+      this._marksAt = null;
+    }
+    this._marksAgain = false;
   }
 
   /**
@@ -1504,6 +1858,14 @@ export class BasketStore {
       // and must not be reported as one.
       const held = this._sessions.read(basketId);
       this._sessions.forget(basketId);
+      if (held === null && this._state() === 'revoked') {
+        // The credential is gone because an earlier refusal of this basket just
+        // dropped it, not because this is a stranger. A revoked guest's tap and the
+        // read their own removal's event asked for both come back 401, in either
+        // order, and the second must not turn "You are no longer on this list"
+        // into the join screen's "This link is no longer accepting people".
+        return;
+      }
       if (held !== null) {
         // Which of the two endings it was, from the code the server put on the
         // refusal (backend `0140`, section 8). Anything else, including a 401
@@ -1530,31 +1892,4 @@ export class BasketStore {
  */
 function isShopLocked(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'basket_shop_locked';
-}
-
-/**
- * The answered row, carrying the `usual` of the row it replaces when it carries
- * none of its own (velista `0104`).
- *
- * A write answers a row with `usual` null (backend `0165`): the settle or revert
- * that wrote it counts nothing about the chain. Taking that null as the answer
- * would make a row the usual filter hid jump back onto the screen the moment
- * somebody settled it, and lose the message under one it kept. So the last read's
- * value stays until the next read, which is the one place it is counted. Found by
- * the answered key first and then by the key the request used, which is the same
- * pair {@link BasketStore} folds the row by.
- */
-function withHeldUsual(
-  row: BasketRow,
-  held: readonly BasketRow[],
-  requested: string
-): BasketRow {
-  if (row.usual !== null) {
-    return row;
-  }
-  const previous =
-    held.find((current) => current.rowKey === row.rowKey) ??
-    held.find((current) => current.rowKey === requested);
-  const usual = previous?.usual ?? null;
-  return usual === null ? row : { ...row, usual };
 }

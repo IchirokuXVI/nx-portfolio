@@ -370,6 +370,10 @@ export function toLine(raw: unknown): Line | null {
     id,
     listId,
     content: strOr(raw['content'], ''),
+    // Whether a person named the line (backend `0207`). Anything but `false` is
+    // named, which is the safe way: a named line draws what it says, and a server
+    // that predates the flag named every line it made.
+    named: raw['named'] !== false,
     quantity: numOr(raw['quantity'], 1),
     // A set now, where this read a single nullable `itemId` (backend plan 0048,
     // section 1.1). Ids that are not strings are dropped rather than kept as
@@ -407,6 +411,11 @@ export function toLine(raw: unknown): Line | null {
     // this over a missing field would read as the line having been dealt with.
     claimed: raw['claimed'] === true,
     claimedByUserId: nullableStr(raw['claimedByUserId']),
+    // Both null on a server that predates backend `0199`, which is also what a
+    // line with no favourite and no supermarket carries, so the two need no
+    // distinction: the page draws no filled star and "Any".
+    favoriteItemId: nullableStr(raw['favoriteItemId']),
+    preferredSupermarketId: nullableStr(raw['preferredSupermarketId']),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather
@@ -792,6 +801,23 @@ export function toCatalogSuggestions(
   return mapArray(body['suggestions'], (raw) =>
     toCatalogSuggestion(raw, chains)
   );
+}
+
+/**
+ * From `catalog.ItemLookupResponse` (`POST /v1/catalog/items/lookup`), or null
+ * for a body that is not one.
+ *
+ * Asked with `prices: true` (backend `0207`), the answer names the chain of each
+ * scope its offers quote in `scopes`, the map the suggest answer carries, so each
+ * item's offers become its `chainPrices` here (velista `0145`, section 7). Without
+ * it there is no map and `chainPrices` is empty.
+ */
+export function toItemLookup(body: unknown): readonly CatalogItem[] | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const chains = toScopeChains(body['scopes']);
+  return mapArray(body['items'], (raw) => toCatalogItem(raw, chains));
 }
 
 /**

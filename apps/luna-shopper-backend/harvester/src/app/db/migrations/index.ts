@@ -19,6 +19,8 @@ import { SourceEntrySizeUnit1758000000000 } from './1758000000000-SourceEntrySiz
 import { SourceEntrySoldByWeight1758100000000 } from './1758100000000-SourceEntrySoldByWeight';
 import { SourceEntryAvailability1758200000000 } from './1758200000000-SourceEntryAvailability';
 import { SourceEntryPriceKind1759200000000 } from './1759200000000-SourceEntryPriceKind';
+import { SourceEntryImageUrl1759300000000 } from './1759300000000-SourceEntryImageUrl';
+import { HarvestSchedules1759400000000 } from './1759400000000-HarvestSchedules';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -50,4 +52,6 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntrySoldByWeight1758100000000,
   SourceEntryAvailability1758200000000,
   SourceEntryPriceKind1759200000000,
+  SourceEntryImageUrl1759300000000,
+  HarvestSchedules1759400000000,
 ];

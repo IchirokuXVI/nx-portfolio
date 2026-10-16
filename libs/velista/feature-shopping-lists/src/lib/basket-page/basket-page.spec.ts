@@ -19,15 +19,19 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  fakeCategoryStore,
   fakeGroupMembers,
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  MEMORY_CATEGORIES,
   MEMORY_SHOP_MAPS,
+  provideFakeCategoryStore,
   provideFakeGroupMembers,
   provideFakeShopDetailStore,
   provideFakeShopSectionsStore,
   SessionStore,
+  type FakeCategoryStore,
   type FakeGroupMembers,
   type FakeShopDetailStore,
   type FakeShopSectionsStore,
@@ -45,6 +49,7 @@ import type {
   BasketShop,
   CatalogItem,
   CatalogSuggestion,
+  CategoryNode,
   ErrorCode,
 } from '@portfolio/velista/models';
 import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
@@ -60,6 +65,7 @@ import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
 import { basketDoors } from '../basket-menu';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
+import { HeldBuy } from '../held-buy';
 import { BasketPage } from './basket-page';
 
 /**
@@ -162,6 +168,28 @@ interface FakeStore {
   readonly addLine: jest.Mock;
 }
 
+/**
+ * The tree the page names its parent headings from (velista `0138`): the memory
+ * slice, and the roots the fixtures here put their leaves under.
+ */
+const PAGE_TREE: readonly CategoryNode[] = [
+  ...MEMORY_CATEGORIES,
+  ...[
+    ['cat-root', 'Groceries'],
+    ['cat-other', 'Other'],
+    ['cat-fruit-and-vegetables', 'Fruit and vegetables'],
+  ].map(
+    ([id, en], position): CategoryNode => ({
+      id,
+      parentId: null,
+      slug: id.slice('cat-'.length),
+      name: { en, es: en },
+      position: 100 + position,
+      itemCount: 0,
+    })
+  ),
+];
+
 interface Options {
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
@@ -236,6 +264,8 @@ interface Options {
   readonly readAtShop?: BasketShop;
   /** The shops' aisles already read, or none (velista `0120`). */
   readonly shopSections?: FakeShopSectionsStore;
+  /** The category tree, landed with {@link PAGE_TREE} unless a test says (`0138`). */
+  readonly categories?: FakeCategoryStore;
   readonly shopDetails?: FakeShopDetailStore;
 }
 
@@ -297,11 +327,11 @@ function line(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds: [],
+    productId: null,
     touchedBy: null,
     touchedAt: null,
     usual: null,
-    entries: [entry(null, `zl-${content}`, left)],
+    entries: [entry(null, `zl-${content}`, left, { content })],
     ...overrides,
   };
 }
@@ -315,6 +345,14 @@ function entry(
   return {
     lineId,
     listId,
+    content: '',
+    itemIds: [],
+    favoriteItemId: null,
+    canWrite: listId !== null,
+    tripItemId: null,
+    skipped: false,
+    closed: false,
+    act: null,
     left,
     bought: 0,
     asked: left,
@@ -322,6 +360,7 @@ function entry(
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
+    version: 1,
     ...over,
   };
 }
@@ -336,15 +375,9 @@ const SERVED = [
   ref('l-weekly', 'Weekly shop'),
 ];
 
-/** What a row write answers: the row as it now stands, and the counts. */
+/** What a row write answers: the lines of the row as they now stand. */
 function rowResult(row: BasketRow): BasketRowResult {
-  return {
-    row,
-    progress: { done: 0, unavailable: 0, total: 1 },
-    pending: 1,
-    replacedRowKey: null,
-    skippedCount: 0,
-  };
+  return { entries: row.entries, skippedCount: 0 };
 }
 
 function participant(entry: BasketPresenceEntry): BasketParticipant {
@@ -469,13 +502,11 @@ async function render(options: Options = {}): Promise<{
     handedOver: signal<{ text: string; seq: number } | null>(null),
     handOver: jest.fn(),
     adding: signal(false),
-    // An add answers the row it landed on, exactly as the store folds it: the row
-    // on screen is the answer's and never the words that were typed.
+    // An add answers the line it made or raised, which the store folds into the
+    // row of its product.
     addLine: jest.fn(
       (body: { content: string }): Promise<BasketRowResult | null> =>
-        Promise.resolve(
-          rowResult({ ...line('zl-added'), content: body.content })
-        )
+        Promise.resolve(rowResult(line(body.content)))
     ),
   };
 
@@ -621,12 +652,12 @@ async function render(options: Options = {}): Promise<{
           // What the composer needs: whether an add is out, and the add itself.
           adding: store.adding,
           addLine: store.addLine,
-          chosen: signal(new Map<string, string>()),
-          choose: jest.fn(),
           itemIdFor: () => undefined,
           skip: jest.fn().mockResolvedValue(null),
           unskip: jest.fn().mockResolvedValue(null),
           setDemand: jest.fn().mockResolvedValue(null),
+          lineLeft: (result: BasketRowResult, lineId: string) =>
+            !result.entries.some((held) => held.lineId === lineId),
           rowFor: (key: string) =>
             store.rows().find((row) => row.rowKey === key) ??
             store
@@ -709,10 +740,18 @@ async function render(options: Options = {}): Promise<{
       // test and not the real facade: jsdom hands every test in this file the same
       // `localStorage`, so a test that chose an order would hand it to the next
       // page to open, through the restore the page now runs on load.
-      provideFakeBrowserFacade(options.storage ?? new Map()),
+      //
+      // A device that answered "Don't ask again" by default, so a buy here is
+      // written at once; the shop question (velista `0141`) seeds its own.
+      provideFakeBrowserFacade(
+        options.storage ?? new Map([[StorageKeys.shopAskOff, 'true']])
+      ),
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
+      ),
+      provideFakeCategoryStore(
+        options.categories ?? fakeCategoryStore(PAGE_TREE)
       ),
       provideFakeShopDetailStore(options.shopDetails ?? fakeShopDetailStore()),
     ],
@@ -1205,8 +1244,7 @@ describe('the number on a row', () => {
         },
       ],
     ]);
-    const pricedMilk = () =>
-      line('Milk', { left: 5, optionIds: ['item-milk'] });
+    const pricedMilk = () => line('Milk', { left: 5, productId: 'item-milk' });
 
     it('the reel names the scope of the price the row draws', async () => {
       const { fixture, store } = await render({
@@ -1217,7 +1255,9 @@ describe('the number on a row', () => {
       row(fixture).left.emit({ from: 5, to: 3 });
       await settleWrites(fixture);
 
+      // The row's product travels with the buy (velista `0139`, section 4).
       expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
+        itemId: 'item-milk',
         priceScopeId: 's-dia',
       });
     });
@@ -1236,7 +1276,42 @@ describe('the number on a row', () => {
         outcome: 'BOUGHT',
         quantity: 5,
         from: 5,
+        itemId: 'item-milk',
         priceScopeId: 's-dia',
+      });
+    });
+
+    /**
+     * Every write names the row by its key, and `BasketStore.targetOf` sends every
+     * line of that row with it (velista `0139`, section 4; asserted with the lines
+     * in `basket-store.spec.ts`). The page never picks a subset of the lines.
+     */
+    it('addresses the whole row by its key on a settle and on a revert', async () => {
+      const twoLists = pricedMilk();
+      const held = {
+        ...twoLists,
+        bought: 2,
+        state: 'PARTLY' as const,
+        entries: [
+          entry('l-groceries', 'row-Milk', 3),
+          entry('l-weekly', 'zl-other', 2),
+        ],
+      };
+      const { fixture, store } = await render({
+        lines: [held],
+        products: priced,
+      });
+
+      row(fixture).settle.emit();
+      row(fixture).revert.emit();
+      await settleWrites(fixture);
+
+      expect(store.settle.mock.calls[0][0]).toBe('row-Milk');
+      expect(store.revert.mock.calls[0][0]).toBe('row-Milk');
+      expect(store.revert.mock.calls[0][1]).toEqual({
+        target: 'UNITS',
+        units: 2,
+        from: 2,
       });
     });
 
@@ -1659,7 +1734,7 @@ describe('searching the basket', () => {
   }
 
   const threeLines: readonly BasketRow[] = [
-    line('Milk', { rowKey: 'l-1', optionIds: ['item-milk'] }),
+    line('Milk', { rowKey: 'l-1', productId: 'item-milk' }),
     line('Sourdough loaf', { rowKey: 'l-2' }),
     line('Plátano', { rowKey: 'l-3' }),
   ];
@@ -2251,7 +2326,7 @@ describe('searching the basket', () => {
         left: 0,
         bought: 3,
         state: 'DONE',
-        optionIds: ['i-milk'],
+        productId: 'i-milk',
         entries: [
           entry('l-weekly', 'zl-1', 0, {
             bought: 2,
@@ -2268,7 +2343,7 @@ describe('searching the basket', () => {
       line('Cheese', {
         rowKey: 'l-2',
         left: 4,
-        optionIds: ['i-milk'],
+        productId: 'i-milk',
         entries: [entry('l-weekly', 'zl-3', 4)],
       }),
       // A row this reader cannot place, which is what a null `listId` means.
@@ -2319,12 +2394,12 @@ describe('searching the basket', () => {
     it('heads each aisle with an h2 carrying the name and the count together', async () => {
       const { fixture } = await renderGrouped('category');
 
-      const [milk] = headings(fixture);
-      expect(milk.tagName).toBe('H2');
+      const [dairy] = headings(fixture);
+      expect(dairy.tagName).toBe('H2');
       // One accessible name, because a reader moving by heading hears the `h2` and
       // nothing else inside it (section 6). The visible spans are `aria-hidden`.
-      expect(milk.getAttribute('aria-label')).toBe(
-        'Milk, basket.group.progress'
+      expect(dairy.getAttribute('aria-label')).toBe(
+        'Eggs, milk, and butter, basket.group.progress'
       );
     });
 
@@ -2366,7 +2441,7 @@ describe('searching the basket', () => {
         line('Bread', {
           rowKey: 'l-1',
           state: 'NOT_AVAILABLE',
-          optionIds: ['i-milk'],
+          productId: 'i-milk',
         }),
       ];
       const { fixture } = await render({
@@ -2379,7 +2454,7 @@ describe('searching the basket', () => {
       // Two keys, as the page's own sentence keeps them apart: a shop that had none
       // is not shopping done.
       expect(headings(fixture)[0].getAttribute('aria-label')).toBe(
-        'Milk, basket.group.progress · basket.group.unavailable'
+        'Eggs, milk, and butter, basket.group.progress · basket.group.unavailable'
       );
     });
 
@@ -2406,7 +2481,9 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {});
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {
+        itemId: 'i-milk',
+      });
     });
 
     it('commits an ungrouped row through the same call', async () => {
@@ -2415,7 +2492,9 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {});
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {
+        itemId: 'i-milk',
+      });
     });
 
     /**
@@ -3428,7 +3507,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
 
   const milk = () =>
     line('Milk', {
-      optionIds: ['item-milk'],
+      productId: 'item-milk',
       entries: [
         entry('l-groceries', 'zl-1', 2),
         entry('l-hidden', 'zl-2', 1, { demandEditable: false }),
@@ -3467,11 +3546,66 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
 
     await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
 
-    expect(store.setDemand).toHaveBeenCalledWith('row-Milk', {
+    // Sent under its own line (backend `0201`, section 4), whichever row holds it.
+    expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl-1',
       quantity: 3,
       from: 2,
     });
+  });
+
+  it('says the line is no longer asked for when the answer no longer holds it', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 0 });
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('basket.demand.nothingLeft');
+  });
+
+  it('names an entry by its own line, which can differ from the row (velista 0139)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Milk', {
+          productId: 'item-milk',
+          entries: [
+            entry('l-groceries', 'zl-1', 2, { content: 'Leche para el café' }),
+          ],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => held.text)
+    ).toEqual(['Leche para el café']);
+  });
+
+  it('holds nothing for a product no row is, even when a line lists it', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('Oat drink', {
+          productId: 'item-oat',
+          entries: [
+            entry('l-groceries', 'zl-3', 1, {
+              itemIds: ['item-oat', 'item-milk'],
+            }),
+          ],
+        }),
+      ],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(page.holdingsOf()(MILK)).toEqual([]);
   });
 
   it('links to the product for an account, and to nothing for a guest', async () => {
@@ -3633,7 +3767,7 @@ describe('similar products on the basket', () => {
 
   const milkRow = (listId: string | null) =>
     line('Milk', {
-      optionIds: ['i-milk'],
+      productId: 'i-milk',
       entries: [entry(listId, 'zl-Milk')],
     });
 
@@ -3642,8 +3776,13 @@ describe('similar products on the basket', () => {
       .componentInstance as BasketRowComponent;
   }
 
-  it('offers the change on a row whose product has a group, on a list the reader writes', async () => {
-    const groupMembers = fakeGroupMembers();
+  const cheaperGroup = () =>
+    fakeGroupMembers({
+      members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 0.9)] },
+    });
+
+  it('opens the change sheet for all lists from the cheaper mark (velista 0140)', async () => {
+    const groupMembers = cheaperGroup();
     const { fixture, store } = await render({
       lines: [milkRow('l-groceries')],
       served: SERVED,
@@ -3651,37 +3790,52 @@ describe('similar products on the basket', () => {
       groupMembers,
     });
 
-    expect(drawn(fixture).canSwap()).toBe(true);
+    expect(drawn(fixture).canChange()).toBe(true);
     expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
       ['g-milk'],
     ]);
 
-    drawn(fixture).swap.emit();
+    drawn(fixture).changeProduct.emit();
 
     expect(store.navigate).toHaveBeenCalledWith(
-      ['sheet', 'rows', 'row-Milk', 'swap'],
+      ['sheet', 'rows', 'row-Milk', 'change'],
       expect.anything()
     );
   });
 
-  it('offers no change on a list the reader may not write, or with no group', async () => {
+  it('draws no control where the cheaper mark is not drawn', async () => {
+    const { fixture } = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 1.5)] },
+      }),
+    });
+
+    expect(drawn(fixture).canChange()).toBe(false);
+  });
+
+  it('draws no control on a list the reader may not write, or with no group', async () => {
     const unserved = await render({
       lines: [milkRow(null)],
       served: SERVED,
       products: new Map([['i-milk', GROUPED]]),
+      groupMembers: cheaperGroup(),
     });
-    expect(drawn(unserved.fixture).canSwap()).toBe(false);
+    expect(drawn(unserved.fixture).canChange()).toBe(false);
 
     const ungrouped = await render({
       lines: [milkRow('l-groceries')],
       served: SERVED,
       products: new Map([['i-milk', { ...GROUPED, productGroupId: null }]]),
+      groupMembers: cheaperGroup(),
     });
-    expect(drawn(ungrouped.fixture).canSwap()).toBe(false);
+    expect(drawn(ungrouped.fixture).canChange()).toBe(false);
   });
 
   it('offers a guest no change and reads no group for one', async () => {
-    const groupMembers = fakeGroupMembers();
+    const groupMembers = cheaperGroup();
     const { fixture } = await render({
       me: participant(guest('p-9', 1)),
       lines: [milkRow('l-groceries')],
@@ -3690,7 +3844,7 @@ describe('similar products on the basket', () => {
       groupMembers,
     });
 
-    expect(drawn(fixture).canSwap()).toBe(false);
+    expect(drawn(fixture).canChange()).toBe(false);
     expect(groupMembers.asked).toEqual([]);
   });
 
@@ -3737,6 +3891,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
     id: string,
     name: string,
     category: string,
+    parent: string,
     sectionIds: readonly string[]
   ): BasketProduct {
     return {
@@ -3753,7 +3908,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
       categories: [
         {
           id: `cat-${category}`,
-          parentId: 'cat-root',
+          parentId: `cat-${parent}`,
           slug: category,
           name: { en: category, es: category },
         },
@@ -3765,22 +3920,29 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   const PRODUCTS = new Map([
     [
       'i-pizza',
-      item('i-pizza', 'Pizza', 'frozen-pizzas', ['sec-frozen', 'sec-pizzas']),
+      item('i-pizza', 'Pizza', 'frozen-pizzas', 'prepared-meals-and-pizzas', [
+        'sec-frozen',
+        'sec-pizzas',
+      ]),
     ],
-    ['i-apple', item('i-apple', 'Apple', 'apples-and-pears', ['sec-fruit'])],
-    ['i-oil', item('i-oil', 'Olive oil', 'oils', [])],
+    [
+      'i-apple',
+      item('i-apple', 'Apple', 'apples-and-pears', 'fruit-and-vegetables', [
+        'sec-fruit',
+      ]),
+    ],
+    ['i-oil', item('i-oil', 'Olive oil', 'oils', 'oils-sauces-and-spices', [])],
   ]);
 
   const LINES = [
-    line('Olive oil', { optionIds: ['i-oil'] }),
-    line('Pizza', { optionIds: ['i-pizza'] }),
-    line('Apple', { optionIds: ['i-apple'] }),
+    line('Olive oil', { productId: 'i-oil' }),
+    line('Pizza', { productId: 'i-pizza' }),
+    line('Apple', { productId: 'i-apple' }),
   ];
 
   function section(id: string, name: string) {
     return {
       id,
-      supermarketId: 'sm-merca',
       slug: id,
       name: { en: name, es: name },
       position: 0,
@@ -3820,11 +3982,18 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   it('draws the shop’s aisles in its order, a row in two of them in both, then the band and the rest', async () => {
     const { fixture } = await atMercadona();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
+    expect(headings(fixture)).toEqual([
+      'Fruit',
+      'Pizzas',
+      'Frozen',
+      'Oils, sauces and spices',
+    ]);
     const band = query(fixture, '.uncovered-band');
     expect(band?.textContent).toContain('basket.group.uncovered');
-    // The band sits between the last aisle and the first category, in document order.
-    expect(band?.nextElementSibling?.textContent).toContain('oils');
+    // The band sits between the last aisle and the first parent, in document order.
+    expect(band?.nextElementSibling?.textContent).toContain(
+      'Oils, sauces and spices'
+    );
     // A paragraph, not a heading: moving by heading reads one flat run of groups.
     expect(band?.querySelector('h1, h2, h3')).toBeNull();
   });
@@ -3833,16 +4002,45 @@ describe('BasketPage: the aisles of the shop you are in', () => {
     const { fixture, shopSections } = await atMercadona(false);
 
     expect(headings(fixture)).toEqual([
-      'oils',
-      'frozen-pizzas',
-      'apples-and-pears',
+      'Oils, sauces and spices',
+      'Prepared meals and pizzas',
+      'Fruit and vegetables',
     ]);
     expect(query(fixture, '.uncovered-band')).toBeNull();
 
     shopSections.land('loc-mayor', WALK);
     fixture.detectChanges();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
+    expect(headings(fixture)).toEqual([
+      'Fruit',
+      'Pizzas',
+      'Frozen',
+      'Oils, sauces and spices',
+    ]);
+  });
+
+  it('draws the rows with no heading until the tree lands, then the parents', async () => {
+    const categories = fakeCategoryStore();
+    const rendered = await render({
+      lines: LINES,
+      products: PRODUCTS,
+      readAtShop: MERCADONA,
+      categories,
+    });
+    TestBed.inject(BasketViewStore).setGrouping('category');
+    rendered.fixture.detectChanges();
+
+    expect(headings(rendered.fixture)).toEqual([]);
+    expect(rendered.fixture.nativeElement.textContent).toContain('Olive oil');
+
+    categories.land(PAGE_TREE);
+    rendered.fixture.detectChanges();
+
+    expect(headings(rendered.fixture)).toEqual([
+      'Oils, sauces and spices',
+      'Prepared meals and pizzas',
+      'Fruit and vegetables',
+    ]);
   });
 
   it('opens the explanation from the info control, and closes it on a second press', async () => {
@@ -3948,7 +4146,6 @@ describe('BasketPage: the map of the shop you are in', () => {
       'loc-jamon': [
         {
           id: 'sec-dairy',
-          supermarketId: 'sm-jamon',
           slug: 'dairy',
           name: { en: 'Dairy', es: 'Lácteos' },
           position: 0,
@@ -3957,7 +4154,7 @@ describe('BasketPage: the map of the shop you are in', () => {
       ],
     });
     const rendered = await render({
-      lines: [line('Milk', { optionIds: ['i-milk'] })],
+      lines: [line('Milk', { productId: 'i-milk' })],
       products: new Map([['i-milk', MILK]]),
       readAtShop: EL_JAMON,
       shopDetails,
@@ -4079,70 +4276,57 @@ describe('BasketPage: the map of the shop you are in', () => {
 });
 
 /**
- * Velista `0131`: a row somebody bought through another basket, on the page.
+ * Velista `0142`: a row somebody bought outside this shopping list, on the page.
  *
- * The pipeline hands the row what was bought elsewhere and the row draws it, so
- * this asserts the two are wired: the caption is on the page and the control that
- * undoes a purchase is not. The quantity control is the sheet's "asks for" reel,
- * which the entries pane and the settle sheet specs assert against
- * `demandEditable`.
+ * Crossed out, last, counted nowhere, and still a way into its sheet. A row that
+ * outside buys only lowered is today's row with nothing added.
  */
-describe('a row bought on another basket (velista 0131)', () => {
-  const butter = (demandEditable = true) =>
+describe('a row bought outside this shopping list (velista 0142)', () => {
+  const butter = () =>
     line('Butter', {
       left: 0,
       bought: 0,
       asked: 0,
       boughtElsewhere: 2,
-      state: 'DONE',
+      state: 'BOUGHT_ELSEWHERE',
       note: 'BOUGHT_ON_ANOTHER_BASKET',
       noteAt: new Date('2026-10-04T10:00:00.000Z'),
       entries: [
         entry(null, 'zl-Butter', 0, {
           boughtElsewhere: 2,
-          state: 'DONE',
-          demandEditable,
+          state: 'BOUGHT_ELSEWHERE',
         }),
       ],
     });
 
-  it('draws the caption', async () => {
-    const { fixture } = await render({ lines: [butter()] });
-
-    expect(text(fixture)).toContain('basket.elsewhere.caption');
-  });
-
-  it('draws it as a done row with no revert control', async () => {
-    const { fixture, store } = await render({ lines: [butter()] });
-    const page = fixture.nativeElement as HTMLElement;
-
-    expect(page.querySelector('lib-basket-row .row.is-done')).not.toBeNull();
-    expect(page.querySelector('lib-basket-row button.status')).toBeNull();
-    expect(page.querySelector('lib-basket-row lib-quantity-reel')).toBeNull();
-    expect(store.revert).not.toHaveBeenCalled();
-  });
-
-  it('draws no caption and keeps the revert on a row this basket bought', async () => {
-    const { fixture } = await render({
-      lines: [line('Eggs', { left: 0, bought: 2, state: 'DONE' })],
+  it('draws it crossed out, last, with where it was bought and no control', async () => {
+    const { fixture, store } = await render({
+      lines: [butter(), line('Milk', { left: 2 })],
     });
     const page = fixture.nativeElement as HTMLElement;
 
-    expect(text(fixture)).not.toContain('basket.elsewhere.caption');
-    expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
+    const rows = [...page.querySelectorAll('lib-basket-row')];
+    expect(rows).toHaveLength(2);
+    const last = rows[1];
+    expect(last.querySelector('.row.is-removed')).not.toBeNull();
+    expect(last.textContent).toContain('basket.line.boughtFromAnotherList');
+    expect(last.querySelector('.status')).toBeNull();
+    expect(last.querySelector('lib-quantity-reel')).toBeNull();
+    expect(store.revert).not.toHaveBeenCalled();
   });
 
-  it('keeps today\u2019s row and adds the caption when something is left', async () => {
+  it('keeps today\u2019s row, with no caption, when something is left', async () => {
     const { fixture } = await render({
       lines: [line('Milk', { left: 2, boughtElsewhere: 1 })],
     });
     const page = fixture.nativeElement as HTMLElement;
 
-    expect(text(fixture)).toContain('basket.elsewhere.caption');
+    expect(page.querySelector('lib-basket-row .row.is-removed')).toBeNull();
     expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
     expect(
       page.querySelector('lib-basket-row lib-quantity-reel')
     ).not.toBeNull();
+    expect(text(fixture)).not.toContain('basket.line.alreadyBought');
   });
 });
 
@@ -4205,7 +4389,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
   /** Two yogurts with a product, and a line that is only words. */
   const lines = (): readonly BasketRow[] => [
-    line('Yogurt', { left: 2, optionIds: ['item-yogurt'] }),
+    line('Yogurt', { left: 2, productId: 'item-yogurt' }),
     line('Candles'),
   ];
 
@@ -4408,8 +4592,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
       };
       const atShop = await render({
         lines: [
-          line('Yogurt', { optionIds: ['item-yogurt'] }),
-          line('Coffee', { optionIds: ['item-coffee'] }),
+          line('Yogurt', { productId: 'item-yogurt' }),
+          line('Coffee', { productId: 'item-coffee' }),
         ],
         products: new Map([
           ['item-yogurt', yogurt(1.5)],
@@ -4423,5 +4607,204 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
       expect(note(atShop.fixture).shopChosen()).toBe(true);
     });
+  });
+});
+
+/**
+ * The first buy of a trip asks where you are (velista `0141`, section 1). The page
+ * holds the buy, opens the question over itself, and the answer writes it.
+ */
+describe('the first buy asks where you are', () => {
+  function firstRow(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const milk = () => line('Milk', { left: 5 });
+
+  it('holds the circle of a row and opens the question, writing nothing yet', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map(),
+    });
+
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'shop'],
+      expect.anything()
+    );
+    // It waits in the page's holder: the release is what writes it.
+    await fixture.debugElement.injector.get(HeldBuy).release();
+    expect(store.settle).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes the held buy once the answer releases it', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map(),
+    });
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    await fixture.debugElement.injector.get(HeldBuy).release();
+
+    expect(store.settle).toHaveBeenCalledWith(
+      'row-Milk',
+      expect.objectContaining({ outcome: 'BOUGHT', quantity: 5, from: 5 })
+    );
+  });
+
+  it('holds the reel when it buys, and never when it takes units back', async () => {
+    const { fixture, store } = await render({
+      lines: [line('Milk', { left: 3, bought: 2, state: 'PARTLY' })],
+      storage: new Map(),
+    });
+
+    firstRow(fixture).left.emit({ from: 3, to: 1 });
+    await settleWrites(fixture);
+    expect(store.setLeft).not.toHaveBeenCalled();
+
+    firstRow(fixture).left.emit({ from: 3, to: 4 });
+    await settleWrites(fixture);
+    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 4, 3, {});
+  });
+
+  /**
+   * A held buy keeps the `from` and the row key of the press. A patch that moves
+   * or re-keys the row while the question is open makes the server refuse it, and
+   * the row stays unbought. The row says so, on the row as it now stands.
+   */
+  describe('a held buy the server refuses', () => {
+    const stale = () =>
+      new GatewayError({
+        code: 'stale_quantity' as ErrorCode,
+        status: 409,
+        correlationId: 'ref-held',
+      });
+    // Milk under a new anchor: the old key is now one of its entries' line ids.
+    const rekeyed = () =>
+      line('Milk', {
+        rowKey: 'row-Milk-2',
+        left: 3,
+        entries: [entry(null, 'row-Milk', 3, { content: 'Milk' })],
+      });
+
+    function refuseWith(store: FakeStore, write: jest.Mock): void {
+      write.mockImplementation(() => {
+        store.error.set(stale());
+        store.rows.set([rekeyed()]);
+        return Promise.resolve(null);
+      });
+    }
+
+    it('says so on the row after the circle', async () => {
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      refuseWith(store, store.settle);
+
+      firstRow(fixture).settle.emit();
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
+      expect(firstRow(fixture).notice()).toMatchObject({
+        key: 'basket.error.staleLine',
+        count: 3,
+      });
+    });
+
+    it('says so on the row after the reel', async () => {
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      refuseWith(store, store.setLeft);
+
+      firstRow(fixture).left.emit({ from: 5, to: 2 });
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
+      expect(firstRow(fixture).notice()?.key).toBe('basket.error.staleLine');
+    });
+
+    it('says so on the row for a buy the settle sheet held', async () => {
+      // The sheet is gone once the question replaced it, so it hands the
+      // refusal to the holder, which the page answers.
+      const { fixture, store } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+      store.error.set(stale());
+      store.rows.set([rekeyed()]);
+      fixture.detectChanges();
+
+      fixture.debugElement.injector.get(HeldBuy).refused('row-Milk');
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).notice()).toMatchObject({
+        key: 'basket.error.staleLine',
+        count: 3,
+      });
+      expect(query(fixture, '.said')?.textContent).toContain(
+        'basket.error.staleLine'
+      );
+    });
+
+    it('says nothing when the held buy lands', async () => {
+      const { fixture } = await render({
+        lines: [milk()],
+        storage: new Map(),
+      });
+
+      firstRow(fixture).settle.emit();
+      await settleWrites(fixture);
+      await fixture.debugElement.injector.get(HeldBuy).release();
+      fixture.detectChanges();
+
+      expect(firstRow(fixture).notice()).toBeNull();
+    });
+  });
+
+  it('does not ask once the trip answered, and writes at once', async () => {
+    const { fixture, store } = await render({
+      lines: [milk()],
+      storage: new Map([
+        [
+          StorageKeys.basketView,
+          JSON.stringify({
+            version: 1,
+            shopAnswered: {
+              value: true,
+              until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            },
+          }),
+        ],
+      ]),
+    });
+
+    firstRow(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    expect(store.navigate).not.toHaveBeenCalledWith(
+      ['sheet', 'shop'],
+      expect.anything()
+    );
   });
 });

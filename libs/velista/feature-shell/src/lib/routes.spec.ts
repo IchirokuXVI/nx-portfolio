@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Route } from '@angular/router';
 import {
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
   productPagePath,
@@ -13,6 +14,7 @@ import {
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
+import { catalogPickLeaveGuard } from './catalog-pick-guards';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
 import {
@@ -106,7 +108,7 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard, and nothing else', () => {
+    it('offers the same two over the dashboard, and the sign in link sheet', () => {
       // Both pages offer both entry actions, so those two copies come from one
       // function and cannot drift apart.
       //
@@ -114,9 +116,13 @@ describe('AppShellRoutes', () => {
       // the button that opened it was in home's bottom row, and that row went when
       // the app's own bar took its place. A sheet no control can open is a URL that
       // draws a form over the wrong page.
+      //
+      // The third is velista 0148: a sign in link opened while another account is on
+      // this phone goes home, and this sheet asks before the link is spent.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
         'sheet/zones/new',
         'sheet/zones/join',
+        'sheet/recovery-link',
       ]);
     });
 
@@ -177,9 +183,11 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
-      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home']
-      );
+      expect(
+        sheetsOf('home')
+          .filter((route) => route.path !== 'sheet/recovery-link')
+          .map((route) => route.data?.['returnTo'])
+      ).toEqual(['home', 'home']);
       expect(
         sheetsOf('shopping-lists').map((route) => route.data?.['returnTo'])
       ).toEqual(['shopping-lists']);
@@ -272,9 +280,25 @@ describe('AppShellRoutes', () => {
       'auth/upgrade',
       'auth/verify',
       'auth/callback',
+      'auth/forgot-password',
+      'auth/reset-password',
+      // Velista 0133: the handoff of a support session, and its end.
+      'auth/impersonate',
+      'auth/support-ended',
     ];
 
-    it('declares all five, before the front door', () => {
+    it('opens the two pages of a support session to anybody, outside any sheet', () => {
+      // Velista 0133: no session is needed to trade a code, the operator is usually
+      // signed in as themselves, and the ended page is drawn in an ordinary tab.
+      for (const path of ['auth/impersonate', 'auth/support-ended']) {
+        const route = pages.find((page) => page.path === path);
+        expect(route?.canActivate ?? []).toEqual([]);
+        expect(route?.canMatch ?? []).toEqual([]);
+        expect(route?.path?.split('/')).not.toContain(SHEET_SEGMENT);
+      }
+    });
+
+    it('declares all nine, before the front door', () => {
       // The `''` ordering assertion above covers this for the table as a whole. This
       // one names the five, so removing one is a failure rather than a shorter list
       // that still happens to be ordered.
@@ -297,6 +321,16 @@ describe('AppShellRoutes', () => {
       ).toHaveLength(1);
     });
 
+    it('guards the forgot password page as it guards sign in (velista 0148)', () => {
+      // It is the way out of the sign in page, and somebody signed in asks for a
+      // link from the account page with their own address.
+      const login = pages.find((r) => r.path === 'auth/login');
+      const forgot = pages.find((r) => r.path === 'auth/forgot-password');
+
+      expect(forgot?.canActivate).toHaveLength(1);
+      expect(forgot?.canActivate?.[0]).toBe(login?.canActivate?.[0]);
+    });
+
     it('guards upgrade, and guards it differently', () => {
       // Rule C1. The two guards are not the same function, which is the whole point:
       // whichever of the two screens a guest reaches, they end up on upgrade.
@@ -307,7 +341,7 @@ describe('AppShellRoutes', () => {
       expect(upgrade?.canActivate?.[0]).not.toBe(register?.canActivate?.[0]);
     });
 
-    it('leaves the two public ones public', () => {
+    it('leaves the three public ones public', () => {
       // A confirmation link is opened wherever the mail app happens to be, which is
       // often a phone that has never signed in, and the OAuth callback lands before
       // there is a session at all.
@@ -316,6 +350,11 @@ describe('AppShellRoutes', () => {
       ).toBeUndefined();
       expect(
         pages.find((r) => r.path === 'auth/callback')?.canActivate
+      ).toBeUndefined();
+      // A reset mail is opened wherever the mail app is, too, and the page answers
+      // a person signed in as somebody else with a question, not a guard (velista 0148).
+      expect(
+        pages.find((r) => r.path === 'auth/reset-password')?.canActivate
       ).toBeUndefined();
     });
 
@@ -546,14 +585,93 @@ describe('AppShellRoutes', () => {
         expect(routeAt(linePath)?.canActivate).toEqual(SIGNED_IN);
       });
 
-      it('confirms a delete over itself rather than over the list', () => {
+      it('covers itself with its own sheets, the delete confirm among them', () => {
         // Deleting is the one thing on either screen that discards a history, so it is
-        // confirmed from here too, and its URL sits under this page's own.
-        // A similar product is a page of its own since velista `0134`, so nothing
-        // else covers the line page.
+        // confirmed from here too, and its URL sits under this page's own. The menu,
+        // the name, the supermarket and the comments are velista `0135`, section 11.
         expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
-          ['sheet/confirm/delete']
+          [
+            'sheet/menu',
+            'sheet/name',
+            'sheet/about-products',
+            'sheet/supermarket',
+            'sheet/comments',
+            'sheet/confirm/delete',
+          ]
         );
+      });
+
+      it('has its history as a page of its own, declared before it', () => {
+        // A page and not a child: a child is drawn over the line page, which is what
+        // a sheet does. Before the line page, as the specific before the general.
+        // Its products are the catalog that chooses them (velista 0146), below.
+        const paths = pages.map((route) => route.path);
+
+        for (const page of ['history']) {
+          const path = `${linePath}/${page}`;
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
+      });
+
+      it('has the catalog that chooses and its two pickers as pages under the line, outside the marker (velista 0140)', () => {
+        // A page cannot take a `sheet` segment, so the catalog that chooses one
+        // product is addressed under the line, at the path velista `0146` gives it.
+        // Its pickers are declared under it, so each comes back to it.
+        const paths = pages.map((route) => route.path);
+        const page = `${linePath}/product`;
+
+        for (const path of [
+          `${page}/categories/:parentSlug`,
+          `${page}/categories`,
+          `${page}/supermarket`,
+          page,
+        ]) {
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(path.split('/')).not.toContain(SHEET_SEGMENT);
+          expect(routeAt(path)?.data).toEqual({
+            [CATALOG_PICK_DATA]: 'one',
+            [NAV_CHROME]: NO_NAV_CHROME,
+          });
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+          expect(routeAt(path)?.canDeactivate).toBeUndefined();
+        }
+      });
+
+      it('has the catalog that chooses the products of the line at the path the products page had, outside the marker (velista 0146)', () => {
+        // The page of section 3, with its pickers under it, so each comes back
+        // to it with the mode, the line and the ticks intact.
+        const paths = pages.map((route) => route.path);
+        const page = `${linePath}/products`;
+
+        for (const path of [
+          `${page}/categories/:parentSlug`,
+          `${page}/categories`,
+          `${page}/supermarket`,
+          page,
+        ]) {
+          expect(paths).toContain(path);
+          expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(linePath));
+          expect(path.split('/')).not.toContain(SHEET_SEGMENT);
+          expect(routeAt(path)?.data).toEqual({
+            [CATALOG_PICK_DATA]: 'set',
+            [NAV_CHROME]: NO_NAV_CHROME,
+          });
+          expect(routeAt(path)?.canMatch).toHaveLength(2);
+          expect(routeAt(path)?.canActivate).toEqual(SIGNED_IN);
+          expect(routeAt(path)?.children).toBeUndefined();
+        }
+
+        // Leaving with a change asks first, and the back of the browser reaches
+        // the question only through a guard on the page. The pickers carry none.
+        expect(routeAt(page)?.canDeactivate).toEqual([catalogPickLeaveGuard]);
+        expect(routeAt(`${page}/supermarket`)?.canDeactivate).toBeUndefined();
       });
     });
 
@@ -831,7 +949,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the ten sheets over the basket, and no units sheet', () => {
+    it('offers the twelve sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -845,8 +963,10 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
-          // Change a row's product for another of its product group.
-          'sheet/rows/:rowKey/swap',
+          // Take another product for one list of a row, or for all of them
+          // (velista `0140`, section 2). The swap sheet went with it.
+          'sheet/rows/:rowKey/change/:lineId',
+          'sheet/rows/:rowKey/change',
           // What changed on the covered lists while somebody was shopping
           // (velista `0093`, section 6). Over both basket routes, because a
           // basket follows its lists whichever way it was opened.
@@ -860,6 +980,9 @@ describe('AppShellRoutes', () => {
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
+          // The first buy of a trip asks where the person is (velista `0141`).
+          // The shop picker again, in its asking mode.
+          'sheet/shop',
         ]
       );
     });
@@ -970,6 +1093,19 @@ describe('AppShellRoutes', () => {
       });
     });
 
+    it('asks for the shop under the marker, in the picker’s asking mode (velista 0141)', () => {
+      const ask = routeAt(basketPath)?.children?.find(
+        (route) => route.path === 'sheet/shop'
+      );
+      const filterShop = routeAt(basketPath)?.children?.find(
+        (route) => route.path === 'sheet/filter/shop'
+      );
+
+      expect(ask?.data?.['shopAsk']).toBe(true);
+      // The filter's own picker never asks.
+      expect(filterShop?.data?.['shopAsk']).toBeUndefined();
+    });
+
     it('resolves the units sheet to nothing at all', () => {
       // Asserted rather than left to the list above, because the failure it guards
       // against is a URL somebody bookmarked resolving to a component that no longer
@@ -988,7 +1124,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(10);
+      expect(sheets).toHaveLength(12);
       for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1190,7 +1326,19 @@ describe('the sheets and their exit animation', () => {
     // the zone list, both baskets and the line page, because a product is a page
     // now. The sheet of lists is over the catalog and over a product's page, and
     // the sheet of what a visit added is over the catalog.
-    expect(sheets).toHaveLength(55);
+    //
+    // `0135` added four over the line page: the menu, the name, the supermarket
+    // and the comments.
+    //
+    // `0137` added one more over the line page: what the info button says.
+    //
+    // `0148` added one over home: a sign in link meeting another account.
+    //
+    // `0140` took away the swap sheet and added the change sheet twice, for one
+    // list and for all of them, over both baskets: two more.
+    //
+    // `0141` added the shop question at the first buy, over both baskets: two more.
+    expect(sheets).toHaveLength(65);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1204,10 +1352,15 @@ describe('the sheets and their exit animation', () => {
   it('puts the guard on nothing else', () => {
     // A page is not a panel, and delaying a navigation off one would be a stall with
     // nothing on screen to explain it. The one page guard allowed is the unsaved
-    // warning of the edit page (velista 0123), which asks on screen.
+    // warning of the edit page (velista 0123), which asks on screen, and the
+    // question of the catalog that chooses the products of a line (velista 0146),
+    // which asks on screen as well.
     const overreach = all
       .filter(({ route }) =>
-        (route.canDeactivate ?? []).some((guard) => guard !== unsavedWalkGuard)
+        (route.canDeactivate ?? []).some(
+          (guard) =>
+            guard !== unsavedWalkGuard && guard !== catalogPickLeaveGuard
+        )
       )
       .filter(({ route }) => !isSheet(route))
       .map(({ path }) => path);
@@ -1293,6 +1446,11 @@ describe('the bottom bar', () => {
     'auth/upgrade',
     'auth/verify',
     'auth/callback',
+    'auth/forgot-password',
+    'auth/reset-password',
+    // Velista 0133: the two pages of a support session are dead ends on purpose.
+    'auth/impersonate',
+    'auth/support-ended',
     'join/:code',
     's/:secret',
     'lab/walk',
@@ -1300,6 +1458,17 @@ describe('the bottom bar', () => {
     'shops/:locationId/walks/:walkId/edit',
     // Velista 0126: the same for recording, where Stop is the way out.
     'shops/:locationId/walks/:walkId/record',
+    // Velista 0140: the catalog that chooses, and its two pickers. No bar of tabs
+    // is one of the differences from the tab, and Close is the way out.
+    'zones/:zoneId/lists/:listId/lines/:lineId/product',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/supermarket',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories',
+    'zones/:zoneId/lists/:listId/lines/:lineId/product/categories/:parentSlug',
+    // Velista 0146: the same page choosing the products of a line, and its pickers.
+    'zones/:zoneId/lists/:listId/lines/:lineId/products',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/supermarket',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/categories',
+    'zones/:zoneId/lists/:listId/lines/:lineId/products/categories/:parentSlug',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {

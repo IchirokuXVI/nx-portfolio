@@ -13,10 +13,28 @@ import {
   zoneStaffRoom,
   type AccessTokenClaims,
 } from '@portfolio/luna-shopper/contracts';
-import { ForbiddenException } from '@portfolio/luna-shopper/platform';
+import {
+  ForbiddenException,
+  ImpersonationEndedException,
+} from '@portfolio/luna-shopper/platform';
 import type { Request } from 'express';
-import { defer, filter, map, Observable, switchMap } from 'rxjs';
-import { TokenVerifierService } from '../auth/token-verifier.service';
+import {
+  defer,
+  filter,
+  map,
+  merge,
+  NEVER,
+  Observable,
+  switchMap,
+  takeUntil,
+  timer,
+} from 'rxjs';
+import {
+  impersonationOf,
+  TokenVerifierService,
+  type SocketImpersonation,
+} from '../auth/token-verifier.service';
+import { ImpersonationSessionsService } from '../impersonation/impersonation-sessions.service';
 import { CoreAccessClient } from '../messaging/core-access.client';
 import { EventRelayService } from '../relay/event-relay.service';
 
@@ -35,7 +53,9 @@ export class SseController {
   constructor(
     private readonly tokenVerifier: TokenVerifierService,
     private readonly coreAccess: CoreAccessClient,
-    private readonly relay: EventRelayService
+    private readonly relay: EventRelayService,
+    // Last, so that no positional caller moves (plan 0194).
+    private readonly impersonation: ImpersonationSessionsService
   ) {}
 
   /**
@@ -92,12 +112,15 @@ export class SseController {
     extraRooms?: (userId: string) => Promise<string[]>
   ): Observable<MessageEvent> {
     return defer(() => this.authorize(req, queryToken, check)).pipe(
-      switchMap(async (claims) => [
-        ...rooms,
-        userRoom(claims.sub),
-        ...(extraRooms ? await extraRooms(claims.sub) : []),
-      ]),
-      switchMap((subscribed) =>
+      switchMap(async (claims) => ({
+        subscribed: [
+          ...rooms,
+          userRoom(claims.sub),
+          ...(extraRooms ? await extraRooms(claims.sub) : []),
+        ],
+        session: impersonationOf(claims.act),
+      })),
+      switchMap(({ subscribed, session }) =>
         this.relay.stream$.pipe(
           filter((message) =>
             message.rooms.some((room) => subscribed.includes(room))
@@ -106,7 +129,8 @@ export class SseController {
             type: message.event,
             data: message.payload as string | object,
             id: message.correlationId,
-          }))
+          })),
+          takeUntil(this.sessionOver(session))
         )
       )
     );
@@ -120,9 +144,35 @@ export class SseController {
     const claims = queryToken
       ? await this.tokenVerifier.verify(queryToken)
       : await this.tokenVerifier.verifyAuthHeader(req.headers.authorization);
+    // A stream of a support session (plan 0194) opens only while auth says
+    // the session is live. The token is verified one time, as the stream
+    // opens, so this is the one moment to ask.
+    const session = impersonationOf(claims.act);
+    if (session && !(await this.impersonation.isLive(session.sessionId))) {
+      throw new ImpersonationEndedException('The support session is over');
+    }
     if (!(await check(claims.sub))) {
       throw new ForbiddenException('You do not have access to this stream');
     }
     return claims;
+  }
+
+  /**
+   * Emits when a stream of a support session must close (plan 0194): at the
+   * deadline of the session, or as auth says the session ended. Never, for a
+   * stream of an ordinary token, which is every other stream.
+   */
+  private sessionOver(
+    session: SocketImpersonation | undefined
+  ): Observable<unknown> {
+    if (!session) {
+      return NEVER;
+    }
+    return merge(
+      timer(Math.max(0, session.until * 1000 - Date.now())),
+      this.impersonation.ended$.pipe(
+        filter((sessionId) => sessionId === session.sessionId)
+      )
+    );
   }
 }

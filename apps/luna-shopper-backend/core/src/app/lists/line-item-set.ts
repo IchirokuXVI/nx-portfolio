@@ -43,6 +43,24 @@ export function toLineItemSet(
   };
 }
 
+/**
+ * The favourite a line keeps over a product set, which is the favourite while it
+ * is one of the products and null otherwise (plan 0199, section 2, rule 2).
+ *
+ * One function for the three writes that can take a product off a line (an
+ * update that replaces the set, the sync of a product group and a merge), so
+ * none of them can answer the question differently. A line with no products
+ * has no favourite, which is this rule over an empty set.
+ */
+export function keptFavorite(
+  favoriteItemId: string | null | undefined,
+  itemIds: readonly string[]
+): string | null {
+  return favoriteItemId != null && itemIds.includes(favoriteItemId)
+    ? favoriteItemId
+    : null;
+}
+
 /** The same, for a set whose provenance the caller states rather than reads. */
 export function lineItemSetOf(
   itemIds: readonly string[],

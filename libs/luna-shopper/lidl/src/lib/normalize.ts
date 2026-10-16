@@ -85,6 +85,10 @@ export function normalizeListRow(data: Json): LidlListRow | null {
     sizeFormat: readString(readRecord(price, 'packaging'), 'text'),
     listPrice: readNumber(price, 'price'),
     ian: firstString(readArray(data, 'ians')),
+    image: readString(data, 'image'),
+    imageList: readArray(data, 'imageList').filter(
+      (entry): entry is string => typeof entry === 'string'
+    ),
   };
 }
 
@@ -145,6 +149,8 @@ export function normalizeProduct(
     sizeFormat,
     packCount: packCountIn(sizeFormat),
     url: path ? `${baseUrl}${path}` : null,
+    image: row.image,
+    imageList: row.imageList,
     // Section 5's clean predicate. Both halves are read, because the first is
     // true of every in-store row and it is the second that removes the online
     // shop a shop happens to stock.

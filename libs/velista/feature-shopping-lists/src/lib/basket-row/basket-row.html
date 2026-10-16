@@ -31,17 +31,34 @@
   every reader who does not see a line through text, which is velista 0052
   section 6.3 applied to the one row that has no glyph to carry it.
 -->
-@if (removed()) {
+<!--
+  A row somebody bought outside this shopping list (velista 0142, section 1) is
+  drawn the same way, with where it was bought in place of "No longer on the
+  list". It has no circle and no reel, and it is the one crossed out row that is
+  a button: it still opens its sheet, because a list can ask for the product
+  again.
+-->
+@if (crossed()) {
   <div class="row is-removed">
-    <div class="removed-body">
-      <span class="content">{{ row().content }}</span>
-      <span class="removed-note">{{ 'basket.line.removed' | rokuT }}</span>
-    </div>
+    @if (removed()) {
+      <div class="removed-body">
+        <ng-container [ngTemplateOutlet]="crossedText" />
+      </div>
+    } @else {
+      <button
+        (click)="onBody()"
+        [attr.aria-label]="crossedLabel()"
+        class="body"
+        type="button"
+      >
+        <ng-container [ngTemplateOutlet]="crossedText" />
+      </button>
+    }
   </div>
 } @else {
   <div
     [attr.aria-busy]="busy() ? 'true' : null"
-    [class.is-done]="state() === 'DONE' || state() === 'NOT_AVAILABLE'"
+    [class.is-done]="drawnDone()"
     class="row"
   >
     <!--
@@ -109,40 +126,33 @@
       type="button"
     >
       <!--
-        The words, with the first match of a search painted (velista 0074, section
-        4.5). The `<mark>` is presentational: the row's accessible name is composed
-        from `line().content` and is unchanged, so a screen reader hears the line
-        rather than the fragment.
+        The name (velista 0139, sections 1 and 2): the product on a row of one,
+        cut to one line, and the line's own words on a row with none. The first
+        match of a search is painted (velista 0074, section 4.5). The `<mark>` is
+        presentational: the row's accessible name is composed separately.
 
         The three pieces are written with no space between them, because there is
-        none in the string: Angular collapses the whitespace around an interpolation
-        into a real space, so a line break here would put one inside the word.
+        none in the string: Angular collapses the whitespace around an
+        interpolation into a real space, so a line break here would put one inside
+        the word.
       -->
-      <span class="content">
-        @if (highlighted(); as parts) {
-          <span>{{ parts.before }}</span
-          ><mark class="match">{{ parts.match }}</mark
-          ><span>{{ parts.after }}</span>
-        } @else {
-          {{ row().content }}
-        }
+      <span [class.is-product]="isProduct()" class="content">
+        <span class="name">
+          @if (highlighted(); as parts) {
+            <span>{{ parts.before }}</span
+            ><mark class="match">{{ parts.match }}</mark
+            ><span>{{ parts.after }}</span>
+          } @else {
+            {{ name() }}
+          }
+        </span>
 
         <!--
           What this viewer has not seen about this row (velista 0093, section 3).
-
-          At the **trailing end of the name line** and inside it, so a marked row
-          and an unmarked one are the same height and the order of the list does
-          not move: a marked row is never lifted to the top, because a list that
-          rearranges under a thumb is what velista 0053 section 7 refused.
-
-          A dot **and** a word, in the accent role, never the warning colour:
-          amber is this app's accent and not its attention role (0002, section
-          4.4), and a line somebody added is not a fault. The word is what
-          survives a monochrome screen.
-
-          `aria-hidden`, because the row's own accessible name already ends with
-          "new on the list": the tag is part of that one sentence rather than a
-          second thing to hear.
+          At the trailing end of the name line and inside it, so a marked row and
+          an unmarked one are the same height. A dot and a word, in the accent
+          role. `aria-hidden`, because the row's own accessible name already ends
+          with it.
         -->
         @if (markWord(); as word) {
           <span aria-hidden="true" class="mark">
@@ -152,99 +162,56 @@
       </span>
 
       <!--
-        The picked product, named, and priced after the separator when the run's
-        scopes have a price for it (velista 0062, section 4). The pick is still the
-        first option added rather than the cheapest (backend 0050), so there is no
-        "best price" badge here; that comparison is the pick sheet's.
+        The caption (velista 0139, section 1): the price, then the lists that
+        ask, then what the chosen shop makes of it. One line: the lists give way
+        and are cut at their end, so a mark after them is never the part that is
+        lost. The separator is drawn by the stylesheet between the pieces.
       -->
-      @if (productName(); as product) {
-        <!--
-          The name, the price, and what this shop makes of it (velista 0078,
-          section 5). Three pieces on one caption line rather than three lines: a row
-          with a mark and a row without must be the same height, or the list jumps as
-          somebody switches shops.
-
-          The mark is **words** and the colour is never the only carrier. "Cheaper
-          elsewhere" is a decision the shopper faces rather than a fault, so it takes
-          the attention role (`0002`, section 4.4); "not listed" is a fact about the
-          shop, so it is only a shade brighter than the caption it sits in.
-        -->
-        <span class="product">
-          <span>{{ product }}</span>
-          <!--
-            The format, then the brand, between the name and the price. Each is
-            drawn only when the catalog knows it, with the separator the price
-            already takes, and neither is labelled: "1 L" and a brand read as what
-            they are. They are what tells two rows of one name apart.
-          -->
-          @if (productFormat(); as format) {
-            <span> · {{ format }}</span>
-          }
-          @if (productBrand(); as brand) {
-            <span> · {{ brand }}</span>
-          }
+      @if (productPrice() || listsText() || markCaption() || groupCaption()) {
+        <span class="caption">
           @if (productPrice(); as price) {
-            <span> · {{ price }}</span>
+            <span class="caption-price">{{ price }}</span>
+          }
+          @if (listsText(); as names) {
+            <span class="caption-lists">{{ names }}</span>
           }
           @if (markCaption(); as mark) {
             <span
-              [class.is-cheaper]="this.priceMark()?.kind === 'cheaper'"
-              [class.is-unlisted]="this.priceMark()?.kind === 'unlisted'"
-            >
-              · {{ mark }}</span
+              [class.is-cheaper]="priceMark()?.kind === 'cheaper'"
+              [class.is-unlisted]="priceMark()?.kind === 'unlisted'"
+              class="caption-mark"
+              >{{ mark }}</span
             >
           }
           <!--
-            Another product of the same group is cheaper. On the same caption
-            line as the other marks, so a marked row and an unmarked one are the
-            same height, and in words, in the attention role a decision takes.
+            Another product of the same group is cheaper, in words, in the
+            attention role a decision takes.
           -->
           @if (groupCaption(); as cheaper) {
-            <span class="is-cheaper"> · {{ cheaper }}</span>
+            <span class="caption-mark is-cheaper">{{ cheaper }}</span>
           }
         </span>
-      } @else if (productAbsence(); as absent) {
-        <!--
-          Two absences and two sentences (velista 0092, section 5). A row of
-          several options nobody has chosen from is a question waiting for an
-          answer; a row whose product the catalog can no longer name is nobody's
-          fault and nothing to do.
-
-          **No price either way**, which is the half that matters: quoting the
-          first option's price would put a number on a product nobody has picked
-          up, and the whole point of the pane behind this row is that the choice
-          is a person's.
-        -->
-        <span class="product is-missing">{{ absent | rokuT }}</span>
       }
 
       <!--
         The section of the shop it is found in (velista 0121, target 5), under the
-        product, so the row names what the shop's map calls it.
+        caption, so the row names what the shop's map calls it.
       -->
       @if (section(); as section) {
         <span class="section">{{ section }}</span>
       }
 
       <!--
-        What the chosen shop is known not to have (velista 0102). Under the product
+        What the chosen shop is known not to have (velista 0102). Under the caption
         and never instead of it: the row keeps its place, its controls and its
-        number, because the shelf may be restocked. "Not available" is the danger
-        role 0002 gives a shop that had none, with a glyph beside the words so the
-        colour never carries it alone. The option offered instead is plain words: it
-        is a suggestion the row has already taken, not a fault.
+        number, because the shelf may be restocked. The danger role 0002 gives a
+        shop that had none, with a glyph so the colour never carries it alone.
       -->
       @if (shelfCaption(); as shelf) {
-        @if (shelf.key === 'basket.shelf.unavailable') {
-          <span class="shelf is-unavailable">
-            <lib-slash-circle-icon class="shelf-glyph" />
-            {{ shelf.key | rokuT }}
-          </span>
-        } @else {
-          <span class="shelf is-instead">{{
-            shelf.key | rokuT: { name: shelf.name }
-          }}</span>
-        }
+        <span class="shelf is-unavailable">
+          <lib-slash-circle-icon class="shelf-glyph" />
+          {{ shelf | rokuT }}
+        </span>
       }
 
       <!--
@@ -256,37 +223,15 @@
       }
 
       <!--
-        Somebody bought it through another basket (velista 0131). In the slot and
-        the style of the caption above, because it answers the same question, who
-        got it, with the only answer the server gives: not this basket. It names
-        nobody and says no time.
-      -->
-      @if (elsewhereCaption(); as said) {
-        <span class="touched">{{ said }}</span>
-      }
-
-      <!--
         How often this was bought at the chosen shop's chain (velista 0104). Only
-        with the usual filter on, only on a row bought here fewer than five times of
-        its last six, and a shade brighter than the captions around it, because it is
-        the one thing on the row that answers the question the filter asked.
+        with the usual filter on, and a shade brighter than the captions around it.
       -->
       @if (usualCaption(); as said) {
         <span class="usual">{{ said }}</span>
       }
 
       <!--
-        Which household this came from. Drawn only for a list this reader was served,
-        which a guest never is: the data decides, so there is no flag here to get
-        wrong (section 4.1).
-      -->
-      @if (from(); as origins) {
-        <span class="from">{{ origins }}</span>
-      }
-
-      <!--
-        Right after the "from" caption, because it is about the same thing: which
-        household's list this line reaches, and whether it has got there yet.
+        Whether the household has agreed to this line yet.
       -->
       @if (row().awaitingApproval) {
         <span class="from">{{ 'basket.units.pending' | rokuT }}</span>
@@ -310,19 +255,19 @@
     </button>
 
     <!--
-      Change the product for a similar one: another product of its group. A
-      control of its own beside the body, because a button cannot hold a button,
-      and only on a row whose product has a group the reader may change.
+      The cheaper mark's control (velista 0140, section 1): it opens the change
+      sheet for all lists. A control of its own beside the body, because a button
+      cannot hold a button, and only on a row the cheaper mark is drawn on.
     -->
-    @if (canSwap()) {
+    @if (canChange()) {
       <button
-        (click)="swap.emit()"
-        [attr.aria-label]="swapLabel()"
+        (click)="changeProduct.emit()"
+        [attr.aria-label]="changeLabel()"
         [disabled]="busy()"
-        class="swap"
+        class="change-product"
         type="button"
       >
-        <lib-swap-icon class="swap-glyph" />
+        <lib-swap-icon class="change-product-glyph" />
       </button>
     }
 
@@ -423,6 +368,18 @@
 @if (notice(); as said) {
   <p class="line-notice">{{ said.key | rokuT: { count: said.count } }}</p>
 }
+
+<!--
+  The name of a crossed out row and the line that says why, for both of its
+  shapes. The name is the product on a product row, cut to one line, and the
+  line's own words otherwise (velista 0139).
+-->
+<ng-template #crossedText>
+  <span [class.is-product]="isProduct()" class="content">
+    <span class="name">{{ name() }}</span>
+  </span>
+  <span class="removed-note">{{ crossedNoteKey() | rokuT }}</span>
+</ng-template>
 
 <!--
   The four shapes, in one place, so the button and the static indicator cannot draw

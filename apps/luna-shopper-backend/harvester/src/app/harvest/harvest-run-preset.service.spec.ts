@@ -6,16 +6,22 @@ import {
   type HarvestRunPresetInput,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  ConflictException,
   ForbiddenException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { HarvestRunPreset, SupermarketSource } from '../entities';
+import type {
+  HarvestRunPreset,
+  HarvestSchedule,
+  SupermarketSource,
+} from '../entities';
 import { HarvestRunPresetService } from './harvest-run-preset.service';
 import type { HarvestRunPresetStore } from './harvest-run-preset.store';
 import type {
   HarvestRunService,
   ValidatedRunRequest,
 } from './harvest-run.service';
+import type { HarvestScheduleStore } from './harvest-schedule.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
@@ -57,6 +63,8 @@ function build(
     validated?: Partial<ValidatedRunRequest>;
     refusal?: Error;
     existing?: HarvestRunPreset;
+    /** The schedules that name the preset (plan 0206, section 2.1). */
+    schedules?: HarvestSchedule[];
   } = {}
 ) {
   const admin = {
@@ -82,6 +90,9 @@ function build(
         ...overrides.validated,
       };
     }),
+    estimates: jest.fn(async (keys: unknown[]) =>
+      keys.map(() => ({ seconds: 1200, basis: 'DEFAULT', samples: 0 }))
+    ),
   } as unknown as HarvestRunService;
 
   const sources = {
@@ -116,7 +127,17 @@ function build(
     ),
   } as unknown as HarvestRunPresetStore;
 
-  const service = new HarvestRunPresetService(store, runs, sources, admin);
+  const schedules = {
+    findByPreset: jest.fn(async () => overrides.schedules ?? []),
+  } as unknown as HarvestScheduleStore;
+
+  const service = new HarvestRunPresetService(
+    store,
+    runs,
+    sources,
+    admin,
+    schedules
+  );
   return { service, store, runs, sources };
 }
 
@@ -161,6 +182,7 @@ describe('HarvestRunPresetService.create (plan 0120)', () => {
         status: HarvestRunStatus.COMPLETED,
         requestedAt: '2026-09-10T09:00:00.000Z',
       },
+      estimate: { seconds: 1200, basis: 'DEFAULT', samples: 0 },
     });
   });
 
@@ -318,5 +340,38 @@ describe('HarvestRunPresetService.delete (plan 0120)', () => {
       service.delete({ userId: ADMIN, presetId: PRESET })
     ).resolves.toEqual({ id: PRESET });
     expect(store.delete).toHaveBeenCalledWith(PRESET);
+  });
+
+  it('refuses while a schedule names the preset, and names the schedule (plan 0206)', async () => {
+    const { service, store } = build({
+      schedules: [{ id: 'schedule-1' } as HarvestSchedule],
+    });
+
+    const refusal = service.delete({ userId: ADMIN, presetId: PRESET });
+
+    await expect(refusal).rejects.toBeInstanceOf(ConflictException);
+    await expect(refusal).rejects.toThrow(/schedule-1/);
+    expect(store.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('HarvestRunPresetService views (plan 0206)', () => {
+  it('carries the estimate of each preset, asked for by its chain and mode', async () => {
+    const { service, runs } = build();
+
+    const view = await service.get({ userId: ADMIN, presetId: PRESET });
+
+    expect(view.estimate).toEqual({
+      seconds: 1200,
+      basis: 'DEFAULT',
+      samples: 0,
+    });
+    expect(runs.estimates).toHaveBeenCalledWith([
+      {
+        presetId: PRESET,
+        supermarketId: SUPERMARKET,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+      },
+    ]);
   });
 });

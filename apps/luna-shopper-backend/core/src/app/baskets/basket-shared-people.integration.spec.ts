@@ -27,11 +27,11 @@ import { BasketOrderService } from '../baskets/basket-order.service';
 import { BasketReadService } from '../baskets/basket-read.service';
 import { fakeBasketMarks } from '../baskets/changes/basket-marks.fake';
 import {
-  BasketSource,
-  CORE_ENTITIES,
   Basket,
   BasketParticipant,
   BasketShareLink,
+  BasketSource,
+  CORE_ENTITIES,
   ListAccess,
   ListLine,
   ShoppingList,
@@ -101,22 +101,17 @@ describeIntegration(
         .filter(
           ([name, , payload]) =>
             name === event &&
-            (payload as BasketAccessEvent).basketId ===
-              basketId
+            (payload as BasketAccessEvent).basketId === basketId
         )
         .flatMap(([, userIds]) => userIds as string[]);
     }
 
-    function roomHeard(
-      event: RealtimeEvent,
-      basketId: string
-    ): unknown[] {
+    function roomHeard(event: RealtimeEvent, basketId: string): unknown[] {
       // The audience is a list of baskets since plan 0139; these events name one.
       return events.emitToBaskets.mock.calls
         .filter(
           ([name, baskets]) =>
-            name === event &&
-            (baskets as readonly string[]).includes(basketId)
+            name === event && (baskets as readonly string[]).includes(basketId)
         )
         .map(([, , payload]) => payload);
     }
@@ -127,9 +122,7 @@ describeIntegration(
         .findOneByOrFail({ id });
     }
 
-    async function newBasket(
-      overrides: Partial<Basket> = {}
-    ): Promise<string> {
+    async function newBasket(overrides: Partial<Basket> = {}): Promise<string> {
       const repo = dataSource.getRepository(Basket);
       const saved = await repo.save(
         repo.create({
@@ -162,10 +155,7 @@ describeIntegration(
       });
       await dataSource.initialize();
 
-      const members = new BasketMembersService(
-        dataSource,
-        events as never
-      );
+      const members = new BasketMembersService(dataSource, events as never);
       sharing = new BasketSharingService(
         dataSource,
         dataSource.getRepository(Basket),
@@ -595,9 +585,9 @@ describeIntegration(
         const left = await row(added.id);
         expect(left.endedReason).toBe(ParticipantEndedReason.LEFT);
         expect(left.revokedAt).toBeInstanceOf(Date);
-        expect(
-          roomHeard(RealtimeEvent.BasketParticipantLeft, basket)
-        ).toEqual([expect.objectContaining({ id: added.id })]);
+        expect(roomHeard(RealtimeEvent.BasketParticipantLeft, basket)).toEqual([
+          expect.objectContaining({ id: added.id }),
+        ]);
         expect(toldUnshared(basket)).toEqual([users.friend]);
       });
 
@@ -830,9 +820,6 @@ describeIntegration(
        * about the reader now: `lists` is every covered list the **reader** holds
        * `WRITE` on (`BasketRedaction.servedLists`), and the owner of a basket
        * that covers a whole zone is served every list in it, empty or not.
-       *
-       * `seesZoneData` is gone with the old rule: it was one flag for the whole
-       * basket, and the question it answered is per list now.
        */
       it('names every covered list the reader writes, empty or not', async () => {
         const basket = await newBasket({

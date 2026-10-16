@@ -17,10 +17,9 @@ import {
 import {
   basketMatchRange,
   basketRowProduct,
-  inLocale,
+  isCrossedOutRow,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   shownOffer,
-  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -36,14 +35,14 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
-  productSizeText,
   QuantityReel,
   SlashCircleIcon,
   SwapIcon,
 } from '@portfolio/velista/ui';
 import {
-  elsewhereCaption,
-  originsCaption,
+  basketRowName,
+  crossedOutNoteKey,
+  listsCaption,
   outstandingCaption,
   quantityCaption,
   skipCaption,
@@ -269,17 +268,6 @@ export class BasketRow {
   } | null>(null);
 
   /**
-   * What was bought of this row through another basket, or null (velista `0131`).
-   *
-   * Composed by the pipeline beside {@link usual}, which hands the entry's under
-   * a list heading and the row's everywhere else, so the row draws what it is
-   * handed. It adds one caption under the name. When that purchase is all that
-   * closed the row, it also takes the two controls that undo a purchase off it:
-   * the glyph is a statement and the number is a readout.
-   */
-  readonly elsewhere = input<BasketElsewhere | null>(null);
-
-  /**
    * What this row says about that shop, beside the number, or null.
    *
    * Composed by the pipeline rather than here, because the **sink** is decided
@@ -291,19 +279,6 @@ export class BasketRow {
    * and velista `0093` draws. Two marks on one row need two names.
    */
   readonly priceMark = input<BasketPriceMark | null>(null);
-
-  /**
-   * Which product somebody said they got on this row, or null (velista `0092`,
-   * section 5).
-   *
-   * An input beside {@link meId} and {@link ownName} rather than a store read,
-   * for their reason: this component is constructed once per row of the basket,
-   * and the page already holds the answer.
-   *
-   * **The row draws it and never stores it.** The choice lives in memory for the
-   * visit, because a product is recorded when it is bought and not before.
-   */
-  readonly chosenId = input<string | null>(null);
 
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
@@ -376,11 +351,11 @@ export class BasketRow {
   readonly highlight = input('');
 
   /**
-   * The row's own words, split around the first match, or null for no match.
+   * The row's name, split around the first match, or null for no match.
    *
-   * The **content only**. The product caption below it is matched too, so a line is
-   * found by its pick's name or brand, but it is 12px muted text and a mark on it
-   * competes with the name it sits beside. So a line found that way is drawn
+   * **The drawn name only**: the product on a product row, the line's words on a
+   * row with none. A row is also found by the names of its lines (velista `0139`,
+   * section 5), which the row does not draw, so a row found that way is drawn
    * unhighlighted, which is why this is null rather than a range into some other
    * string.
    *
@@ -388,7 +363,7 @@ export class BasketRow {
    * are the same height.
    */
   protected readonly highlighted = computed(() => {
-    const content = this.row().content;
+    const content = this.name();
     const range = basketMatchRange(content, this.highlight());
     if (range === null) {
       return null;
@@ -403,11 +378,12 @@ export class BasketRow {
   readonly open = output<void>();
 
   /**
-   * Whether the row offers "change product": its product belongs to a product
-   * group and the reader may write every list the row stands for. The page
-   * decides, because it holds the lists and the groups.
+   * Whether the cheaper mark opens the change sheet (velista `0140`, section 1):
+   * another product of the group is cheaper, and the reader may change the
+   * product of one list of the row or more. The page decides, because it holds
+   * the lists and the groups.
    */
-  readonly canSwap = input(false);
+  readonly canChange = input(false);
 
   /**
    * Another product of this product's group is cheaper, by the price per litre
@@ -415,20 +391,20 @@ export class BasketRow {
    */
   readonly groupCheaper = input(false);
 
-  /** "Change product" was pressed. */
-  readonly swap = output<void>();
+  /** The cheaper mark's control was pressed: change the product for all lists. */
+  readonly changeProduct = output<void>();
 
-  /** The change button's accessible name, which names the product. */
-  protected readonly swapLabel = computed(() =>
-    this._translator.t('basket.swap.openLabel', undefined, this._locale(), {
-      name: this.productName() ?? this.row().content,
+  /** The control's accessible name, which says why it is there and names the product. */
+  protected readonly changeLabel = computed(() =>
+    this._translator.t('basket.change.openLabel', undefined, this._locale(), {
+      name: this.name(),
     })
   );
 
   /** The group mark's words, or null. */
   protected readonly groupCaption = computed(() =>
     this.groupCheaper() && this._product() !== null
-      ? this._translator.t('basket.swap.cheaper', undefined, this._locale())
+      ? this._translator.t('basket.change.cheaper', undefined, this._locale())
       : null
   );
 
@@ -474,6 +450,11 @@ export class BasketRow {
    */
   protected readonly state = computed<BasketRowState>(
     () => this.entry()?.state ?? this.row().state
+  );
+
+  /** Whether the row is drawn quietly as finished: bought here, or closed by the shop. */
+  protected readonly drawnDone = computed(
+    () => this.state() === 'DONE' || this.state() === 'NOT_AVAILABLE'
   );
 
   /**
@@ -529,12 +510,12 @@ export class BasketRow {
    * row rather than seeing which heading it sits under.
    *
    * A list with no name falls back to the reel's ordinary name rather than drawing a
-   * leading comma, which is the rule `originsCaption` and the filter sheet's rows
+   * leading comma, which is the rule `listsCaption` and the filter sheet's rows
    * already follow for the same data. The pipeline heads no section for such a list,
    * so this is a guard and not a case anybody meets.
    */
   protected readonly reelLabel = computed(() => {
-    const name = this.row().content;
+    const name = this.name();
     const listId = this.entry()?.listId ?? null;
     const list = listId === null ? '' : (this.lists().get(listId)?.name ?? '');
 
@@ -637,6 +618,43 @@ export class BasketRow {
   protected readonly removed = computed(() => this.row().state === 'REMOVED');
 
   /**
+   * Whether the row is drawn crossed out (velista `0142`, section 1): `REMOVED`,
+   * or bought outside this shopping list. **The entry's state under a list
+   * heading**, as everything else the row draws, so a household whose share
+   * somebody else bought is crossed out under its own heading.
+   *
+   * A row bought elsewhere has no circle and no reel, because nothing on it buys
+   * or takes back: this shopping list bought none of it, and the server refuses
+   * to let it undo a buy of another. It still opens its sheet, where a list can
+   * ask for the product again.
+   */
+  protected readonly crossed = computed(
+    () => isCrossedOutRow(this.row()) || this.state() === 'BOUGHT_ELSEWHERE'
+  );
+
+  /**
+   * The one line under the crossed out name: where it was bought, or that it is
+   * no longer on the list. The row's note says where, so an entry crossed out
+   * inside a row that still asks for something says "Already bought".
+   */
+  protected readonly crossedNoteKey = computed(() => {
+    const row = this.row();
+    return crossedOutNoteKey(
+      row.state === 'REMOVED' || row.state === 'BOUGHT_ELSEWHERE'
+        ? row
+        : { state: 'BOUGHT_ELSEWHERE', note: null }
+    );
+  });
+
+  /** The crossed out row's name and its line, as one accessible name. */
+  protected readonly crossedLabel = computed(() =>
+    [
+      this.name(),
+      this._translator.t(this.crossedNoteKey(), undefined, this._locale()),
+    ].join('. ')
+  );
+
+  /**
    * The word on the tag at the end of the name line, or null (velista `0093`,
    * section 3).
    *
@@ -701,35 +719,7 @@ export class BasketRow {
    * `0044`: press it, and the reel comes back with the row.
    */
   protected readonly showsReel = computed(
-    () =>
-      this.state() !== 'SKIPPED' &&
-      this.state() !== 'NOT_AVAILABLE' &&
-      // Raising the reel of a done row takes units back, and there are none of
-      // this basket's to take (velista `0131`). What the list asks for is raised
-      // on the sheet, where the server allows it.
-      !this._closedElsewhere()
-  );
-
-  /**
-   * Whether a purchase made through another basket is all that closed this row
-   * (velista `0131`).
-   *
-   * It is a done row to look at and offers no revert: the server refuses to let
-   * one basket take back a purchase of another, and a control it refuses is not
-   * drawn (`0030`).
-   */
-  private readonly _closedElsewhere = computed(
-    () => this.elsewhere()?.closed === true
-  );
-
-  /**
-   * "Bought on another basket", under the name, or null (velista `0131`).
-   *
-   * It names nobody and says no time. The same sentence on a row closed from
-   * elsewhere and on a row that still has something left.
-   */
-  protected readonly elsewhereCaption = computed<string | null>(() =>
-    elsewhereCaption(this.elsewhere(), this._translator, this._locale())
+    () => this.state() !== 'SKIPPED' && this.state() !== 'NOT_AVAILABLE'
   );
 
   /**
@@ -750,20 +740,15 @@ export class BasketRow {
   /**
    * Whether the glyph is a control, or only a statement of what the row is.
    *
-   * Three ways to be a statement rather than a button: a finished trip, which
-   * takes every control off the screen; a `REMOVED` row, which is information
-   * about the basket rather than a thing to act on; and a row somebody closed
-   * through another basket (velista `0131`), where pressing would ask for a revert
-   * the server refuses.
+   * One way to be a statement rather than a button: a finished trip, which takes
+   * every control off the screen. A crossed out row draws no glyph at all
+   * (velista `0142`), so it never asks.
    *
    * The third was a build with no reopen route behind it. There is no such build:
    * `BASKET_REOPEN_AVAILABLE` guarded a route backend `0136` replaced with a revert
    * that is always available, so the constant went with it.
    */
-  protected readonly statusIsButton = computed(
-    () =>
-      !this.finished() && this.state() !== 'REMOVED' && !this._closedElsewhere()
-  );
+  protected readonly statusIsButton = computed(() => !this.finished());
 
   /**
    * The status control's accessible name: **the act it performs**, and which state it
@@ -788,7 +773,7 @@ export class BasketRow {
       : STATES_ON_STATUS[glyph];
 
     return this._translator.t(key, undefined, this._locale(), {
-      name: this.row().content,
+      name: this.name(),
     });
   });
 
@@ -815,100 +800,36 @@ export class BasketRow {
   }
 
   /**
-   * The picked product's name, with its price after it when there is one, or
-   * null for a free text line (velista `0062`, section 4).
+   * The name the row is drawn under (velista `0139`, sections 1 and 2).
    *
-   * One string and not two fields, so a row with a price and a row without are
-   * the same shape: the price is a suffix on the caption line, joined by the
-   * separator the app already uses, and when the offer is null the caption is
-   * exactly the string it was before. No unit price here; it is a second number
-   * in a place with room for one, and its whole value is comparison, which is
-   * the pick sheet's job.
-   *
-   * A line with options and no pick draws no price (section 4.1): quoting the
-   * cheapest option there would put a number on a product nobody has chosen.
+   * **The product**, on a row of one: its name, its brand and its size, as the
+   * catalog cards print them, in one line. The line's own words on a row whose
+   * lines hold no product, and on a row whose product the read could not name,
+   * because a basket outlives the catalog it was read against and a line with an
+   * unnameable product is still a line to buy.
    */
-  protected readonly productName = computed<string | null>(() => {
-    const product = this._product();
-    // A pick catalog no longer has: the basket outlives the catalog it was built
-    // from, and a line with an unnameable product is still a line to buy.
-    return product === null ? null : inLocale(product.name, this._locale());
-  });
+  protected readonly name = computed<string>(() =>
+    basketRowName(this.row(), this.products(), this._translator, this._locale())
+  );
+
+  /** Whether the row is a product, which cuts its name to one line. */
+  protected readonly isProduct = computed(() => this._product() !== null);
 
   /**
-   * How big the product's packet is, as words, or null where the catalog does
-   * not say or a count of one says nothing.
-   */
-  protected readonly productFormat = computed<string | null>(() => {
-    const product = this._product();
-    if (product === null) {
-      return null;
-    }
-    const locale = this._locale();
-    return productSizeText(product.size, product.unit, locale, (key, args) =>
-      this._translator.t(key, undefined, locale, args)
-    );
-  });
-
-  /** The product's brand, or null where the catalog names none. */
-  protected readonly productBrand = computed<string | null>(() => {
-    const brand = this._product()?.brand?.trim() ?? '';
-    return brand === '' ? null : brand;
-  });
-
-  /**
-   * The product this row means, or null (velista `0092`, section 5).
-   *
-   * The **row's** and never the entry's, because a row is one thing to pick off
-   * one shelf however many households asked for it.
-   *
-   * Three answers, and the middle one is the change. Somebody chose, and the
-   * choice is still one of the row's options. Or the row has exactly one option,
-   * which is not a choice at all: there was nothing to choose between. Or the row
-   * has several and nobody has chosen, and then it draws **no product and no
-   * price**, because quoting the first of them would put a name and a number on
-   * something nobody has picked up.
-   *
-   * `basketRowPick` stays what the search and the price mark ask, and this is
-   * deliberately not that question: those two ask "what is this row about", which
-   * is answered by the anchor's own product whether anybody has chosen or not.
-   * This one asks "what is in the trolley", which only a person can answer.
+   * The product this row is, or null (backend `0201`): one product or none, the
+   * row's own. The **row's** and never the entry's, because a row is one thing to
+   * pick off one shelf however many households asked for it.
    */
   private readonly _product = computed<BasketProduct | null>(() =>
-    basketRowProduct(this.row(), this.products(), this.chosenId())
+    basketRowProduct(this.row(), this.products())
   );
 
   /**
-   * Why there is no product to name, as a key, or null when there is one.
-   *
-   * **Two absences and two sentences**, because they are different facts. A row
-   * of several options nobody has chosen from says "No product chosen", which is
-   * a question waiting for an answer; a row whose one product the catalog can no
-   * longer name says "This line names no product", which is nobody's fault and
-   * nothing to do. Drawing the first over the second would ask somebody to choose
-   * from a list of one thing that cannot be drawn.
-   *
-   * Null for a row that names no product at all, which is free text somebody
-   * typed: there is nothing absent, so there is nothing to say about it.
-   */
-  protected readonly productAbsence = computed<string | null>(() => {
-    if (this._product() !== null || this.row().optionIds.length === 0) {
-      return null;
-    }
-    return this.row().optionIds.length > 1 && this.chosenId() === null
-      ? 'basket.line.free'
-      : 'basket.product.none';
-  });
-
-  /**
-   * The price after the product's name, or null where there is none.
+   * The price first on the caption line, or null where there is none.
    *
    * **The chosen shop's**, when one is in use (velista `0078`, section 5), and the
-   * cheapest at the run's scopes otherwise, which is what `0062` drew and what the
-   * default still draws. A scope that carries the product with no number on it draws
-   * nothing, which is the same blank a product nobody has priced leaves: the row has
-   * no way to say "listed, price unknown" in the space it has, and the pick sheet is
-   * where that distinction is worth drawing (`0062`, section 5.3).
+   * cheapest at the run's scopes otherwise. A row with no product has no price and
+   * adds nothing to the total (velista `0139`, section 2).
    */
   protected readonly productPrice = computed<string | null>(() => {
     // The same lookup a settle reads its scope from (velista `0095`, section 6).
@@ -922,11 +843,9 @@ export class BasketRow {
   /**
    * The price mark's own sentence, composed, or null when the row carries none.
    *
-   * One string and not two spans, because the unlisted mark is genuinely two
-   * clauses about one thing — "not listed at Mercadona · 2.85 € at Dia" — and
-   * drawing them as separate pieces would let a line break fall between a price and
-   * the shop it belongs to. The separator is the one this row already joins its
-   * captions with.
+   * "Not sold here" for a product the shop of the read has no price for (velista
+   * `0139`, section 1), with the cheapest price elsewhere after it when there is
+   * one. One string, so a line break never falls between a price and its shop.
    */
   protected readonly markCaption = computed<string | null>(() => {
     const mark = this.priceMark();
@@ -943,10 +862,9 @@ export class BasketRow {
     }
 
     const missing = this._translator.t(
-      'basket.price.notListedAt',
+      'basket.row.notSoldHere',
       undefined,
-      locale,
-      { chain: mark.chain }
+      locale
     );
     const elsewhere = mark.elsewhere;
     if (elsewhere === null) {
@@ -961,35 +879,12 @@ export class BasketRow {
   });
 
   /**
-   * What the shop's shelf says about this row, as a key and its arguments, or null
-   * (velista `0102`).
-   *
-   * "Not available at this shop" when every option is known missing. "Instead of
-   * Danone griego, not available at this shop" when the row is drawing the option
-   * it offers in place of a missing default, which is only while that option is the
-   * product in the trolley: somebody who chose another has answered the question.
+   * What the shop's shelf says about this row, as a key, or null (velista `0102`):
+   * "Not available at this shop" when its product is known missing there.
    */
-  protected readonly shelfCaption = computed<{
-    readonly key: string;
-    readonly name?: string;
-  } | null>(() => {
-    const shelf = this.shelf();
-    if (shelf === null) {
-      return null;
-    }
-    if (shelf.kind === 'unavailable') {
-      return { key: 'basket.shelf.unavailable' };
-    }
-
-    const replaced = this.products().get(shelf.replacedId);
-    if (this._product()?.id !== shelf.optionId || replaced === undefined) {
-      return null;
-    }
-    return {
-      key: 'basket.shelf.instead',
-      name: inLocale(replaced.name, this._locale()),
-    };
-  });
+  protected readonly shelfCaption = computed<string | null>(() =>
+    this.shelf() === null ? null : 'basket.shelf.unavailable'
+  );
 
   /**
    * "Bought here 2 of the last 6 times", or null (velista `0104`).
@@ -1041,25 +936,17 @@ export class BasketRow {
   );
 
   /**
-   * The households this row came from, or null.
+   * The lists that ask for this row, after its price (velista `0139`, section 1),
+   * or null.
    *
-   * Null under a list heading, which is velista `0077` section 4.1: "from Weekly
-   * shop" is not drawn on a row that sits under Weekly shop's own heading, because
-   * the heading already says it. Drawing both would put the same three words on
-   * every row of the section.
-   *
-   * Null too for a reader served no list the row is on, which is a guest. The data
-   * decides, as it does everywhere else on this screen.
+   * Null under a list heading, which is velista `0077` section 4.1: the heading
+   * already names the list, and the row there is that list's share. A list the
+   * reader was not served is counted in words, "and 1 more list", and never named.
    */
-  protected readonly from = computed(() =>
+  protected readonly listsText = computed(() =>
     this.entry() !== null
       ? null
-      : originsCaption(
-          this.row(),
-          this.lists(),
-          this._translator,
-          this._locale()
-        )
+      : listsCaption(this.row(), this.lists(), this._translator, this._locale())
   );
 
   /**
@@ -1075,33 +962,28 @@ export class BasketRow {
    */
   protected readonly label = computed(() => {
     const parts = [
-      this.row().content,
+      this.name(),
       this._translator.t(
         STATES_ON_STATUS[this.statusGlyph()],
         undefined,
         this._locale(),
-        { name: this.row().content }
+        { name: this.name() }
       ),
       this.progressCaption(),
-      // The product, its price and what the row says about the shop, each a
-      // sentence of its own: a mark is words beside a number and a reader who
-      // hears the row hears it (velista `0078`, section 7).
-      this.productName() ?? '',
-      // The format and the brand, in the order the row draws them.
-      this.productFormat() ?? '',
-      this.productBrand() ?? '',
+      // The price, the lists and what the row says about the shop, each a
+      // sentence of its own, in the order the caption draws them: a mark is words
+      // beside a number and a reader who hears the row hears it (velista `0078`,
+      // section 7).
       this.productPrice() ?? '',
+      this.listsText() ?? '',
       this.markCaption() ?? '',
       // A cheaper product of the same group, said as it is drawn.
       this.groupCaption() ?? '',
       // What the shop is known not to have, said as it is drawn (velista `0102`).
       this._shelfLabel(),
       this.touched() ?? '',
-      // Bought on another basket, said as it is drawn (velista `0131`).
-      this.elsewhereCaption() ?? '',
       // How often it was bought here, said as it is drawn (velista `0104`).
       this.usualCaption() ?? '',
-      this.from() ?? '',
       // Said with the rest of the row, because a reader moving by button hears
       // this string and nothing else about it. On a skipped row it repeats what
       // the glyph's own name already says, which is deliberate: the two are read
@@ -1123,12 +1005,10 @@ export class BasketRow {
 
   /** The shelf caption, said in full, or the empty string on a row with none. */
   private _shelfLabel(): string {
-    const caption = this.shelfCaption();
-    return caption === null
+    const key = this.shelfCaption();
+    return key === null
       ? ''
-      : this._translator.t(caption.key, undefined, this._locale(), {
-          name: caption.name ?? '',
-        });
+      : this._translator.t(key, undefined, this._locale());
   }
 
   /** The tag, said in full, or the empty string on a row with no mark. */
@@ -1141,7 +1021,7 @@ export class BasketRow {
       mark === 'ADDED' ? 'basket.mark.addedLabel' : 'basket.mark.changedLabel',
       undefined,
       this._locale(),
-      { name: this.row().content }
+      { name: this.name() }
     );
   }
 }

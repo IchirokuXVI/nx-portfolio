@@ -303,6 +303,12 @@ lunaShopperBackend:
     # production data has been warned about the wrong thing in the harmless
     # direction only if the colour is alarming, so both clusters state their own.
     environmentName: development
+    # Support sessions (plan 0194): an operator opens the app as a user, for
+    # two hours at most. Off here, so a cluster allows it only when its own
+    # values file says so. values.staging.yaml does. values.production.yaml
+    # does not name it: production waits for the privacy policy to name
+    # support access, and the owner turns it on after that.
+    impersonationEnabled: false
     # Google sign in is optional (plan 0026): with an empty client id every
     # service still boots, and the two interactive Google routes answer 501
     # `not_configured` instead of failing. Set all three to turn it on.
@@ -426,6 +432,15 @@ lunaShopperBackend:
     # queue in plan 0063 fills either way, so a cluster that turns this on later
     # drains a real backlog rather than starting from nothing.
     harvestEnabled: false
+
+    # Whether a due schedule starts its preset by itself (plan 0206, section
+    # 10). A third decision, after the pod existing and the pod fetching: a pod
+    # that runs the walk a person asked for and a pod that starts walks with
+    # nobody asking are not the same thing. False here, false in staging, true
+    # in production only: two clusters that both fetch one chain on a timer
+    # double what the chain sees and add nothing. With it on and no schedule
+    # row, nothing happens.
+    schedulerEnabled: false
 
     # There is no per chain key here, and there is not meant to be (plan 0083).
     # Which chains may be fetched is a row per chain in the harvester's own

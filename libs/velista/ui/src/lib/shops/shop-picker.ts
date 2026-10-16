@@ -22,20 +22,6 @@ import { FranchiseButtons } from './franchise-buttons';
 import { ShopList, type ShopGroup, type ShopRow } from './shop-list';
 
 /**
- * The one row that answers "no particular shop" (velista `0124`): All
- * supermarkets at the root, or Any Mercadona shop inside a chain. The catalog is
- * the only host that draws one, because a chain alone is enough there; the words
- * are the host's, since only it knows which question it is asking.
- */
-export interface ShopPickerAny {
-  readonly title: string;
-  readonly detail: string;
-  readonly logo: ChainLogoView;
-  /** Whether it is the current choice, which checks its radio. */
-  readonly checked: boolean;
-}
-
-/**
  * Where the list body stands, for a caller that asks a server for it.
  *
  * `ready` for one that already holds its shops, which is the basket's picker: its
@@ -72,16 +58,16 @@ export type ShopPickerNear =
  * The body of "which shop am I buying at" (velista `0078`, section 4; `0102`).
  *
  * Top to bottom at the root: the shops near the device once "Near me" was pressed,
- * the host's any row if it asked for one, the shops this person bought at recently
- * (velista `0103`), a search across every chain, and the chain buttons, two to a
- * row with their logos (velista `0124`). While something is typed the any row, the
- * recent shops and the buttons go, and the matches take their place. A chosen
- * chain replaces the whole root with the any row and that chain's shops under
- * their postal codes. One radio per shop, one radio group per section.
+ * the shops this person bought at recently (velista `0103`), a search across every
+ * chain, and the chain buttons, two to a row with their logos (velista `0124`).
+ * While something is typed the recent shops and the buttons go, and the matches
+ * take their place. A chosen chain replaces the whole root with that chain's shops
+ * under their postal codes. One radio per shop, one radio group per section.
  *
- * **It is the only picker.** The catalog's page, the basket's Buying at sheet, the
- * get a list sheet and the Bought it pane all draw it, so two pickers that look
- * almost alike can never confuse anybody: only the frame around it differs.
+ * **It is the only shop picker.** The basket's Buying at sheet, the get a list
+ * sheet and the Bought it pane all draw it, so two pickers that look almost alike
+ * can never confuse anybody: only the frame around it differs. The catalog asks
+ * for a chain and never for a shop, so its page does not draw this.
  *
  * "Near me" itself is not here. It sits in the title row, which each sheet owns,
  * so it is `NearMeButton` and the sheet draws it.
@@ -103,11 +89,11 @@ export type ShopPickerNear =
 @Component({
   selector: 'lib-shop-picker',
   imports: [
-    ChainLogo,
     FranchiseButtons,
     RokuTranslatorPipe,
     SearchIcon,
     InfoIcon,
+    ChainLogo,
     ShopList,
     SpinnerIcon,
   ],
@@ -129,12 +115,6 @@ export class ShopPicker {
 
   /** The chain of the current choice, which its button draws with a tick. */
   readonly pickedChain = input<string | null>(null);
-
-  /**
-   * One "any" row above the root and above a chain's shops, or null for none,
-   * which is every host but the catalog. See {@link ShopPickerAny}.
-   */
-  readonly anyRow = input<ShopPickerAny | null>(null);
 
   /** The open chain's shops, under their postal codes. */
   readonly groups = input<readonly ShopGroup[]>([]);
@@ -183,6 +163,27 @@ export class ShopPicker {
    */
   readonly recent = input<readonly ShopRow[]>([]);
 
+  /**
+   * Whether a press on the checked shop picks it (velista `0141`). The question at
+   * the first buy selects the nearest shop for the person, and that shop has to
+   * answer one press. See `ShopList.pickChecked`.
+   */
+  readonly pickChecked = input(false);
+
+  /**
+   * Whether to offer "No shop" as a row of its own (velista `0141`), at the root
+   * under the shops near the device. The filter offers no shop through its own
+   * "Any of your shops" row, so only the question at the first buy sets this.
+   */
+  readonly offerNoShop = input(false);
+
+  /**
+   * Whether the shop rows draw their round button to the shop's own page. Off
+   * under the question at the first buy (velista `0141`), where leaving for that
+   * page would leave the basket with a buy waiting. See `ShopList.showAbout`.
+   */
+  readonly showAbout = input(true);
+
   /** Something was typed. The container decides what it matches. */
   readonly queried = output<string>();
 
@@ -195,16 +196,23 @@ export class ShopPicker {
   /** A shop's radio was chosen: its location id. */
   readonly picked = output<string>();
 
+  /** "No shop" was chosen. Only drawn under {@link offerNoShop}. */
+  readonly noShop = output<void>();
+
   /**
    * A shop row's round button was pressed: its location id, for the shop's own
    * page (velista `0121`). Every host opens `shops/:locationId`.
    */
   readonly about = output<string>();
 
-  /** The "any" row was chosen. */
-  readonly anyChosen = output<void>();
-
   private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** The store glyph in a logo's square, which "No shop" leads with. */
+  protected readonly noShopLogo: ChainLogoView = {
+    logoUrl: null,
+    name: '',
+    store: true,
+  };
 
   /** How far the server looks, in the reader's language, for the heading. */
   protected readonly radius = computed(() =>
@@ -235,11 +243,6 @@ export class ShopPicker {
   /** Whether a word is being searched, which decides what the body draws. */
   protected searching(): boolean {
     return this.query().trim() !== '';
-  }
-
-  /** The fixed id the any row's radio is labelled by, one per picker. */
-  protected anyName(): string {
-    return `${this.fieldId()}-any`;
   }
 
   protected onQuery(event: Event): void {

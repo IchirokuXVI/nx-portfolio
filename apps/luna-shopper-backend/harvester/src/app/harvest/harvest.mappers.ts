@@ -4,20 +4,28 @@ import type {
   HarvestRunPresetLastRun,
   HarvestRunPresetView,
   HarvestRunView,
+  HarvestScheduleBlock,
+  HarvestScheduleLastRun,
+  HarvestScheduleView,
   ItemPriceDetails,
   PlaceLocationCandidate,
   PostalCodeDiscoveryRequestView,
+  RunEstimate,
   SourceCatalogEntryView,
   SourceEntryPriceView,
   SourceLocationCandidate,
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
-import { unitBasisOf } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestRunStatus,
+  unitBasisOf,
+} from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
   HarvestRun,
   HarvestRunPreset,
+  HarvestSchedule,
   PostalCodeDiscoveryRequest,
   SourceCatalogEntry,
   SourceEntryPrice,
@@ -57,6 +65,29 @@ export function toSupermarketSourceView(
   };
 }
 
+/**
+ * Whether a run was stopped by the harvester going down rather than by a
+ * person (plan 0206, section 7).
+ *
+ * A person's abort always sets `abortRequestedAt`. A shutdown aborts the run
+ * through the same signal and sets nothing, and a run whose process was killed
+ * outright is marked `STALE` by the reaper. No column says it, because these
+ * two say it already.
+ */
+export function isInterrupted(
+  row: Pick<HarvestRun, 'status' | 'abortRequestedAt'>
+): boolean {
+  return (
+    (row.status === HarvestRunStatus.ABORTED && !row.abortRequestedAt) ||
+    row.status === HarvestRunStatus.STALE
+  );
+}
+
+/**
+ * One argument, so `rows.map(toHarvestRunView)` stays safe. The estimate is
+ * added by `HarvestRunService.views`, which reads other runs for it; the
+ * dashboard does not, so its runs carry none.
+ */
 export function toHarvestRunView(row: HarvestRun): HarvestRunView {
   return {
     id: row.id,
@@ -99,6 +130,10 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     revertedPriceCount: row.revertedPriceCount ?? null,
     // Plan 0120. The preset a run came from, which may since have been deleted.
     presetId: row.presetId ?? null,
+    // Plan 0206. The schedule that started it, and whether a shutdown or the
+    // reaper ended it rather than a person.
+    scheduleId: row.scheduleId ?? null,
+    interrupted: isInterrupted(row),
   };
 }
 
@@ -108,7 +143,8 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
  */
 export function toHarvestRunPresetView(
   row: HarvestRunPreset,
-  lastRun: HarvestRunPresetLastRun | null
+  lastRun: HarvestRunPresetLastRun | null,
+  estimate?: RunEstimate
 ): HarvestRunPresetView {
   return {
     id: row.id,
@@ -118,6 +154,42 @@ export function toHarvestRunPresetView(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lastRun,
+    ...(estimate ? { estimate } : {}),
+  };
+}
+
+/**
+ * One schedule (plan 0206, section 4.3). The preset's name, the last run, the
+ * block and the estimate are reads of other rows, so the caller passes them.
+ */
+export function toHarvestScheduleView(
+  row: HarvestSchedule,
+  extra: {
+    presetName: string;
+    lastRun: HarvestScheduleLastRun | null;
+    blockedBy: HarvestScheduleBlock | null;
+    estimate: RunEstimate;
+  }
+): HarvestScheduleView {
+  return {
+    id: row.id,
+    presetId: row.presetId,
+    presetName: extra.presetName,
+    supermarketId: row.supermarketId,
+    timeOfDay: row.timeOfDay,
+    daysOfWeek: row.daysOfWeek.map(Number),
+    timezone: row.timezone,
+    enabled: row.enabled,
+    nextRunAt: iso(row.nextRunAt),
+    blockedBy: extra.blockedBy,
+    lastSlotAt: iso(row.lastSlotAt),
+    lastOutcome: row.lastOutcome ?? null,
+    lastOutcomeAt: iso(row.lastOutcomeAt),
+    lastOutcomeNote: row.lastOutcomeNote ?? null,
+    lastRun: extra.lastRun,
+    estimate: extra.estimate,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -183,6 +255,7 @@ export function toSourceCatalogEntryView(
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
     url: row.url,
+    imageUrl: row.imageUrl ?? null,
     extra: row.extra ?? null,
     timesSeen: row.timesSeen,
     firstSeenAt: row.firstSeenAt.toISOString(),

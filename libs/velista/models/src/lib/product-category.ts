@@ -129,6 +129,18 @@ export function buildCategoryTree(rows: readonly CategoryNode[]): CategoryTree {
 }
 
 /**
+ * The name of every root of the tree, by the root's id (velista `0138`).
+ *
+ * What the basket's category grouping heads its sections with: a product carries
+ * its leaves and the id of each leaf's root, and only the tree names the root.
+ */
+export function categoryParents(
+  tree: CategoryTree
+): ReadonlyMap<string, LocalizedName> {
+  return new Map(tree.roots.map(({ root }) => [root.id, root.name]));
+}
+
+/**
  * A category's name in the reader's language, never blank while it has one at all.
  *
  * {@link catalogName}'s rule, because a category name is catalog data and at least

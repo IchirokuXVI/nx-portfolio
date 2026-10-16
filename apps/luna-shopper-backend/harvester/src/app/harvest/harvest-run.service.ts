@@ -11,6 +11,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestRunWrites,
+  HarvestScheduleOutcome,
   PriceSourceKind,
   adapterCapabilities,
   type AdapterCapabilities,
@@ -22,12 +23,14 @@ import {
   type HarvestRunPresetInput,
   type HarvestRunView,
   type ListHarvestRunsRequest,
+  type RunEstimate,
   type ScopeCopy,
   type SpawnHarvestRunRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
   NotConfiguredException,
+  NotFoundException,
   ValidationException,
   clampPageSize,
   decodeCursor,
@@ -35,7 +38,12 @@ import {
   getRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
-import type { SupermarketSource } from '../entities';
+import type {
+  HarvestRun,
+  HarvestRunPreset,
+  HarvestSchedule,
+  SupermarketSource,
+} from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { readHarvestDocument } from './harvest-document.reader';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
@@ -43,10 +51,13 @@ import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
   HarvestRunStore,
+  sourceModeKey,
+  type SourceRef,
 } from './harvest-run.store';
 import { toHarvestRunView } from './harvest.mappers';
 import { resolveImportWindow } from './import-window';
 import { PlatformAdminService } from './platform-admin.service';
+import { ESTIMATE_SAMPLES, estimateRun } from './run-estimate';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryService } from './source-entry.service';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -58,6 +69,50 @@ interface RunCursor {
 
 /** A spawn's request without the credential, which is what a preset rebuilds. */
 export type RunRequest = Omit<SpawnHarvestRunRequest, keyof AdminCredential>;
+
+/**
+ * Who a run is for (plan 0206, section 5.4): a person, from a typed request or
+ * a preset, or a schedule, which names no person.
+ */
+interface RunOrigin {
+  trigger: HarvestRunTrigger;
+  userId: string | null;
+  presetId: string | null;
+  scheduleId: string | null;
+}
+
+/**
+ * The consecutive failures at which a schedule stops firing until a run
+ * completes (plan 0206, section 6).
+ */
+export const SOURCE_FAILING_AFTER = 3;
+
+/** The refusal of a run of a chain whose row is off. Its words never change. */
+const SOURCE_DISABLED =
+  'That source is disabled. Enable it with supermarketSource.setEnabled.';
+
+/** What became of the start of a scheduled run (plan 0206, section 5.3). */
+export interface ScheduledStart {
+  outcome: HarvestScheduleOutcome;
+  /** The refusal, or the run that was in the way. Null when a run started. */
+  note: string | null;
+  /** The run that started, or null. */
+  runId: string | null;
+}
+
+/** One run, preset or schedule an estimate is asked for (plan 0206, section 8). */
+export interface EstimateKey {
+  presetId: string | null;
+  mode: HarvestRunMode;
+  /**
+   * The source of a run, null for a run that used none. Absent means the
+   * source is read by {@link supermarketId}, which is how a preset is asked.
+   */
+  sourceId?: string | null;
+  supermarketId?: string | null;
+  /** The run the estimate is drawn beside, whose own duration never counts. */
+  excludeRunId?: string | null;
+}
 
 /** What {@link HarvestRunService.validateRequest} answers. */
 export interface ValidatedRunRequest {
@@ -116,6 +171,16 @@ const OFFICIAL_KINDS: readonly PriceSourceKind[] = [
  */
 function takesScopeList(capabilities: AdapterCapabilities): boolean {
   return capabilities.writesPrices && capabilities.walkablePriorities !== null;
+}
+
+/** A slot that started nothing because something was refused. */
+function refused(note: string): ScheduledStart {
+  return { outcome: HarvestScheduleOutcome.REFUSED, note, runId: null };
+}
+
+/** The ids that are set, each once. */
+function distinct(ids: readonly (string | null | undefined)[]): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
 /** The statuses a run never leaves, and the only ones a revert is offered on. */
@@ -186,10 +251,14 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     const source = req.supermarketId
       ? await this.sources.findBySupermarket(req.supermarketId)
       : null;
-    return this.start(req, source, await this.validateRequest(req, source), {
-      userId: req.userId,
-      presetId: null,
-    });
+    return this.view(
+      await this.start(req, source, await this.validateRequest(req, source), {
+        trigger: HarvestRunTrigger.MANUAL,
+        userId: req.userId,
+        presetId: null,
+        scheduleId: null,
+      })
+    );
   }
 
   /**
@@ -230,10 +299,138 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       }
       throw error;
     }
-    return this.start(request, source, validated, {
-      userId: req.userId,
-      presetId: preset.id,
-    });
+    return this.view(
+      await this.start(request, source, validated, {
+        trigger: HarvestRunTrigger.MANUAL,
+        userId: req.userId,
+        presetId: preset.id,
+        scheduleId: null,
+      })
+    );
+  }
+
+  /**
+   * Start the preset of a due schedule (plan 0206, section 5.4).
+   *
+   * **The same {@link validateRequest} and the same {@link start}** as a
+   * person's start from a preset, with trigger `SCHEDULED`, no user, and the
+   * schedule's id beside the preset's. It takes no credential, because no
+   * person is asking: it is not a NATS handler, and nothing outside the
+   * harvester can call it.
+   *
+   * It answers what became of the slot rather than throwing, in one order
+   * that `blockedBy` uses too: the source row off or missing, then the source
+   * failing, then the preset refused, then a run in the way. An error it does
+   * not expect is thrown, and the worker writes it as `REFUSED`.
+   */
+  async startScheduled(
+    schedule: Pick<HarvestSchedule, 'id' | 'presetId'>
+  ): Promise<ScheduledStart> {
+    this.requireHarvesting();
+    let preset: HarvestRunPreset;
+    try {
+      preset = await this.presets.load(schedule.presetId);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return refused(
+          `The preset ${schedule.presetId} of this schedule no longer exists.`
+        );
+      }
+      throw error;
+    }
+    const request: RunRequest = {
+      ...preset.input,
+      supermarketId: preset.supermarketId,
+    };
+    const source = await this.sources.findBySupermarket(preset.supermarketId);
+    if (source && !source.enabled) {
+      return refused(SOURCE_DISABLED);
+    }
+    if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
+      return {
+        outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
+        note:
+          `The source has failed ${source.consecutiveFailures} runs in a row. ` +
+          'The first run a person starts that completes lets the schedule ' +
+          'fire again.',
+        runId: null,
+      };
+    }
+
+    let validated: ValidatedRunRequest;
+    try {
+      validated = await this.validateRequest(request, source);
+    } catch (error) {
+      if (error instanceof ValidationException) {
+        // The sentence a person starting the preset by hand would read.
+        return refused(
+          `The preset "${preset.name}" (${preset.id}) cannot start a run: ` +
+            error.message
+        );
+      }
+      throw error;
+    }
+
+    try {
+      const run = await this.start(request, source, validated, {
+        trigger: HarvestRunTrigger.SCHEDULED,
+        userId: null,
+        presetId: preset.id,
+        scheduleId: schedule.id,
+      });
+      return {
+        outcome: HarvestScheduleOutcome.STARTED,
+        note: null,
+        runId: run.id,
+      };
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        return {
+          outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+          note: await this.busyNote(
+            request.mode,
+            preset.supermarketId,
+            error.message
+          ),
+          runId: null,
+        };
+      }
+      if (error instanceof ValidationException) {
+        return refused(error.message);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The run in the way of a scheduled start, named.
+   *
+   * A run of the chain is the usual answer. A store discovery can also wait
+   * behind a store discovery of another chain or of OpenStreetMap, because
+   * `uq_harvest_run_active_store_discovery` allows one in the whole database,
+   * and the postal code queue starts them each time it drains (plan 0206,
+   * review point 6).
+   */
+  private async busyNote(
+    mode: HarvestRunMode,
+    supermarketId: string,
+    fallback: string
+  ): Promise<string> {
+    const ofChain = await this.store.findActiveBySupermarket(supermarketId);
+    if (ofChain) {
+      return `A run of this chain is in progress: ${ofChain.id}.`;
+    }
+    if (mode === HarvestRunMode.STORE_DISCOVERY) {
+      const discovery = await this.store.findActiveStoreDiscovery();
+      if (discovery) {
+        return (
+          `A store discovery is in progress: ${discovery.id}. One store ` +
+          'discovery runs at a time across every source, the runs of the ' +
+          'postal code queue included.'
+        );
+      }
+    }
+    return fallback;
   }
 
   /**
@@ -258,20 +455,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     req: RunRequest,
     source: SupermarketSource | null,
     validated: ValidatedRunRequest,
-    origin: { userId: string; presetId: string | null }
-  ): Promise<HarvestRunView> {
+    origin: RunOrigin
+  ): Promise<HarvestRun> {
     const { supermarketId, priceScopeId, payload, documentSha256 } = validated;
     const needsSource = req.mode !== HarvestRunMode.FILE_IMPORT;
     if (needsSource && source && !source.enabled) {
-      throw new ValidationException(
-        'That source is disabled. Enable it with supermarketSource.setEnabled.'
-      );
+      throw new ValidationException(SOURCE_DISABLED);
     }
 
     try {
       const run = await this.store.create({
         mode: req.mode,
-        trigger: HarvestRunTrigger.MANUAL,
+        trigger: origin.trigger,
         supermarketId,
         sourceId: needsSource ? (source?.id ?? null) : null,
         priceScopeId,
@@ -280,13 +475,14 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         payload,
         documentSha256,
         presetId: origin.presetId,
+        scheduleId: origin.scheduleId,
       });
       // The reaper compares heartbeats, so a run gets one the moment it exists
       // rather than when it starts working: a process that dies in between would
       // otherwise hold the lock forever.
       await this.store.seedHeartbeat(run.id);
       this.executor.start(run.id);
-      return toHarvestRunView(run);
+      return run;
     } catch (error) {
       if (error instanceof DocumentAlreadyImportedError) {
         // A different sentence from the one below, because the next step is
@@ -321,7 +517,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     await this.admin.requireAdmin(req);
     const run = await this.store.requestAbort(req.runId);
     this.executor.cancel(req.runId);
-    return toHarvestRunView(run);
+    return this.view(run);
   }
 
   /**
@@ -404,12 +600,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         `recomputed, ${observed} price observation(s) and ${undecided} ` +
         'undecided row(s) removed.'
     );
-    return toHarvestRunView(reverted);
+    return this.view(reverted);
   }
 
   async get(req: HarvestRunIdRequest): Promise<HarvestRunView> {
     await this.admin.requireAdmin(req);
-    return toHarvestRunView(await this.store.load(req.runId));
+    return this.view(await this.store.load(req.runId));
   }
 
   async list(req: ListHarvestRunsRequest): Promise<HarvestRunPage> {
@@ -435,6 +631,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     if (req.presetId) {
       qb.andWhere('r."presetId" = :pid', { pid: req.presetId });
     }
+    if (req.scheduleId) {
+      qb.andWhere('r."scheduleId" = :schid', { schid: req.scheduleId });
+    }
+    if (req.trigger) {
+      qb.andWhere('r.trigger = :trigger', { trigger: req.trigger });
+    }
     if (req.reverted !== undefined) {
       // A filter of its own rather than a status (plan 0082, section 6): a
       // revert does not change how the run ended.
@@ -454,12 +656,91 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toHarvestRunView),
+      items: await this.views(page),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.requestedAt.toISOString(), id: last.id })
           : null,
     };
+  }
+
+  /** Runs as views, each with its estimate, read for the page in one go. */
+  async views(rows: readonly HarvestRun[]): Promise<HarvestRunView[]> {
+    const estimates = await this.estimates(
+      rows.map((row) => ({
+        presetId: row.presetId,
+        mode: row.mode,
+        sourceId: row.sourceId,
+        excludeRunId: row.id,
+      }))
+    );
+    return rows.map((row, index) => ({
+      ...toHarvestRunView(row),
+      estimate: estimates[index],
+    }));
+  }
+
+  private async view(row: HarvestRun): Promise<HarvestRunView> {
+    const [view] = await this.views([row]);
+    return view;
+  }
+
+  /**
+   * About how long each of these takes (plan 0206, section 8), in the same
+   * order, from three queries for the whole list rather than three per row.
+   *
+   * The preset's own runs come first, then the runs of the same source and
+   * mode, then the adapter's default. A run with no preset thus starts at its
+   * source, and a run with no source, such as a file import or an
+   * OpenStreetMap discovery, at the default of no adapter.
+   */
+  async estimates(keys: readonly EstimateKey[]): Promise<RunEstimate[]> {
+    if (keys.length === 0) {
+      return [];
+    }
+    const sources = await this.store.sourcesFor(
+      distinct(keys.map((key) => key.sourceId)),
+      distinct(
+        keys
+          .filter((key) => key.sourceId === undefined)
+          .map((key) => key.supermarketId)
+      )
+    );
+    const byId = new Map(sources.map((row) => [row.id, row]));
+    const byChain = new Map(sources.map((row) => [row.supermarketId, row]));
+    const resolved: (SourceRef | null)[] = keys.map((key) =>
+      key.sourceId !== undefined
+        ? key.sourceId
+          ? (byId.get(key.sourceId) ?? null)
+          : null
+        : key.supermarketId
+          ? (byChain.get(key.supermarketId) ?? null)
+          : null
+    );
+    // A run keeps naming a source that was deleted since, and its siblings
+    // still name it too, so the id counts even when its row is gone.
+    const sourceIds = keys.map((key, index) =>
+      key.sourceId !== undefined ? key.sourceId : (resolved[index]?.id ?? null)
+    );
+    const durations = await this.store.recentDurations(
+      distinct(keys.map((key) => key.presetId)),
+      distinct(sourceIds),
+      ESTIMATE_SAMPLES + 1
+    );
+    return keys.map((key, index) => {
+      const sourceId = sourceIds[index];
+      return estimateRun({
+        preset: key.presetId
+          ? (durations.byPreset.get(key.presetId) ?? [])
+          : null,
+        source: sourceId
+          ? (durations.bySourceMode.get(sourceModeKey(sourceId, key.mode)) ??
+            [])
+          : null,
+        adapterKey: resolved[index]?.adapterKey ?? null,
+        excludeRunId: key.excludeRunId ?? null,
+      });
+    });
   }
 
   /**

@@ -20,10 +20,13 @@ export interface NamedList {
  * Name a set of lists, for a reader who has already been found entitled to the
  * names (plan 0053, section 4).
  *
- * **It does no access check and must not be called without one.** Both callers
- * resolve `seesZoneData` first and skip this entirely when it is false, which is
- * the difference between a rule and a filter: a reader who may not have the names
- * costs no query rather than costing one and having the answer discarded.
+ * **It does no access check and must not be called without one.** A caller
+ * passes only the lists the reader is served, which is
+ * `BasketRedaction.servedListIds`, the covered lists the reader writes, and
+ * skips the call when that set is empty. That is the difference between a rule
+ * and a filter: a reader who may not have the names costs no query rather than
+ * costing one and having the answer discarded. No code calls it today: the
+ * basket read names its lists with `BASKET_LIST_REFS_SQL` under the same rule.
  *
  * A list that cannot be read back simply drops out of the map, so a caller
  * defaults it to null rather than to an invented name. That is the ordinary case

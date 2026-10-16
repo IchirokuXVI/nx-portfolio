@@ -68,6 +68,9 @@ lunaShopperBackend:
     # database they are about to write to. ADMIN_DEV_AUTOLOGIN is absent here for
     # the same reason it is absent from production.
     environmentName: staging
+    # Support sessions (plan 0194). On in staging, where the people are the
+    # owner's own test accounts. Production does not set this.
+    impersonationEnabled: true
     googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.
@@ -86,11 +89,10 @@ lunaShopperBackend:
     # registration wrote the account and still answered 504.
     smtpPort: 2525
     smtpUser: 497721f71489adfcbc3078d2b292aad8
-    # `auth/verify`, and with no locale segment, for the reasons spelled out
-    # beside the production pair. `mailResetBaseUrl` is still a placeholder for a
-    # page the app does not have.
+    # `auth/verify` and `auth/reset-password`, and with no locale segment, for
+    # the reasons spelled out beside the production pair.
     mailVerifyBaseUrl: https://staging.velista.app/auth/verify
-    mailResetBaseUrl: https://staging.velista.app/reset-password
+    mailResetBaseUrl: https://staging.velista.app/auth/reset-password
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
 
@@ -135,6 +137,10 @@ lunaShopperBackend:
   harvester:
     enabled: true
     harvestEnabled: true
+    # Staging fires no schedule (plan 0206, section 10). Production does, and
+    # two clusters fetching one chain on one timer double what the chain sees.
+    # A person can still start any run here.
+    schedulerEnabled: false
 
   # The catalog database keeps the one core that values.yaml gives it, and Redis
   # keeps its 100m. Both would take more, and this node has four cores: 3,310m of

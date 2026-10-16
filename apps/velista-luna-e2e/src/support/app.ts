@@ -5,7 +5,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { DEMO_PASSWORD } from '@portfolio/luna-shopper/test-fixtures';
-import { VELISTA_BASE_URL } from '../../playwright.config';
+import { SHOP_ASK_OFF_STATE, VELISTA_BASE_URL } from '../../playwright.config';
 
 /**
  * The screens, as a spec drives them. Every string here is the English copy
@@ -158,44 +158,13 @@ export async function openSettleSheet(
 }
 
 /**
- * On an open settle sheet, say which product of a row of several was got
- * (velista `0092`, section 5).
- *
- * Change opens "Which did you get?", a radio group, and choosing closes that
- * pane back onto the settle pane. Nothing is written: the choice rides on the
- * next purchase made **from this sheet**. The row's own glyph and reel do not
- * carry it (the page binds the row to `insteadOf`, velista `0102`), so a spec
- * that means to buy a named product buys it here.
+ * The quantity one list asks for on an open settle sheet (velista `0139`,
+ * section 3): a reel, by the list's name.
  */
-export async function chooseProduct(
-  dialog: Locator,
-  product: string
-): Promise<void> {
-  await dialog.getByRole('button', { name: 'Change', exact: true }).click();
-  const option = dialog.getByRole('radio', {
-    name: new RegExp(`^\\s*${product}\\b`),
-  });
-  // The choice lasts the visit, so it may already be this one, and checking a
-  // checked radio fires nothing. The pane's Cancel is then the way back.
-  if (await option.isChecked()) {
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  } else {
-    // A click, not `check()`: choosing closes the pane, and `check()` then
-    // waits to confirm a radio that is gone.
-    await option.click();
-  }
-  await expect(dialog.getByRole('radio')).toHaveCount(0);
-}
-
-/**
- * The "got" reel of one list on an open settle sheet (velista `0090`, 9.2).
- * Raising it buys that many for that household alone, as the product chosen
- * on the sheet, and leaves the sheet open.
- */
-export function gotReel(dialog: Locator, list: string): Locator {
+export function askReel(dialog: Locator, list: string): Locator {
   return reel(
     dialog.locator('lib-row-entries'),
-    new RegExp(`^${list}.*, got$`)
+    new RegExp(`^${list}, asks for$`)
   );
 }
 
@@ -311,13 +280,16 @@ export function chip(page: Page, label: string): Locator {
 /**
  * A second person: their own browser context, signed in to nothing, on the
  * same origin and with the same certificate allowance as the main page.
- * `browser.newContext()` inherits none of the config's `use` options, so both
- * are stated here rather than assumed.
+ * All three options are stated here rather than assumed. The runner's
+ * `browser.newContext()` was seen to apply the config's storage state (the
+ * walk of velista `0141`), but nothing documents which `use` options it
+ * carries, so "Don't ask again" is stated too.
  */
 export async function newVisitor(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
     baseURL: VELISTA_BASE_URL,
     ignoreHTTPSErrors: true,
+    storageState: SHOP_ASK_OFF_STATE,
   });
   return context.newPage();
 }

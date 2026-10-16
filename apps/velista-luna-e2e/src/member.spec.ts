@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LIST_HARDWARE_ID } from '@portfolio/luna-shopper/test-fixtures';
+import { SHOP_ASK_OFF_KEY } from '../playwright.config';
 import {
   addBasketLine,
   ALICE_EMAIL,
@@ -10,6 +11,7 @@ import {
   readBasketRows,
   readLiveBasket,
   resetAliceWorld,
+  type BasketRowView,
   type Session,
 } from './support/api';
 import {
@@ -50,10 +52,11 @@ import {
  * and then asked for again from the settle sheet, which the API confirms
  * reached the household's list.
  *
- * The last step is two baskets over one line (velista `0131`, backend `0188`).
+ * The last step is two baskets over one line (velista `0142`, backend `0203`).
  * The owner buys a line through her **own** basket, the permanent one, and the
- * member's open basket keeps the row: done, saying it was bought on another
- * basket, with nothing to undo it, and without a reload.
+ * member's open basket keeps the row crossed out, saying it was bought from
+ * another shopping list, with nothing to undo it, and one change in the banner,
+ * without a reload.
  */
 test.describe('a registered participant', () => {
   let alice: Session;
@@ -124,11 +127,11 @@ test.describe('a registered participant', () => {
       await expectBasketUrl(dana, basketId);
 
       // What a guest never gets: the lists behind the row on the settle sheet,
-      // with the list that asks for the line named (velista `0090`, 9.2).
+      // with the list that asks for the line named (velista `0139`, section 3).
       const dialog = await openSettleSheet(dana, 'Milk');
       const entries = dialog.locator('lib-row-entries');
       await expect(
-        entries.getByRole('heading', { name: 'Lists that ask for this' })
+        entries.getByRole('heading', { name: 'Asked for on 1 list' })
       ).toBeVisible();
       await expect(
         entries.locator('.row-name', { hasText: 'Groceries' })
@@ -153,10 +156,32 @@ test.describe('a registered participant', () => {
         )
         .toContain(aisleLine);
 
+      // The first buy of a trip asks where she is (velista `0141`), which is
+      // what every device meets until it answers "Don't ask again". The suite's
+      // storage state answers that for every other buy, so this one buy clears
+      // the flag, meets the question, answers "No shop", and puts the flag back.
+      await page.evaluate(
+        (key) => localStorage.removeItem(key),
+        SHOP_ASK_OFF_KEY
+      );
       await row(page, aisleLine)
         .getByRole('button', { name: `Mark ${aisleLine} as got` })
         .click();
 
+      // The plain picker, or the question once a shop near the device is found.
+      await expect(page).toHaveURL(/\/sheet\/shop(\?.*)?$/);
+      const question = sheet(page, /^(Buying at|Are you buying here\?)$/);
+      await expect(
+        question.getByRole('button', { name: "Don't ask again" })
+      ).toBeVisible();
+      await question.getByRole('radio', { name: /^No shop/ }).click();
+      await expectBasketUrl(page, basketId);
+      await page.evaluate(
+        (key) => localStorage.setItem(key, 'true'),
+        SHOP_ASK_OFF_KEY
+      );
+
+      // The buy waited for the answer, and was written with no shop.
       await expect(
         row(page, aisleLine).getByRole('button', {
           name: `${aisleLine} is got. Undo it`,
@@ -195,7 +220,7 @@ test.describe('a registered participant', () => {
         .toBe(1);
     });
 
-    await test.step('4. Alice buys a line from her own basket, and Dana\u2019s open basket shows it done', async () => {
+    await test.step('4. Alice buys a line from her own basket, and Dana\u2019s open basket crosses it out', async () => {
       // Alice's permanent basket covers Hardware too, so the two baskets hold the
       // same line. Everything she does here goes over the gateway: no page of hers
       // is involved, which is what "another basket" means to Dana's screen.
@@ -218,18 +243,40 @@ test.describe('a registered participant', () => {
         hers.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
       ).toBeVisible();
 
-      await buyBasketRow(alice, live.id, added.rowKey, {
+      // The addition is a change too. Dana's screen acknowledges it once the
+      // row has been in front of her for a moment (velista `0093`), so the
+      // banner below counts the buy and nothing before it.
+      await hers.scrollIntoViewIfNeeded();
+      await expect(dana.locator('lib-changes-banner')).toHaveCount(0, {
+        timeout: 15_000,
+      });
+
+      // Watched from inside the page on every frame, and started before the
+      // buy: the banner says "1 change" only until the crossed out row, which
+      // carries the mark, has been on screen for the same moment and is
+      // acknowledged in its turn.
+      const oneChange = dana.waitForFunction(
+        () =>
+          document
+            .querySelector('lib-changes-banner')
+            ?.textContent?.includes('1 change on your lists') === true,
+        null,
+        { polling: 'raf', timeout: 20_000 }
+      );
+
+      await buyBasketRow(alice, live.id, [added.lineId], {
         quantity: 2,
         from: 2,
       });
 
-      // What the backend serves on the shared basket: the row stays, done, with
-      // nothing bought here and two bought elsewhere (backend `0188`).
+      // What the backend serves on the shared basket: the row stays, bought
+      // elsewhere, with nothing bought here and two bought elsewhere, and the
+      // note that says it went through another basket (backend `0203`).
       await expect
         .poll(async () => {
           const held = (await readBasketRows(alice, basketId)).find(
             (r) => r.content === elsewhereLine
-          );
+          ) as (BasketRowView & { note?: string | null }) | undefined;
           return held === undefined
             ? null
             : {
@@ -237,20 +284,32 @@ test.describe('a registered participant', () => {
                 left: held.left,
                 bought: held.bought,
                 boughtElsewhere: held.boughtElsewhere,
+                note: held.note,
               };
         })
-        .toEqual({ state: 'DONE', left: 0, bought: 0, boughtElsewhere: 2 });
+        .toEqual({
+          state: 'BOUGHT_ELSEWHERE',
+          left: 0,
+          bought: 0,
+          boughtElsewhere: 2,
+          note: 'BOUGHT_ON_ANOTHER_BASKET',
+        });
 
-      // And what Dana's screen draws, without a reload: a done row, the caption,
-      // and no control that takes the purchase back.
-      await expect(hers.locator('.row.is-done')).toBeVisible();
-      await expect(hers).toContainText('Bought on another basket');
+      // And what Dana's screen draws, without a reload: one change in the
+      // banner, the row crossed out with where it was bought, and no control
+      // that buys or takes the purchase back (velista `0142`).
+      await oneChange;
+      const crossed = hers.locator('.row.is-removed');
+      await expect(crossed).toBeVisible();
+      await expect(crossed.locator('.removed-note')).toHaveText(
+        'Bought from another shopping list'
+      );
       await expect(
-        hers.getByRole('button', { name: `${elsewhereLine} is got. Undo it` })
-      ).toHaveCount(0);
-      await expect(
-        hers.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
-      ).toHaveCount(0);
+        crossed.locator('.content'),
+        'the name is struck through'
+      ).toHaveCSS('text-decoration-line', 'line-through');
+      await expect(hers.locator('.status')).toHaveCount(0);
+      await expect(hers.locator('lib-quantity-reel')).toHaveCount(0);
       await expectBasketUrl(dana, basketId);
     });
   });

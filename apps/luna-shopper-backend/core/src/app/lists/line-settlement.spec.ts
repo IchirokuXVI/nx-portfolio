@@ -1,3 +1,4 @@
+import { fakeLineChanges } from './changes/line-change.fake';
 import {
   LineApprovalStatus,
   ListPermission,
@@ -187,7 +188,8 @@ function build(options: {
     listAccess,
     fakeLineClaims().service,
     publisher,
-    announcer
+    announcer,
+    fakeLineChanges().recorder
   );
 
   return { service, saved, written, events, line };

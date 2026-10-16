@@ -10,7 +10,15 @@ import { GatewayError } from '@portfolio/velista/data-access';
  * that table for these three calls (the same shape `entry-error-copy.ts` is for
  * plan 0008's two).
  */
-export type AuthOperation = 'auth.login' | 'auth.register' | 'auth.upgrade';
+export type AuthOperation =
+  | 'auth.login'
+  | 'auth.register'
+  | 'auth.upgrade'
+  // Velista `0148`. Each has its own states for every answer it can explain, so
+  // what reaches this table is a 400 on the address, too many tries, or a failure.
+  | 'auth.forgotPassword'
+  | 'auth.resetPassword'
+  | 'auth.recoverySignIn';
 
 /** Where a message belongs, which is the only thing the three screens differ on. */
 export type AuthErrorPlacement = 'pair' | 'email' | 'password';
@@ -45,6 +53,12 @@ export function authErrorCopy(
     // connection screen owns the first of those, so all that is needed here is a
     // sentence that does not claim to know why.
     return GENERIC;
+  }
+
+  // A support session asked for something only the person may do (backend `0194`):
+  // here, securing a guest account with an address. Whatever the operation.
+  if (error.code === 'impersonation_not_allowed') {
+    return { key: 'support.refused', placement: 'pair' };
   }
 
   // Five a minute on login and three on register, and the copy says the same thing
@@ -86,6 +100,11 @@ export function authErrorCopy(
       return error.code === 'conflict'
         ? { key: 'auth.error.emailTaken', placement: 'email' }
         : GENERIC;
+
+    case 'auth.forgotPassword':
+    case 'auth.resetPassword':
+    case 'auth.recoverySignIn':
+      return GENERIC;
   }
 }
 

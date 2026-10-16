@@ -16,6 +16,7 @@ import {
   BRAND_PATTERNS,
   CATEGORY_PATTERNS,
   HARVEST_SCHEMA_IDS,
+  ITEM_LINKED_IMAGE_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   PRICE_POLICY_PATTERNS,
@@ -41,12 +42,12 @@ import {
   type CreateBrandResult,
   type CreateItemsResult,
   type DeleteBrandResult,
+  type DisableAllLinkedImagesResult,
+  type ItemLinkedImagesView,
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
   type ItemScopePricesPage,
-  type ItemSectionPinsPage,
-  type ItemSectionPinsView,
   type ItemSectionsAtLocationRequest,
   type ItemSectionsAtLocationView,
   type ItemView,
@@ -62,13 +63,12 @@ import {
   type RegisterBrandSuggestionResult,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
+  type ShopSectionView,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
-  type SupermarketSectionPage,
-  type SupermarketSectionView,
   type SupermarketView,
   type UpdateBrandResult,
   type UpdateItemsResult,
@@ -95,11 +95,9 @@ import {
   AdminListBrandsQueryDto,
   AdminListBrandSuggestionsQueryDto,
   AdminListCategoriesQueryDto,
-  AdminListItemSectionPinsQueryDto,
   AdminListLocationItemsQueryDto,
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
-  AdminListSupermarketSectionsQueryDto,
   AdminListSupermarketsQueryDto,
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
@@ -114,15 +112,15 @@ import {
   CreateItemsDto,
   CreatePriceScopeDto,
   CreateProductGroupDto,
+  CreateShopSectionDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
-  CreateSupermarketSectionDto,
   ListItemPricesQueryDto,
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   RegisterBrandsDto,
   RegisterBrandSuggestionDto,
-  SetItemSectionPinsDto,
+  SetLinkedImagesEnabledDto,
   SetLocationSectionsDto,
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
@@ -133,9 +131,9 @@ import {
   UpdatePricePolicyDto,
   UpdatePriceScopeDto,
   UpdateProductGroupDto,
+  UpdateShopSectionDto,
   UpdateSupermarketDto,
   UpdateSupermarketLocationDto,
-  UpdateSupermarketSectionDto,
   UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
 
@@ -258,6 +256,29 @@ export class AdminCatalogSupermarketsController {
   }
 
   /**
+   * Turn the photos of one chain on or off (plan 0198, section 4).
+   *
+   * A chain photo is a link to the chain's own host. Off is the state of
+   * every chain until somebody turns one on here, and `enabled: false` takes
+   * the photos of this chain out of every product in the same transaction.
+   * The saved links stay, so turning the chain on again needs no harvest.
+   * Answers the chain.
+   */
+  @Put(':id/linked-images')
+  @ApiContractResponse(SUPERMARKET_PATTERNS.setLinkedImagesEnabled)
+  @ApiProblemResponses({ body: true })
+  setLinkedImages(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: SetLinkedImagesEnabledDto
+  ): Promise<SupermarketView> {
+    return this.nats.send<SupermarketView>(
+      SUPERMARKET_PATTERNS.setLinkedImagesEnabled,
+      { ...adminCredential(admin), supermarketId: id, enabled: dto.enabled }
+    );
+  }
+
+  /**
    * An `externalRef` that another shop holds answers 409
    * `location_external_ref_taken` and names that shop in `details.heldBy`
    * (plan 0195). The catalog holds one shop for each reference, across
@@ -307,88 +328,6 @@ export class AdminCatalogSupermarketsController {
         limit: query.limit,
       }
     );
-  }
-
-  /**
-   * Create a section on this chain (plan 0167, section 4): an aisle as the
-   * chain names it, and the categories it holds. A slug the chain already
-   * holds answers 409 `section_slug_taken`, and an unknown category 404
-   * `category_not_found`.
-   */
-  @Post(':id/sections')
-  @ApiContractResponse(SECTION_PATTERNS.create, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ body: true, conflict: true })
-  createSection(
-    @ActingAdmin() admin: CurrentAdmin,
-    @UuidParam('id') id: string,
-    @Body() dto: CreateSupermarketSectionDto
-  ): Promise<SupermarketSectionView> {
-    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.create, {
-      ...adminCredential(admin),
-      supermarketId: id,
-      ...dto,
-    });
-  }
-
-  /** This chain's sections, in `position` order, each with its shop count. */
-  @Get(':id/sections')
-  @ApiContractResponse(SECTION_PATTERNS.list)
-  listSections(
-    @ActingAdmin() admin: CurrentAdmin,
-    @UuidParam('id') id: string,
-    @Query() query: AdminListSupermarketSectionsQueryDto
-  ): Promise<SupermarketSectionPage> {
-    return this.nats.send<SupermarketSectionPage>(SECTION_PATTERNS.list, {
-      userId: admin.adminId,
-      supermarketId: id,
-      query: query.query,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
-  }
-
-  /**
-   * The pins of this chain (plan 0167, section 4): `?itemId=` for one
-   * product's, `?sectionId=` for the products pinned to one section. One entry
-   * per pinned product, carrying all of its pins in the chain.
-   */
-  @Get(':id/item-sections')
-  @ApiContractResponse(SECTION_PATTERNS.listPins)
-  listItemSections(
-    @ActingAdmin() admin: CurrentAdmin,
-    @UuidParam('id') id: string,
-    @Query() query: AdminListItemSectionPinsQueryDto
-  ): Promise<ItemSectionPinsPage> {
-    return this.nats.send<ItemSectionPinsPage>(SECTION_PATTERNS.listPins, {
-      userId: admin.adminId,
-      supermarketId: id,
-      itemId: query.itemId,
-      sectionId: query.sectionId,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
-  }
-
-  /**
-   * Replace one product's pins in this chain. An empty list removes them. A
-   * section of another chain answers 409 `section_of_another_chain`.
-   */
-  @Put(':id/item-sections')
-  @ApiContractResponse(SECTION_PATTERNS.setPins)
-  @ApiProblemResponses({ body: true, conflict: true })
-  setItemSections(
-    @ActingAdmin() admin: CurrentAdmin,
-    @UuidParam('id') id: string,
-    @Body() dto: SetItemSectionPinsDto
-  ): Promise<ItemSectionPinsView> {
-    return this.nats.send<ItemSectionPinsView>(SECTION_PATTERNS.setPins, {
-      ...adminCredential(admin),
-      supermarketId: id,
-      itemId: dto.itemId,
-      sectionIds: dto.sectionIds,
-    });
   }
 }
 
@@ -448,9 +387,10 @@ export class AdminCatalogLocationsController {
   }
 
   /**
-   * This shop's sections, in its order, and whether the list is its own or
-   * its chain's default (plan 0167, section 4). The same answer as the public
-   * `GET /v1/catalog/locations/:id/sections`, behind the operator's guard.
+   * The sections of this shop, in its order (plan 0200). None when the shop
+   * has none of its own: nothing is read from its chain. The same answer as
+   * the public `GET /v1/catalog/locations/:id/sections`, behind the operator's
+   * guard.
    */
   @Get(':id/sections')
   @ApiContractResponse(SECTION_PATTERNS.forLocation)
@@ -463,13 +403,40 @@ export class AdminCatalogLocationsController {
   }
 
   /**
-   * Replace this shop's ordered section list, whole. An empty array deletes
-   * the shop's own list and returns it to its chain's default. A section of
-   * another chain answers 409 `section_of_another_chain`.
+   * Create a section of this shop, after its last one (plan 0200, section 4):
+   * an aisle as this shop has it, and the categories it holds.
+   *
+   * A slug the shop already holds answers 409 `section_slug_taken` and names
+   * the holder in `details.sectionId`. An unknown category answers 404
+   * `category_not_found`, and an unknown shop the ordinary 404.
+   */
+  @Post(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true, notFound: true })
+  createSection(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: CreateShopSectionDto
+  ): Promise<ShopSectionView> {
+    return this.nats.send<ShopSectionView>(SECTION_PATTERNS.create, {
+      ...adminCredential(admin),
+      supermarketLocationId: id,
+      ...dto,
+    });
+  }
+
+  /**
+   * Set the order of this shop's own sections. The ones named come first, in
+   * the order given, and the ones not named follow in the order they had. It
+   * creates and deletes nothing. A section of another shop answers 409
+   * `section_of_another_shop`, and an id that names no section 404
+   * `section_not_found`.
    */
   @Put(':id/sections')
   @ApiContractResponse(SECTION_PATTERNS.setForLocation)
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, notFound: true })
   setSections(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -486,9 +453,10 @@ export class AdminCatalogLocationsController {
   }
 
   /**
-   * Where shoppers will find these products in this shop: the rule of plan
-   * 0167, section 3, for the back office's preview, naming the step that
-   * answered for each. The subject the basket read at a shop calls too.
+   * Where shoppers will find these products in this shop, for the back
+   * office's preview: the sections of this shop that cover each product, and
+   * `COVERED` or `NONE` beside them. No product is pinned (plan 0200). The
+   * subject the basket read at a shop calls too.
    */
   @Get(':id/item-sections')
   @ApiContractResponse(SECTION_PATTERNS.itemsAtLocation)
@@ -509,9 +477,9 @@ export class AdminCatalogLocationsController {
 }
 
 /**
- * One shop section, read, edited and deleted at its own id (plan 0167,
- * section 4). Created and listed under its chain, at
- * `/supermarkets/:id/sections`, the way locations are.
+ * One section of a shop, read, edited and deleted at its own id (plan 0167,
+ * section 4). Created and listed under its shop, at
+ * `/locations/:id/sections` (plan 0200).
  */
 @ApiTags('admin-catalog')
 @ApiBearerAuth('access-token')
@@ -526,30 +494,33 @@ export class AdminCatalogSectionsController {
   get(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string
-  ): Promise<SupermarketSectionView> {
-    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.get, {
+  ): Promise<ShopSectionView> {
+    return this.nats.send<ShopSectionView>(SECTION_PATTERNS.get, {
       ...adminCredential(admin),
       sectionId: id,
     });
   }
 
-  /** Rename, reorder, or replace the categories. The slug is not editable. */
+  /**
+   * Rename, move, or replace the categories. `position` moves the section to
+   * that place in its shop. The slug is not editable.
+   */
   @Patch(':id')
   @ApiContractResponse(SECTION_PATTERNS.update)
   @ApiProblemResponses({ body: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
-    @Body() dto: UpdateSupermarketSectionDto
-  ): Promise<SupermarketSectionView> {
-    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.update, {
+    @Body() dto: UpdateShopSectionDto
+  ): Promise<ShopSectionView> {
+    return this.nats.send<ShopSectionView>(SECTION_PATTERNS.update, {
       ...adminCredential(admin),
       sectionId: id,
       ...dto,
     });
   }
 
-  /** Cascades out of every shop's list and every pin (plan 0167, section 2). */
+  /** Its categories go with it, and the sections after it move up by one. */
   @Delete(':id')
   @ApiContractResponse(SECTION_PATTERNS.delete)
   remove(
@@ -812,6 +783,60 @@ export class AdminCatalogItemsController {
       itemId: id,
       ean,
     });
+  }
+
+  /**
+   * Every chain photo saved for one product (plan 0198, section 3.2).
+   *
+   * The links of chains that are off are answered too, each with `enabled`,
+   * so a person can see what is saved before a chain is turned on. It is the
+   * only route that answers the address of a chain that is off, and it is
+   * here, behind the operator guard, for that reason.
+   */
+  @Get(':id/linked-images')
+  @ApiContractResponse(ITEM_LINKED_IMAGE_PATTERNS.listByItem)
+  listLinkedImages(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<ItemLinkedImagesView> {
+    return this.nats.send<ItemLinkedImagesView>(
+      ITEM_LINKED_IMAGE_PATTERNS.listByItem,
+      { ...adminCredential(admin), itemId: id }
+    );
+  }
+}
+
+/**
+ * The one request that stops every chain photo (plan 0198, section 4).
+ *
+ * Its own path and not a field of the chain routes, because the stop is one
+ * step and names no chain. Turning chains back on is one request for each
+ * chain, on `PUT …/supermarkets/:id/linked-images`.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/linked-images', version: '1' })
+export class AdminCatalogLinkedImagesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Turn every chain off and take every chain photo out of every product, in
+   * one transaction. No body. Answers how many chains and products changed.
+   * The saved links stay.
+   */
+  @Post('disable-all')
+  @ApiContractResponse(ITEM_LINKED_IMAGE_PATTERNS.disableAll, {
+    status: HttpStatus.CREATED,
+  })
+  disableAll(
+    @ActingAdmin() admin: CurrentAdmin
+  ): Promise<DisableAllLinkedImagesResult> {
+    return this.nats.send<DisableAllLinkedImagesResult>(
+      ITEM_LINKED_IMAGE_PATTERNS.disableAll,
+      { ...adminCredential(admin) }
+    );
   }
 }
 

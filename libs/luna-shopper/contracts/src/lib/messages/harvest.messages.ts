@@ -13,6 +13,8 @@ import type {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestRunWrites,
+  HarvestScheduleBlock,
+  HarvestScheduleOutcome,
   HarvestWarningCode,
   ItemSourceMatch,
   PlaceLinkField,
@@ -107,6 +109,24 @@ export const HARVEST_PRESET_PATTERNS = {
   create: 'harvestPreset.create',
   update: 'harvestPreset.update',
   delete: 'harvestPreset.delete',
+} as const;
+
+/**
+ * A preset that starts by itself (plan 0206): a time of day, the days of the
+ * week and a timezone, polled by a timer in the harvester.
+ *
+ * A schedule is created and switched on only with
+ * `acknowledgedAutomaticFetch: true`, which says the person was told that the
+ * chain is then fetched with nobody asking. The preset of a schedule never
+ * changes: delete the schedule and create another.
+ */
+export const HARVEST_SCHEDULE_PATTERNS = {
+  list: 'harvestSchedule.list',
+  get: 'harvestSchedule.get',
+  create: 'harvestSchedule.create',
+  update: 'harvestSchedule.update',
+  setEnabled: 'harvestSchedule.setEnabled',
+  delete: 'harvestSchedule.delete',
 } as const;
 
 export const DISCOVERED_PLACE_PATTERNS = {
@@ -662,6 +682,40 @@ export interface HarvestRunView {
    * preset.
    */
   presetId: string | null;
+  /**
+   * The schedule that started this run (plan 0206, section 9), null for a run
+   * a person or the postal code queue started. A deleted schedule leaves it.
+   */
+  scheduleId: string | null;
+  /**
+   * Whether the run was stopped by the harvester going down and not by a
+   * person (plan 0206, section 7): `ABORTED` with no `abortRequestedAt`, or
+   * `STALE`. A scheduled run that was interrupted is started again one time.
+   */
+  interrupted: boolean;
+  /**
+   * About how long a run like this one takes, from earlier runs and never from
+   * this one (plan 0206, section 8). The view states no time remaining:
+   * `startedAt` and `estimate.seconds` are both here, and the client subtracts.
+   *
+   * Absent only on the dashboard's runs, which do not compute it.
+   */
+  estimate?: RunEstimate;
+}
+
+/**
+ * About how long a run takes (plan 0206, section 8).
+ *
+ * The median of the newest five runs that completed and were not reverted,
+ * from the first of these that has one: runs of the same preset, runs of the
+ * same source and mode, or a constant per adapter.
+ */
+export interface RunEstimate {
+  seconds: number;
+  /** Where the number came from. */
+  basis: 'PRESET' | 'SOURCE' | 'DEFAULT';
+  /** How many finished runs it was taken from, 0 for DEFAULT. */
+  samples: number;
 }
 
 /**
@@ -828,6 +882,12 @@ export interface SourceCatalogEntryView {
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
+  /**
+   * The address of the photo the chain prints for the product, verbatim, or
+   * null (plan 0198). It is on the chain's own host. Shown in the queue so a
+   * person can see what a link would be.
+   */
+  imageUrl: string | null;
   /**
    * The last observation's `extra` bag: a leaflet's page and raw text, a
    * chain's loyalty block, whatever the producer knew and the import does not
@@ -1177,6 +1237,10 @@ export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
   reverted?: boolean;
   /** The runs started from this preset (plan 0120, section 7). */
   presetId?: string;
+  /** The runs started by this schedule (plan 0206, section 9). */
+  scheduleId?: string;
+  /** The runs of one trigger, such as only the scheduled ones. */
+  trigger?: HarvestRunTrigger;
 }
 
 // --- Run presets (plan 0120) -----------------------------------------------
@@ -1219,6 +1283,11 @@ export interface HarvestRunPresetView {
   updatedAt: string;
   /** The latest run started from this preset, null when none was. */
   lastRun: HarvestRunPresetLastRun | null;
+  /**
+   * About how long a run of this preset takes (plan 0206, section 8). Always
+   * present on what the harvester answers.
+   */
+  estimate?: RunEstimate;
 }
 
 /** A chain's presets, or every chain's, ordered by name. */
@@ -1250,6 +1319,94 @@ export interface UpdateHarvestRunPresetRequest extends AdminCredential {
   presetId: string;
   name?: string;
   input?: HarvestRunPresetInput;
+}
+
+// --- Schedules (plan 0206) ---------------------------------------------------
+
+/** The last run a schedule started, for its row. */
+export interface HarvestScheduleLastRun {
+  id: string;
+  status: HarvestRunStatus;
+  requestedAt: string;
+}
+
+/** One schedule (plan 0206, section 4.3). */
+export interface HarvestScheduleView {
+  id: string;
+  presetId: string;
+  presetName: string;
+  supermarketId: string;
+  /** `HH:mm`, 24 hour, in {@link timezone}. */
+  timeOfDay: string;
+  /** ISO numbers, 1 is Monday and 7 is Sunday. */
+  daysOfWeek: number[];
+  /** An IANA name. */
+  timezone: string;
+  enabled: boolean;
+  /** The next slot, null while the schedule is off. */
+  nextRunAt: string | null;
+  /**
+   * Why no run can start at `nextRunAt` as things are now, or null (section
+   * 6). Computed on read, so the back office can show it before the slot.
+   */
+  blockedBy: HarvestScheduleBlock | null;
+  /** The slot the last fire was for. */
+  lastSlotAt: string | null;
+  lastOutcome: HarvestScheduleOutcome | null;
+  lastOutcomeAt: string | null;
+  /** The refusal, or the run that was in the way. */
+  lastOutcomeNote: string | null;
+  lastRun: HarvestScheduleLastRun | null;
+  /** About how long a run of its preset takes. */
+  estimate: RunEstimate;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Ordered by `nextRunAt`, with the schedules that are off last. */
+export interface ListHarvestSchedulesRequest
+  extends PageQuery, AdminCredential {
+  supermarketId?: string;
+  presetId?: string;
+}
+
+export interface HarvestScheduleIdRequest extends AdminCredential {
+  scheduleId: string;
+}
+
+/**
+ * Start a preset by itself at a time of day. Refused unless
+ * `acknowledgedAutomaticFetch` is true, which says the warning was shown.
+ *
+ * A schedule can be created while the source row is off, while the scheduler
+ * is off, and while the preset would be refused: each of those is a state that
+ * changes, and `blockedBy` and `lastOutcome` report it.
+ */
+export interface CreateHarvestScheduleRequest extends AdminCredential {
+  presetId: string;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  /** Absent is `Europe/Madrid`. */
+  timezone?: string;
+  acknowledgedAutomaticFetch: boolean;
+}
+
+/** Change when a schedule fires. Its preset never changes. */
+export interface UpdateHarvestScheduleRequest extends AdminCredential {
+  scheduleId: string;
+  timeOfDay?: string;
+  daysOfWeek?: number[];
+  timezone?: string;
+}
+
+/**
+ * Switch a schedule on or off. Switching on needs
+ * `acknowledgedAutomaticFetch: true`, as a create does.
+ */
+export interface SetHarvestScheduleEnabledRequest extends AdminCredential {
+  scheduleId: string;
+  enabled: boolean;
+  acknowledgedAutomaticFetch?: boolean;
 }
 
 // --- Discovered place requests ---------------------------------------------
@@ -1961,6 +2118,7 @@ export const BRAND_SPELLINGS_MAX = 200;
 
 export type HarvestRunPage = Paginated<HarvestRunView>;
 export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
+export type HarvestSchedulePage = Paginated<HarvestScheduleView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceEntryPage = Paginated<ItemSourceEntryView>;

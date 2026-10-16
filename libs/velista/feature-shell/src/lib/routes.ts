@@ -13,9 +13,11 @@ import {
   BasketViewStore,
   ListViewStore,
   TripStore,
+  type ProductPickKind,
 } from '@portfolio/velista/data-access';
 import {
   CATALOG_PATHS,
+  CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
   RENDERS_WHILE_CONNECTING,
@@ -29,6 +31,7 @@ import {
   authenticatedGuard,
   guestOnlyGuard,
 } from './auth-guards';
+import { catalogPickLeaveGuard } from './catalog-pick-guards';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -113,6 +116,80 @@ function sheet(route: Route): Route {
     path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
     canDeactivate: [sheetFallGuard],
   };
+}
+
+/**
+ * The catalog opened to choose for a line, and its two pickers: one product
+ * (velista `0140`, section 3; `0146`, section 2) under `product`, or the whole set
+ * of the line (`0146`, section 3) under `products`, the path the products page of
+ * the line had.
+ *
+ * **A page and not a sheet**, so it is addressed under the line and never under
+ * the `sheet` marker: a page cannot take one (velista `0140`, review point 1). The
+ * path is the one velista `0146` gives the same page.
+ *
+ * It is the catalog tab's own component, told by its data what it chooses. The
+ * supermarket and the category pickers are declared again under it rather than
+ * under the tab, so each comes back to the page that opened it with the line and
+ * the mode intact (review point 2): a picker finds its opener by its own route.
+ * None of the four draws the bar of tabs, which is one of the four differences
+ * from the tab.
+ *
+ * The guards of the line's pages, because the page reads catalog prices, which
+ * need an account, and names a line of a list. Which reader may change that line
+ * is the caller's to decide, and the server's to refuse.
+ *
+ * The page that chooses a set asks before it is left with a change in it
+ * (`0146`, section 4), which the back of the browser reaches only through a
+ * guard. Its pickers carry none: going back from one to the page is not leaving.
+ */
+function productPickRoutes(kind: ProductPickKind): Route[] {
+  const line = 'zones/:zoneId/lists/:listId/lines/:lineId';
+  const page = `${line}/${
+    kind === 'one' ? CATALOG_PATHS.pickOne : CATALOG_PATHS.pickSet
+  }`;
+  const data = { [CATALOG_PICK_DATA]: kind, [NAV_CHROME]: NO_NAV_CHROME };
+  const guards: Pick<Route, 'canMatch' | 'canActivate'> = {
+    canMatch: [zoneIdGuard, listIdGuard],
+    canActivate: [authenticatedGuard, setupGuard],
+  };
+  return [
+    {
+      path: `${page}/${CATALOG_PATHS.categoryPicker}/:parentSlug`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CategoryChildrenPage
+        ),
+    },
+    {
+      path: `${page}/${CATALOG_PATHS.categoryPicker}`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CategoriesPage
+        ),
+    },
+    {
+      path: `${page}/${CATALOG_PATHS.supermarketPicker}`,
+      ...guards,
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.CatalogSupermarketPage
+        ),
+    },
+    {
+      path: page,
+      ...guards,
+      ...(kind === 'set' ? { canDeactivate: [catalogPickLeaveGuard] } : {}),
+      data,
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then((m) => m.CatalogPage),
+    },
+  ];
 }
 
 /**
@@ -253,13 +330,22 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.SettleSheet
         ),
     }),
-    // Change a row's product for another of its group. The page offers it only
-    // to a reader who may write every list the row stands for.
+    // Take another product for one list of a row, or for every list the reader
+    // may change (velista `0140`, section 2). The settle sheet opens both, and the
+    // cheaper mark of a row the second. Which lines it may change is the sheet's
+    // to decide, from the reader and the row, so neither carries a guard.
     sheet({
-      path: 'rows/:rowKey/swap',
+      path: 'rows/:rowKey/change/:lineId',
       loadComponent: () =>
         import('@portfolio/velista/feature-shopping-lists').then(
-          (m) => m.SwapSheet
+          (m) => m.ChangeSheet
+        ),
+    }),
+    sheet({
+      path: 'rows/:rowKey/change',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.ChangeSheet
         ),
     }),
     // There were three sheets about one line here and now there is one.
@@ -369,6 +455,19 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
       loadComponent: () =>
         import('@portfolio/velista/feature-shopping-lists').then(
           (m) => m.FilterSheet
+        ),
+    }),
+    // The first buy of a trip asks where the person is (velista `0141`). The
+    // shop picker of the filter in its asking mode, which `data.shopAsk` turns
+    // on: "No shop", "Don't ask again", and a way out to the basket rather than
+    // to the filter. The buy that opened it waits in the page's `HeldBuy`; a cold
+    // load of this URL has none, and an answer here only chooses the shop.
+    sheet({
+      path: 'shop',
+      data: { shopAsk: true },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.ShopPickerSheet
         ),
     }),
   ];
@@ -628,7 +727,19 @@ export const AppShellRoutes: Route[] = [
             // offered by the third tab and by the history, which are the two screens
             // that now have a control for it. A sheet nothing can open is a URL that
             // draws a form over the wrong page.
-            children: [...entrySheetRoutes('home')],
+            children: [
+              ...entrySheetRoutes('home'),
+              // A sign in link opened while another account is on this phone
+              // (velista `0148`). The reset page comes here with the token held in
+              // memory, never in this URL, and the sheet asks before anything is sent.
+              sheet({
+                path: 'recovery-link',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-auth').then(
+                    (m) => m.RecoveryLinkSheet
+                  ),
+              }),
+            ],
           },
           // The setup a new account walks through (velista `0098`). `setupGuard`, on
           // every signed in page, sends a fresh account here once per document.
@@ -700,6 +811,30 @@ export const AppShellRoutes: Route[] = [
               ),
           },
           {
+            // Asking for a reset link (velista `0148`). The guard `auth/login` carries,
+            // because this is the way out of that page: somebody signed in changes
+            // their password from the account page, which asks with their own address.
+            path: 'auth/forgot-password',
+            canActivate: [anonymousOnlyGuard],
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ForgotPasswordPage
+              ),
+          },
+          {
+            // Public, as `auth/verify` is: the link in a reset mail is opened wherever
+            // the mail app is. Both links of the mail open it (backend `0210`), and the
+            // page decides who may do what from the server's answer, not a guard
+            // (velista `0148`).
+            path: 'auth/reset-password',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ResetPasswordPage
+              ),
+          },
+          {
             // Public, and inert until the gateway redirects here with the pair in the URL
             // fragment instead of answering JSON (section 5.6).
             path: 'auth/callback',
@@ -707,6 +842,33 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.AuthCallbackPage
+              ),
+          },
+          {
+            // The handoff of a support session (velista `0133`, backend `0194`): the
+            // back office opens it with a code in the fragment. Public, and it has to
+            // be: no session is needed to trade the code, and the operator is usually
+            // signed in as themselves, which no guard here may act on.
+            path: 'auth/impersonate',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.ImpersonatePage
+              ),
+          },
+          {
+            // Where a tab lands when its support session is over (velista `0133`).
+            // Public, with no bar and no way in. `WORKS_WITHOUT_BACKEND`, because its
+            // one sentence needs no answer from anybody, and a session ended by the
+            // server going away must still say that it ended.
+            path: 'auth/support-ended',
+            data: {
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [WORKS_WITHOUT_BACKEND]: true,
+            },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.SupportEndedPage
               ),
           },
           // The group and its people (plan 0010). Both carry `zoneIdGuard`, which is
@@ -749,6 +911,29 @@ export const AppShellRoutes: Route[] = [
            * panel over the list is a sheet and is addressed as one, so the two no
            * longer have to be told apart by a word.
            */
+          /**
+           * The pages under a line (velista `0135`, section 11): its buy history
+           * here, and the catalog that chooses its products after it (velista
+           * `0146`).
+           *
+           * **Pages of their own and not children of the line page**, for the
+           * reason the line page is not a child of the list page: a child is drawn
+           * in its parent's outlet, over the parent, which is what a sheet does.
+           * Declared before the line page as the specific before the general. The
+           * line page's children all begin with `sheet`, so neither word can be
+           * taken by one of them.
+           */
+          {
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId/history',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.LineHistoryPage
+              ),
+          },
+          ...productPickRoutes('set'),
+          ...productPickRoutes('one'),
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',
             canMatch: [zoneIdGuard, listIdGuard],
@@ -758,6 +943,49 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.LinePage
               ),
             children: [
+              sheet({
+                // The three dots (velista `0135`, section 6): the rare acts on a
+                // line. It decides which rows to draw from the reader's own
+                // permissions, so it carries no guard.
+                path: 'menu',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineMenuSheet
+                  ),
+              }),
+              sheet({
+                path: 'name',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.RenameLineSheet
+                  ),
+              }),
+              sheet({
+                // What the info button beside the products says (velista `0137`).
+                path: 'about-products',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineProductsInfoSheet
+                  ),
+              }),
+              sheet({
+                // Where the line is bought: one supermarket, or any (section 3.2).
+                path: 'supermarket',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.LineSupermarketSheet
+                  ),
+              }),
+              sheet({
+                // The same sheet the list opens, over this page. It closes onto
+                // the page it covers, which the flag tells it.
+                path: 'comments',
+                data: { overLinePage: true },
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.CommentsSheet
+                  ),
+              }),
               sheet({
                 // The one thing on either screen that discards the history, so it is
                 // confirmed here as well as from the list (section 5.3).
@@ -1112,21 +1340,12 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
-             * The catalog's supermarket picker (velista `0124`): the shop picker as a
-             * page of its own, where a chain is enough and a shop is optional. A
-             * sibling of the tab like the category pages, for their reason: the tab
-             * renders its children into its sheets' outlet.
+             * The catalog's supermarket picker (velista `0124`): a page of its own,
+             * where a chain is the whole choice and no shop is asked for. A sibling
+             * of the tab like the category pages, for their reason: the tab renders
+             * its children into its sheets' outlet.
              */
             path: 'catalog/supermarket',
-            canActivate: [authenticatedGuard, setupGuard],
-            loadComponent: () =>
-              import('@portfolio/velista/feature-catalog').then(
-                (m) => m.CatalogSupermarketPage
-              ),
-          },
-          {
-            /** One chain's shops (velista `0124`), by the chain's id. */
-            path: 'catalog/supermarket/:supermarketId',
             canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-catalog').then(

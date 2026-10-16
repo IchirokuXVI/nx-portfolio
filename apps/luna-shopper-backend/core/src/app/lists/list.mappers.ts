@@ -3,6 +3,7 @@ import {
   type CommentView,
   type LineClaim,
   type LineSettlementSummary,
+  type LineSettlementHistoryView,
   type LineSettlementView,
   type LineView,
   type ListCounts,
@@ -117,6 +118,13 @@ export function toLineView(
     // answer for a hand made set rather than a stand in for an unread value.
     productGroupId: line.productGroupId,
     groupItemIds: [...items.groupItemIds],
+    // Null and never absent (plan 0199, section 1). The `??` is for a line that
+    // was built by hand and not read from the table, which has no such property.
+    favoriteItemId: line.favoriteItemId ?? null,
+    preferredSupermarketId: line.preferredSupermarketId ?? null,
+    // True and never absent (plan 0207, section 1.5), which is what the column
+    // defaults to. The `??` is for a line that was built by hand.
+    named: line.named ?? true,
     position: line.position,
     approvalStatus: line.approvalStatus,
     createdByUserId: line.createdByUserId,
@@ -180,6 +188,22 @@ export function toLineSettlementView(
     pricePaidCurrency: settlement.pricePaidCurrency,
     priceScopeId: settlement.priceScopeId,
     supermarketLocationId: settlement.supermarketLocationId,
+  };
+}
+
+/**
+ * A settlement as a history serves it (plan 0202, section 4): the view above,
+ * with what the product was called when it was bought.
+ *
+ * Its own mapper because the view above is also half of the `line.settled`
+ * event, which that plan does not change.
+ */
+export function toLineSettlementHistoryView(
+  settlement: LineSettlement
+): LineSettlementHistoryView {
+  return {
+    ...toLineSettlementView(settlement),
+    itemSnapshot: settlement.itemSnapshot ?? null,
   };
 }
 

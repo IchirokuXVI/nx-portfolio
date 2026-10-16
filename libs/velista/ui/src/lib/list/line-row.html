@@ -1,14 +1,11 @@
 <!--
   **The row is a button, and its action is opening the detail sheet.**
 
-  It was `role="checkbox"` with `aria-checked`, and section 1.1 takes that back in full:
-  there is no checked state left to report, because there is no tick. What a tap does
-  now is open what the app knows about the thing, which is a button's job.
-
-  Its accessible name is the content plus the quantity, so "Sourdough loaf, 2" is what
-  gets read. The indicators are **description, not name**: "bought" and "Ana is buying
-  this" go in `aria-describedby`, so a screen reader reads the thing and its number
-  first and the commentary on demand (section 7).
+  Its accessible name is the name, the product when the line is named, the price and
+  the quantity, so "Leche, Leche semidesnatada, Hacendado · 1 L, 0,92 €, 6" is what
+  gets read. The status words are **description, not name**: they go in
+  `aria-describedby`, so a screen reader reads the thing and its number first and
+  the commentary on demand.
 
   In reorder mode the role is **dropped** rather than kept and dishonoured: the row is
   not a button while it is a thing being dragged, and claiming otherwise would announce
@@ -34,7 +31,7 @@
       The grip is a real button with real keys on it. Up and down move the row and each
       step is announced through the page's live region, because a grip that only
       answered a pointer would put the manual order out of reach of anybody without a
-      working one (section 7).
+      working one.
     -->
     <span class="grip-wrap">
       <button
@@ -50,12 +47,8 @@
       </button>
 
       <!--
-        The grip proper, and what a pointer takes hold of.
-
-        `touch-action: none` is what makes the drag reach the list at all: without it
-        the browser reads the downward movement as a scroll of the page. Still
-        `aria-hidden` and still unfocusable, because the two buttons around it are the
-        accessible way to do the same thing and they are already labelled.
+        The grip proper, and what a pointer takes hold of. `touch-action: none` is what
+        makes the drag reach the list at all.
       -->
       <span
         (pointerdown)="startDrag($event)"
@@ -79,89 +72,165 @@
     </span>
   }
 
+  <!--
+    The picture (velista 0145, sections 3 and 5). A line with no product draws a
+    dashed square with a plus, and for a reader who may change the line it is the
+    full size target that chooses one. Not in reorder mode, where a second control in
+    the row would fight the drag.
+  -->
+  @if (line().product; as product) {
+    @switch (product.kind) {
+      @case ('shown') {
+        <lib-product-picture [imageUrl]="product.imageUrl" class="picture" />
+      }
+      @case ('loading') {
+        <span aria-hidden="true" class="picture bone"></span>
+      }
+      @case ('none') {
+        @if (canChoose()) {
+          <button
+            (click)="onChoose($event)"
+            (keydown)="$event.stopPropagation()"
+            (pointerdown)="$event.stopPropagation()"
+            [attr.aria-label]="
+              'list.row.chooseFor' | rokuT: { name: line().content }
+            "
+            class="picture choose"
+            type="button"
+          >
+            <lib-plus-icon class="choose-glyph" />
+          </button>
+        } @else if (mayChoose()) {
+          <!-- Reorder mode: the same square, not a button while the row is dragged. -->
+          <span aria-hidden="true" class="picture choose">
+            <lib-plus-icon class="choose-glyph" />
+          </span>
+        } @else {
+          <lib-product-picture class="picture" />
+        }
+      }
+      @case ('unread') {
+        <lib-product-picture class="picture" />
+      }
+    }
+  }
+
   <span class="body">
     <!--
-      The first match of a search painted, as the basket row paints it (velista 0082,
-      section 6). Presentational: the row's accessible name is composed from the
-      content and is unchanged. No whitespace between the three pieces, because there
-      is none in the string.
+      Line 1: the name, then the price of one. The name is cut, the price never is.
+      The first match of a search is painted on the name (velista 0082, section 6).
     -->
-    <span class="content">
-      @if (highlighted(); as parts) {
-        <span>{{ parts.before }}</span
-        ><mark class="match">{{ parts.match }}</mark
-        ><span>{{ parts.after }}</span>
-      } @else {
-        {{ line().content }}
+    <span class="line-1">
+      <span [class.own]="line().named === true" class="content">
+        @if (highlighted(); as parts) {
+          <span>{{ parts.before }}</span
+          ><mark class="match">{{ parts.match }}</mark
+          ><span>{{ parts.after }}</span>
+        } @else {
+          {{ line().content }}
+        }
+      </span>
+
+      @if (shown(); as product) {
+        @if (product.price !== null) {
+          <span class="price">{{ product.price }}</span>
+        } @else {
+          <span class="price none">{{ 'list.row.noPrice' | rokuT }}</span>
+        }
       }
     </span>
 
     <!--
-      The format and the brand of the line's one product. A list can hold two
-      lines of one name that differ in exactly these, and this is what tells them
-      apart. Absent for free text, for a line of several products, and for a
-      product the catalog knows neither fact of, so an ordinary row is unchanged.
+      Line 2: the product, then one status word. A row has no third line: the words
+      that stood under the name are one word at the end of this one now (section 4).
     -->
-    @if (line().detail; as detail) {
-      <span class="detail">{{ detail }}</span>
-    }
-
-    <!--
-      The three indicators (section 3.3). A row can carry more than one at once, which
-      is why this is a loop over a list and not a switch: a loaf that was missing last
-      week, is wanted again, and is in somebody's basket right now shows two.
-
-      Each one is a word as well as a colour and a glyph. Plan 0002 section 11: colour
-      is never the only carrier of meaning, and these are read in a bright shop by
-      somebody walking.
-    -->
-    @if (line().indicators.length > 0) {
-      <span [id]="'ind-' + line().id" class="indicators">
-        @for (indicator of line().indicators; track indicator) {
-          <span [class]="'indicator indicator-' + indicator">
-            @switch (indicator) {
-              @case ('bought') {
-                <lib-check-icon aria-hidden="true" class="indicator-glyph" />
-                {{ 'line.indicator.bought' | rokuT }}
-              }
-              @case ('notAvailable') {
-                <lib-x-circle-icon aria-hidden="true" class="indicator-glyph" />
-                {{ 'line.indicator.notAvailable' | rokuT }}
-              }
-              @case ('claimed') {
-                <!--
-                  A live dot rather than a glyph, because this one is presence rather
-                  than state: it appears and disappears while the page is open, and it
-                  must never read as the line having been dealt with (section 3.3).
-                -->
-                <span aria-hidden="true" class="indicator-dot"></span>
-                @if (line().claimedBy; as who) {
-                  {{ 'line.indicator.claimedBy' | rokuT: { name: who } }}
-                } @else {
-                  {{ 'line.indicator.claimed' | rokuT }}
-                }
-              }
+    <span class="line-2">
+      @switch (line().product?.kind) {
+        @case ('shown') {
+          @if (shown(); as product) {
+            @if (product.favorite) {
+              <span
+                [attr.aria-label]="'list.row.favorite' | rokuT"
+                class="favorite"
+                role="img"
+              >
+                <lib-star-filled-icon class="favorite-glyph" />
+              </span>
             }
-          </span>
+            @if (line().named === true && product.name !== null) {
+              <span class="product-name">{{ product.name }}</span>
+            }
+            @if (product.brandSize !== null) {
+              <span
+                [class.alone]="line().named !== true || product.name === null"
+                class="brand-size"
+                >{{ product.brandSize }}</span
+              >
+            }
+            @if (product.others > 0) {
+              <span
+                [attr.aria-label]="
+                  'list.row.more' | rokuT: { count: product.others }
+                "
+                class="more"
+                role="img"
+                >+{{ product.others }}</span
+              >
+            }
+          }
         }
-      </span>
-    }
+        @case ('loading') {
+          <span aria-hidden="true" class="bone line-bone"></span>
+        }
+        @case ('none') {
+          @if (canChoose()) {
+            <button
+              (click)="onChoose($event)"
+              (keydown)="$event.stopPropagation()"
+              (pointerdown)="$event.stopPropagation()"
+              class="ask"
+              type="button"
+            >
+              {{ 'list.row.choose' | rokuT }}
+            </button>
+          } @else if (!mayChoose()) {
+            <span class="no-product">{{ 'list.row.noProduct' | rokuT }}</span>
+          }
+        }
+        @case ('unread') {
+          <span class="no-product"></span>
+        }
+        @default {
+          @if (line().detail; as detail) {
+            <span class="brand-size alone">{{ detail }}</span>
+          }
+        }
+      }
 
-    @if (line().captionKey !== null) {
-      <span [id]="'cap-' + line().id" class="caption">
-        {{ line().captionKey! | rokuT }}
+      @if (status(); as word) {
+        <span
+          [class]="'status status-' + word"
+          aria-hidden="true"
+          data-status
+          >{{ statusKey(word) | rokuT: statusArgs() }}</span
+        >
+      }
+    </span>
+
+    <!-- Every word that applies, for a screen reader, in the order of section 4. -->
+    @if (statuses().length > 0) {
+      <span [id]="'st-' + line().id" class="visually-hidden">
+        @for (word of statuses(); track word; let last = $last) {
+          {{ statusKey(word) | rokuT: statusArgs() }}{{ last ? '' : ', ' }}
+        }
       </span>
     }
   </span>
 
   <!--
     Who is editing this line right now: their initial, and the word, subdued. Advisory
-    and nothing more (plan 0022, section 3.4): the row stays tappable, the sheet still
-    opens over it, and a simultaneous edit resolves exactly as it did before.
-
-    `aria-hidden`, and deliberately: the row's accessible name is its content and its
-    quantity, and a name that grew "Ana is editing" would be read out every time focus
-    touched the row and would go stale between two reads of it.
+    and nothing more (plan 0022, section 3.4). `aria-hidden`, because a name that grew
+    "Ana is editing" would be read out every time focus touched the row.
   -->
   @if (line().editor !== null) {
     <span aria-hidden="true" class="editor">
@@ -178,12 +247,8 @@
   }
 
   <!--
-    **The quantity, on every row, zero included.** It stopped being an annotation above
-    one and became the thing the line says, and a control that is only sometimes there
-    is not a control anybody learns to reach for (section 3.2).
-
-    Absent in reorder mode, where the row is a thing being dragged and a second gesture
-    living inside it would fight the first for the same finger.
+    **The quantity, on every row, zero included** (velista 0043, section 3.2). Absent
+    in reorder mode, where a second gesture inside the row would fight the drag.
   -->
   @if (!reordering()) {
     <lib-quantity-reel

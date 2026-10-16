@@ -30,7 +30,6 @@ import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
-  SettlementOutcome,
   type AddLineResult,
   type CommentAudioView,
   type CommentPage,
@@ -70,7 +69,6 @@ import type { CurrentUser } from '../auth/jwt.strategy';
 import {
   pricedItemId,
   SettlePriceService,
-  shopPricedItemId,
 } from '../baskets/settle-price.service';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
@@ -437,6 +435,7 @@ export class ListsController {
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       productGroupId: dto.productGroupId,
+      named: dto.named,
     });
   }
 
@@ -509,7 +508,7 @@ export class LinesController {
    */
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
-  @ApiProblemResponses({ body: true, lineMerge: true })
+  @ApiProblemResponses({ body: true, lineMerge: true, staleQuantity: true })
   update(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -520,8 +519,16 @@ export class LinesController {
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
+      // The quantity the client saw (plan 0209), checked in core under the
+      // lock of the write.
+      from: dto.from,
       itemIds: dto.itemIds,
       adoptItemIds: dto.adoptItemIds,
+      // Passed as they arrived (plan 0199): null clears, and an absent key is
+      // `undefined` here and is dropped on the way to core.
+      favoriteItemId: dto.favoriteItemId,
+      preferredSupermarketId: dto.preferredSupermarketId,
+      named: dto.named,
       confirmMerge: dto.confirmMerge,
     });
   }
@@ -603,43 +610,30 @@ export class LinesController {
     @UuidParam('id') id: string,
     @Body() dto: SettleLineDto
   ): Promise<LineSettlementResult> {
-    // What the screen said one of it costs (plan 0143). Here the caller is the
-    // account the price is read as, their own default profile supplies the
-    // scopes, and `servedLocations` is true: they are the caller's own shops.
-    // With no `itemId`, core says which product the line records and that is
-    // the product priced (plan 0151, section 3).
+    // What one of it costs and what it is called (plan 0143; plan 0202). Here
+    // the caller is the account the price is read as, their own default profile
+    // supplies the scopes, and `servedLocations` is true: they are the caller's
+    // own shops. With no `itemId`, core says which product the line records and
+    // that is the product priced and named (plan 0151, section 3). A line with
+    // several products and none named records no product, so nothing is read.
     //
-    // A shop with no scope is the zone list's "I bought this" (velista `0114`):
-    // the gateway works the scope out from the shop and records neither when it
-    // cannot, so naming a shop never fails a purchase.
-    const paid = dto.priceScopeId
-      ? await this.prices.read({
-          userId: user.userId,
-          profileId: undefined,
-          itemId: pricedItemId(
-            dto.itemId,
-            dto.itemId === undefined
-              ? await this.settlePick(user.userId, id)
-              : undefined
-          ),
-          priceScopeId: dto.priceScopeId,
-          supermarketLocationId: dto.supermarketLocationId,
-          servedLocations: true,
-        })
-      : dto.supermarketLocationId && dto.outcome === SettlementOutcome.BOUGHT
-        ? await this.prices.readAtShop({
-            userId: user.userId,
-            profileId: undefined,
-            itemId: shopPricedItemId(
-              dto.itemId,
-              dto.itemId === undefined
-                ? await this.settlePick(user.userId, id)
-                : undefined
-            ),
-            supermarketLocationId: dto.supermarketLocationId,
-            servedLocations: true,
-          })
-        : null;
+    // The gateway chooses the price (plan 0202, section 2): at the shop when
+    // the caller named one, else the cheapest across the caller's scopes with
+    // no shop and no chain. `dto.priceScopeId` is not read. A shop that has no
+    // price for the product records no shop, so naming a shop never fails a
+    // purchase (velista `0114`).
+    const { paid, itemSnapshot } = await this.prices.choose({
+      userId: user.userId,
+      profileId: undefined,
+      itemId: pricedItemId(
+        dto.itemId,
+        dto.itemId === undefined
+          ? await this.settlePick(user.userId, id)
+          : undefined
+      ),
+      supermarketLocationId: dto.supermarketLocationId,
+      servedLocations: true,
+    });
     const req: SettleLineRequest = {
       userId: user.userId,
       lineId: id,
@@ -647,6 +641,7 @@ export class LinesController {
       quantity: dto.quantity,
       itemId: dto.itemId,
       paid: paid ?? undefined,
+      ...(itemSnapshot ? { itemSnapshot } : {}),
     };
     return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, req);
   }

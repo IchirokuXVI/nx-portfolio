@@ -34,12 +34,21 @@ export interface WalkCompassReading {
   readonly qw: number;
 }
 
+/**
+ * One gyro reading: the `game` orientation quaternion, from the gyroscope and
+ * the accelerometer with no magnetometer (`GyroSample`, recorder plan 0005).
+ * Its yaw starts at an arbitrary zero and drifts slowly, and no magnet bends it.
+ */
+export type WalkGyroReading = WalkCompassReading;
+
 /** What a running session reports. */
 export interface WalkSensorListener {
   /** Every camera frame. */
   pose(reading: WalkPoseReading): void;
   /** Every compass reading. */
   compass(reading: WalkCompassReading): void;
+  /** Every gyro reading (velista `0136`, target 1). */
+  gyro(reading: WalkGyroReading): void;
   /** The session ended by itself: the browser closed it, or the camera failed. */
   ended(): void;
 }
@@ -52,7 +61,7 @@ export interface WalkSensorSession {
    * person leaving (the walk lab's rule, recorder plan 0002, section 7.2).
    */
   showing(): boolean;
-  /** Ends the camera, the compass and the wake lock. Safe to call twice. */
+  /** Ends the camera, the compass, the gyro and the wake lock. Safe to call twice. */
   end(): void;
 }
 
@@ -82,8 +91,9 @@ export interface WalkSensorsI {
 }
 
 /**
- * The real sensors: `openXrCamera` for the poses and `listenToOrientation` on the
- * `absolute` stream for the compass, the pieces the walk lab records with.
+ * The real sensors: `openXrCamera` for the poses, and `listenToOrientation` on the
+ * `absolute` stream for the compass and on the `game` stream for the gyro
+ * (velista `0136`), the pieces the walk lab records with.
  */
 export class WebXrWalkSensors implements WalkSensorsI {
   constructor(private readonly _document: Document) {}
@@ -167,6 +177,19 @@ export class WebXrWalkSensors implements WalkSensorsI {
       listenToOrientation(win, 'absolute', {
         reading: (_source, q, eventTime) =>
           listener.compass({
+            t: stamp(eventTime),
+            qx: q[0],
+            qy: q[1],
+            qz: q[2],
+            qw: q[3],
+          }),
+        event: () => undefined,
+      }),
+      // The gyro, on the same clock. The tracking guard compares it with the
+      // camera to tell a frame that turned from a compass that a magnet bent.
+      listenToOrientation(win, 'game', {
+        reading: (_source, q, eventTime) =>
+          listener.gyro({
             t: stamp(eventTime),
             qx: q[0],
             qy: q[1],

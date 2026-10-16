@@ -27,7 +27,7 @@ function row(
     noteAt: null,
     mark: null,
     awaitingApproval: false,
-    optionIds,
+    productId: optionIds[0] ?? null,
     touchedBy: null,
     touchedAt: null,
     entries: [],

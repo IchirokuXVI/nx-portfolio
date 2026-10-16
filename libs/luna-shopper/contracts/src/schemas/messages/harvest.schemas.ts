@@ -5,6 +5,8 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestRunWrites,
+  HarvestScheduleBlock,
+  HarvestScheduleOutcome,
   HarvestWarningCode,
   ItemSourceMatch,
   PlaceLinkField,
@@ -27,6 +29,7 @@ import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
+  HARVEST_SCHEDULE_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
@@ -118,6 +121,18 @@ export const HARVEST_SCHEMA_IDS = {
   presetIdRequest: schemaId('msg/harvestPreset.id/request'),
   createPresetRequest: schemaId('msg/harvestPreset.create/request'),
   updatePresetRequest: schemaId('msg/harvestPreset.update/request'),
+  // Plan 0206: a preset that starts by itself, and how long a run takes.
+  runEstimate: schemaId('harvest/RunEstimate'),
+  harvestScheduleOutcome: schemaId('enums/HarvestScheduleOutcome'),
+  harvestScheduleBlock: schemaId('enums/HarvestScheduleBlock'),
+  harvestScheduleLastRun: schemaId('harvest/HarvestScheduleLastRun'),
+  harvestScheduleView: schemaId('harvest/HarvestScheduleView'),
+  harvestSchedulePage: schemaId('harvest/HarvestSchedulePage'),
+  listSchedulesRequest: schemaId('msg/harvestSchedule.list/request'),
+  scheduleIdRequest: schemaId('msg/harvestSchedule.id/request'),
+  createScheduleRequest: schemaId('msg/harvestSchedule.create/request'),
+  updateScheduleRequest: schemaId('msg/harvestSchedule.update/request'),
+  setScheduleEnabledRequest: schemaId('msg/harvestSchedule.setEnabled/request'),
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
   sourceCatalogEntryPage: schemaId('harvest/SourceCatalogEntryPage'),
   sourceLocationPage: schemaId('harvest/SourceLocationPage'),
@@ -293,6 +308,11 @@ const harvestRunView = object(
     // office types its fixtures with the generated wire types, and every run
     // this service answers carries it anyway.
     presetId: nullableString(),
+    // Plan 0206, not required for the same reason. `estimate` is absent on the
+    // dashboard's runs, which do not compute it.
+    scheduleId: nullableString(),
+    interrupted: boolean(),
+    estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
   },
   [
     'id',
@@ -565,6 +585,8 @@ const sourceCatalogEntryProperties = {
   packCount: packCountOrNull(),
   categoryPath: array(string()),
   url: nullableString(),
+  // Plan 0198: the photo address the chain prints, on the chain's own host.
+  imageUrl: nullableString(),
   // Stored, shown, and never interpreted (plan 0086, section 6.1).
   extra: nullableObject(),
   timesSeen: integer({ minimum: 0 }),
@@ -599,6 +621,7 @@ const sourceCatalogEntryRequired = [
   'packCount',
   'categoryPath',
   'url',
+  'imageUrl',
   'extra',
   'timesSeen',
   'firstSeenAt',
@@ -1275,6 +1298,9 @@ const harvestRunPresetView = object(
         { type: 'null' },
       ],
     },
+    // Plan 0206. Not required, so the fixtures the back office types with the
+    // wire types stay valid; the harvester always answers it.
+    estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
   },
   ['id', 'supermarketId', 'name', 'input', 'createdAt', 'updatedAt', 'lastRun']
 );
@@ -1318,6 +1344,155 @@ const updatePresetRequest = object(
   },
   ['userId', 'presetId']
 );
+/** About how long a run takes (plan 0206, section 8). */
+const runEstimate = object(
+  HARVEST_SCHEMA_IDS.runEstimate,
+  {
+    seconds: integer({ minimum: 0 }),
+    basis: { type: 'string', enum: ['PRESET', 'SOURCE', 'DEFAULT'] },
+    samples: integer({ minimum: 0 }),
+  },
+  ['seconds', 'basis', 'samples']
+);
+const harvestScheduleLastRun = object(
+  HARVEST_SCHEMA_IDS.harvestScheduleLastRun,
+  {
+    id: nonEmptyString(),
+    status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
+    requestedAt: string({ format: 'date-time' }),
+  },
+  ['id', 'status', 'requestedAt']
+);
+/**
+ * `HH:mm`, 24 hour. A length and not a pattern, as every message schema here
+ * states: the gateway DTO and the harvester both check the form itself.
+ */
+const timeOfDay = (): JsonSchema =>
+  string({
+    minLength: 5,
+    maxLength: 5,
+    description: 'HH:mm on a 24 hour clock, such as 03:00.',
+  });
+/** ISO weekday numbers, 1 is Monday and 7 is Sunday, each at most once. */
+const daysOfWeek = (): JsonSchema => ({
+  type: 'array',
+  items: { type: 'integer', minimum: 1, maximum: 7 },
+  minItems: 1,
+  maxItems: 7,
+  uniqueItems: true,
+});
+const harvestScheduleView = object(
+  HARVEST_SCHEMA_IDS.harvestScheduleView,
+  {
+    id: nonEmptyString(),
+    presetId: nonEmptyString(),
+    presetName: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    timeOfDay: timeOfDay(),
+    daysOfWeek: daysOfWeek(),
+    timezone: nonEmptyString(),
+    enabled: boolean(),
+    nextRunAt: nullableString(),
+    // What stands in the way of the next slot now, computed on read.
+    blockedBy: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestScheduleBlock), { type: 'null' }],
+    },
+    lastSlotAt: nullableString(),
+    lastOutcome: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestScheduleOutcome), { type: 'null' }],
+    },
+    lastOutcomeAt: nullableString(),
+    lastOutcomeNote: nullableString(),
+    lastRun: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestScheduleLastRun), { type: 'null' }],
+    },
+    estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
+    createdAt: string({ format: 'date-time' }),
+    updatedAt: string({ format: 'date-time' }),
+  },
+  [
+    'id',
+    'presetId',
+    'presetName',
+    'supermarketId',
+    'timeOfDay',
+    'daysOfWeek',
+    'timezone',
+    'enabled',
+    'nextRunAt',
+    'blockedBy',
+    'lastSlotAt',
+    'lastOutcome',
+    'lastOutcomeAt',
+    'lastOutcomeNote',
+    'lastRun',
+    'estimate',
+    'createdAt',
+    'updatedAt',
+  ]
+);
+const harvestSchedulePage = paginated(
+  HARVEST_SCHEMA_IDS.harvestSchedulePage,
+  HARVEST_SCHEMA_IDS.harvestScheduleView
+);
+const listSchedulesRequest = object(
+  HARVEST_SCHEMA_IDS.listSchedulesRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: string(),
+    presetId: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+const scheduleIdRequest = object(
+  HARVEST_SCHEMA_IDS.scheduleIdRequest,
+  { ...adminCredentialProperties, scheduleId: nonEmptyString() },
+  ['userId', 'scheduleId']
+);
+const createScheduleRequest = object(
+  HARVEST_SCHEMA_IDS.createScheduleRequest,
+  {
+    ...adminCredentialProperties,
+    presetId: nonEmptyString(),
+    timeOfDay: timeOfDay(),
+    daysOfWeek: daysOfWeek(),
+    timezone: nonEmptyString({ maxLength: 64 }),
+    // A consent, so a boolean and nothing that reads as one. The harvester
+    // refuses anything but true.
+    acknowledgedAutomaticFetch: boolean(),
+  },
+  [
+    'userId',
+    'presetId',
+    'timeOfDay',
+    'daysOfWeek',
+    'acknowledgedAutomaticFetch',
+  ]
+);
+const updateScheduleRequest = object(
+  HARVEST_SCHEMA_IDS.updateScheduleRequest,
+  {
+    ...adminCredentialProperties,
+    scheduleId: nonEmptyString(),
+    timeOfDay: timeOfDay(),
+    daysOfWeek: daysOfWeek(),
+    timezone: nonEmptyString({ maxLength: 64 }),
+  },
+  ['userId', 'scheduleId']
+);
+const setScheduleEnabledRequest = object(
+  HARVEST_SCHEMA_IDS.setScheduleEnabledRequest,
+  {
+    ...adminCredentialProperties,
+    scheduleId: nonEmptyString(),
+    enabled: boolean(),
+    acknowledgedAutomaticFetch: boolean(),
+  },
+  ['userId', 'scheduleId', 'enabled']
+);
 const runIdRequest = object(
   HARVEST_SCHEMA_IDS.runIdRequest,
   { ...adminCredentialProperties, runId: nonEmptyString() },
@@ -1334,6 +1509,9 @@ const listRunsRequest = object(
     reverted: boolean(),
     // Plan 0120: the runs started from one preset.
     presetId: string(),
+    // Plan 0206: the runs one schedule started, and the runs of one trigger.
+    scheduleId: string(),
+    trigger: ref(HARVEST_SCHEMA_IDS.harvestRunTrigger),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1772,6 +1950,14 @@ export const harvestSchemas: JsonSchema[] = [
     HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus,
     Object.values(PostalCodeDiscoveryStatus)
   ),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestScheduleOutcome,
+    Object.values(HarvestScheduleOutcome)
+  ),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestScheduleBlock,
+    Object.values(HarvestScheduleBlock)
+  ),
   supermarketSourceView,
   harvestRunWarning,
   harvestRunView,
@@ -1820,6 +2006,15 @@ export const harvestSchemas: JsonSchema[] = [
   presetIdRequest,
   createPresetRequest,
   updatePresetRequest,
+  runEstimate,
+  harvestScheduleLastRun,
+  harvestScheduleView,
+  harvestSchedulePage,
+  listSchedulesRequest,
+  scheduleIdRequest,
+  createScheduleRequest,
+  updateScheduleRequest,
+  setScheduleEnabledRequest,
   runIdRequest,
   listRunsRequest,
   exportRunRequest,
@@ -1909,6 +2104,32 @@ export const harvestMessageContracts: Record<
   // runs started from it keep their record and still name it.
   [HARVEST_PRESET_PATTERNS.delete]: {
     request: HARVEST_SCHEMA_IDS.presetIdRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [HARVEST_SCHEDULE_PATTERNS.list]: {
+    request: HARVEST_SCHEMA_IDS.listSchedulesRequest,
+    response: HARVEST_SCHEMA_IDS.harvestSchedulePage,
+  },
+  [HARVEST_SCHEDULE_PATTERNS.get]: {
+    request: HARVEST_SCHEMA_IDS.scheduleIdRequest,
+    response: HARVEST_SCHEMA_IDS.harvestScheduleView,
+  },
+  [HARVEST_SCHEDULE_PATTERNS.create]: {
+    request: HARVEST_SCHEMA_IDS.createScheduleRequest,
+    response: HARVEST_SCHEMA_IDS.harvestScheduleView,
+  },
+  [HARVEST_SCHEDULE_PATTERNS.update]: {
+    request: HARVEST_SCHEMA_IDS.updateScheduleRequest,
+    response: HARVEST_SCHEMA_IDS.harvestScheduleView,
+  },
+  [HARVEST_SCHEDULE_PATTERNS.setEnabled]: {
+    request: HARVEST_SCHEMA_IDS.setScheduleEnabledRequest,
+    response: HARVEST_SCHEMA_IDS.harvestScheduleView,
+  },
+  // The schedule that is gone, by its own id, as every delete here answers.
+  // Its runs keep their record and still name it.
+  [HARVEST_SCHEDULE_PATTERNS.delete]: {
+    request: HARVEST_SCHEMA_IDS.scheduleIdRequest,
     response: COMMON_IDS.idResult,
   },
   [DISCOVERED_PLACE_PATTERNS.list]: {

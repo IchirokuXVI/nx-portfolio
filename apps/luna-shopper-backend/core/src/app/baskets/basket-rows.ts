@@ -1,15 +1,24 @@
 import {
+  rowNumbersOf,
+  rowStateOf,
+  progressOf as ruleProgressOf,
+  type BasketRuleEntry,
+} from '@portfolio/luna-shopper/basket-rules';
+import {
+  BASKET_ACT_SKIPPED,
   BasketKind,
   BasketRowMark,
   BasketRowNote,
   BasketRowState,
   LineApprovalStatus,
   SettlementOutcome,
+  type BasketEntryAct,
+  type BasketEntryPatch,
   type BasketProgress,
   type BasketRowEntryView,
   type BasketRowView,
 } from '@portfolio/luna-shopper/contracts';
-import { mergeKey } from './line-dedup';
+import { productOf, rowKeyOf, type BasketPicks } from './line-dedup';
 
 /**
  * Every rule of a basket row that needs no database (plan 0136, section 3).
@@ -29,6 +38,8 @@ export interface BasketSettlementFact {
   quantity: number;
   settledAt: Date;
   settledByParticipantId: string | null;
+  /** The product the buy named, or null (plan 0201, section 1). */
+  itemId: string | null;
   /**
    * Inside the skip window, decided by the database (plan 0137, section 4).
    *
@@ -42,15 +53,20 @@ export interface BasketSettlementFact {
 /**
  * What other baskets bought of one line lately (plan 0188).
  *
- * A count and a time. **It names nobody**, and it cannot: the read never loads
- * who made these purchases, so no rule here could put a person on a row by
- * accident.
+ * A count, a time and one boolean. **It names nobody**, and it cannot: the read
+ * never loads who made these purchases, so no rule here could put a person on a
+ * row by accident.
  */
 export interface BasketElsewhereFact {
   /** Units bought through another basket, or through none, inside the window. */
   quantity: number;
   /** The newest of those purchases. */
   settledAt: Date;
+  /**
+   * That newest purchase was made through a basket, and not on the zone list
+   * page (plan 0203, section 3). Never the basket itself.
+   */
+  throughBasket: boolean;
 }
 
 /** One line's newest standing skip, as the read hands it to these rules. */
@@ -89,13 +105,23 @@ export interface BasketEntry {
   content: string;
   /** `list_lines.quantity`: what this household still asks for. */
   quantity: number;
+  /** `list_lines.version`, which a patch is ordered by (plan 0204). */
+  version: number;
   itemSetHash: string | null;
+  /** The favourite of the line (plan 0199), or null. */
+  favoriteItemId: string | null;
   approvalStatus: LineApprovalStatus;
   createdAt: Date;
   /** The line's product set, in attachment order. */
   itemIds: string[];
   /** This basket's standing purchases of this line, in scope, oldest first. */
   settlements: BasketSettlementFact[];
+  /**
+   * The product of the latest of those purchases that is a buy and names one,
+   * or null (plan 0201, section 1). {@link tripItemIdOf} over `settlements`,
+   * kept on the entry so that every rule reads one answer.
+   */
+  tripItemId: string | null;
   /** What somebody else bought of this line lately, or null (plan 0188). */
   elsewhere: BasketElsewhereFact | null;
 }
@@ -103,33 +129,67 @@ export interface BasketEntry {
 /** A group of entries that are one thing to buy. */
 export interface BasketGroup {
   key: string;
+  /** The product every entry counts as, or null for a group by name. */
+  productId: string | null;
   /** The earliest entry by `(createdAt, id)`. It names the row. */
   anchor: BasketEntry;
   entries: BasketEntry[];
 }
 
 /**
- * Fold the covered lines into rows (plan 0136, section 3.1, step 5).
+ * The product of the latest standing buy among these purchases, or null (plan
+ * 0201, section 1, step 1).
  *
- * The same `mergeKey` a generation run used, which is the point: a run merged
- * "Milk" on the flat's list with "leche" on the parents' when they named one
- * product, and the view has to fold exactly the same pair or a basket read would
- * disagree with every basket ever composed.
+ * The purchases are this basket's, in scope: the current session of a `LIVE`
+ * basket, or the whole life of a `GENERATED` one. A buy that was taken back is
+ * not among them, and "they had none" names no product. The newest buy that
+ * names a product decides, by `("settledAt", id)`, as everywhere.
+ */
+export function tripItemIdOf(
+  settlements: readonly BasketSettlementFact[]
+): string | null {
+  let newest: BasketSettlementFact | null = null;
+  for (const row of settlements) {
+    if (row.outcome !== SettlementOutcome.BOUGHT || row.itemId === null) {
+      continue;
+    }
+    if (
+      !newest ||
+      row.settledAt.getTime() > newest.settledAt.getTime() ||
+      (row.settledAt.getTime() === newest.settledAt.getTime() &&
+        row.id > newest.id)
+    ) {
+      newest = row;
+    }
+  }
+  return newest?.itemId ?? null;
+}
+
+/**
+ * Fold the covered lines into rows (plan 0201, section 2).
+ *
+ * Two lines are one row when they count as the same product, and failing a
+ * product, when they carry the same normalized name. `picks` is what the
+ * gateway chose by price, and it is empty for every caller that has no prices.
  *
  * **The input must already be ordered by `(createdAt, id)`**, which
  * `COVERED_LINES_SQL` does, because the anchor is the group's first entry and
- * the oldest ask for a thing is the one that names the row.
+ * the oldest ask for a thing names the row.
  */
-export function groupEntries(entries: readonly BasketEntry[]): BasketGroup[] {
+export function groupEntries(
+  entries: readonly BasketEntry[],
+  picks: BasketPicks
+): BasketGroup[] {
   const groups = new Map<string, BasketGroup>();
   for (const entry of entries) {
-    const key = mergeKey(entry);
+    const productId = productOf(entry, picks);
+    const key = rowKeyOf(entry.content, productId);
     const held = groups.get(key);
     if (held) {
       held.entries.push(entry);
       continue;
     }
-    groups.set(key, { key, anchor: entry, entries: [entry] });
+    groups.set(key, { key, productId, anchor: entry, entries: [entry] });
   }
   return [...groups.values()];
 }
@@ -155,13 +215,30 @@ export function boughtElsewhereOf(entries: readonly BasketEntry[]): number {
   );
 }
 
-/** The newest purchase another basket made of these entries, or null. */
-function newestElsewhere(entries: readonly BasketEntry[]): Date | null {
-  let newest: Date | null = null;
+/**
+ * The newest purchase somebody else made of these entries, or null.
+ *
+ * At the same instant a purchase through a basket wins over one on the list
+ * page, so two entries of one row bought in one settle of another basket agree.
+ */
+function newestElsewhere(
+  entries: readonly BasketEntry[]
+): BasketElsewhereFact | null {
+  let newest: BasketElsewhereFact | null = null;
   for (const entry of entries) {
-    const at = entry.elsewhere?.settledAt;
-    if (at && (!newest || at.getTime() > newest.getTime())) {
-      newest = at;
+    const fact = entry.elsewhere;
+    if (!fact) {
+      continue;
+    }
+    const at = fact.settledAt.getTime();
+    if (
+      !newest ||
+      at > newest.settledAt.getTime() ||
+      (at === newest.settledAt.getTime() &&
+        fact.throughBasket &&
+        !newest.throughBasket)
+    ) {
+      newest = fact;
     }
   }
   return newest;
@@ -194,91 +271,93 @@ export function newestSettlement(
 }
 
 /**
- * The state of a left/bought pair and the newest thing said about it (plan 0130,
- * section 4).
+ * One entry as the shared rules take it (plan 0204, section 4).
  *
- * The table's order, with `REMOVED` skipped because nothing produces it before
- * plan 0138 and the union is declared whole so that plan changes a value here
- * rather than the wire shape.
+ * The state table itself is `rowStateOf` in
+ * `@portfolio/luna-shopper/basket-rules`, which velista calls too. This is the
+ * half that only core can do: turning what the database answered into the three
+ * things the table asks of an entry.
  *
- * `entries` is the group the numbers came from, which is what a skip is asked
- * about: a skip belongs to a line, and a row is skipped only when every line it
- * still asks something of is.
+ * - **`skipped`**: the line carries a standing skip of this basket that is
+ *   still fresh (plan 0137, section 4).
+ * - **`act`**: the newer of the entry's newest purchase and its standing skip.
+ *   A skip stands only while this basket has no later purchase of the line
+ *   (`SKIP_STANDS`), so a standing skip is the newest act by construction, and
+ *   the comparison below is written anyway so the rule does not rest on that.
+ * - **`closed`**: that newest act is "they had none" and it still holds. A
+ *   `GENERATED` basket is a trip, so the close holds until the trip is
+ *   finished. A `LIVE` basket never ends, so the close runs out with the skip
+ *   window (plan 0137, section 4).
  *
- * ## A row somebody else finished is done (plan 0188)
+ * A close under a later skip is not `closed`: only the newer of a skip and a
+ * close is ever standing (plan 0137, section 3.2).
+ */
+export function toRuleEntry(
+  entry: BasketEntry,
+  facts: BasketFacts
+): BasketRuleEntry {
+  const act = actOf(entry, facts);
+  const settled = newestSettlement([entry]);
+  return {
+    left: entry.quantity,
+    bought: boughtOf(entry),
+    boughtElsewhere: entry.elsewhere?.quantity ?? 0,
+    skipped: facts.skips.get(entry.lineId)?.fresh === true,
+    closed:
+      act?.outcome === SettlementOutcome.NOT_AVAILABLE &&
+      settled !== null &&
+      (facts.kind !== BasketKind.LIVE || settled.fresh),
+    act,
+  };
+}
+
+/**
+ * The newest standing act of this basket on one line, or null (plan 0204,
+ * section 2).
  *
- * With something left, another basket's purchase changes nothing here: the row
- * is whatever the table says of this basket's own acts. With **nothing left
- * and nothing bought here**, the row exists only because somebody else bought
- * it, and it is `DONE`: there is nothing for this shopper to do about it.
+ * The newest of the entry's scoped settlements **and** its standing skip. A
+ * skip is an act on the row, and "Marta, 10:42" under a skipped row is the same
+ * answer to the same question a purchase gets (plan 0137, section 4).
+ */
+export function actOf(
+  entry: BasketEntry,
+  facts: BasketFacts
+): BasketEntryAct | null {
+  const settled = newestSettlement([entry]);
+  const skip = facts.skips.get(entry.lineId);
+  if (
+    skip &&
+    (!settled || skip.skippedAt.getTime() > settled.settledAt.getTime())
+  ) {
+    return {
+      participantId: skip.skippedByParticipantId,
+      at: skip.skippedAt.toISOString(),
+      outcome: BASKET_ACT_SKIPPED,
+    };
+  }
+  return settled
+    ? {
+        participantId: settled.settledByParticipantId,
+        at: settled.settledAt.toISOString(),
+        outcome: settled.outcome,
+      }
+    : null;
+}
+
+/**
+ * The state of a group of entries, by the table of plan 0130, section 4.
+ *
+ * The table is the shared library's. The cast is the one place its plain string
+ * meets the contract's enum, and `basket-rows.spec.ts` asserts that the two
+ * hold the same values.
  */
 export function stateOf(
   entries: readonly BasketEntry[],
-  left: number,
-  bought: number,
-  newest: BasketSettlementFact | null,
   facts: BasketFacts
 ): BasketRowState {
-  if (left > 0 && isSkipped(entries, facts)) {
-    // Tested before `NOT_AVAILABLE`, which is the table's order, and right in
-    // both directions because only the newer of a skip and a close is ever
-    // standing (plan 0137, section 3.2).
-    return BasketRowState.SKIPPED;
-  }
-  if (
-    newest?.outcome === SettlementOutcome.NOT_AVAILABLE &&
-    left > 0 &&
-    closeHolds(newest, facts)
-  ) {
-    // Tested before `DONE`, which is the table's order, and guarded on `left`
-    // because a demand taken to zero after a close would otherwise leave a row
-    // claiming the shop had none of something nobody is asking for.
-    return BasketRowState.NOT_AVAILABLE;
-  }
-  if (left === 0 && (bought > 0 || boughtElsewhereOf(entries) > 0)) {
-    return BasketRowState.DONE;
-  }
-  if (left > 0 && bought > 0) {
-    return BasketRowState.PARTLY;
-  }
-  return BasketRowState.WANTED;
-}
-
-/**
- * Every entry the row still asks something of has a **fresh** standing skip
- * (plan 0137, section 4).
- *
- * **One unskipped entry makes the row wanted again.** A row of two lists' milk
- * is skipped as one gesture, and when a third household asks for milk an hour
- * later that entry carries no skip. New demand is a reason to look at the row
- * again, and the note below then says it was skipped earlier, so nothing about
- * the first gesture is lost.
- *
- * An entry at zero is not asked about: there is nothing left of it to skip, and
- * requiring a skip on it would leave a partly bought row wanted for ever.
- */
-function isSkipped(
-  entries: readonly BasketEntry[],
-  facts: BasketFacts
-): boolean {
-  const asking = entries.filter((entry) => entry.quantity > 0);
-  return (
-    asking.length > 0 &&
-    asking.every((entry) => facts.skips.get(entry.lineId)?.fresh === true)
-  );
-}
-
-/**
- * Whether a close still says anything (plan 0137, section 4).
- *
- * A `GENERATED` basket is a trip, so the shop not having something holds until
- * the trip is finished. A `LIVE` basket never ends, so the close runs out with
- * the skip window, whichever comes first: plan 0136 already held it to the
- * current session, and this is the other bound. After it the row is `WANTED`
- * with no note, and `touchedBy` still says who looked and when.
- */
-function closeHolds(newest: BasketSettlementFact, facts: BasketFacts): boolean {
-  return facts.kind !== BasketKind.LIVE || newest.fresh;
+  return rowStateOf(
+    entries.map((entry) => toRuleEntry(entry, facts))
+  ) as BasketRowState;
 }
 
 /**
@@ -292,15 +371,21 @@ function closeHolds(newest: BasketSettlementFact, facts: BasketFacts): boolean {
  * clears when the skip stops standing, which is when the row is bought, closed
  * or unskipped.
  *
- * `DONE` and `REMOVED` carry none because there is nothing left to decide about
- * the row, and `SKIPPED` carries none because the state already says it.
+ * `DONE`, `BOUGHT_ELSEWHERE` and `REMOVED` carry none because there is nothing
+ * left to decide about the row, and `SKIPPED` carries none because the state
+ * already says it.
  *
- * ## `BOUGHT_ON_ANOTHER_BASKET`
+ * ## `BOUGHT_ON_ANOTHER_BASKET` and `BOUGHT_ON_THE_LIST`
  *
  * Somebody bought some of this row lately through another basket, or through
  * none. It is said in **every** state but `REMOVED`, `DONE` included, because
  * it is the only thing on the row that explains a number this shopper did not
  * move: the row went to zero, or lost a unit, and nobody here touched it.
+ *
+ * **Which of the two** is decided by the newest of those purchases (plan 0203,
+ * section 3): `BOUGHT_ON_ANOTHER_BASKET` when it was made through a basket, and
+ * `BOUGHT_ON_THE_LIST` when it was made on the zone list page. `noteAt` is the
+ * time of that purchase in both cases.
  *
  * A row carries one note, and **the skip wins** when both apply: it is this
  * basket's own decision, and the count beside the row still says what was
@@ -314,16 +399,26 @@ export function noteOf(
   if (state === BasketRowState.REMOVED) {
     return null;
   }
-  if (state !== BasketRowState.SKIPPED && state !== BasketRowState.DONE) {
+  if (
+    state !== BasketRowState.SKIPPED &&
+    state !== BasketRowState.DONE &&
+    state !== BasketRowState.BOUGHT_ELSEWHERE
+  ) {
     const newest = newestSkip(entries, facts);
     if (newest) {
       return { note: BasketRowNote.SKIPPED_EARLIER, noteAt: newest.skippedAt };
     }
   }
-  const elsewhereAt = newestElsewhere(entries);
-  return elsewhereAt
-    ? { note: BasketRowNote.BOUGHT_ON_ANOTHER_BASKET, noteAt: elsewhereAt }
-    : null;
+  const elsewhere = newestElsewhere(entries);
+  if (!elsewhere) {
+    return null;
+  }
+  return {
+    note: elsewhere.throughBasket
+      ? BasketRowNote.BOUGHT_ON_ANOTHER_BASKET
+      : BasketRowNote.BOUGHT_ON_THE_LIST,
+    noteAt: elsewhere.settledAt,
+  };
 }
 
 /** The newest standing skip over these entries, fresh or not. */
@@ -345,18 +440,21 @@ function newestSkip(
 }
 
 /**
- * The union of the entries' product sets, first seen order, anchor first.
+ * Every product a group can be found under in the walk history: the product it
+ * counts as, then the product sets of its entries, first seen order.
  *
- * A union rather than the anchor's own set: two households naming the same thing
- * may each have attached a different carton, and the shopper at the shelf is
- * choosing between all of them. Deduplicated, because the common case is two
- * entries naming the same product and a picker offering it twice is a bug the
- * shopper sees.
+ * The wire no longer carries it (plan 0201 removed `optionIds`). The walk order
+ * still asks it, because a shelf somebody settled under another product of the
+ * same line is still the shelf of this row.
  */
-export function optionIdsOf(entries: readonly BasketEntry[]): string[] {
+export function walkItemIdsOf(group: BasketGroup): string[] {
   const seen = new Set<string>();
   const ids: string[] = [];
-  for (const entry of entries) {
+  if (group.productId) {
+    seen.add(group.productId);
+    ids.push(group.productId);
+  }
+  for (const entry of group.entries) {
     for (const itemId of entry.itemIds) {
       if (!seen.has(itemId)) {
         seen.add(itemId);
@@ -376,15 +474,51 @@ export interface EntryContext {
   /** What the read knows and the entries do not (plan 0137, section 4). */
   facts: BasketFacts;
   /**
-   * What changed about each row since **this viewer** last looked, by merge key
-   * (plan 0138, section 7).
+   * What changed about each row since **this viewer** last looked, by the key
+   * of the row (plan 0138, section 7).
    *
    * By key rather than by line, because a mark belongs to the row: a line deleted
-   * from one household marks the row its name is still on in another, and there is
-   * no line id both of those share. Empty for a caller with no viewer to measure,
-   * which is what the admin and history reads are.
+   * from one household marks the row its product is still on in another, and
+   * there is no line id both of those share. Since plan 0201 the key is the
+   * product the lines count as, so the marks are folded with the picks of the
+   * same read. Empty for a caller with no viewer to measure, which is what the
+   * admin and history reads are.
    */
   marks: ReadonlyMap<string, BasketRowMark>;
+}
+
+/**
+ * What an entry and a patch of it both state (plan 0204, sections 2 and 5).
+ *
+ * One function for the two, so the patch of a line is the entry a read of the
+ * same instant would serve, less the two fields a room may not carry.
+ */
+export function toEntryPatch(
+  entry: BasketEntry,
+  facts: BasketFacts
+): BasketEntryPatch {
+  const rule = toRuleEntry(entry, facts);
+  return {
+    lineId: entry.lineId,
+    version: entry.version,
+    left: rule.left,
+    bought: rule.bought,
+    // Somebody else's units, beside this basket's own and never added to them
+    // (plan 0188).
+    boughtElsewhere: rule.boughtElsewhere,
+    // The same rule as the row's, asked of a group of one: an entry the shopper
+    // skipped reads `SKIPPED` whether or not its neighbours did, which is what
+    // lets a client draw the half of a row that was put off.
+    state: rowStateOf([rule]) as BasketRowState,
+    approvalStatus: entry.approvalStatus,
+    skipped: rule.skipped,
+    closed: rule.closed,
+    act: actOf(entry, facts),
+    // The product the line counts as since its latest buy in this trip (plan
+    // 0201, section 1). A client holding the line in a row of another product
+    // reads the basket again (plan 0204, section 7).
+    tripItemId: entry.tripItemId,
+  };
 }
 
 /** One entry, as the wire carries it. */
@@ -392,31 +526,26 @@ export function toEntryView(
   entry: BasketEntry,
   context: EntryContext
 ): BasketRowEntryView {
-  const bought = boughtOf(entry);
+  // The lists a reader is served are the covered lists they write themselves
+  // (plan 0136, section 3.4), so being served the list and being allowed to
+  // edit its lines are one fact.
+  const served = context.servedListIds.has(entry.listId);
   const view: BasketRowEntryView = {
-    lineId: entry.lineId,
-    left: entry.quantity,
-    bought,
-    // Somebody else's units, beside this basket's own and never added to them
-    // (plan 0188).
-    boughtElsewhere: boughtElsewhereOf([entry]),
-    // The same rule as the row's, asked of a group of one: an entry the shopper
-    // skipped reads `SKIPPED` whether or not its neighbours did, which is what
-    // lets a client draw the half of a row that was put off.
-    state: stateOf(
-      [entry],
-      entry.quantity,
-      bought,
-      newestSettlement([entry]),
-      context.facts
-    ),
-    approvalStatus: entry.approvalStatus,
+    ...toEntryPatch(entry, context.facts),
+    // The line itself (plan 0201, section 3). Its name and its products are
+    // what every reader of a row was already told, one row at a time.
+    content: entry.content,
+    itemIds: [...entry.itemIds],
+    favoriteItemId: entry.favoriteItemId,
+    canWrite: served,
     demandEditable: context.demandEditable(entry),
   };
   // Redaction by absence (plan 0130, section 6). The field is omitted rather
   // than nulled, so a reader cannot tell "a list you may not see" from "no
   // list", and nothing downstream is trusted to hide a value it was handed.
-  if (context.servedListIds.has(entry.listId)) {
+  // The names of the list and its zone are in `BasketView.lists` under this
+  // id, so an entry on a list that is not served gains none of them.
+  if (served) {
     view.listId = entry.listId;
   }
   return view;
@@ -428,25 +557,25 @@ export function toRowView(
   context: EntryContext
 ): BasketRowView {
   const entries = group.entries.map((entry) => toEntryView(entry, context));
-  const left = entries.reduce((sum, entry) => sum + entry.left, 0);
-  const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
-  const newest = newestSettlement(group.entries);
-  const state = stateOf(group.entries, left, bought, newest, context.facts);
+  // The sums, the newest act and the state all come from the entries as the
+  // wire carries them, through the rules a client rebuilds its own rows with
+  // (plan 0204, section 4).
+  const numbers = rowNumbersOf(entries);
+  const state = rowStateOf(entries) as BasketRowState;
   const note = noteOf(group.entries, state, context.facts);
-  const touched = newestAct(group.entries, newest, context.facts);
   return {
     rowKey: group.anchor.lineId,
+    // The name of the anchor. A row with a product is named by the catalog,
+    // and this is what a client draws when the catalog cannot name it.
     content: group.anchor.content,
-    left,
-    bought,
+    productId: group.productId,
+    left: numbers.left,
+    bought: numbers.bought,
     // Computed here and stored nowhere, which is the whole of plan 0136.
-    asked: bought + left,
+    asked: numbers.asked,
     // Not part of `asked`: these units were never this basket's to buy by the
     // time it looked (plan 0188).
-    boughtElsewhere: entries.reduce(
-      (sum, entry) => sum + entry.boughtElsewhere,
-      0
-    ),
+    boughtElsewhere: numbers.boughtElsewhere,
     state,
     note: note?.note ?? null,
     noteAt: note ? note.noteAt.toISOString() : null,
@@ -457,9 +586,10 @@ export function toRowView(
     awaitingApproval: group.entries.some(
       (entry) => entry.approvalStatus === LineApprovalStatus.PENDING
     ),
-    optionIds: optionIdsOf(group.entries),
-    touchedBy: touched?.participantId ?? null,
-    touchedAt: touched ? touched.at.toISOString() : null,
+    // Who last did something to this row, and when (plan 0137, section 4): the
+    // newest of its purchases and its standing skips.
+    touchedBy: numbers.act?.participantId ?? null,
+    touchedAt: numbers.act?.at ?? null,
     entries,
     // Filled by the read when it has a chain (plan 0165), and null otherwise.
     usual: null,
@@ -467,58 +597,14 @@ export function toRowView(
 }
 
 /**
- * Who last did something to this row, and when (plan 0137, section 4).
+ * The three numbers a basket card draws (plan 0130, section 4).
  *
- * The newest of the row's scoped settlements **and** its standing skips. A skip
- * is an act on the row, and "Marta, 10:42" under a skipped row is the same
- * answer to the same question a purchase gets.
+ * The rule is the shared library's (plan 0204, section 4). A row that only
+ * outside buys closed is `BOUGHT_ELSEWHERE` and counts toward no number (plan
+ * 0203, section 4, which reversed plan 0188), and a `SKIPPED` row is pending.
  */
-function newestAct(
-  entries: readonly BasketEntry[],
-  newest: BasketSettlementFact | null,
-  facts: BasketFacts
-): { participantId: string | null; at: Date } | null {
-  const settled = newest
-    ? { participantId: newest.settledByParticipantId, at: newest.settledAt }
-    : null;
-  const skip = newestSkip(entries, facts);
-  if (!skip) {
-    return settled;
-  }
-  const skipped = {
-    participantId: skip.skippedByParticipantId,
-    at: skip.skippedAt,
-  };
-  if (!settled) {
-    return skipped;
-  }
-  return skip.skippedAt.getTime() > settled.at.getTime() ? skipped : settled;
-}
-
-/** The three numbers a basket card draws (plan 0130, section 4). */
 export function progressOf(rows: readonly BasketRowView[]): BasketProgress {
-  // Nothing produces `REMOVED` before plan 0138, so every row counts. The
-  // filter is written anyway, because that plan adds a value and not a rule.
-  const counted = rows.filter((row) => row.state !== BasketRowState.REMOVED);
-  // A row somebody else bought to zero is `DONE` (plan 0188), so it is in `done`
-  // and in `total` by the same two filters: a shopper's progress does not fall
-  // because somebody else did the buying.
-  //
-  // A `SKIPPED` row falls into `pending` by arithmetic rather than by a branch,
-  // which is the answer plan 0130 section 4 asks for: it is neither done nor
-  // unavailable, and it is still something somebody has to decide about.
-  const done = counted.filter(
-    (row) => row.state === BasketRowState.DONE
-  ).length;
-  const unavailable = counted.filter(
-    (row) => row.state === BasketRowState.NOT_AVAILABLE
-  ).length;
-  return {
-    done,
-    unavailable,
-    total: counted.length,
-    pending: counted.length - done - unavailable,
-  };
+  return ruleProgressOf(rows);
 }
 
 /**

@@ -1,8 +1,10 @@
 import {
   BASKET_CHANGE_LIMITS,
+  BasketChangeOriginKind,
   LineApprovalStatus,
   LineChangeKind,
 } from '@portfolio/luna-shopper/contracts';
+import { BasketLineKeys } from '../basket-line-keys';
 import {
   anchorsOf,
   clampChangePage,
@@ -30,7 +32,9 @@ function line(over: Partial<ChangeLineRow> = {}): ChangeLineRow {
     listId: 'list-a',
     content: 'Milk',
     quantity: 2,
+    version: 1,
     itemSetHash: null,
+    favoriteItemId: null,
     approvalStatus: LineApprovalStatus.APPROVED,
     createdAt: new Date(2026, 0, seq),
     ...over,
@@ -55,33 +59,110 @@ function row(
     actorUserId: null,
     actorParticipantId: null,
     basketId: null,
+    originOwnerUserId: null,
     unseen: true,
     ...over,
   };
 }
 
+/**
+ * One change as a reader is served it.
+ *
+ * `covered` is the lines the basket draws, oldest first. `departed` is the
+ * lines the page names that the basket no longer draws: deleted, absorbed by a
+ * merge, or at zero. `products` gives a line its products, and a line with
+ * none is keyed by its name, as a read with no picks keys it (plan 0201).
+ */
 function view(
   change: ChangePageRow,
-  lines: ChangeLineRow[],
-  served: string[] = ['list-a']
+  covered: ChangeLineRow[],
+  served: string[] = ['list-a'],
+  departed: ChangeLineRow[] = [],
+  products: Record<string, string[]> = {}
 ) {
+  const all = [...covered, ...departed];
+  const keys = new BasketLineKeys().add(
+    all.map((entry) => ({
+      lineId: entry.id,
+      content: entry.content,
+      itemIds: products[entry.id] ?? [],
+      favoriteItemId: entry.favoriteItemId,
+      tripItemId: null,
+    }))
+  );
   return toChangeView(change, {
-    anchors: anchorsOf(lines),
-    lines: new Map(lines.map((entry) => [entry.id, entry])),
+    anchors: anchorsOf(covered, keys.keyOf),
+    coveredIds: new Set(covered.map((entry) => entry.id)),
+    keyOf: keys.keyOf,
+    lines: new Map(all.map((entry) => [entry.id, entry])),
     basketId: BASKET,
     servedListIds: new Set(served),
   });
 }
 
 describe('the row a change points at', () => {
-  it('is the anchor of the row its line is in', () => {
+  it('is the line itself when the basket draws it', () => {
     const anchor = line({ createdAt: new Date(2026, 0, 1) });
     const later = line({ createdAt: new Date(2026, 0, 9), listId: 'list-b' });
 
-    // Any entry's change names the row, and the row is named by its oldest ask.
+    // Before plan 0201 this was the anchor of the row. A read with picks can
+    // group the lines in another way, so the change names its own line and a
+    // client finds the row that holds it among its entries.
     expect(view(row({ lineId: later.id }), [anchor, later]).rowKey).toBe(
+      later.id
+    );
+    expect(view(row({ lineId: anchor.id }), [anchor, later]).rowKey).toBe(
       anchor.id
     );
+  });
+
+  it('is the oldest covered line of the same name for a line that left', () => {
+    const anchor = line({ createdAt: new Date(2026, 0, 1) });
+    const later = line({ createdAt: new Date(2026, 0, 9), listId: 'list-b' });
+    const gone = line({ id: 'll-gone', listId: 'list-c' });
+
+    // The row the mark was passed to.
+    expect(
+      view(
+        row({ lineId: gone.id, kind: LineChangeKind.DELETED }),
+        [anchor, later],
+        ['list-a'],
+        [gone]
+      ).rowKey
+    ).toBe(anchor.id);
+  });
+
+  it('is a covered line of the same product for a line that left (plan 0201)', () => {
+    const milk = line({ content: 'Milk' });
+    const leche = line({ content: 'Leche', listId: 'list-b' });
+    const gone = line({ id: 'll-gone', content: 'Leche', listId: 'list-c' });
+
+    // The line that went was called as one covered line and counted as the
+    // product of the other. The product decides.
+    expect(
+      view(
+        row({ lineId: gone.id, kind: LineChangeKind.DELETED }),
+        [milk, leche],
+        ['list-a'],
+        [gone],
+        { [milk.id]: ['i1'], [leche.id]: ['i2'], [gone.id]: ['i1', 'i3'] }
+      ).rowKey
+    ).toBe(milk.id);
+  });
+
+  it('is null for a line that left when only its name is still covered', () => {
+    const milk = line({ content: 'Milk' });
+    const gone = line({ id: 'll-gone', content: 'Milk', listId: 'list-c' });
+
+    expect(
+      view(
+        row({ lineId: gone.id, kind: LineChangeKind.DELETED }),
+        [milk],
+        ['list-a'],
+        [gone],
+        { [milk.id]: ['i1'], [gone.id]: ['i2'] }
+      ).rowKey
+    ).toBeNull();
   });
 
   it('resolves a merge through the line that stayed', () => {
@@ -94,7 +175,9 @@ describe('the row a change points at', () => {
         kind: LineChangeKind.MERGED,
         mergedIntoLineId: survivor.id,
       }),
-      [survivor, gone]
+      [survivor],
+      ['list-a'],
+      [gone]
     );
 
     // The absorbed line names no row. What a client can act on is the survivor's.
@@ -180,6 +263,100 @@ describe('who made a change', () => {
     // That participant is on another basket, so this reader does not know them,
     // and the change carries no account of its own to fall back to.
     expect(drawn.actor).toBeNull();
+  });
+});
+
+describe('where a buy came from (plan 0203, section 5)', () => {
+  const buy = (over: Partial<ChangePageRow> & Pick<ChangePageRow, 'lineId'>) =>
+    row({
+      kind: LineChangeKind.BOUGHT,
+      quantityBefore: 2,
+      quantityAfter: 0,
+      ...over,
+    });
+
+  it('is null for a change that is not a buy', () => {
+    const only = line();
+
+    expect(
+      view(row({ lineId: only.id, basketId: 'b-other' }), [only]).origin
+    ).toBeNull();
+    expect(view(row({ lineId: only.id }), [only]).origin).toBeNull();
+  });
+
+  it('is null for a buy of this basket, which names its participant', () => {
+    const only = line();
+    const drawn = view(
+      buy({ lineId: only.id, basketId: BASKET, actorParticipantId: 'p-1' }),
+      [only]
+    );
+
+    expect(drawn.origin).toBeNull();
+    expect(drawn.actor).toEqual({ participantId: 'p-1' });
+  });
+
+  it('is LIST for a buy with no basket, with the buyer as the actor', () => {
+    const only = line();
+    const drawn = view(buy({ lineId: only.id, actorUserId: 'u-buyer' }), [
+      only,
+    ]);
+
+    expect(drawn.origin).toEqual({ kind: BasketChangeOriginKind.LIST });
+    expect(drawn.actor).toEqual({ userId: 'u-buyer' });
+  });
+
+  it('is ANOTHER_BASKET with the owner the statement loaded', () => {
+    const only = line();
+    const drawn = view(
+      buy({
+        lineId: only.id,
+        basketId: 'b-other',
+        actorParticipantId: 'p-9',
+        actorUserId: 'u-buyer',
+        originOwnerUserId: 'u-owner',
+      }),
+      [only]
+    );
+
+    expect(drawn.origin).toEqual({
+      kind: BasketChangeOriginKind.ANOTHER_BASKET,
+      owner: { userId: 'u-owner' },
+    });
+    // The buyer is somebody on that basket. The owner is whose basket it is.
+    expect(drawn.actor).toEqual({ userId: 'u-buyer' });
+  });
+
+  it('names nobody when the statement loaded no owner', () => {
+    // A guest, a reader who cannot write the list, or a basket deleted since.
+    const only = line();
+    const drawn = view(
+      buy({ lineId: only.id, basketId: 'b-other', actorParticipantId: 'p-9' }),
+      [only],
+      []
+    );
+
+    expect(drawn.origin).toEqual({
+      kind: BasketChangeOriginKind.ANOTHER_BASKET,
+      owner: null,
+    });
+    expect(drawn.actor).toBeNull();
+    expect(Object.keys(drawn)).not.toContain('listId');
+  });
+
+  it('serves no basket id, in any field', () => {
+    const only = line();
+    const drawn = view(
+      buy({
+        lineId: only.id,
+        kind: LineChangeKind.BUY_REVERTED,
+        basketId: 'b-other',
+        originOwnerUserId: 'u-owner',
+      }),
+      [only]
+    );
+
+    expect(JSON.stringify(drawn)).not.toContain('b-other');
+    expect(Object.keys(drawn)).not.toContain('basketId');
   });
 });
 

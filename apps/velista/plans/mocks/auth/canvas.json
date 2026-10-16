@@ -1,6 +1,6 @@
 {
   "title": "Velista Credential Flows",
-  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Below them, the design for plan <code>0148</code>: a forgotten password, the link that sets a new one or signs you in with the old one kept, and what happens when that link meets somebody else on the phone. The owner picked on 2026-10-14: the reset link keeps design C, the sign in link shows no screen of its own, and a reset asks first on the page with one button. A sign in link that meets another account goes home, where a sheet asks.",
   "artboards": [
     {
       "file": "SignIn.dc.html",
@@ -41,6 +41,54 @@
       "w": 470,
       "h": 700,
       "title": "The resend line, three states"
+    },
+    {
+      "file": "SignInForgot.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 1: sign in, with the way back"
+    },
+    {
+      "file": "ForgotPassword.dc.html",
+      "x": 960,
+      "y": 2700,
+      "w": 1330,
+      "h": 970,
+      "title": "0148 item 2: forgot your password"
+    },
+    {
+      "file": "ResetMode.dc.html",
+      "x": 0,
+      "y": 3880,
+      "w": 470,
+      "h": 970,
+      "title": "0148 item 3: the reset link, design C"
+    },
+    {
+      "file": "OtherAccount.dc.html",
+      "x": 0,
+      "y": 5060,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 5: the reset link meets an account on this phone"
+    },
+    {
+      "file": "LinkDead.dc.html",
+      "x": 530,
+      "y": 3880,
+      "w": 470,
+      "h": 970,
+      "title": "0148 item 6: a link that no longer works"
+    },
+    {
+      "file": "RecoveryLinkSheet.dc.html",
+      "x": 960,
+      "y": 5060,
+      "w": 900,
+      "h": 970,
+      "title": "0148 item 5: the sign in link meets another account, a sheet over home"
     }
   ],
   "annotations": [
@@ -85,6 +133,48 @@
       "y": 1120,
       "w": 450,
       "text": "RESENDING IS PLAIN TEXT, NOT A BUTTON (user decision 2026-08-26). One sentence inside the card: amber while it can be used, then it becomes its own reply and counts down for a minute before returning.\nIt is deliberately quiet. Confirming is optional, so the affordance must not compete with the group actions underneath it.\nTHE COUNTDOWN IS THE SERVER'S NUMBER, NOT SIXTY. The refused state exists because the verifyResend bucket is 3 per 10 minutes, so the fourth ask waits far longer than a minute. A hardcoded 60 would count to zero and then fail again. The client reads retryAfterSeconds from the response BODY: enableCors sets no exposedHeaders, so a browser cannot read a Retry-After header cross origin.\nBoth the resend endpoint and sending a verification on upgrade are being implemented by the user."
+    },
+    {
+      "id": "p0148-brief",
+      "x": 0,
+      "y": 2420,
+      "w": 430,
+      "text": "PLAN 0148, STAGE 0. A forgotten password has a way back. Backend 0210 sends one mail with two links that share one token: a reset link, and a sign in link (the same address plus mode=sign-in). Using either ends both, and ends every older link of that person.\nBoth links open ONE page, auth/reset-password, in two modes. The second action switches the mode in place and keeps the token.\nNight only, as the rest of this folder: no new colour role."
+    },
+    {
+      "id": "p0148-nothing-on-load",
+      "x": 470,
+      "y": 2420,
+      "w": 430,
+      "text": "THE RESET LINK SPENDS NOTHING ON LOAD. Mail scanners open links, so the page reads the token, takes it out of the URL, and waits for a button.\nTHE SIGN IN LINK HAS NO SCREEN (the owner's pick 2). It spends the link as the page loads and lands on home. While the request runs the page shows the spinner the confirmation link page already shows, and nothing else. The owner accepted the risk: a mail scanner that runs scripts can spend the link first, and it then arrives dead. The reset link still waits for a press.\nIf the owner of the link is already signed in, either way into it lands on home with no error, even when the link is old."
+    },
+    {
+      "id": "p0148-no-disclosure",
+      "x": 940,
+      "y": 2420,
+      "w": 430,
+      "text": "THE FORGOT PAGE NEVER SAYS WHETHER AN ACCOUNT EXISTS, and never says a mail arrived. forgot-password answers the same for every address, so the copy says what we did (\"if it has an account, we have sent it a mail\"). The wait is the server's number (rule C3), as on the resend line.\nThe address comes over from the sign in page, so a person who just failed to sign in types nothing again."
+    },
+    {
+      "id": "p0148-pick",
+      "x": 1060,
+      "y": 3880,
+      "w": 430,
+      "text": "THE OWNER'S PICKS, 2026-10-14.\n1. The reset link is design C: the OR rule and the outlined Keep my password and sign in, the same pair the sign in page uses for Google.\n2. The sign in link shows no screen. Its alternatives are gone from this canvas.\n3 and 4. The confirm before a reset is a message with one button that continues. A sign in link that meets another account is asked about in a sheet over home instead (2026-10-14). For a guest the last paragraph carries a plain link to the upgrade page, which keeps the groups. No second button.\n5. Each confirm names the username and the email of the account on this phone, always.\n6. No support session screen. The backend still refuses the link inside one, and the page shows that answer as the dead link screen."
+    },
+    {
+      "id": "p0148-sheet",
+      "x": 1920,
+      "y": 5060,
+      "w": 430,
+      "text": "THE SIGN IN LINK MEETS ANOTHER ACCOUNT: A SHEET OVER HOME (the owner's decision of 2026-10-14). With a session, the page asks the server once without switchAccount, the bearer going along. The owner of the link lands home with no error. Another account (a 409 that spends nothing) goes home, and this sheet opens there.\nThe token waits in memory, never in the sheet's URL. The sheet names the account by username and email and has ONE button, which retries with switchAccount. Closing it (the scrim, Escape, back) spends nothing, and the link still works later.\nTHE RESET LINK STILL ASKS ON ITS OWN PAGE before a reset, whenever an account is signed in: a message and one button, with words that hold whoever the link turns out to belong to.\nA GUEST IS NEVER OFFERED REGISTER (rule C2). The guest's last paragraph links to the upgrade page, and its button takes the destructive colour of the delete sheet."
+    },
+    {
+      "id": "p0148-questions",
+      "x": 1920,
+      "y": 5620,
+      "w": 430,
+      "text": "THE DEAD LINK SCREEN, SIGNED IN. The artboard draws a visitor who is signed out. A person who is signed in cannot open the forgot password page or the sign in page, so for them the screen has one button back to their groups instead of the two."
     }
   ]
 }

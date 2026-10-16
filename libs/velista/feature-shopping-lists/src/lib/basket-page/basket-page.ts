@@ -37,7 +37,6 @@ import {
   type BasketRow as BasketRowModel,
   basketRowPick,
   basketRowProduct,
-  basketShelfMark,
   type BasketViewRow,
   type BasketViewSection,
   catalogName,
@@ -99,8 +98,13 @@ import {
   visitTime,
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
+import { SHOP_ASK_SEGMENTS } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
-import { basketGroupScope } from '../swap-sheet/swap';
+import {
+  basketGroupScope,
+  changeableLineIds,
+} from '../change-sheet/change-targets';
+import { HeldBuy } from '../held-buy';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
 
@@ -209,7 +213,9 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
   // `BasketChangeStore` is **not** here. It is on the route beside
   // `BasketStore`, because the changes sheet is a child route that is
   // constructed and destroyed while this page stays.
-  providers: [ChangeAcknowledger],
+  // `HeldBuy` here, for `ChangeAcknowledger`'s reason: the sheets that hold and
+  // release a buy are drawn in this page's outlet (velista `0141`).
+  providers: [ChangeAcknowledger, HeldBuy],
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
@@ -332,10 +338,7 @@ export class BasketPage {
    */
   protected rowSection(row: BasketRowModel): string | null {
     const shop = this.mapShop();
-    if (
-      shop === null ||
-      (this._view.grouping() === 'category' && this._view.byAisle())
-    ) {
+    if (shop === null || this._view.drawnByAisle()) {
       return null;
     }
     const sections = this._shopSections.sectionsOf(shop.id) ?? [];
@@ -405,7 +408,19 @@ export class BasketPage {
    */
   protected readonly surface = computed(() => {
     const basket = this._store.basket();
-    return basket === null ? null : selectBasketSurface(basket, basket.me);
+    // The rows and the counts the store draws, which a choice held on this
+    // device can have grouped differently from the read (velista `0140`).
+    return basket === null
+      ? null
+      : selectBasketSurface(
+          {
+            ...basket,
+            rows: this._store.rows(),
+            progress: this._store.progress(),
+            pending: this._store.pending(),
+          },
+          basket.me
+        );
   });
   protected readonly busyRows = this._store.busyRows;
   protected readonly participantsById = this._store.participantsById;
@@ -915,6 +930,10 @@ export class BasketPage {
   );
 
   constructor() {
+    // A held buy outlives the sheet that pressed it, so a refusal is said here, on
+    // the row (velista `0141`).
+    this._held.reportTo((rowKey) => this._reportSettle(rowKey));
+
     // Whether the shop the basket is read at has a map, read once per shop per
     // session, so the Map button can appear (velista `0121`, target 5).
     effect(() => {
@@ -1078,9 +1097,9 @@ export class BasketPage {
     }
   );
 
-  /** The product a row draws: its choice, its one option, or none. */
+  /** The product a row draws: its one product, or none. */
   private _rowProduct(row: BasketRowModel): BasketProduct | null {
-    return basketRowProduct(row, this.products(), this.insteadOf(row));
+    return basketRowProduct(row, this.products());
   }
 
   /** Every product group a row's product belongs to, once each. */
@@ -1112,24 +1131,18 @@ export class BasketPage {
   });
 
   /**
-   * Whether a row offers "change product": its product has a group, the basket
-   * is open, and the reader may write **every** list the row stands for. All of
-   * them, because the change is made on each line, and changing some would split
-   * the row in two.
+   * Whether the cheaper mark of a row opens the change sheet for all lists
+   * (velista `0140`, section 1): it is drawn, and the reader may change the
+   * product of one list of the row or more. The sheet then says for how many.
    */
-  protected canSwap(row: BasketRowModel): boolean {
-    if (
-      this.finished() ||
-      row.state === 'REMOVED' ||
-      row.entries.length === 0 ||
-      this._store.me()?.kind === 'GUEST' ||
-      (this._rowProduct(row)?.productGroupId ?? null) === null
-    ) {
-      return false;
-    }
-    const lists = this.lists();
-    return row.entries.every(
-      (entry) => entry.listId !== null && lists.has(entry.listId)
+  protected canChange(row: BasketRowModel): boolean {
+    return (
+      this.groupCheaper(row) &&
+      changeableLineIds(row, {
+        guest: this._store.me()?.kind === 'GUEST',
+        finished: this.finished(),
+        lists: this.lists(),
+      }).length > 0
     );
   }
 
@@ -1146,9 +1159,9 @@ export class BasketPage {
     );
   }
 
-  /** Open the change sheet over this basket, as a row opens the settle sheet. */
-  protected openSwap(row: BasketRowModel): void {
-    void this._router.navigate(sheetSegments('rows', row.rowKey, 'swap'), {
+  /** The change sheet for all lists, over this basket, as a row opens the settle sheet. */
+  protected openChange(row: BasketRowModel): void {
+    void this._router.navigate(sheetSegments('rows', row.rowKey, 'change'), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
     });
@@ -1173,55 +1186,66 @@ export class BasketPage {
    * exactly as it does when the sheet sends the same body.
    */
   protected settleRow(row: BasketRowModel): void {
-    void this._toggle(row, () =>
+    const send = () =>
       this._store.settle(row.rowKey, {
         outcome: 'BOUGHT',
         quantity: row.left,
         from: row.left,
         ...this._settleAt(row),
-      })
+      });
+    this._buy(
+      () => this._toggle(row, send),
+      // Held, the press's numbers can go stale under the question, and the row
+      // would stay unbought with nothing said (velista `0141`).
+      () => this._toggle(row, send, () => this._held.refused(row.rowKey))
     );
+  }
+
+  // --- The first buy asks where you are (velista `0141`) ---------------------
+
+  private readonly _held = inject(HeldBuy);
+
+  /**
+   * Write a buy, or hold it and ask where the person is first.
+   *
+   * The question comes at the first buy of a trip with no shop chosen
+   * (`BasketViewStore.asksForShop`). The write is held, not its body: the body
+   * names the shop, so it is worked out when the answer releases it, and a shop
+   * chosen there is the shop this buy records.
+   */
+  private _buy(
+    write: () => Promise<void>,
+    heldWrite: () => Promise<void> = write
+  ): void {
+    if (!this._view.asksForShop()) {
+      void write();
+      return;
+    }
+    this._held.hold(heldWrite);
+    void this._router.navigate(sheetSegments(...SHOP_ASK_SEGMENTS), {
+      relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
+    });
   }
 
   /**
    * Where a settle from the row happened and what it bought, as a body fragment to
-   * spread (velista `0095`, section 6; `0102`).
+   * spread (velista `0095`, section 6; `0102`; `0139`, section 4).
    *
-   * The scope of the price the row draws, and the shop the person is buying at,
-   * both from `BasketViewStore.settleShop`, which the settle sheet asks too. And the
-   * option the row offers in place of a default the shop is known not to have:
-   * the row names it, so the settle buys it.
-   *
-   * The row on this page is bound with no product anybody chose, so this asks the
-   * same question with the same answer: what is sent is what the row drew.
+   * The scope of the price the row draws and the shop the person is buying at,
+   * both from `BasketViewStore.settleShop`, which the settle sheet asks too. And
+   * the row's product as `itemId`, which a row of no product leaves out: what is
+   * sent is what the row drew.
    */
   private _settleAt(row: BasketRowModel): {
     itemId?: string;
     priceScopeId?: string;
     supermarketLocationId?: string;
   } {
-    const instead = this.insteadOf(row);
     return {
-      ...(instead === null ? {} : { itemId: instead }),
-      ...this._view.settleShop(basketRowProduct(row, this.products(), instead)),
+      ...(row.productId === null ? {} : { itemId: row.productId }),
+      ...this._view.settleShop(this._rowProduct(row)),
     };
-  }
-
-  /**
-   * The option this row offers in place of a default the chosen shop is known not
-   * to have, or null (velista `0102`).
-   *
-   * What the row draws as its product, and what a settle from the row buys. The
-   * page binds the row with it as the product in the trolley, because the row says
-   * so: "Instead of Danone griego, not available at this shop".
-   */
-  protected insteadOf(row: BasketRowModel): string | null {
-    const shelf = basketShelfMark(
-      row,
-      this.products(),
-      this._view.readAtShop()
-    );
-    return shelf?.kind === 'instead' ? shelf.optionId : null;
   }
 
   /**
@@ -1254,13 +1278,20 @@ export class BasketPage {
    * A failure needs no branch here. It has already moved `BasketStore.state` or is a
    * transient the next refresh resolves, and the row is drawn from the store either
    * way; the sheet is where a failure gets a sentence, and the person opens it.
+   * `refused` is for a held buy only (velista `0141`): its numbers are the press's,
+   * so a refusal there is the window the question was open, and the row says so.
    */
   private async _toggle(
     row: BasketRowModel,
-    write: () => Promise<{ skippedCount: number } | null>
+    write: () => Promise<{ skippedCount: number } | null>,
+    refused: () => void = () => undefined
   ): Promise<void> {
     const result = await write();
-    if (result !== null && result.skippedCount > 0) {
+    if (result === null) {
+      refused();
+      return;
+    }
+    if (result.skippedCount > 0) {
       this.openRow(row);
     }
   }
@@ -1280,7 +1311,20 @@ export class BasketPage {
    * the server divides oldest entry first, which is what it did before a heading
    * existed.
    */
-  protected async setRowLeft(
+  protected setRowLeft(
+    row: BasketViewRow,
+    change: { from: number; to: number }
+  ): void {
+    // Only the settling direction is a buy. Taking units back names no shop, so
+    // it never asks (velista `0141`).
+    if (change.to < change.from) {
+      this._buy(() => this._writeRowLeft(row, change));
+      return;
+    }
+    void this._writeRowLeft(row, change);
+  }
+
+  private async _writeRowLeft(
     row: BasketViewRow,
     change: { from: number; to: number }
   ): Promise<void> {
@@ -1401,7 +1445,27 @@ export class BasketPage {
     const found = this._store.rowFor(row.rowKey);
     const count = (found ?? row).left;
 
-    this._notice.set({ rowKey: row.rowKey, key, count });
+    // On the row as it now stands, so a re-keyed row draws it (velista `0141`).
+    this._notice.set({ rowKey: (found ?? row).rowKey, key, count });
+    this._say(this._translator.t(key, undefined, this._locale(), { count }));
+  }
+
+  /**
+   * Say that a held buy was refused, on its row (velista `0141`).
+   *
+   * The settle sheet drew this sentence before the hold. A held buy outlives the
+   * sheet, which the question replaced, so the row says it instead, as it does for
+   * a refused reel. The row is found again by the key of the press, because a
+   * patch can have re-keyed it while the question was open.
+   */
+  private _reportSettle(rowKey: string): void {
+    const key = basketErrorKey(this._store.error(), 'basket.settle');
+    const found = this._store.rowFor(rowKey);
+    const count = found?.left ?? 0;
+
+    if (found !== null) {
+      this._notice.set({ rowKey: found.rowKey, key, count });
+    }
     this._say(this._translator.t(key, undefined, this._locale(), { count }));
   }
 
@@ -2034,11 +2098,11 @@ export class BasketPage {
 
   /**
    * The lines in this basket already holding what a card offers (velista `0101`,
-   * section 4): one per entry of every row whose products name it, because the same
-   * product reaches the basket from several lists.
+   * section 4): one per entry of the row of that product (velista `0139`, section
+   * 5), because the same product reaches the basket from several lists.
    *
-   * The words are the row's, since an entry carries none of its own, and the list
-   * above them is named only where this reader was served that list. How many is the
+   * The words are the line's own, and the list above them is named only where
+   * this reader was served that list. How many is the
    * entry's `left`, and the stepper moves only where the server says that entry's
    * demand may change. A group is held by nothing here: a basket row names products,
    * not the group a line followed.
@@ -2051,12 +2115,12 @@ export class BasketPage {
         return [];
       }
       return rows
-        .filter((row) => row.optionIds.includes(suggestion.item.id))
+        .filter((row) => row.productId === suggestion.item.id)
         .flatMap((row) =>
           row.entries.map((entry) => ({
             key: `${row.rowKey}:${entry.lineId}`,
             lineId: entry.lineId,
-            text: row.content,
+            text: entry.content === '' ? row.content : entry.content,
             listName:
               entry.listId === null
                 ? null
@@ -2085,25 +2149,14 @@ export class BasketPage {
 
   /**
    * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{rowKey}/demand`, and the same sentences
-   * after it. The row is found again by the line, because a row's key can change
-   * under the panel while somebody else adds or settles.
+   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
+   * after it. It is sent under the line itself (backend `0201`), because a row's key
+   * can change under the panel while somebody else adds or settles.
    */
   protected async changeHolding(
     change: SuggestionHoldingChange
   ): Promise<void> {
-    const row = this._store
-      .rows()
-      .find((candidate) =>
-        candidate.entries.some(
-          (entry) => entry.lineId === change.holding.lineId
-        )
-      );
-    if (row === undefined) {
-      return;
-    }
-
-    const result = await this._store.setDemand(row.rowKey, {
+    const result = await this._store.setDemand({
       lineId: change.holding.lineId,
       quantity: change.to,
       from: change.from,
@@ -2121,7 +2174,7 @@ export class BasketPage {
       return;
     }
 
-    if (result.row === null) {
+    if (this._store.lineLeft(result, change.holding.lineId)) {
       this._say(
         this._translator.t(
           'basket.demand.nothingLeft',
@@ -2242,6 +2295,8 @@ export class BasketPage {
       content: entry.content,
       quantity: entry.quantity,
       ...(itemIds.length > 0 ? { itemIds } : {}),
+      // A chosen card is not named (velista `0144`, section 3).
+      ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
     });
 
     // The dropdown goes with the words that produced it, whichever way the add
@@ -2264,7 +2319,7 @@ export class BasketPage {
 
     this._say(
       this._translator.t('basket.added.announced', undefined, this._locale(), {
-        content: result.row?.content ?? entry.content,
+        content: result.entries[0]?.content ?? entry.content,
       })
     );
   }

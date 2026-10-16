@@ -222,7 +222,10 @@ lib-line-composer {
 }
 
 // A failed read of the trips, said under To buy. Quiet, because To buy is fully usable.
-.trips-failed {
+// A failed read of the trips, and of the products of the lines (velista 0145,
+// section 7): one sentence and a retry, never in front of the lines.
+.trips-failed,
+.products-failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -235,7 +238,8 @@ lib-line-composer {
   color: var(--app-text-secondary);
 }
 
-.trips-failed .state-action {
+.trips-failed .state-action,
+.products-failed .state-action {
   margin-block-start: 0;
 }
 

@@ -21,12 +21,12 @@ import {
   CatalogBrowseMemory,
   fakeCategoryStore,
   MEMORY_CATEGORIES,
+  ProductPickStore,
   provideFakeCategoryStore,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import type {
   CatalogBrowseQuery,
-  CatalogLocation,
   CatalogPriceState,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
@@ -79,8 +79,6 @@ interface RenderOptions extends FakeAddsOptions {
   readonly category?: string;
   /** The chain in `?chain=` on arrival (velista 0124). */
   readonly chain?: string;
-  /** The shop in `?shop=` on arrival (velista 0124). */
-  readonly shop?: string;
   /** The text in `?q=` on arrival. */
   readonly q?: string;
   /** The order in `?order=` on arrival. */
@@ -113,7 +111,6 @@ async function render(
     convertToParamMap({
       ...(options.category === undefined ? {} : { category: options.category }),
       ...(options.chain === undefined ? {} : { chain: options.chain }),
-      ...(options.shop === undefined ? {} : { shop: options.shop }),
       ...(options.q === undefined ? {} : { q: options.q }),
       ...(options.order === undefined ? {} : { order: options.order }),
     })
@@ -128,6 +125,7 @@ async function render(
       provideRouter([]),
       provideFakeCategoryStore(tree),
       ...adds.providers,
+      ProductPickStore,
       { provide: ActivatedRoute, useValue: { queryParamMap: query } },
       { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -498,7 +496,7 @@ describe('CatalogPage', () => {
     const supermarket = selector(fixture, 'supermarket');
     expect(supermarket.set).toBe(true);
     expect(supermarket.text).toBe('Deza');
-    expect(supermarket.label).toBe('catalog.selector.supermarketAny');
+    expect(supermarket.label).toBe('catalog.selector.supermarketChain');
     expect(supermarket.clear?.getAttribute('aria-label')).toBe(
       'catalog.supermarket.clear'
     );
@@ -554,10 +552,10 @@ describe('CatalogPage', () => {
       locationId: null,
     });
     expect(field(fixture).placeholder).toBe('catalog.search.chain');
-    // The chain on the selector, heard as "any shop", with a cross beside it.
+    // The chain on the selector, with a cross beside it.
     const chosen = selector(fixture, 'supermarket');
     expect(chosen.text).toBe('Deza');
-    expect(chosen.label).toBe('catalog.selector.supermarketAny');
+    expect(chosen.label).toBe('catalog.selector.supermarketChain');
     expect(chosen.clear?.getAttribute('aria-label')).toBe(
       'catalog.supermarket.clear'
     );
@@ -589,105 +587,27 @@ describe('CatalogPage', () => {
     expect(field(fixture).placeholder).toBe('catalog.categories.search');
   });
 
-  it('prices at one shop with locationId alone, and says where', async () => {
-    const { fixture, browse } = await render('priced', {
+  it('never narrows to one shop: a ?shop= in an old link is not read', async () => {
+    const { fixture, browse, query } = await render('priced', {
       chain: 'chain-mercadona',
-      shop: 'location-mercadona-mayor',
     });
-    await settle(fixture);
+    const reads = browse.mock.calls.length;
 
-    expect(lastQuery(browse)).toMatchObject({
-      soldBy: null,
-      priceScopeIds: [],
-      locationId: 'location-mercadona-mayor',
-    });
-    // The selector names the chain. The line that heads the list names the shop.
-    const chosen = selector(fixture, 'supermarket');
-    expect(chosen.text).toBe('Mercadona');
-    expect(chosen.label).toBe('catalog.selector.supermarketShop');
-    expect(headNote(fixture)).toBe('catalog.supermarket.pricesAt');
-  });
-
-  it('writes the chain a ?shop= link left out into the URL, so the URL and the page agree', async () => {
-    const navigate = jest
-      .spyOn(Router.prototype, 'navigateByUrl')
-      .mockResolvedValue(true);
-    try {
-      const { fixture, browse, query } = await render('priced', {
+    query.next(
+      convertToParamMap({
+        chain: 'chain-mercadona',
         shop: 'location-mercadona-mayor',
-      });
-      await settle(fixture);
-
-      // The shop's chain, beside the shop, in place of this entry.
-      const url = lastUrl(navigate);
-      expect(url).toContain('chain=chain-mercadona');
-      expect(url).toContain('shop=location-mercadona-mayor');
-      expect(navigate.mock.calls[navigate.mock.calls.length - 1][1]).toEqual({
-        replaceUrl: true,
-      });
-
-      // That navigation lands here: the same choice, so no first page again.
-      const reads = browse.mock.calls.length;
-      query.next(
-        convertToParamMap({
-          chain: 'chain-mercadona',
-          shop: 'location-mercadona-mayor',
-        })
-      );
-      await settle(fixture);
-      expect(browse.mock.calls.length).toBe(reads);
-      expect(selector(fixture, 'supermarket').text).toBe('Mercadona');
-      expect(headNote(fixture)).toBe('catalog.supermarket.pricesAt');
-    } finally {
-      navigate.mockRestore();
-    }
-  });
-
-  it('writes no URL when the tab is left before the shop answers', async () => {
-    // The shop's real answer, held back until after the page is gone.
-    const found = await new CatalogBrowseMemory().location(
-      'location-mercadona-mayor'
+      })
     );
-    let answer: (location: CatalogLocation | null) => void = () => undefined;
-    const location = jest
-      .spyOn(CatalogBrowseMemory.prototype, 'location')
-      .mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            answer = resolve;
-          })
-      );
-    const navigate = jest
-      .spyOn(Router.prototype, 'navigateByUrl')
-      .mockResolvedValue(true);
-    try {
-      const { fixture } = await render('priced', {
-        shop: 'location-mercadona-mayor',
-      });
-      expect(location).toHaveBeenCalledWith('location-mercadona-mayor');
-
-      fixture.destroy();
-      answer(found);
-      await settle(fixture);
-
-      expect(navigate).not.toHaveBeenCalled();
-    } finally {
-      location.mockRestore();
-      navigate.mockRestore();
-    }
-  });
-
-  it('says a product has no price at the shop rather than dropping it', async () => {
-    const { fixture } = await render('noPlace', {
-      chain: 'chain-mercadona',
-      shop: 'location-mercadona-mayor',
-    });
     await settle(fixture);
 
-    const missing = host(fixture).querySelectorAll('.no-price');
-    expect(missing.length).toBeGreaterThan(0);
-    expect(missing[0].textContent).toContain('catalog.row.noPrice');
-    expect(missing[0].textContent).toContain('catalog.supermarket.notPriced');
+    // The same chain, so no first page again, and the read is the chain's.
+    expect(browse.mock.calls.length).toBe(reads);
+    expect(lastQuery(browse)).toMatchObject({
+      soldBy: 'chain-mercadona',
+      locationId: null,
+    });
+    expect(headNote(fixture)).toBe('catalog.head.chainNear');
   });
 
   it('announces how many products are drawn, politely', async () => {
@@ -745,24 +665,17 @@ describe('CatalogPage', () => {
   });
 
   describe('the line that heads the list (velista 0134, section 3)', () => {
-    it('names the shop first, then the chain, then the postal code', async () => {
+    it('names the chain first, then the postal code', async () => {
       const near = await render();
       expect(headNote(near.fixture)).toBe('catalog.near');
 
       const chain = await render('priced', { chain: 'chain-deza' });
       expect(headNote(chain.fixture)).toBe('catalog.head.chainNear');
-
-      const shop = await render('priced', {
-        chain: 'chain-mercadona',
-        shop: 'location-mercadona-mayor',
-      });
-      await settle(shop.fixture);
-      expect(headNote(shop.fixture)).toBe('catalog.supermarket.pricesAt');
     });
 
     it('names the chain alone for somebody with no postal code, and nothing with neither', async () => {
       const chain = await render('noPlace', { chain: 'chain-deza' });
-      expect(headNote(chain.fixture)).toBe('catalog.supermarket.any');
+      expect(headNote(chain.fixture)).toBe('Deza');
 
       const plain = await render('noPlace');
       expect(headNote(plain.fixture)).toBeNull();
@@ -1029,7 +942,9 @@ describe('CatalogPage', () => {
         'list-weekly',
         'Extra virgin olive oil',
         1,
-        ['item-oil']
+        ['item-oil'],
+        // Not named: the words are the product's (velista 0144).
+        false
       );
       // The plus stays a plus. The line it made is under the row, with one.
       expect(plusOf(fixture, OIL)?.classList.contains('has-count')).toBe(false);
@@ -1531,6 +1446,7 @@ describe('CatalogPage', () => {
           ]),
           provideFakeCategoryStore(fakeCategoryStore(MEMORY_CATEGORIES)),
           ...fakeAdds().providers,
+          ProductPickStore,
           { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
           { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
         ],

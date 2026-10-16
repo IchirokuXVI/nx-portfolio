@@ -7,6 +7,7 @@ import {
   DiaClient,
   DiaSessionError,
   DiaStoppedError,
+  photoAddressRead,
   regularPrice,
   splitSize,
   type DiaLeaf,
@@ -20,6 +21,7 @@ import type {
   CatalogRunner,
   RunPriceScope,
 } from './catalog-runner';
+import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
@@ -697,9 +699,6 @@ function observationOf(
     // our categories (section 7).
     diaCategoryIds: product.leafIds,
   };
-  if (row.image) {
-    extra['image'] = absolute(row.image);
-  }
   if (row.weightInGrams !== null) {
     extra['weightInGrams'] = row.weightInGrams;
   }
@@ -722,6 +721,9 @@ function observationOf(
     packCount: packCountOf(size.packCount),
     categoryPath: [product.firstLeaf.rootName, product.firstLeaf.name],
     url: row.url ? absolute(row.url) : null,
+    // The listing's `image`, made absolute against the chain's own host
+    // (plan 0198). It used to sit in `extra`, which nothing reads.
+    imageUrl: photoOf(photoAddressRead(row), product.skuId),
     observedAt,
     extra,
     prices,

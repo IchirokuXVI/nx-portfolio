@@ -197,6 +197,8 @@ function line(
     id,
     listId,
     content,
+    // Typed by a person, like every line of the fixture.
+    named: true,
     quantity,
     position,
     // Free text, which is what most lines are and stays first class (section 6).
@@ -206,6 +208,8 @@ function line(
     // would draw provenance headings over a fixture nothing syncs.
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    preferredSupermarketId: null,
     approvalStatus: 'APPROVED',
     // Nothing has ever happened to it, which is the honest default and the one that
     // draws no indicator. The helpers below are what say otherwise.

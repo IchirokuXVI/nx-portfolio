@@ -1,3 +1,4 @@
+import type { BasketRowMark } from '../enums/basket.enums';
 import type { LineApprovalStatus } from '../enums/list.enums';
 
 /**
@@ -33,9 +34,10 @@ import type { LineApprovalStatus } from '../enums/list.enums';
  * moved, so an edit that renames a line, sets its quantity and sends it back to
  * `PENDING` is one `RENAMED` change with all six values filled.
  *
- * A purchase, a revert, a skip and a reorder are **not** changes here (plan
- * 0130, section 11, decision 12): a shopper buying a thing is not the household
- * changing what it asked for.
+ * A purchase that lowers the quantity of a line, and a revert that raises it,
+ * are changes since plan 0203, which reversed decision 12 of plan 0130. Each is
+ * shown to every basket but the one it was made through. A skip, "they had
+ * none" and a reorder move no quantity and are **not** changes.
  */
 export enum LineChangeKind {
   /** A line the list did not hold before. Only the `after` values are filled. */
@@ -50,7 +52,45 @@ export enum LineChangeKind {
   DELETED = 'DELETED',
   /** Approved, rejected or put back to pending. */
   APPROVAL_CHANGED = 'APPROVAL_CHANGED',
+  /** A buy lowered how many are left (plan 0203). Only the quantity pair is filled. */
+  BOUGHT = 'BOUGHT',
+  /** A buy was taken back, so more are left again (plan 0203). */
+  BUY_REVERTED = 'BUY_REVERTED',
 }
+
+/**
+ * The two kinds that a buy writes (plan 0203, section 1).
+ *
+ * They share one rule that the other six do not have: a basket is shown the
+ * change exactly when it was not made through that basket.
+ */
+export const BUY_CHANGE_KINDS: readonly LineChangeKind[] = [
+  LineChangeKind.BOUGHT,
+  LineChangeKind.BUY_REVERTED,
+];
+
+/** Where a buy that was not made through the reading basket came from. */
+export enum BasketChangeOriginKind {
+  /** Through another basket. Its id and its name are never served. */
+  ANOTHER_BASKET = 'ANOTHER_BASKET',
+  /** On the zone list page, through no basket. */
+  LIST = 'LIST',
+}
+
+/**
+ * Where an outside buy came from (plan 0203, section 5).
+ *
+ * `owner` is the owner of the other basket, served as `{ userId }` beside a
+ * served `listId` alone. That is the rule an account follows everywhere in this
+ * view. It is null for a guest, for a reader who cannot write the list, and
+ * for a basket that was deleted since. A client then says "Someone".
+ */
+export type BasketChangeOrigin =
+  | {
+      kind: BasketChangeOriginKind.ANOTHER_BASKET;
+      owner: BasketChangeActorView | null;
+    }
+  | { kind: BasketChangeOriginKind.LIST };
 
 /**
  * The bounds the change reads hold themselves to.
@@ -85,11 +125,17 @@ export interface BasketChangeView {
   /** This viewer has not acknowledged it. */
   unseen: boolean;
   /**
-   * The anchor of the basket row this line is in now, or null when it is gone.
+   * A covered line of the basket row this change is about, or null when the
+   * line is in no row now.
+   *
+   * **A client finds the row that holds this line among its entries.** Before
+   * plan 0201 this was the anchor of the row. A row is now the lines that
+   * count as one product, which the picks of a read can regroup, so the
+   * history names the line itself and never a row.
    *
    * A merge resolves through the surviving line, because that is the row the
-   * change is about now. A deleted line whose name a covered row still carries
-   * resolves to that row.
+   * change is about now. A deleted line whose product, or whose name when it
+   * holds none, a covered line still carries resolves to that line.
    */
   rowKey: string | null;
   contentBefore: string | null;
@@ -114,6 +160,11 @@ export interface BasketChangeView {
    * person. Otherwise null. Core serves no name, as everywhere else.
    */
   actor: BasketChangeActorView | null;
+  /**
+   * Set for a `BOUGHT` and a `BUY_REVERTED` that was not made through this
+   * basket, and null for every other change (plan 0203, section 5).
+   */
+  origin: BasketChangeOrigin | null;
 }
 
 /** Whoever made a change, named the one way this reader is allowed to see them. */
@@ -133,6 +184,38 @@ export interface ListBasketChangesRequest {
   participantId: string;
   cursor?: string;
   limit?: number;
+}
+
+/** Read the marks of a basket alone (plan 0204, section 6). */
+export interface GetBasketMarksRequest {
+  basketId: string;
+  participantId: string;
+}
+
+/**
+ * What changed since this viewer last looked, with no rows (plan 0204, section
+ * 6).
+ *
+ * The two numbers are the ones `BasketView` carries, and `lines` is the `mark`
+ * of each row before it is folded: a client folds the marks of the lines of a
+ * row with the rule of the read, which is that `ADDED` wins over `CHANGED`.
+ *
+ * **A line that was removed is not here.** A removal sends a
+ * `basket.linesChanged` with ids alone, and a client reads the basket for it.
+ */
+export interface BasketMarksView {
+  /** Capped at {@link BASKET_CHANGE_LIMITS.countCap}. */
+  unseenChangeCount: number;
+  /** What an acknowledgement sends as `through`. */
+  newestUnseenChangeId: string | null;
+  /** One for each covered line that carries a mark for this viewer. */
+  lines: BasketLineMark[];
+}
+
+/** The mark of one covered line. */
+export interface BasketLineMark {
+  lineId: string;
+  mark: BasketRowMark;
 }
 
 /**

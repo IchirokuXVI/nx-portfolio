@@ -18,6 +18,8 @@ import {
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type OAuthStatePayload,
+  type RecoverySignInRequest,
+  type RecoverySignInResult,
   type RefreshRequest,
   type RegisterRequest,
   type ResendVerificationRequest,
@@ -92,6 +94,13 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.resetPassword)
   resetPassword(@Payload() req: ResetPasswordRequest): Promise<AuthTokens> {
     return this.identity.resetPassword(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.recoverySignIn)
+  recoverySignIn(
+    @Payload() req: RecoverySignInRequest
+  ): Promise<RecoverySignInResult> {
+    return this.identity.recoverySignIn(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.refresh)

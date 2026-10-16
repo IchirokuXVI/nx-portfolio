@@ -25,6 +25,8 @@ import {
   type ListRef,
 } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
+import { keptFavorite } from './line-item-set';
+import { mergedNamed } from './line-named';
 
 /**
  * The products two lines hold together, the survivor's first and in its own
@@ -35,6 +37,38 @@ export function mergedItemIds(
   absorbed: readonly string[]
 ): string[] {
   return [...new Set([...survivor, ...absorbed])];
+}
+
+/** The two fields of a line that plan 0199 adds, as a merge reads them. */
+type LineChoices = Pick<ListLine, 'favoriteItemId' | 'preferredSupermarketId'>;
+
+/**
+ * The favourite product and the chain of a merged line (plan 0199, section 2,
+ * rule 6).
+ *
+ * The survivor keeps its own. Where it has none, it takes the field of the line
+ * that goes away. Each field is decided by itself, so a survivor with a chain
+ * and no favourite keeps its chain and takes the other favourite.
+ *
+ * A favourite is taken only when that product is in the merged set. The union
+ * holds every product of both lines, so this refuses only a favourite that was
+ * already outside the set of its own line. Such a row breaks the rule that a
+ * favourite is one of the products, and a merge does not carry it over.
+ */
+export function mergedChoices(
+  survivor: LineChoices,
+  absorbed: LineChoices,
+  union: readonly string[]
+): LineChoices {
+  return {
+    favoriteItemId:
+      keptFavorite(survivor.favoriteItemId, union) ??
+      keptFavorite(absorbed.favoriteItemId, union),
+    preferredSupermarketId:
+      survivor.preferredSupermarketId ??
+      absorbed.preferredSupermarketId ??
+      null,
+  };
 }
 
 /**
@@ -221,6 +255,9 @@ export class LineMergeService {
     );
     this.mergeApproval(survivor, absorbed);
     survivor.itemSetHash = itemSetHash(union);
+    Object.assign(survivor, mergedChoices(survivor, absorbed, union));
+    // Named when either line is (plan 0207, section 1.3).
+    survivor.named = mergedNamed(survivor, absorbed);
     survivor.version = version;
 
     // After the survivor holds its merged quantity and approval, and before the

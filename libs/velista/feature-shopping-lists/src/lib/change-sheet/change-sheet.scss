@@ -1,0 +1,203 @@
+@use '../basket-shared' as shared;
+
+// Change the product (velista 0140, section 2). The title and the line under it
+// as the settle sheet draws its own, so the two sheets read as one pair.
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.sub {
+  margin: var(--app-space-1) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// One list, ruled off row from row, starting on a hairline. No heading and no
+// container: the owner merged the two lists into one.
+.choices {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.choice {
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// The product as the cards print it, cut on one line.
+.name {
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "Chosen now", "cheaper option", "Not sold here": words under the name, never
+// a colour alone.
+.caption {
+  overflow: hidden;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  em {
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  .cheaper {
+    color: var(--app-action-quiet-fg);
+  }
+
+  .not-sold {
+    color: var(--app-status-danger-fg);
+  }
+}
+
+.price {
+  flex: none;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+  white-space: nowrap;
+}
+
+// A row of the loading list, as tall as a real one.
+.bone {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-line-row-height);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.bone-dot {
+  flex: none;
+  inline-size: var(--app-choice-radio-size);
+  block-size: var(--app-choice-radio-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+}
+
+.bone-text {
+  flex: 1;
+  max-inline-size: 60%;
+  block-size: var(--app-text-base);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-sunken);
+}
+
+// The read did not answer: one row, with a second try.
+.failed {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-line-row-height);
+  margin-block-start: var(--app-space-3);
+  border-block: 1px solid var(--app-border-subtle);
+}
+
+.failed-text {
+  flex: 1;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.retry {
+  @include shared.tap-target;
+
+  flex: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// "Look for another one in the catalog": a link row the width of the list.
+.catalog {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-line-row-height);
+  padding: 0;
+  border: none;
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  text-align: start;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.catalog-glyph,
+.catalog-chevron {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-secondary);
+}
+
+.catalog-text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// The checkbox and the one button, pinned to the foot of the panel.
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-block-start: var(--app-space-2);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+.use {
+  @include shared.primary-button;
+}

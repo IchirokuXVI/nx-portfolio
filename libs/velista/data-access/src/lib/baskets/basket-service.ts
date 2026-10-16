@@ -6,11 +6,14 @@ import type {
   BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
+  BasketMarks,
   BasketParticipant,
+  BasketProductChangeRequest,
+  BasketProductList,
   BasketRenameRequest,
-  BasketRenameResult,
   BasketRevertRequest,
   BasketRowResult,
+  BasketRowTarget,
   BasketSession,
   BasketSettleRequest,
   BasketShareLink,
@@ -42,12 +45,12 @@ import { BasketApi } from './basket-api';
  * section 3.3). A client supplied participant id would be a second answer to a
  * question the server has already answered better.
  *
- * ## Every write addresses a row, and answers one
+ * ## Every write names its lines, and answers them
  *
- * A basket stores no lines since backend `0136`, so there is nothing to address
- * one by. A write names a `rowKey` and answers a {@link BasketRowResult}, which
- * is the row as it now stands and the basket's counts. The store folds that whole
- * and patches nothing.
+ * A row is a group the server makes on every read (backend `0201`), so a write
+ * names a row's key for its path and the lines it acts on, and answers those
+ * lines as they now stand ({@link BasketRowResult}). The store puts them back into
+ * its rows with the shared rules and reads the basket again.
  */
 export interface BasketServiceI {
   /**
@@ -112,6 +115,23 @@ export interface BasketServiceI {
   getLiveBasket(locationId?: string): Promise<Basket>;
 
   /**
+   * The rows of a basket and nothing of the catalog (`GET /v1/baskets/:id/rows`,
+   * backend `0205`; velista `0143`, section 5).
+   *
+   * The full answer without `products`, `scopes` and `shop`, which come back
+   * empty here: the caller keeps the ones it holds. What an event that cannot be
+   * applied reads, at a third of the bytes. `locationId` is the full read's.
+   */
+  getBasketRows(basketId: string, locationId?: string): Promise<Basket>;
+
+  /**
+   * The marks of each line and the two numbers of the banner
+   * (`GET /v1/baskets/:id/changes/marks`, backend `0204`, section 6), for an
+   * event that says `marksMoved` (velista `0143`, section 4).
+   */
+  getMarks(basketId: string): Promise<BasketMarks>;
+
+  /**
    * The three numbers the dashboard card draws (`GET /v1/baskets/live/summary`).
    *
    * A read of its own so the card does not pay for a thousand rows and a catalog
@@ -135,10 +155,13 @@ export interface BasketServiceI {
    * tap safe. The server no longer caps an absent quantity at what the row asks
    * for: buying three of a row that says two records three, because the extra
    * unit is real and belongs in the consumption history.
+   *
+   * **Every row write names its lines** (backend `0201`, section 4): `target`
+   * carries the row's key for the path and the lines the write acts on.
    */
   settle(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketSettleRequest
   ): Promise<BasketRowResult>;
 
@@ -162,7 +185,7 @@ export interface BasketServiceI {
    */
   revert(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRevertRequest
   ): Promise<BasketRowResult>;
 
@@ -187,7 +210,7 @@ export interface BasketServiceI {
    * `PUT` because it is "ensure": skipping a row that is already skipped is the
    * state it asked for, not a second skip.
    */
-  skip(basketId: string, rowKey: string): Promise<BasketRowResult>;
+  skip(basketId: string, target: BasketRowTarget): Promise<BasketRowResult>;
 
   /**
    * Put a skipped row back (`DELETE` on the same route).
@@ -197,7 +220,7 @@ export interface BasketServiceI {
    * person who skipped the bread and then found it presses "Got it", and the
    * skip goes with the settle rather than needing this first.
    */
-  unskip(basketId: string, rowKey: string): Promise<BasketRowResult>;
+  unskip(basketId: string, target: BasketRowTarget): Promise<BasketRowResult>;
 
   /**
    * Change what one list asks for (`POST /v1/baskets/:id/rows/:rowKey/demand`),
@@ -212,14 +235,43 @@ export interface BasketServiceI {
    * guest has none of their own, which is why the answer travels as
    * `BasketRowEntry.demandEditable` rather than being worked out here.
    *
-   * {@link BasketRowResult.row} is null when the row left the basket, which is
-   * a demand taken to zero on a row nothing was bought of.
+   * Addressed by its one line, which is also the key of the path (backend
+   * `0201`, section 4). The line can be at zero on a covered list, which is how
+   * a list that holds the product asks for it again (velista `0139`, section 3).
+   * A line absent from the answer left the basket: a demand taken to zero on a
+   * line nothing was bought of.
    */
   setDemand(
     basketId: string,
-    rowKey: string,
     body: BasketDemandRequest
   ): Promise<BasketRowResult>;
+
+  /**
+   * Take another product on these lines (`POST /v1/baskets/:id/lines/product`,
+   * backend `0202` section 3; velista `0140`, section 4).
+   *
+   * The buys of this trip of every named line take the new product, and with
+   * `keep` the product is added to each line and made its favourite. Account
+   * participants only: a guest is refused with `forbidden`. A line the reader may
+   * not edit refuses a `keep` for the whole request, and nothing is written.
+   */
+  changeProduct(
+    basketId: string,
+    body: BasketProductChangeRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * The covered lists that could take a product (`GET
+   * /v1/baskets/:id/products/:itemId/lists`, backend `0201`, section 5).
+   *
+   * Every covered list the reader may write with no line counting as that
+   * product, each with its line that holds the product at zero when it has one.
+   * A guest is refused with `forbidden`, and the sheet does not ask for one.
+   */
+  productLists(
+    basketId: string,
+    itemId: string
+  ): Promise<readonly BasketProductList[]>;
 
   /**
    * Add a line, onto one of the basket's covered lists (`POST
@@ -231,8 +283,8 @@ export interface BasketServiceI {
    *
    * It goes through the list's ordinary rules, so it can land on a line the list
    * already held (backend `0091`) and it can land unapproved on a list that does
-   * not auto approve. Either way the answer is the row it landed on, which the
-   * store folds like any other row write.
+   * not auto approve. Either way the answer is the line, which the store puts
+   * into the row of its product like any other row write.
    */
   addLine(
     basketId: string,
@@ -248,15 +300,15 @@ export interface BasketServiceI {
    * rule — every entry's list served — but a refusal here is still the answer.
    *
    * A name already taken, on a list or in the basket, is refused with
-   * `line_merge_required` until the same request carries `confirmMerge`. After a
-   * merge the answer's row is the survivor, which may not be the row addressed:
-   * `absorbedRowKey` names the one that went away.
+   * `line_merge_required` until the same request carries `confirmMerge`. A row
+   * with a product is named by the catalog and is refused (backend `0201`), so
+   * only a row of lines with no product is renamed.
    */
   renameRow(
     basketId: string,
-    rowKey: string,
+    target: BasketRowTarget,
     body: BasketRenameRequest
-  ): Promise<BasketRenameResult>;
+  ): Promise<BasketRowResult>;
 
   /**
    * The catalog, searched **through the basket**

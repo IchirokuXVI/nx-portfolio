@@ -28,9 +28,9 @@ import { CATALOG_MIGRATIONS } from '../db/migrations';
 import { ShopWalks1758400000000 } from '../db/migrations/1758400000000-ShopWalks';
 import {
   CATALOG_ENTITIES,
+  ShopSection,
   Supermarket,
   SupermarketLocation,
-  SupermarketSection,
 } from '../entities';
 import { shopsWithMap } from './has-map';
 import { ShopWalkService } from './shop-walk.service';
@@ -42,9 +42,10 @@ import { ShopWalkService } from './shop-walk.service';
  * It appends the El Jamón fixture log of shop-map plan 0002 entry by entry and
  * reads back the document the library folds the whole log to; a retried entry
  * answers the first result; a stale base is refused; the fixture's second
- * rewind goes past its first; the shop's section list is in walk order once
- * the walk is shown; and the public read answers without an account. It ends
- * with the migration down and up again.
+ * rewind goes past its first; the sections of the shop are in walk order once
+ * the walk is shown, and the other shop of the chain gets none of them (plan
+ * 0200); and the public read answers without an account. It ends with the
+ * migration down and up again.
  *
  * It works in a scratch schema of its own, and drops it afterwards.
  *
@@ -75,7 +76,7 @@ describeIntegration('shop walks (real Postgres)', () => {
   let chainId: string;
   let shopId: string;
   let otherShopId: string;
-  /** The chain's own sections before any walk: one per spelling to match. */
+  /** The walked shop's own sections before any walk: one per spelling to match. */
   let lacteos: string;
   let charcuteria: string;
 
@@ -116,14 +117,13 @@ describeIntegration('shop walks (real Postgres)', () => {
     entry: Omit<ShopWalkEntryView, 'seq'>
   ) => walks.append({ userId: MAPPER, walkId, baseSeq, ...entry });
 
-  /** The shop's own section list, by name, in its order. */
+  /** The sections of a shop, by name, in its order. */
   async function listOf(locationId: string): Promise<string[]> {
     const rows = (await dataSource.query(
       `SELECT s."name" AS "name"
-         FROM "location_sections" ls
-         JOIN "supermarket_sections" s ON s."id" = ls."sectionId"
-        WHERE ls."supermarketLocationId" = $1
-        ORDER BY ls."position"`,
+         FROM "shop_sections" s
+        WHERE s."supermarketLocationId" = $1
+        ORDER BY s."position"`,
       [locationId]
     )) as { name: Record<string, string> }[];
     return rows.map((row) => row.name['es'] ?? row.name['en']);
@@ -153,7 +153,7 @@ describeIntegration('shop walks (real Postgres)', () => {
       getOrThrow: () => ({ adminJwtPublicKey: '', serviceActorIds: [OWNER] }),
     } as never);
     sections = new SectionService(
-      dataSource.getRepository(SupermarketSection),
+      dataSource.getRepository(ShopSection),
       admin,
       new CatalogAuditService(dataSource)
     );
@@ -174,7 +174,7 @@ describeIntegration('shop walks (real Postgres)', () => {
     lacteos = (
       await sections.create({
         userId: OWNER,
-        supermarketId: chainId,
+        supermarketLocationId: shopId,
         slug: 'lacteos',
         name: { en: 'Lácteos', es: 'Leche y derivados' },
         categoryIds: [],
@@ -183,7 +183,7 @@ describeIntegration('shop walks (real Postgres)', () => {
     charcuteria = (
       await sections.create({
         userId: OWNER,
-        supermarketId: chainId,
+        supermarketLocationId: shopId,
         slug: 'charcuteria',
         name: { es: 'charcutería' },
         categoryIds: [],
@@ -401,13 +401,104 @@ describeIntegration('shop walks (real Postgres)', () => {
     expect(fromRewind.entries[0].seq).toBe(firstRewind + 1);
   });
 
-  it('writes the shop’s section list in walk order once the walk is shown', async () => {
+  it('keeps the guard events of an entry in the log and nowhere in the map (plan 0197)', async () => {
+    const guardShop = await shop(chainId, 'guard');
+    const walk = await walks.create({
+      userId: MAPPER,
+      supermarketLocationId: guardShop,
+      name: 'Thursday',
+    });
+    const guards: ShopWalkEntryView['events'] = [
+      { type: 'guard', logMs: 400, what: 'compass-disturbed', degrees: 41.5 },
+      { type: 'guard', logMs: 900, what: 'turned', degrees: 158.2 },
+      { type: 'guard', logMs: 950, what: 'jump', metres: 3.4 },
+      { type: 'guard', logMs: 1000, what: 'lost' },
+    ];
+    const events: ShopWalkEntryView['events'] = [
+      {
+        type: 'path',
+        points: [
+          [0, 0, 0],
+          [500, 1, 0],
+        ],
+      },
+      guards[0],
+      {
+        type: 'mark-put',
+        mark: {
+          id: 'n1',
+          kind: 'note',
+          x: 1,
+          y: 0,
+          heading: 0,
+          text: 'door',
+          logMs: 500,
+        },
+      },
+      ...guards.slice(1),
+    ];
+    const stopped = {
+      id: 'bb000000-0000-4000-8000-000000000197',
+      kind: 'stopped' as const,
+      at: '2026-10-08T11:00:00.000Z',
+      logFrom: 0,
+      logTo: 1000,
+      reason: 'frame-moved' as const,
+    };
+    await append(walk.id, 0, { ...stopped, events });
+
+    const { entries } = await walks.log({ userId: MAPPER, walkId: walk.id });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].events).toEqual(events);
+
+    // The document is the one the entry folds to with no guard event in it.
+    const plain = await walks.create({
+      userId: MAPPER,
+      supermarketLocationId: guardShop,
+      name: 'Friday',
+    });
+    await append(plain.id, 0, {
+      ...stopped,
+      id: 'bb000000-0000-4000-8000-000000000198',
+      events: events.filter((event) => event.type !== 'guard'),
+    });
+    const read = await walks.get({ userId: MAPPER, walkId: walk.id });
+    expect(read.document).toEqual(
+      (await walks.get({ userId: MAPPER, walkId: plain.id })).document
+    );
+    expect(read.document.marks.map((mark) => mark.id)).toEqual(['n1']);
+    expect(JSON.stringify(read)).not.toContain('guard');
+
+    await walks.update({ userId: MAPPER, walkId: walk.id, shown: true });
+    const { map } = await walks.mapForLocation({
+      supermarketLocationId: guardShop,
+    });
+    expect(map?.view).toEqual(shopperView(read.document));
+    expect(JSON.stringify(map)).not.toContain('guard');
+
+    // One over the cap is refused whole, and the walk stays where it was.
+    const error = await refusal(
+      append(walk.id, 1, {
+        ...stopped,
+        id: 'bb000000-0000-4000-8000-000000000199',
+        logFrom: 1000,
+        logTo: 2000,
+        events: Array.from({ length: 51 }, () => guards[0]),
+      })
+    );
+    expect(error).toBeInstanceOf(ValidationException);
+    expect(
+      (await walks.get({ userId: MAPPER, walkId: walk.id })).walk.lastSeq
+    ).toBe(1);
+  });
+
+  it('writes the sections of the shop in walk order once the walk is shown', async () => {
     const shown = await walks.update({ userId: MAPPER, walkId, shown: true });
     expect(shown.shown).toBe(true);
 
     const names = walkOrderV2(expectedMap).sections.map((stop) => stop.name);
     // Lácteos matched the section named so in English, Charcutería the one
-    // spelled in lower case; every other name created a section of the chain.
+    // spelled in lower case; every other name created a section of this shop.
     const expected = names.map((name) =>
       name === 'Lácteos'
         ? 'Leche y derivados'
@@ -418,16 +509,30 @@ describeIntegration('shop walks (real Postgres)', () => {
     expect(await listOf(shopId)).toEqual(expected);
 
     const created = (await dataSource.query(
-      `SELECT "slug", "name" FROM "supermarket_sections"
-        WHERE "supermarketId" = $1 AND "id" <> ALL($2::uuid[])
+      `SELECT "slug", "name", "position" FROM "shop_sections"
+        WHERE "supermarketLocationId" = $1 AND "id" <> ALL($2::uuid[])
         ORDER BY "position"`,
-      [chainId, [lacteos, charcuteria]]
-    )) as { slug: string; name: Record<string, string> }[];
+      [shopId, [lacteos, charcuteria]]
+    )) as { slug: string; name: Record<string, string>; position: number }[];
     expect(created.length).toBe(names.length - 2);
     // No request context, so the default locale names them.
     expect(created.find((row) => row.slug === 'pescaderia')?.name).toEqual({
       en: 'Pescadería',
     });
+    // The places are the walk order, from 0 and with no gap.
+    const places = (await dataSource.query(
+      `SELECT "position" FROM "shop_sections"
+        WHERE "supermarketLocationId" = $1 ORDER BY "position"`,
+      [shopId]
+    )) as { position: number }[];
+    expect(places.map((row) => row.position)).toEqual(names.map((_, i) => i));
+    // The other shop of the chain was not walked, so it has no sections: a
+    // walk creates sections for its own shop and for no other (plan 0200).
+    expect(await listOf(otherShopId)).toEqual([]);
+    expect(
+      (await sections.forLocation({ supermarketLocationId: otherShopId }))
+        .sections
+    ).toEqual([]);
     expect(await shopsWithMap(dataSource, [shopId, otherShopId])).toEqual(
       new Set([shopId.toLowerCase()])
     );
@@ -454,7 +559,7 @@ describeIntegration('shop walks (real Postgres)', () => {
     });
     const fish = before.map?.sections.find((s) => s.name === 'Pescadería');
     expect(fish).toBeDefined();
-    // Delete the chain section: the cached names still hold the walk's name,
+    // Delete the section: the cached names still hold the walk's name,
     // and the next read leaves it out because nothing resolves it.
     await sections.delete({ userId: OWNER, sectionId: fish?.sectionId ?? '' });
     const after = await walks.mapForLocation({ supermarketLocationId: shopId });
@@ -467,13 +572,14 @@ describeIntegration('shop walks (real Postgres)', () => {
   });
 
   it('keeps the list in walk order on the next save of the shown walk', async () => {
-    // Nothing new in the walk, and the list is rewritten the same, even after
-    // a hand edit of the list.
+    // Nothing new in the walk, and the order is rewritten the same, even after
+    // a hand edit put Lácteos first.
     await sections.setForLocation({
       userId: OWNER,
       supermarketLocationId: shopId,
       sectionIds: [lacteos],
     });
+    expect((await listOf(shopId))[0]).toBe('Leche y derivados');
     await append(walkId, elJamon.length, {
       id: 'bb000000-0000-4000-8000-000000000003',
       kind: 'confirmed',

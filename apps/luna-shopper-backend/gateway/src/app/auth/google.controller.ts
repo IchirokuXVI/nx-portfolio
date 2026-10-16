@@ -18,7 +18,6 @@ import {
   type OAuthStatePayload,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  DEFAULT_LOCALE,
   ERROR_CODES,
   getRequestContext,
   toSupportedLocale,
@@ -27,6 +26,7 @@ import {
 import type { GatewayConfig } from '../config/app-config';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
+import { appUrl } from './app-url';
 import { AuthUser } from './current-user.decorator';
 import {
   GoogleAuthGuard,
@@ -36,6 +36,7 @@ import {
 } from './google-auth.guard';
 import { OptionalJwtAuthGuard } from './jwt-auth.guard';
 import type { CurrentUser } from './jwt.strategy';
+import { RefuseImpersonation } from './refuse-impersonation.decorator';
 import { errorCodeOf } from './remote-problem';
 
 /**
@@ -46,9 +47,6 @@ interface RedirectResponse {
   setHeader(name: string, value: string): unknown;
   status(code: number): { end(): unknown };
 }
-
-/** Substituted with the flow's locale; see `APP_BASE_URL` in the gateway config. */
-const LOCALE_PLACEHOLDER = '{locale}';
 
 /** The page in the app that reads the fragment (velista plan 0009, section 5.6). */
 const APP_CALLBACK_PATH = 'auth/callback';
@@ -96,6 +94,9 @@ export class GoogleController {
   // is the same error one step earlier, and answering it here is what lets the
   // frontend hide the button before the user clicks it (plan 0026, section 3.3).
   @Post('state')
+  // A support session cannot link a Google identity onto the account (plan
+  // 0194): the link is permanent, and the identity would be the operator's.
+  @RefuseImpersonation()
   @UseGuards(GoogleConfiguredGuard, OptionalJwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiContractResponse(AUTH_PATTERNS.mintOAuthState, {
@@ -103,7 +104,11 @@ export class GoogleController {
     description:
       'An opaque, single use state valid for ten minutes. Pass it as the `state` query parameter when navigating to `GET /v1/auth/google`.',
   })
-  @ApiProblemResponses({ auth: true, notConfigured: true })
+  @ApiProblemResponses({
+    auth: true,
+    notConfigured: true,
+    impersonation: 'refused',
+  })
   mintState(@AuthUser() user?: CurrentUser): Promise<MintOAuthStateResult> {
     return this.nats.send(AUTH_PATTERNS.mintOAuthState, {
       // From the verified token or not at all. A body could name somebody else,
@@ -253,13 +258,8 @@ export class GoogleController {
     locale: SupportedLocale | undefined,
     fragment: Record<string, string>
   ): { url: string; statusCode: number } {
-    const language = locale ?? DEFAULT_LOCALE;
-    const base = this.appBaseUrl.includes(LOCALE_PLACEHOLDER)
-      ? this.appBaseUrl.replace(LOCALE_PLACEHOLDER, language)
-      : `${this.appBaseUrl.replace(/\/+$/, '')}/${language}`;
-    const params = new URLSearchParams(fragment).toString();
     return {
-      url: `${base.replace(/\/+$/, '')}/${APP_CALLBACK_PATH}#${params}`,
+      url: appUrl(this.appBaseUrl, locale, APP_CALLBACK_PATH, fragment),
       statusCode: HttpStatus.FOUND,
     };
   }

@@ -14,6 +14,7 @@ import type { Paginated } from '../pagination';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
 import type {
+  ItemSnapshot,
   ItemView,
   LocalizedText,
   LocationSectionNameView,
@@ -35,15 +36,24 @@ import type { SettlePick, SettlementPaid } from './list.messages';
  *
  * One thing to buy can be asked for by two households: "Milk" on the flat's list
  * and on the parents' list is one thing to pick off one shelf. So a **row** is a
- * group of covered list lines that share a merge key, and each line inside it is
- * an **entry**. A write addresses the row and lands on its entries.
+ * group of covered list lines that count as the same product, or that share a
+ * normalized name when they hold no product (plan 0201). Each line inside it is
+ * an **entry**.
  *
- * ## Why the row key is a line id
+ * ## A line counts as one product
  *
- * A group has no identity of its own, because it is recomputed. Its anchor's
- * line id is the closest thing to a stable name, and any entry's id addresses
- * the row on a write: a row whose anchor was just bought to zero must not turn
- * the next tap on the same row into a not found.
+ * The first of these that applies (plan 0201, section 1): the product of its
+ * latest buy in this trip, its favourite, the cheapest of its products at the
+ * scopes of the read, its first product, nothing. Only the cheapest needs a
+ * price, and core holds none, so the gateway hands core a
+ * {@link BasketLinePick} for each line that reaches that step.
+ *
+ * ## The row key is an address, and a write names its lines
+ *
+ * A group has no identity of its own, because it is recomputed, and two reads
+ * at two shops can group the same lines differently. `rowKey` is the line id of
+ * the anchor and addresses a page. Every write names the lines it means in
+ * `lineIds`, and acts on those lines and no others.
  */
 
 /**
@@ -57,6 +67,12 @@ import type { SettlePick, SettlementPaid } from './list.messages';
 export const BASKET_LIMITS = {
   /** Rows one read answers. Past it the read says `truncated` (section 3.6). */
   maxRows: 1000,
+  /**
+   * Lines one `basket.linesChanged` event states the entries of (plan 0204,
+   * section 3). A write that names more sends the ids alone, and a client reads
+   * the basket again, as it did for every write before that plan.
+   */
+  patchMaxLines: 25,
   maxSources: 100,
   nameMaxLength: 120,
   contentMaxLength: 500,
@@ -72,6 +88,8 @@ export const BASKET_LIMITS = {
    * is anywhere near this, so it bounds the insert without bounding the feature.
    */
   maxOptions: 50,
+  /** Lines one write on a row may name (plan 0201, section 4). */
+  maxWriteLines: 100,
 } as const;
 
 /**
@@ -104,8 +122,23 @@ export interface BasketListRef {
 /** One covered list line inside a row (plan 0130, section 4). */
 export interface BasketRowEntryView {
   lineId: string;
-  /** Present only when the reader was served this list's ref (0130, section 6). */
+  /**
+   * Present only when the reader was served this list's ref (0130, section 6).
+   * The name of the list and its zone are in {@link BasketView.lists} under
+   * this id, so an entry repeats neither (plan 0201, section 3).
+   */
   listId?: string;
+  /** The name of the line on its own list (plan 0201, section 3). */
+  content: string;
+  /** The products of the line, in the order the line holds them. */
+  itemIds: string[];
+  /** The favourite of the line (plan 0199), or null. */
+  favoriteItemId: string | null;
+  /**
+   * Whether the **reader** may edit this line: they hold `WRITE` on its list
+   * themselves. False for a guest, who holds no list.
+   */
+  canWrite: boolean;
   left: number;
   bought: number;
   /**
@@ -121,6 +154,26 @@ export interface BasketRowEntryView {
   /** `APPROVED` or `PENDING`. A `REJECTED` line is not covered, so never a row. */
   approvalStatus: LineApprovalStatus;
   /**
+   * `list_lines.version` as this read found it (plan 0204, section 5).
+   *
+   * A client keeps it to drop a {@link BasketEntryPatch} that is older than the
+   * entry it holds. It does not rise on every write: a skip and "they had none"
+   * move no line, so two states of one entry can carry one version.
+   */
+  version: number;
+  /** A standing skip of this basket on the line, inside its window (0137). */
+  skipped: boolean;
+  /**
+   * The newest standing act of this basket on the line is "they had none", and
+   * it still holds: until the trip is finished for a `GENERATED` basket, inside
+   * the skip window for a `LIVE` one (plan 0137, section 4).
+   */
+  closed: boolean;
+  /** The newest standing act of this basket on the line, or null. */
+  act: BasketEntryAct | null;
+  /** As {@link BasketEntryPatch.tripItemId}. */
+  tripItemId: string | null;
+  /**
    * Whether a change of demand on this entry is allowed, by the rule of `0131`
    * asked of the basket's **OWNER**.
    *
@@ -130,12 +183,84 @@ export interface BasketRowEntryView {
   demandEditable: boolean;
 }
 
+/** What {@link BasketEntryAct.outcome} says for a skip, which is no settlement. */
+export const BASKET_ACT_SKIPPED = 'SKIPPED';
+
+/**
+ * The newest thing a basket did to one line: a purchase, "they had none", or a
+ * skip (plan 0204, section 2).
+ *
+ * `at` orders two acts and is drawn beside a row. **A client never compares it
+ * with its own clock**: whether a skip or a close still holds is `skipped` and
+ * `closed`, which the database decided.
+ */
+export interface BasketEntryAct {
+  participantId: string | null;
+  at: string;
+  outcome: SettlementOutcome | typeof BASKET_ACT_SKIPPED;
+}
+
+/**
+ * The state of one line as one basket reads it, on `basket.linesChanged` (plan
+ * 0204, section 2).
+ *
+ * **Every value is absolute**, so applying a patch twice gives what applying it
+ * once gives. It holds nothing that a guest of the basket does not already read
+ * on {@link BasketRowEntryView}: no list, no zone, no name, no account and no
+ * basket. It says nothing about a row either, because a row is a group and the
+ * client rebuilds its own with `@portfolio/luna-shopper/basket-rules`.
+ *
+ * ## The order of two patches of one line
+ *
+ * `version` orders them when it differs. When it is equal, the two states
+ * differ only in `skipped`, `closed` and `act`, and a patch is computed after
+ * the commit of its write, so one read before a later skip can be published
+ * after the patch of that skip. **A client that holds an entry of the same
+ * version whose `skipped` or `closed` differs from the patch reads the basket
+ * again** and does not apply it. The payload carries no order of its own.
+ */
+export interface BasketEntryPatch {
+  lineId: string;
+  /** `list_lines.version` after the write. */
+  version: number;
+  left: number;
+  bought: number;
+  boughtElsewhere: number;
+  state: BasketRowState;
+  approvalStatus: LineApprovalStatus;
+  skipped: boolean;
+  closed: boolean;
+  act: BasketEntryAct | null;
+  /**
+   * The product of the latest standing buy of this line through this basket in
+   * its trip, or null (plan 0201, section 1; plan 0204, section 7).
+   *
+   * A line counts as this product while it is set, so a buy that names another
+   * product than the row's moves the line to another row. **A client reads the
+   * basket again when this differs from the `productId` of the row that holds
+   * the line.** No patch can say which row the line is in now.
+   */
+  tripItemId: string | null;
+}
+
 /** One thing to buy, however many households asked for it. */
 export interface BasketRowView {
-  /** The anchor's list line id. Any entry's id addresses the row on a write. */
+  /**
+   * The anchor's list line id. An address for a page, not an identity: another
+   * read can hand the same lines out under another key (plan 0201, section 3).
+   */
   rowKey: string;
-  /** The anchor's text. */
+  /**
+   * The anchor's text. A row with a product is named by the catalog, and this
+   * is what a client draws when the catalog could not name it.
+   */
   content: string;
+  /**
+   * The product every entry of this row counts as, or null for a row whose
+   * lines hold no product (plan 0201, section 2). Always null on a `REMOVED`
+   * row.
+   */
+  productId: string | null;
   left: number;
   bought: number;
   /** `bought + left`, computed, never stored. */
@@ -156,8 +281,6 @@ export interface BasketRowView {
   mark: BasketRowMark | null;
   /** At least one entry is `PENDING`. Named apart from the `pending` count below. */
   awaitingApproval: boolean;
-  /** The union of the entries' product sets, first seen order, anchor first. */
-  optionIds: string[];
   /** The participant behind the newest standing act of this basket on this row. */
   touchedBy: string | null;
   touchedAt: string | null;
@@ -204,11 +327,20 @@ export interface BasketRowUsualView {
   of: number;
 }
 
-/** The three numbers a basket card draws, and the total they are of. */
+/**
+ * The three numbers a basket card draws, and the total they are of.
+ *
+ * It counts rows, and a row is a product (plan 0201). **Only the full read
+ * counts with the picks of the gateway.** A basket card, `live/summary`, the
+ * answer of a write and the back office count the rows core builds alone, where
+ * a line with several products and no favourite counts as its first product.
+ * The two can differ by one for such a line. A client that holds the rows
+ * counts them itself with `@portfolio/luna-shopper/basket-rules`.
+ */
 export interface BasketProgress {
   done: number;
   unavailable: number;
-  /** Rows that are not `REMOVED`. */
+  /** Rows that are not `REMOVED` and not `BOUGHT_ELSEWHERE`. */
   total: number;
   /** `total - done - unavailable`. */
   pending: number;
@@ -298,7 +430,8 @@ export interface BasketSummaryView {
  */
 export interface BasketResult extends BasketView {
   /**
-   * Every product named by a row's `optionIds`, deduplicated.
+   * The product of every row, and nothing else (plan 0201, section 3). The
+   * other products of a line are read by the page that needs them.
    *
    * Each carries `bestOffer`, the cheapest price at the scopes the basket's
    * profile resolves to, and null wherever nothing was harvested at them. The
@@ -465,6 +598,14 @@ export interface GetBasketRequest {
    * which is the service that knows which chain a shop belongs to.
    */
   supermarketId?: string;
+  /**
+   * The cheapest product of each line that has several and no favourite, as
+   * the gateway priced them at the scopes of the read (plan 0201, section 1).
+   *
+   * Core ignores a pick that is not a product of its line, and a line with no
+   * pick counts as its first product.
+   */
+  picks?: BasketLinePick[];
 }
 
 /** The caller's permanent basket, created the first time they ask for it. */
@@ -472,6 +613,73 @@ export interface GetLiveBasketRequest {
   userId: string;
   /** The read's chain, exactly as {@link GetBasketRequest.supermarketId}. */
   supermarketId?: string;
+  /** As {@link GetBasketRequest.picks}. */
+  picks?: BasketLinePick[];
+}
+
+/** The product one line counts as, chosen by price (plan 0201, section 1). */
+export interface BasketLinePick {
+  lineId: string;
+  itemId: string;
+}
+
+/**
+ * Ask which covered lines need a price to know their product (plan 0201,
+ * section 1): two or more products, no favourite among them, and no buy in
+ * this trip.
+ */
+export interface GetBasketPriceChoicesRequest {
+  basketId: string;
+  participantId: string;
+}
+
+/** One such line, with its products in the order the line holds them. */
+export interface BasketPriceChoice {
+  lineId: string;
+  itemIds: string[];
+}
+
+/**
+ * The lines the gateway must price before it reads the basket.
+ *
+ * `basketId` and `participantId` are the basket and the reader the answer is
+ * for. The live read asks with an account alone, and learns both here.
+ */
+export interface BasketPriceChoicesView {
+  basketId: string;
+  participantId: string;
+  lines: BasketPriceChoice[];
+}
+
+/**
+ * The covered lists that can still take a product (plan 0201, section 5).
+ *
+ * Every covered list the actor may write that holds no covered line counting
+ * as that product. Core decides "counting as" alone, with no picks.
+ */
+export interface GetBasketProductListsRequest {
+  basketId: string;
+  participantId: string;
+  itemId: string;
+}
+
+/** One such list, with its line that holds the product when it has one. */
+export interface BasketProductListView {
+  listId: string;
+  listName: string;
+  zoneId: string;
+  zoneName: string;
+  /**
+   * The oldest line of the list that holds the product among its products, or
+   * null. It can be at zero, and the demand route raises it.
+   */
+  lineId: string | null;
+  lineName: string | null;
+  quantity: number | null;
+}
+
+export interface BasketProductListsView {
+  lists: BasketProductListView[];
 }
 
 /**
@@ -486,24 +694,107 @@ export interface GetLiveBasketRequest {
 export interface SettleBasketRowRequest {
   basketId: string;
   participantId: string;
+  /** One of {@link lineIds}. */
   rowKey: string;
+  /**
+   * The lines this settle acts on, 1 to {@link BASKET_LIMITS.maxWriteLines}
+   * (plan 0201, section 4). Each must be a row of the basket.
+   */
+  lineIds: string[];
   outcome: SettlementOutcome;
-  /** Required for `BOUGHT`, refused for `NOT_AVAILABLE`. */
+  /**
+   * How many were bought, a whole number from 1. Absent on a `BOUGHT`, the
+   * settle buys what the named lines still ask for. Ignored on a
+   * `NOT_AVAILABLE`, which records no units.
+   */
   quantity?: number;
-  /** The row's `left` as the client drew it. Refused with `stale_quantity`. */
+  /**
+   * The sum of `left` over the named lines as the client drew them. Refused
+   * with `stale_quantity`.
+   */
   from: number;
-  /** Must be one of the row's `optionIds`. */
+  /**
+   * The product of the row as the client drew it. It can be a product that is
+   * not on the line, which is a change for this trip only. The gateway refuses
+   * an id the catalog does not know. Absent, the settle records the product
+   * the named lines count as when they agree on one, and none otherwise.
+   */
   itemId?: string;
-  /** Which entry got what. Derived oldest first when absent. */
+  /** Which entry got what, over the named lines. Derived oldest first when absent. */
   allocations?: BasketAllocationEntry[];
   /**
-   * What the screen said one of it costs, and where (plan 0143).
+   * What one of it costs, and where (plan 0143; plan 0202, section 2).
    *
-   * Written by the **gateway**, which reads the price as the basket's owner at
-   * the basket's scopes, and never by a client: the actor at the shelf can be a
-   * guest. The same four values are written on every row this settle writes.
+   * Written by the **gateway**, which chooses the price as the basket's owner,
+   * and never by a client: the actor at the shelf can be a guest. At the shop
+   * of the settle when it has one, else the cheapest across the owner's scopes
+   * with no shop and no chain. The same values are written on every row this
+   * settle writes.
    */
   paid?: SettlementPaid;
+  /**
+   * What the product was called when it was bought (plan 0202, section 1). As
+   * `SettleLineRequest.itemSnapshot`: written by the gateway, and absent when
+   * catalog did not answer in time.
+   */
+  itemSnapshot?: ItemSnapshot | null;
+}
+
+/**
+ * Change the product of basket lines (plan 0202, section 3).
+ *
+ * Two writes in one transaction, for each named line:
+ *
+ * 1. **The buys of the trip are rewritten.** Every standing buy of the line
+ *    through this basket in its trip that names another product is marked
+ *    reverted, and a new settlement is written beside it with the same line,
+ *    quantity, person and `settledAt`, the new product, its name and its price.
+ *    The quantity of the line does not move, so no change row is written.
+ * 2. **When {@link keep} is true the line is written.** The product joins the
+ *    products of the line when it is not one of them, and it becomes the
+ *    favourite. That is an ordinary edit of the line, with its permissions,
+ *    its change row and its events.
+ *
+ * With `keep` false and no buy in the trip nothing is written, and the answer
+ * is the lines as they are.
+ *
+ * Account participants only. Every named line must be a row of the basket, or
+ * the whole write answers "Row not found".
+ */
+export interface ChangeBasketLinesProductRequest {
+  basketId: string;
+  participantId: string;
+  /** The actor's own account. A guest reaches the route and is refused. */
+  userId: string;
+  /** 1 to {@link BASKET_LIMITS.maxWriteLines} lines, each a row of the basket. */
+  lineIds: string[];
+  /** The product the lines change to. The gateway refuses one catalog does not know. */
+  itemId: string;
+  /** Whether the change is kept on the line, or holds for this trip only. */
+  keep: boolean;
+  /** What the product is called now. Written by the gateway, never by a client. */
+  itemSnapshot?: ItemSnapshot | null;
+  /**
+   * What one unit of the product costs at each scope a rewritten buy was
+   * priced at. Written by the gateway, which learned those scopes from
+   * {@link BasketSearchScope.tripBuys}. A buy whose scope is not in this list
+   * keeps its scope and its shop and gets no price.
+   */
+  prices?: BasketScopePrice[];
+  /**
+   * The price for a rewritten buy that recorded no scope, chosen as a settle
+   * chooses one (plan 0202, section 2). Written by the gateway.
+   */
+  paid?: SettlementPaid;
+}
+
+/** What one unit of a product costs at one scope, as the gateway read it. */
+export interface BasketScopePrice {
+  priceScopeId: string;
+  /** One unit, in the minor unit of {@link pricePaidCurrency}. */
+  pricePaidCents: number;
+  /** ISO 4217. */
+  pricePaidCurrency: string;
 }
 
 /** One line's share of a settle, when the caller allocates by hand. */
@@ -524,16 +815,20 @@ export type RevertBasketRowRequest =
   | {
       basketId: string;
       participantId: string;
+      /** One of `lineIds`. */
       rowKey: string;
+      /** The lines this revert acts on (plan 0201, section 4). */
+      lineIds: string[];
       target: 'UNITS';
       units: number;
-      /** The row's `bought` as the client drew it. */
+      /** The sum of `bought` over the named lines as the client drew them. */
       from: number;
     }
   | {
       basketId: string;
       participantId: string;
       rowKey: string;
+      lineIds: string[];
       target: 'CLOSE';
     };
 
@@ -546,9 +841,14 @@ export type RevertBasketRowRequest =
 export interface SetBasketRowDemandRequest {
   basketId: string;
   participantId: string;
+  /** The same id as {@link lineId}. */
   rowKey: string;
-  /** Required when the row holds more than one entry. */
-  lineId?: string;
+  /**
+   * The line to change, always (plan 0201, section 4). It is on a covered list
+   * and it can be at zero, which is how a list that holds a product at zero
+   * asks for it again.
+   */
+  lineId: string;
   /** What that list asks for from now on. */
   quantity: number;
   /** That entry's `left` as the client drew it. */
@@ -571,6 +871,11 @@ export interface AddBasketLineRequest {
   content: string;
   quantity?: number;
   itemIds?: string[];
+  /**
+   * Whether a person typed {@link content} (plan 0207, section 1.3). Handed to
+   * the add of a list line as it arrived, and absent means true.
+   */
+  named?: boolean;
 }
 
 /**
@@ -589,15 +894,25 @@ export interface AddBasketLineRequest {
 export interface SkipBasketRowRequest {
   basketId: string;
   participantId: string;
+  /** One of {@link lineIds}. */
   rowKey: string;
+  /** The lines to put off, or to take the skip back from (plan 0201). */
+  lineIds: string[];
 }
 
-/** Rename every entry of a row, on each of their lists (plan 0113's rule). */
+/**
+ * Rename the named lines, on each of their lists (plan 0113's rule).
+ *
+ * Refused with `validation_failed` for a line that has a product: a row with a
+ * product is named by the catalog (plan 0201, section 4).
+ */
 export interface RenameBasketRowRequest {
   basketId: string;
   participantId: string;
   userId: string;
+  /** One of {@link lineIds}. */
   rowKey: string;
+  lineIds: string[];
   content: string;
   /** Agree to the fold a rename onto an existing name would cause. */
   confirmMerge?: boolean;
@@ -609,10 +924,33 @@ export interface RenameBasketRowRequest {
  */
 export interface BasketSearchScopeRequest extends GetBasketRequest {
   /**
-   * The row a settle is about to write on. Sent only by a settle that named a
-   * scope and no `itemId`, and answered in {@link BasketSearchScope.pick}.
+   * The lines a write is about to act on. Sent by a settle that named no
+   * `itemId`, and answered in {@link BasketSearchScope.pick}. Sent also by a
+   * change of product that asks for {@link tripBuys}.
    */
-  rowKey?: string;
+  lineIds?: string[];
+  /**
+   * Ask where the standing buys of {@link lineIds} in this trip were priced
+   * (plan 0202, section 3). Answered in {@link BasketSearchScope.tripBuys}.
+   */
+  tripBuys?: boolean;
+}
+
+/**
+ * Where the buys a change of product will rewrite were priced (plan 0202,
+ * section 3).
+ *
+ * The gateway reads a price and core never does. So before core rewrites the
+ * buys of a trip, the gateway asks where they were priced, reads what the new
+ * product costs at each of those scopes, and hands core the answers. The buys
+ * are the standing `BOUGHT` settlements of the named lines through this basket
+ * in its trip.
+ */
+export interface BasketTripBuys {
+  /** The distinct price scopes those buys recorded. */
+  priceScopeIds: string[];
+  /** At least one of those buys recorded no scope. */
+  unscoped: boolean;
 }
 
 /** Where a search inside this basket is priced. */
@@ -641,9 +979,9 @@ export interface BasketSearchScope {
    */
   supermarketLocationId: string | null;
   /**
-   * The product a settle on the requested row records when it names none, and
-   * how many the row offers (plan 0151). Present exactly when the request
-   * named a `rowKey`.
+   * The product a settle on the requested lines records when it names none
+   * (plan 0151). `optionCount` is 1 when they agree on one product and 0
+   * otherwise (plan 0201). Present exactly when the request named `lineIds`.
    *
    * It rides here for the reason {@link servesLocations} does: the settle
    * already asks this question to price what was paid, so the gateway learns
@@ -651,30 +989,31 @@ export interface BasketSearchScope {
    * core, which is the one service that writes the answer.
    */
   pick?: SettlePick;
+  /** Present exactly when the request asked for it and named `lineIds`. */
+  tripBuys?: BasketTripBuys;
 }
 
 // --- Results ----------------------------------------------------------------
 
 /**
- * What every write on a row answers.
+ * What every write on a row answers (plan 0201, section 4).
  *
- * One shape for all five, because a client redraws one row after any of them.
- * `row` is never null: a settle that takes `left` to zero leaves the row in the
- * view as `DONE`, since the purchase it just wrote is in scope.
+ * The lines of the write as they are now, and no row: a row cannot be built
+ * without the prices of a read. A client rebuilds its rows from the entries
+ * with `@portfolio/luna-shopper/basket-rules`, or takes them from its next
+ * read.
  */
 export interface BasketRowResult {
-  /** The row as it now stands, under whatever `rowKey` it now has. */
-  row: BasketRowView;
+  /**
+   * The lines the write named or touched, as this reader reads them now. **A
+   * line that is absent left the basket**: it is at zero with no buy that keeps
+   * it a row, or it was merged away, deleted or rejected.
+   */
+  entries: BasketRowEntryView[];
+  /** Counted by core alone. See {@link BasketProgress}. */
   progress: BasketProgress;
   /** Set by a revert: entries whose line was deleted since, so no units went back. */
   skippedCount?: number;
-  /**
-   * Set by a rename that folded this row into another: the key the request used.
-   *
-   * The client drops that row and redraws {@link row} without reading the basket
-   * again.
-   */
-  replacedRowKey?: string;
 }
 
 /**
@@ -689,6 +1028,11 @@ export const BASKET_PATTERNS = {
   /** The same basket with the rows dropped, for the home card. */
   liveSummary: 'basket.live.summary',
   get: 'basket.get',
+  /** The lines the gateway must price before a read (plan 0201, section 1). */
+  priceChoices: 'basket.priceChoices',
+  livePriceChoices: 'basket.live.priceChoices',
+  /** The covered lists that can still take a product (plan 0201, section 5). */
+  productLists: 'basket.productLists',
   rowSettle: 'basket.row.settle',
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
@@ -697,10 +1041,14 @@ export const BASKET_PATTERNS = {
   rowSkip: 'basket.row.skip',
   rowUnskip: 'basket.row.unskip',
   lineAdd: 'basket.line.add',
+  /** Change the product of basket lines (plan 0202, section 3). */
+  linesProduct: 'basket.lines.product',
   searchScope: 'basket.searchScope',
   /** What changed on the covered lists, and saying it was drawn (plan 0138). */
   changesList: 'basket.changes.list',
   changesAcknowledge: 'basket.changes.acknowledge',
+  /** The marks and the count alone, with no rows (plan 0204, section 6). */
+  changesMarks: 'basket.changes.marks',
   /** Compose a basket from the caller's chosen sources (plan 0050, section 4). */
   create: 'basket.create',
   /** The caller's baskets, newest first, cursor paginated (plan 0050, section 7). */

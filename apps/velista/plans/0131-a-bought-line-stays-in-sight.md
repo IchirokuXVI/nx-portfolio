@@ -2,6 +2,10 @@
 
 # 0131: a bought line stays in sight
 
+> **Changed by plan `0142`** (the owner, 2026-10-11). Targets 3, 4 and 6 are reversed: the
+> row is crossed out, it has other words, and a row that only went down has no caption.
+> Plan `0143` changes how fast the row arrives.
+
 > Reported by the owner on 2026-10-04, as the first thing to build. Two or more people
 > shop the same zone list, each from their own basket. One of them buys a line. The row
 > disappears from every other basket, and the buyer keeps it. The owner expects the row

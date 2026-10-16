@@ -36,6 +36,7 @@ import { LineMergeService } from '../lists/line-merge.service';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
+import { BasketPatchReader } from './basket-patch.reader';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
 import { BasketRevertService } from './basket-revert.service';
@@ -106,7 +107,8 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
     const coverage = new BasketCoverageService(baskets);
     announcer = new BasketAnnouncer(
       coverage,
-      events as unknown as CoreEventsPublisher
+      events as unknown as CoreEventsPublisher,
+      new BasketPatchReader(baskets, fakeCoreConfig())
     );
     const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 
@@ -190,13 +192,15 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       baskets,
       context,
       claims,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
     revertService = new BasketRevertService(
       dataSource,
       context,
       claims,
-      events as never
+      events as never,
+      new LineChangeRecorder()
     );
     merges = new LineMergeService(new LineChangeRecorder());
 
@@ -371,6 +375,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
       });
 
       const written = await skipsOf(held.id);
@@ -384,7 +389,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       // A guest did it, and every act on a basket is attributed to the
       // participant (plan 0051, section 3.2).
       expect(written[0].skippedByParticipantId).toBe(participantId);
-      expect(result.row.state).toBe(BasketRowState.SKIPPED);
+      // The answer is the named lines as they are now, and no row (plan 0201,
+      // section 4). The row itself is on the read.
+      expect(result.entries.map((entry) => entry.state)).toEqual([
+        BasketRowState.SKIPPED,
+        BasketRowState.SKIPPED,
+      ]);
+      expect((await rowOf(held, first.id)).state).toBe(BasketRowState.SKIPPED);
       // No zone event about the line itself (section 5.3): the household's
       // line did not change, and whose trip put it off is private to the
       // basket. `line.claimChanged` is the exception and is section 5.4's own
@@ -413,6 +424,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
       });
       expect(await skipsOf(held.id)).toHaveLength(2);
 
@@ -421,13 +433,95 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: first.id,
+        lineIds: [first.id, second.id],
       });
-      expect(back.row.state).toBe(BasketRowState.WANTED);
+      expect(back.entries.map((entry) => entry.state)).toEqual([
+        BasketRowState.WANTED,
+        BasketRowState.WANTED,
+      ]);
+      expect((await rowOf(held, first.id)).state).toBe(BasketRowState.WANTED);
       expect(
         (await skipsOf(held.id)).every(
           (row) => row.revertedByParticipantId === participantId
         )
       ).toBe(true);
+    });
+
+    it('marks the named line only, and takes the skip back from it only (plan 0201)', async () => {
+      const flat = await list('Flat named');
+      const parents = await list('Parents named');
+      const { basket: held, participantId } = await basket({}, flat, parents);
+      const first = await line(flat, 'Milk', 2);
+      const second = await line(parents, 'milk', 1);
+
+      // A write never rebuilds a row from a key. The client named one of the
+      // two lines of the row, so the other is left as it was.
+      const result = await skipService.skip({
+        basketId: held.id,
+        participantId,
+        rowKey: second.id,
+        lineIds: [second.id],
+      });
+
+      expect((await skipsOf(held.id)).map((row) => row.lineId)).toEqual([
+        second.id,
+      ]);
+      expect(result.entries.map((entry) => entry.lineId)).toEqual([second.id]);
+      const row = await rowOf(held, first.id);
+      // One entry still asks, so the row is wanted and says it was skipped.
+      expect(row.state).toBe(BasketRowState.WANTED);
+      expect(row.entries.map((entry) => entry.state)).toEqual([
+        BasketRowState.WANTED,
+        BasketRowState.SKIPPED,
+      ]);
+
+      await skipService.skip({
+        basketId: held.id,
+        participantId,
+        rowKey: first.id,
+        lineIds: [first.id],
+      });
+      await skipService.unskip({
+        basketId: held.id,
+        participantId,
+        rowKey: first.id,
+        lineIds: [first.id],
+      });
+
+      const standing = (await skipsOf(held.id)).filter(
+        (entry) => entry.revertedAt === null
+      );
+      expect(standing.map((entry) => entry.lineId)).toEqual([second.id]);
+    });
+
+    it('refuses a skip that names a line the basket does not draw', async () => {
+      const covered = await list('Covered skip');
+      const other = await list('Not covered skip');
+      const { basket: held, participantId } = await basket({}, covered);
+      const row = await line(covered, 'Milk', 1);
+      const outside = await line(other, 'milk', 1);
+
+      // One refusal for the whole write, and nothing is marked on the line
+      // that was found.
+      await expect(
+        skipService.skip({
+          basketId: held.id,
+          participantId,
+          rowKey: row.id,
+          lineIds: [row.id, outside.id],
+        })
+      ).rejects.toMatchObject({ code: 'not_found' });
+      expect(await skipsOf(held.id)).toHaveLength(0);
+
+      // The row key has to be one of the named lines.
+      await expect(
+        skipService.skip({
+          basketId: held.id,
+          participantId,
+          rowKey: outside.id,
+          lineIds: [row.id],
+        })
+      ).rejects.toMatchObject({ code: 'validation_failed' });
     });
 
     it('refuses a PUT on a row with nothing left to skip', async () => {
@@ -441,13 +535,19 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 1,
       });
 
       await expect(
-        skipService.skip({ basketId: held.id, participantId, rowKey: row.id })
+        skipService.skip({
+          basketId: held.id,
+          participantId,
+          rowKey: row.id,
+          lineIds: [row.id],
+        })
       ).rejects.toMatchObject({ code: 'conflict' });
       expect(await skipsOf(held.id)).toHaveLength(0);
     });
@@ -460,7 +560,12 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         .getRepository(Basket)
         .update(held.id, { status: BasketStatus.FINISHED });
 
-      const req = { basketId: held.id, participantId, rowKey: row.id };
+      const req = {
+        basketId: held.id,
+        participantId,
+        rowKey: row.id,
+        lineIds: [row.id],
+      };
       await expect(skipService.skip(req)).rejects.toMatchObject({
         code: 'basket_finished',
       });
@@ -482,11 +587,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       await settleService.settle({
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 3,
@@ -502,6 +609,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units: 1,
         from: 1,
@@ -522,6 +630,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       // A purchase on the list page carries no basket, so it cannot end this
       // basket's skip. It lowers `left` and nothing else.
@@ -548,11 +657,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: a.id,
         participantId: pa,
         rowKey: one.id,
+        lineIds: [one.id],
       });
       await settleService.settle({
         basketId: a.id,
         participantId: pa,
         rowKey: one.id,
+        lineIds: [one.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
         from: 2,
       });
@@ -567,6 +678,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: b.id,
         participantId: pb,
         rowKey: two.id,
+        lineIds: [two.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
         from: 2,
       });
@@ -574,6 +686,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: b.id,
         participantId: pb,
         rowKey: two.id,
+        lineIds: [two.id],
       });
       expect((await rowOf(b, two.id)).state).toBe(BasketRowState.SKIPPED);
     });
@@ -587,11 +700,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       await settleService.settle({
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
         quantity: 1,
         from: 3,
@@ -601,6 +716,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       expect(
         (await skipsOf(held.id)).every((entry) => entry.revertedAt !== null)
@@ -610,6 +726,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
         target: 'UNITS',
         units: 1,
         from: 1,
@@ -632,6 +749,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       const [written] = await skipsOf(held.id);
       await ageSkip(written.id, 13);
@@ -684,6 +802,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       expect((await claims.claimOf(row.id)).claimed).toBe(false);
       // And the household was told, rather than being left to find out on the
@@ -701,6 +820,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       expect((await claims.claimOf(row.id)).claimed).toBe(true);
       expect(
@@ -717,6 +837,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       const standing = (await skipsOf(held.id)).filter(
         (entry) => entry.revertedAt === null
@@ -735,6 +856,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: mine.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
 
       // Asked of the derivation rather than assumed from the write: a line one
@@ -756,11 +878,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: survivor.id,
+        lineIds: [survivor.id],
       });
       await skipService.skip({
         basketId: held.id,
         participantId,
         rowKey: absorbed.id,
+        lineIds: [absorbed.id],
       });
 
       await dataSource.transaction(async (manager) => {
@@ -802,6 +926,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       expect(await skipsOf(held.id)).toHaveLength(1);
 
@@ -818,6 +943,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         basketId: held.id,
         participantId,
         rowKey: row.id,
+        lineIds: [row.id],
       });
       await dataSource
         .getRepository(Basket)

@@ -119,6 +119,22 @@ describe('AppHistory', () => {
     expect(history.hasEntryBehind()).toBe(false);
   });
 
+  it('says how deep the entry stands, and a replace does not move it (velista 0140)', () => {
+    const { history, router } = setUp();
+
+    expect(history.depth()).toBe(-1);
+    arriveAt(router, '/velista/en/shopping-lists/live');
+    router.go({ url: '/velista/en/shopping-lists/live/sheet/rows/a/change' });
+    expect(history.depth()).toBe(0);
+    router.go({ url: '/velista/en/zones/z1/lists/l1/lines/a/product' });
+    router.go({
+      url: '/velista/en/zones/z1/lists/l1/lines/a/product?chain=m',
+      extras: { replaceUrl: true },
+    });
+
+    expect(history.depth()).toBe(1);
+  });
+
   it('has something behind it once this document has pushed', () => {
     const { history, router } = setUp();
 

@@ -4,6 +4,7 @@ import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
 import {
   ELJAMON_DEFAULT_POSTAL_CODE,
   ElJamonClient,
+  photoAddressRead,
   splitSize,
   type ElJamonCategory,
   type ElJamonListingRow,
@@ -17,6 +18,7 @@ import {
   type CatalogDiscoveryInput,
   type CatalogRunner,
 } from './catalog-runner';
+import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
@@ -139,7 +141,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       if (known.has(listed.row.code)) {
         // What the listing said and nothing else, so the stored name, brand
         // and category path stay what the last full read wrote (plan 0119,
-        // section 6).
+        // section 6). The photo address is on the product page alone (plan
+        // 0198), so it is not stated here and the stored one stays too.
         report.product({
           externalId: listed.row.code,
           detailFetched: false,
@@ -313,6 +316,11 @@ function observationOf(
         ? detail.categoryPath
         : [listed.category.name],
     url: listed.row.url,
+    // The `image` of the product page's JSON-LD (plan 0198). A page that
+    // failed states none.
+    imageUrl: detail
+      ? photoOf(photoAddressRead(detail), listed.row.code)
+      : null,
     observedAt,
     extra: Object.keys(extra).length > 0 ? extra : null,
     prices: pricesOf(listed.row),

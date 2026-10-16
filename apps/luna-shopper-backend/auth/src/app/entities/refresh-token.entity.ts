@@ -1,5 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from './base.entity';
+import { ImpersonationSession } from './impersonation-session.entity';
 import { User } from './user.entity';
 
 /**
@@ -26,4 +27,19 @@ export class RefreshToken extends BaseEntity {
 
   @Column({ type: 'timestamptz', nullable: true })
   revokedAt!: Date | null;
+
+  /**
+   * The support session this row belongs to (plan 0194), or null for the row
+   * of an ordinary session, which is every row a person holds. A rotation
+   * reads it, so the next pair is cut to the deadline of the same session.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  impersonationSessionId!: string | null;
+
+  @ManyToOne(() => ImpersonationSession, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'impersonationSessionId' })
+  impersonationSession!: ImpersonationSession | null;
 }

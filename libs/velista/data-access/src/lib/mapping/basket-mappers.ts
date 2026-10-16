@@ -11,8 +11,12 @@ import {
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
   type Basket,
+  type BasketChangeMark,
+  type BasketEntryAct,
+  type BasketEntryPatch,
   type BasketLinkPreview,
   type BasketListRef,
+  type BasketMarks,
   type BasketMergeRequired,
   type BasketMergeRequiredBasket,
   type BasketMergeRequiredList,
@@ -21,8 +25,8 @@ import {
   type BasketPriceScope,
   type BasketProduct,
   type BasketProductAtShop,
+  type BasketProductList,
   type BasketProgress,
-  type BasketRenameResult,
   type BasketRow,
   type BasketRowEntry,
   type BasketRowResult,
@@ -186,6 +190,22 @@ function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
   return {
     lineId,
     listId: str(raw['listId']),
+    // The line's own words (backend `0201`, section 3). Empty when absent, which
+    // is a gateway before that plan: the sheet then draws the list and its zone
+    // with no line name, and the search has nothing more to match.
+    content: strOr(raw['content'], ''),
+    itemIds: mapArray(raw['itemIds'], str),
+    favoriteItemId: str(raw['favoriteItemId']),
+    // False on anything but an explicit true, for `demandEditable`'s reason: the
+    // server owns the rule, and a value this build cannot read grants nothing.
+    canWrite: raw['canWrite'] === true,
+    tripItemId: str(raw['tripItemId']),
+    skipped: raw['skipped'] === true,
+    closed: raw['closed'] === true,
+    act: toBasketEntryAct(raw['act']),
+    // Zero when absent, which is a gateway before backend `0204`: every patch is
+    // then at least as new as the entry, and the store applies it.
+    version: atLeastZero(raw['version']),
     left,
     bought,
     // Zero when absent, which is a gateway without backend `0188` behind it, and
@@ -207,6 +227,22 @@ function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
     // not been told the control is allowed, and velista `0092` draws none.
     demandEditable: raw['demandEditable'] === true,
   };
+}
+
+/**
+ * From `BasketEntryAct` (backend `0204`, section 2): the newest act of a basket on
+ * one line. Null without an instant, because an act is only read to order it
+ * against another, and an act with no time cannot be ordered.
+ */
+function toBasketEntryAct(raw: unknown): BasketEntryAct | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const at = str(raw['at']);
+  const outcome = str(raw['outcome']);
+  return at === null || outcome === null
+    ? null
+    : { participantId: str(raw['participantId']), at, outcome };
 }
 
 /**
@@ -267,7 +303,10 @@ export function toBasketRow(raw: unknown): BasketRow | null {
     // this build does not know. Velista `0093` draws it; nothing draws it yet.
     mark: oneOfOrNull(raw['mark'], BASKET_CHANGE_MARKS),
     awaitingApproval: raw['awaitingApproval'] === true,
-    optionIds: mapArray(raw['optionIds'], str),
+    // The one product of the row, or null for a row whose lines hold none
+    // (backend `0201`). A server before that plan sent `optionIds` instead, and
+    // its rows read as rows with no product, which draw their own words.
+    productId: str(raw['productId']),
     touchedBy: nullableStr(raw['touchedBy']),
     touchedAt: date(raw['touchedAt']),
     entries,
@@ -393,98 +432,77 @@ function atLeastZero(raw: unknown): number {
 }
 
 /**
- * From `BasketRowResult`: what every write on a row answers.
+ * From `BasketRowResult`: what every write on a row answers (backend `0201`,
+ * section 4).
  *
- * Refused when the row or the progress cannot be read, and both refusals mean the
- * same thing: the store folds the answer whole and patches nothing, so an answer
- * it cannot fold is one it must not half apply. The caller reads the basket again
- * instead.
+ * The lines of the write as they now stand, and no row. Refused without an
+ * `entries` array, because the store puts these lines back into its rows and an
+ * answer it cannot read is one it must not half apply: the caller reads the basket
+ * again instead. An entry that will not map is dropped, which reads as a line that
+ * left the basket until the read that follows every write says otherwise.
  *
- * ## The row the write emptied
+ * The answer's `progress` is not read. Core counts it with no prices, and it can
+ * be one off the read's (backend `0201`, "What the build decided", point 1), so the
+ * page counts its header over the rows it holds.
  *
- * `row` is never null **on the wire**: the server answers a row carrying the
- * requested key, an empty `entries` array and zeros where the write took the row
- * out of the basket, which only a demand lowered to zero can do (velista `0092`,
- * section 6.2). {@link toBasketRow} already refuses an entryless row that is not
- * `REMOVED`, so that answer is read here as `row: null` rather than as an answer
- * this build could not read.
- *
- * The two are told apart by whether the wire held a row shaped record at all:
- * a record with an `entries` array is an answer, and its emptiness is the
- * server's way of saying the row is gone. Anything else is a body this build
- * cannot fold, and the caller reads the basket again instead.
- *
- * `replacedRowKey` and `skippedCount` are absent on the wire when nothing
- * happened, and null and zero here, so a caller asks one question rather than
- * two.
- *
- * The row's list ids are **not** gated here, because there are no refs in this
- * answer to gate them against. The store applies
- * {@link restrictRowToServedLists} with the basket's own refs as it folds.
+ * The list ids are **not** gated here, because there are no refs in this answer
+ * to gate them against. The store gates them as it folds.
  */
 export function toBasketRowResult(raw: unknown): BasketRowResult | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const progress = toBasketProgress(raw['progress']);
-  if (progress === null) {
-    return null;
-  }
-
-  const row = toBasketRow(raw['row']);
-  if (row === null && !isEmptiedRow(raw['row'])) {
+  if (!isRecord(raw) || !Array.isArray(raw['entries'])) {
     return null;
   }
 
   return {
-    row,
-    progress,
-    // Lifted out of the wire's progress exactly as `Basket.pending` is, because
-    // the store puts it back on the basket after every write and nothing in this
-    // scope subtracts one count from another.
-    pending: isRecord(raw['progress'])
-      ? atLeastZero(raw['progress']['pending'])
-      : 0,
-    replacedRowKey: str(raw['replacedRowKey']),
+    entries: mapArray(raw['entries'], toBasketRowEntry),
     skippedCount: atLeastZero(raw['skippedCount']),
   };
 }
 
 /**
- * Whether the wire's `row` is the server's "this row is gone" answer.
+ * From `BasketProductListsView` (`GET /v1/baskets/:id/products/:itemId/lists`,
+ * backend `0201`, section 5): the covered lists that could take a product.
  *
- * A record with an `entries` array holding nothing. That is the shape
- * `BasketWriteContext.result` answers when the lines a write touched left the
- * view, and it is deliberately not a missing key: the server states the row it
- * was asked about and says it is empty, so a build that reads neither the
- * emptiness nor the key is a build that misread the body rather than one that
- * met a gone row.
- *
- * Nothing else about the record is checked. `toBasketRow` has already refused
- * it, so this only has to tell "the row went away" from "this is not a row".
+ * Null for a body with no `lists` array, which the sheet draws as a read that
+ * failed. A list without its ids or names is dropped, because a row naming no list
+ * is a control that says nothing. The line fields go together: a line with no id
+ * cannot be raised, so it reads as no line, and the list then adds one.
  */
-function isEmptiedRow(raw: unknown): boolean {
-  return (
-    isRecord(raw) &&
-    Array.isArray(raw['entries']) &&
-    raw['entries'].length === 0
-  );
+export function toBasketProductLists(
+  raw: unknown
+): readonly BasketProductList[] | null {
+  if (!isRecord(raw) || !Array.isArray(raw['lists'])) {
+    return null;
+  }
+  return mapArray(raw['lists'], toBasketProductList);
 }
 
-/**
- * A rename's answer (velista `0084`, backend `0113`, section 7).
- *
- * The same shape every write on a row answers, read once, with the wire's
- * `replacedRowKey` named for what a rename does with it: the earliest line
- * survives a merge, so the row the request addressed can be the one that went
- * away, and the sheet reads this to know whether its own row survived.
- */
-export function toBasketRenameResult(raw: unknown): BasketRenameResult | null {
-  const result = toBasketRowResult(raw);
-  return result === null
-    ? null
-    : { ...result, absorbedRowKey: result.replacedRowKey };
+function toBasketProductList(raw: unknown): BasketProductList | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const listId = str(raw['listId']);
+  const listName = str(raw['listName']);
+  const zoneId = str(raw['zoneId']);
+  const zoneName = str(raw['zoneName']);
+  if (
+    listId === null ||
+    listName === null ||
+    zoneId === null ||
+    zoneName === null
+  ) {
+    return null;
+  }
+  const lineId = str(raw['lineId']);
+  return {
+    listId,
+    listName,
+    zoneId,
+    zoneName,
+    lineId,
+    lineName: lineId === null ? null : strOr(raw['lineName'], ''),
+    quantity: lineId === null ? null : atLeastZero(raw['quantity']),
+  };
 }
 
 /**
@@ -921,4 +939,97 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
         expiresAt,
         participantCount: numOr(link['participantCount'], 0),
       };
+}
+
+/**
+ * From `BasketEntryPatch` (backend `0204`, section 2): the state of one line as
+ * the addressed basket reads it, on `basket.linesChanged` (velista `0143`).
+ *
+ * **Strict, unlike {@link toBasketRowEntry}.** An entry of a read degrades,
+ * because a row drawn with a zero is better than no row. A patch that is half
+ * read would put a state on screen that the server never answered, so a missing
+ * or malformed field makes it no patch, and the store reads the basket instead.
+ */
+export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const lineId = str(raw['lineId']);
+  const version = wholeCount(raw['version']);
+  const left = wholeCount(raw['left']);
+  const bought = wholeCount(raw['bought']);
+  const boughtElsewhere = wholeCount(raw['boughtElsewhere']);
+  const state = oneOfOrNull(raw['state'], BASKET_ROW_STATES);
+  const approval = raw['approvalStatus'];
+  const skipped = raw['skipped'];
+  const closed = raw['closed'];
+  const tripItemId = raw['tripItemId'];
+  const act = raw['act'] === null ? null : toBasketEntryAct(raw['act']);
+  if (
+    lineId === null ||
+    version === null ||
+    left === null ||
+    bought === null ||
+    boughtElsewhere === null ||
+    // An entry is never `REMOVED` (backend `0136`).
+    state === null ||
+    state === 'REMOVED' ||
+    (approval !== 'APPROVED' && approval !== 'PENDING') ||
+    typeof skipped !== 'boolean' ||
+    typeof closed !== 'boolean' ||
+    (tripItemId !== null && typeof tripItemId !== 'string') ||
+    (raw['act'] !== null && act === null)
+  ) {
+    return null;
+  }
+  return {
+    lineId,
+    version,
+    left,
+    bought,
+    boughtElsewhere,
+    state,
+    awaitingApproval: approval === 'PENDING',
+    skipped,
+    closed,
+    act,
+    tripItemId,
+  };
+}
+
+/**
+ * From `BasketMarksView` (`GET /v1/baskets/:id/changes/marks`, backend `0204`,
+ * section 6; velista `0143`, section 4).
+ *
+ * Null without the two numbers or the `lines` array. A line with a mark this
+ * build does not know is dropped, which draws its row with no tag.
+ */
+export function toBasketMarks(raw: unknown): BasketMarks | null {
+  if (!isRecord(raw) || !Array.isArray(raw['lines'])) {
+    return null;
+  }
+  const unseen = wholeCount(raw['unseenChangeCount']);
+  const newest = raw['newestUnseenChangeId'];
+  if (unseen === null || (newest !== null && typeof newest !== 'string')) {
+    return null;
+  }
+  const lines = new Map<string, BasketChangeMark>();
+  for (const line of raw['lines']) {
+    if (!isRecord(line)) {
+      continue;
+    }
+    const lineId = str(line['lineId']);
+    const mark = oneOfOrNull(line['mark'], BASKET_CHANGE_MARKS);
+    if (lineId !== null && mark !== null) {
+      lines.set(lineId, mark);
+    }
+  }
+  return { unseenChangeCount: unseen, newestUnseenChangeId: newest, lines };
+}
+
+/** A whole number at zero or above, or null. */
+function wholeCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0
+    ? raw
+    : null;
 }

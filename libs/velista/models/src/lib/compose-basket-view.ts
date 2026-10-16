@@ -1,6 +1,5 @@
 import { matchesBasketRow } from './basket-search';
 import type {
-  BasketElsewhere,
   BasketListRef,
   BasketPriceScope,
   BasketProduct,
@@ -11,12 +10,11 @@ import type {
   BasketShelfMark,
   BasketShop,
 } from './basket-view';
-import { basketElsewhere, basketRowPick, basketShelfMark } from './basket-view';
+import { basketRowPick, basketShelfMark, isCrossedOutRow } from './basket-view';
 import { catalogName } from './catalog-browse';
 import type { BasketRowState } from './enums';
-import { categoryName, type ProductCategory } from './product-category';
 import type { ShopSection } from './shop-section';
-import { inLocale } from './shopping-profile';
+import { inLocale, type LocalizedName } from './shopping-profile';
 
 /**
  * How the basket's lines are ordered (velista `0075`, section 2).
@@ -115,7 +113,7 @@ export interface BasketViewContext {
    * The covered lists this reader was served, by list id (velista `0090`).
    *
    * Empty for a reader who may not name any list, which is what keeps the list
-   * grouping out of their view without a `seesZoneData` branch in here. A ref the
+   * grouping out of their view without a branch on a flag in here. A ref the
    * basket did not serve is simply absent, and an entry naming an absent list is
    * one this reader cannot place, so **one collection answers both questions**:
    * which lists there are, and whether this entry belongs to one of them.
@@ -154,6 +152,17 @@ export interface BasketViewContext {
    * category grouping exactly as it was before. See {@link basketGroupsByAisle}.
    */
   readonly sections: readonly ShopSection[] | null;
+  /**
+   * The name of every root of the category tree, by the root's id, or null while the
+   * tree has not been read (velista `0138`).
+   *
+   * The headings of the category grouping are these roots: a product carries its
+   * leaves, each with the `ProductCategory.parentId` of its root and no name
+   * for it, so the names arrive here like the sections do and the pipeline reads no
+   * store. Null makes the category grouping draw the rows ungrouped until the tree
+   * lands, so a page never draws leaf headings first and parent headings after.
+   */
+  readonly parents: ReadonlyMap<string, LocalizedName> | null;
 }
 
 /**
@@ -192,7 +201,8 @@ export type BasketPriceMark =
       readonly chain: string;
     }
   /**
-   * The chosen shop does not list it, and this line has sunk.
+   * The chosen shop does not list it: "Not sold here" (velista `0139`, section
+   * 1). The row stays in its group.
    *
    * {@link elsewhere} is the cheapest price anybody else on this basket quotes,
    * which is often the thing that decides whether to walk across the road, and null
@@ -246,9 +256,9 @@ export interface BasketViewRow {
    * `0102`).
    *
    * Beside {@link priceMark} rather than inside its union, because a row can carry
-   * both: a product the shop neither prices nor stocks sinks with the unlisted and
-   * says it is missing too. **It never moves a row.** Only {@link priceMark}'s
-   * `unlisted` does, and that is `0078`'s rule unchanged.
+   * both: a product the shop neither prices nor stocks is not sold there and is
+   * missing too. **It never moves a row**, and neither does the price mark since
+   * velista `0139`.
    */
   readonly shelf: BasketShelfMark | null;
   /**
@@ -261,18 +271,6 @@ export interface BasketViewRow {
    * null, so nothing about the page changes until somebody asks for it.
    */
   readonly usual: Pick<BasketRowUsual, 'bought' | 'of'> | null;
-  /**
-   * What was bought through another basket, or null (velista `0131`).
-   *
-   * **The entry's under a list heading** and the row's everywhere else, like the
-   * numbers and the state the row draws, so a household whose share somebody else
-   * bought says so under its own heading and the household beside it does not.
-   *
-   * It never moves a row. A row closed from elsewhere stays where the order put
-   * it, exactly as a row this basket bought does, and its section counts it as
-   * done because the server wrote `DONE` on it.
-   */
-  readonly elsewhere: BasketElsewhere | null;
 }
 
 /**
@@ -372,9 +370,6 @@ const NO_CATEGORY_SECTION_KEY = 'no-category';
 /** What an aisle's section key starts with, beside `category:` and `list:`. */
 const AISLE_SECTION_PREFIX = 'aisle:';
 
-/** The sink holding the rows the chosen shop does not list (`0078`, section 5). */
-const NOT_LISTED_SECTION_KEY = 'not-listed';
-
 /**
  * Turn a basket's rows into the sections a page draws (velista `0075`,
  * section 3).
@@ -401,9 +396,10 @@ const NOT_LISTED_SECTION_KEY = 'not-listed';
  * were in. Sinking after grouping would need the rule written once per grouping,
  * and the three copies would eventually disagree.
  *
- * A `REMOVED` row sinks below them, and passes every filter on the way: it is
- * information about the basket rather than a thing to find, so nothing hides it
- * and nothing lets it sit among the things still to buy. Velista `0093` draws it.
+ * A crossed out row ({@link isCrossedOutRow}: `REMOVED`, or `BOUGHT_ELSEWHERE`)
+ * sinks below them, and passes every filter on the way: it is information about
+ * the basket rather than a thing to find, so nothing hides it and nothing lets it
+ * sit among the things still to buy. Velista `0093` and `0142` draw it.
  */
 export function composeBasketView(
   rows: readonly BasketRow[],
@@ -417,7 +413,7 @@ export function composeBasketView(
   const usual = basketUsualApplies(state, context);
   const kept = keepUsual(filterRows(rows, state, context), usual);
   const ordered = orderRows(kept, state, context);
-  const sunk = sinkUnlisted(ordered, prices);
+  const sunk = sinkRemoved(ordered);
   return groupRows(sunk, state, context, { prices, usual });
 }
 
@@ -445,14 +441,14 @@ export function basketUsualApplies(
  * `NO_SHOP_KNOWN`, which is a separate state so that keeping it is one line here if
  * the first weeks prove it should be kept (backend `0165`, section 3).
  *
- * Two more rows stay, and neither is a state. A `REMOVED` row passes every filter,
+ * Two more rows stay, and neither is a state. A crossed out row passes every filter,
  * for the reason it also sinks. And a row with no `usual` at all is kept, because
  * nobody has said where it is bought: a read at a shop answers it on every row, so
  * this is a row a write put on the screen before the next read, usually one
  * somebody has just added, and hiding it would take it away under their thumb.
  */
 export function keptByUsual(row: BasketRow): boolean {
-  if (row.state === 'REMOVED' || row.usual === null) {
+  if (isCrossedOutRow(row) || row.usual === null) {
     return true;
   }
   const state = row.usual.state;
@@ -520,8 +516,6 @@ interface PriceView {
   readonly chain: string;
   /** One mark per row that has one, by `rowKey`. A row absent from it draws nothing. */
   readonly marks: ReadonlyMap<string, BasketPriceMark>;
-  /** The rows this shop does not list, by `rowKey`, which sink and are marked. */
-  readonly unlisted: ReadonlySet<string>;
   /** What the shop is known not to have, by `rowKey`. Never moves a row. */
   readonly shelves: ReadonlyMap<string, BasketShelfMark>;
 }
@@ -538,7 +532,6 @@ function priceView(
 
   const chain = inLocale(shop.chain, context.locale);
   const marks = new Map<string, BasketPriceMark>();
-  const unlisted = new Set<string>();
   const shelves = new Map<string, BasketShelfMark>();
   const priced = basketPricedAtShop(rows, state, context);
 
@@ -551,7 +544,7 @@ function priceView(
     const product = basketRowPick(row, context.products);
     if (!priced || product === undefined) {
       // No price anywhere at this shop, or no product to be unlisted: the row says
-      // nothing about prices and never sinks.
+      // nothing about prices.
       continue;
     }
 
@@ -563,7 +556,9 @@ function priceView(
     );
 
     if (here === null || here.price === null) {
-      unlisted.add(row.rowKey);
+      // "Not sold here" (velista `0139`, section 1). The row stays in its group:
+      // velista `0078` sank it to a section of its own, which a row that is one
+      // product no longer needs.
       marks.set(row.rowKey, { kind: 'unlisted', chain, elsewhere: best });
       continue;
     }
@@ -578,7 +573,7 @@ function priceView(
     }
   }
 
-  return { chain, marks, unlisted, shelves };
+  return { chain, marks, shelves };
 }
 
 /**
@@ -668,40 +663,27 @@ function cheapestElsewhere(
 }
 
 /**
- * Put the rows the chosen shop does not list at the end, and the `REMOVED` rows
- * below those.
+ * Put the crossed out rows at the end: `REMOVED` and `BOUGHT_ELSEWHERE`.
  *
- * A stable partition and not a sort, so two sunk rows come out in the order the
- * step before put them in, and so does everything above them. By identity when
- * nothing sank, which is every basket until somebody picks a shop.
+ * A stable partition and not a sort, so everything above them keeps the order the
+ * step before gave it. By identity when there is none, which is every basket until
+ * somebody edits a list under it. A row somebody took off the basket is a fact
+ * about it rather than a thing to buy, so it never sits among the things still to
+ * buy.
  *
- * `REMOVED` is last of all and unconditional: a row somebody took off the basket
- * is a fact about it rather than a thing to buy, so it never sits among the
- * things still to buy, whatever shop is chosen.
+ * Rows the chosen shop does not list sank here too, to a section of their own
+ * (velista `0078`, section 5). Velista `0139` keeps them in their group with the
+ * words "Not sold here", because a row is one product now and its place is the
+ * place of that product.
  */
-function sinkUnlisted(
-  rows: readonly BasketRow[],
-  prices: PriceView | null
-): readonly BasketRow[] {
-  const sinksForPrice = prices !== null && prices.unlisted.size > 0;
-  const hasRemoved = rows.some((row) => row.state === 'REMOVED');
-  if (!sinksForPrice && !hasRemoved) {
+function sinkRemoved(rows: readonly BasketRow[]): readonly BasketRow[] {
+  if (!rows.some(isCrossedOutRow)) {
     return rows;
   }
-
-  const held: BasketRow[] = [];
-  const sunk: BasketRow[] = [];
-  const removed: BasketRow[] = [];
-  for (const row of rows) {
-    if (row.state === 'REMOVED') {
-      removed.push(row);
-    } else if (prices !== null && prices.unlisted.has(row.rowKey)) {
-      sunk.push(row);
-    } else {
-      held.push(row);
-    }
-  }
-  return [...held, ...sunk, ...removed];
+  return [
+    ...rows.filter((row) => !isCrossedOutRow(row)),
+    ...rows.filter(isCrossedOutRow),
+  ];
 }
 
 /** Step one: the search, and then the lists. */
@@ -715,7 +697,7 @@ function filterRows(
       ? rows
       : rows.filter(
           (row) =>
-            row.state === 'REMOVED' ||
+            isCrossedOutRow(row) ||
             matchesBasketRow(
               row,
               basketRowPick(row, context.products),
@@ -739,14 +721,14 @@ function filterRows(
  * stays, which is the filter doing its job. A row with an entry this reader was
  * not served stays too, because **a reader cannot filter out what they cannot
  * name**: the entry might be on a kept list and there is no way to ask. And a
- * `REMOVED` row stays whatever the filter says, for the reason it also sinks.
+ * crossed out row stays whatever the filter says, for the reason it also sinks.
  *
  * This is the successor of "lines on no list yet are always shown" (velista
  * `0075`, section 6). No such line exists now, and the sentence that replaced it
  * is about redaction rather than about a line nobody has claimed.
  */
 function keptByLists(row: BasketRow, lists: ReadonlySet<string>): boolean {
-  if (row.state === 'REMOVED') {
+  if (isCrossedOutRow(row)) {
     return true;
   }
   return row.entries.some(
@@ -786,9 +768,14 @@ function groupRows(
   notes: RowNotes
 ): readonly BasketViewSection[] {
   if (state.grouping === 'category') {
+    // Until the tree lands there is no parent to name, and a leaf heading drawn
+    // now would be replaced by its parent a moment later (velista `0138`).
+    if (context.parents === null) {
+      return ungrouped(rows, notes);
+    }
     return basketGroupsByAisle(state, context)
-      ? byAisle(rows, context, context.sections ?? [], notes)
-      : byCategory(rows, context, notes);
+      ? byAisle(rows, context, context.sections ?? [], context.parents, notes)
+      : byCategory(rows, context, context.parents, notes);
   }
   if (state.grouping === 'list') {
     return byList(rows, context, notes);
@@ -797,67 +784,44 @@ function groupRows(
 }
 
 /**
- * Nothing is grouped: one unheaded section, plus the shop's sink when something
- * sank.
+ * Nothing is grouped: one unheaded section.
  *
- * There used to be a second sink here, for lines no household had accepted yet,
- * drawn while the list filter was on. Backend `0136` removed the thing it held: a
- * line is on a list or it does not exist. What is left is `0078`'s sink, which is
- * unconditional, because a shopper who asked for one shop's prices asked exactly
- * the question it answers.
- *
- * The sink is a **section** rather than a caption here because there are no other
- * sections to put a caption inside, which is the rule `0078`'s sink already
- * follows: a sink is a section when there are no sections, and a caption when
- * there are.
+ * It had a second one, the sink for the rows the chosen shop does not list
+ * (velista `0078`, section 5). Velista `0139` keeps such a row where it is, with
+ * "Not sold here" on it.
  */
 function ungrouped(
   rows: readonly BasketRow[],
   notes: RowNotes
 ): readonly BasketViewSection[] {
-  const prices = notes.prices;
-  const listed: BasketRow[] = [];
-  const notListed: BasketRow[] = [];
-
-  for (const row of rows) {
-    if (prices !== null && prices.unlisted.has(row.rowKey)) {
-      notListed.push(row);
-    } else {
-      listed.push(row);
-    }
-  }
-
-  const sections = [
-    section(ALL_SECTION_KEY, null, null, rowsOf(listed, notes), false),
-  ];
-  if (notListed.length > 0 && prices !== null) {
-    sections.push(
-      notListedSection(prices.chain, rowsOf(notListed, notes), false)
-    );
-  }
-  return sections;
+  return [section(ALL_SECTION_KEY, null, null, rowsOf(rows, notes), false)];
 }
 
 /**
- * The aisle view: every row under each of its product's categories (`0077`,
- * section 3).
+ * The aisle view: every row under the parent of each of its product's categories
+ * (`0077`, section 3; velista `0138`).
+ *
+ * ## A heading is a root, never a leaf
+ *
+ * The leaves are too fine to group by: a shopping list of a hundred lines drew most
+ * headings over one or two rows. So a section is keyed on the id of the **root** a
+ * leaf sits under (`ProductCategory.parentId`) and headed by the root's name
+ * from {@link BasketViewContext.parents}, also when a root holds one row. A product
+ * with two leaves under one root is one row under it, and a product with leaves
+ * under two roots is drawn under both, which the owner decided (`0138`).
  *
  * ## Sections take the order of their first row
  *
- * A category is created the first time a row lands in it and the sections come out
+ * A root is created the first time a row lands in it and the sections come out
  * in that order, which is the whole ordering rule and it needs no second one. Under
  * "The way you shop" the aisles then order the categories, which is the point of
  * that order; under A to Z the sections follow their first row's name, which reads
  * as alphabetical enough. The tree's order is deliberately **not** used here (velista
  * `0118`): the shopper's walk is the better order, and it is the one `0077` chose.
  *
- * A section is keyed on the category's id and headed by its name in the reader's
- * language. "Not yet categorised" is a leaf like any other and takes its place by
- * the same rule.
- *
  * ## A row can be in two places
  *
- * {@link BasketProduct.categories} is a list, so a product carrying two puts its
+ * {@link BasketProduct.categories} is a list, so a product under two roots puts its
  * row under two headings. `basketViewRows` counts it once, which is what keeps the
  * sheet's button from reporting more rows than the basket has.
  *
@@ -866,46 +830,54 @@ function ungrouped(
  * It holds every row with no resolved product: something somebody typed in an
  * aisle, and a row whose product the catalog can no longer name because the basket
  * has outlived it. Both are things to buy and neither has an aisle, so the heading
- * says why rather than inventing one. A product whose categories none could be read
- * joins them, which the server's "never empty" makes a defence rather than a state.
+ * says why rather than inventing one. A product none of whose roots the tree knows
+ * joins them: no category could be read, or each names a root the tree no longer
+ * holds. A product with one known root and one stale root is drawn under the known
+ * one only.
  */
 function byCategory(
   rows: readonly BasketRow[],
   context: BasketViewContext,
+  parents: ReadonlyMap<string, LocalizedName>,
   notes: RowNotes
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first row's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
-  const aisles = new Map<
+  const roots = new Map<
     string,
-    { readonly category: ProductCategory; readonly rows: BasketRow[] }
+    { readonly name: LocalizedName; readonly rows: BasketRow[] }
   >();
   const noCategory: BasketRow[] = [];
 
   for (const row of rows) {
     const product = basketRowPick(row, context.products);
-    if (product === undefined || product.categories.length === 0) {
-      noCategory.push(row);
-      continue;
-    }
-
-    for (const category of product.categories) {
-      const held = aisles.get(category.id);
+    let placed = false;
+    for (const category of product?.categories ?? []) {
+      const name = parents.get(category.parentId);
+      if (name === undefined) {
+        // A root the tree does not hold: a stale id, which names nothing.
+        continue;
+      }
+      placed = true;
+      const held = roots.get(category.parentId);
       if (held === undefined) {
-        aisles.set(category.id, { category, rows: [row] });
+        roots.set(category.parentId, { name, rows: [row] });
       } else if (!held.rows.includes(row)) {
-        // A product listing one category twice is still one row under it.
+        // Two leaves of one root, or one leaf listed twice: one row under it.
         held.rows.push(row);
       }
+    }
+    if (!placed) {
+      noCategory.push(row);
     }
   }
 
   const sections: BasketViewSection[] = [];
-  for (const [id, held] of aisles) {
+  for (const [id, held] of roots) {
     sections.push(
       section(
         `category:${id}`,
-        { kind: 'text', text: categoryName(held.category, context.locale) },
+        { kind: 'text', text: catalogName(held.name, context.locale) },
         null,
         rowsOf(held.rows, notes),
         true
@@ -974,9 +946,11 @@ export function basketGroupsByAisle(
  *    section its product names, so a frozen pizza in Pizzas and in Frozen is drawn
  *    in both and is still one line: settling either copy settles the row, and
  *    `basketViewRows` counts it once.
- * 2. **The categories of the products no section holds**, built by
+ * 2. **The parent categories of the products no section holds**, built by
  *    {@link byCategory} exactly as it builds them without a shop, first row's
- *    place and data names. The first of them carries the band.
+ *    place and data names. The first of them carries the band. A parent heading
+ *    here holds only the rows the sections left out, also when a sibling leaf of
+ *    the same parent is in a section (velista `0138`, section 2).
  * 3. **"No category"**, last, as ever.
  *
  * A section id the shop's list does not name is ignored, and a product left with no
@@ -990,6 +964,7 @@ function byAisle(
   rows: readonly BasketRow[],
   context: BasketViewContext,
   shopSections: readonly ShopSection[],
+  parents: ReadonlyMap<string, LocalizedName>,
   notes: RowNotes
 ): readonly BasketViewSection[] {
   const held = new Map<string, BasketRow[]>(
@@ -1034,7 +1009,7 @@ function byAisle(
     );
   }
 
-  const rest = byCategory(uncovered, context, notes);
+  const rest = byCategory(uncovered, context, parents, notes);
   const first = rest[0];
   if (
     sections.length > 0 &&
@@ -1086,7 +1061,6 @@ function byList(
         priceMark: prices?.marks.get(row.rowKey) ?? null,
         shelf: prices?.shelves.get(row.rowKey) ?? null,
         usual: usualNote(row, notes.usual),
-        elsewhere: basketElsewhere(entry),
       };
 
       const listId = entry.listId;
@@ -1135,28 +1109,6 @@ function byList(
   return sections;
 }
 
-/**
- * The sink for the rows the chosen shop does not list (`0078`, section 5).
- *
- * The chain is in the heading rather than only on each row, because the section is
- * the answer to "what does this shop not have" and a heading reading "Not listed"
- * would leave a reader who scrolled to it asking where. It is data inside a sentence
- * this app owns, which is what {@link BasketViewHeading}'s `args` is for.
- */
-function notListedSection(
-  chain: string,
-  rows: readonly BasketViewRow[],
-  counted: boolean
-): BasketViewSection {
-  return section(
-    NOT_LISTED_SECTION_KEY,
-    { kind: 'key', key: 'basket.group.notListed', args: { chain } },
-    'basket.group.notListedHint',
-    rows,
-    counted
-  );
-}
-
 /** A run of rows as rows about themselves, which is every grouping but by list. */
 function rowsOf(
   rows: readonly BasketRow[],
@@ -1170,7 +1122,6 @@ function rowsOf(
     priceMark: prices?.marks.get(row.rowKey) ?? null,
     shelf: prices?.shelves.get(row.rowKey) ?? null,
     usual: usualNote(row, notes.usual),
-    elsewhere: basketElsewhere(row),
   }));
 }
 
@@ -1239,7 +1190,7 @@ function countedUnits(
  * section 4 took over: the server knows about closes, skips and purchases another
  * shopper made, and this side knows what it was told.
  *
- * `total` is every unit that is not `REMOVED`, because a row somebody took off the
+ * `total` is every unit that is not crossed out, because a row somebody took off the
  * basket is not a thing to buy and must not make the basket look unfinished.
  *
  * **`done` is not `finished`.** A `NOT_AVAILABLE` row is closed without anything
@@ -1259,7 +1210,9 @@ export function basketRowsProgress(
   let total = 0;
 
   for (const unit of units) {
-    if (unit.state === 'REMOVED') {
+    // Neither counts for anything, which is `progressOf` of the shared rules
+    // (backend `0203`, section 4): a buy made outside the basket is no part of it.
+    if (isCrossedOutRow(unit)) {
       continue;
     }
     total += 1;

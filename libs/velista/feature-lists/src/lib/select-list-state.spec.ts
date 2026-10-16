@@ -1,14 +1,19 @@
-import type {
-  Line,
-  ListPageState,
-  ListPermission,
-  ShoppingListSummary,
+import {
+  composeListView,
+  DEFAULT_LIST_VIEW_STATE,
+  type CatalogItem,
+  type Line,
+  type ListPageState,
+  type ListPermission,
+  type ProductOffer,
+  type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
   actionsFor,
   editScopeFor,
   selectAbilities,
   selectListState,
+  type ListStateCatalog,
   type ListStateInput,
 } from './select-list-state';
 
@@ -44,6 +49,9 @@ function line(overrides: Partial<Line> = {}): Line {
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
+    favoriteItemId: null,
+    named: true,
+    preferredSupermarketId: null,
     position: 1,
     approvalStatus: 'APPROVED',
     boughtCount: 0,
@@ -244,6 +252,313 @@ describe('selectListState', () => {
       const state = select({ lines: [line({ itemIds: ['item-oat'] })] });
 
       expect(loaded(state).lines[0].detail).toBeNull();
+    });
+  });
+
+  /**
+   * Velista 0145: each state of `States.dc.html` as a view model, and the cost in
+   * the header.
+   */
+  describe('the picture and the two lines (velista 0145)', () => {
+    const MERCADONA = {
+      id: 'mercadona',
+      name: { en: 'Mercadona', es: 'Mercadona' },
+    };
+
+    function offer(price: number | null, unitPrice: number | null = price) {
+      return {
+        price,
+        unitPrice,
+        currency: 'EUR',
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'CATALOG',
+        stale: false,
+        priceScopeId: 'scope-1',
+      } as unknown as ProductOffer;
+    }
+
+    function item(
+      id: string,
+      es: string,
+      price: number | null,
+      overrides: Partial<CatalogItem> = {}
+    ): CatalogItem {
+      return {
+        id,
+        name: { en: es, es },
+        brand: 'Hacendado',
+        size: 1,
+        unit: 'LITER',
+        productGroupId: null,
+        categories: [],
+        offer: null,
+        unitBasis: null,
+        chainPrices: [{ chain: MERCADONA, offer: offer(price) }],
+        imageUrl: null,
+        packCount: null,
+        ...overrides,
+      } as CatalogItem;
+    }
+
+    const ITEMS = new Map<string, CatalogItem>([
+      ['milk', item('milk', 'Leche semidesnatada', 0.92)],
+      ['milk-2', item('milk-2', 'Leche entera', 1.1)],
+      ['milk-3', item('milk-3', 'Leche sin lactosa', 1.4)],
+      ['oat', item('oat', 'Bebida de avena', 2.15)],
+      [
+        'battery',
+        item('battery', 'Pilas alcalinas AA', null, { chainPrices: [] }),
+      ],
+    ]);
+
+    function catalog(
+      overrides: Partial<ListStateCatalog> = {}
+    ): ListStateCatalog {
+      return {
+        itemOf: (itemId) => ITEMS.get(itemId) ?? null,
+        settled: () => true,
+        failed: () => false,
+        pricesOf: (itemId) => {
+          const known = ITEMS.get(itemId);
+          return known === undefined
+            ? []
+            : known.chainPrices.map((price) => ({
+                supermarketId: price.chain.id,
+                chain: price.chain.name,
+                logoUrl: null,
+                kind:
+                  price.offer.price === null
+                    ? ('unpriced' as const)
+                    : ('priced' as const),
+                offer: price.offer,
+                cheapest: false,
+              }));
+        },
+        locale: 'es',
+        brandSizeOf: (known) => `${known.brand} · 1 L`,
+        formatMoney: (amount) => `${amount.toFixed(2).replace('.', ',')} €`,
+        ...overrides,
+      };
+    }
+
+    function rowOf(
+      lineOverrides: Partial<Line>,
+      input: Partial<ListStateInput> = {}
+    ) {
+      return loaded(
+        select({
+          lines: [line(lineOverrides)],
+          catalog: catalog(),
+          nameOfLine: (current) => ({
+            text: current.content,
+            own: current.named,
+          }),
+          ...input,
+        })
+      ).lines[0];
+    }
+
+    it('draws a name and one product', () => {
+      const row = rowOf({ content: 'Leche', itemIds: ['milk'] });
+
+      expect(row.named).toBe(true);
+      expect(row.product).toEqual({
+        kind: 'shown',
+        itemId: 'milk',
+        name: 'Leche semidesnatada',
+        brandSize: 'Hacendado · 1 L',
+        imageUrl: null,
+        favorite: false,
+        others: 0,
+        price: '0,92 €',
+      });
+    });
+
+    it('shows the cheapest of several products, and counts the others', () => {
+      const row = rowOf({
+        content: 'Leche',
+        itemIds: ['milk-2', 'milk', 'milk-3'],
+      });
+
+      expect(row.product).toEqual(
+        expect.objectContaining({ itemId: 'milk', others: 2, price: '0,92 €' })
+      );
+    });
+
+    it('shows the favourite instead, starred', () => {
+      const row = rowOf({
+        content: 'Para el café de Marta',
+        itemIds: ['milk', 'oat'],
+        favoriteItemId: 'oat',
+      });
+
+      expect(row.product).toEqual(
+        expect.objectContaining({
+          itemId: 'oat',
+          favorite: true,
+          others: 1,
+          price: '2,15 €',
+        })
+      );
+    });
+
+    it('draws a line that is not named by its product', () => {
+      const row = rowOf(
+        { content: 'Tomate frito', named: false, itemIds: ['milk'] },
+        { nameOfLine: () => ({ text: 'Leche semidesnatada', own: false }) }
+      );
+
+      expect(row.content).toBe('Leche semidesnatada');
+      expect(row.named).toBe(false);
+    });
+
+    it('asks for a product on a line with none, when the reader may change it', () => {
+      expect(rowOf({ content: 'Pan de molde', itemIds: [] }).product).toEqual({
+        kind: 'none',
+        canChoose: true,
+      });
+      expect(
+        rowOf(
+          { itemIds: [], approvalStatus: 'APPROVED' },
+          { caller: { permissions: WRITER } }
+        ).product
+      ).toEqual({ kind: 'none', canChoose: false });
+      expect(
+        rowOf(
+          { itemIds: [], approvalStatus: 'PENDING' },
+          { caller: { permissions: WRITER } }
+        ).product
+      ).toEqual({ kind: 'none', canChoose: true });
+      expect(
+        rowOf({ itemIds: [] }, { caller: { permissions: READ_ONLY } }).product
+      ).toEqual({ kind: 'none', canChoose: false });
+    });
+
+    it('says no price where nobody prices it', () => {
+      const row = rowOf({ content: 'Pilas', itemIds: ['battery'] });
+
+      expect(row.product).toEqual(
+        expect.objectContaining({ itemId: 'battery', price: null })
+      );
+    });
+
+    it('draws a bought line at zero with its product and its word', () => {
+      const row = rowOf({
+        content: 'Yogur natural',
+        itemIds: ['milk'],
+        quantity: 0,
+        boughtCount: 1,
+      });
+
+      expect(row.settled).toBe(true);
+      expect(row.indicators).toEqual(['bought']);
+      expect(row.product?.kind).toBe('shown');
+    });
+
+    it('draws a line waiting for approval with its product', () => {
+      const row = rowOf({
+        content: 'Chocolate',
+        itemIds: ['milk'],
+        approvalStatus: 'PENDING',
+      });
+
+      expect(row.captionKey).toBe('list.line.awaitingApproval');
+      expect(row.product?.kind).toBe('shown');
+    });
+
+    it('draws bones while the product has not loaded, and no product when the read failed', () => {
+      expect(
+        rowOf(
+          { itemIds: ['milk'] },
+          { catalog: catalog({ settled: () => false }) }
+        ).product
+      ).toEqual({ kind: 'loading' });
+      expect(
+        rowOf(
+          { itemIds: ['gone'] },
+          { catalog: catalog({ failed: () => true }) }
+        ).product
+      ).toEqual({ kind: 'unread' });
+    });
+
+    it('counts only the prices at the supermarket of the line', () => {
+      const row = rowOf({
+        itemIds: ['milk'],
+        preferredSupermarketId: 'carrefour',
+      });
+
+      expect(row.product).toEqual(
+        expect.objectContaining({ itemId: 'milk', price: null })
+      );
+    });
+
+    it('orders A to Z on the name the row draws, a product name included (section 8)', () => {
+      const state = loaded(
+        select({
+          catalog: catalog(),
+          lines: [
+            line({ id: 'zz', content: 'Zumo', position: 1 }),
+            // Stored as "Tomate frito" and drawn by its product's name.
+            line({
+              id: 'unnamed',
+              content: 'Tomate frito',
+              named: false,
+              itemIds: ['milk'],
+              position: 2,
+            }),
+            line({ id: 'aa', content: 'Aceite', position: 3 }),
+          ],
+          nameOfLine: (current) =>
+            current.named
+              ? { text: current.content, own: true }
+              : { text: 'Leche semidesnatada', own: false },
+        })
+      );
+
+      const ordered = composeListView(
+        state.lines,
+        { ...DEFAULT_LIST_VIEW_STATE, order: 'alpha' },
+        {
+          query: '',
+          locale: 'es',
+          categoriesOf: () => [],
+          productNamesOf: () => [],
+          categoryNameOf: () => '',
+        } as unknown as Parameters<typeof composeListView>[2]
+      ).lines.map((row) => row.id);
+
+      expect(ordered).toEqual(['aa', 'unnamed', 'zz']);
+    });
+
+    describe('what the list costs', () => {
+      it('adds the quantity times the price of the lines still wanted', () => {
+        const state = select({
+          catalog: catalog(),
+          lines: [
+            line({ id: 'a', itemIds: ['milk'], quantity: 6, position: 1 }),
+            line({ id: 'b', itemIds: ['oat'], quantity: 1, position: 2 }),
+            line({ id: 'c', itemIds: ['milk'], quantity: 0, position: 3 }),
+            line({ id: 'd', itemIds: ['battery'], quantity: 2, position: 4 }),
+            line({ id: 'e', itemIds: [], quantity: 3, position: 5 }),
+          ],
+        });
+
+        // 6 x 0,92 + 1 x 2,15.
+        expect(loaded(state).header.cost).toBe('7,67 €');
+      });
+
+      it('draws nothing with no priced line, and nothing without a catalog', () => {
+        expect(
+          loaded(
+            select({
+              catalog: catalog(),
+              lines: [line({ itemIds: ['battery'], quantity: 2 })],
+            })
+          ).header.cost
+        ).toBeNull();
+        expect(loaded(select()).header.cost).toBeNull();
+      });
     });
   });
 

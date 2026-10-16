@@ -5,6 +5,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -12,90 +13,84 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketElsewhere,
   type BasketListRef,
+  type BasketProductList,
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
-import { QuantityReel } from '@portfolio/velista/ui';
+import { ChevronDownIcon, QuantityReel } from '@portfolio/velista/ui';
 
-/** One entry, with everything the pane draws about it already resolved. */
+/** One list that asks for the row, as it is drawn. */
 interface DrawnEntry {
   readonly lineId: string;
-  /** The list and its group, or the one sentence for a list nobody may name. */
-  readonly name: string;
-  readonly asked: number;
-  readonly bought: number;
-  /** What this list still asks for, which is what the demand control moves. */
-  readonly left: number;
+  /** The list, or "Another list" for a list the reader was not served. */
+  readonly list: string;
   /**
-   * Whether the "got" number is a reel rather than text.
-   *
-   * A served entry on an open basket, and nothing else. An entry this reader was
-   * not served cannot be allocated to, because the server refuses an `allocations`
-   * naming a list they may not write, and a control that is refused is not drawn
-   * (`0030`).
-   *
-   * Nor on an entry somebody closed through another basket (velista `0131`):
-   * lowering the reel is a revert, and this basket has no purchase to take back.
+   * "zone · line name", or null for a list the reader was not served. An entry
+   * somebody bought outside this shopping list starts with "Already bought".
    */
+  readonly where: string | null;
+  /** What the list asks for, which is the entry's `left`. */
+  readonly asks: number;
+  /** Whether the quantity is a control, by the server's `demandEditable`. */
   readonly editable: boolean;
-  /**
-   * Whether "asks for" is a reel rather than text (velista `0092`, section 6.2).
-   *
-   * Three conditions, all of them the server's or the row's, and none of them a
-   * rule this client could write:
-   *
-   * - the basket is open,
-   * - `demandEditable`, which asks the rule of the basket's **owner** on this
-   *   entry's list and is the one field no client can compute,
-   * - the entry's list was served to this reader, **or** the row has exactly one
-   *   entry. A reader who cannot tell two entries apart is never asked to choose
-   *   between them, which is backend `0130`'s "single entry rows only".
-   *
-   * An entry that fails any of them keeps the plain number. **Nothing explains
-   * why a control is absent** (`0030`): the person reading has no standing to
-   * change it and no use for the reason.
-   */
-  readonly demandEditable: boolean;
-  /** The reel's accessible name, which names the list: two reels look alike. */
   readonly label: string;
-  /** The demand reel's own name, which has to differ from the one beside it. */
-  readonly askLabel: string;
+  /** Change is drawn on this entry (velista `0140`, section 1). */
+  readonly changeable: boolean;
+  /** Change's accessible name, which names the list. */
+  readonly changeLabel: string;
+}
+
+/** One list that does not ask yet, as it is drawn under the disclosure. */
+interface DrawnOther {
+  readonly list: BasketProductList;
+  /** "zone · line name" for a list that holds the product at zero, else the zone. */
+  readonly where: string;
+  readonly label: string;
 }
 
 /**
- * What each household asked for and got, on the settle sheet (velista `0090`,
- * section 9.2).
+ * The read of the lists that could take the row's product (backend `0201`,
+ * section 5), as the sheet holds it.
+ */
+export type OtherListsState =
+  | { readonly state: 'loading' }
+  | { readonly state: 'failed' }
+  | { readonly state: 'ready'; readonly lists: readonly BasketProductList[] };
+
+/**
+ * The lists that ask for a row, and the lists that could (velista `0139`,
+ * section 3; artboards `RowSheet` and `RowLists`).
  *
- * It replaced `lib-line-lists-summary`, and the difference is not cosmetic. That
- * one took a line and its origins and worked out, in the component, what each list
- * had contributed and how much of it was bought. Backend `0136` serves both numbers
- * per entry, so there is no arithmetic here at all: every number this draws is one
- * the server sent, which is the rule velista `0060` section 4 states and the reason
- * `commitAsked` and `commitGot` went with the folder.
+ * ## Lists lead
  *
- * ## Drawn when there is something to say
+ * An entry is the name of its list, then "zone · line" under it, which is the
+ * owner's choice: a row is one product, and the question on this sheet is which
+ * households asked for it and how many. A list this reader was not served reads
+ * "Another list", with its quantity and no control.
  *
- * More than one entry, or one entry whose list this reader was served. A row with
- * one unserved entry says nothing anybody can act on — "another list asks for 2" on
- * a row that asks for 2 — so the pane is not drawn at all rather than drawn empty.
+ * ## The quantity is the reel the list page uses
  *
- * ## The two numbers are different kinds of thing
+ * A tap opens it, and it commits on release. It is drawn only where the server's
+ * `demandEditable` allows it, and for a list the reader may not name only when it
+ * is the whole row (velista `0092`'s rule for a guest). Elsewhere it is the number.
  *
- * "Got" is a **reel** for a served entry on an open basket: raising it settles those
- * units against that household alone and lowering it takes them back, which is the
- * per household half of the shopping somebody does at a shelf.
+ * ## Change
  *
- * "Asks for" is a **reel** too, and only where the server says it may be
- * (`BasketRowEntry.demandEditable`). Both reels **commit on release**. "Asks for"
- * used to wait for an explicit button under a warning that the list changes for
- * everybody, and that confirmation was taken off: the reel's own idle beat is the
- * decision, as it is on "Got" beside it.
+ * Before the quantity, on each entry the sheet names as changeable (velista
+ * `0140`, section 1), and "Change for all lists" at the end of the heading's row
+ * once two entries or more have it. Both only say so: the sheet opens the change.
+ *
+ * ## Add it to another list
+ *
+ * Last, closed, and drawn only when the sheet hands it a read: never for a guest,
+ * never for a row with no product, and not once the read answered no list. Open,
+ * it draws the read's loading row, its failed row with a retry, or one row per
+ * list at a quantity of 0. Moving one above zero is the sheet's to send.
  */
 @Component({
   selector: 'lib-row-entries',
-  imports: [QuantityReel, RokuTranslatorPipe],
+  imports: [ChevronDownIcon, QuantityReel, RokuTranslatorPipe],
   templateUrl: './row-entries.html',
   styleUrl: './row-entries.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -106,140 +101,110 @@ export class RowEntries {
 
   readonly row = input.required<BasketRow>();
 
-  /** The lists this reader was served, for the name on each line. */
+  /** The covered lists this reader was served, by id, for the names. */
   readonly lists = input<ReadonlyMap<string, BasketListRef>>(new Map());
 
-  /** Whether the trip is over, which takes every reel off the pane (`0057`). */
+  /** The whole trip is over, which takes every control away (velista `0057`). */
   readonly finished = input(false);
 
-  /** Whether a write on this row is in flight, so the reels wait. */
+  /** A write from the sheet is out. The reels are read only meanwhile. */
   readonly busy = input(false);
 
   /**
-   * One household's "got" number was moved.
-   *
-   * Absolute in both halves, and `from` is the number the reel was picked up at,
-   * which is velista `0054`'s bargain: the page turns it into a settle with an
-   * `allocations` naming this one line, or a revert of the difference.
+   * The lists that could take the product, or null when the disclosure is not
+   * drawn at all: a guest, a row with no product, a finished trip.
    */
-  readonly allocated = output<{
-    readonly lineId: string;
-    readonly from: number;
-    readonly to: number;
-  }>();
+  readonly others = input<OtherListsState | null>(null);
 
   /**
-   * What one household asks for was changed (velista `0092`, section 6.2).
-   *
-   * Emitted when the demand reel settles, as {@link allocated} is for the one
-   * beside it. No confirmation comes first.
-   *
-   * `from` is the `left` the reel was picked up at, which is velista `0054`'s
-   * bargain: a write whose starting number has moved is refused rather than
-   * applied to a number that moved underneath it.
+   * The lines whose product the reader may change from here (velista `0140`,
+   * section 1). The sheet decides, because it knows the reader and the row.
    */
+  readonly changeable = input<ReadonlySet<string>>(new Set());
+
+  /** Change on one entry, by its line. */
+  readonly changed = output<string>();
+
+  /** "Change for all lists". */
+  readonly changedAll = output<void>();
+
+  /** One list's ask was moved. */
   readonly demanded = output<{
     readonly lineId: string;
     readonly from: number;
     readonly to: number;
   }>();
 
-  /**
-   * Whether the pane is drawn at all.
-   *
-   * More than one entry, or one whose list this reader was served, **or** one
-   * the owner may change the demand on (velista `0092`, section 6.2). The third
-   * is what the plan adds: a guest is served no list refs at all, so their every
-   * entry is unplaceable, and on a single entry row they may still change what
-   * the household asks for. A pane that stayed hidden would hide the only
-   * control they have.
-   *
-   * A row with a single unserved entry nobody may change still says nothing that
-   * the row above it does not say already — "another list asks for 2" on a row
-   * that asks for 2 — so it stays hidden.
-   */
-  readonly shows = computed(() => {
-    const entries = this.row().entries;
-    if (entries.length > 1) {
-      return true;
-    }
-    const only = entries[0];
-    return (
-      only !== undefined && (only.listId !== null || this._mayDemand(only))
-    );
-  });
+  /** A list that did not ask was given a quantity above zero. */
+  readonly raised = output<{
+    readonly list: BasketProductList;
+    readonly to: number;
+  }>();
 
-  /**
-   * Whether this entry's demand is a control, by the three conditions of
-   * section 6.2.
-   *
-   * Here rather than inline in {@link _draw} because {@link shows} asks it too,
-   * and the pane appearing for a control it then does not draw would be the two
-   * answering differently.
-   */
-  private _mayDemand(entry: BasketRowEntry): boolean {
-    return (
-      !this.finished() &&
-      entry.demandEditable &&
-      (entry.listId !== null || this.row().entries.length === 1)
-    );
-  }
+  /** The read failed and the reader asked again. */
+  readonly retry = output<void>();
+
+  /** Whether "Add it to another list" is open. Closed on every sheet. */
+  protected readonly open = signal(false);
 
   protected readonly entries = computed<readonly DrawnEntry[]>(() =>
     this.row().entries.map((entry) => this._draw(entry))
   );
 
-  private _draw(entry: BasketRowEntry): DrawnEntry {
+  /**
+   * "Asked for on 3 lists": the heading, counted over the entries, which are the
+   * lines that ask. Two lines of one list are two entries, and the heading counts
+   * what it draws.
+   */
+  protected readonly heading = computed(() =>
+    this._translator.t('basket.sheet.askedOn', undefined, this._locale(), {
+      count: this.row().entries.length,
+    })
+  );
+
+  /** "Change for all lists" is drawn when Change is drawn on two entries or more. */
+  protected readonly changesAll = computed(
+    () =>
+      this.row().entries.filter((entry) => this.changeable().has(entry.lineId))
+        .length >= 2
+  );
+
+  /** Whether the disclosure is drawn: there is a read, and it did not answer none. */
+  protected readonly showsOthers = computed(() => {
+    const others = this.others();
+    return (
+      others !== null &&
+      !this.finished() &&
+      !(others.state === 'ready' && others.lists.length === 0)
+    );
+  });
+
+  protected readonly otherRows = computed<readonly DrawnOther[]>(() => {
+    const others = this.others();
+    if (others?.state !== 'ready') {
+      return [];
+    }
     const locale = this._locale();
-    const ref =
-      entry.listId === null ? undefined : this.lists().get(entry.listId);
-    // A list this reader was not served, and a list id the basket served no ref
-    // for, are the same nothing to name: the mapper already collapsed the second
-    // onto the first, so there is one case here.
-    const name =
-      ref === undefined
-        ? this._translator.t('basket.entries.otherList', undefined, locale)
-        : // The group's name beside the list's, because a list alone is ambiguous
-          // when two households both keep one called "Groceries".
-          `${ref.name} · ${ref.zoneName}`;
-
-    // Closed by a purchase made through another basket (velista `0131`). Both
-    // plain numbers read the server's `boughtElsewhere`, as the row's own caption
-    // does: this basket's pair is zero and zero, which says nothing was wanted.
-    const closedElsewhere = basketElsewhere(entry)?.closed === true;
-
-    return {
-      lineId: entry.lineId,
-      name,
-      asked: closedElsewhere ? entry.boughtElsewhere : entry.asked,
-      bought: closedElsewhere ? entry.boughtElsewhere : entry.bought,
-      left: entry.left,
-      editable: ref !== undefined && !this.finished() && !closedElsewhere,
-      demandEditable: this._mayDemand(entry),
-      label: this._translator.t('basket.entries.gotLabel', undefined, locale, {
-        name,
+    return others.lists.map((list) => ({
+      list,
+      where:
+        list.lineId === null || list.lineName === null || list.lineName === ''
+          ? list.zoneName
+          : `${list.zoneName} · ${list.lineName}`,
+      label: this._translator.t('basket.demand.askLabel', undefined, locale, {
+        name: list.listName,
       }),
-      // The list's own name, so two reels on one row are told apart by somebody
-      // who hears them rather than seeing which column they sit in. A single
-      // unserved entry has no name to give, and takes the plain label instead:
-      // there is one list in the row and no ambiguity to resolve.
-      askLabel:
-        ref === undefined
-          ? this._translator.t('basket.demand.label', undefined, locale)
-          : this._translator.t('basket.demand.askLabel', undefined, locale, {
-              name,
-            }),
-    };
+    }));
+  });
+
+  protected readonly othersState = computed(
+    () => this.others()?.state ?? 'loading'
+  );
+
+  protected toggle(): void {
+    this.open.update((open) => !open);
   }
 
-  protected onCommitted(
-    lineId: string,
-    change: { from: number; to: number }
-  ): void {
-    this.allocated.emit({ lineId, from: change.from, to: change.to });
-  }
-
-  /** The demand reel settled, which is the commit: there is no button to press. */
   protected onAsked(
     lineId: string,
     change: { from: number; to: number }
@@ -247,5 +212,80 @@ export class RowEntries {
     if (change.to !== change.from) {
       this.demanded.emit({ lineId, from: change.from, to: change.to });
     }
+  }
+
+  protected onRaised(
+    list: BasketProductList,
+    change: { from: number; to: number }
+  ): void {
+    if (change.to > 0 && change.to !== change.from) {
+      this.raised.emit({ list, to: change.to });
+    }
+  }
+
+  private _mayDemand(entry: BasketRowEntry): boolean {
+    // A row bought outside this shopping list keeps it (velista `0142`): asking
+    // the list for the product again is the one thing left to do there.
+    return (
+      !this.finished() &&
+      entry.demandEditable &&
+      (entry.listId !== null || this.row().entries.length === 1)
+    );
+  }
+
+  private _draw(entry: BasketRowEntry): DrawnEntry {
+    const locale = this._locale();
+    const ref =
+      entry.listId === null ? undefined : this.lists().get(entry.listId);
+    const list =
+      ref === undefined
+        ? this._translator.t('basket.entries.otherList', undefined, locale)
+        : ref.name;
+    const line = entry.content.trim();
+    const place =
+      ref === undefined
+        ? null
+        : line === ''
+          ? ref.zoneName
+          : `${ref.zoneName} · ${line}`;
+    // Its quantity is 0, and the words say why (velista `0142`, section 1). The
+    // entry carries no note, so it does not say where the buy was made. First,
+    // because the line is cut at its end and a long line name must not take them.
+    const bought =
+      entry.state === 'BOUGHT_ELSEWHERE'
+        ? this._translator.t('basket.line.alreadyBought', undefined, locale)
+        : null;
+    const where =
+      place === null
+        ? bought
+        : bought === null
+          ? place
+          : `${bought} · ${place}`;
+
+    return {
+      lineId: entry.lineId,
+      list,
+      where,
+      asks: entry.left,
+      editable: this._mayDemand(entry),
+      // The list's own name, so two reels on one sheet are told apart by somebody
+      // who hears them. A single unserved entry takes the plain label: there is one
+      // list in the row and nothing to tell apart.
+      label:
+        ref === undefined
+          ? this._translator.t('basket.demand.label', undefined, locale)
+          : this._translator.t('basket.demand.askLabel', undefined, locale, {
+              name: list,
+            }),
+      changeable: this.changeable().has(entry.lineId),
+      changeLabel: this._translator.t(
+        'basket.change.oneLabel',
+        undefined,
+        locale,
+        {
+          name: list,
+        }
+      ),
+    };
   }
 }

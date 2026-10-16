@@ -4,10 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_LIMITS,
   BASKET_USUAL_WINDOW,
-  BasketKind,
   isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
-  SettlementOutcome,
   type BasketListRef,
   type BasketProgress,
   type BasketRowView,
@@ -19,51 +17,67 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import type { CoreConfig } from '../config/app-config';
 import { Basket, BasketParticipant } from '../entities';
-import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
 import { BasketCoverageService } from './basket-coverage.service';
+import {
+  basketScopeOf,
+  frozenLinesOf,
+  isFrozenBasket,
+  standingSkipsOf,
+  toEntries,
+} from './basket-line-facts';
+import { BasketLineKeys, picksOf } from './basket-line-keys';
 import { BasketOrderService, type OrderableRow } from './basket-order.service';
+import {
+  BASKET_ELSEWHERE_SQL,
+  BASKET_LIST_REFS_SQL,
+  BASKET_SETTLEMENTS_SQL,
+  BASKETS_SETTLEMENTS_SQL,
+  COVERED_LINE_ITEMS_SQL,
+  COVERED_LINES_SQL,
+  type BasketElsewhereRow,
+  type BasketListRefRow,
+  type BasketSettlementRow,
+  type BasketsSettlementRow,
+  type CoveredLineItemRow,
+  type CoveredLineRow,
+} from './basket-read.sql';
 import { BasketRedaction } from './basket-redaction';
 import {
   groupEntries,
   progressOf,
   toRowView,
-  type BasketElsewhereFact,
+  walkItemIdsOf,
   type BasketEntry,
   type BasketGroup,
-  type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
 import { usualLineIdsOf, withUsual } from './basket-usual';
 import { USUAL_WINDOWS_SQL, type UsualWindowRow } from './basket-usual.sql';
 import {
-  BASKET_ELSEWHERE_SQL,
-  BASKET_LIST_REFS_SQL,
-  BASKET_SESSION_LOOKBACK_MS,
-  BASKET_SESSION_SQL,
-  BASKET_SETTLEMENTS_SQL,
-  COVERED_LINE_ITEMS_SQL,
-  COVERED_LINES_SQL,
-  STANDING_SKIPS_SQL,
-  type BasketElsewhereRow,
-  type BasketLineSkipRow,
-  type BasketListRefRow,
-  type BasketSessionRow,
-  type BasketSettlementRow,
-  type CoveredLineItemRow,
-  type CoveredLineRow,
-} from './basket-read.sql';
-import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
+  CHANGE_LINES_SQL,
+  type ChangeLineRow,
+} from './changes/basket-changes.sql';
 import {
   BasketMarksReader,
+  departedLinesOf,
+  foldBasketMarks,
+  NO_BASKET_CHANGES,
   NO_BASKET_MARKS,
   type BasketMarks,
   type RemovedGroup,
 } from './changes/basket-marks.reader';
 import { removedRows } from './changes/basket-removed-rows';
+import { NO_PICKS, type BasketPicks } from './line-dedup';
+
+// Where every caller of the read already imports it from. It moved beside the
+// other facts so the patch of an event can stitch rows without importing this
+// service (plan 0204).
+export { toEntries };
 
 /**
  * The basket, read from the lists it covers (plan 0136, section 3).
@@ -84,7 +98,8 @@ import { removedRows } from './changes/basket-removed-rows';
  * Seven queries for the rows, none of them per line: the session, the covered
  * lines, their product sets, the settlements in scope, what other baskets bought
  * lately (plan 0188), the standing skips (plan 0137) and the owner's walk
- * history (plan 0141). The settlements read rides `ix_settlements_basket_live`
+ * history (plan 0141). Plan 0201 added none: the favourite rides the covered
+ * lines, and the product of a buy rides the settlements. The settlements read rides `ix_settlements_basket_live`
  * from plan 0134, the purchases elsewhere ride `ix_settlements_line`, the skips
  * read rides `ix_basket_line_skips_standing` and the history rides both. A read
  * at a shop
@@ -121,7 +136,91 @@ export class BasketReadService {
   /** The basket as one participant reads it. */
   async read(req: GetBasketRequest): Promise<BasketView> {
     const { basket, participant } = await this.resolve(req);
-    return this.view(basket, participant, req.supermarketId);
+    return this.view(
+      basket,
+      participant,
+      req.supermarketId,
+      picksOf(req.picks)
+    );
+  }
+
+  /**
+   * The covered lines as entries, each with its key, and no row (plan 0201).
+   *
+   * For a caller that has to know which row a line is in and draws none: the
+   * marks alone, the changes view, the lines that need a price, the lists that
+   * can take a product. The session, the lines, their products and this
+   * basket's purchases, which is four queries, and three for a `LIVE` basket
+   * with no session.
+   *
+   * A finished trip answers the lines it asked when it finished (plan 0209,
+   * section 1.1), whatever the coverage says now.
+   */
+  async keyedLinesOf(
+    basket: Basket,
+    coveredListIds: readonly string[],
+    picks: BasketPicks = NO_PICKS
+  ): Promise<{
+    lines: CoveredLineRow[];
+    entries: BasketEntry[];
+    keys: BasketLineKeys;
+  }> {
+    const keys = new BasketLineKeys(picks);
+    const frozen = isFrozenBasket(basket);
+    if (!frozen && coveredListIds.length === 0) {
+      return { lines: [], entries: [], keys };
+    }
+    const scope = await this.scopeOf(basket);
+    const lines = frozen
+      ? await this.frozenLinesOf(basket)
+      : await this.baskets.query<CoveredLineRow[]>(COVERED_LINES_SQL, [
+          [...coveredListIds],
+          basket.id,
+          scope.startedAt,
+          scope.enabled,
+          elsewhereGapOf(basket),
+        ]);
+    if (lines.length === 0) {
+      return { lines, entries: [], keys };
+    }
+    const lineIds = lines.map((line) => line.id);
+    const [items, settlements] = await Promise.all([
+      this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
+        lineIds,
+      ]),
+      scope.enabled
+        ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
+            basket.id,
+            lineIds,
+            scope.startedAt,
+            this.skipWindowMs,
+          ])
+        : Promise.resolve([]),
+    ]);
+    const entries = toEntries(lines, items, settlements);
+    keys.add(entries);
+    return { lines, entries, keys };
+  }
+
+  /**
+   * Key lines that left the coverage, so a change about one can be placed on
+   * the row its product is still on (plan 0138, section 7; plan 0201).
+   *
+   * One query for their product sets. Their purchases are not read: a line
+   * that left counts as its favourite or its first product.
+   */
+  async keyDeparted(
+    keys: BasketLineKeys,
+    departed: readonly ChangeLineRow[]
+  ): Promise<void> {
+    if (departed.length === 0) {
+      return;
+    }
+    const items = await this.baskets.query<CoveredLineItemRow[]>(
+      COVERED_LINE_ITEMS_SQL,
+      [departed.map((line) => line.id)]
+    );
+    keys.add(toEntries(departed, items, []));
   }
 
   /**
@@ -180,7 +279,13 @@ export class BasketReadService {
      * The read's chain (plan 0165). With it every row carries `usual`; without
      * it, which is every write's own answer, every row carries null.
      */
-    supermarketId?: string
+    supermarketId?: string,
+    /**
+     * What the gateway chose by price (plan 0201, section 1). Only the full
+     * read carries any. A write's own answer carries none, so its rows and its
+     * progress are the ones core builds alone.
+     */
+    picks: BasketPicks = NO_PICKS
   ): Promise<BasketView> {
     const covered = await this.coverage.listsOf(basket);
     const coveredListIds = covered.map((row) => row.listId);
@@ -199,7 +304,7 @@ export class BasketReadService {
         // The marks are read for **this** viewer, which is why they are asked for
         // here and not by the callers that have no reader to measure (plan 0138,
         // section 7).
-        this.rowsOf(basket, coveredListIds, redaction, participant.id),
+        this.rowsOf(basket, coveredListIds, redaction, participant.id, picks),
         this.sharing.listParticipants({
           basketId: basket.id,
           asParticipantId: participant.id,
@@ -246,13 +351,80 @@ export class BasketReadService {
    * The counts read for an **open** basket, and the admin detail's rows. A page
    * holds at most a few open baskets, because the sweep finishes them, so one
    * read each is acceptable.
+   *
+   * **It counts products with no picks** (plan 0201, decided by the owner on
+   * 2026-10-13). A card, the home summary and the back office pay for no
+   * catalog read, so a line with several products and no favourite counts as
+   * its first product here. The full read can group that one line differently.
    */
   async progressOf(basket: Basket): Promise<BasketProgress> {
-    return progressOf(await this.openRows(basket));
+    return progressOf(await this.unredactedRows(basket));
   }
 
-  /** The rows of an open basket, unredacted, for a caller that is not a reader. */
-  async openRows(basket: Basket): Promise<BasketRowView[]> {
+  /**
+   * The progress of finished baskets, for a page of history (plan 0209,
+   * section 1.2).
+   *
+   * **In products, as an open basket's is.** The frozen lines are grouped by
+   * `groupEntries` with no picks and counted by `progressOf`, which is the
+   * same code the screen of the basket runs, so a history card and the screen
+   * of one finished basket cannot disagree. Before this plan a finished
+   * basket counted lines in SQL.
+   *
+   * Three queries for the whole page: the frozen lines, their products and
+   * the purchases. A basket that is not finished is not answered.
+   */
+  async finishedProgressOf(
+    baskets: readonly Basket[]
+  ): Promise<Map<string, BasketProgress>> {
+    const finished = baskets.filter((basket) => isFrozenBasket(basket));
+    const progress = new Map<string, BasketProgress>();
+    if (finished.length === 0) {
+      return progress;
+    }
+    const ids = finished.map((basket) => basket.id);
+    const linesByBasket = await frozenLinesOf(this.baskets, ids);
+    const lineIds = [
+      ...new Set([...linesByBasket.values()].flat().map((line) => line.id)),
+    ];
+    const [items, settlements] =
+      lineIds.length === 0
+        ? [[], []]
+        : await Promise.all([
+            this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
+              lineIds,
+            ]),
+            this.baskets.query<BasketsSettlementRow[]>(
+              BASKETS_SETTLEMENTS_SQL,
+              [ids, this.skipWindowMs]
+            ),
+          ]);
+    for (const basket of finished) {
+      const own = settlements.filter((row) => row.basketId === basket.id);
+      const entries = toEntries(linesByBasket.get(basket.id) ?? [], items, own);
+      const context = {
+        servedListIds: new Set<string>(),
+        demandEditable: () => false,
+        // A finished basket reads no skips (plan 0137): its trip is over.
+        facts: { skips: new Map(), kind: basket.kind },
+        marks: new Map(),
+      };
+      const rows = groupEntries(entries, NO_PICKS).map((group) =>
+        toRowView(group, context)
+      );
+      progress.set(basket.id, progressOf(rows));
+    }
+    return progress;
+  }
+
+  /**
+   * The rows of a basket, unredacted, for a caller that is not a reader.
+   *
+   * A finished trip answers its frozen rows, grouped by product as the screen
+   * groups them, so the admin detail draws the rows its count counts (plan
+   * 0209, section 1.2).
+   */
+  async unredactedRows(basket: Basket): Promise<BasketRowView[]> {
     const covered = await this.coverage.listsOf(basket);
     const listIds = covered.map((row) => row.listId);
     const { rows } = await this.rowsOf(
@@ -268,6 +440,15 @@ export class BasketReadService {
    *
    * Public so that the writes can recompute a row without composing the whole
    * view, and so that the finish can freeze the numbers it draws.
+   *
+   * ## A finished trip holds still (plan 0209, section 1.1)
+   *
+   * A `GENERATED` basket that is not open reads its lines from
+   * `basket_trip_rows`, which its finish wrote, and not from today's coverage.
+   * It skips the reads that only an open basket needs: what was bought
+   * elsewhere and the change marks. The grouping, the rows and the order are
+   * the same code, so a finished basket is drawn as an open one is, from
+   * numbers that stop.
    */
   async rowsOf(
     basket: Basket,
@@ -278,49 +459,92 @@ export class BasketReadService {
      * is not a reader: the history counts, the admin detail and the finish read
      * the rows to count or freeze them, and a mark belongs to somebody looking.
      */
-    participantId?: string
+    participantId?: string,
+    /** What the gateway chose by price. Empty for every caller but the read. */
+    picks: BasketPicks = NO_PICKS
   ): Promise<{
     rows: BasketRowView[];
     groups: BasketGroup[];
     truncated: boolean;
     marks: BasketMarks;
   }> {
-    if (coveredListIds.length === 0) {
+    // A finished trip asked what it asked whatever its owner can write now,
+    // so only an open basket stops at an empty coverage.
+    const frozen = isFrozenBasket(basket);
+    if (!frozen && coveredListIds.length === 0) {
       // A person in no zone has a basket with nothing in it. An answer, never
       // an error: a caller asking what a basket holds is drawing a screen.
       return { rows: [], groups: [], truncated: false, marks: NO_BASKET_MARKS };
     }
 
     const scope = await this.scopeOf(basket);
+    // Null for a basket that is not open, so a finished trip reads nothing
+    // that was bought elsewhere.
     const elsewhereGapMs = elsewhereGapOf(basket);
-    const lines = await this.baskets.query<CoveredLineRow[]>(
-      COVERED_LINES_SQL,
-      [
-        [...coveredListIds],
-        basket.id,
-        scope.startedAt,
-        scope.enabled,
-        elsewhereGapMs,
-      ]
-    );
+    const lines = frozen
+      ? await this.frozenLinesOf(basket)
+      : await this.baskets.query<CoveredLineRow[]>(COVERED_LINES_SQL, [
+          [...coveredListIds],
+          basket.id,
+          scope.startedAt,
+          scope.enabled,
+          elsewhereGapMs,
+        ]);
 
     // Before the settlements, because a removed row shows what this basket bought
     // of a line the coverage no longer holds, and those purchases have to be in
     // the same read (plan 0138, section 7).
-    const marks = participantId
-      ? await this.marks.marksFor(participantId, coveredListIds, lines)
-      : NO_BASKET_MARKS;
-    const removedLineIds = marks.removed.flatMap((group) => group.lineIds);
+    // A removed row lives for the window an outside buy does, and only while
+    // the basket is open (plan 0203, section 6): one clock for both kinds of
+    // crossed out row.
+    //
+    // Read here and folded further down (plan 0201): a mark belongs to the key
+    // of a row, and the key is the product a line counts as, which is known
+    // only after the products and the purchases are read.
+    // A finished trip carries no marks: what changed on a list after the trip
+    // is not something its rows show.
+    const changes =
+      participantId && !frozen
+        ? await this.marks.changesFor(
+            participantId,
+            coveredListIds,
+            lines,
+            elsewhereGapMs
+          )
+        : NO_BASKET_CHANGES;
+    const departed = departedLinesOf(changes, lines);
+    const coveredIds = new Set(lines.map((line) => line.id));
+    // Every line a removal names that is not covered now. A superset of the
+    // lines of the removed rows, which is harmless: the purchases of a line
+    // that makes no row are read and then not drawn.
+    const removedLineIds = [
+      ...new Set(
+        changes.removing
+          .map((change) => change.lineId)
+          .filter((lineId) => !coveredIds.has(lineId))
+      ),
+    ];
 
-    if (lines.length === 0 && marks.removed.length === 0) {
-      return { rows: [], groups: [], truncated: false, marks };
+    if (lines.length === 0 && removedLineIds.length === 0) {
+      return {
+        rows: [],
+        groups: [],
+        truncated: false,
+        marks: {
+          ...NO_BASKET_MARKS,
+          unseenChangeCount: changes.unseenChangeCount,
+          newestUnseenChangeId: changes.newestUnseenChangeId,
+        },
+      };
     }
 
     const lineIds = lines.map((line) => line.id);
     const [items, settlements, elsewhere, skips, permissions] =
       await Promise.all([
+        // The product sets of the covered lines and of the lines that left, in
+        // one statement: both are keyed below.
         this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
-          lineIds,
+          [...lineIds, ...departed.map((line) => line.id)],
         ]),
         scope.enabled
           ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
@@ -347,7 +571,13 @@ export class BasketReadService {
       ]);
 
     const entries = toEntries(lines, items, settlements, elsewhere);
-    const groups = groupEntries(entries);
+    // The product and the key of every line, worked out once (plan 0201). A
+    // line that left is keyed with no purchases.
+    const keys = new BasketLineKeys(picks)
+      .add(entries)
+      .add(toEntries(departed, items, []));
+    const marks = foldBasketMarks(changes, lines, keys.keyOf);
+    const groups = groupEntries(entries, picks);
 
     const context = {
       servedListIds: redaction.servedListIds,
@@ -357,8 +587,8 @@ export class BasketReadService {
           entry.approvalStatus
         ),
       facts: { skips, kind: basket.kind },
-      // What changed about each row since this viewer last looked, by the row's
-      // merge key (plan 0138, section 7). Empty for a caller with no viewer.
+      // What changed about each row since this viewer last looked, by the key
+      // of the row (plan 0138, section 7). Empty for a caller with no viewer.
       marks: marks.byKey,
     };
 
@@ -367,8 +597,8 @@ export class BasketReadService {
     // its products like any other row's, so it stands where it stood instead of
     // jumping to the end under the thumb that was about to tap it. It carries no
     // products, so it falls back to the text key, which for a row that matched
-    // by product can move it: accepted for a disabled row that lives for
-    // minutes (plan 0141, section 4).
+    // by product can move it: accepted for a disabled row (plan 0141, section
+    // 4). It lives for six hours since plan 0203, where it lived for minutes.
     const orderable = [
       ...groups.map((group) => orderableOf(toRowView(group, context), group)),
       ...removedRows(marks.removed, settlements).map((row) =>
@@ -437,6 +667,13 @@ export class BasketReadService {
     return withUsual(rows, windows, removedLineIds);
   }
 
+  /** The lines a finished trip asked for (plan 0209, section 1.1). */
+  private async frozenLinesOf(basket: Basket): Promise<CoveredLineRow[]> {
+    return (
+      (await frozenLinesOf(this.baskets, [basket.id])).get(basket.id) ?? []
+    );
+  }
+
   /**
    * This basket's standing skips, by line (plan 0137, section 3).
    *
@@ -448,31 +685,11 @@ export class BasketReadService {
    * **A finished basket reads none.** Its rows come from `basket_trip_rows`,
    * and a skip is an intention about a trip that is over.
    */
-  private async skipsOf(
-    basket: Basket
-  ): Promise<Map<string, BasketSkipFact>> {
+  private async skipsOf(basket: Basket): Promise<Map<string, BasketSkipFact>> {
     if (!isOpenBasket(basket.status)) {
       return new Map();
     }
-    const rows = await this.baskets.query<BasketLineSkipRow[]>(
-      STANDING_SKIPS_SQL,
-      [basket.id, this.skipWindowMs]
-    );
-    return new Map(
-      rows.map((row) => [
-        row.lineId,
-        {
-          // `pg` hands a `timestamptz` back as a `Date`, but a driver that
-          // handed back a string would otherwise reach `getTime` and throw.
-          skippedAt:
-            row.skippedAt instanceof Date
-              ? row.skippedAt
-              : new Date(row.skippedAt),
-          skippedByParticipantId: row.skippedByParticipantId,
-          fresh: row.fresh,
-        },
-      ])
-    );
+    return standingSkipsOf(this.baskets, basket.id, this.skipWindowMs);
   }
 
   /**
@@ -486,16 +703,7 @@ export class BasketReadService {
   private async scopeOf(
     basket: Basket
   ): Promise<{ startedAt: Date | null; enabled: boolean }> {
-    if (basket.kind !== BasketKind.LIVE) {
-      return { startedAt: null, enabled: true };
-    }
-    const [session] = await this.baskets.query<BasketSessionRow[]>(
-      BASKET_SESSION_SQL,
-      [basket.id, BASKET_SESSION_LOOKBACK_MS, PURCHASE_SESSION_GAP_MS]
-    );
-    return session
-      ? { startedAt: session.startedAt, enabled: true }
-      : { startedAt: null, enabled: false };
+    return basketScopeOf(this.baskets, basket);
   }
 
   /** The names behind the lists this reader was served. */
@@ -537,7 +745,8 @@ export class BasketReadService {
 
 /**
  * The window in which another basket's purchase keeps a line a row (plan 0188),
- * or null when this basket does not ask.
+ * or null when this basket does not ask. A removed row lives for the same
+ * window (plan 0203, section 6).
  *
  * `$5` of `COVERED_LINES_SQL`, and one definition for the read and for the row
  * resolver, so a write can find every row the read drew.
@@ -572,87 +781,10 @@ function orderableOf(
   return {
     key: row.rowKey,
     content: row.content,
-    optionIds: row.optionIds,
+    // Every product the row can be found under in the history (plan 0201).
+    // A removed row has none and falls back to its text.
+    optionIds: group ? walkItemIdsOf(group) : [],
     row,
     group,
   };
-}
-
-/**
- * Stitch the four row reads into the shape the pure rules take.
- *
- * A free function rather than a method for the reason the rest of `basket-rows`
- * is: it is the join the database did not do, and a spec can state it.
- */
-export function toEntries(
-  lines: readonly CoveredLineRow[],
-  items: readonly CoveredLineItemRow[],
-  settlements: readonly BasketSettlementRow[],
-  /**
-   * What other baskets bought lately, one row per line (plan 0188). Empty for a
-   * caller that writes on a row rather than drawing it: the row resolver hands a
-   * write this basket's own purchases, and no write acts on anybody else's.
-   */
-  elsewhere: readonly BasketElsewhereRow[] = []
-): BasketEntry[] {
-  const itemsByLine = new Map<string, string[]>();
-  for (const row of items) {
-    const held = itemsByLine.get(row.lineId);
-    if (held) {
-      held.push(row.itemId);
-    } else {
-      itemsByLine.set(row.lineId, [row.itemId]);
-    }
-  }
-
-  const settlementsByLine = new Map<string, BasketSettlementFact[]>();
-  for (const row of settlements) {
-    const fact: BasketSettlementFact = {
-      id: row.id,
-      outcome: row.outcome as SettlementOutcome,
-      quantity: row.quantity,
-      // `pg` hands a `timestamptz` back as a `Date`, but a driver that hands
-      // back a string would otherwise reach `toISOString` and throw.
-      settledAt:
-        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
-      settledByParticipantId: row.settledByParticipantId,
-      // Computed by the database against its own `now()` (plan 0137, section
-      // 4), and read for a `LIVE` basket's close alone.
-      fresh: row.fresh,
-    };
-    const held = settlementsByLine.get(row.lineId);
-    if (held) {
-      held.push(fact);
-    } else {
-      settlementsByLine.set(row.lineId, [fact]);
-    }
-  }
-
-  const elsewhereByLine = new Map<string, BasketElsewhereFact>();
-  for (const row of elsewhere) {
-    elsewhereByLine.set(row.lineId, {
-      // `SUM` over an integer column is a bigint to Postgres, and `pg` hands a
-      // bigint back as a string. The statement casts it, and this does not
-      // trust the cast to survive an edit.
-      quantity: Number(row.quantity),
-      settledAt:
-        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
-    });
-  }
-
-  return lines.map((line) => ({
-    lineId: line.id,
-    listId: line.listId,
-    content: line.content,
-    quantity: line.quantity,
-    itemSetHash: line.itemSetHash,
-    approvalStatus: line.approvalStatus,
-    createdAt:
-      line.createdAt instanceof Date
-        ? line.createdAt
-        : new Date(line.createdAt),
-    itemIds: itemsByLine.get(line.id) ?? [],
-    settlements: settlementsByLine.get(line.id) ?? [],
-    elsewhere: elsewhereByLine.get(line.id) ?? null,
-  }));
 }

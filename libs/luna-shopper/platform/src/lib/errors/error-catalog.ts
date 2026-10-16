@@ -219,13 +219,13 @@ export const ERROR_CATALOG: Record<
     en: 'That section does not exist.',
     es: 'Esa sección no existe.',
   },
-  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: {
-    en: 'A section belongs to one chain. A shop or a pinned product can only use sections of its own chain.',
-    es: 'Una sección pertenece a una sola cadena. Una tienda o un producto fijado solo puede usar secciones de su propia cadena.',
+  [ERROR_CODES.SECTION_OF_ANOTHER_SHOP]: {
+    en: 'A section belongs to one shop. The order of a shop can only hold its own sections.',
+    es: 'Una sección pertenece a una sola tienda. El orden de una tienda solo puede contener sus propias secciones.',
   },
   [ERROR_CODES.SECTION_SLUG_TAKEN]: {
-    en: 'This chain already has a section with that slug.',
-    es: 'Esta cadena ya tiene una sección con ese identificador.',
+    en: 'This shop already has a section with that slug.',
+    es: 'Esta tienda ya tiene una sección con ese identificador.',
   },
   // One shop for each external reference (plan 0195).
   [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: {
@@ -260,6 +260,42 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.SHOP_MAP_TOO_LARGE]: {
     en: 'That save is too large to store.',
     es: 'Ese guardado es demasiado grande para almacenarlo.',
+  },
+  // Support sessions (plan 0194). An operator reads the first and the last
+  // two. The person never sees any of them.
+  [ERROR_CODES.IMPERSONATION_DISABLED]: {
+    en: 'Support sessions are switched off on this server.',
+    es: 'Las sesiones de soporte están desactivadas en este servidor.',
+  },
+  [ERROR_CODES.IMPERSONATION_CODE_INVALID]: {
+    en: 'That support link is no longer valid. Start the session again.',
+    es: 'Ese enlace de soporte ya no es válido. Inicia la sesión de nuevo.',
+  },
+  [ERROR_CODES.IMPERSONATION_ENDED]: {
+    en: 'This support session has ended.',
+    es: 'Esta sesión de soporte ha terminado.',
+  },
+  [ERROR_CODES.IMPERSONATION_NOT_ALLOWED]: {
+    en: 'A support session cannot do that. Only the owner of the account can.',
+    es: 'Una sesión de soporte no puede hacer eso. Solo puede la persona dueña de la cuenta.',
+  },
+  [ERROR_CODES.NOT_IMPERSONATING]: {
+    en: 'This is not a support session.',
+    es: 'Esta no es una sesión de soporte.',
+  },
+  // A reset grant (plan 0210). The person reads the first, an operator the
+  // other two.
+  [ERROR_CODES.RECOVERY_OTHER_ACCOUNT]: {
+    en: 'This link belongs to another account than the one signed in here. Sign out of this one to use it.',
+    es: 'Este enlace es de otra cuenta distinta de la que tiene la sesión abierta aquí. Cierra esta sesión para usarlo.',
+  },
+  [ERROR_CODES.RECOVERY_NEEDS_EMAIL]: {
+    en: 'This account has no email address, so it has no password to reset.',
+    es: 'Esta cuenta no tiene correo, así que no tiene contraseña que restablecer.',
+  },
+  [ERROR_CODES.RECOVERY_NEEDS_PASSWORD]: {
+    en: 'This account signs in with Google and has no password to reset.',
+    es: 'Esta cuenta entra con Google y no tiene contraseña que restablecer.',
   },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',

@@ -213,52 +213,49 @@
   margin-block-start: var(--app-space-4);
 }
 
-// ---- the any row (velista 0124): All supermarkets, or Any Mercadona shop
-
-.any-card {
+// "No shop" (velista 0141): one row in a card of its own, drawn like a pick row of
+// the list below it, with the store glyph where a chain's logo would be.
+.no-shop {
   margin-block-end: var(--app-space-5);
 }
 
-.any {
+.no-shop-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   column-gap: var(--app-space-4);
   min-block-size: var(--app-touch-target);
-  padding: var(--app-space-3) var(--app-space-4);
+  padding: var(--app-space-4);
   cursor: pointer;
 
-  &:has(.any-radio:checked) {
-    background: var(--app-action-quiet-bg);
-  }
-
-  &:has(.any-radio:focus-visible) {
+  &:has(.no-shop-radio:focus-visible) {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: calc(var(--app-focus-ring-offset) * -1);
   }
 }
 
-.any-text {
+.no-shop-body {
   display: flex;
   flex-direction: column;
   gap: var(--app-space-hair);
   min-inline-size: 0;
 }
 
-.any-title {
+.no-shop-title {
   font-size: var(--app-text-base);
   font-weight: 600;
   line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
 }
 
-.any-detail {
+.no-shop-hint {
   font-size: var(--app-text-sm);
   line-height: var(--app-leading-body);
   color: var(--app-text-secondary);
 }
 
-.any-radio {
+.no-shop-radio {
+  flex: none;
   inline-size: var(--app-pick-radio);
   block-size: var(--app-pick-radio);
   margin: 0;

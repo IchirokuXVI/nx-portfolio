@@ -51,11 +51,18 @@ const PINNED: Readonly<
     danger: ['delete-account'],
     plain: [
       'resend-verification',
+      // A reset grant destroys nothing by itself: the account keeps its
+      // password and its sessions until somebody uses a link (backend plan
+      // 0210).
+      'send-password-reset',
+      'create-recovery-links',
       // A role that was given is taken away again, and the other way round.
       'give-role-admin',
       'take-role-admin',
       'give-role-premium',
       'take-role-premium',
+      // Admin plan 0062: it changes nothing in the account.
+      'open-as-user',
     ],
   },
   zones: {

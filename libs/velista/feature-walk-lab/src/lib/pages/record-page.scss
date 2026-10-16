@@ -17,7 +17,9 @@
   overflow: hidden;
   padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
   background: var(--app-surface-ground);
-  min-block-size: 100svh;
+  // Less the strip of a support session (velista `0133`), so the buttons at the foot
+  // of a recording stay on the screen under it. `0px` in an ordinary tab.
+  min-block-size: calc(100svh - var(--app-support-strip-height));
 }
 
 .head {

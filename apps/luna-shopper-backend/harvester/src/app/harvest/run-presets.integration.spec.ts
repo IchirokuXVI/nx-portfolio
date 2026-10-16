@@ -21,6 +21,7 @@ import {
   HARVESTER_ENTITIES,
   HarvestRun,
   HarvestRunPreset,
+  HarvestSchedule,
   type SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -28,6 +29,7 @@ import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
+import { HarvestScheduleStore } from './harvest-schedule.store';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { RunExecutor } from './run-executor.service';
 import type { SourceEntryService } from './source-entry.service';
@@ -135,7 +137,13 @@ describeIntegration('run presets (real Postgres)', () => {
       config,
       presetStore
     );
-    presets = new HarvestRunPresetService(presetStore, runs, sources, admin);
+    presets = new HarvestRunPresetService(
+      presetStore,
+      runs,
+      sources,
+      admin,
+      new HarvestScheduleStore(dataSource.getRepository(HarvestSchedule))
+    );
   });
 
   beforeEach(async () => {
