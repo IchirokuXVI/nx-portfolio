@@ -310,6 +310,10 @@ $app-content-max: 480px;
   --app-choice-tick-width: 9px;
   --app-choice-tick-height: 5px;
   --app-choice-tick-stroke: 2px;
+  // The box of a catalog card (velista 0146), as large as the radio beside it.
+  --app-choice-card-check-radius: 7px;
+  --app-choice-card-tick-width: 11px;
+  --app-choice-card-tick-height: 6px;
   // Narrower inside a preview row, which is 38px tall and is a picture rather than a
   // control.
   --app-preview-quantity-width: 34px;

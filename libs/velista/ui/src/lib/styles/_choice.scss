@@ -70,3 +70,18 @@
     outline-offset: var(--app-focus-ring-offset);
   }
 }
+
+// The box of a catalog card (velista 0146): the radio's size, so a card that
+// ticks and a card that chooses one take the same room at the trailing edge.
+@mixin card-check-box {
+  @include check-box;
+
+  inline-size: var(--app-choice-radio-size);
+  block-size: var(--app-choice-radio-size);
+  border-radius: var(--app-choice-card-check-radius);
+
+  &:checked::after {
+    inline-size: var(--app-choice-card-tick-width);
+    block-size: var(--app-choice-card-tick-height);
+  }
+}

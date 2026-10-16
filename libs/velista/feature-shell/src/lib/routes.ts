@@ -13,6 +13,7 @@ import {
   BasketViewStore,
   ListViewStore,
   TripStore,
+  type ProductPickKind,
 } from '@portfolio/velista/data-access';
 import {
   CATALOG_PATHS,
@@ -30,6 +31,7 @@ import {
   authenticatedGuard,
   guestOnlyGuard,
 } from './auth-guards';
+import { catalogPickLeaveGuard } from './catalog-pick-guards';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -117,8 +119,10 @@ function sheet(route: Route): Route {
 }
 
 /**
- * The catalog opened to choose one product for a line (velista `0140`, section 3;
- * `0146`, section 2), and its two pickers.
+ * The catalog opened to choose for a line, and its two pickers: one product
+ * (velista `0140`, section 3; `0146`, section 2) under `product`, or the whole set
+ * of the line (`0146`, section 3) under `products`, the path the products page of
+ * the line had.
  *
  * **A page and not a sheet**, so it is addressed under the line and never under
  * the `sheet` marker: a page cannot take one (velista `0140`, review point 1). The
@@ -134,11 +138,17 @@ function sheet(route: Route): Route {
  * The guards of the line's pages, because the page reads catalog prices, which
  * need an account, and names a line of a list. Which reader may change that line
  * is the caller's to decide, and the server's to refuse.
+ *
+ * The page that chooses a set asks before it is left with a change in it
+ * (`0146`, section 4), which the back of the browser reaches only through a
+ * guard. Its pickers carry none: going back from one to the page is not leaving.
  */
-function productPickRoutes(): Route[] {
+function productPickRoutes(kind: ProductPickKind): Route[] {
   const line = 'zones/:zoneId/lists/:listId/lines/:lineId';
-  const page = `${line}/${CATALOG_PATHS.pickOne}`;
-  const data = { [CATALOG_PICK_DATA]: 'one', [NAV_CHROME]: NO_NAV_CHROME };
+  const page = `${line}/${
+    kind === 'one' ? CATALOG_PATHS.pickOne : CATALOG_PATHS.pickSet
+  }`;
+  const data = { [CATALOG_PICK_DATA]: kind, [NAV_CHROME]: NO_NAV_CHROME };
   const guards: Pick<Route, 'canMatch' | 'canActivate'> = {
     canMatch: [zoneIdGuard, listIdGuard],
     canActivate: [authenticatedGuard, setupGuard],
@@ -174,6 +184,7 @@ function productPickRoutes(): Route[] {
     {
       path: page,
       ...guards,
+      ...(kind === 'set' ? { canDeactivate: [catalogPickLeaveGuard] } : {}),
       data,
       loadComponent: () =>
         import('@portfolio/velista/feature-catalog').then((m) => m.CatalogPage),
@@ -901,8 +912,9 @@ export const AppShellRoutes: Route[] = [
            * longer have to be told apart by a word.
            */
           /**
-           * The two pages under a line (velista `0135`, section 11): its buy
-           * history, and where its products are changed.
+           * The pages under a line (velista `0135`, section 11): its buy history
+           * here, and the catalog that chooses its products after it (velista
+           * `0146`).
            *
            * **Pages of their own and not children of the line page**, for the
            * reason the line page is not a child of the list page: a child is drawn
@@ -920,16 +932,8 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.LineHistoryPage
               ),
           },
-          {
-            path: 'zones/:zoneId/lists/:listId/lines/:lineId/products',
-            canMatch: [zoneIdGuard, listIdGuard],
-            canActivate: [authenticatedGuard, setupGuard],
-            loadComponent: () =>
-              import('@portfolio/velista/feature-lists').then(
-                (m) => m.LineProductsPage
-              ),
-          },
-          ...productPickRoutes(),
+          ...productPickRoutes('set'),
+          ...productPickRoutes('one'),
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',
             canMatch: [zoneIdGuard, listIdGuard],

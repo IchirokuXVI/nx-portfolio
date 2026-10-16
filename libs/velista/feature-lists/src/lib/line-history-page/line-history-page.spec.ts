@@ -1,5 +1,5 @@
 import { signal, type Type } from '@angular/core';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
@@ -30,9 +30,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   type CatalogItem,
-  type CatalogSuggestion,
   type Line,
-  LINE_ITEM_SET_MAX,
   type LineSettlement,
   type ListPermission,
   type MyZone,
@@ -43,15 +41,10 @@ import {
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
-import { LineHistoryPage } from '../line-history-page/line-history-page';
-import { LineProductsPage } from './line-products-page';
+import { LineHistoryPage } from './line-history-page';
 
 /**
- * The two pages under a line, at the DOM (velista `0135`, sections 3 and 5).
- *
- * The products page holds the search, the adopt and the remove that the line
- * page had. Their rules did not change when they moved, and these specs are what
- * says so.
+ * The history page of a line, at the DOM (velista `0135`, section 5).
  */
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -124,7 +117,6 @@ function bought(id: string, daysAgo: number): LineSettlement {
 interface Options {
   readonly lines?: readonly Line[];
   readonly permissions?: readonly ListPermission[];
-  readonly suggestions?: readonly CatalogSuggestion[];
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
   readonly moreSettlements?: Readonly<
     Record<string, readonly LineSettlement[]>
@@ -149,7 +141,7 @@ async function render<T>(
   });
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
   const catalog: CatalogServiceI = {
-    suggest: jest.fn().mockResolvedValue(options.suggestions ?? []),
+    suggest: jest.fn().mockResolvedValue([]),
     itemsByIds: jest.fn().mockResolvedValue([]),
   } as unknown as CatalogServiceI;
   const map = convertToParamMap({
@@ -236,9 +228,6 @@ async function drain<T>(fixture: ComponentFixture<T>): Promise<void> {
 const textOf = <T>(fixture: ComponentFixture<T>): string =>
   fixture.nativeElement.textContent ?? '';
 
-const updates = (lines: FakeLineStore) =>
-  lines.calls.filter((call) => call.kind === 'update');
-
 function buttonWith<T>(
   fixture: ComponentFixture<T>,
   key: string
@@ -251,153 +240,13 @@ function buttonWith<T>(
   );
 }
 
-const product = (catalogItem: CatalogItem): CatalogSuggestion =>
-  ({ kind: 'item', item: catalogItem }) as CatalogSuggestion;
-
-describe('LineProductsPage', () => {
-  it('lists the products of the line under a field that is not focused', async () => {
-    const { fixture } = await render(LineProductsPage);
-    const field = fixture.nativeElement.querySelector(
-      '#line-product-search'
-    ) as HTMLInputElement;
-
-    expect(textOf(fixture)).toContain('Shampoo for normal hair');
-    expect(textOf(fixture)).toContain('Classic care shampoo');
-    expect(field).not.toBeNull();
-    expect(document.activeElement).not.toBe(field);
-    expect(
-      fixture.nativeElement.querySelector('label[for="line-product-search"]')
-    ).not.toBeNull();
-  });
-
-  it('goes back to the line page', async () => {
-    const { fixture, pages } = await render(LineProductsPage);
-
-    await fixture.componentInstance.back();
-
-    expect(pages.back).toHaveBeenCalledWith(LINE_URL);
-  });
-
-  it('adds a product to the set, and never replaces the set', async () => {
-    const { fixture, lines } = await render(LineProductsPage);
-
-    await fixture.componentInstance.addProduct(product(DANDRUFF));
-
-    expect(updates(lines)).toEqual([
-      {
-        kind: 'update',
-        lineId: LINE_ID,
-        itemIds: ['normal', 'classic', 'dandruff'],
-      },
-    ]);
-  });
-
-  it('sends nothing for a product the line already holds', async () => {
-    const { fixture, lines } = await render(LineProductsPage);
-
-    await fixture.componentInstance.addProduct(product(NORMAL));
-
-    expect(updates(lines)).toEqual([]);
-  });
-
-  it('refuses an add over the cap before anything is sent, and says the numbers', async () => {
-    const full = Array.from(
-      { length: LINE_ITEM_SET_MAX },
-      (_, index) => `item-${index}`
-    );
-    const { fixture, lines } = await render(LineProductsPage, {
-      lines: [line({ itemIds: full })],
-    });
-
-    await fixture.componentInstance.addProduct(product(DANDRUFF));
-    await drain(fixture);
-
-    expect(updates(lines)).toEqual([]);
-    expect(fixture.componentInstance.productsFull()).toEqual({
-      key: 'list.products.full.one',
-      args: { count: LINE_ITEM_SET_MAX, cap: LINE_ITEM_SET_MAX },
-    });
-    expect(fixture.nativeElement.querySelector('.full')).not.toBeNull();
-  });
-
-  it('removes one product by writing the set without it', async () => {
-    const { fixture, lines } = await render(LineProductsPage);
-
-    await fixture.componentInstance.removeProduct('normal');
-
-    expect(updates(lines)).toEqual([
-      { kind: 'update', lineId: LINE_ID, itemIds: ['classic'] },
-    ]);
-  });
-
-  it('keeps a product the catalog put there with adoptItemIds and nothing else', async () => {
-    const { fixture, lines } = await render(LineProductsPage, {
-      lines: [
-        line({ productGroupId: 'group-1', groupItemIds: ['classic'] }),
-      ],
-    });
-
-    expect(buttonWith(fixture, 'list.products.keep')).not.toBeNull();
-    await fixture.componentInstance.adoptProduct('classic');
-    // A product the person already owns has nothing to adopt.
-    await fixture.componentInstance.adoptProduct('normal');
-
-    expect(updates(lines)).toEqual([
-      { kind: 'update', lineId: LINE_ID, adoptItemIds: ['classic'] },
-    ]);
-  });
-
-  it('sets the favourite from the star of a row, and clears it from the same star', async () => {
-    const { fixture, lines } = await render(LineProductsPage, {
-      lines: [line({ favoriteItemId: 'normal' })],
-    });
-    const stars = fixture.debugElement
-      .queryAll(By.css('button.star'))
-      .map((element) => element.nativeElement as HTMLButtonElement);
-
-    expect(stars.map((star) => star.getAttribute('aria-pressed'))).toEqual([
-      'true',
-      'false',
-    ]);
-
-    stars[1].click();
-    await drain(fixture);
-    stars[0].click();
-    await drain(fixture);
-
-    expect(updates(lines)).toEqual([
-      { kind: 'update', lineId: LINE_ID, favoriteItemId: 'classic' },
-      // The fake store applied the first write, so the first star is now empty
-      // and a press on it sets the favourite again.
-      { kind: 'update', lineId: LINE_ID, favoriteItemId: 'normal' },
-    ]);
-  });
-
-  it('draws no field and no controls for a reader', async () => {
-    const { fixture } = await render(LineProductsPage, {
-      permissions: ['READ'],
-      lines: [line({ favoriteItemId: 'normal' })],
-    });
-
-    expect(
-      fixture.nativeElement.querySelector('#line-product-search')
-    ).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(1);
-    expect(
-      fixture.nativeElement.querySelectorAll('.star.is-mark')
-    ).toHaveLength(1);
-  });
-});
-
 describe('LineHistoryPage', () => {
   it('reads the history of the line and draws its rows under a month', async () => {
     const { fixture } = await render(LineHistoryPage, {
       settlements: { [LINE_ID]: [bought('st-1', 1), bought('st-2', 2)] },
     });
 
-    expect(
-      fixture.nativeElement.querySelectorAll('.card .row').length
-    ).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('.card .row').length).toBe(2);
     expect(textOf(fixture)).toContain('list.history.bought');
     expect(textOf(fixture)).toContain('Shampoo for normal hair · Deliplus');
     expect(textOf(fixture)).toContain('list.history.lastPaid');

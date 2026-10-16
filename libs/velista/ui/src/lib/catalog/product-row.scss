@@ -13,6 +13,12 @@
   @include choice.radio-dot;
 }
 
+// In the catalog that chooses the products of a line (velista 0146), a box the
+// size of the radio, ticked in the same accent.
+.pick-many {
+  @include choice.card-check-box;
+}
+
 .row.is-chosen {
   border-color: var(--app-action-quiet-fg);
 }

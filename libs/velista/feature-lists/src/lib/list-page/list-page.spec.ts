@@ -2661,6 +2661,26 @@ describe('ListPage: a row with no product (velista 0145)', () => {
     expect(pick.answer()).toBeNull();
   });
 
+  it('opens the catalog that chooses the set when the line has a product by then (velista 0146)', async () => {
+    const { fixture, router } = await render({
+      lines: [line('ln-bread', { content: 'Pan', itemIds: ['item-bread'] })],
+    });
+    const pick = TestBed.inject(ProductPickStore);
+
+    fixture.componentInstance.chooseProduct('ln-bread');
+
+    expect(pick.request()).toEqual(
+      expect.objectContaining({
+        kind: 'set',
+        lineId: 'ln-bread',
+        chosenIds: ['item-bread'],
+      })
+    );
+    expect(router.navigateByUrl.mock.calls.at(-1)?.[0]).toMatch(
+      /\/zones\/[^/]+\/lists\/[^/]+\/lines\/ln-bread\/products$/
+    );
+  });
+
   it('writes nothing when the catalog was closed', async () => {
     const { fixture, lines } = await render({
       lines: [line('ln-bread', { itemIds: [] })],

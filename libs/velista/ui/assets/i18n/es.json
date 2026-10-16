@@ -549,10 +549,7 @@
     },
     "similar": {
       "title": "Productos similares",
-      "titleFor": "Similares a {{name}}",
-      "failed": "No se han podido cargar los productos similares.",
-      "change": "Cambiar",
-      "changeLabel": "Cambiar por {{label}}"
+      "failed": "No se han podido cargar los productos similares."
     },
     "categories": {
       "title": "Categorías",
@@ -574,6 +571,25 @@
       "emptyBody": "Velista aún no ha encontrado nada. Quita la categoría para verlo todo.",
       "emptyChainTitle": "Todavía no hay nada en {{category}} en {{chain}}",
       "emptyChainBody": "Velista aún no ha encontrado nada en esta tienda. Elige Todas las tiendas, o quita la categoría para ver todo lo de {{chain}}."
+    },
+    "pick": {
+      "titleSet": "Elige productos",
+      "closeSet": "Cerrar sin guardar",
+      "onLine": "En esta línea",
+      "all": "Todos los productos",
+      "onLineLabel": "{{label}}, en esta línea",
+      "gone": "Ya no está en el catálogo",
+      "save": "Guardar",
+      "added_one": "1 producto añadido",
+      "added_other": "{{count}} productos añadidos",
+      "removed_one": "1 producto quitado",
+      "removed_other": "{{count}} productos quitados",
+      "first": "Elige antes un producto.",
+      "full": "Esta línea tiene {{count}} de {{cap}} productos. Quita uno primero.",
+      "saveFailed": "No se pudieron guardar los productos.",
+      "leaveQuestion": "¿Salir sin guardar?",
+      "leave": "Salir",
+      "stay": "Seguir eligiendo"
     }
   },
   "home": {
@@ -959,8 +975,6 @@
       "menu": "Más opciones de {{name}}",
       "productsTitle": "Vale cualquiera de estos",
       "productsChange": "Cambiar",
-      "productsAdd": "Añadir un producto",
-      "productsEmpty": "Todavía no hay productos. Vale cualquier marca.",
       "aboutLabel": "Cuál te toca comprar",
       "about": {
         "title": "Cuál te toca comprar",
@@ -990,7 +1004,10 @@
       "loading": "Cargando la línea",
       "failed": "No se ha podido cargar esta línea.",
       "retry": "Reintentar",
-      "toList": "Volver a la lista"
+      "toList": "Volver a la lista",
+      "productsNone": "Todavía no hay producto",
+      "productsChoose": "Elige un producto",
+      "productsWhy": "Con un producto, la lista muestra lo que cuesta y dónde se vende."
     },
     "menu": {
       "rename": "Cambiar el nombre",
@@ -1049,23 +1066,6 @@
       "older": "Ver más antiguas",
       "empty": "Todavía no se ha comprado nada.",
       "loading": "Cargando el historial de compras"
-    },
-    "products": {
-      "title": "Productos de {{name}}",
-      "titlePlain": "Productos",
-      "back": "Volver a la línea",
-      "search": "Busca en el catálogo para añadir un producto",
-      "fromGroup": "De {{name}}",
-      "fromGroupUnnamed": "De un grupo",
-      "addedByYou": "Añadidos por ti",
-      "keep": "Conservar",
-      "keepLabel": "Conservar {{name}} en esta línea",
-      "remove": "Quitar {{name}}",
-      "count": "{{count}} de {{cap}} productos",
-      "full": {
-        "one": "Esta línea tiene {{count}} de {{cap}} productos. Quita uno primero.",
-        "group": "Esta línea tiene {{count}} de {{cap}} productos, y {{name}} añade {{adds}}. Quita algunos productos primero."
-      }
     },
     "confirmDelete": {
       "title": "¿Borrar “{{name}}”?",

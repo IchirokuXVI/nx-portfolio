@@ -40,6 +40,7 @@ export * from './lib/problem';
 export * from './lib/product-category';
 export * from './lib/product-change';
 export * from './lib/product-group';
+export * from './lib/product-set-change';
 export * from './lib/purchases';
 export * from './lib/requests';
 export * from './lib/shop';

@@ -549,10 +549,7 @@
     },
     "similar": {
       "title": "Similar products",
-      "titleFor": "Similar to {{name}}",
-      "failed": "Similar products did not load.",
-      "change": "Change",
-      "changeLabel": "Change to {{label}}"
+      "failed": "Similar products did not load."
     },
     "categories": {
       "title": "Categories",
@@ -574,6 +571,25 @@
       "emptyBody": "Velista has not found any yet. Clear the category to see everything.",
       "emptyChainTitle": "Nothing in {{category}} at {{chain}} yet",
       "emptyChainBody": "Velista has not found any at this shop. Choose All shops, or clear the category to see everything from {{chain}}."
+    },
+    "pick": {
+      "titleSet": "Choose products",
+      "closeSet": "Close without saving",
+      "onLine": "On this line",
+      "all": "All products",
+      "onLineLabel": "{{label}}, on this line",
+      "gone": "No longer in the catalog",
+      "save": "Save",
+      "added_one": "1 product added",
+      "added_other": "{{count}} products added",
+      "removed_one": "1 product removed",
+      "removed_other": "{{count}} products removed",
+      "first": "Choose a product first.",
+      "full": "This line holds {{count}} of {{cap}} products. Remove one first.",
+      "saveFailed": "The products could not be saved.",
+      "leaveQuestion": "Leave without saving?",
+      "leave": "Leave",
+      "stay": "Keep choosing"
     }
   },
   "home": {
@@ -959,8 +975,6 @@
       "menu": "More for {{name}}",
       "productsTitle": "Any of these will do",
       "productsChange": "Change",
-      "productsAdd": "Add a product",
-      "productsEmpty": "No products yet. Any brand will do.",
       "aboutLabel": "Which one you get when you shop",
       "about": {
         "title": "Which one you get when you shop",
@@ -990,7 +1004,10 @@
       "loading": "Loading the line",
       "failed": "This line could not be loaded.",
       "retry": "Try again",
-      "toList": "Back to the list"
+      "toList": "Back to the list",
+      "productsNone": "No product yet",
+      "productsChoose": "Choose a product",
+      "productsWhy": "With a product, the list shows what it costs and where it is sold."
     },
     "menu": {
       "rename": "Rename",
@@ -1049,23 +1066,6 @@
       "older": "Show older",
       "empty": "Nothing bought yet.",
       "loading": "Loading the buy history"
-    },
-    "products": {
-      "title": "Products of {{name}}",
-      "titlePlain": "Products",
-      "back": "Back to the line",
-      "search": "Search the catalog to add a product",
-      "fromGroup": "From {{name}}",
-      "fromGroupUnnamed": "From a group",
-      "addedByYou": "Added by you",
-      "keep": "Keep",
-      "keepLabel": "Keep {{name}} on this line",
-      "remove": "Remove {{name}}",
-      "count": "{{count}} of {{cap}} products",
-      "full": {
-        "one": "This line holds {{count}} of {{cap}} products. Remove one first.",
-        "group": "This line holds {{count}} of {{cap}} products, and {{name}} adds {{adds}}. Remove a few products first."
-      }
     },
     "confirmDelete": {
       "title": "Delete “{{name}}”?",
