@@ -46,6 +46,11 @@
     outline-offset: var(--app-focus-ring-offset);
   }
 
+  // Room for the cross, so the last words typed never run under it.
+  &.clearable {
+    padding-inline-end: calc(var(--app-space-7) + var(--app-space-2));
+  }
+
   // Locked (velista 0110): read as unavailable, and still answer a tap, which is
   // what opens the container's explanation. So the pointer is the ordinary one and
   // not `not-allowed`, and the focus ring stays.
@@ -56,6 +61,35 @@
   }
 }
 
+// The cross inside the field's trailing end. Smaller than a full target inside a
+// field that is already tall enough, as the catalog's search draws it.
+.clear {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--app-space-1);
+  translate: 0 -50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.clear-glyph {
+  font-size: var(--app-icon-sm);
+}
+
 .counter {
   position: absolute;
   inset-inline-end: var(--app-space-3);
@@ -63,6 +97,10 @@
   font-size: var(--app-text-2xs);
   font-variant-numeric: tabular-nums;
   color: var(--app-text-muted);
+
+  .clearable ~ & {
+    inset-inline-end: calc(var(--app-space-7) + var(--app-space-2));
+  }
 }
 
 .send {
