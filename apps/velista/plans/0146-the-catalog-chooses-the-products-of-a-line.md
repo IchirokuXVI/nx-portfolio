@@ -432,3 +432,14 @@ the group's. The person keeps oat, takes soy off and ticks rice, and Save sends
 
 The line still follows the group. Oat stays the group's, soy is gone, and rice is the
 person's own: the owner's option A, as decided.
+
+### Evidence
+
+- `npx nx build velista` passes. Lint and test pass for `velista/models`,
+  `velista/data-access`, `velista/platform`, `velista/ui`, `velista/feature-catalog`,
+  `velista/feature-lists` and `velista/feature-shell`, `routes.spec.ts` and
+  `no-unguarded-history-back.spec.ts` among them.
+- `velista-luna-e2e` passes 8 of 8, twice, on Luna slot 2 started with
+  `LUNA_REFERENCE_SEED=0`. No spec of the suite used the products page.
+- The browser walk of the brief, at 390 pixels in English and Spanish, is in a private
+  artifact: https://claude.ai/artifact/YVSQy1xDnuKANzQdMDck2V
