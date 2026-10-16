@@ -63,6 +63,8 @@ const OUTSIDE = [
   'feature-entry/src/lib/join-link-page/',
   'feature-landing/',
   'feature-setup/',
+  // The `'**'` route, a sibling of `:locale` and so outside `AppLayout` (plan 0150).
+  'feature-shell/src/lib/not-found-page/',
   'feature-walk-lab/',
   // `s/:secret`: the page a share link opens, before the reader is anybody.
   'feature-shopping-lists/src/lib/join-page/',

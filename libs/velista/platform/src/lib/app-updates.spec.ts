@@ -407,6 +407,86 @@ describe('AppUpdates', () => {
 
       expect(reload).toHaveBeenCalledTimes(1);
     });
+
+    /**
+     * Plan 0150. A route this build does not know may be one a newer release added,
+     * so the 404 asks before it draws, and reloads on the same URL once.
+     */
+    describe('a page no route matched', () => {
+      const url = '/es/auth/reset-password?token=t';
+
+      it('answers what the worker answers', async () => {
+        checkForUpdate.mockResolvedValueOnce(true);
+        const updates = TestBed.inject(AppUpdates);
+
+        await expect(updates.newerVersionForUnknownPage(url)).resolves.toBe(
+          true
+        );
+        await expect(updates.newerVersionForUnknownPage(url)).resolves.toBe(
+          false
+        );
+        expect(checkForUpdate).toHaveBeenCalledTimes(2);
+      });
+
+      it('answers yes without asking when a version already waits', async () => {
+        // `checkForUpdate` answers about versions newer than the one waiting, so it
+        // would say no with the right bundle in the cache.
+        ready();
+        const updates = TestBed.inject(AppUpdates);
+
+        await expect(updates.newerVersionForUnknownPage(url)).resolves.toBe(
+          true
+        );
+        expect(checkForUpdate).not.toHaveBeenCalled();
+      });
+
+      it('reloads once on the URL, apart from the refused build latch', () => {
+        const updates = TestBed.inject(AppUpdates);
+
+        updates.reloadForUnknownPage(url);
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(session.get(StorageKeys.notFoundUpdate)).toBe(url);
+        expect(session.has(StorageKeys.updateAttempt)).toBe(false);
+      });
+
+      it('takes over a waiting version, so the next navigation does not reload too', () => {
+        ready();
+        const updates = TestBed.inject(AppUpdates);
+
+        updates.reloadForUnknownPage(url);
+        routerEvents.next(new NavigationEnd(2, '/es/home', '/es/home'));
+        jest.runOnlyPendingTimers();
+
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
+
+      it('asks nothing for a URL this tab already reloaded for', async () => {
+        checkForUpdate.mockResolvedValue(true);
+        session.set(StorageKeys.notFoundUpdate, url);
+        const updates = TestBed.inject(AppUpdates);
+
+        await expect(updates.newerVersionForUnknownPage(url)).resolves.toBe(
+          false
+        );
+        expect(checkForUpdate).not.toHaveBeenCalled();
+
+        // Another URL still gets its own question.
+        await expect(
+          updates.newerVersionForUnknownPage('/es/elsewhere')
+        ).resolves.toBe(true);
+      });
+
+      it('never shows the dead end of a refused build', async () => {
+        session.set(StorageKeys.updateAttempt, '1');
+        const updates = TestBed.inject(AppUpdates);
+
+        await updates.newerVersionForUnknownPage(url);
+        updates.reloadForUnknownPage(url);
+
+        expect(updates.updateFailed()).toBe(false);
+      });
+    });
   });
 
   describe('without an enabled service worker', () => {
@@ -435,6 +515,14 @@ describe('AppUpdates', () => {
       routerEvents.next(new NavigationEnd(1, '/en/home', '/en/home'));
 
       expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('tells a page no route matched that nothing newer exists', async () => {
+      // No update channel, so the 404 draws at once (plan 0150).
+      await expect(
+        TestBed.inject(AppUpdates).newerVersionForUnknownPage('/en/nowhere')
+      ).resolves.toBe(false);
+      expect(checkForUpdate).not.toHaveBeenCalled();
     });
 
     /**
