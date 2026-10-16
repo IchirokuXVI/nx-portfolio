@@ -223,12 +223,11 @@ export class LineMemory implements LineServiceI {
   /**
    * Change what a line says, or how many.
    *
-   * Three different answers on an approved line, and the whole shape of the permission
-   * model is in them (backend plan 0036, section 4.1). `WRITE` may not touch it at all,
-   * because a writer whose line has been agreed to cannot quietly change what was agreed
-   * to. `DECIDE` may change the quantity and nothing else, which is the one thing a
-   * person in the aisle learns that the list did not know. `MANAGE` may change any field
-   * of any line, because a governed thing needs somebody who can fix it.
+   * Three different answers on an approved line, the server's since backend plan 0076.
+   * `WRITE` may change every field but the quantity, and the edit puts the line back to
+   * `PENDING` so the group is asked again. `DECIDE` may change the quantity on its own,
+   * which is the one thing a person in the aisle learns that the list did not know.
+   * `MANAGE` may change any field of any line and the line keeps its approval.
    *
    * One further rule rides on the same call: editing a `REJECTED` line puts it back to
    * `PENDING` and clears the approver, on any edit and on any list, which is what makes a
@@ -257,19 +256,31 @@ export class LineMemory implements LineServiceI {
     const permissions = this._permissionsFor(line.listId);
     const approved = line.approvalStatus === 'APPROVED';
 
-    if (!permissions.includes('MANAGE')) {
-      if (approved) {
-        if (
-          !permissions.includes('DECIDE') ||
-          changes.content !== undefined ||
-          changes.named !== undefined
-        ) {
-          throw memoryFailure('forbidden', 403);
-        }
-      } else if (!permissions.includes('WRITE')) {
+    const manages = permissions.includes('MANAGE');
+    const decides = permissions.includes('DECIDE');
+    const quantityOnly =
+      changes.content === undefined &&
+      changes.named === undefined &&
+      changes.itemIds === undefined &&
+      changes.adoptItemIds === undefined &&
+      changes.favoriteItemId === undefined &&
+      changes.preferredSupermarketId === undefined;
+    if (!manages && !(approved && decides && quantityOnly)) {
+      if (!permissions.includes('WRITE')) {
+        throw memoryFailure('forbidden', 403);
+      }
+      if (changes.quantity !== undefined && approved && !decides) {
         throw memoryFailure('forbidden', 403);
       }
     }
+    // A writer's edit to an approved line asks the group again (backend plan
+    // 0076), unless the caller decides or manages or the list approves by itself.
+    const reopens =
+      line.approvalStatus === 'REJECTED' ||
+      (approved &&
+        !decides &&
+        !manages &&
+        this._lists.listById(line.listId)?.autoApproveLines !== true);
 
     // A floor of **zero**, which moved there with the trip status (backend plan
     // 0047). Zero is the household saying it is stocked rather than an empty line
@@ -340,7 +351,7 @@ export class LineMemory implements LineServiceI {
         changes.preferredSupermarketId === undefined
           ? current.preferredSupermarketId
           : changes.preferredSupermarketId,
-      ...(current.approvalStatus === 'REJECTED'
+      ...(reopens
         ? {
             approvalStatus: 'PENDING' as LineApprovalStatus,
             approvedByUserId: null,

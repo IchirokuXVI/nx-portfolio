@@ -169,14 +169,15 @@ export class LinePage {
   /** How many cards the rail has reached, counted from the first. */
   private readonly _reached = signal(0);
 
-  /** `WRITE` on a line nobody approved yet, `MANAGE` on any (backend 0036, 4.1). */
+  /**
+   * `WRITE` or `MANAGE` on any line. A writer may change the products of an
+   * approved line, which puts it back to pending (backend plan 0076); the only
+   * field approval keeps from a writer is the quantity, which this page does not
+   * write.
+   */
   private readonly _canEdit = computed(() => {
     const abilities = this._abilities();
-    const line = this._line();
-    return (
-      abilities.canManage ||
-      (abilities.canWrite && line?.approvalStatus !== 'APPROVED')
-    );
+    return abilities.canWrite || abilities.canManage;
   });
 
   /**
