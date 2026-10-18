@@ -139,6 +139,7 @@ export class GroupPage {
       zoneState: this._zones.zoneState().get(id) ?? 'idle',
       lists: lists.lists,
       listsState: lists.state,
+      zoneError: this._zones.error(),
       correlationId:
         correlationIdOf(this._zones.error()) ?? correlationIdOf(lists.error),
       stale: this._zones.staleZoneIds().has(id),
@@ -213,7 +214,9 @@ export class GroupPage {
    */
   readonly header = computed(() => {
     const current = this.state();
-    return current.kind === 'error' ? null : current.header;
+    return current.kind === 'error' || current.kind === 'not-available'
+      ? null
+      : current.header;
   });
 
   /**
@@ -408,6 +411,18 @@ export class GroupPage {
   /** Back to wherever this group was opened from, the dashboard being the usual one. */
   async back(): Promise<void> {
     await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
+  }
+
+  /**
+   * The way out of a group this reader may not read (velista 0157).
+   *
+   * Forward to the dashboard rather than a pop: the link that brought them here is
+   * the thing that did not work, and going back to it says nothing new.
+   */
+  goHome(): void {
+    void this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'home')
+    );
   }
 
   openMembers(): void {

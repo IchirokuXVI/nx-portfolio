@@ -94,29 +94,39 @@ export const listIdGuard: CanMatchFn = (
  * about what is *drawn*: core re-resolves the caller's membership on every request, so
  * a guard passing has never meant a write will be allowed.
  *
- * A zone that is not in the cache sends the caller to the group page rather than being
- * refused. That is the deep link case, and the group page is where the zone is loaded;
- * once it is there, the sheet is one tap away and the guard has an answer. Guessing
- * `true` would open a sheet over a page with no data in it, and guessing `false` would
- * make a shared link to a sheet silently do nothing.
+ * A zone that is not in the cache is loaded here and then tested (velista 0157). That
+ * is the deep link case: a reload of a sheet, or a link to one, used to land on the
+ * bare group page because the guard read only the cache. Only a zone still absent
+ * after the read, or a role that fails the test, sends the caller to the group page,
+ * which draws the not available sentence for a group they may not read.
+ *
+ * The redirect is built before the read, because `inject` works only in the guard's
+ * synchronous part. And the guard always answers: `loadZone` resolves on a failure it
+ * swallowed, and a rejection is caught here too, so no read can hang the navigation.
  */
 function requireRole(
   test: (role: 'OWNER' | 'ADMIN' | 'MEMBER') => boolean
 ): CanActivateFn {
   return (route) => {
     const zoneId = zoneIdFrom(route);
-    const zone = inject(ZoneStore).zoneById(zoneId);
+    const zones = inject(ZoneStore);
+    const refused = groupPageOf(zoneId);
+    const decide = () => {
+      const zone = zones.zoneById(zoneId);
 
-    if (
-      zone !== undefined &&
-      zone.myStatus === 'APPROVED' &&
-      zone.status === 'ACTIVE' &&
-      test(zone.myRole)
-    ) {
-      return true;
+      return zone !== undefined &&
+        zone.myStatus === 'APPROVED' &&
+        zone.status === 'ACTIVE' &&
+        test(zone.myRole)
+        ? true
+        : refused;
+    };
+
+    if (zoneId === '' || zones.zoneById(zoneId) !== undefined) {
+      return decide();
     }
 
-    return groupPageOf(zoneId);
+    return zones.loadZone(zoneId).then(decide, () => refused);
   };
 }
 

@@ -96,6 +96,16 @@ export type GroupState =
       readonly reason: GroupEmptyReason;
     }
   | {
+      /**
+       * The group read answered `not_found` or `forbidden` (velista 0157).
+       *
+       * One kind for both, and it carries nothing: core answers a stranger with
+       * `not_found` so that nobody can tell an existing group from a missing one, and a
+       * reference or a retry here would only invite the reader to keep asking.
+       */
+      readonly kind: 'not-available';
+    }
+  | {
       readonly kind: 'error';
       /** Shown as "ref {id}" and copyable. Never absent: the client mints one. */
       readonly correlationId: string | null;

@@ -5,6 +5,7 @@ import type {
   MyZone,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { zoneErrorKey } from './zone-error-copy';
 
 /**
  * Chooses which of the group page's states to render.
@@ -24,6 +25,14 @@ export function selectGroupState(input: {
   readonly zoneState: 'idle' | 'loading' | 'loaded' | 'failed';
   readonly lists: readonly ShoppingListSummary[];
   readonly listsState: 'idle' | 'loading' | 'loaded' | 'failed';
+  /**
+   * What the last zone read failed with, or null (velista 0157).
+   *
+   * Read only when this zone's own state is `failed`, because the store keeps one
+   * error for every zone and a refusal left over from another group must not decide
+   * this one.
+   */
+  readonly zoneError: unknown;
   readonly correlationId: string | null;
   /** Whether this zone's realtime room was refused, so the page is not live. */
   readonly stale: boolean;
@@ -55,9 +64,18 @@ export function selectGroupState(input: {
   if (zone === undefined) {
     // Nothing to draw yet. `failed` here is a genuine dead end: there is no cached
     // header to fall back on, so the error panel is the whole screen.
-    return zoneState === 'failed'
-      ? { kind: 'error', correlationId }
-      : { kind: 'loading', header: null };
+    if (zoneState !== 'failed') {
+      return { kind: 'loading', header: null };
+    }
+
+    // A `not_found` or a `forbidden` on the read is not a fault to retry or report,
+    // and the two read alike so that nobody learns which groups exist (velista 0157).
+    // The copy table already says so for `zone.read`, so the choice is read from it
+    // rather than restated here.
+    return zoneErrorKey(input.zoneError, 'zone.read') ===
+      'zone.error.notAvailable'
+      ? { kind: 'not-available' }
+      : { kind: 'error', correlationId };
   }
 
   const header = toHeader(zone, stale, input.online);

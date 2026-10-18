@@ -26,8 +26,20 @@
       (retry)="retry()"
       [body]="'home.error.body' | rokuT"
       [correlationId]="current.correlationId"
-      [title]="'zone.error.notAvailable' | rokuT"
+      [title]="'zone.error.loadFailed' | rokuT"
     />
+  } @else if (current.kind === 'not-available') {
+    <!--
+      A group this reader may not read, or one that does not exist (velista 0157). One
+      sentence and a way home: no retry, since asking again answers the same, and no
+      reference, since nothing broke.
+    -->
+    <section class="state">
+      <h2 class="state-title">{{ 'zone.error.notAvailable' | rokuT }}</h2>
+      <button (click)="goHome()" class="primary" type="button">
+        {{ 'nav.home' | rokuT }}
+      </button>
+    </section>
   } @else {
     <!--
       The summary comes from the cache when the caller arrived from the dashboard, so
