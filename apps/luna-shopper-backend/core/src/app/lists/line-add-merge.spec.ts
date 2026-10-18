@@ -79,6 +79,8 @@ interface Seed {
   position?: number;
   approvalStatus?: LineApprovalStatus;
   productGroupId?: string | null;
+  /** The flag of plan 0207. Named when absent, as the column defaults. */
+  named?: boolean;
 }
 
 interface Harness {
@@ -114,6 +116,7 @@ function build(options: {
         id: seed.id,
         listId: LIST_ID,
         content: seed.content,
+        named: seed.named ?? true,
         quantity: seed.quantity ?? 1,
         // The digest of the products seeded onto the line, as the service
         // stamps it, since it is half of what an add compares.
@@ -279,7 +282,12 @@ function build(options: {
 function add(
   harness: Harness,
   content: string,
-  extra: { quantity?: number; itemIds?: string[]; productGroupId?: string } = {}
+  extra: {
+    quantity?: number;
+    itemIds?: string[];
+    productGroupId?: string;
+    named?: boolean;
+  } = {}
 ) {
   return harness.service.add({
     userId: ADDER,
@@ -502,6 +510,120 @@ describe('a name shared by two products is two lines', () => {
     expect(results[0].line.id).toBe(results[2].line.id);
     expect(results[0].line.id).not.toBe(results[1].line.id);
     expect(results[0].line.quantity).toBe(3);
+  });
+});
+
+describe('a product add merges by product (plan 0214, section 1)', () => {
+  it('lands an unnamed add in English on the unnamed line made in Spanish', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Huevos', quantity: 2, named: false }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Eggs', { itemIds: [WHOLE], named: false });
+
+    expect(result.merged).toBe(true);
+    expect(result.line).toMatchObject({
+      id: 'li1',
+      content: 'Huevos',
+      named: false,
+      quantity: 3,
+    });
+    expect(w.saved.filter((row) => row.id !== 'li1')).toEqual([]);
+  });
+
+  it('lands an unnamed add on an unnamed line that follows the same group', async () => {
+    const w = build({
+      holds: [
+        {
+          id: 'li1',
+          content: 'Leche',
+          productGroupId: GROUP,
+          named: false,
+        },
+      ],
+      products: [
+        { lineId: 'li1', itemId: WHOLE, position: 0 },
+        { lineId: 'li1', itemId: OAT, position: 1 },
+      ],
+    });
+
+    const result = await add(w, 'Milk', {
+      itemIds: [WHOLE],
+      productGroupId: GROUP,
+      named: false,
+    });
+
+    expect(result.merged).toBe(true);
+    expect(result.line.id).toBe('li1');
+  });
+
+  it('never lands an unnamed add on a line somebody named, even with the same set', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Eggs', named: true }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Eggs', { itemIds: [WHOLE], named: false });
+
+    expect(result.merged).toBe(false);
+    expect(result.line.id).not.toBe('li1');
+    expect(result.line.named).toBe(false);
+  });
+
+  it('never lands a named add on an unnamed line of the same set', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Eggs', named: false }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Eggs', { itemIds: [WHOLE] });
+
+    expect(result.merged).toBe(false);
+    expect(result.line.id).not.toBe('li1');
+  });
+
+  it('still merges a text add by its folded name', async () => {
+    const w = build({ holds: [{ id: 'li1', content: 'jamon' }] });
+
+    const result = await add(w, '  JAMÓN ', { named: false });
+
+    expect(result.merged).toBe(true);
+    expect(result.line.id).toBe('li1');
+  });
+
+  it('folds two unnamed items of one set in two languages in a batch', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Eggs', itemIds: [WHOLE], named: false },
+        { content: 'Huevos', itemIds: [WHOLE], named: false },
+        { content: 'Eggs', itemIds: [WHOLE] },
+      ],
+    });
+
+    // One unnamed line at two, and the named Eggs beside it.
+    expect(results.map((entry) => entry.merged)).toEqual([false, true, false]);
+    expect(results[0].line.id).toBe(results[1].line.id);
+    expect(results[0].line).toMatchObject({ content: 'Eggs', quantity: 2 });
+    expect(results[2].line.id).not.toBe(results[0].line.id);
+  });
+
+  it('carries commentCount null on the line.added payload', async () => {
+    const w = build({});
+
+    const { line } = await add(w, 'Eggs', { itemIds: [WHOLE], named: false });
+
+    expect(line.commentCount).toBeNull();
+    expect(w.events).toEqual([
+      {
+        event: RealtimeEvent.LineAdded,
+        line: expect.objectContaining({ commentCount: null }),
+      },
+    ]);
   });
 });
 

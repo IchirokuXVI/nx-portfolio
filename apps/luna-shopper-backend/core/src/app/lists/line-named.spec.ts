@@ -168,6 +168,8 @@ interface Options {
   named?: boolean;
   approvalStatus?: LineApprovalStatus;
   permissions?: ListPermission[];
+  /** How many comments the count of the lines read finds on the line. */
+  comments?: number;
 }
 
 const EVERYTHING = [
@@ -236,7 +238,12 @@ function build(options: Options = {}) {
         select: () => qb,
         where: () => qb,
         andWhere: () => qb,
+        take: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
         getRawOne: async () => ({ max: 10 }),
+        // The lines read (plan 0214), which answers the one line of the list.
+        getMany: async () => [{ ...line }],
       };
       return qb;
     },
@@ -277,7 +284,19 @@ function build(options: Options = {}) {
   const groupRemovals = fakeGroupRemovals();
   const settlements = fakeLineSettlements();
 
+  // The raw reads of a page (plan 0214, section 2): the comment count answers
+  // what `options.comments` says, and the settlement summary answers nothing.
+  const queries: { sql: string; parameters: unknown[] }[] = [];
   const dataSource = {
+    query: async (sql: string, parameters: unknown[]) => {
+      queries.push({ sql, parameters });
+      if (sql.includes('"line_comments"')) {
+        return options.comments === undefined
+          ? []
+          : [{ lineId: LINE_ID, count: options.comments }];
+      }
+      return [];
+    },
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
         getRepository: (entity: unknown) => {
@@ -321,7 +340,9 @@ function build(options: Options = {}) {
     fields: Omit<Parameters<LineService['update']>[0], 'userId' | 'lineId'>
   ) => service.update({ userId: ACTOR, lineId: LINE_ID, ...fields });
 
-  return { service, add, update, saved, events };
+  const read = () => service.list({ userId: ACTOR, listId: LIST_ID });
+
+  return { service, add, update, read, saved, events, queries };
 }
 
 describe('LineService.add writes the flag (plan 0207, section 1.3)', () => {
@@ -387,7 +408,29 @@ describe('LineService.addMany writes the flag of each item (plan 0207, section 1
     expect(w.saved.map((row) => row.named)).toEqual([true, false, true, true]);
   });
 
-  it('takes the flag of the first of two items that fold into one line', async () => {
+  it('folds two unnamed items of one product into one line, whatever their names', async () => {
+    // Since plan 0214 a line that is not named is met by its products alone,
+    // so two items fold only when their flags agree, and the line keeps it.
+    const w = build();
+
+    const results = await w.service.addMany({
+      userId: ACTOR,
+      listId: LIST_ID,
+      items: [
+        { content: 'Oat drink', itemIds: [itemId(1)], named: false },
+        { content: 'Bebida de avena', itemIds: [itemId(1)], named: false },
+      ],
+    });
+
+    expect(w.saved).toHaveLength(1);
+    expect(results.map((result) => result.line.named)).toEqual([false, false]);
+    expect(results[0].line).toMatchObject({
+      content: 'Oat drink',
+      quantity: 2,
+    });
+  });
+
+  it('keeps a named item apart from an unnamed one of the same product (plan 0214)', async () => {
     const w = build();
 
     const results = await w.service.addMany({
@@ -399,8 +442,44 @@ describe('LineService.addMany writes the flag of each item (plan 0207, section 1
       ],
     });
 
-    expect(w.saved).toHaveLength(1);
-    expect(results.map((result) => result.line.named)).toEqual([false, false]);
+    expect(w.saved).toHaveLength(2);
+    expect(results.map((result) => result.line.named)).toEqual([false, true]);
+  });
+});
+
+describe('the lines read counts the comments of each line (plan 0214, section 2)', () => {
+  it('answers the count the batched query finds', async () => {
+    const w = build({ comments: 2 });
+
+    const page = await w.read();
+
+    expect(page.items.map((item) => [item.id, item.commentCount])).toEqual([
+      [LINE_ID, 2],
+    ]);
+    const counts = w.queries.filter((q) => q.sql.includes('"line_comments"'));
+    expect(counts).toHaveLength(1);
+    expect(counts[0].sql).toContain('GROUP BY');
+    expect(counts[0].parameters).toEqual([[LINE_ID]]);
+  });
+
+  it('answers 0 for a line with no comment, and never null', async () => {
+    const w = build();
+
+    const page = await w.read();
+
+    expect(page.items[0].commentCount).toBe(0);
+  });
+
+  it('answers null on the payload of a write, which pays for no count', async () => {
+    const w = build({ comments: 2 });
+
+    const view = await w.update({ quantity: 3 });
+
+    expect(view.commentCount).toBeNull();
+    expect(w.events.map((e) => e.line.commentCount)).toEqual([null]);
+    expect(w.queries.filter((q) => q.sql.includes('"line_comments"'))).toEqual(
+      []
+    );
   });
 });
 

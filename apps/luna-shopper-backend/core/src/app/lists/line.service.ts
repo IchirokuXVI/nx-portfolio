@@ -601,6 +601,31 @@ export class LineService {
   }
 
   /**
+   * How many comments each line of a page has, in one query over
+   * `ix_comments_line` (plan 0214, section 2).
+   *
+   * A line with no comment has no row here, and the caller's default of 0 is
+   * the answer for it. A plain count is right because a comment is never
+   * deleted on its own: it goes with its line, by the cascade.
+   */
+  private async commentCountsOfMany(
+    lineIds: string[]
+  ): Promise<Map<string, number>> {
+    if (lineIds.length === 0) {
+      return new Map();
+    }
+    const rows: { lineId: string; count: number }[] =
+      await this.dataSource.query(
+        `SELECT c."lineId" AS "lineId", count(*)::int AS "count"
+           FROM "line_comments" c
+          WHERE c."lineId" = ANY($1::uuid[])
+          GROUP BY 1`,
+        [lineIds]
+      );
+    return new Map(rows.map((row) => [row.lineId, row.count]));
+  }
+
+  /**
    * One line's summary, for the paths that answer with a single line.
    *
    * Two repository reads rather than the aggregate above, and the difference is
@@ -868,6 +893,11 @@ export class LineService {
    * product group, or the same product set, or free text on both sides.
    * Otherwise it creates a line beside the one that shares its name.
    *
+   * **A line that is not named is met by its products alone** (plan 0214). Its
+   * name is a product's name in the adder's locale, so an add of the same set
+   * with `named: false` lands on it in any language. It never lands on a line
+   * somebody named, even one that holds the same set.
+   *
    * What a merge does and refuses to do is {@link raiseForAdd}, and which line it
    * lands on is {@link findAddTarget}. The answer says which of the two
    * happened, because a caller reading it back to a person cannot tell from the
@@ -910,8 +940,11 @@ export class LineService {
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
 
+      // The flag the new line would carry, so an add that is not named meets
+      // a line that is not named by its products alone (plan 0214, section 1).
       const identities = lineIdentities({
         content: req.content,
+        named: namedOnAdd(req.named, itemIds.length > 0),
         itemSetHash: itemSetHash(itemIds),
         productGroupId,
       });
@@ -1057,6 +1090,7 @@ export class LineService {
       (item, index) =>
         lineIdentities({
           content: item.content,
+          named: namedOnAdd(item.named, itemSets[index].length > 0),
           itemSetHash: itemSetHash(itemSets[index]),
           productGroupId: null,
         })[0]
@@ -1367,7 +1401,10 @@ export class LineService {
     listId: string,
     keys: readonly string[],
     keysOf: (
-      candidate: Pick<ListLine, 'content' | 'itemSetHash' | 'productGroupId'>
+      candidate: Pick<
+        ListLine,
+        'content' | 'named' | 'itemSetHash' | 'productGroupId'
+      >
     ) => readonly string[]
   ): Promise<Map<string, ListLine>> {
     const wanted = new Set(keys);
@@ -1382,6 +1419,9 @@ export class LineService {
       select: {
         id: true,
         content: true,
+        // Half of what an add compares since plan 0214: a line that is not
+        // named is met by its products, whatever its name.
+        named: true,
         itemSetHash: true,
         productGroupId: true,
         approvalStatus: true,
@@ -3265,17 +3305,21 @@ export class LineService {
     // baskets the third one is (plan 0052, section 4). This is the read that
     // makes the claim survive a reconnect, so a phone that was asleep while
     // somebody generated a basket draws the same row as one that was watching.
-    const [sets, settlements, claims] = await Promise.all([
+    // A fourth for the comment counts (plan 0214, section 2), which only this
+    // read answers: a line event carries null there.
+    const [sets, settlements, claims, comments] = await Promise.all([
       this.itemSetsOfMany(pageIds),
       this.settlementsOfMany(pageIds),
       this.claims.claimsOf(pageIds),
+      this.commentCountsOfMany(pageIds),
     ]);
     const items = page.map((line) =>
       toLineView(
         line,
         sets.get(line.id) ?? EMPTY_LINE_ITEM_SET,
         settlements.get(line.id) ?? NO_LINE_SETTLEMENTS,
-        claims.get(line.id) ?? NO_LINE_CLAIM
+        claims.get(line.id) ?? NO_LINE_CLAIM,
+        comments.get(line.id) ?? 0
       )
     );
     const last = page[page.length - 1];
