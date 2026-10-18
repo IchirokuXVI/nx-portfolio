@@ -423,7 +423,7 @@ describe('selectListState', () => {
           { itemIds: [], approvalStatus: 'APPROVED' },
           { caller: { permissions: WRITER } }
         ).product
-      ).toEqual({ kind: 'none', canChoose: false });
+      ).toEqual({ kind: 'none', canChoose: true });
       expect(
         rowOf(
           { itemIds: [], approvalStatus: 'PENDING' },
