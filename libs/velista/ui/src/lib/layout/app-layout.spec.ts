@@ -664,6 +664,24 @@ describe('AppLayout', () => {
     expect(outletOf(fixture)).not.toBeNull();
   });
 
+  // Velista `0159`, F7.9: the screen that says the network is gone cannot fetch its
+  // own icon, so the icon must already be in the bundle. Asserted on the same frame
+  // the screen is drawn, with no await: a lazy chunk would still be loading.
+  it('draws the icon of the connection screen with no chunk to fetch', async () => {
+    const fixture = await createFixture();
+    TestBed.inject(BackendReadiness).reportReady();
+    fixture.detectChanges();
+
+    TestBed.inject(ConnectionState).reportNetworkFailure();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const icon = host.querySelector(
+      'lib-connection-lost lib-offline-icon .icon'
+    );
+    expect(icon?.innerHTML).not.toBe('');
+  });
+
   // The walk lab (recorder plan 0002) records in a supermarket with no signal and
   // needs no backend. The connection screen would cover its controls, and its reload
   // would end the recording.

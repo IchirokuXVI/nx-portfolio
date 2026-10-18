@@ -132,6 +132,14 @@ export const StorageKeys = {
    */
   notFoundUpdate: `not-found-update:${APP_KEY}`,
   /**
+   * The writes this tab lost to the network, so the page they were made on can say so
+   * after the reconnect reloads it (velista `0159`).
+   *
+   * In `sessionStorage` for the reason `updateAttempt` is: it must survive the reload
+   * and die with the tab. It holds the last few entries and is cleared as it is read.
+   */
+  droppedWrites: `dropped-writes:${APP_KEY}`,
+  /**
    * That this tab holds a support session: an operator opened the app as a user
    * (velista `0133`, backend `0194`).
    *

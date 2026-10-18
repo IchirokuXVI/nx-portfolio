@@ -1,5 +1,13 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  signal,
+} from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { inlineSvg } from './inline-svg';
+// @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+import offlineSvg from './offline-icon.svg?raw';
 
 /**
  * Every icon this app draws, one standalone component each.
@@ -258,6 +266,12 @@ export class JoinCodeIcon {
   );
 }
 
+/**
+ * The one icon in the bundle rather than in a chunk of its own (velista `0159`). The
+ * screen that says the network is gone draws it, and a chunk cannot be fetched then:
+ * in development, on the first visit before the worker installs, and mounted under
+ * the shell, which registers no worker. Still `?raw`, so `currentColor` reaches it.
+ */
 @Component({
   selector: 'lib-offline-icon',
   template: TEMPLATE,
@@ -265,11 +279,10 @@ export class JoinCodeIcon {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OfflineIcon {
-  readonly svg = inlineSvg(
-    () =>
-      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
-      import('./offline-icon.svg?raw')
-  );
+  // The markup is ours, checked into this repository, and never user supplied.
+  readonly svg = signal(
+    inject(DomSanitizer).bypassSecurityTrustHtml(offlineSvg as string)
+  ).asReadonly();
 }
 
 /** Sharing an invite, on the card the creator lands on (plan 0008). */

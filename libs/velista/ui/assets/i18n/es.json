@@ -1142,6 +1142,14 @@
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
       "retry": "Reintentar"
+    },
+    "dropped": {
+      "quantity": {
+        "lost": "Tu cambio en {{name}} ({{delta}}) no se guardó mientras estabas sin conexión.",
+        "unsure": "Puede que tu cambio en {{name}} ({{delta}}) no se guardara mientras estabas sin conexión. Mira la cantidad antes de volver a cambiarla."
+      },
+      "resend": "Enviarlo otra vez",
+      "dismiss": "Descartar"
     }
   },
   "account": {

@@ -19,7 +19,13 @@ import {
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { Mutations, overlayKey, type Overlay } from '../mutations';
+import {
+  listWritesPage,
+  Mutations,
+  overlayKey,
+  type DroppedWriteDraft,
+  type Overlay,
+} from '../mutations';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -656,7 +662,20 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta)
+      () => this._lines.addQuantity(lineId, delta),
+      // Velista `0159`: the reconnect reloads the page and this row's note goes with
+      // it, so a delta the network dropped is written down for the next document.
+      // The name is the line's own text, which the page swaps for the name it draws.
+      {
+        page: listWritesPage(before.listId),
+        subject: overlayKey(lineId, 'quantity'),
+        key: 'list.dropped.quantity',
+        args: {
+          name: before.content,
+          delta: delta > 0 ? `+${delta}` : `${delta}`,
+        },
+        replay: { kind: 'line-quantity', lineId, delta },
+      }
     );
   }
 
@@ -1152,7 +1171,8 @@ export class LineStore {
     before: Line,
     fields: readonly string[],
     apply: (line: Line) => Line,
-    send: () => Promise<Line>
+    send: () => Promise<Line>,
+    dropped?: DroppedWriteDraft
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const listId = before.listId;
 
@@ -1171,7 +1191,8 @@ export class LineStore {
       overlay,
       send,
       (line) => line.version,
-      before.version
+      before.version,
+      dropped
     );
 
     if (outcome.state === 'failed') {

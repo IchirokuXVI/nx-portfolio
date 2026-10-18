@@ -104,6 +104,37 @@
 
   @if (current.kind === 'loaded') {
     <!--
+      A quantity change the network dropped before the reconnect reloaded this page
+      (velista 0159). Said once, in the person's words, with a resend only when the
+      first attempt never left the phone.
+    -->
+    @if (droppedNotices().length > 0) {
+      <div class="dropped" role="status">
+        @for (notice of droppedNotices(); track notice.id) {
+          <div class="trips-failed">
+            <p class="trips-failed-body">{{ notice.text }}</p>
+            @if (notice.canResend) {
+              <button
+                (click)="resendDropped(notice.id)"
+                class="state-action"
+                type="button"
+              >
+                {{ 'list.dropped.resend' | rokuT }}
+              </button>
+            }
+            <button
+              (click)="dismissDropped(notice.id)"
+              class="state-action"
+              type="button"
+            >
+              {{ 'list.dropped.dismiss' | rokuT }}
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    <!--
       One line, drawn on arrival from what the server said rather than after a control
       has failed (plan 0030, section 3.2). Two callers need it and neither of them is
       looking at a broken screen:

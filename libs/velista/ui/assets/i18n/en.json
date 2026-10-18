@@ -1142,6 +1142,14 @@
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
       "retry": "Try again"
+    },
+    "dropped": {
+      "quantity": {
+        "lost": "Your change to {{name}} ({{delta}}) was not saved while you were offline.",
+        "unsure": "Your change to {{name}} ({{delta}}) may not have been saved while you were offline. Check the number before you change it again."
+      },
+      "resend": "Send it again",
+      "dismiss": "Dismiss"
     }
   },
   "account": {
