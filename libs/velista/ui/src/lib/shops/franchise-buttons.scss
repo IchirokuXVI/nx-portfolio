@@ -120,6 +120,13 @@
   color: var(--app-text-muted);
 }
 
+// A fact about the chain, read with its count, not a third exclusion promise: it
+// takes the count's quiet type, and none of the badge weight or tracking below.
+.no-prices {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
 // The two exclusion states, each with its own glyph and its own word beside it. The
 // colour is the third signal and never the only one (section 7).
 .state {

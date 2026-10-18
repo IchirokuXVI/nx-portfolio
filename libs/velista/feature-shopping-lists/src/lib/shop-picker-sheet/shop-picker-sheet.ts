@@ -414,7 +414,10 @@ export class ShopPickerSheet {
     const quotes = new Map<string, boolean>();
     for (const scope of this._view.priceScopes()) {
       const key = chainKeyOf(scope);
-      quotes.set(key, (quotes.get(key) ?? false) || scope.quotesBasket);
+      quotes.set(
+        key,
+        (quotes.get(key) ?? false) || scope.quotesBasket !== false
+      );
     }
     return new Set(
       [...quotes].filter(([, quoted]) => !quoted).map(([key]) => key)
@@ -423,7 +426,7 @@ export class ShopPickerSheet {
 
   /**
    * Whether the read could not list every scope or shop of the profile
-   * (backend `0213`), which the picker says above Near me with a way to read
+   * (backend `0213`), which the picker says above the Near you results with a way to read
    * again. The list may still hold some shops.
    */
   protected readonly incomplete = computed(

@@ -210,3 +210,9 @@ builder's, not the owner's:
   from before `0213`. It read the Lidl button with "No prices here yet", a pick there, the
   short list line over an empty list and over one chain, one more read after "Try again",
   and a read with neither field drawn as before.
+- A review round changed two things. The sheet reads a scope with no `quotesBasket` field
+  as quoting the basket (`scope.quotesBasket !== false`), the mapper's rule, so a missing
+  flag never draws "No prices here yet". And that line has its own class, `no-prices`, in
+  the size and colour of the count line above it, with no uppercase and no tracking: it is
+  a fact about the chain, and in the exclusion badge style it read as a third exclusion
+  state.

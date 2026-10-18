@@ -1175,7 +1175,19 @@ describe('ShopPickerSheet: every chain of the profile', () => {
     expect(chains(fixture)[0]).not.toContain('basket.view.shop.noPrices');
   });
 
-  it('says the shops could not be listed, above Near me, and reads again', async () => {
+  it('reads a scope with no quotesBasket flag as quoting the basket', () => {
+    const unflagged = {
+      ...scope('s-lidl', 'Lidl', [
+        shop('loc-lidl', null, 'Calle Lidl 1', 'Córdoba', '14010'),
+      ]),
+      quotesBasket: undefined,
+    } as unknown as BasketPriceScope;
+    const { fixture } = render([unflagged]);
+
+    expect(chains(fixture)[0]).not.toContain('basket.view.shop.noPrices');
+  });
+
+  it('says the shops could not be listed, above the Near you results, and reads again', async () => {
     const { fixture, refresh } = render(OWNER_SCOPES, { incomplete: true });
     const element = fixture.nativeElement as HTMLElement;
 

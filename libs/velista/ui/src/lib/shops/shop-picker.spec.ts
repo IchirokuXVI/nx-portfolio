@@ -541,7 +541,7 @@ describe('ShopPicker: the chains with no prices, and a short list', () => {
     );
   });
 
-  it('says the shops could not be listed, above Near me, with a button to try again', async () => {
+  it('says the shops could not be listed, above the Near you results, with a button to try again', async () => {
     const fixture = await render({ incomplete: true });
     let retried = 0;
     fixture.componentInstance.retried.subscribe(() => retried++);
