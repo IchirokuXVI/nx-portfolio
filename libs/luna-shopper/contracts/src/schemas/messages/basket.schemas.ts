@@ -424,6 +424,8 @@ const priceScopeView = object(
     supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
     supermarketLogoUrl: nullableString(),
     locations: array(ref(BASKET_SCHEMA_IDS.scopeLocationView)),
+    // Plan 0213: deliberately NOT required, for a mixed fleet during a deploy.
+    quotesBasket: boolean(),
   },
   [
     'priceScopeId',
@@ -502,6 +504,9 @@ const result = object(
     // Required and possibly empty, never absent: nothing about it is redacted
     // as a whole, only the shops inside each entry are.
     scopes: array(ref(BASKET_SCHEMA_IDS.priceScopeView)),
+    // Plan 0213: true when the scopes could not be named this time. Not
+    // required, for a mixed fleet during a deploy.
+    scopesIncomplete: boolean(),
   },
   [...viewRequired, 'products', 'shop', 'scopes']
 );
