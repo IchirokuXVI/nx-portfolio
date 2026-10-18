@@ -234,8 +234,10 @@ export class BasketListStore {
     const subscription = this._realtime.events.subscribe((event) => {
       switch (event.type) {
         case 'basket.created':
-        case 'basket.updated':
           this._upsert(event.list);
+          break;
+        case 'basket.updated':
+          this._patchHeader(event.basketId, event.name, event.status);
           break;
         case 'basket.deleted':
           this._lists.update((lists) =>
@@ -455,6 +457,30 @@ export class BasketListStore {
   private _setStatusLocally(basketId: string, status: BasketStatus): void {
     this._lists.update((lists) =>
       lists.map((list) => (list.id === basketId ? { ...list, status } : list))
+    );
+  }
+
+  /**
+   * Lay a `basket.updated` header over the summary it names (velista `0155`).
+   *
+   * The header carries a name and a status and none of the counts, so it can only
+   * patch a summary this store already holds. A basket it does not hold cannot be
+   * drawn from it, and the listing is read again instead, coalesced like a settle.
+   */
+  private _patchHeader(
+    basketId: string,
+    name: string | null,
+    status: BasketStatus
+  ): void {
+    if (!this._lists().some((list) => list.id === basketId)) {
+      this._scheduleRefresh();
+      return;
+    }
+
+    this._lists.update((lists) =>
+      lists.map((list) =>
+        list.id === basketId ? { ...list, name, status } : list
+      )
     );
   }
 

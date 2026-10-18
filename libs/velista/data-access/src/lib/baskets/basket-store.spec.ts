@@ -20,6 +20,7 @@ import { Subject } from 'rxjs';
 import { MEMORY_CATEGORIES, memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
+import { toRealtimeEvent } from '../realtime/realtime-event-mapper';
 import type { RealtimeEvent } from '../realtime/realtime-events';
 import { RealtimeMemory } from '../realtime/realtime-memory';
 import {
@@ -1001,10 +1002,16 @@ describe('BasketStore', () => {
         expect(store.finished()).toBe(false);
 
         memory.status = 'FINISHED';
-        socket.events.next({
-          type: 'basket.updated',
-          list: { id: 'basket-saturday' },
-        } as never);
+        // The frame as core emits it, through the mapper the socket uses (velista
+        // `0155`). A hand mapped event here is what hid that the mapper dropped it.
+        const event = toRealtimeEvent('basket.updated', {
+          basketId: 'basket-saturday',
+          kind: 'GENERATED',
+          name: null,
+          status: 'FINISHED',
+        });
+        expect(event).not.toBeNull();
+        socket.events.next(event as RealtimeEvent);
 
         // Coalesced, like every other refetch this store schedules: a shop full of
         // people is a stream of broadcasts and a request each would be a request per
