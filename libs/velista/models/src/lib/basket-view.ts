@@ -1418,8 +1418,17 @@ export interface BasketMergeRequiredBasket {
 /** How the basket screen's one read has got on. */
 export type BasketLoad =
   | 'loading'
-  /** No participant session for this basket, so the join screen is the answer. */
-  | 'needsJoin'
+  /**
+   * Refused, with no credential and no account behind the request (velista
+   * `0154`). Signing in is the way forward, and it comes back here.
+   */
+  | 'needsSignIn'
+  /**
+   * Refused for a signed in reader this device has never seen on the basket
+   * (velista `0154`). A stranger, or a member removed on another device: the
+   * gateway answers both with one code.
+   */
+  | 'notYours'
   | 'ready'
   | 'failed'
   /** The participant was revoked, or the link they held was cascaded. */
