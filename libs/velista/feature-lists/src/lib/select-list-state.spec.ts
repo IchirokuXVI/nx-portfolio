@@ -102,7 +102,7 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     live: true,
     errorKey: null,
     correlationId: null,
-    gone: null,
+    gone: false,
     ...overrides,
   });
 }
@@ -1123,9 +1123,9 @@ describe('selectListState', () => {
     it('reports the page gone before anything else', () => {
       // Ahead of the error branch: a caller whose access was withdrawn should read
       // the sentence about that rather than a generic failure.
-      const state = select({ gone: 'unshared', errorKey: 'list.error.failed' });
+      const state = select({ gone: true, errorKey: 'list.error.failed' });
 
-      expect(state).toEqual({ kind: 'gone', reason: 'unshared' });
+      expect(state).toEqual({ kind: 'gone' });
     });
 
     it('carries the correlation id through an error', () => {

@@ -240,7 +240,7 @@ export class ListStore {
       case 'list.myAccessChanged': {
         if (event.permissions.length === 0) {
           // Nothing left, so the list leaves the cache and the page reading it reaches
-          // the `gone: 'unshared'` state it already has for a list that is no longer in
+          // the `gone` state it already has for a list that is no longer in
           // the zone's answer. No refetch: the event is the answer, and asking again
           // would only confirm it a round trip later.
           this._removeList(event.listId);
