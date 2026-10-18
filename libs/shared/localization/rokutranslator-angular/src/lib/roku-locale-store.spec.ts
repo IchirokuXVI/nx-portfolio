@@ -39,6 +39,22 @@ describe('RokuLocaleStore', () => {
     expect(store.locale()).toBe('en');
   });
 
+  /** Plan 0006: every `index.html` ships `lang="en"`, and the store keeps it true. */
+  it('writes the published locale to <html lang>', async () => {
+    document.documentElement.lang = 'xx';
+    const store = TestBed.inject(RokuLocaleStore);
+    const translator = TestBed.inject(ROKU_TRANSLATOR);
+
+    // On construction, with the locale it starts from.
+    expect(document.documentElement.lang).toBe(store.getLocale());
+
+    await translator.changeLocale('es');
+    expect(document.documentElement.lang).toBe('es');
+
+    await translator.changeLocale('en');
+    expect(document.documentElement.lang).toBe('en');
+  });
+
   describe('switchAppLocale rewrites the locale relative to the mount', () => {
     it('rewrites the first segment for an app mounted at the root', async () => {
       const router = TestBed.inject(Router);

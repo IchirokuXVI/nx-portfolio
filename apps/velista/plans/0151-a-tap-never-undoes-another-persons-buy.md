@@ -1,3 +1,5 @@
+> **PR:** [#747](https://github.com/IchirokuXVI/nx-portfolio/pull/747)
+
 # 0151: a tap never undoes another person's buy, and a refused write says so
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -155,3 +157,40 @@ sentence next to the control that sent it.
   and no new screen.
 - **A deaf window after a remote flip.** It mirrors the reel's existing shield, so the row
   has one rule for "the control moved under the finger".
+
+## What the build decided
+
+1. **Who acted is the entry's last act under a list heading, and `touchedBy` elsewhere.** A
+   row whose actor is not `meId`, or whose `meId` is unknown, opens the sheet. A row whose
+   newest units are somebody else's also opens the sheet, even if this person acted on the
+   row. The plan's item 1 asked only for the first case.
+2. **Item 2, as far as the client can tell.** `ownBoughtUnits` (in `basket-row.ts`, used by
+   the row and by `revertRow`) reads the entries that hold units, newest act first. It counts
+   them until the first entry whose last act is not this person's `BOUGHT`. That is the
+   prefix that the server's newest first walk reaches before anybody else's buy. A row whose
+   entries carry no act sends `row.bought`, as before. `from` is still `row.bought`.
+3. **The mixed row stays a gap, for the owner.** An entry knows only its last act. So two
+   people's units on **one** entry count as the last person's, and the revert still takes
+   the newest units, whoever bought them. The exact answer is a revert scoped to the caller's
+   own settlements in `basket-revert.service.ts`. That is a backend rule and the owner's call.
+4. **The hold is a second field, not `_deafUntil`.** The status control and the words keep
+   separate beats, so a reel that closed itself does not silence the tick. An effect watches
+   the press that is drawn. `toggle()` also catches a flip that no frame has drawn yet. A
+   flip whose actor is this person holds nothing. This person's own press holds nothing
+   either: a settle or a revert from `toggle()` sets a one shot `_ownPress`, and the next
+   flip clears it and starts no hold. The store is not optimistic, so after an undo the act
+   that is left on the entry is the older one (somebody else's, or none). Without the flag
+   that flip read as remote, and a quick re-tick after an undo was dropped with no word.
+5. **The walk at 400 ms lands inside the hold.** On slot 1 against backend slot 4, the
+   patch reached the second phone 241 ms after the tick, and the tap at 404 ms did nothing.
+   The buy stood, and a second tap opened the sheet. At 707 ms the patch arrived at 207 ms,
+   and the first tap opened the sheet. The progress evidence expected the sheet at 400 ms.
+6. **The sheet freezes the failure in `_failedOp`.** The signal now holds an operation or
+   a frozen `{ key, count, correlationId }`. That keeps the sites that clear it unchanged.
+   The count is the `asked` of the re-read entry that the demand named, then the row's.
+7. **Every tap that the server refuses says why.** The default `refused` of `_toggle` is
+   `_reportSettle(row.rowKey)`. A revert passes `basket.reopen` as the operation, and a held
+   buy keeps its own report. The row notice is cleared when a tap starts, as it is for the
+   reel. No i18n key was added.
+8. The status control's accessible name still says "undo" on a row that somebody else
+   bought. The sheet that the press opens holds the undo.

@@ -647,9 +647,10 @@ describe('what goes out afterwards (plan 0036, section 8)', () => {
     ]);
   });
 
-  it('addresses the event to the person, so somebody just granted access hears it', async () => {
+  it('addresses the event to the person alone, so somebody just granted access hears it', async () => {
     // The room event names nobody and by construction cannot reach them: they
-    // were never in the room.
+    // were never in the room. And to the person alone (plan 0212): a copy on
+    // the zone room hands every other member a set that is not theirs.
     const { service, emitted } = build({
       callerRole: ZoneRole.OWNER,
       members: [MEMBER],
@@ -664,10 +665,7 @@ describe('what goes out afterwards (plan 0036, section 8)', () => {
     const mine = emitted.find(
       (e) => e.event === RealtimeEvent.ListMyAccessChanged
     );
-    const audience = mine?.audience as EventAudience;
-    expect(audience.userIds).toEqual(['u-2']);
-    expect(audience.zoneId).toBe(ZONE_ID);
-    expect(audience.listId).toBe(LIST_ID);
+    expect(mine?.audience).toEqual({ userIds: ['u-2'] });
   });
 
   it('carries an empty array for somebody who just lost the list', async () => {
@@ -687,6 +685,30 @@ describe('what goes out afterwards (plan 0036, section 8)', () => {
       (e) => e.event === RealtimeEvent.ListMyAccessChanged
     );
     expect((mine?.payload as ListMyAccessChangedEvent).permissions).toEqual([]);
+  });
+
+  it('tells nobody else in the zone that one member lost the list', async () => {
+    // Velista drops a list whose permissions arrive empty (plan 0212). On the
+    // zone room, one member's revocation would drop it from every member's cache.
+    const { service, emitted } = build({
+      callerRole: ZoneRole.OWNER,
+      members: [MEMBER, OTHER],
+      existing: {
+        'm-2': [ListPermission.READ],
+        'm-3': [ListPermission.READ],
+      },
+    });
+
+    await service.setAccess({
+      userId: CALLER,
+      listId: LIST_ID,
+      entries: [{ membershipId: 'm-2', permissions: [] }],
+    });
+
+    const mine = emitted.filter(
+      (e) => e.event === RealtimeEvent.ListMyAccessChanged
+    );
+    expect(mine.map((e) => e.audience)).toEqual([{ userIds: ['u-2'] }]);
   });
 });
 

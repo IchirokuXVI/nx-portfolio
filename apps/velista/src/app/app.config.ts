@@ -5,21 +5,25 @@ import {
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
-import { appProviders } from './app-providers';
 import { appRoutes } from './app.routes';
 
 /**
  * The standalone half of the pair. This runs when velista is served from its own
  * origin (plan 0013), which since that plan is production rather than a preview: the
  * app draws its own chrome and owns its own token scope, so it borrows nothing from
- * the portfolio shell. Under the shell it is `appRootRoute` that carries
- * `appProviders`, and this configuration never runs at all.
+ * the portfolio shell. Under the shell this configuration never runs at all.
+ *
+ * **`appProviders` is not here** (velista `0155`). `appRootRoute` carries it in both
+ * run modes, and this file holds only what a route cannot provide: the router itself,
+ * the service worker and the browser's error listeners. It used to spread the list
+ * here as well, which gave the standalone build two environment injectors holding
+ * the same services. Each ran its own initializers and each built its own
+ * `RealtimeSocket`, so every frame of the user room arrived twice.
  */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
-    ...appProviders,
 
     /**
      * The service worker, registered **here and nowhere else** (plan 0013 D4).

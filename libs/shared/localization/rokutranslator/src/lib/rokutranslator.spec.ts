@@ -193,6 +193,120 @@ describe('registering a namespace', () => {
 });
 
 /**
+ * Plan 0006. A browser that speaks none of the supported languages used to start
+ * i18next with no locale, and the first `addNamespace` then threw before any loader
+ * was registered, so every page drew keys. Each case runs in the order the Angular
+ * service drives: `init` with no locale, then the namespace, then the translations.
+ */
+describe('starting with no locale (plan 0006)', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+
+  function browserSpeaks(...languages: string[]): void {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { languages, language: languages[0] },
+      configurable: true,
+    });
+  }
+
+  afterEach(() => {
+    if (original) {
+      Object.defineProperty(globalThis, 'navigator', original);
+    }
+  });
+
+  async function startApp(
+    config: Parameters<RokuTranslator['init']>[0]
+  ): Promise<RokuTranslator> {
+    const translator = new RokuTranslator();
+    await translator.init({ ...config, namespaces: ['ns-app'] });
+    await translator.addNamespace('ns-app');
+    await translator.addTranslations({
+      locale: 'en',
+      namespace: 'ns-app',
+      translations: () => Promise.resolve({ key: 'English text' }),
+    });
+    await translator.addTranslations({
+      locale: 'es',
+      namespace: 'ns-app',
+      translations: () => Promise.resolve({ key: 'Texto en español' }),
+    });
+    return translator;
+  }
+
+  it('starts a French browser with the default locale and draws its text', async () => {
+    browserSpeaks('fr-FR', 'fr');
+
+    const translator = await startApp({
+      supportedLocales: ['en', 'es'],
+      defaultLocale: 'en',
+    });
+
+    expect(translator.getLocale()).toBe('en');
+    expect(translator.t('key', { ns: 'ns-app' })).toBe('English text');
+  });
+
+  it('starts with the first supported locale when no default is configured', async () => {
+    browserSpeaks('de-DE');
+
+    const translator = await startApp({ supportedLocales: ['es', 'en'] });
+
+    expect(translator.getLocale()).toBe('es');
+    expect(translator.t('key', { ns: 'ns-app' })).toBe('Texto en español');
+  });
+
+  it('still prefers a supported browser language over the default', async () => {
+    browserSpeaks('fr-FR', 'es-ES');
+
+    const translator = await startApp({
+      supportedLocales: ['en', 'es'],
+      defaultLocale: 'en',
+    });
+
+    expect(translator.getLocale()).toBe('es');
+  });
+
+  it('registers a namespace before any locale, and the next changeLocale loads it', async () => {
+    const translator = new RokuTranslator();
+    // No browser language, no supported locales and no default: the one state in
+    // which init still leaves the locale unset.
+    jest.spyOn(translator, 'getBrowserLocale').mockReturnValue(undefined);
+    await translator.init({});
+
+    const loader = jest.fn(() => Promise.resolve({ key: 'cargado' }));
+    translator.setLocaleNamespaceLoader('es', 'ns-early', loader as never);
+
+    await expect(translator.addNamespace('ns-early')).resolves.toBeUndefined();
+    expect(loader).not.toHaveBeenCalled();
+
+    await translator.changeLocale('es');
+
+    expect(loader).toHaveBeenCalled();
+    expect(translator.t('key', { ns: 'ns-early' })).toBe('cargado');
+  });
+});
+
+/**
+ * The early return the re-run of the locale guard relies on (plan 0006): a change to
+ * the locale already announced loads nothing and tells nobody.
+ */
+describe('changeLocale to the announced locale', () => {
+  it('announces each locale once, and the first change after init always', async () => {
+    const translator = new RokuTranslator();
+    await translator.init({ locale: 'en', supportedLocales: ['en', 'es'] });
+    const listener = jest.fn();
+    translator.onLocaleChange(listener);
+
+    // init set `en` without announcing it, so this one must still be heard.
+    await translator.changeLocale('en');
+    await translator.changeLocale('en');
+    await translator.changeLocale('es');
+    await translator.changeLocale('es');
+
+    expect(listener.mock.calls).toEqual([['en'], ['es']]);
+  });
+});
+
+/**
  * Plan 0005 acceptance criterion 2, and the test that would have caught D3: with the
  * backend on the module level default instance, two translators shared one loader
  * registry and the second to init won it for both.

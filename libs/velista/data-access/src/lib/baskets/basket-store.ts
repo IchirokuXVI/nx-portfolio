@@ -288,9 +288,9 @@ export class BasketStore {
           return;
 
         case 'basket.updated':
-          // The name or the status moved. The payload is a summary and this store
-          // holds the whole basket, so there is nothing here to merge.
-          if (event.list.id === this._id) {
+          // The name or the status moved. The payload is the header and this store
+          // holds the whole basket, so it reads the basket rather than merging.
+          if (event.basketId === this._id) {
             this._eventReads.ask();
           }
           return;

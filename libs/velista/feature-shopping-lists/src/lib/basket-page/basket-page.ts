@@ -94,7 +94,7 @@ import {
   SuggestionList,
   VisitNotice,
 } from '@portfolio/velista/ui';
-import { basketErrorKey } from '../basket-error-copy';
+import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
 import {
   listPickerRows,
   outstandingCaption,
@@ -103,7 +103,7 @@ import {
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
 import { basketPath, SHOP_ASK_SEGMENTS } from '../basket-paths';
-import { BasketRow } from '../basket-row/basket-row';
+import { BasketRow, ownBoughtUnits } from '../basket-row/basket-row';
 import {
   basketGroupScope,
   changeableLineIds,
@@ -1333,13 +1333,24 @@ export class BasketPage {
    * and deciding it here from two numbers is the arithmetic velista `0090` removed.
    */
   protected revertRow(row: BasketRowModel): void {
-    void this._toggle(row, () =>
-      this._store.revert(
-        row.rowKey,
-        row.state === 'NOT_AVAILABLE'
-          ? { target: 'CLOSE' }
-          : { target: 'UNITS', units: row.bought, from: row.bought }
-      )
+    // Only this person's own units, as far as the row can tell (velista `0151`):
+    // the server takes units back newest first, whoever bought them.
+    const me = this.meId();
+    const units = me === null ? row.bought : ownBoughtUnits(row, me);
+    if (row.state !== 'NOT_AVAILABLE' && units === 0) {
+      this.openRow(row);
+      return;
+    }
+    void this._toggle(
+      row,
+      () =>
+        this._store.revert(
+          row.rowKey,
+          row.state === 'NOT_AVAILABLE'
+            ? { target: 'CLOSE' }
+            : { target: 'UNITS', units, from: row.bought }
+        ),
+      () => this._reportSettle(row.rowKey, 'basket.reopen')
     );
   }
 
@@ -1354,14 +1365,17 @@ export class BasketPage {
    * A failure needs no branch here. It has already moved `BasketStore.state` or is a
    * transient the next refresh resolves, and the row is drawn from the store either
    * way; the sheet is where a failure gets a sentence, and the person opens it.
-   * `refused` is for a held buy only (velista `0141`): its numbers are the press's,
-   * so a refusal there is the window the question was open, and the row says so.
+   * `refused` says the refusal on the row, for every tap (velista `0151`): a tick
+   * the server refused because the trip finished, or because somebody else moved
+   * first, said nothing before. A held buy passes its own (velista `0141`), which
+   * reports through the same sentence.
    */
   private async _toggle(
     row: BasketRowModel,
     write: () => Promise<{ skippedCount: number } | null>,
-    refused: () => void = () => undefined
+    refused: () => void = () => this._reportSettle(row.rowKey)
   ): Promise<void> {
+    this._notice.set(null);
     const result = await write();
     if (result === null) {
       refused();
@@ -1534,8 +1548,11 @@ export class BasketPage {
    * a refused reel. The row is found again by the key of the press, because a
    * patch can have re-keyed it while the question was open.
    */
-  private _reportSettle(rowKey: string): void {
-    const key = basketErrorKey(this._store.error(), 'basket.settle');
+  private _reportSettle(
+    rowKey: string,
+    operation: BasketOperation = 'basket.settle'
+  ): void {
+    const key = basketErrorKey(this._store.error(), operation);
     const found = this._store.rowFor(rowKey);
     const count = found?.left ?? 0;
 

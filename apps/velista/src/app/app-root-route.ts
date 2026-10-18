@@ -34,9 +34,10 @@ import { appProviders } from './app-providers';
  *
  * The shell never bootstraps this remote — it loads these routes into a document it
  * already rendered — so this route's injector is the only one the app layer can reach
- * while it runs as a remote. `appConfig` spreads the same providers for the standalone
- * bootstrap, which is a second attachment rather than a duplicate one. See
- * `app-providers.ts`.
+ * while it runs as a remote. The standalone bootstrap uses the same injector, built
+ * the same way: `appConfig` does not spread the list a second time, so on either
+ * origin there is one copy of every service and every initializer runs once (velista
+ * `0155`). See `app-providers.ts`.
  *
  * @param mount Where this build is mounted, with a leading slash and no trailing one.
  *   `'/velista'` under the shell, `''` standalone.

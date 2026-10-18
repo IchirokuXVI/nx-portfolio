@@ -399,7 +399,11 @@ function listServiceFor(world: World) {
       ) ?? null,
   };
 
-  const emitted: { event: RealtimeEvent; payload: unknown }[] = [];
+  const emitted: {
+    event: RealtimeEvent;
+    audience?: unknown;
+    payload: unknown;
+  }[] = [];
   const authz = new ZoneAuthzService(memberships as never);
   const service = new ListService(
     dataSource,
@@ -417,8 +421,8 @@ function listServiceFor(world: World) {
     {
       emit: (event: RealtimeEvent, _zoneId: string, payload: unknown) =>
         emitted.push({ event, payload }),
-      emitTo: (event: RealtimeEvent, _audience: unknown, payload: unknown) =>
-        emitted.push({ event, payload }),
+      emitTo: (event: RealtimeEvent, audience: unknown, payload: unknown) =>
+        emitted.push({ event, audience, payload }),
     } as unknown as CoreEventsPublisher,
     // These are the member facing edits, which record nothing.
     {} as never,
@@ -463,6 +467,23 @@ describe('ListService.update and the sharing switch', () => {
       zoneId: ZONE,
       permissions: SHARED_SET,
     });
+  });
+
+  it('addresses each of those events to its one member, not to the zone', async () => {
+    // A copy on the zone room would hand every member the set of somebody else
+    // (plan 0212).
+    const world = makeWorld();
+    const { service, emitted } = listServiceFor(world);
+
+    await service.update({ ...owner, sharedWithZone: true });
+
+    const audiences = emitted
+      .filter((e) => e.event === RealtimeEvent.ListMyAccessChanged)
+      .map((e) => e.audience);
+    expect(audiences).toHaveLength(2);
+    expect(audiences).toEqual(
+      expect.arrayContaining([{ userIds: ['u-m-1'] }, { userIds: ['u-m-2'] }])
+    );
   });
 
   it('revokes nobody when it goes true to false', async () => {

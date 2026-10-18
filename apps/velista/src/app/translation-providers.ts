@@ -12,6 +12,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   APP_AVAILABLE_LOCALES,
+  APP_DEFAULT_LOCALE,
   VELISTA_UI_TRANSLATIONS,
 } from '@portfolio/velista/ui';
 
@@ -86,6 +87,9 @@ export const VELISTA_TRANSLATION_PROVIDERS: (
 )[] = [
   ...provideRokuTranslator({
     locales: APP_AVAILABLE_LOCALES,
+    // A browser that speaks none of the app's languages starts here rather than with
+    // no locale at all, which drew keys on every page (rokutranslator plan 0006).
+    defaultLocale: APP_DEFAULT_LOCALE,
     defaultNamespace,
     namespaces: sources
       .map((source) => source.namespace)
