@@ -693,6 +693,73 @@ describe('LineStore', () => {
     });
   });
 
+  describe('a read that lands after a write (plan 0158, item 2)', () => {
+    it('keeps the patched line when the read carries an older version', async () => {
+      // The catalog's "Use this product": the list page PATCHes the answer and loads
+      // its lines in one construction, and a read started before the write committed
+      // answers with the old row after it.
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: [], version: 1 })]);
+      await store.load(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[0].version).toBe(2);
+    });
+
+    it('keeps the local line while this device is writing to it', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      lines.holdWrites();
+      const writing = store.updateLine('a', { itemIds: ['item-9'] });
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+
+      lines.releaseWrites();
+      await writing;
+    });
+
+    it('takes a read that is newer than the local line', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: ['item-3'], version: 3 })]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-3']);
+    });
+
+    it('lets the read decide which lines exist', async () => {
+      const { store, lines } = await build([line('a'), line('b')]);
+      await store.load(LIST);
+
+      lines.setServed([line('b'), line('c')]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['b', 'c']);
+    });
+
+    it('refuses an event older than the local line', async () => {
+      const { store, realtime } = await build([
+        line('a', { content: 'Bread', version: 1 }),
+      ]);
+      await store.load(LIST);
+      await store.updateLine('a', { content: 'Sourdough' });
+
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Bread', version: 1 })
+      );
+
+      expect(store.linesIn(LIST)[0].content).toBe('Sourdough');
+    });
+  });
+
   describe('the other events', () => {
     it('takes a deleted row away without announcing it', async () => {
       const { store, realtime } = await build([line('a'), line('b')]);

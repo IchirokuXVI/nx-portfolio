@@ -378,7 +378,7 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, page.items);
+      this._setLines(listId, this._mergeRead(listId, page.items));
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -409,7 +409,7 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, page.items);
+      this._setLines(listId, this._mergeRead(listId, page.items));
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -1376,6 +1376,13 @@ export class LineStore {
    * changing away from.
    */
   private _reconcile(local: Line, incoming: Line): Line {
+    // An event older than what this device holds is refused whole (plan 0158, item 2).
+    // Events carry no origin and arrive in no promised order, so without this the
+    // echo of an earlier state that lands last would put that state back.
+    if (incoming.version < local.version) {
+      return local;
+    }
+
     const claims = (field: string): boolean =>
       this._mutations.claims(overlayKey(local.id, field)) ||
       this._mutations.claims(overlayKey(local.id, 'content+quantity'));
@@ -1395,6 +1402,39 @@ export class LineStore {
       // therefore correct, and stating it here is what stops somebody "fixing" it
       // into the pattern above the next time a field is added.
     };
+  }
+
+  /**
+   * A read of one list's lines against what this device already holds, line by line
+   * (plan 0158, item 2).
+   *
+   * The read decides which lines exist and in what order. For each line it names, the
+   * local copy is kept when it is newer than the read, or while this device is writing
+   * to it. A read started before a write committed and answered after it carries the
+   * old row, and replacing the array whole put that old row back: a product chosen in
+   * the catalog vanished from its own list until a reload. Version wins, not arrival
+   * order.
+   */
+  private _mergeRead(
+    listId: string,
+    incoming: readonly Line[]
+  ): readonly Line[] {
+    const local = new Map(
+      (this._byList().get(listId) ?? []).map((line) => [line.id, line])
+    );
+
+    return incoming.map((line) => {
+      const mine = local.get(line.id);
+      return mine !== undefined && this._keepsLocal(mine, line) ? mine : line;
+    });
+  }
+
+  /** Whether the local copy of a line outranks a read of it. */
+  private _keepsLocal(local: Line, incoming: Line): boolean {
+    return (
+      local.version > incoming.version ||
+      this._writes().get(local.id)?.outcome === 'pending'
+    );
   }
 
   private _nextPosition(listId: string): number {
