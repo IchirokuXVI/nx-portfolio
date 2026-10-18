@@ -5161,6 +5161,7 @@ export type ListLineView = {
   lastSettlementOutcome: EnumsSettlementOutcome | null;
   claimed: boolean;
   claimedByUserId: string | null;
+  commentCount: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -5308,6 +5309,7 @@ export type ListUpdateLineResult = {
   lastSettlementOutcome: EnumsSettlementOutcome | null;
   claimed: boolean;
   claimedByUserId: string | null;
+  commentCount: number | null;
   createdAt: string;
   updatedAt: string;
   absorbedLineId?: string;

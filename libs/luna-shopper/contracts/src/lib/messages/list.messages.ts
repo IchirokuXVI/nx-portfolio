@@ -418,6 +418,18 @@ export interface LineView {
    * same rule, so a zone a person left takes their name with it.
    */
   claimedByUserId: string | null;
+  /**
+   * How many comments the line has, or null when this answer does not say
+   * (plan 0214, section 2).
+   *
+   * **A number on the lines read** (`GET /v1/lists/:id/lines`), counted for the
+   * whole page in one query, and 0 on a line with no comment. **Null
+   * everywhere else**: the `line.added` and `line.updated` events and the
+   * answer of every write carry null, which means "unknown" and never "none",
+   * so that no write pays for a count. A client keeps the count it already
+   * holds when a line arrives with null.
+   */
+  commentCount: number | null;
   /** ISO 8601 UTC (plan 0017, section 7). */
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
