@@ -252,6 +252,7 @@ function atShopOf(
 const SCOPES: readonly BasketPriceScope[] = [
   {
     priceScopeId: SCOPE_MERCADONA,
+    quotesBasket: true,
     supermarketId: 'chain-mercadona',
     logoUrl: null,
     supermarketName: { en: 'Mercadona', es: 'Mercadona' },
@@ -276,6 +277,7 @@ const SCOPES: readonly BasketPriceScope[] = [
   },
   {
     priceScopeId: SCOPE_DIA,
+    quotesBasket: true,
     supermarketId: 'chain-dia',
     logoUrl: null,
     supermarketName: { en: 'Dia', es: 'Dia' },
@@ -1141,6 +1143,7 @@ export class BasketMemory implements BasketServiceI {
       // since backend `0163` section 4: a guest picks the shop they are
       // standing in from the same list the owner sees.
       scopes: new Map(SCOPES.map((scope) => [scope.priceScopeId, scope])),
+      scopesIncomplete: false,
       // Nobody started this basket at a shop, so nothing is locked here.
       shop: null,
       lockedShopId: null,

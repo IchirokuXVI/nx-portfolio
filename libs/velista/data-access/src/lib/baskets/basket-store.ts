@@ -1083,6 +1083,7 @@ export class BasketStore {
       ...rows,
       products: held.products,
       scopes: held.scopes,
+      scopesIncomplete: held.scopesIncomplete,
       shop: held.shop,
     };
   }

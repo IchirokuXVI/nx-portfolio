@@ -1629,7 +1629,10 @@
           "headingHint": "where you bought, newest first",
           "today": "Today",
           "yesterday": "Yesterday"
-        }
+        },
+        "noPrices": "No prices here yet",
+        "incomplete": "The shops could not be listed.",
+        "retry": "Try again"
       },
       "lists": {
         "legend": "Lists",
