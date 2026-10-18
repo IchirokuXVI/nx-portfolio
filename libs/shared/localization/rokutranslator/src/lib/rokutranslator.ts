@@ -5,9 +5,18 @@ interface RokuTranslatorConfig {
   /**
    * Hardcoded locales to know which languages are supported.
    * If not set, any locale will be considered valid.
-   * If the user doesn't have a locale from this array, the first one will be used.
+   * If the user doesn't have a locale from this array, `defaultLocale` is used, and
+   * without one the first locale of this array.
    */
   supportedLocales: string[];
+  /**
+   * The locale `init` starts with when no locale is passed and no browser language
+   * is supported. Optional: without it the first supported locale is used. Without
+   * either, a French browser on an English and Spanish app started i18next with no
+   * language at all, and the first `addNamespace` threw before a single loader was
+   * registered (plan 0006).
+   */
+  defaultLocale?: string;
   /**
    * List of namespaces to use. This makes translations
    * able to be overrided by priority (first one is the highest priority).
@@ -86,6 +95,9 @@ class RokuTranslator {
 
   private localeListeners = new Set<(locale: string) => void>();
 
+  /** The locale the last `changeLocale` announced, see the early return there. */
+  private announcedLocale?: string;
+
   /**
    * Register a listener notified after every locale change. Returns an
    * unsubscribe function. Multicast on purpose: an app's store, its pipe and any
@@ -153,7 +165,17 @@ class RokuTranslator {
       // locale plus per-app persistence, see the locale routing refactor). Here
       // we only need a reasonable starting value for i18next before the shell's
       // guards correct it, so fall back to the browser locale.
-      this.config.locale = this.getBrowserLocale();
+      //
+      // Then to the default, then to the first supported locale (plan 0006). A
+      // browser that speaks none of the supported languages is ordinary (a French
+      // visitor on an English and Spanish app), and starting with no locale at all
+      // is what left that visitor with keys on every page.
+      this.config.locale =
+        this.getBrowserLocale() ??
+        (this.config.defaultLocale
+          ? this.formatLocale(this.config.defaultLocale)
+          : undefined) ??
+        this.config.supportedLocales[0];
     }
 
     // `createInstance()` first, then `use()` on what it returned. Written the other
@@ -301,6 +323,22 @@ class RokuTranslator {
       throw new Error(`Invalid locale: ${locale}`);
     }
 
+    // Unchanged since the last change this instance announced: nothing to load and
+    // nothing to tell anybody. This is what makes the locale guard cheap to re-run
+    // on every change of the locale segment (plan 0006), including the navigation a
+    // language switcher makes right after it has already changed the locale here.
+    //
+    // Compared with the last *announced* locale, not with `config.locale`, because
+    // `init` sets that one without announcing it. The first change after init must
+    // still reach the listeners, or a store that read its initial value before init
+    // finished would never hear the locale init settled on.
+    if (
+      locale === this.announcedLocale &&
+      (!this.i18nextInstance || this.i18nextInstance.language === locale)
+    ) {
+      return;
+    }
+
     this.config.locale = locale;
 
     if (this.i18nextInstance) {
@@ -312,6 +350,7 @@ class RokuTranslator {
 
     // Persistence is per app and owned by the Angular routing layer
     // (roku-locale:{appKey}); the core no longer keeps a single global key.
+    this.announcedLocale = locale;
     this.emitLocaleChange(locale);
   }
 
@@ -339,12 +378,24 @@ class RokuTranslator {
     // The lazy path, which D3 left dead. A namespace registered **after** init is
     // not in any bundle, so it is loaded through the backend `read` above.
     //
+    // With no locale yet there is nothing to load the namespace for. It is
+    // registered above, so the next `changeLocale` loads it through `read`. This
+    // used to call `getLocale()`, which throws without a locale, and the throw
+    // landed before any `addTranslations`, so the app was left with no loaders at
+    // all (plan 0006). `init` now always settles a locale; this is the second guard,
+    // so that no other path into this state can repeat that.
+    if (!this.config.locale) {
+      return;
+    }
+
+    const active = this.config.locale;
+
     // Only the ones with a loader for the active locale: asking i18next for a
     // namespace nothing can serve makes `read` call back with an error and logs a
     // failed load, and the ordinary case (the service registering a namespace
     // before its translations) would hit that on every startup.
     const loadable = namespaces.filter(
-      (ns) => !!this.getLocaleNamespaceLoader(this.getLocale(), ns)
+      (ns) => !!this.getLocaleNamespaceLoader(active, ns)
     );
 
     if (loadable.length) {
