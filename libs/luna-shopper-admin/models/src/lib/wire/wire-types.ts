@@ -2223,6 +2223,7 @@ export type BasketBasketPriceScopeView = {
   supermarketName: CatalogLocalizedText;
   supermarketLogoUrl: string | null;
   locations: BasketBasketScopeLocationView[];
+  quotesBasket?: boolean;
 };
 
 /**
@@ -2313,6 +2314,7 @@ export type BasketBasketResult = {
   products: BasketBasketProductView[];
   shop: BasketBasketShopView | null;
   scopes: BasketBasketPriceScopeView[];
+  scopesIncomplete?: boolean;
 };
 
 /**
