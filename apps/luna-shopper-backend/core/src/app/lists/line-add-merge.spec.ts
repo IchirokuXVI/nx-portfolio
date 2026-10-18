@@ -505,6 +505,22 @@ describe('a name shared by two products is two lines', () => {
   });
 });
 
+describe('the comment count of an add (plan 0214, section 2)', () => {
+  it('carries commentCount null on the line.added payload', async () => {
+    const w = build({});
+
+    const { line } = await add(w, 'Eggs', { itemIds: [WHOLE] });
+
+    expect(line.commentCount).toBeNull();
+    expect(w.events).toEqual([
+      {
+        event: RealtimeEvent.LineAdded,
+        line: expect.objectContaining({ commentCount: null }),
+      },
+    ]);
+  });
+});
+
 describe('what a merge may change (plan 0091, section 3)', () => {
   it('keeps the line pending, and does not ask for approval again', async () => {
     // Plan 0047 section 7: a quantity change never re-triggers approval. Asking

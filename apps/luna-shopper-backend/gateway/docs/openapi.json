@@ -44732,6 +44732,13 @@
               "null"
             ]
           },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -44762,6 +44769,7 @@
           "lastSettlementOutcome",
           "claimed",
           "claimedByUserId",
+          "commentCount",
           "createdAt",
           "updatedAt"
         ],
@@ -45227,6 +45235,13 @@
               "null"
             ]
           },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -45261,6 +45276,7 @@
           "lastSettlementOutcome",
           "claimed",
           "claimedByUserId",
+          "commentCount",
           "createdAt",
           "updatedAt"
         ],
