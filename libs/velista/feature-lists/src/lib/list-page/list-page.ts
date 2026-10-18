@@ -1076,13 +1076,16 @@ export class ListPage {
     });
 
     // Rows load on first open and stay loaded for the visit. The store asks only for a
-    // trip it has not asked for, so this can run on every change to the heads.
+    // trip it has not asked for, so this can run on every change to the heads. A picked
+    // category asks for every trip's rows, because only the rows can say whether a
+    // trip holds a line in it, and a trip that cannot say is not drawn (`0088`, 6).
     effect(() => {
       const open = this._view.openTrips();
+      const filtered = this._view.picked() !== null;
       const trips = [...this._trips.live(), ...this._trips.past()];
       untracked(() => {
         for (const trip of trips) {
-          if (open.has(tripKey(trip))) {
+          if (filtered || open.has(tripKey(trip))) {
             this._trips.ensureRows(trip);
           }
         }
