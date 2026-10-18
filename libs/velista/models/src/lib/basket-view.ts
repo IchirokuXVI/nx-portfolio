@@ -421,6 +421,14 @@ export interface BasketPriceScope {
    * only to be collapsed at every call site.
    */
   readonly locations: readonly ScopeLocation[];
+  /**
+   * Whether this scope quotes at least one product of the basket (backend
+   * `0213`). False for a scope of the profile that prices nothing here, which
+   * the shop picker still lists so that its chain stays choosable, and draws
+   * with a line that says so (velista `0153`). True from a server that did not
+   * send it, which only named the scopes that quote something.
+   */
+  readonly quotesBasket: boolean;
 }
 
 /**
@@ -1042,6 +1050,13 @@ export interface Basket {
    * scope is not here resolves to no place and is still a price.
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
+  /**
+   * Whether {@link scopes} may be missing scopes or shops of the profile this
+   * time (backend `0213`). It may still hold some. The shop picker then says
+   * the shops could not all be listed and offers to read again (velista
+   * `0153`). False from a server that did not send it.
+   */
+  readonly scopesIncomplete: boolean;
   /**
    * The shop this basket was started at, or null (velista `0102`; backend `0163`,
    * section 1).

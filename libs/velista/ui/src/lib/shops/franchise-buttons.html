@@ -39,6 +39,17 @@
           </span>
 
           <!--
+            A chain of the profile that prices none of the basket's products
+            (velista 0153). It stays a button: somebody standing in that shop
+            still wants the list and the ticks, only the prices are missing.
+          -->
+          @if (row.noPrices) {
+            <span class="state">
+              {{ 'basket.view.shop.noPrices' | rokuT }}
+            </span>
+          }
+
+          <!--
             The two exclusion states, in words and with a glyph each. They are
             different promises and must not look the same: the chain covers shops
             that do not exist yet, the other covers exactly the rows underneath.

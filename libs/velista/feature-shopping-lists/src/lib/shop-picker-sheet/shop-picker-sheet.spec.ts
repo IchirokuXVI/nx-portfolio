@@ -61,7 +61,8 @@ function shop(
 function scope(
   priceScopeId: string,
   chain: string,
-  locations: ReturnType<typeof shop>[] = []
+  locations: ReturnType<typeof shop>[] = [],
+  quotesBasket = true
 ): BasketPriceScope {
   return {
     priceScopeId,
@@ -69,6 +70,7 @@ function scope(
     logoUrl: null,
     supermarketName: { en: chain, es: chain },
     locations,
+    quotesBasket,
   };
 }
 
@@ -103,6 +105,8 @@ function render(
     readonly asking?: boolean;
     /** This device's storage, so a spec can read what an answer kept. */
     readonly storage?: Map<string, string>;
+    /** The read's `scopesIncomplete` (backend `0213`). */
+    readonly incomplete?: boolean;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -126,6 +130,12 @@ function render(
   );
   // The device's shop (velista `0102`), read at once by this double.
   const readAt = signal<string | null>(null);
+  // A read again answers the whole list, which is what "Try again" asks for.
+  const incomplete = signal(options.incomplete ?? false);
+  const refresh = jest.fn(() => {
+    incomplete.set(false);
+    return Promise.resolve();
+  });
   const store = {
     readAt,
     shopRead: readAt,
@@ -144,11 +154,13 @@ function render(
       id: BASKET_ID,
       sources: [],
       scopes: held(),
+      scopesIncomplete: incomplete(),
       shop: null,
       lockedShopId: null,
       readAt: readAt(),
     })),
     listNames: signal(new Map<string, string>()),
+    refresh,
   };
 
   // The navigation under way when the sheet is torn down, which says whether
@@ -209,6 +221,7 @@ function render(
     notices: TestBed.inject(ShopPickNotices),
     held: TestBed.inject(HeldBuy),
     router,
+    refresh,
   };
 }
 
@@ -1099,5 +1112,107 @@ describe('ShopPickerSheet, asking at the first buy', () => {
     expect(element.querySelector('.foot')).toBeNull();
     expect(element.querySelector('.no-shop')).toBeNull();
     expect(element.querySelector('.close')).toBeNull();
+  });
+});
+
+/**
+ * Every chain of the profile, and a list that could not be read whole (velista
+ * `0153`, items 4 and 5; backend `0213`).
+ */
+describe('ShopPickerSheet: every chain of the profile', () => {
+  /** Mercadona quotes the basket; Lidl is in the profile and quotes nothing. */
+  const WITH_LIDL = [
+    ...OWNER_SCOPES,
+    scope(
+      's-lidl',
+      'Lidl',
+      [shop('loc-lidl', null, 'Calle Lidl 1', 'Córdoba', '14010')],
+      false
+    ),
+  ];
+
+  it('draws a chain that quotes nothing, with the line that says so', () => {
+    const { fixture } = render(WITH_LIDL);
+
+    expect(chains(fixture)).toHaveLength(3);
+    expect(chains(fixture)[2]).toContain('Lidl');
+    expect(chains(fixture)[2]).toContain('basket.view.shop.noPrices');
+    expect(chains(fixture)[0]).not.toContain('basket.view.shop.noPrices');
+    expect(chains(fixture)[1]).not.toContain('basket.view.shop.noPrices');
+  });
+
+  it('keeps that chain choosable, and writes its shop when picked', () => {
+    const { fixture, view, sheets } = render(WITH_LIDL);
+
+    tapChain(fixture, 2);
+    expect(fixture.nativeElement.querySelector('.head')?.textContent).toContain(
+      'Lidl'
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      'basket.view.shop.noPrices'
+    );
+    fixture.debugElement
+      .queryAll(By.css('lib-shop-list .checkbox'))[0]
+      .nativeElement.click();
+    fixture.detectChanges();
+
+    expect(view.shop()).toBe('loc-lidl');
+    expect(sheets.dismiss).toHaveBeenCalled();
+  });
+
+  it('draws no line for a chain with one scope that quotes something', () => {
+    const { fixture } = render([
+      scope('s-lidl-region', 'Lidl', [], false),
+      scope(
+        's-lidl-store',
+        'Lidl',
+        [shop('loc-lidl', null, 'Calle Lidl 1', 'Córdoba', '14010')],
+        true
+      ),
+    ]);
+
+    expect(chains(fixture)).toHaveLength(1);
+    expect(chains(fixture)[0]).not.toContain('basket.view.shop.noPrices');
+  });
+
+  it('says the shops could not be listed, above Near me, and reads again', async () => {
+    const { fixture, refresh } = render(OWNER_SCOPES, { incomplete: true });
+    const element = fixture.nativeElement as HTMLElement;
+
+    const line = element.querySelector('lib-shop-picker .incomplete');
+    expect(line?.textContent).toContain('basket.view.shop.incomplete');
+    expect(
+      line?.compareDocumentPosition(
+        element.querySelector('lib-shop-picker .near-region') as Node
+      )
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // The shops it did list are still drawn under the line.
+    expect(chains(fixture)).toHaveLength(2);
+
+    (element.querySelector('.retry') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('lib-shop-picker .incomplete')).toBeNull();
+  });
+
+  it('never draws an empty list with no word', () => {
+    const { fixture } = render([], { incomplete: true });
+
+    expect(chains(fixture)).toHaveLength(0);
+    expect(
+      fixture.nativeElement.querySelector('lib-shop-picker .incomplete')
+        ?.textContent
+    ).toContain('basket.view.shop.incomplete');
+  });
+
+  it('draws no line for a read that listed everything', () => {
+    const { fixture } = render(OWNER_SCOPES);
+
+    expect(
+      fixture.nativeElement.querySelector('lib-shop-picker .incomplete')
+    ).toBeNull();
   });
 });
