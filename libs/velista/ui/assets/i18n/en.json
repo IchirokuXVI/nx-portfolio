@@ -802,6 +802,7 @@
     "empty": {
       "title": "Nothing on this list yet",
       "body": "Write the first thing and everyone here sees it",
+      "bodyPrivate": "Write the first thing. You have not shared this list with anybody yet",
       "short": "List is empty"
     },
     "readOnly": {
@@ -904,7 +905,11 @@
       },
       "sharedWithZone": {
         "label": "Everybody in this group can use this list",
-        "hint": "People who join later get it too. Turning this off does not take it away from anybody who already has it"
+        "hint": "People who join later get it too. Turning this off does not take it away from anybody who already has it",
+        "takeBack_one": "Also take it from the {{count}} person who has it",
+        "takeBack_other": "Also take it from the {{count}} people who have it",
+        "keepers_one": "Nothing changed. {{names}} is a list admin now, so only a group admin can take it away",
+        "keepers_other": "Nothing changed. {{names}} are list admins now, so only a group admin can take it away"
       },
       "delete": "Delete this list",
       "accessFor": "What {{name}} can do with this list",
@@ -1751,8 +1756,8 @@
       "body_one": "Nobody new will be able to join. The {{count}} person already shopping keeps working until their time ends.",
       "body_other": "Nobody new will be able to join. The {{count}} people already shopping keep working until their time ends.",
       "bodyNone": "Nobody new will be able to join.",
-      "cascade_one": "Also remove the {{count}} guest who joined with it",
-      "cascade_other": "Also remove the {{count}} guests who joined with it",
+      "cascade_one": "Also remove the {{count}} person who joined with it",
+      "cascade_other": "Also remove the {{count}} people who joined with it",
       "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
       "confirm": "Revoke the link",
       "cancel": "Keep it"
