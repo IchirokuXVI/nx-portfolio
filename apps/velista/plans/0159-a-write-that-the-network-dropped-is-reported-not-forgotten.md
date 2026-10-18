@@ -159,9 +159,15 @@ offline.
   (`list.dropped.quantity.lost` and `.unsure`). They are not built from a nested
   description key, because i18next escapes each value, and a nested sentence would
   escape an `&` in a line name twice.
-- **The offline icon is a static `?raw` import**, so it ships in the velista/ui chunk with
-  the screen that draws it. The other icons keep their lazy `import()`, and the three
-  pages that draw this one were not touched.
+- **The offline icon is an eager `import()`** (`/* webpackMode: "eager" */`). Webpack puts
+  the text in the chunk that holds `OfflineIcon`, and the promise resolves with no
+  request. The production build shows it: the markup is in the large velista/ui chunk,
+  and the share icon, the control, is still in its own 399 byte chunk. A static `?raw`
+  import was tried first and broke `velista:test` in CI: the app's Jest config (and the
+  shell's) has no mapping for a `?raw` path, and both are outside this plan's scope.
+  The app layout spec reads the eager import off the source, because Jest has no chunks.
+  The other icons keep their lazy `import()`, and the pages that draw this one were not
+  touched.
 - **The notice reuses the list page's `trips-failed` classes** (a sentence and quiet
   actions in one wrapping row), because `list-page.scss` is not in this plan's scope.
 - **The ledger keeps 5 entries.**

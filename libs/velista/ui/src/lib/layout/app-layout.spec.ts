@@ -665,14 +665,25 @@ describe('AppLayout', () => {
   });
 
   // Velista `0159`, F7.9: the screen that says the network is gone cannot fetch its
-  // own icon, so the icon must already be in the bundle. Asserted on the same frame
-  // the screen is drawn, with no await: a lazy chunk would still be loading.
+  // own icon, so the icon must already be in the bundle. Jest has no chunks, so the
+  // half about the bundle is read off the source: an eager `import()` is one webpack
+  // puts in the chunk of the file that holds it, with no request of its own.
   it('draws the icon of the connection screen with no chunk to fetch', async () => {
+    const icons = readFileSync(resolve(__dirname, '../icons/icons.ts'), 'utf8');
+    const start = icons.indexOf('export class OfflineIcon');
+    const offline = icons.slice(start, icons.indexOf('\n}', start));
+    expect(offline).toContain(
+      `import(/* webpackMode: "eager" */ './offline-icon.svg?raw')`
+    );
+
     const fixture = await createFixture();
     TestBed.inject(BackendReadiness).reportReady();
     fixture.detectChanges();
 
     TestBed.inject(ConnectionState).reportNetworkFailure();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
     fixture.detectChanges();
 
     const host: HTMLElement = fixture.nativeElement;
