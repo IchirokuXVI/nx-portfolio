@@ -1,3 +1,5 @@
+> **PR:** [#756](https://github.com/IchirokuXVI/nx-portfolio/pull/756)
+
 # 0152: what a switch or a link gave can be taken back, and the copy says who goes
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -137,3 +139,26 @@ does not promise that everyone will see it.
   settings sheet with the switch in hand; the revoke pane set the pattern.
 - **Names under the tick.** "2 people" alone hides who, and the list of names is what lets
   the owner decide.
+
+## What the build decided
+
+- **The switch still saves on the flip.** The tick appears only after a flip from on to off
+  succeeds in this sheet, and it is a pending change that the footer Save sends, like a row
+  edit. So "Save sends the PATCH, then the revoke" is the flip and then Save. Cancel after a
+  flip leaves the list private and nobody revoked, which is today's behaviour.
+- **Who counts as a holder:** an approved member who is not group staff, whose row as read
+  holds anything and not `MANAGE`. Read from the loaded rows, not from edits. The revoke
+  entries go in the same `setListAccess` as any row edits, and win over an edit of the same
+  row.
+- **The hint:** hidden only after a turn off that leaves nobody holding the list. Drawn as
+  before in every other case, including beside the tick.
+- **A refused take back** (the accepted race of rule 3) rereads access and names the people
+  among the ones sent who now hold `MANAGE` (`list.settings.sharedWithZone.keepers`). The
+  PUT is one transaction, so the copy opens with "Nothing changed". The tick then counts
+  the rest, and Save again takes it from them. Any other failure shows the ordinary error.
+- **The private body** needs the access read, which needs `MANAGE`. The page reads it once
+  per list, only for an empty list that is not shared with the group and that the reader
+  manages. "Somebody else" is a row with a non empty set whose membership is not the
+  reader's. A failed read, or an unknown membership of the reader, keeps the shared
+  wording. Copy: "Write the first thing. You have not shared this list with anybody yet",
+  which stays true beside the derived access of group staff.
