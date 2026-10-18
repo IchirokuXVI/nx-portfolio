@@ -115,12 +115,12 @@ describe('LiveBasketStore', () => {
     });
 
     await store.load();
+    // The header core emits (velista `0155`), not the basket view.
     TestBed.inject(RealtimeMemory).emit('basket.updated', {
-      id: 'basket-saturday',
+      basketId: 'basket-saturday',
+      kind: 'GENERATED',
       name: 'Saturday shop',
-      status: 'OPEN',
-      generatedAt: '2026-08-21T10:00:00.000Z',
-      lines: [],
+      status: 'FINISHED',
     });
     await Promise.resolve();
 

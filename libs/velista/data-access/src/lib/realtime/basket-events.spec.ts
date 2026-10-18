@@ -247,3 +247,69 @@ describe('the basket room, off the wire', () => {
     expect(event).toMatchObject({ present: [{ participantId: 'p-3' }] });
   });
 });
+
+/**
+ * The owner's own room, where the two header events arrive (velista `0155`).
+ *
+ * They used to share one mapper, which read both as the whole basket view. Only
+ * `basket.created` is that. `basket.updated` is four fields, so it was dropped on
+ * every frame and an open tab never heard that its trip had finished.
+ */
+describe('the owner room, off the wire', () => {
+  it('reads basket.updated as the header it is', () => {
+    expect(
+      toRealtimeEvent('basket.updated', {
+        basketId: 'gl-1',
+        kind: 'GENERATED',
+        name: null,
+        status: 'FINISHED',
+      })
+    ).toEqual({
+      type: 'basket.updated',
+      basketId: 'gl-1',
+      kind: 'GENERATED',
+      name: null,
+      status: 'FINISHED',
+    });
+  });
+
+  it('reads an unknown status as the fallback, not as a dropped event', () => {
+    expect(
+      toRealtimeEvent('basket.updated', {
+        basketId: 'gl-1',
+        kind: 'GENERATED',
+        name: 'Saturday',
+        status: 'PAUSED',
+      })
+    ).toMatchObject({ status: 'UNKNOWN' });
+  });
+
+  it.each([
+    ['an empty basket id', { basketId: '' }],
+    ['a name that is not a string', { name: 7 }],
+    ['a status that is not a string', { status: null }],
+  ])('drops a header with %s', (_, change) => {
+    expect(
+      toRealtimeEvent('basket.updated', {
+        basketId: 'gl-1',
+        kind: 'GENERATED',
+        name: 'Saturday',
+        status: 'OPEN',
+        ...change,
+      })
+    ).toBeNull();
+  });
+
+  it('still reads basket.created as the whole view', () => {
+    expect(
+      toRealtimeEvent('basket.created', {
+        id: 'gl-2',
+        kind: 'GENERATED',
+        name: 'From the laptop',
+        status: 'OPEN',
+        generatedAt: '2026-08-21T10:00:00.000Z',
+        lines: [],
+      })
+    ).toMatchObject({ type: 'basket.created', list: { id: 'gl-2' } });
+  });
+});
