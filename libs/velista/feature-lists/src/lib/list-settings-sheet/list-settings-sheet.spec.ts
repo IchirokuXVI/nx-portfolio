@@ -107,6 +107,8 @@ interface Options {
   readonly accessAfter?: readonly ListAccessEntry[];
   /** Whether `setListAccess` refuses, as rule 3 does for a row holding MANAGE. */
   readonly refuseAccess?: boolean;
+  /** Whether every access read fails. */
+  readonly failAccessRead?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -127,6 +129,9 @@ async function render(options: Options = {}): Promise<{
     getListAccess: async () => {
       const first = !calls.includes('getListAccess');
       calls.push('getListAccess');
+      if (options.failAccessRead === true) {
+        throw new Error('unreadable');
+      }
       return first
         ? (options.access ?? [])
         : (options.accessAfter ?? options.access ?? []);
@@ -611,6 +616,34 @@ describe('ListSettingsSheet', () => {
 
       expect(tick(fixture)).toBeNull();
       expect(host.querySelector('#list-settings-shared-hint')).toBeNull();
+    });
+
+    it('keeps the hint when the access read failed, since nobody is not known', async () => {
+      const { fixture } = await turnedOff({ failAccessRead: true });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(fixture.componentInstance.turnedOff()).toBe(true);
+      expect(tick(fixture)).toBeNull();
+      expect(host.querySelector('#list-settings-shared-hint')).not.toBeNull();
+    });
+
+    it('follows the server when a turn on lands and the refresh after it fails', async () => {
+      const { fixture, lists } = await turnedOff();
+      const sheet = fixture.componentInstance;
+      expect(tick(fixture)).not.toBeNull();
+
+      jest.spyOn(lists, 'refresh').mockRejectedValueOnce(new Error('offline'));
+      await sheet.setSharedWithZone({
+        target: { checked: true },
+      } as unknown as Event);
+      fixture.detectChanges();
+
+      // The server shares the list, so the switch says so and no tick offers to take
+      // away what the flip just gave.
+      expect(sheet.sharedWithZone()).toBe(true);
+      expect(sheet.turnedOff()).toBe(false);
+      expect(sheet.takeBackOn()).toBe(false);
+      expect(tick(fixture)).toBeNull();
     });
 
     it('names who kept it when the server refuses, and changes nothing', async () => {

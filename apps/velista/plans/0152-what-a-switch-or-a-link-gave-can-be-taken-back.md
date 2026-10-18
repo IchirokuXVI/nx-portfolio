@@ -150,15 +150,24 @@ does not promise that everyone will see it.
   holds anything and not `MANAGE`. Read from the loaded rows, not from edits. The revoke
   entries go in the same `setListAccess` as any row edits, and win over an edit of the same
   row.
-- **The hint:** hidden only after a turn off that leaves nobody holding the list. Drawn as
-  before in every other case, including beside the tick.
+- **The hint:** hidden only after a turn off that the access read says leaves nobody
+  holding the list. Drawn as before in every other case, including beside the tick, and
+  while the read has not answered or after it failed: a failed read is not "nobody".
 - **A refused take back** (the accepted race of rule 3) rereads access and names the people
   among the ones sent who now hold `MANAGE` (`list.settings.sharedWithZone.keepers`). The
   PUT is one transaction, so the copy opens with "Nothing changed". The tick then counts
   the rest, and Save again takes it from them. Any other failure shows the ordinary error.
-- **The private body** needs the access read, which needs `MANAGE`. The page reads it once
-  per list, only for an empty list that is not shared with the group and that the reader
-  manages. "Somebody else" is a row with a non empty set whose membership is not the
+- **The private body** needs the access read, which needs `MANAGE`. The page reads it only
+  for an empty list that is not shared with the group and that the reader manages. The
+  answer is not kept for the visit: the settings sheet is a child route, so the page
+  outlives it. The page reads again each time a sheet closes over it (the outlet's
+  `deactivate`), and drops the answer whenever the list stops being one the read is for,
+  so a flip on and off reads again too. "Somebody else" is a row with a non empty set whose membership is not the
   reader's. A failed read, or an unknown membership of the reader, keeps the shared
   wording. Copy: "Write the first thing. You have not shared this list with anybody yet",
   which stays true beside the derived access of group staff.
+- **A flip follows the server once the PATCH lands.** The switch, `turnedOff` and the tick
+  are set as soon as `updateList` resolves, before the store refresh. A refresh that fails
+  after it shows the error but does not put the switch back, so a turn on over an earlier
+  turn off never leaves the tick drawn over a list the server shares. Only a failed PATCH
+  puts the switch back.

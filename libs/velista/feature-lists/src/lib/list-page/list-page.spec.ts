@@ -1,7 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  RouterOutlet,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -1372,6 +1377,61 @@ describe('ListPage', () => {
           { membershipId: 'm-toni', permissions: ['READ'] },
         ],
       });
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    // The settings sheet is a child route, so the page outlives it and must not keep
+    // the answer it read before the sheet opened.
+    const closeSheet = async (fixture: ComponentFixture<ListPage>) => {
+      fixture.debugElement
+        .query(By.directive(RouterOutlet))
+        .injector.get(RouterOutlet)
+        .deactivateEvents.emit({});
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    };
+
+    it('reads again when a sheet closes, so a grant made there brings the shared wording back', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      // Toni was given a row in the settings sheet, which then closed.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      await closeSheet(fixture);
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('reads again after the list is shared with the group and made private again', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture, lists } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      lists.set([list({ sharedWithZone: true, lineCount: 0 })]);
+      fixture.detectChanges();
+      expect(body(fixture)).toBe('list.empty.body');
+
+      // The flip on gave Toni a row, and turning it off took nothing back.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      lists.set([list({ sharedWithZone: false, lineCount: 0 })]);
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
 
       expect(body(fixture)).toBe('list.empty.body');
     });

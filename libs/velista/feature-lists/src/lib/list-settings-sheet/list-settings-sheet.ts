@@ -301,9 +301,18 @@ export class ListSettingsSheet {
       this.turnedOff() && !this.sharedWithZone() && this.holders().length > 0
   );
 
-  /** Whether the hint under the switch is drawn. Not after a turn off that left nobody. */
+  /**
+   * Whether the access read answered. Until it has, or when it failed, nobody holding
+   * the list is not known, so the hint is not taken away on that ground.
+   */
+  private readonly _accessRead = signal(false);
+
+  /**
+   * Whether the hint under the switch is drawn. Not after a turn off that the access read
+   * says left nobody; an unfinished or failed read keeps it.
+   */
   readonly showsSharedHint = computed(
-    () => !this.turnedOff() || this.holders().length > 0
+    () => !this.turnedOff() || !this._accessRead() || this.holders().length > 0
   );
 
   /** Whether Save will take the list from the holders. */
@@ -541,19 +550,27 @@ export class ListSettingsSheet {
     this.sharedWithZone.set(next);
     this.errorKey.set(null);
 
+    // Once the server took the flip, the switch and the tick follow it, also when the
+    // reread of the store fails after it. Otherwise a turn on whose refresh failed puts
+    // the switch back off over a list the server shares, and leaves the tick drawn that
+    // would take away the grants the flip just made.
+    let landed = false;
     try {
       await this._listService.updateList(this.listId(), {
         sharedWithZone: next,
       });
-      await this._lists.refresh(this.zoneId());
+      landed = true;
       this.turnedOff.set(previous && !next);
       this.takeBack.set(false);
-      if (next) {
-        await this._loadAccess();
-      }
+      await this._lists.refresh(this.zoneId());
     } catch (error) {
-      this.sharedWithZone.set(previous);
+      if (!landed) {
+        this.sharedWithZone.set(previous);
+      }
       this.errorKey.set(listErrorKey(error, 'list.manage'));
+    }
+    if (landed && next) {
+      await this._loadAccess();
     }
   }
 
@@ -732,6 +749,7 @@ export class ListSettingsSheet {
 
     try {
       this._loadedAccess.set(await read.call(this._listService, this.listId()));
+      this._accessRead.set(true);
     } catch {
       // Quiet, and the section stays empty rather than showing a guess. A wrong guess
       // here is not a worse screen, it is somebody losing access they had.
