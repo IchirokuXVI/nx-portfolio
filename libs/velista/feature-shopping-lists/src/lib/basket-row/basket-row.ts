@@ -952,8 +952,9 @@ export class BasketRow {
   /**
    * The price first on the caption line, or null where there is none.
    *
-   * **The chosen shop's**, when one is in use (velista `0078`, section 5), and the
-   * cheapest at the run's scopes otherwise. A row with no product has no price and
+   * **The chosen shop's**, when one is in use (velista `0078`, section 5), or
+   * none when that shop has no price for it (velista `0153`), and the cheapest at
+   * the run's scopes otherwise. A row with no product has no price and
    * adds nothing to the total (velista `0139`, section 2).
    */
   protected readonly productPrice = computed<string | null>(() => {
@@ -969,8 +970,10 @@ export class BasketRow {
    * The price mark's own sentence, composed, or null when the row carries none.
    *
    * "Not sold here" for a product the shop of the read has no price for (velista
-   * `0139`, section 1), with the cheapest price elsewhere after it when there is
-   * one. One string, so a line break never falls between a price and its shop.
+   * `0139`, section 1), and "No price here" at a shop that prices nothing on this
+   * basket (velista `0153`), each with the cheapest price elsewhere after it when
+   * there is one. That amount is the mark's and never the row's price. One
+   * string, so a line break never falls between a price and its shop.
    */
   protected readonly markCaption = computed<string | null>(() => {
     const mark = this.priceMark();
@@ -987,7 +990,9 @@ export class BasketRow {
     }
 
     const missing = this._translator.t(
-      'basket.row.notSoldHere',
+      mark.kind === 'noPriceHere'
+        ? 'basket.row.noPriceHere'
+        : 'basket.row.notSoldHere',
       undefined,
       locale
     );

@@ -2255,6 +2255,40 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       expect(body['priceScopeId']).toBe('s-dia');
     });
 
+    /**
+     * Velista `0153`: at a shop that prices nothing on this basket, the sheet
+     * quotes no price and a buy names the shop and no scope. The cheapest price at
+     * another chain is not what was paid here.
+     */
+    it('quotes no price and sends no scope at a shop that prices nothing here', async () => {
+      const unpriced: BasketProduct = {
+        ...AT_SHOP,
+        atShop: {
+          priceScopeId: null,
+          price: null,
+          currency: null,
+          available: null,
+        },
+      };
+      const { fixture, store } = await render({
+        lines: [line({ productId: unpriced.id })],
+        products: new Map([[unpriced.id, unpriced]]),
+        scopes: SCOPES,
+        readAt: 'loc-merca',
+      });
+
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('.subtitle')
+          ?.textContent?.trim()
+      ).toBe('basket.sheet.toGet');
+
+      await gotOne(fixture);
+      const body = (store.settle as unknown as jest.Mock).mock.calls[0][1];
+      expect(body['supermarketLocationId']).toBe('loc-merca');
+      expect(body).not.toHaveProperty('priceScopeId');
+    });
+
     it('names the shop on "they had none" too, and no scope', async () => {
       const body = await press('loc-merca', (button) =>
         (button.textContent ?? '').includes('basket.settle.none')
