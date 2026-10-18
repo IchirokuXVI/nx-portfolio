@@ -112,13 +112,16 @@ const brand: AppBrand = {
 /**
  * Everything the app layer supplies to its libraries.
  *
- * Attached in **two** places, and both are needed. The shell never runs this
- * remote's `bootstrapApplication`, it only loads the exposed `./Routes`, so
- * providers that live solely in `appConfig` would be missing in the mode the app
- * runs in under the portfolio. `appRootRoute` therefore spreads these onto the route
- * it builds, which is what both `entry.routes.ts` and `app.routes.ts` mount, and
- * `appConfig` attaches them again for the standalone bootstrap on velista's own
- * origin (plan 0013).
+ * Attached in **one** place, the route. The shell never runs this remote's
+ * `bootstrapApplication`, it only loads the exposed `./Routes`, so providers that
+ * lived solely in `appConfig` would be missing in the mode the app runs in under the
+ * portfolio. `appRootRoute` therefore spreads these onto the route it builds, which is
+ * what both `entry.routes.ts` and `app.routes.ts` mount (plan 0013).
+ *
+ * `appConfig` does **not** attach them again (velista `0155`). It used to, for the
+ * standalone bootstrap, and that gave velista's own origin two environment injectors
+ * holding this list: every initializer below ran twice, and two `ProfileStore`s each
+ * built a `RealtimeSocket` joined to the same user room, so every frame arrived twice.
  *
  * **This injector is a child of the root one, and that is the whole reason rule D5
  * exists** (plan 0004, section 9; plan 0005). Under the shell the root injector belongs

@@ -4,6 +4,7 @@ import { RokuLocaleStore } from './roku-locale-store';
 import { ROKU_TRANSLATOR } from './roku-translator-token';
 import {
   LoaderFunction,
+  ROKU_TRANSLATOR_DEFAULT_LOCALE,
   ROKU_TRANSLATOR_DEFAULT_NAMESPACE,
   ROKU_TRANSLATOR_LOADER,
   ROKU_TRANSLATOR_LOCALES,
@@ -61,11 +62,17 @@ export function provideRokuTranslator<L extends string>({
   locales = [],
   namespaces = [],
   defaultNamespace,
+  defaultLocale,
   loader,
 }: {
   locales?: L | L[];
   namespaces?: string | string[];
   defaultNamespace?: string;
+  /**
+   * The locale the translator starts with when the browser speaks none of `locales`
+   * (plan 0006). Optional: without it the first of `locales` is used.
+   */
+  defaultLocale?: L;
   loader: LoaderFunction<L>;
 }): Provider[] {
   return [
@@ -73,6 +80,7 @@ export function provideRokuTranslator<L extends string>({
       provide: ROKU_TRANSLATOR_LOCALES,
       useValue: Array.isArray(locales) ? locales : [locales],
     },
+    { provide: ROKU_TRANSLATOR_DEFAULT_LOCALE, useValue: defaultLocale },
     {
       provide: ROKU_TRANSLATOR_NAMESPACES,
       useValue: Array.isArray(namespaces) ? namespaces : [namespaces],

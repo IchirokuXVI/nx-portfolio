@@ -1,3 +1,5 @@
+> **PR:** [#748](https://github.com/IchirokuXVI/nx-portfolio/pull/748)
+
 # 0155: a basket event reaches the open page, over one socket
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -126,3 +128,49 @@ origin holds one user socket and one basket socket, never three.
   summary with holes that other code trusts.
 - **The route owns `appProviders` in both modes.** It is what the mounted mode already
   does, so one shape serves both and the spread of plan `0013` keeps its meaning.
+
+## What the build decided
+
+- **The mapper and its shape.** `toBasketUpdated` in `mapping/mappers.ts` returns a
+  `BasketHeaderUpdate` (`basketId`, `kind`, `name`, `status`), and the event spreads it
+  under `type: 'basket.updated'`. The payload is dropped when `basketId` is not a
+  non-empty string, when `kind` or `status` is not a string, or when `name` is neither a
+  string nor null. A string `kind` or `status` that this build does not know reads as
+  `UNKNOWN`, as on every other basket read (rule D4), rather than dropping the event.
+- **An unknown id in `basket-list-store`** schedules the same coalesced quiet refresh
+  a settle schedules. Nothing is inserted from a header, because a header has no counts
+  and no date.
+- **`live-basket-store` and `purchase-store` needed no code change.** Both react to the
+  type alone, so they were dead only because the mapper dropped the frame. Their specs
+  now feed the wire payload, and `purchase-store` gained a spec where the header arrives
+  without a settle beside it.
+- **The contract spec reads the schema itself.** `wire-contract.spec.ts` imports
+  `validateSchema`, `allSchemas` and `BASKET_SCHEMA_IDS` from the contracts library
+  (a spec, so ajv never reaches the bundle) and asserts that the schema names exactly
+  the four required fields.
+- **The boot spec** is in `app-root-route.spec.ts`. It runs `bootstrapApplication` with
+  `appConfig`, a stored session and a counting `SOCKET_FACTORY`, and mocks
+  `@portfolio/velista/feature-shell` to an empty table so no page is drawn. Before the
+  change it counted two sockets.
+- **`data-access-providers.ts` did not change.** No provider had to move.
+- **Every environment initializer, and where it lives now.** All of them are in
+  `appProviders`, which only the route from `appRootRoute` carries, in both modes. Each
+  runs once, when the router builds that route's injector on the first navigation:
+  `RokuTranslatorService` (from `VELISTA_TRANSLATION_PROVIDERS`), `ConnectionRecovery`,
+  `StartupProbe`, `SessionValidation`, `ImpersonationSession`, `AppUpdates`,
+  `InstallStore`, `AppHistory.watch()`, the `NavChrome` usable effect, the
+  `CatalogAddStore` visit effect, and the tour effects (`ProfileStore`, `TourStore`).
+  Before, the standalone build ran each of them twice, once at the root and once on
+  the route. `app.config.ts` now holds `provideBrowserGlobalErrorListeners`,
+  `provideRouter(appRoutes)` and `provideServiceWorker` and nothing else.
+- **What starting on the route costs the standalone build.** The initializers now run
+  when the first navigation builds the route injector, a moment after bootstrap instead
+  of during it. That is the timing the mounted mode always had. `AppHistory` misses the
+  first `NavigationStart` and counts the first entry as the floor, which is its
+  documented safe answer. `InstallStore` still listens before `beforeinstallprompt`,
+  which Chromium fires after load. `SwUpdate` stays at the root beside
+  `provideServiceWorker`, and `AppUpdates` (root scoped) reaches it from there.
+- **The slot check** finished the trip from tab A's document with the request its finish
+  sheet sends, not through the sheet. Tab B drew "This trip is finished." 235 ms later.
+  Each tab held one user socket and one basket socket, and each received one
+  `basket.updated` frame.

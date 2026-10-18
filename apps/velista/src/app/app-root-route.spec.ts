@@ -1,8 +1,24 @@
-import { createEnvironmentInjector, EnvironmentInjector } from '@angular/core';
+import { APP_BASE_HREF } from '@angular/common';
+import {
+  ApplicationRef,
+  createEnvironmentInjector,
+  EnvironmentInjector,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { bootstrapApplication } from '@angular/platform-browser';
 import { APP_MOUNT_PATH } from '@portfolio/localization/rokutranslator-angular';
+import {
+  SOCKET_FACTORY,
+  type SocketLike,
+} from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
+import {
+  provideFakeBrowserFacade,
+  StorageKeys,
+} from '@portfolio/velista/platform';
+import { AppRoot } from './app-root';
 import { appRootRoute } from './app-root-route';
+import { appConfig } from './app.config';
 
 /**
  * D2, asserted. This is the whole reason the factory exists.
@@ -63,5 +79,103 @@ describe('appRootRoute', () => {
     expect(route.data?.['mountPath']).toBe(
       providersOf('/velista').get(APP_BASE_PATH)
     );
+  });
+});
+
+/**
+ * One environment injector for `appProviders` on velista's own origin (velista
+ * `0155`, item 4).
+ *
+ * `appConfig` used to spread the list at the root as well as on the route, so the
+ * standalone build held two copies of everything on it. Each copy ran its own
+ * initializers, each built a `ProfileStore`, and each `ProfileStore` built a
+ * `RealtimeSocket` joined to the same user room: every frame arrived twice before the
+ * basket socket made it three. Only a real bootstrap shows it, because the second
+ * copy comes from the root and the router together.
+ */
+// The pages are not what this counts, and drawing them would pull every screen
+// into the spec. An empty table still matches `/`, so the root route and its
+// injector are built exactly as they are in the browser.
+jest.mock('@portfolio/velista/feature-shell', () => ({ AppShellRoutes: [] }));
+
+describe('the standalone bootstrap', () => {
+  const host = 'app-velista-root';
+  const realFetch = globalThis.fetch;
+  let opened: string[];
+  let app: ApplicationRef | null;
+
+  function freshToken(): string {
+    const encode = (value: object) =>
+      btoa(JSON.stringify(value))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    return `${encode({ alg: 'RS256' })}.${encode({ exp, sub: 'u1' })}.sig`;
+  }
+
+  /** A socket that never comes up. Only how many were asked for matters here. */
+  function inertSocket(): SocketLike {
+    return {
+      connected: false,
+      connect: () => undefined,
+      disconnect: () => undefined,
+      on: () => undefined,
+      onAny: () => undefined,
+      timeout: () => ({ emitWithAck: () => new Promise(() => undefined) }),
+    };
+  }
+
+  beforeEach(() => {
+    opened = [];
+    app = null;
+    document.body.appendChild(document.createElement(host));
+    // No backend: every request stays in flight, so nothing answers and nothing fails.
+    globalThis.fetch = jest.fn(() => new Promise<Response>(() => undefined));
+  });
+
+  afterEach(() => {
+    app?.destroy();
+    document.querySelector(host)?.remove();
+    globalThis.fetch = realFetch;
+  });
+
+  it('opens one user socket for a signed in session', async () => {
+    const storage = new Map([
+      [
+        StorageKeys.session,
+        JSON.stringify({
+          userId: 'u1',
+          kind: 'REGISTERED',
+          username: 'Calm Harbour',
+          accessToken: freshToken(),
+          refreshToken: 'r1',
+        }),
+      ],
+    ]);
+
+    app = await bootstrapApplication(AppRoot, {
+      providers: [
+        ...appConfig.providers,
+        { provide: APP_BASE_HREF, useValue: '/' },
+        provideFakeBrowserFacade(storage),
+        {
+          provide: SOCKET_FACTORY,
+          useValue: (url: string) => {
+            opened.push(url);
+            return inertSocket();
+          },
+        },
+      ],
+    });
+
+    // The route injector is built by the first navigation, and a socket opens after
+    // an awaited token read, so both get a few turns to happen. A second socket has
+    // every chance to appear: the loop waits past one before it stops.
+    for (let turn = 0; turn < 20; turn++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(opened).toHaveLength(1);
   });
 });

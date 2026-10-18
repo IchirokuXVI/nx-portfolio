@@ -1,5 +1,10 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import {
+  allSchemas,
+  BASKET_SCHEMA_IDS,
+  validateSchema,
+} from '@portfolio/luna-shopper/contracts';
 import { APP_API_CONFIG, type MyZone } from '@portfolio/velista/models';
 import {
   ConnectionState,
@@ -13,6 +18,7 @@ import { MembershipStore } from '../memberships/membership-store';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { ZoneStore } from '../zones/zone-store';
 import { REALTIME_CLIENT } from './realtime-client';
+import { toRealtimeEvent } from './realtime-event-mapper';
 import { RealtimeSocket } from './realtime-socket';
 import { SOCKET_FACTORY, type SocketLike } from './socket-factory';
 
@@ -84,6 +90,19 @@ const MEMBER_JOINED = {
 const PRESENCE_ZONE_UPDATED = {
   zoneId: ZONE_ID,
   online: [{ userId: 'd54a5df1-31f3-4514-b75f-85ec9879bb62' }],
+};
+
+/**
+ * The header core emits when a basket is renamed or finished (`basket.service.ts`,
+ * backend `0139` section 4). Not captured off JetStream like the five above: it is
+ * checked against the contract schema below instead, which is what core validates
+ * its own emit against.
+ */
+const BASKET_UPDATED = {
+  basketId: '0b2f0c55-6a8e-4c1e-9d0a-3f5b8a2e7c11',
+  kind: 'GENERATED',
+  name: 'Saturday big shop',
+  status: 'FINISHED',
 };
 
 // ---------------------------------------------------------------- the harness
@@ -243,9 +262,63 @@ describe('the realtime wire contract, against captured payloads', () => {
     socket.send('list.created', LIST_CREATED);
     socket.send('member.joined', MEMBER_JOINED);
     socket.send('presence.zoneUpdated', PRESENCE_ZONE_UPDATED);
+    socket.send('basket.updated', BASKET_UPDATED);
 
     // The counter that would have caught a wire shape this app no longer
     // understands. Empty is the assertion: every payload above mapped.
     expect([...realtime.droppedEvents().entries()]).toEqual([]);
+  });
+});
+
+/**
+ * `basket.updated` against the schema core's emit is held to (velista `0155`).
+ *
+ * The mapper used to read this event as the whole basket view, which it has not
+ * been since backend `0139`, and every frame was dropped while every spec stayed
+ * green: they all fed it a payload written to suit the mapper. Reading the schema
+ * itself closes that gap, so a payload change in the backend fails here.
+ */
+describe('basket.updated, against the contract schema', () => {
+  const schemaId = BASKET_SCHEMA_IDS.updatedEvent;
+
+  it('is a payload the contract accepts', () => {
+    expect(validateSchema(schemaId, BASKET_UPDATED).valid).toBe(true);
+  });
+
+  it('maps a payload the contract accepts to the event', () => {
+    expect(toRealtimeEvent('basket.updated', BASKET_UPDATED)).toEqual({
+      type: 'basket.updated',
+      ...BASKET_UPDATED,
+    });
+  });
+
+  it('reads exactly the fields the contract names, all of them required', () => {
+    const schema = allSchemas.find(
+      (candidate) => candidate.$id === schemaId
+    ) as { properties?: object; required?: readonly string[] } | undefined;
+
+    const fields = ['basketId', 'kind', 'name', 'status'];
+    expect(Object.keys(schema?.properties ?? {}).sort()).toEqual(fields);
+    expect([...(schema?.required ?? [])].sort()).toEqual(fields);
+  });
+
+  it.each(['basketId', 'kind', 'name', 'status'])(
+    'drops a payload with no %s, as the contract refuses it',
+    (field) => {
+      const payload: Record<string, unknown> = { ...BASKET_UPDATED };
+      delete payload[field];
+
+      expect(validateSchema(schemaId, payload).valid).toBe(false);
+      expect(toRealtimeEvent('basket.updated', payload)).toBeNull();
+    }
+  );
+
+  it('reads a cleared name, which the contract allows', () => {
+    const payload = { ...BASKET_UPDATED, name: null };
+
+    expect(validateSchema(schemaId, payload).valid).toBe(true);
+    expect(toRealtimeEvent('basket.updated', payload)).toMatchObject({
+      name: null,
+    });
   });
 });

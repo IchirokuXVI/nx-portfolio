@@ -33,7 +33,9 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type BasketKind,
   type BasketRun,
+  type BasketStatus,
   type BasketSummary,
   type CatalogItem,
   type CatalogScope,
@@ -1660,4 +1662,52 @@ export function toBasketFromView(raw: unknown): BasketSummary | null {
   }).length;
 
   return { ...summary, lineCount: lines.length, settledLineCount: settled };
+}
+
+/**
+ * What a `basket.updated` frame says moved (velista `0155`): the header of one
+ * basket, and nothing that a summary counts.
+ *
+ * Its own shape rather than a `BasketSummary` with holes. A summary carries counts and
+ * a date that other code trusts, and the event carries neither.
+ */
+export interface BasketHeaderUpdate {
+  readonly basketId: string;
+  readonly kind: BasketKind;
+  readonly name: string | null;
+  readonly status: BasketStatus;
+}
+
+/**
+ * From the payload of `basket.updated` (backend `0139`, section 4), which is
+ * `{ basketId, kind, name, status }` and not the basket view `basket.created` sends.
+ *
+ * All four are required on the wire, so a payload missing one is dropped. `name` has
+ * to be present as a string or null, because an absent name and a basket with its
+ * name cleared would otherwise read the same. An unknown kind or status reads as the
+ * fallback, as it does on every other basket read.
+ */
+export function toBasketUpdated(raw: unknown): BasketHeaderUpdate | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const basketId = str(raw['basketId']);
+  const name = raw['name'];
+  if (
+    basketId === null ||
+    basketId === '' ||
+    typeof raw['kind'] !== 'string' ||
+    typeof raw['status'] !== 'string' ||
+    (name !== null && typeof name !== 'string')
+  ) {
+    return null;
+  }
+
+  return {
+    basketId,
+    kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
+    name,
+    status: oneOf(raw['status'], BASKET_STATUSES, BASKET_STATUS_FALLBACK),
+  };
 }

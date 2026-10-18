@@ -6,6 +6,7 @@ import {
 } from '../mapping/basket-mappers';
 import {
   toBasketFromView,
+  toBasketUpdated,
   toComment,
   toLine,
   toLineSettlement,
@@ -297,14 +298,21 @@ export function toRealtimeEvent(
       return profiles.length === 0 ? null : { type: name, profiles };
     }
 
-    case 'basket.created':
-    case 'basket.updated': {
+    case 'basket.created': {
       // The payload is the whole basket and only its summary is kept. A body this
-      // build cannot read is dropped and counted rather than applied, which for these
-      // two means the card keeps whatever the last read said instead of losing its
-      // counts to an unreadable event.
+      // build cannot read is dropped and counted rather than applied, which means the
+      // card keeps whatever the last read said instead of losing its counts to an
+      // unreadable event.
       const list = toBasketFromView(payload);
       return list === null ? null : { type: name, list };
+    }
+
+    case 'basket.updated': {
+      // The header and nothing else, `{ basketId, kind, name, status }` (velista
+      // `0155`). It is not the view `basket.created` sends, and reading it as one
+      // dropped every frame.
+      const header = toBasketUpdated(payload);
+      return header === null ? null : { type: name, ...header };
     }
 
     case 'basket.linesChanged': {

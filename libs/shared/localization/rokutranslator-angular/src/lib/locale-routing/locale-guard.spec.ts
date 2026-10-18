@@ -4,7 +4,7 @@ import { provideRouter, Route, Router } from '@angular/router';
 import { provideRokuTranslator } from '../provide-rokutranslator';
 import { ROKU_TRANSLATOR } from '../roku-translator-token';
 import { writeAppLocale } from './app-locale-storage';
-import { localeGuard } from './locale-guard';
+import { localeGuard, rerunOnLocaleSegmentChange } from './locale-guard';
 
 @Component({ selector: 'lib-page', template: 'page' })
 class Page {}
@@ -103,6 +103,45 @@ describe('localeGuard', () => {
     const { router } = await navigate('/velista/home?tab=lists#top');
 
     expect(router.url).toBe('/velista/es/home?tab=lists#top');
+  });
+
+  /**
+   * Plan 0006, the landing defect: a history move between two locale URLs changes
+   * only the `:locale` child's param, so the guard on the parent never ran and the
+   * old language stayed under the new URL.
+   */
+  it('applies the locale of the URL on a move that changes only the locale segment', async () => {
+    const guard = jest.fn(localeGuard);
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            ...routes('/velista', 'velista')[0],
+            canActivate: [guard],
+            runGuardsAndResolvers: rerunOnLocaleSegmentChange,
+          },
+        ]),
+        provideRokuTranslator({
+          locales: ['en', 'es'],
+          defaultNamespace: 'ns-guard',
+          loader: () => Promise.resolve({ greeting: 'hi' }),
+        }),
+      ],
+    });
+    const router = TestBed.inject(Router);
+    const translator = TestBed.inject(ROKU_TRANSLATOR);
+
+    await router.navigateByUrl('/velista/en/home');
+    await router.navigateByUrl('/velista/es/home');
+    expect(translator.getLocale()).toBe('es');
+
+    await router.navigateByUrl('/velista/en/home');
+    expect(translator.getLocale()).toBe('en');
+    expect(guard).toHaveBeenCalledTimes(3);
+
+    // A change below the locale segment does not re-run it.
+    await router.navigateByUrl('/velista/en');
+    expect(guard).toHaveBeenCalledTimes(3);
   });
 
   it('persists a locale taken from the URL, so it survives the next visit', async () => {

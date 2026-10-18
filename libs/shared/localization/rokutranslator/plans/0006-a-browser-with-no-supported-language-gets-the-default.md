@@ -1,3 +1,5 @@
+> **PR:** [#745](https://github.com/IchirokuXVI/nx-portfolio/pull/745)
+
 # 0006: a browser with no supported language gets the default, and the page says its language
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -142,3 +144,24 @@ on `<html lang>`, and a history move between two locale URLs applies the locale 
   change passes through `publish`, so the three other remotes get the fix for free.
 - **A segment comparison, not `'always'`.** `'always'` re-runs the guard on every child
   param change, which includes every list and line id change in velista.
+
+## What the build decided
+
+- **`changeLocale` did not return early, so the build made it.** The brief says the re-run
+  costs nothing because `changeLocale` returns early for an unchanged locale. On `d73a36b8`
+  it did not: it always called `changeLanguage` and announced. With the re-run, a language
+  switch would have announced twice (the switcher, then the guard) and refetched every
+  locale keyed pipeline twice. It now returns early for the locale it last **announced**,
+  not for `config.locale`, because `init` sets that one without announcing it, and the
+  first change after init must still reach a store that read its initial value early.
+- **One shared `rerunOnLocaleSegmentChange`, next to the guard.** It lives in
+  `locale-guard.ts` and is exported from `rokutranslator-angular`, so the four route tables
+  name one function rather than four copies. That file and the barrel are outside the
+  Scope list. The function compares the first URL segment below the guarded route, which is
+  the locale segment whichever child matched, the `:locale` route or the `**` one.
+- **`localized-title.ts` and the README of this library** carry the rule (target state 5),
+  so both were edited although Scope does not list them.
+- **The default is formatted like any locale** (`formatLocale`) before `init` uses it.
+- **Browser check** on velista slot 1 against backend slot 4, Chromium with
+  `--lang=fr-FR`: `/` became `/en` in English, `/es` drew Spanish, `<html lang>` followed
+  both, and browser back and forward after the bar's switch re-applied the locale of the URL.

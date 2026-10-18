@@ -1,7 +1,9 @@
 import type {
   BasketEntryPatch,
+  BasketKind,
   BasketParticipant,
   BasketPresenceEntry,
+  BasketStatus,
   BasketSummary,
   Comment,
   Line,
@@ -251,20 +253,37 @@ export type RealtimeEvent =
     }
   | {
       /**
-       * A generated shopping list of the caller's was composed, or one of them moved
-       * (backend `0050` section 9), on their own sessions and on nothing else.
+       * A generated shopping list of the caller's was composed (backend `0050`
+       * section 9), on their own sessions and on nothing else.
        *
        * A basket is private, so the owner's room is the only audience it can have: not
        * the zones it drew from, not the admins of those zones, nobody. What it buys is
        * the one thing a private resource still needs from realtime, which is that the
        * same basket stays in sync between the phone in the shop and the laptop at home.
        *
-       * The payload is the **whole** basket, lines included, and this app keeps the
-       * summary out of it: the dashboard card and the history draw a name, a date and
-       * two counts, and the screen that wants the lines fetches them itself.
+       * The payload is the **whole** basket, and this app keeps the summary out of it:
+       * the dashboard card and the history draw a name, a date and two counts, and the
+       * screen that wants the rows fetches them itself.
        */
-      readonly type: 'basket.created' | 'basket.updated';
+      readonly type: 'basket.created';
       readonly list: BasketSummary;
+    }
+  | {
+      /**
+       * The header of a basket moved: its name or its status (backend `0139`,
+       * section 4). A finish is the one that matters most, because a second tab on
+       * the basket has to stop offering ticks.
+       *
+       * **Not the basket.** The payload is `{ basketId, kind, name, status }`, the
+       * four fields a guest already reads on the basket itself, and nothing that a
+       * summary counts. It shared a type with `basket.created` until velista `0155`,
+       * which made the mapper ask for the whole view and drop every one of these.
+       */
+      readonly type: 'basket.updated';
+      readonly basketId: string;
+      readonly kind: BasketKind;
+      readonly name: string | null;
+      readonly status: BasketStatus;
     }
   | {
       /**

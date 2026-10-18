@@ -101,6 +101,16 @@ interface MergeQuestion {
 type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
 
 /**
+ * A failure whose sentence was decided when it happened (velista `0151`), so a
+ * later read that clears the store's error cannot turn it into another one.
+ */
+interface FrozenFailure {
+  readonly key: string;
+  readonly count: number;
+  readonly correlationId: string | null;
+}
+
+/**
  * One line of the basket: its product, what each household asked for and got, and
  * the ways to close it without buying (plan 0044, section 4.2).
  *
@@ -238,7 +248,9 @@ export class SettleSheet {
    * things here, so the copy is keyed on the code **and** what was being attempted,
    * and this is the second half of that key.
    */
-  private readonly _failedOp = signal<BasketOperation | null>(null);
+  private readonly _failedOp = signal<BasketOperation | FrozenFailure | null>(
+    null
+  );
   private readonly _result = signal<BasketRowResult | null>(null);
 
   private readonly _history = signal<readonly SettlementRowVm[]>([]);
@@ -266,15 +278,32 @@ export class SettleSheet {
    */
   protected readonly errorKey = computed<string | null>(() => {
     const operation = this._failedOp();
-    return operation === null
-      ? null
+    if (operation === null) {
+      return null;
+    }
+    return typeof operation === 'object'
+      ? operation.key
       : basketErrorKey(this._store.error(), operation);
   });
 
+  /** What the sentence interpolates: the count a frozen failure took. */
+  protected readonly errorArgs = computed<{ count?: number }>(() => {
+    const operation = this._failedOp();
+    return typeof operation === 'object' && operation !== null
+      ? { count: operation.count }
+      : {};
+  });
+
   /** The support reference, drawn beside a failure that has one. */
-  protected readonly correlationId = computed<string | null>(() =>
-    this._failedOp() === null ? null : correlationIdOf(this._store.error())
-  );
+  protected readonly correlationId = computed<string | null>(() => {
+    const operation = this._failedOp();
+    if (operation === null) {
+      return null;
+    }
+    return typeof operation === 'object'
+      ? operation.correlationId
+      : correlationIdOf(this._store.error());
+  });
   protected readonly history = this._history.asReadonly();
   protected readonly historyState = this._historyState.asReadonly();
   protected readonly historyHasMore = computed(
@@ -1196,7 +1225,18 @@ export class SettleSheet {
       // the operation as well as the code: a refused demand is the owner's
       // standing having moved between the read and the tap, which is a different
       // fact from a refused settle.
-      this._failedOp.set('basket.demand');
+      //
+      // Taken now, with the number the store's re-read brought (velista
+      // `0151`): the next quiet read clears the store's error, and a live key
+      // would then fall back to "That did not save".
+      const error = this._store.error();
+      const row = this._store.rowFor(this._rowKey);
+      const line = row?.entries.find((entry) => entry.lineId === change.lineId);
+      this._failedOp.set({
+        key: basketErrorKey(error, 'basket.demand'),
+        count: line?.asked ?? row?.asked ?? change.to,
+        correlationId: correlationIdOf(error),
+      });
       return;
     }
 

@@ -267,11 +267,10 @@ describe('PurchaseStore (velista 0095)', () => {
 
       realtime.emit('line.settled', settled());
       realtime.emit('basket.updated', {
-        id: 'b',
+        basketId: 'b',
+        kind: 'GENERATED',
         name: null,
-        status: 'OPEN',
-        generatedAt: '2026-09-20T10:00:00.000Z',
-        lines: [],
+        status: 'FINISHED',
       });
 
       jest.advanceTimersByTime(PURCHASES_REFETCH_QUIET_MS - 1);
@@ -286,6 +285,27 @@ describe('PurchaseStore (velista 0095)', () => {
       });
       await flush();
       expect(store.entries().map((item) => item.id)).toEqual(['s-2', 's-1']);
+    });
+
+    // A finish on its own, as core emits it (velista `0155`). Above, the settle in
+    // the same burst would refetch even if this frame were dropped.
+    it('refetches for a basket header on its own', async () => {
+      jest.useFakeTimers();
+      const { store, fake, realtime } = await loaded({
+        items: [entry('s-1')],
+        nextCursor: null,
+      });
+      store.attach();
+
+      realtime.emit('basket.updated', {
+        basketId: 'b',
+        kind: 'GENERATED',
+        name: null,
+        status: 'FINISHED',
+      });
+
+      jest.advanceTimersByTime(PURCHASES_REFETCH_QUIET_MS);
+      expect(fake.heads).toHaveLength(2);
     });
 
     it('drops an entry the fresh first page no longer names', async () => {
