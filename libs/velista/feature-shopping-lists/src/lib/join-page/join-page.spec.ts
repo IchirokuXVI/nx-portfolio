@@ -5,7 +5,12 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BASKET_SERVICE, SessionStore } from '@portfolio/velista/data-access';
+import {
+  BASKET_SERVICE,
+  GatewayError,
+  NetworkError,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import type { BasketLinkPreview } from '@portfolio/velista/models';
 import {
   InstallStore,
@@ -26,24 +31,37 @@ import { JoinPage } from './join-page';
  * answer identically on purpose (velista `0064`, section 3).
  */
 
-const SECRET = 'abc123';
+/** A whole secret: 43 base64url characters, the shape the backend mints. */
+const SECRET = '7-qcthEEDLArtXr-l6OxWudKuHDInYqD53198Z6ZcBE';
 
 async function render(
   options: {
     readonly preview?: BasketLinkPreview;
     readonly signedIn?: boolean;
+    /** A preview that never answers, the way a lost network or a 503 does. */
+    readonly previewFails?: boolean;
+    /** What a join is refused with, when it is. */
+    readonly joinFails?: unknown;
+    readonly secret?: string;
   } = {}
 ) {
   TestBed.resetTestingModule();
 
-  const join = jest.fn().mockResolvedValue({ basketId: 'b1' });
-  const previewLink = jest
-    .fn()
-    .mockResolvedValue(
-      options.preview ?? { joinable: true, name: 'Saturday shop' }
-    );
+  const join =
+    options.joinFails === undefined
+      ? jest.fn().mockResolvedValue({ basketId: 'b1' })
+      : jest.fn().mockRejectedValue(options.joinFails);
+  const previewLink = options.previewFails
+    ? jest.fn().mockRejectedValue(new NetworkError('spec', 'basket.preview'))
+    : jest
+        .fn()
+        .mockResolvedValue(
+          options.preview ?? { joinable: true, name: 'Saturday shop' }
+        );
+  const navigate = jest.fn().mockResolvedValue(true);
+  const navigateByUrl = jest.fn().mockResolvedValue(true);
 
-  const paramMap = convertToParamMap({ secret: SECRET });
+  const paramMap = convertToParamMap({ secret: options.secret ?? SECRET });
 
   await TestBed.configureTestingModule({
     imports: [JoinPage, RokuTranslatorTestingModule.forTesting()],
@@ -61,10 +79,7 @@ async function render(
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: Router,
-        useValue: {
-          navigate: jest.fn().mockResolvedValue(true),
-          navigateByUrl: jest.fn().mockResolvedValue(true),
-        },
+        useValue: { navigate, navigateByUrl },
       },
       {
         provide: ActivatedRoute,
@@ -81,8 +96,29 @@ async function render(
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  return Object.assign(fixture, { join, previewLink });
+  return Object.assign(fixture, {
+    join,
+    previewLink,
+    navigate,
+    navigateByUrl,
+  });
 }
+
+/** Let the promises a tap started settle, then draw. */
+async function settle(fixture: Awaited<ReturnType<typeof render>>) {
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
+
+const buttons = (fixture: Awaited<ReturnType<typeof render>>) =>
+  [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].map(
+    (button) => button.textContent?.trim()
+  );
+
+const press = (fixture: Awaited<ReturnType<typeof render>>, key: string) =>
+  [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')]
+    .find((button) => button.textContent?.trim() === key)
+    ?.click();
 
 const html = (fixture: Awaited<ReturnType<typeof render>>) =>
   (fixture.nativeElement as HTMLElement).innerHTML;
@@ -138,8 +174,8 @@ describe('JoinPage: a dead link still says nothing', () => {
     for (const preview of causes.values()) {
       const fixture = await render({ preview });
 
-      expect(text(fixture, '.dead-title')).toBe('basket.join.dead');
-      expect(text(fixture, '.dead-body')).toBe('basket.join.deadBody');
+      expect(text(fixture, '.dead .card-title')).toBe('basket.join.dead');
+      expect(text(fixture, '.dead .card-body')).toBe('basket.join.deadBody');
       // Not one word about expiry, on the one screen that must not say it.
       expect(html(fixture)).not.toContain('basket.join.forHours');
       expect(html(fixture)).not.toContain('basket.share.ended');
@@ -168,5 +204,134 @@ describe('JoinPage: somebody already signed in', () => {
     expect(fixture.join).toHaveBeenCalledWith(SECRET, '');
     expect(text(fixture, '.for-hours')).toBeNull();
     expect(text(fixture, '.offer')).toBeNull();
+  });
+
+  it('is told they were taken off the list, and never offered the guest path', async () => {
+    // F6.4: a removed member who opens a new link (velista 0154, target 2).
+    const fixture = await render({
+      signedIn: true,
+      joinFails: new GatewayError({
+        code: 'not_a_participant',
+        status: 401,
+        correlationId: 'spec',
+      }),
+    });
+    await settle(fixture);
+
+    expect(text(fixture, '.card-title')).toBe('basket.join.removed');
+    expect(text(fixture, '.card-body')).toBe('basket.join.removedBody');
+    expect(buttons(fixture)).toEqual(['basket.join.home']);
+
+    press(fixture, 'basket.join.home');
+    expect(fixture.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
+  });
+
+  it('sees no guest offer when a join fails for no named reason', async () => {
+    const fixture = await render({
+      signedIn: true,
+      joinFails: new NetworkError('spec', 'basket.join'),
+    });
+    await settle(fixture);
+
+    expect(text(fixture, '.offer')).toBeNull();
+    expect(html(fixture)).not.toContain('basket.join.continue');
+    expect(html(fixture)).not.toContain('basket.join.email');
+    expect(text(fixture, '[role="alert"]')).toBe('basket.join.failed');
+    expect(buttons(fixture)).toEqual(['basket.join.retry']);
+
+    press(fixture, 'basket.join.retry');
+    await settle(fixture);
+    expect(fixture.join).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads a 404 on the join as the dead link', async () => {
+    const fixture = await render({
+      signedIn: true,
+      joinFails: new GatewayError({
+        code: 'not_found',
+        status: 404,
+        correlationId: 'spec',
+      }),
+    });
+    await settle(fixture);
+
+    expect(text(fixture, '.dead .card-title')).toBe('basket.join.dead');
+  });
+});
+
+describe('JoinPage: somebody signed out', () => {
+  it('sees the guest offer and sign in, and no register and no Google', async () => {
+    // Rule C2 in spirit (velista 0154, target 3): the guest path is the way in.
+    const fixture = await render();
+
+    expect(buttons(fixture)).toEqual([
+      'basket.join.continue',
+      'basket.join.email',
+    ]);
+    expect(html(fixture)).not.toContain('basket.join.google');
+  });
+
+  it('signs in and comes back to this link', async () => {
+    // F6.6 (velista 0154, target 5). The sign in page navigates to returnUrl,
+    // and this page, signed in, joins without a prompt (asserted above).
+    const fixture = await render();
+
+    press(fixture, 'basket.join.email');
+
+    expect(fixture.navigate).toHaveBeenCalledWith(['/velista/en/auth/login'], {
+      queryParams: { returnUrl: `/velista/en/s/${SECRET}` },
+    });
+  });
+
+  it('keeps the offer, with the alert, when a guest join fails', async () => {
+    const fixture = await render({
+      joinFails: new NetworkError('spec', 'basket.join'),
+    });
+
+    press(fixture, 'basket.join.continue');
+    await settle(fixture);
+
+    expect(text(fixture, '.offer .invited')).toBe('basket.join.invited');
+    expect(text(fixture, '[role="alert"]')).toBe('basket.join.failed');
+  });
+});
+
+describe('JoinPage: every state has a way on', () => {
+  it('says the link could not be checked, and tries again', async () => {
+    // F6.5: a preview that rejects used to leave the spinner up for good.
+    const fixture = await render({ previewFails: true });
+
+    expect(text(fixture, '.card-title')).toBe('basket.join.unreachable');
+    expect(buttons(fixture)).toEqual(['basket.join.retry']);
+
+    fixture.previewLink.mockResolvedValue({ joinable: true, name: 'Saturday' });
+    press(fixture, 'basket.join.retry');
+    await settle(fixture);
+
+    expect(fixture.previewLink).toHaveBeenCalledTimes(2);
+    expect(text(fixture, '.offer .invited')).toBe('basket.join.invited');
+  });
+
+  it('offers one action on a dead link, which opens the app', async () => {
+    // F6.9. Signed out, the app is the front door.
+    const fixture = await render({ preview: { joinable: false } });
+
+    expect(buttons(fixture)).toEqual(['basket.join.openApp']);
+
+    press(fixture, 'basket.join.openApp');
+    expect(fixture.navigateByUrl).toHaveBeenCalledWith('/velista/en');
+  });
+
+  it('says a secret of the wrong shape is not complete', async () => {
+    const fixture = await render({
+      preview: { joinable: false },
+      secret: 'PjLG6E1bUXxEcS5l8ve8',
+    });
+
+    expect(text(fixture, '.dead .card-title')).toBe('basket.join.incomplete');
+    expect(text(fixture, '.dead .card-body')).toBe(
+      'basket.join.incompleteBody'
+    );
+    expect(buttons(fixture)).toEqual(['basket.join.openApp']);
   });
 });

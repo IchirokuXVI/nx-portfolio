@@ -22,37 +22,91 @@
       </div>
     }
 
+    <!--
+      Every state a reader cannot use is one card: a sentence, the reason, and
+      one action (velista 0154). The route draws no nav here, so the action is
+      the way on.
+    -->
+    @case ('unreachable') {
+      <section class="card">
+        <h1 class="card-title">{{ 'basket.join.unreachable' | rokuT }}</h1>
+        <p class="card-body">{{ 'basket.join.unreachableBody' | rokuT }}</p>
+        <button (click)="retryCheck()" class="primary" type="button">
+          {{ 'basket.join.retry' | rokuT }}
+        </button>
+      </section>
+    }
+
     @case ('dead') {
       <!--
-        One sentence for four causes, and it offers nothing to try. A revoked
-        link, an expired one, a finished basket and a link that never existed
-        answer identically on purpose (backend 0051, section 3.1), so a screen
-        that named which had happened would be guessing and would leak.
+        One sentence for four causes. A revoked link, an expired one, a finished
+        basket and a link that never existed answer identically on purpose
+        (backend 0051, section 3.1), so a screen that named which had happened
+        would be guessing and would leak. A secret of the wrong shape is the one
+        other sentence, and it is decided here, not by the server.
       -->
-      <section class="dead">
-        <h1 class="dead-title">{{ 'basket.join.dead' | rokuT }}</h1>
-        <p class="dead-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+      <section class="card dead">
+        @if (incomplete) {
+          <h1 class="card-title">{{ 'basket.join.incomplete' | rokuT }}</h1>
+          <p class="card-body">{{ 'basket.join.incompleteBody' | rokuT }}</p>
+        } @else {
+          <h1 class="card-title">{{ 'basket.join.dead' | rokuT }}</h1>
+          <p class="card-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+        }
+        <button (click)="goHome()" class="primary" type="button">
+          {{ 'basket.join.openApp' | rokuT }}
+        </button>
+      </section>
+    }
+
+    @case ('removed') {
+      <!--
+        A signed in reader the basket refused by name. The link cannot undo a
+        removal (backend 0140, section 5), so the guest offer would only fail
+        again. The person to ask is the one who shared it.
+      -->
+      <section class="card">
+        <h1 class="card-title">{{ 'basket.join.removed' | rokuT }}</h1>
+        <p class="card-body">{{ 'basket.join.removedBody' | rokuT }}</p>
+        <button (click)="goHome()" class="primary" type="button">
+          {{ 'basket.join.home' | rokuT }}
+        </button>
       </section>
     }
 
     @default {
-      <section class="offer">
-        <h1 class="invited">{{ 'basket.join.invited' | rokuT }}</h1>
-
+      @if (signedIn()) {
         <!--
+          A signed in reader is joined as themselves and never sees the guest
+          offer. Only a join that failed for no named reason reaches here, and it
+          says so with the one thing worth doing.
+        -->
+        <section class="card">
+          <p aria-live="assertive" class="card-title failed" role="alert">
+            {{ 'basket.join.failed' | rokuT }}
+          </p>
+          <button (click)="join()" class="primary" type="button">
+            {{ 'basket.join.retry' | rokuT }}
+          </button>
+        </section>
+      } @else {
+        <section class="offer">
+          <h1 class="invited">{{ 'basket.join.invited' | rokuT }}</h1>
+
+          <!--
           The whole of what a link discloses before anybody joins: the name, and
           how many people are on it. No lines, no groups, no members.
         -->
-        <p class="list-name">
-          {{ preview().name || ('basket.unnamed' | rokuT) }}
-        </p>
-        @if (peopleCount() > 0) {
-          <p class="people">
-            {{ 'basket.join.people' | rokuT: { count: peopleCount() } }}
+          <p class="list-name">
+            {{ preview().name || ('basket.unnamed' | rokuT) }}
           </p>
-        }
+          @if (peopleCount() > 0) {
+            <p class="people">
+              {{ 'basket.join.people' | rokuT: { count: peopleCount() } }}
+            </p>
+          }
 
-        <!--
+          <!--
           How long they get, said before they decide (velista 0094, section 4).
           One muted line, and it mentions no account, no name to ask and no
           register: rule C2 is that a guest is never shown register, and
@@ -63,73 +117,76 @@
           because this is the one screen that says it before there is a
           participant with an `expiresAt` to read.
         -->
-        <p class="for-hours">
-          {{ 'basket.join.forHours' | rokuT: { hours: visitHours } }}
-        </p>
+          <p class="for-hours">
+            {{ 'basket.join.forHours' | rokuT: { hours: visitHours } }}
+          </p>
 
-        <!--
+          <!--
           Optional, and it looks it: the word is on the field rather than in a
           hint somebody has to read to discover the field can be skipped.
         -->
-        <label class="name-label" for="join-name">
-          <span class="name-text">{{ 'basket.join.nameLabel' | rokuT }}</span>
-          <span class="name-optional">{{
-            'basket.join.optional' | rokuT
-          }}</span>
-        </label>
-        <input
-          (input)="name.set($any($event.target).value)"
-          [value]="name()"
-          autocomplete="nickname"
-          class="name-field"
-          id="join-name"
-          maxlength="40"
-          type="text"
-        />
-        <p class="name-hint" id="join-name-hint">
-          {{ 'basket.join.nameHint' | rokuT }}
-        </p>
+          <label class="name-label" for="join-name">
+            <span class="name-text">{{ 'basket.join.nameLabel' | rokuT }}</span>
+            <span class="name-optional">{{
+              'basket.join.optional' | rokuT
+            }}</span>
+          </label>
+          <input
+            (input)="name.set($any($event.target).value)"
+            [value]="name()"
+            autocomplete="nickname"
+            class="name-field"
+            id="join-name"
+            maxlength="40"
+            type="text"
+          />
+          <p class="name-hint" id="join-name-hint">
+            {{ 'basket.join.nameHint' | rokuT }}
+          </p>
 
-        <!--
+          <!--
           The primary action of the page, directly under the field and reachable
-          with a thumb (section 7). Register is offered below it and is never a
+          with a thumb (section 7). Sign in is offered below it and is never a
           step: a join screen that reads as a signup wall turns a favour into a
           chore, in a shop, on somebody else's phone.
         -->
-        <button (click)="join()" class="primary" type="button">
-          {{ 'basket.join.continue' | rokuT }}
-        </button>
-
-        @if (state() === 'failed') {
-          <p aria-live="assertive" class="failed" role="alert">
-            {{ 'basket.join.failed' | rokuT }}
-          </p>
-        }
-
-        <p class="or">{{ 'basket.join.or' | rokuT }}</p>
-        <div class="secondary-actions">
-          <button (click)="register()" class="secondary" type="button">
-            {{ 'basket.join.google' | rokuT }}
+          <button (click)="join()" class="primary" type="button">
+            {{ 'basket.join.continue' | rokuT }}
           </button>
-          <button (click)="signIn()" class="secondary" type="button">
-            {{ 'basket.join.email' | rokuT }}
-          </button>
-        </div>
 
-        <!--
-          Lowest of the four actions and never a condition of anything (section
+          @if (state() === 'failed') {
+            <p aria-live="assertive" class="failed" role="alert">
+              {{ 'basket.join.failed' | rokuT }}
+            </p>
+          }
+
+          <!--
+          Sign in, which comes back to this link (velista 0154). No register and
+          no Google: the guest path is the way in, and an account can be made
+          later from the account page, where upgrade keeps the memberships.
+        -->
+          <p class="or">{{ 'basket.join.or' | rokuT }}</p>
+          <div class="secondary-actions">
+            <button (click)="signIn()" class="secondary" type="button">
+              {{ 'basket.join.email' | rokuT }}
+            </button>
+          </div>
+
+          <!--
+          Lowest of the three actions and never a condition of anything (section
           3.1). Drawn only where the browser can actually honour it, so nobody is
           offered a button that does nothing.
         -->
-        @if (canInstall()) {
-          <div class="install">
-            <p class="install-copy">{{ 'basket.join.install' | rokuT }}</p>
-            <button (click)="install()" class="install-action" type="button">
-              {{ 'basket.join.installAction' | rokuT }}
-            </button>
-          </div>
-        }
-      </section>
+          @if (canInstall()) {
+            <div class="install">
+              <p class="install-copy">{{ 'basket.join.install' | rokuT }}</p>
+              <button (click)="install()" class="install-action" type="button">
+                {{ 'basket.join.installAction' | rokuT }}
+              </button>
+            </div>
+          }
+        </section>
+      }
     }
   }
 </main>

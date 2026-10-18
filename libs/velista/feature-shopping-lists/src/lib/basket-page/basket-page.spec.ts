@@ -209,6 +209,8 @@ interface Options {
   readonly me?: BasketParticipant | null;
   /** Their account name, which is the one name the basket itself never carries. */
   readonly username?: string | null;
+  /** Whether the reader is signed in. Most readers here are. */
+  readonly signedIn?: boolean;
   /** The rows on the basket. Empty draws the empty state. */
   readonly lines?: readonly BasketRow[];
   /** Whether the trip is over (plan 0057). A finished basket draws no controls. */
@@ -599,7 +601,10 @@ async function render(options: Options = {}): Promise<{
       },
       {
         provide: SessionStore,
-        useValue: { username: signal(options.username ?? null) },
+        useValue: {
+          username: signal(options.username ?? null),
+          isAuthenticated: signal(options.signedIn ?? true),
+        },
       },
       {
         provide: BasketStore,
@@ -2789,6 +2794,125 @@ describe('a visit that ends', () => {
       expect(title(fixture)).toBe('basket.revoked.title');
       expect(body(fixture)).toBe('basket.revoked.body');
     });
+
+    it('offers one way on, home', async () => {
+      // F6.8: the ended page had no control at all (velista 0154).
+      const fixture = await ended('REMOVED', participant(registered()));
+
+      const actions = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.notice button'
+        ),
+      ];
+      expect(actions.map((b) => b.textContent?.trim())).toEqual([
+        'basket.goHome',
+      ]);
+      (actions[0] as HTMLButtonElement).click();
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+        '/en/home'
+      );
+    });
+
+    it('draws no visit notice and no second banner over it', async () => {
+      // F6.7: "you are on this list until" stayed above "no longer on this
+      // list", and the socket's latch drew the sentence a second time.
+      const me = visitor(guest('p-9', 1), 240);
+      const rendered = await render({
+        me,
+        participants: [namedOwner(), me],
+        accessEnded: 'REMOVED',
+        revoked: true,
+      });
+      rendered.store.state.set('revoked');
+      rendered.fixture.detectChanges();
+
+      expect(query(rendered.fixture, 'lib-visit-notice')).toBeNull();
+      expect(query(rendered.fixture, '.stale')).toBeNull();
+      expect(title(rendered.fixture)).toBe('basket.revoked.title');
+    });
+
+    it('draws no visit notice when only the socket has said so', async () => {
+      // The removal's event latches `revoked` while the read is still `ready`,
+      // and the page draws "no longer on this list" from that alone.
+      const me = visitor(guest('p-9', 1), 240);
+      const { fixture, store } = await render({
+        me,
+        participants: [namedOwner(), me],
+      });
+      expect(query(fixture, 'lib-visit-notice')).not.toBeNull();
+
+      store.revoked.set(true);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-visit-notice')).toBeNull();
+    });
+  });
+
+  it('draws no visit notice on a finished basket', async () => {
+    const me = visitor(guest('p-9', 1), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+      finished: true,
+    });
+
+    expect(query(fixture, 'lib-visit-notice')).toBeNull();
+  });
+});
+
+/**
+ * A basket URL opened by somebody who is not on it (velista `0154`, target 6).
+ *
+ * F5.4: both readers were told "You are no longer on this list" with no way on.
+ */
+describe('a basket the reader cannot open', () => {
+  const titleOf = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, '.notice .notice-title')?.textContent?.trim() ?? null;
+
+  const opened = async (
+    state: 'needsSignIn' | 'notYours',
+    signedIn: boolean
+  ) => {
+    const rendered = await render({ signedIn });
+    rendered.store.state.set(state);
+    rendered.fixture.detectChanges();
+    return rendered.fixture;
+  };
+
+  const press = (fixture: ComponentFixture<BasketPage>) => {
+    const action = query(fixture, '.notice button') as HTMLButtonElement;
+    action.click();
+    return action.textContent?.trim();
+  };
+
+  it('asks a signed out reader to sign in, and to come back here', async () => {
+    const fixture = await opened('needsSignIn', false);
+
+    expect(titleOf(fixture)).toBe('basket.needsSignIn.title');
+    expect(press(fixture)).toBe('basket.needsSignIn.action');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/en/auth/login'],
+      { queryParams: { returnUrl: '/en/shopping-lists/basket-saturday' } }
+    );
+  });
+
+  it('tells a signed in stranger it is not theirs, and goes home', async () => {
+    const fixture = await opened('notYours', true);
+
+    expect(titleOf(fixture)).toBe('basket.notYours.title');
+    expect(press(fixture)).toBe('basket.goHome');
+    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+      '/en/home'
+    );
+  });
+
+  it('draws no "not updating" banner over it', async () => {
+    // A reader with no place on the basket has no socket either.
+    const rendered = await render({ signedIn: false, live: false });
+    rendered.store.state.set('needsSignIn');
+    rendered.fixture.detectChanges();
+
+    expect(query(rendered.fixture, '.stale')).toBeNull();
   });
 });
 

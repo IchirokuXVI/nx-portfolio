@@ -167,11 +167,29 @@ describe('selectGroupState', () => {
       // The heuristic is wrong for four people who genuinely have no lists, and this
       // records that it is wrong in the harmless direction on purpose.
       const state = select({
-        zone: zone({ counts: { ...zone().counts, memberCount: 4 } }),
+        zone: zone({
+          myRole: 'MEMBER',
+          counts: { ...zone().counts, memberCount: 4 },
+        }),
       });
 
       expect(state).toMatchObject({ reason: 'no-access' });
     });
+
+    it.each(['OWNER', 'ADMIN'] as const)(
+      'tells %s the group has no lists, whatever the member count (plan 0158)',
+      (myRole) => {
+        // Staff read every list in the group, so zero readable is zero lists.
+        const state = select({
+          zone: zone({
+            myRole,
+            counts: { ...zone().counts, memberCount: 2 },
+          }),
+        });
+
+        expect(state).toMatchObject({ kind: 'empty', reason: 'no-lists' });
+      }
+    );
   });
 
   describe('loaded', () => {

@@ -181,7 +181,7 @@ export class ListStore {
     switch (event.type) {
       case 'list.created':
       case 'list.updated': {
-        const { list } = event;
+        const { list, counts } = event;
         if (!this._byZone().has(list.zoneId)) {
           // A zone this store has never loaded. Inventing a partial cache from an
           // event would make the next `load` look like a refresh of data that was
@@ -190,23 +190,27 @@ export class ListStore {
         }
 
         this._upsertPartial(list.zoneId, list.id, (existing) => ({
-          // `myPermissions` is kept from the row this store already holds and is empty
-          // for a list it is hearing about for the first time. A broadcast to a room
-          // cannot say something different to each person in it, so this payload has no
-          // per caller set to carry, and empty is the safe reading: the card draws, and
-          // the page corrects it from the load or refresh it runs when somebody opens
-          // the list.
-          ...(existing ?? {
-            lineCount: 0,
-            wantedCount: 0,
-            myPermissions: [],
-            sharedWithZone: false,
-          }),
+          // `myPermissions` is the one field kept from the row this store already
+          // holds, and it is empty for a list it is hearing about for the first time. A
+          // broadcast to a room cannot say something different to each person in it, so
+          // the set this payload carries is its actor's and not the reader's, and empty
+          // is the safe reading: the card draws, and the page corrects it from the load
+          // or refresh it runs when somebody opens the list.
+          //
+          // Everything else is the event's (plan 0158, item 4). A row made from the
+          // event with zero counts said "List is empty" over a list with lines, and
+          // stayed that way, because `list.myAccessChanged` patches a row that exists
+          // rather than reading it again. Counts the payload does not carry are
+          // unknown, so the row keeps what it had.
           id: list.id,
           zoneId: list.zoneId,
           name: list.name,
           createdByUserId: list.createdByUserId,
           autoApproveLines: list.autoApproveLines,
+          sharedWithZone: list.sharedWithZone,
+          lineCount: counts?.lineCount ?? existing?.lineCount ?? 0,
+          wantedCount: counts?.wantedCount ?? existing?.wantedCount ?? 0,
+          myPermissions: existing?.myPermissions ?? [],
         }));
         break;
       }
