@@ -1909,14 +1909,22 @@ export class BasketPage {
   );
 
   /**
-   * Whether every row quotes the chosen shop's price, or the cheapest anywhere
-   * (`0078`; `0102`).
+   * Whether the chosen shop prices any row of this basket (`0078`; `0102`), which
+   * is what lets the total's popover name the shop.
    *
-   * Asked once for the whole basket and handed to each row, which is what this page
-   * already does with `canReopen` and its own name: a component built once per line
-   * has no business asking the same question a dozen times.
+   * Asked once for the whole basket, which is what this page already does with
+   * `canReopen` and its own name: a component built once per line has no business
+   * asking the same question a dozen times. {@link readAtShop} is asked the same
+   * way.
    */
   protected readonly pricedAtShop = this._view.pricedAtShop;
+
+  /**
+   * Whether the rows are read at the chosen shop, priced there or not, which
+   * decides the price each row draws (velista `0153`): the shop's own or none,
+   * and never the cheapest at another chain under the shop's chip.
+   */
+  protected readonly readAtShop = this._view.readAtShop;
 
   /** How many of the five properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;
@@ -1939,10 +1947,10 @@ export class BasketPage {
    * The chain the popover names in "have a price at Mercadona", or null.
    *
    * Only while {@link pricedAtShop} is true, and not whenever a shop is chosen.
-   * A read at a new shop still out, and a shop that prices nothing on this
-   * basket, both leave every row on the cheapest price anywhere. The sum reads
-   * those same prices, so naming the shop then would be a claim about prices the
-   * number does not hold.
+   * A read at a new shop still out leaves every row on the cheapest price
+   * anywhere, and the sum reads those same prices, so naming the shop then would
+   * be a claim about prices the number does not hold. A shop that prices nothing
+   * on this basket adds no price at all (velista `0153`), so no number is drawn.
    */
   protected readonly totalChain = computed(() =>
     this.pricedAtShop() ? (this._view.chosenShop()?.chain ?? null) : null

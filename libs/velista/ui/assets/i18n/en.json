@@ -1845,7 +1845,8 @@
       "listsAndMore_other": "{{names}} and {{count}} more lists",
       "otherLists_one": "Another list",
       "otherLists_other": "{{count}} other lists",
-      "notSoldHere": "Not sold here"
+      "notSoldHere": "Not sold here",
+      "noPriceHere": "No price here"
     },
     "skip": {
       "action": "Not today",

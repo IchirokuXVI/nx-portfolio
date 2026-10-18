@@ -449,8 +449,9 @@ export class SettleSheet {
   /**
    * Under the title: the price of one, and how many are left to get (velista
    * `0139`, section 3). "0.92 € each · 6 to get". The price is the one the row
-   * underneath draws, at the chosen shop when the rows are priced there, so the
-   * sheet cannot quote a number the row does not. A finished row says what
+   * underneath draws, at the chosen shop when the rows are read there, and none
+   * when that shop has no price for it (velista `0153`), so the sheet cannot
+   * quote a number the row does not. A finished row says what
    * happened instead of "0 to get".
    */
   protected readonly subtitle = computed<string | null>(() => {
@@ -459,7 +460,7 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.pricedAtShop());
+    const offer = shownOffer(this._product(), this._view.readAtShop());
     const parts = [
       offer === null
         ? null
@@ -489,8 +490,8 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.pricedAtShop());
-    const chosen = this._view.pricedAtShop() ? this._view.chosenShop() : null;
+    const offer = shownOffer(this._product(), this._view.readAtShop());
+    const chosen = this._view.readAtShop() ? this._view.chosenShop() : null;
     const where =
       chosen === null
         ? null

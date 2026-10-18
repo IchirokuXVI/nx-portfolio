@@ -249,7 +249,7 @@
                     (open)="openRow(row.row)"
                     (revert)="revertRow(row.row)"
                     (settle)="settleRow(row.row)"
-                    [atShop]="pricedAtShop()"
+                    [atShop]="readAtShop()"
                     [busy]="isBusy(row.row)"
                     [canChange]="canChange(row.row)"
                     [entry]="row.entry"
@@ -446,7 +446,7 @@
         @if (total().lines > 0 && total().withPrice === 0) {
           <lib-no-prices-note
             [guest]="isGuest()"
-            [shopChosen]="pricedAtShop()"
+            [shopChosen]="readAtShop()"
             [total]="total()"
             class="no-prices"
           />
@@ -633,7 +633,7 @@
                         (open)="openRow(row.row)"
                         (revert)="revertRow(row.row)"
                         (settle)="settleRow(row.row)"
-                        [atShop]="pricedAtShop()"
+                        [atShop]="readAtShop()"
                         [busy]="isBusy(row.row)"
                         [canChange]="canChange(row.row)"
                         [entry]="row.entry"

@@ -169,6 +169,10 @@ function product(
     name: { en: name, es: name },
     brand,
     categories,
+    // Priced nowhere, as the read sends a product nobody priced.
+    offer: null,
+    offers: [],
+    atShop: null,
   } as BasketProduct;
 }
 
@@ -1220,9 +1224,11 @@ describe('composeBasketView: prices from one shop', () => {
 
   /**
    * Section 5.1, and the case staging and production are actually in: a shop nobody
-   * has priced is not a shop that stocks nothing.
+   * has priced is not a shop that stocks nothing. So no line is "not sold here",
+   * and every line says it has no price here (velista `0153`), with the cheapest
+   * price elsewhere beside it.
    */
-  it('marks nothing and sinks nothing at a shop that prices no line of the basket', () => {
+  it('marks every line "no price here" at a shop that prices no line of the basket, and sinks nothing', () => {
     const context = priced();
     const unpriced = new Map(
       [...context.products].map(([id, item]) => [
@@ -1242,7 +1248,60 @@ describe('composeBasketView: prices from one shop', () => {
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].rows.map((row) => row.priceMark)).toEqual([null, null]);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['c', 'b']);
+    expect(sections[0].rows.map((row) => row.priceMark)).toEqual([
+      {
+        kind: 'noPriceHere',
+        chain: 'Carrefour',
+        elsewhere: { price: 2.4, currency: 'EUR', chain: 'Dia' },
+      },
+      {
+        kind: 'noPriceHere',
+        chain: 'Carrefour',
+        elsewhere: { price: 1.2, currency: 'EUR', chain: 'Mercadona' },
+      },
+    ]);
+  });
+
+  /** Velista `0153`: with nothing quoted anywhere, the line says only that. */
+  it('marks "no price here" with nothing elsewhere when no other shop quotes the line', () => {
+    const context = priced();
+    const unpriced = new Map(
+      [...context.products].map(([id, item]) => [
+        id,
+        { ...item, offers: [], atShop: at(null, null) },
+      ])
+    );
+    const typed = row('d', 'Something for the cat');
+
+    const sections = composeBasketView(
+      [EGGS, typed],
+      state({ shop: 'loc-deza' }),
+      { ...context, products: unpriced, shop: shop('loc-deza', 'Deza') }
+    );
+
+    expect(sections[0].rows.map((row) => row.priceMark)).toEqual([
+      { kind: 'noPriceHere', chain: 'Deza', elsewhere: null },
+      // No product, so nothing to price anywhere.
+      null,
+    ]);
+  });
+
+  /**
+   * Velista `0153`: one priced line is enough to say somebody priced this shop, so
+   * the others are still "not sold here" and never "no price here".
+   */
+  it('keeps the unlisted mark on the other lines at a shop that prices one of them', () => {
+    const sections = composeBasketView(
+      [EGGS, BREAD],
+      state({ shop: MERCA }),
+      priced()
+    );
+
+    expect(sections[0].rows.map((row) => row.priceMark?.kind ?? null)).toEqual([
+      'unlisted',
+      null,
+    ]);
   });
 
   /**
