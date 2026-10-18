@@ -416,9 +416,6 @@ export interface ListHeaderVm {
   readonly live: boolean;
 }
 
-/** Why the page has nothing to draw. */
-export type ListGoneReason = 'deleted' | 'unshared';
-
 /**
  * Every state the list page can be in (section 3.1).
  *
@@ -457,7 +454,11 @@ export type ListPageState =
       readonly messageKey: string;
       readonly correlationId: string | null;
     }
-  | { readonly kind: 'gone'; readonly reason: ListGoneReason };
+  /**
+   * The reader cannot read the list, or the id names nothing. One state for both,
+   * because a reader cannot tell them apart (velista 0156).
+   */
+  | { readonly kind: 'gone' };
 
 /** One comment, ready to draw. */
 export interface CommentRowVm {

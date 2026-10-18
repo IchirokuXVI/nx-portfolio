@@ -196,6 +196,15 @@
     }
   } @else {
     @switch (status()) {
+      @case ('gone') {
+        <!-- The line page's sentence and way out for a list nobody may read (velista 0156). -->
+        <div class="content">
+          <p class="empty">{{ 'list.error.notAvailable' | rokuT }}</p>
+          <button (click)="leaveToGroup()" class="older" type="button">
+            {{ 'list.header.back' | rokuT }}
+          </button>
+        </div>
+      }
       @case ('missing') {
         <div class="content">
           <p class="empty">{{ 'list.gone.unavailable' | rokuT }}</p>
