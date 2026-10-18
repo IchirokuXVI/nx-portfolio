@@ -35,9 +35,11 @@ export interface BasketTotal {
 /** What the sum reads beside the rows, which is what the page hands each row. */
 export interface BasketTotalContext {
   readonly products: ReadonlyMap<string, BasketProduct>;
-  /** Whether the rows quote the chosen shop's price (`basketPricedAtShop`). */
-  readonly pricedAtShop: boolean;
-  /** Whether the products describe the chosen shop (`basketReadAtShop`). */
+  /**
+   * Whether the products describe the chosen shop (`basketReadAtShop`). The
+   * shop's price or none when true (velista `0153`), the cheapest anywhere when
+   * false.
+   */
   readonly readAtShop: boolean;
 }
 
@@ -58,7 +60,7 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  *
  * **The product and the price are resolved by the row's own functions, with the
  * row's own arguments**, so the number cannot disagree with the rows under it.
- * The page hands a row `atShop` from `pricedAtShop`, and so does this:
+ * The page hands a row `atShop` from `readAtShop`, and so does this:
  * {@link basketRowProduct} resolves the row's one product, {@link basketShelfMark}
  * says whether the shop is known not to have it, and {@link shownOffer} reads its
  * price.
@@ -72,7 +74,8 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  *   although the row still prints the shop's number beside "Not available".
  * - **No price**: nobody priced the product, or the chosen shop does not list
  *   it. With a shop chosen the cheapest price elsewhere is not a fallback,
- *   because that is the row's rule too.
+ *   because that is the row's rule too, and that holds at a shop that prices
+ *   no row at all (velista `0153`): it totals zero, with every row counted.
  *
  * ## The quantity
  *
@@ -101,7 +104,7 @@ export function basketTotal(
   rows: readonly BasketRow[],
   context: BasketTotalContext
 ): BasketTotal {
-  const { products, pricedAtShop, readAtShop } = context;
+  const { products, readAtShop } = context;
 
   let lines = 0;
   let withProduct = 0;
@@ -124,7 +127,7 @@ export function basketTotal(
       continue;
     }
 
-    const offer = shownOffer(product, pricedAtShop);
+    const offer = shownOffer(product, readAtShop);
     if (offer === null) {
       continue;
     }

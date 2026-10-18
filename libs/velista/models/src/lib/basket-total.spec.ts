@@ -97,7 +97,6 @@ function context(
 ): BasketTotalContext {
   return {
     products: new Map(products.map((held) => [held.id, held])),
-    pricedAtShop: atShop,
     readAtShop: atShop,
   };
 }
@@ -289,6 +288,25 @@ describe('basketTotal', () => {
           withProduct: 1,
         }
       );
+    });
+
+    /**
+     * Velista `0153`: a shop that prices no row of the basket (Deza) totals zero.
+     * Every row is counted as a row with a product and no price, and the cheapest
+     * price at another chain never enters the sum under this shop's chip.
+     */
+    it('totals zero at a shop that prices no row, with every row counted as unpriced', () => {
+      const bread = product('p-bread', offer(1.2), here(null));
+      const total = basketTotal(
+        [row(['p-milk'], { left: 2 }), row(['p-bread'])],
+        context([unlisted, bread], true)
+      );
+
+      expect(total).toEqual({
+        ...EMPTY_BASKET_TOTAL,
+        lines: 2,
+        withProduct: 2,
+      });
     });
 
     it('adds the cheapest price with no shop chosen', () => {

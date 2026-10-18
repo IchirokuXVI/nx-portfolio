@@ -246,6 +246,41 @@ describe('BasketRowComponent: prices from one shop', () => {
   });
 
   /**
+   * Velista `0153`: at a shop that prices nothing on this basket (Deza), the row
+   * draws no price of its own, and the cheapest price elsewhere sits in the mark,
+   * outside the price column, after "No price here".
+   */
+  it('says there is no price here, and where it costs what, with no price of its own', async () => {
+    const fixture = await render({
+      atShop: true,
+      product: DIA_ONLY,
+      mark: {
+        kind: 'noPriceHere',
+        chain: 'Deza',
+        elsewhere: { price: 0.79, currency: 'EUR', chain: 'Dia' },
+      },
+    });
+
+    expect(caption(fixture)).toBe(
+      'Weekly · basket.row.noPriceHere · basket.price.cheaperAt'
+    );
+    expect(rowLabel(fixture)).toContain('basket.row.noPriceHere');
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.caption-price')).toBeNull();
+    expect(element.querySelector('.caption-mark.is-unlisted')).not.toBeNull();
+  });
+
+  it('says only that there is no price here when nobody else prices it either', async () => {
+    const fixture = await render({
+      atShop: true,
+      product: DIA_ONLY,
+      mark: { kind: 'noPriceHere', chain: 'Deza', elsewhere: null },
+    });
+
+    expect(caption(fixture)).toBe('Weekly · basket.row.noPriceHere');
+  });
+
+  /**
    * A shop that carries the product with no number on it is listed and unpriced,
    * which reads as the same blank a product nobody has priced leaves: the row has no
    * room to say "listed, price unknown", and the pick sheet is where that
