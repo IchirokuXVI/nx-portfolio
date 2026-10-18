@@ -207,7 +207,7 @@
     } @else if (current.empty) {
       <div class="state">
         <p class="state-title">{{ 'list.empty.title' | rokuT }}</p>
-        <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
+        <p class="state-body">{{ emptyBodyKey() | rokuT }}</p>
       </div>
     } @else {
       @let shown = groups();

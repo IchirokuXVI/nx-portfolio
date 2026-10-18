@@ -1,7 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  RouterOutlet,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -21,6 +26,7 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  LIST_SERVICE,
   ListViewStore,
   ProductPickStore,
   provideFakeCategoryStore,
@@ -43,6 +49,7 @@ import {
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type ListServiceI,
   type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
@@ -51,6 +58,7 @@ import type {
   DueLine,
   Line,
   LineRowVm,
+  ListAccessEntry,
   ListPermission,
   Membership,
   MyZone,
@@ -216,6 +224,8 @@ interface Options {
   readonly zoneError?: unknown;
   /** A sheet URL over the page: the route has a child (velista 0156). */
   readonly sheetOpen?: boolean;
+  /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
+  readonly access?: readonly ListAccessEntry[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -385,6 +395,13 @@ async function render(options: Options = {}): Promise<{
       // The blip that says a recording left the device. A fake, so a spec can ask
       // whether it was played without a browser and without making a noise.
       { provide: NOTIFICATION_TONE, useValue: tone },
+      // Who else holds an empty private list (velista `0152`, item 4).
+      {
+        provide: LIST_SERVICE,
+        useValue: {
+          getListAccess: async () => options.access ?? [],
+        } as unknown as ListServiceI,
+      },
     ],
   }).compileComponents();
 
@@ -1363,6 +1380,108 @@ describe('ListPage', () => {
 
       expect(fixture.nativeElement.textContent).toContain('list.empty.title');
       expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    // Velista `0152`, item 4: "everyone here sees it" is false on a private list.
+    const body = (fixture: ComponentFixture<ListPage>) =>
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.state-body')
+        ?.textContent?.trim();
+
+    async function emptyList(options: Options) {
+      const rendered = await render({
+        lines: [],
+        members: [member('u1', 'Me', 'MEMBER')],
+        ...options,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('says nobody else has it when the list is private and nobody holds it', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [{ membershipId: 'm-u1', permissions: ADMIN }],
+      });
+
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+    });
+
+    it('keeps the shared wording when somebody else holds the private list', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [
+          { membershipId: 'm-u1', permissions: ADMIN },
+          { membershipId: 'm-toni', permissions: ['READ'] },
+        ],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    // The settings sheet is a child route, so the page outlives it and must not keep
+    // the answer it read before the sheet opened.
+    const closeSheet = async (fixture: ComponentFixture<ListPage>) => {
+      fixture.debugElement
+        .query(By.directive(RouterOutlet))
+        .injector.get(RouterOutlet)
+        .deactivateEvents.emit({});
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    };
+
+    it('reads again when a sheet closes, so a grant made there brings the shared wording back', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      // Toni was given a row in the settings sheet, which then closed.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      await closeSheet(fixture);
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('reads again after the list is shared with the group and made private again', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture, lists } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      lists.set([list({ sharedWithZone: true, lineCount: 0 })]);
+      fixture.detectChanges();
+      expect(body(fixture)).toBe('list.empty.body');
+
+      // The flip on gave Toni a row, and turning it off took nothing back.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      lists.set([list({ sharedWithZone: false, lineCount: 0 })]);
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('keeps the shared wording on a list shared with the group', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: true, lineCount: 0 })],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
     });
   });
 
