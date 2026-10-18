@@ -601,6 +601,31 @@ export class LineService {
   }
 
   /**
+   * How many comments each line of a page has, in one query over
+   * `ix_comments_line` (plan 0214, section 2).
+   *
+   * A line with no comment has no row here, and the caller's default of 0 is
+   * the answer for it. A plain count is right because a comment is never
+   * deleted on its own: it goes with its line, by the cascade.
+   */
+  private async commentCountsOfMany(
+    lineIds: string[]
+  ): Promise<Map<string, number>> {
+    if (lineIds.length === 0) {
+      return new Map();
+    }
+    const rows: { lineId: string; count: number }[] =
+      await this.dataSource.query(
+        `SELECT c."lineId" AS "lineId", count(*)::int AS "count"
+           FROM "line_comments" c
+          WHERE c."lineId" = ANY($1::uuid[])
+          GROUP BY 1`,
+        [lineIds]
+      );
+    return new Map(rows.map((row) => [row.lineId, row.count]));
+  }
+
+  /**
    * One line's summary, for the paths that answer with a single line.
    *
    * Two repository reads rather than the aggregate above, and the difference is
@@ -3265,17 +3290,21 @@ export class LineService {
     // baskets the third one is (plan 0052, section 4). This is the read that
     // makes the claim survive a reconnect, so a phone that was asleep while
     // somebody generated a basket draws the same row as one that was watching.
-    const [sets, settlements, claims] = await Promise.all([
+    // A fourth for the comment counts (plan 0214, section 2), which only this
+    // read answers: a line event carries null there.
+    const [sets, settlements, claims, comments] = await Promise.all([
       this.itemSetsOfMany(pageIds),
       this.settlementsOfMany(pageIds),
       this.claims.claimsOf(pageIds),
+      this.commentCountsOfMany(pageIds),
     ]);
     const items = page.map((line) =>
       toLineView(
         line,
         sets.get(line.id) ?? EMPTY_LINE_ITEM_SET,
         settlements.get(line.id) ?? NO_LINE_SETTLEMENTS,
-        claims.get(line.id) ?? NO_LINE_CLAIM
+        claims.get(line.id) ?? NO_LINE_CLAIM,
+        comments.get(line.id) ?? 0
       )
     );
     const last = page[page.length - 1];
