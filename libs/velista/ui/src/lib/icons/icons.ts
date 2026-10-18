@@ -258,6 +258,17 @@ export class JoinCodeIcon {
   );
 }
 
+/**
+ * The one icon in the chunk of this file rather than in a chunk of its own (velista
+ * `0159`). The screen that says the network is gone draws it, and a chunk cannot be
+ * fetched then: in development, on the first visit before the worker installs, and
+ * mounted under the shell, which registers no worker.
+ *
+ * `webpackMode: "eager"` keeps the `import()` and drops the request: webpack puts the
+ * text in the chunk that holds this component, and the promise resolves with no
+ * network. A static import would do the same, but the app's own specs load this file
+ * and have no Jest mapping for a `?raw` path.
+ */
 @Component({
   selector: 'lib-offline-icon',
   template: TEMPLATE,
@@ -268,7 +279,7 @@ export class OfflineIcon {
   readonly svg = inlineSvg(
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
-      import('./offline-icon.svg?raw')
+      import(/* webpackMode: "eager" */ './offline-icon.svg?raw')
   );
 }
 

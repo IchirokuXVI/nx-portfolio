@@ -19,7 +19,13 @@ import {
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { Mutations, overlayKey, type Overlay } from '../mutations';
+import {
+  listWritesPage,
+  Mutations,
+  overlayKey,
+  type DroppedWriteDraft,
+  type Overlay,
+} from '../mutations';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -645,10 +651,16 @@ export class LineStore {
    * negation of the delta: by the time a failure returns, somebody else's delta may
    * have landed, and subtracting ours from their result would invent a third number
    * nobody asked for.
+   *
+   * @param options.reportDropped write a delta the network dropped down for the list
+   *   page's next document (velista `0159`). Only the list page passes it: the
+   *   notice and its "Send it again" are drawn there, and an entry recorded by the
+   *   line page or the catalog would surface on a page that never made the write.
    */
   async addQuantity(
     lineId: string,
-    delta: number
+    delta: number,
+    options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
@@ -663,7 +675,23 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta)
+      () => this._lines.addQuantity(lineId, delta),
+      // Velista `0159`: the reconnect reloads the page and this row's note goes with
+      // it, so a delta the network dropped is written down for the next document.
+      // The name is the line's own text, which the page swaps for the name it draws.
+      options.reportDropped === true
+        ? {
+            page: listWritesPage(before.listId),
+            subject: overlayKey(lineId, 'quantity'),
+            lineId,
+            key: 'list.dropped.quantity',
+            args: {
+              name: before.content,
+              delta: delta > 0 ? `+${delta}` : `${delta}`,
+            },
+            replay: { kind: 'line-quantity', lineId, delta },
+          }
+        : undefined
     );
   }
 
@@ -1159,7 +1187,8 @@ export class LineStore {
     before: Line,
     fields: readonly string[],
     apply: (line: Line) => Line,
-    send: () => Promise<Line>
+    send: () => Promise<Line>,
+    dropped?: DroppedWriteDraft
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const listId = before.listId;
 
@@ -1178,7 +1207,8 @@ export class LineStore {
       overlay,
       send,
       (line) => line.version,
-      before.version
+      before.version,
+      dropped
     );
 
     if (outcome.state === 'failed') {

@@ -24,6 +24,8 @@ import {
   type AssistantServiceI,
   CATALOG_SERVICE,
   type CatalogServiceI,
+  type DroppedWrite,
+  DroppedWrites,
   DueLineStore,
   ItemNames,
   LineStore,
@@ -32,6 +34,7 @@ import {
   ListStore,
   type ListViewSnapshot,
   ListViewStore,
+  listWritesPage,
   MemberNames,
   presenceNames,
   presencePeople,
@@ -1169,6 +1172,58 @@ export class ListPage {
     this._view.reset();
   }
 
+  // Velista `0159`: the quantity changes an earlier document of this tab lost to the
+  // network. The reconnect reloads the page and the row's own note goes with it, so
+  // the store wrote each one down, and this page reads its own once and clears them.
+  // Taken again when the list in the URL changes, so another list's entries wait.
+  private readonly _droppedLedger = inject(DroppedWrites);
+  private readonly _dropped = signal<readonly DroppedWrite[]>([]);
+  private readonly _takeDropped = effect(() => {
+    const page = listWritesPage(this.listId());
+    untracked(() => this._dropped.set(this._droppedLedger.take(page)));
+  });
+
+  /** One sentence per lost change, named as the row names the line. */
+  readonly droppedNotices = computed(() => {
+    const locale = this._locale();
+    // Read so the sentence redraws once the translations of a cold load arrive.
+    this._translator.loaded();
+    const lines = this._lineById();
+    return this._dropped().map((entry) => {
+      const replay = entry.replay;
+      // Off the entry, not the replay, so an unsure entry is named as the row names
+      // the line too.
+      const line = lines.get(entry.lineId);
+      const name =
+        line === undefined ? entry.args['name'] : this._lineName(line);
+      return {
+        id: entry.id,
+        text: this._translator.t(
+          `${entry.key}.${replay === null ? 'unsure' : 'lost'}`,
+          undefined,
+          locale,
+          { ...entry.args, name }
+        ),
+        canResend: replay !== null,
+      };
+    });
+  });
+
+  dismissDropped(id: string): void {
+    this._dropped.update((entries) =>
+      entries.filter((entry) => entry.id !== id)
+    );
+  }
+
+  /** "Send it again": the same delta, through the same path as a turn of the reel. */
+  async resendDropped(id: string): Promise<void> {
+    const replay = this._dropped().find((entry) => entry.id === id)?.replay;
+    this.dismissDropped(id);
+    if (replay !== null && replay !== undefined) {
+      await this.changeQuantity({ lineId: replay.lineId, delta: replay.delta });
+    }
+  }
+
   constructor() {
     // A return to this page comes back to what it showed (`PageReturn`). Applied
     // here, before any effect runs, so the search entry's effect finds the words it
@@ -1639,7 +1694,11 @@ export class ListPage {
       return;
     }
 
-    const outcome = await this._lines.addQuantity(event.lineId, event.delta);
+    // Only this page's writes are written down if the network drops them, because
+    // only this page draws the notice (velista `0159`).
+    const outcome = await this._lines.addQuantity(event.lineId, event.delta, {
+      reportDropped: true,
+    });
     this._afterWrite(outcome, event.lineId, 'lines.write');
 
     if (outcome === 'succeeded') {
@@ -2085,7 +2144,9 @@ export class ListPage {
 
     const rows = this.dueSection()?.rows ?? [];
     const at = rows.findIndex((row) => row.lineId === event.lineId);
-    const pending = this._lines.addQuantity(event.lineId, delta);
+    const pending = this._lines.addQuantity(event.lineId, delta, {
+      reportDropped: true,
+    });
 
     const next = this.dueSection()?.rows[Math.max(0, at)];
     this._focusAfterRender(

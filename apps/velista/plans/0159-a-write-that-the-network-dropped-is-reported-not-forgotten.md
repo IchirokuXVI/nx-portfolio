@@ -1,3 +1,5 @@
+> **PR:** [#760](https://github.com/IchirokuXVI/nx-portfolio/pull/760)
+
 # 0159: a write that the network dropped is reported, not forgotten
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -130,3 +132,77 @@ offline.
   seen would keep a page that cannot talk to the server on screen with stale data.
 - **Resend only when the attempt never left.** The person is told the truth in every
   case, and a double increment is worse than one extra tap.
+
+## What the build decided
+
+- **The ledger names its page by a key, not by the URL.** An entry holds `list:<listId>`
+  (`listWritesPage` in `mutations.ts`). The URL holds the locale, the mount and a possible
+  `sheet` segment, and none of them says which page the change was made on. The list page
+  takes its entries when it opens, and again when the list in the URL changes.
+- **"Never left" is read from `navigator.onLine` at the moment the request is handed on.**
+  Angular reports status 0 for a request the browser refused and for one whose answer was
+  lost, so the error itself cannot tell the two apart. When the browser is offline, Chrome
+  refuses the request before it is sent (`ERR_INTERNET_DISCONNECTED`). That case keeps the
+  replay. A `NetworkError` while the browser is online keeps none, and so does an rxjs
+  `TimeoutError`. A captive portal is online by that measure, so it gets the safe answer.
+- **The read is in `gateway-interceptor.ts`, which is outside this plan's Scope.** The
+  first build read `onLine` when `Mutations.run` started. The request can leave later: a
+  stale token makes the interceptor wait for `ensureFreshToken()`, and the connection can
+  come back during that refresh. The POST then lands, its answer is lost, and a replay
+  kept from the earlier read would add a second +1. The interceptor is the one place that
+  knows the moment of the send, so it reads `onLine` just before each attempt goes to
+  `next(...)` (the refreshed retry too) and puts the answer on the `NetworkError` it
+  raises as `refusedOffline`. `errors.ts` gains that field, false by default.
+  `Mutations.run` keeps the replay only when the field is true and no longer reads the
+  connection itself. The refresh and the sign out paths of the interceptor are unchanged.
+- **Only the list page's writes are recorded.** `LineStore.addQuantity` takes an optional
+  `{ reportDropped: true }`, and only `ListPage.changeQuantity` and `addDueLine` pass it.
+  The line page's stepper and the catalog's adds pass nothing, so a drop there records no
+  entry that would surface later on the list page with a live "Send it again". It is a
+  flag rather than the draft itself, because the draft needs the line's list and text,
+  which the store holds, and one place builds it.
+- **The entry names its line.** The draft carries `lineId`, and the page looks the line
+  up from there for both sentences. Before, it read the id off the replay, so an unsure
+  entry (no replay) drew the line's raw text and not the name the row draws.
+- **The live region is on the page before it fills.** The `role="status"` container is
+  drawn while the page loads and receives its sentences once it has loaded, because a
+  region inserted already filled is often not announced. A page that opens from the
+  cache straight into its loaded state still inserts it filled; nothing short of a region
+  in the layout avoids that.
+- **The notice without a replay says "may not have been saved"**, with "Check the number
+  before you change it again". Target state 3 says "not saved", but such a write may
+  have landed, and "not saved" would then be false. The owner can change it.
+- **A 4xx or a 5xx records nothing.** A response proves the network works, so no reload
+  follows it, and the inline note on the row still says that the change did not save.
+- **A write that lands clears the entries of its subject** (the overlay key
+  `<lineId>:quantity`). Thus "Tap to try again" on the row, used before any reload,
+  leaves no stale notice behind.
+- **The page draws the name the row draws.** The entry holds the line's own text. The
+  page puts the name it draws for the line in its place while the line is loaded.
+- **The two sentences take the name and the delta directly**
+  (`list.dropped.quantity.lost` and `.unsure`). They are not built from a nested
+  description key, because i18next escapes each value, and a nested sentence would
+  escape an `&` in a line name twice.
+- **The offline icon is an eager `import()`** (`/* webpackMode: "eager" */`). Webpack puts
+  the text in the chunk that holds `OfflineIcon`, and the promise resolves with no
+  request. The production build shows it: the markup is in the large velista/ui chunk,
+  and the share icon, the control, is still in its own 399 byte chunk. A static `?raw`
+  import was tried first and broke `velista:test` in CI: the app's Jest config (and the
+  shell's) has no mapping for a `?raw` path, and both are outside this plan's scope.
+  The app layout spec reads the eager import off the source, because Jest has no chunks.
+  The other icons keep their lazy `import()`, and the pages that draw this one were not
+  touched.
+- **Follow up, not built here: replace the source reading spec.** A static `?raw` import
+  plus a one line `?raw` mapper in `apps/velista/jest.config.cts` and in the shell's Jest
+  config, as `libs/velista/ui/jest.config.cts` has, would let the icon be a plain import
+  and the app layout spec assert the markup instead of reading the source. Both configs
+  are outside this plan's scope.
+- **The notice reuses the list page's `trips-failed` classes** (a sentence and quiet
+  actions in one wrapping row), because `list-page.scss` is not in this plan's scope.
+- **The ledger keeps 5 entries.**
+- **Writes for a follow up, none of them built here:** a rename of a line (`updateLine`
+  through `_write`), the approval of a line, a tick or an undo on the basket, a change
+  of the quantity on the basket rows and on the line page, and the delete of a line.
+  Only the quantity carries a replay that is a pure delta. For the others the notice can
+  say what was lost, but a resend needs a separate check that the record still has the
+  value that the write was made against.

@@ -1,8 +1,13 @@
+import type { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Line, Page } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { GatewayError } from '../errors';
-import { Mutations } from '../mutations';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
+import { TimeoutError } from 'rxjs';
+import { GatewayError, NetworkError } from '../errors';
+import { DroppedWrites, Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
 import { LINE_SERVICE, type LineServiceI } from './line-service';
@@ -226,7 +231,7 @@ function service(seed: readonly Line[]) {
   };
 }
 
-async function build(seed: readonly Line[] = []) {
+async function build(seed: readonly Line[] = [], extra: Provider[] = []) {
   TestBed.resetTestingModule();
 
   const lines = service(seed);
@@ -239,6 +244,7 @@ async function build(seed: readonly Line[] = []) {
       LineStore,
       { provide: LINE_SERVICE, useValue: lines },
       { provide: REALTIME_CLIENT, useValue: realtime },
+      ...extra,
     ],
   }).compileComponents();
 
@@ -487,6 +493,65 @@ describe('LineStore', () => {
       // delta: somebody else's may have landed while ours was out.
       expect(store.linesIn(LIST)[0].quantity).toBe(2);
       expect(store.writeNoteOf('a')?.outcome).toBe('failed');
+    });
+
+    /**
+     * Velista `0159`: the reconnect reloads the page and the inline note goes with
+     * it, so a write the network dropped is also written down for the next document.
+     */
+    it('writes down a quantity the network dropped before it was sent, with its replay', async () => {
+      const { store, lines } = await build(
+        [line('a', { content: 'Pan de pueblo', quantity: 1 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+      expect(await store.addQuantity('a', 1, { reportDropped: true })).toBe(
+        'failed'
+      );
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
+        expect.objectContaining({
+          subject: 'a:quantity',
+          lineId: 'a',
+          key: 'list.dropped.quantity',
+          args: { name: 'Pan de pueblo', delta: '+1' },
+          replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
+        }),
+      ]);
+    });
+
+    it('writes down a quantity lost to a timeout with no replay', async () => {
+      const { store, lines } = await build(
+        [line('a', { content: 'Pan de pueblo', quantity: 3 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new TimeoutError());
+
+      await store.addQuantity('a', -2, { reportDropped: true });
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
+        expect.objectContaining({
+          args: { name: 'Pan de pueblo', delta: '-2' },
+          replay: null,
+        }),
+      ]);
+    });
+
+    it('writes nothing down for a caller that did not ask, as the line page does not', async () => {
+      // Only the list page draws the notice, so only its writes are recorded.
+      const { store, lines } = await build(
+        [line('a', { quantity: 1 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+      expect(await store.addQuantity('a', 1)).toBe('failed');
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([]);
     });
 
     it('reports overwritten when the server moved further than this write alone', async () => {

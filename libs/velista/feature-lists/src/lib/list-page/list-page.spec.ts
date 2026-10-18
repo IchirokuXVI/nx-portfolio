@@ -16,6 +16,7 @@ import {
   AssistantMemory,
   CATALOG_SERVICE,
   CatalogMemory,
+  DroppedWrites,
   DUE_LINE_SERVICE,
   DueLineStore,
   fakeItemNames,
@@ -30,6 +31,7 @@ import {
   LineStore,
   LIST_SERVICE,
   ListViewStore,
+  overlayKey,
   ProductPickStore,
   provideFakeCategoryStore,
   provideFakeItemNames,
@@ -45,6 +47,7 @@ import {
   TRIP_SERVICE,
   TripStore,
   type AssistantServiceI,
+  type DroppedWriteDraft,
   type DueLineServiceI,
   type FakeItemNames,
   type FakeLineStore,
@@ -221,6 +224,8 @@ interface Options {
   readonly connected?: boolean;
   /** What `PageReturn` hands back, which makes this arrival a return to the page. */
   readonly returned?: unknown;
+  /** Writes an earlier document of this tab lost to the network (velista `0159`). */
+  readonly dropped?: readonly DroppedWriteDraft[];
   /**
    * What the lines read answers. Set, the page gets the real `LineStore` over a
    * service that answers this, in place of the fake (velista `0158`, item 6).
@@ -425,6 +430,10 @@ async function render(options: Options = {}): Promise<{
       },
     ],
   }).compileComponents();
+
+  for (const dropped of options.dropped ?? []) {
+    TestBed.inject(DroppedWrites).record(dropped);
+  }
 
   const fixture = TestBed.createComponent(ListPage);
   fixture.detectChanges();
@@ -2996,6 +3005,105 @@ describe('ListPage: a row with no product (velista 0145)', () => {
     ).click();
 
     expect(itemNames.refreshed.at(-1)).toEqual(['milk']);
+  });
+});
+
+/**
+ * Velista `0159`: the reconnect reloads the page, and the inline note of a quantity
+ * that did not save goes with it. The store wrote the change down first, and the page
+ * it was made on says what was lost.
+ */
+describe('ListPage: a write the network dropped (velista 0159)', () => {
+  function dropped(
+    overrides: Partial<DroppedWriteDraft> = {}
+  ): DroppedWriteDraft {
+    return {
+      page: `list:${LIST_ID}`,
+      // Built as the store builds it, so a spec that settles the entry by its
+      // subject would find it.
+      subject: overlayKey('ln-1', 'quantity'),
+      lineId: 'ln-1',
+      key: 'list.dropped.quantity',
+      args: { name: 'Pan de pueblo', delta: '+1' },
+      replay: { kind: 'line-quantity', lineId: 'ln-1', delta: 1 },
+      ...overrides,
+    };
+  }
+
+  function notice(fixture: ComponentFixture<ListPage>) {
+    return query(fixture, '.dropped');
+  }
+
+  /** How many lost changes the region holds. The region itself is always drawn. */
+  function entries(fixture: ComponentFixture<ListPage>): number {
+    return notice(fixture)?.querySelectorAll('.trips-failed').length ?? 0;
+  }
+
+  function action(fixture: ComponentFixture<ListPage>, name: string) {
+    return [...(notice(fixture)?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === name
+    ) as HTMLButtonElement | undefined;
+  }
+
+  it('names the change it lost, and sends it again through the normal path', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped()],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.lost'
+    );
+
+    action(fixture, 'list.dropped.resend')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'ln-1',
+      delta: 1,
+    });
+    expect(entries(fixture)).toBe(0);
+    // Read once and cleared: a reload now draws nothing.
+    expect(TestBed.inject(DroppedWrites).take(`list:${LIST_ID}`)).toEqual([]);
+  });
+
+  it('offers no resend for a change that may have reached the server', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped({ replay: null })],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.unsure'
+    );
+    expect(action(fixture, 'list.dropped.resend')).toBeUndefined();
+
+    action(fixture, 'list.dropped.dismiss')?.click();
+    fixture.detectChanges();
+
+    expect(entries(fixture)).toBe(0);
+    expect(lines.calls).not.toContainEqual(
+      expect.objectContaining({ kind: 'quantity' })
+    );
+  });
+
+  it('draws nothing for a change made on another list', async () => {
+    const { fixture } = await render({
+      dropped: [dropped({ page: 'list:another' })],
+    });
+
+    expect(entries(fixture)).toBe(0);
+  });
+
+  it('keeps the live region on the page before it has anything to say', async () => {
+    // A region inserted already filled is often not announced, so it is there
+    // empty and the sentence arrives into it.
+    const { fixture } = await render({});
+
+    expect(notice(fixture)?.getAttribute('role')).toBe('status');
+    expect(entries(fixture)).toBe(0);
   });
 });
 
