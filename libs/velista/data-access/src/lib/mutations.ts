@@ -57,6 +57,11 @@ export interface DroppedWriteDraft {
   readonly page: string;
   /** The record and field, so a later write of the same change that lands clears it. */
   readonly subject: string;
+  /**
+   * The line the write was made on, so the page can draw its name whether or not a
+   * replay was kept.
+   */
+  readonly lineId: string;
   /** A translation key that names the change in the person's words. */
   readonly key: string;
   readonly args: Readonly<Record<string, string>>;
@@ -158,6 +163,7 @@ function isDroppedWrite(value: unknown): value is DroppedWrite {
     typeof entry['id'] === 'string' &&
     typeof entry['page'] === 'string' &&
     typeof entry['subject'] === 'string' &&
+    typeof entry['lineId'] === 'string' &&
     typeof entry['key'] === 'string' &&
     typeof args === 'object' &&
     args !== null &&
@@ -192,7 +198,6 @@ function droppedByNetwork(error: unknown): boolean {
 
 @Injectable({ providedIn: 'root' })
 export class Mutations {
-  private readonly _browser = inject(BrowserFacade);
   private readonly _dropped = inject(DroppedWrites);
 
   /** Overlays in flight, keyed by `${recordId}:${field}`. Reads see these applied. */
@@ -219,10 +224,13 @@ export class Mutations {
    *   one. Only lines do (plan 0004, section 7.2), so this is optional and a record
    *   without one can never report `overwritten`.
    * @param dropped what to write down if the network drops this write (velista
-   *   `0159`). Its replay is kept only when the browser was offline as the request
-   *   started: such a request is refused before it leaves, so the server cannot have
-   *   applied it. Online, the answer may have been lost on the way back, and the same
-   *   goes for a timeout, so the entry then keeps no replay.
+   *   `0159`). Its replay is kept only when the failure is a {@link NetworkError}
+   *   whose `refusedOffline` is true: the interceptor saw the browser offline at the
+   *   moment it handed the request on, so the request was refused before it left and
+   *   the server cannot have applied it. `onLine` is not read here, because the
+   *   request can leave later than `run` starts (a token refresh comes first). Any
+   *   other failure, a timeout included, may have lost only the answer, so the entry
+   *   then keeps no replay.
    */
   async run<T>(
     overlay: Overlay<unknown> | null,
@@ -235,7 +243,6 @@ export class Mutations {
       this._addOverlay(overlay);
     }
     this._inFlight.update((n) => n + 1);
-    const neverLeft = dropped !== undefined && !this._isOnline();
 
     try {
       const value = await send();
@@ -261,7 +268,9 @@ export class Mutations {
       // than swallowed here.
       if (dropped !== undefined && droppedByNetwork(error)) {
         const replay =
-          neverLeft && error instanceof NetworkError ? dropped.replay : null;
+          error instanceof NetworkError && error.refusedOffline
+            ? dropped.replay
+            : null;
         this._dropped.record({ ...dropped, replay });
       }
       return { state: 'failed', error };
@@ -293,15 +302,6 @@ export class Mutations {
       }
     }
     return result;
-  }
-
-  /** Online unless the browser says otherwise, and online when it cannot say. */
-  private _isOnline(): boolean {
-    try {
-      return this._browser.onLine();
-    } catch {
-      return true;
-    }
   }
 
   private _addOverlay(overlay: Overlay<unknown>): void {

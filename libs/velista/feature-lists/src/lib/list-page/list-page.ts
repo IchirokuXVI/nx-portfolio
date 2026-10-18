@@ -1191,7 +1191,9 @@ export class ListPage {
     const lines = this._lineById();
     return this._dropped().map((entry) => {
       const replay = entry.replay;
-      const line = replay === null ? undefined : lines.get(replay.lineId);
+      // Off the entry, not the replay, so an unsure entry is named as the row names
+      // the line too.
+      const line = lines.get(entry.lineId);
       const name =
         line === undefined ? entry.args['name'] : this._lineName(line);
       return {
@@ -1692,7 +1694,11 @@ export class ListPage {
       return;
     }
 
-    const outcome = await this._lines.addQuantity(event.lineId, event.delta);
+    // Only this page's writes are written down if the network drops them, because
+    // only this page draws the notice (velista `0159`).
+    const outcome = await this._lines.addQuantity(event.lineId, event.delta, {
+      reportDropped: true,
+    });
     this._afterWrite(outcome, event.lineId, 'lines.write');
 
     if (outcome === 'succeeded') {
@@ -2138,7 +2144,9 @@ export class ListPage {
 
     const rows = this.dueSection()?.rows ?? [];
     const at = rows.findIndex((row) => row.lineId === event.lineId);
-    const pending = this._lines.addQuantity(event.lineId, delta);
+    const pending = this._lines.addQuantity(event.lineId, delta, {
+      reportDropped: true,
+    });
 
     const next = this.dueSection()?.rows[Math.max(0, at)];
     this._focusAfterRender(

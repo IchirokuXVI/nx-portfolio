@@ -135,7 +135,8 @@ describe('a write the network dropped', () => {
   ): DroppedWriteDraft {
     return {
       page: PAGE,
-      subject: 'quantity:ln1',
+      subject: 'ln1:quantity',
+      lineId: 'ln1',
       key: 'list.dropped.quantity',
       args: { name: 'Pan de pueblo', delta: '+1' },
       replay: { kind: 'line-quantity', lineId: 'ln1', delta: 1 },
@@ -143,7 +144,7 @@ describe('a write the network dropped', () => {
     };
   }
 
-  function build(online: boolean): {
+  function build(): {
     mutations: Mutations;
     ledger: DroppedWrites;
     session: Map<string, string>;
@@ -153,7 +154,6 @@ describe('a write the network dropped', () => {
     TestBed.configureTestingModule({
       providers: [
         provideFakeBrowserFacade(new Map(), {
-          onLine: (() => online) as never,
           readSessionStorage: (key: string) => session.get(key) ?? null,
           writeSessionStorage: (key: string, value: string) =>
             void session.set(key, value),
@@ -169,14 +169,15 @@ describe('a write the network dropped', () => {
   }
 
   it('keeps the replay of a write that failed before it was sent', async () => {
-    // Offline when the request started: the browser refused it before it left, so
-    // the server cannot have applied it and sending it again is safe.
-    const { mutations, ledger } = build(false);
+    // The interceptor saw the browser offline as it handed the request on: it was
+    // refused before it left, so the server cannot have applied it and sending it
+    // again is safe.
+    const { mutations, ledger } = build();
 
     const outcome = await mutations.run(
       null,
       async () => {
-        throw new NetworkError('c1', 'lines.quantity');
+        throw new NetworkError('c1', 'lines.quantity', true);
       },
       undefined,
       undefined,
@@ -193,9 +194,9 @@ describe('a write the network dropped', () => {
   });
 
   it('keeps no replay when the request may have reached the server', async () => {
-    // Online when it started, so the answer may have been lost on the way back. The
-    // route has no idempotency key, and a second +1 would be a double increment.
-    const { mutations, ledger } = build(true);
+    // Online as it was handed on, so the answer may have been lost on the way back.
+    // The route has no idempotency key, and a second +1 would be a double increment.
+    const { mutations, ledger } = build();
 
     await mutations.run(
       null,
@@ -212,8 +213,40 @@ describe('a write the network dropped', () => {
     ]);
   });
 
+  it('does not read the connection itself, because the request can leave later', async () => {
+    // Offline as `run` starts, but the request waited on a token refresh and left
+    // once the connection was back. Only the interceptor knows, and it said no.
+    TestBed.resetTestingModule();
+    const session = new Map<string, string>();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeBrowserFacade(new Map(), {
+          onLine: (() => false) as never,
+          readSessionStorage: (key: string) => session.get(key) ?? null,
+          writeSessionStorage: (key: string, value: string) =>
+            void session.set(key, value),
+          removeSessionStorage: (key: string) => void session.delete(key),
+        }),
+      ],
+    });
+
+    await TestBed.inject(Mutations).run(
+      null,
+      async () => {
+        throw new NetworkError('c1', 'lines.quantity', false);
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(TestBed.inject(DroppedWrites).take(PAGE)).toEqual([
+      expect.objectContaining({ replay: null }),
+    ]);
+  });
+
   it('keeps no replay after a timeout', async () => {
-    const { mutations, ledger } = build(false);
+    const { mutations, ledger } = build();
 
     await mutations.run(
       null,
@@ -233,7 +266,7 @@ describe('a write the network dropped', () => {
   it('writes nothing for a refusal the server answered', async () => {
     // A 4xx or a 5xx leaves no reload behind it, so the inline note on the row is
     // still there to say so.
-    const { mutations, ledger, session } = build(false);
+    const { mutations, ledger, session } = build();
 
     await mutations.run(
       null,
@@ -254,7 +287,7 @@ describe('a write the network dropped', () => {
   });
 
   it('forgets a dropped write once the same change lands', async () => {
-    const { mutations, ledger } = build(false);
+    const { mutations, ledger } = build();
     const fail = async (): Promise<never> => {
       throw new NetworkError('c1', 'lines.quantity');
     };
@@ -266,7 +299,7 @@ describe('a write the network dropped', () => {
   });
 
   it('clears what it read, and only for the page that read it', async () => {
-    const { mutations, ledger } = build(false);
+    const { mutations, ledger } = build();
     const fail = async (): Promise<never> => {
       throw new NetworkError('c1', 'lines.quantity');
     };
@@ -276,7 +309,7 @@ describe('a write the network dropped', () => {
       fail,
       undefined,
       undefined,
-      draft({ page: 'list:l2', subject: 'quantity:ln2' })
+      draft({ page: 'list:l2', subject: 'ln2:quantity' })
     );
 
     expect(ledger.take(PAGE)).toHaveLength(1);
@@ -285,7 +318,7 @@ describe('a write the network dropped', () => {
   });
 
   it('holds only the last few entries', async () => {
-    const { mutations, ledger } = build(false);
+    const { mutations, ledger } = build();
     const fail = async (): Promise<never> => {
       throw new NetworkError('c1', 'lines.quantity');
     };
@@ -296,7 +329,7 @@ describe('a write the network dropped', () => {
         undefined,
         undefined,
         draft({
-          subject: `quantity:ln${i}`,
+          subject: `ln${i}:quantity`,
           args: { name: `n${i}`, delta: '+1' },
         })
       );
@@ -308,7 +341,7 @@ describe('a write the network dropped', () => {
   });
 
   it('reads a ledger it cannot parse as empty', () => {
-    const { ledger, session } = build(false);
+    const { ledger, session } = build();
     session.set(StorageKeys.droppedWrites, '{not json');
 
     expect(ledger.take(PAGE)).toEqual([]);

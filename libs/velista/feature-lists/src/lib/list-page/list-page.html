@@ -94,20 +94,16 @@
     @if (header(); as list) {
       <lib-list-header [header]="list" />
     }
-  }
 
-  @if (current.kind === 'loading') {
-    <lib-row-skeleton [count]="5" labelKey="zone.detail.loading" />
-  }
-
-  @if (current.kind === 'loaded') {
     <!--
       A quantity change the network dropped before the reconnect reloaded this page
       (velista 0159). Said once, in the person's words, with a resend only when the
-      first attempt never left the phone.
+      first attempt never left the phone. The live region is drawn while the page
+      loads and filled once it has, because a region inserted already filled is often
+      not announced.
     -->
-    @if (droppedNotices().length > 0) {
-      <div class="dropped" role="status">
+    <div class="dropped" role="status">
+      @if (current.kind === 'loaded') {
         @for (notice of droppedNotices(); track notice.id) {
           <div class="trips-failed">
             <p class="trips-failed-body">{{ notice.text }}</p>
@@ -129,9 +125,15 @@
             </button>
           </div>
         }
-      </div>
-    }
+      }
+    </div>
+  }
 
+  @if (current.kind === 'loading') {
+    <lib-row-skeleton [count]="5" labelKey="zone.detail.loading" />
+  }
+
+  @if (current.kind === 'loaded') {
     <!--
       One line, drawn on arrival from what the server said rather than after a control
       has failed (plan 0030, section 3.2). Two callers need it and neither of them is

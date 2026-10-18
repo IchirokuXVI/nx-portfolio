@@ -502,19 +502,19 @@ describe('LineStore', () => {
     it('writes down a quantity the network dropped before it was sent, with its replay', async () => {
       const { store, lines } = await build(
         [line('a', { content: 'Pan de pueblo', quantity: 1 })],
-        [
-          provideFakeBrowserFacade(new Map(), {
-            onLine: (() => false) as never,
-          }),
-        ]
+        [provideFakeBrowserFacade(new Map())]
       );
       await store.load(LIST);
-      lines.failNext(new NetworkError('c1', 'lines.quantity'));
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
 
-      expect(await store.addQuantity('a', 1)).toBe('failed');
+      expect(await store.addQuantity('a', 1, { reportDropped: true })).toBe(
+        'failed'
+      );
 
       expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
         expect.objectContaining({
+          subject: 'a:quantity',
+          lineId: 'a',
           key: 'list.dropped.quantity',
           args: { name: 'Pan de pueblo', delta: '+1' },
           replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
@@ -530,7 +530,7 @@ describe('LineStore', () => {
       await store.load(LIST);
       lines.failNext(new TimeoutError());
 
-      await store.addQuantity('a', -2);
+      await store.addQuantity('a', -2, { reportDropped: true });
 
       expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
         expect.objectContaining({
@@ -538,6 +538,20 @@ describe('LineStore', () => {
           replay: null,
         }),
       ]);
+    });
+
+    it('writes nothing down for a caller that did not ask, as the line page does not', async () => {
+      // Only the list page draws the notice, so only its writes are recorded.
+      const { store, lines } = await build(
+        [line('a', { quantity: 1 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+      expect(await store.addQuantity('a', 1)).toBe('failed');
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([]);
     });
 
     it('reports overwritten when the server moved further than this write alone', async () => {

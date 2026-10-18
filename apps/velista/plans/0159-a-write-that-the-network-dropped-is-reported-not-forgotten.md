@@ -139,12 +139,36 @@ offline.
   (`listWritesPage` in `mutations.ts`). The URL holds the locale, the mount and a possible
   `sheet` segment, and none of them says which page the change was made on. The list page
   takes its entries when it opens, and again when the list in the URL changes.
-- **"Never left" is read from `navigator.onLine` as the request starts.** Angular reports
-  status 0 for a request the browser refused and for one whose answer was lost, so the
-  error itself cannot tell the two apart. When the browser is offline, Chrome refuses the
-  request before it is sent (`ERR_INTERNET_DISCONNECTED`). That case keeps the replay. A
-  `NetworkError` while the browser is online keeps none, and so does an rxjs `TimeoutError`.
-  A captive portal is online by that measure, so it gets the safe answer.
+- **"Never left" is read from `navigator.onLine` at the moment the request is handed on.**
+  Angular reports status 0 for a request the browser refused and for one whose answer was
+  lost, so the error itself cannot tell the two apart. When the browser is offline, Chrome
+  refuses the request before it is sent (`ERR_INTERNET_DISCONNECTED`). That case keeps the
+  replay. A `NetworkError` while the browser is online keeps none, and so does an rxjs
+  `TimeoutError`. A captive portal is online by that measure, so it gets the safe answer.
+- **The read is in `gateway-interceptor.ts`, which is outside this plan's Scope.** The
+  first build read `onLine` when `Mutations.run` started. The request can leave later: a
+  stale token makes the interceptor wait for `ensureFreshToken()`, and the connection can
+  come back during that refresh. The POST then lands, its answer is lost, and a replay
+  kept from the earlier read would add a second +1. The interceptor is the one place that
+  knows the moment of the send, so it reads `onLine` just before each attempt goes to
+  `next(...)` (the refreshed retry too) and puts the answer on the `NetworkError` it
+  raises as `refusedOffline`. `errors.ts` gains that field, false by default.
+  `Mutations.run` keeps the replay only when the field is true and no longer reads the
+  connection itself. The refresh and the sign out paths of the interceptor are unchanged.
+- **Only the list page's writes are recorded.** `LineStore.addQuantity` takes an optional
+  `{ reportDropped: true }`, and only `ListPage.changeQuantity` and `addDueLine` pass it.
+  The line page's stepper and the catalog's adds pass nothing, so a drop there records no
+  entry that would surface later on the list page with a live "Send it again". It is a
+  flag rather than the draft itself, because the draft needs the line's list and text,
+  which the store holds, and one place builds it.
+- **The entry names its line.** The draft carries `lineId`, and the page looks the line
+  up from there for both sentences. Before, it read the id off the replay, so an unsure
+  entry (no replay) drew the line's raw text and not the name the row draws.
+- **The live region is on the page before it fills.** The `role="status"` container is
+  drawn while the page loads and receives its sentences once it has loaded, because a
+  region inserted already filled is often not announced. A page that opens from the
+  cache straight into its loaded state still inserts it filled; nothing short of a region
+  in the layout avoids that.
 - **The notice without a replay says "may not have been saved"**, with "Check the number
   before you change it again". Target state 3 says "not saved", but such a write may
   have landed, and "not saved" would then be false. The owner can change it.
@@ -168,6 +192,11 @@ offline.
   The app layout spec reads the eager import off the source, because Jest has no chunks.
   The other icons keep their lazy `import()`, and the pages that draw this one were not
   touched.
+- **Follow up, not built here: replace the source reading spec.** A static `?raw` import
+  plus a one line `?raw` mapper in `apps/velista/jest.config.cts` and in the shell's Jest
+  config, as `libs/velista/ui/jest.config.cts` has, would let the icon be a plain import
+  and the app layout spec assert the markup instead of reading the source. Both configs
+  are outside this plan's scope.
 - **The notice reuses the list page's `trips-failed` classes** (a sentence and quiet
   actions in one wrapping row), because `list-page.scss` is not in this plan's scope.
 - **The ledger keeps 5 entries.**

@@ -31,6 +31,7 @@ import {
   LineStore,
   LIST_SERVICE,
   ListViewStore,
+  overlayKey,
   ProductPickStore,
   provideFakeCategoryStore,
   provideFakeItemNames,
@@ -3018,7 +3019,10 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
   ): DroppedWriteDraft {
     return {
       page: `list:${LIST_ID}`,
-      subject: 'quantity:ln-1',
+      // Built as the store builds it, so a spec that settles the entry by its
+      // subject would find it.
+      subject: overlayKey('ln-1', 'quantity'),
+      lineId: 'ln-1',
       key: 'list.dropped.quantity',
       args: { name: 'Pan de pueblo', delta: '+1' },
       replay: { kind: 'line-quantity', lineId: 'ln-1', delta: 1 },
@@ -3028,6 +3032,11 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
 
   function notice(fixture: ComponentFixture<ListPage>) {
     return query(fixture, '.dropped');
+  }
+
+  /** How many lost changes the region holds. The region itself is always drawn. */
+  function entries(fixture: ComponentFixture<ListPage>): number {
+    return notice(fixture)?.querySelectorAll('.trips-failed').length ?? 0;
   }
 
   function action(fixture: ComponentFixture<ListPage>, name: string) {
@@ -3055,7 +3064,7 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
       lineId: 'ln-1',
       delta: 1,
     });
-    expect(notice(fixture)).toBeNull();
+    expect(entries(fixture)).toBe(0);
     // Read once and cleared: a reload now draws nothing.
     expect(TestBed.inject(DroppedWrites).take(`list:${LIST_ID}`)).toEqual([]);
   });
@@ -3074,7 +3083,7 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
     action(fixture, 'list.dropped.dismiss')?.click();
     fixture.detectChanges();
 
-    expect(notice(fixture)).toBeNull();
+    expect(entries(fixture)).toBe(0);
     expect(lines.calls).not.toContainEqual(
       expect.objectContaining({ kind: 'quantity' })
     );
@@ -3085,7 +3094,16 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
       dropped: [dropped({ page: 'list:another' })],
     });
 
-    expect(notice(fixture)).toBeNull();
+    expect(entries(fixture)).toBe(0);
+  });
+
+  it('keeps the live region on the page before it has anything to say', async () => {
+    // A region inserted already filled is often not announced, so it is there
+    // empty and the sentence arrives into it.
+    const { fixture } = await render({});
+
+    expect(notice(fixture)?.getAttribute('role')).toBe('status');
+    expect(entries(fixture)).toBe(0);
   });
 });
 

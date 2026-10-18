@@ -425,6 +425,22 @@ describe('LinePage', () => {
       ]);
     });
 
+    it('asks for no record of a write the network drops (velista 0159)', async () => {
+      // The notice and its "Send it again" are the list page's, so an entry recorded
+      // here would surface on a page that never made the write.
+      const { fixture, lines } = await render();
+      const addQuantity = jest.spyOn(lines, 'addQuantity');
+      const [, more] = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement);
+
+      more.click();
+      await drain(fixture);
+
+      expect(addQuantity).toHaveBeenCalledTimes(1);
+      expect(addQuantity.mock.calls[0]).toEqual([LINE_ID, 1]);
+    });
+
     it('is a number with no buttons for a reader without DECIDE', async () => {
       const { fixture } = await render({ permissions: READER });
 
