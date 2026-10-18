@@ -1,4 +1,4 @@
-> **PR:** [#751](https://github.com/IchirokuXVI/nx-portfolio/pull/751)
+> **PR:** [#751](https://github.com/IchirokuXVI/nx-portfolio/pull/751) stage 1, [#758](https://github.com/IchirokuXVI/nx-portfolio/pull/758) stage 2
 
 # 0158: the list page draws what the server holds
 
@@ -161,8 +161,8 @@ Stage 2, after backend `0214`:
 
 ## What the build decided
 
-- **Stage 1 (items 1 to 5) is in PR #751. Stage 2 (item 6, `commentCount`) waits on
-  backend `0214`** and is not built.
+- **Stage 1 (items 1 to 5) is in PR #751. Stage 2 (item 6, `commentCount`) is in PR
+  #758**, on top of backend `0214` (PR #755).
 - **The sheet seeds in one place.** An `effect` hands the list to `_seedFromList` the first
   time `list()` is defined, and a `seeded` signal makes it run once. `canSave` also
   requires `seeded`. Plan `0152` builds on `_seedFromList`.
@@ -181,3 +181,18 @@ Stage 2, after backend `0214`:
   snapshot of the local lines before the first page lands and hand it to `_loadRest`,
   which merges each later page against it with the same `_keepsLocal` rule. A merge
   against the current store would find nothing for those lines.
+- **Stage 2: the count travels on `Line` and lives in the store.** The read reaches
+  `LineStore` as mapped lines through `LineApi`. Thus `Line` (in `domain.ts`, outside the
+  Scope above) gained an optional `commentCount?: number | null`. Screens still read
+  `commentCountOf`. `toLine` takes a whole number from 0 as known, and null, an absent
+  field or any other value as unknown.
+- **A read records only what it knows.** `_recordReadCounts` runs after each page of
+  `load`, `refresh` and `_loadRest`. A count is recorded for a line that the merge took
+  from the read and whose count is a number. A line kept from the local copy keeps its
+  count, and a read that says null or nothing keeps the count the device has. Events and
+  write answers never record a count, so their null erases nothing.
+- **`hasLists` is not built.** Backend `0214` did not ship it, so a plain member keeps the
+  member count heuristic in `selectGroupState`.
+- **The walk needed an intercept.** The shared backend slot ran code from before PR #755,
+  so Playwright added the real count to the lines read. After two comments and a reload,
+  the row showed the badge "2".
