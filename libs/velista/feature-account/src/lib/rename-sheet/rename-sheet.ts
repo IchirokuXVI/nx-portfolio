@@ -15,6 +15,9 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
   USERNAME_SCOPE_DEFAULT,
+  usernameLength,
+  usernameProblem,
+  type UsernameProblem,
   type UsernameScope,
 } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
@@ -52,15 +55,25 @@ import { RenameAnnouncement } from '../rename-announcement';
  * bucket an order of magnitude larger. So the refusal renders `retryAfterSeconds` from
  * the problem body, and there is no fallback duration anywhere in this file.
  *
- * ## The rules the field states, and the ones it does not
+ * ## The rules the field states, and when
  *
- * The field states the length, which is the one a person can act on while typing.
- * Everything else — the character classes, the "at least one letter", the ban on
- * bidirectional formatting characters, the reserved `former member` prefix — is
- * enforced by `validateUsername` on the server and **not** re-implemented here. A second
- * copy of that regular expression in the browser is a second place for it to drift, and
- * a refusal has copy that states the rule rather than echoing the server.
+ * The length is stated from the start, beside the counter, because it is the rule a
+ * person meets while typing. The other rules of the server's `validateUsername` (the
+ * characters, at least one letter, the reserved `former member` prefix) are mirrored
+ * by `usernameProblem` (velista `0160`) and drawn the moment a name breaks one, so an
+ * emoji is answered on screen and not by a 400. A short name says nothing new: its rule
+ * is already on screen, and a name is too short for most of the time it takes to write
+ * one (section 3.3). Either way the primary stays disabled. `limits.spec.ts` carries
+ * the server's cases, which is what keeps the mirror from drifting, and the server stays
+ * the authority: its 400 still draws `account.error.badName`.
  */
+/** The sentence each broken name rule draws, shared with the setup name step. */
+const PROBLEM_KEYS: Record<Exclude<UsernameProblem, 'length'>, string> = {
+  characters: 'account.error.nameCharacters',
+  letter: 'account.error.nameLetter',
+  reserved: 'account.error.nameReserved',
+};
+
 @Component({
   selector: 'lib-rename-sheet',
   imports: [RokuTranslatorPipe, SheetShell, SpinnerIcon],
@@ -96,21 +109,25 @@ export class RenameSheet {
   readonly failure = signal<{ key: string; wait: string } | null>(null);
 
   /** Code points, so an emoji counts once and the counter matches the server's rule. */
-  readonly length = computed(() => Array.from(this.typed().trim()).length);
+  readonly length = computed(() => usernameLength(this.typed().trim()));
+
+  /** The server's rule the typed name breaks, or null. */
+  private readonly _problem = computed(() => usernameProblem(this.typed()));
 
   /**
-   * Whether the primary is enabled.
+   * The sentence for a broken rule, drawn under the field, or null.
    *
-   * Length only, and checked on the trimmed value, because that is what is sent. The
-   * field is never refused **while typing** (section 3.3): a name is invalid for most
-   * of the time it takes to write one.
+   * Never for the length, whose rule is on screen from the start (section 3.3).
    */
-  readonly canSave = computed(() => {
-    const length = this.length();
-    return (
-      !this.busy() && length >= this.minLength && length <= this.maxLength
-    );
+  readonly problemKey = computed(() => {
+    const problem = this._problem();
+    return problem === null || problem === 'length'
+      ? null
+      : PROBLEM_KEYS[problem];
   });
+
+  /** Whether the primary is enabled: never for a name the server would refuse. */
+  readonly canSave = computed(() => !this.busy() && this._problem() === null);
 
   onTyped(event: Event): void {
     this.typed.set((event.target as HTMLInputElement).value);

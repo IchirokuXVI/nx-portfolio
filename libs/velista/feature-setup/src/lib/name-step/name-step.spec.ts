@@ -183,6 +183,75 @@ describe('NameStep', () => {
     expect(flow.go).toHaveBeenCalledWith('place');
   });
 
+  describe('a name the server would refuse (velista 0160)', () => {
+    it('draws the rule, marks the field and holds the button for an emoji', async () => {
+      const { fixture, profile, flow } = await render();
+
+      await type(fixture, 'Bruno 🍋 Peña');
+
+      const field = element<HTMLInputElement>(fixture, '#setup-name');
+      const rule = element(fixture, '#setup-name-rule');
+      expect(rule.textContent?.trim()).toBe('account.error.nameCharacters');
+      expect(field.getAttribute('aria-invalid')).toBe('true');
+      expect(field.getAttribute('aria-describedby')).toBe('setup-name-rule');
+
+      const primary = element<HTMLButtonElement>(fixture, '.primary');
+      expect(primary.disabled).toBe(true);
+      // The refused name is not echoed as accepted, by the button or by the note.
+      expect(primary.textContent?.trim()).toBe('setup.name.continuePlain');
+      expect(fixture.nativeElement.querySelector('.note')).toBeNull();
+
+      element<HTMLFormElement>(fixture, 'form').dispatchEvent(
+        new Event('submit')
+      );
+      await settle(fixture);
+      expect(renames(profile)).toHaveLength(0);
+      expect(flow.go).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a', 'account.error.nameLength'],
+      ['123', 'account.error.nameLetter'],
+      ['former member x', 'account.error.nameReserved'],
+    ])('draws the rule %s breaks', async (value, key) => {
+      const { fixture } = await render();
+
+      await type(fixture, value);
+
+      expect(element(fixture, '#setup-name-rule').textContent?.trim()).toBe(
+        key
+      );
+      expect(element<HTMLButtonElement>(fixture, '.primary').disabled).toBe(
+        true
+      );
+    });
+
+    it('lets the field go back to normal once the name is fixed', async () => {
+      const { fixture } = await render();
+
+      await type(fixture, 'Bruno 🍋');
+      await type(fixture, 'Bruno');
+
+      const field = element<HTMLInputElement>(fixture, '#setup-name');
+      expect(
+        fixture.nativeElement.querySelector('#setup-name-rule')
+      ).toBeNull();
+      expect(field.getAttribute('aria-invalid')).toBeNull();
+      expect(field.getAttribute('aria-describedby')).toBeNull();
+      expect(element<HTMLButtonElement>(fixture, '.primary').disabled).toBe(
+        false
+      );
+    });
+
+    it('counts code points, so a letter outside the basic plane counts once', async () => {
+      const { fixture } = await render();
+
+      await type(fixture, '𝔄𝔄');
+
+      expect(element(fixture, '.counter').textContent?.trim()).toBe('2 / 40');
+    });
+  });
+
   it('puts focus on the question when it arrives', async () => {
     const { fixture } = await render();
 

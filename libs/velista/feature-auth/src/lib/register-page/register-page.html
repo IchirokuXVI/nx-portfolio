@@ -4,7 +4,9 @@
   [lede]="'auth.register.body' | rokuT"
   [title]="'auth.register.title' | rokuT"
 >
-  <form (submit)="onSubmit($event)" class="form">
+  <!-- `novalidate`, so the app's own sentence answers a bad address, in the app's
+       language, and not the browser's tooltip (velista 0160). -->
+  <form (submit)="onSubmit($event)" class="form" novalidate>
     <lib-email-field
       [(value)]="email"
       [describedBy]="error()?.placement === 'password' ? null : errorId"
@@ -22,7 +24,11 @@
       [(value)]="password"
       [describedBy]="error()?.placement === 'email' ? null : errorId"
       [hideLabel]="'auth.field.hidePassword' | rokuT"
-      [invalid]="error() !== null && error()?.placement !== 'email'"
+      [invalid]="
+        error() !== null &&
+        error()?.placement !== 'email' &&
+        error()?.key !== 'auth.error.passwordMismatch'
+      "
       [label]="'auth.field.password' | rokuT"
       [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
       [readOnly]="submitting()"

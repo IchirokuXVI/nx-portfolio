@@ -15,8 +15,10 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   USERNAME_MAX_LENGTH,
-  USERNAME_MIN_LENGTH,
   USERNAME_SCOPE_DEFAULT,
+  usernameLength,
+  usernameProblem,
+  type UsernameProblem,
 } from '@portfolio/velista/models';
 import { PageNavigation } from '@portfolio/velista/platform';
 import { InfoIcon, SetupStepHeader, SpinnerIcon } from '@portfolio/velista/ui';
@@ -28,6 +30,14 @@ interface Failure {
   readonly key: string;
   readonly wait: string;
 }
+
+/** The sentence each broken name rule draws under the field (velista `0160`). */
+const PROBLEM_KEYS: Record<UsernameProblem, string> = {
+  length: 'account.error.nameLength',
+  characters: 'account.error.nameCharacters',
+  letter: 'account.error.nameLetter',
+  reserved: 'account.error.nameReserved',
+};
 
 /**
  * Step 1 of 3, the name (velista `0098`, section 5).
@@ -49,6 +59,13 @@ interface Failure {
  * the button writes it.
  *
  * Skip writes nothing, whatever is in the field or on the card.
+ *
+ * ## A name the server would refuse is never echoed as accepted
+ *
+ * `usernameProblem` is the server's rule, mirrored (velista `0160`). While a typed name
+ * breaks it, the rule is drawn under the field, the field is marked invalid, the button
+ * is disabled and says only Continue, and the note that repeats the name is gone. The
+ * server stays the authority: its 400 still draws `account.error.badName`.
  */
 @Component({
   selector: 'lib-setup-name-step',
@@ -84,19 +101,50 @@ export class NameStep {
 
   protected readonly trimmed = computed(() => this.typed().trim());
 
-  /** The primary button's words, which say what pressing it will do. */
-  protected readonly action = computed(() => {
-    const typed = this.trimmed();
-    return typed === ''
-      ? { key: 'setup.name.keep', name: this.cardName() }
-      : { key: 'setup.name.continue', name: typed };
+  /** Code points, so an emoji counts once, as the server counts it. */
+  protected readonly length = computed(() => usernameLength(this.typed()));
+
+  /** The key of the rule the typed name breaks, or null. A blank field breaks none. */
+  protected readonly problem = computed(() => {
+    if (this.trimmed() === '') {
+      return null;
+    }
+    const problem = usernameProblem(this.typed());
+    return problem === null ? null : PROBLEM_KEYS[problem];
   });
 
-  /** A typed name shorter than the server accepts is not sent to be refused. */
-  protected readonly canContinue = computed(() => {
-    const length = this.trimmed().length;
-    return !this.saving() && (length === 0 || length >= USERNAME_MIN_LENGTH);
+  /** The field is wrong while it breaks a rule, or after the server refused it. */
+  protected readonly invalid = computed(
+    () =>
+      this.problem() !== null || this.failure()?.key === 'account.error.badName'
+  );
+
+  /** What describes the field: the broken rule first, then a server failure. */
+  protected readonly describedBy = computed(() => {
+    if (this.problem() !== null) {
+      return 'setup-name-rule';
+    }
+    return this.failure() === null ? null : 'setup-name-error';
   });
+
+  /**
+   * The primary button's words, which say what pressing it will do. A name that breaks
+   * a rule is not named, because the button would not continue as it.
+   */
+  protected readonly action = computed(() => {
+    const typed = this.trimmed();
+    if (typed === '') {
+      return { key: 'setup.name.keep', name: this.cardName() };
+    }
+    return this.problem() === null
+      ? { key: 'setup.name.continue', name: typed }
+      : { key: 'setup.name.continuePlain', name: '' };
+  });
+
+  /** A typed name the server would refuse is not sent to be refused. */
+  protected readonly canContinue = computed(
+    () => !this.saving() && this.problem() === null
+  );
 
   private readonly _heading = viewChild<ElementRef<HTMLElement>>('heading');
 

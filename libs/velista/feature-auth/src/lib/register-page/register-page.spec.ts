@@ -306,6 +306,96 @@ describe('RegisterPage', () => {
     });
   });
 
+  /**
+   * Velista `0160`, items 3 and 4: an address or a password the server would refuse is
+   * answered on screen, in the app's words, and the request is spared. The button stays
+   * enabled, which is plan 0009 section 5.5.
+   */
+  describe('before the request', () => {
+    it('lets the app say it, not the browser', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, 'form')?.hasAttribute('novalidate')).toBe(true);
+    });
+
+    it('draws the app sentence for an address with no @, and sends nothing', async () => {
+      const { fixture, auth, router } = await render();
+
+      fill(fixture, 'ana-sin-arroba', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.error()).toEqual({
+        key: 'auth.error.badEmail',
+        placement: 'email',
+      });
+      expect(query(fixture, 'lib-form-error')?.textContent).toContain(
+        'auth.error.badEmail'
+      );
+      expect(
+        query(fixture, 'input[type="email"]')?.getAttribute('aria-invalid')
+      ).toBe('true');
+      expect(document.activeElement?.id).toBe('register-email');
+      expect(auth.calls).toEqual([]);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('draws the short password sentence for seven characters, and sends nothing', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'abcdefg');
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.error()).toEqual({
+        key: 'auth.error.shortPassword',
+        placement: 'password',
+      });
+      expect(
+        query(fixture, '#register-password')?.getAttribute('aria-invalid')
+      ).toBe('true');
+      expect(document.activeElement?.id).toBe('register-password');
+      expect(auth.calls).toEqual([]);
+      // The rule is not a condition on the button (plan 0009, section 5.5).
+      expect((query(fixture, '.primary') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+    });
+
+    it('lets eight characters through', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'abcdefgh');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([
+        { method: 'register', email: 'marta@example.com' },
+      ]);
+    });
+
+    it('leaves the first password box alone on a mismatch', async () => {
+      // Its contents are the ones being confirmed, so it is not the box at fault.
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(
+        query(fixture, '#register-password')?.getAttribute('aria-invalid')
+      ).toBe('false');
+      expect(
+        query(fixture, '#register-confirm-password')?.getAttribute(
+          'aria-invalid'
+        )
+      ).toBe('true');
+    });
+  });
+
   describe('a 400 from the DTO', () => {
     it('puts a short password against the password field', async () => {
       // The one case where a message is not shared between the fields (section 5.5).
@@ -323,7 +413,9 @@ describe('RegisterPage', () => {
         }),
       });
 
-      fill(fixture, 'marta@example.com', 'short');
+      // Long enough for the client, refused by the server all the same: the server
+      // stays the authority.
+      fill(fixture, 'marta@example.com', 'password123');
       submit(fixture);
       await fixture.whenStable();
 
@@ -347,7 +439,7 @@ describe('RegisterPage', () => {
         }),
       });
 
-      fill(fixture, 'not-an-address', 'password123');
+      fill(fixture, 'marta@example.c', 'password123');
       submit(fixture);
       await fixture.whenStable();
 

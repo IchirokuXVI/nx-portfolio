@@ -13,12 +13,14 @@
       </label>
       @if (typed() !== '') {
         <span aria-hidden="true" class="counter">
-          {{ typed().length }} / {{ maxLength }}
+          {{ length() }} / {{ maxLength }}
         </span>
       }
     </div>
     <input
       (input)="onInput($event)"
+      [attr.aria-describedby]="describedBy()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
       [attr.maxlength]="maxLength"
       [placeholder]="'setup.name.placeholder' | rokuT"
       [readOnly]="saving()"
@@ -28,6 +30,14 @@
       id="setup-name"
       type="text"
     />
+    <!-- The server's rule, drawn as it is broken rather than after a request
+         (velista 0160). The live region stays in the page so that a rule appearing
+         inside it is read out while the person is still typing. -->
+    <div aria-live="polite">
+      @if (problem(); as rule) {
+        <p class="error" id="setup-name-rule">{{ rule | rokuT }}</p>
+      }
+    </div>
   </div>
 
   @if (trimmed() === '') {
@@ -52,7 +62,7 @@
         <span>{{ 'setup.name.another' | rokuT }}</span>
       </button>
     </section>
-  } @else {
+  } @else if (problem() === null) {
     <p class="note">
       <lib-info-icon aria-hidden="true" class="note-glyph" />
       <span>{{ 'setup.name.note' | rokuT: { name: trimmed() } }}</span>
@@ -60,7 +70,7 @@
   }
 
   @if (failure(); as failed) {
-    <p class="error" role="alert">
+    <p class="error" id="setup-name-error" role="alert">
       {{ failed.key | rokuT: { wait: failed.wait } }}
     </p>
   }
