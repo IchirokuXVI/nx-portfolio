@@ -803,6 +803,7 @@
     "empty": {
       "title": "Todavía no hay nada en esta lista",
       "body": "Escribe lo primero y todos lo verán",
+      "bodyPrivate": "Escribe lo primero. Todavía no has compartido esta lista con nadie",
       "short": "La lista está vacía"
     },
     "readOnly": {
@@ -905,7 +906,11 @@
       },
       "sharedWithZone": {
         "label": "Todo el mundo de este grupo puede usar esta lista",
-        "hint": "Quien se una más adelante también la tendrá. Desactivarlo no se la quita a nadie que ya la tenga"
+        "hint": "Quien se una más adelante también la tendrá. Desactivarlo no se la quita a nadie que ya la tenga",
+        "takeBack_one": "Quitársela también a la {{count}} persona que la tiene",
+        "takeBack_other": "Quitársela también a las {{count}} personas que la tienen",
+        "keepers_one": "No ha cambiado nada. {{names}} administra la lista ahora, así que solo un administrador del grupo se la puede quitar",
+        "keepers_other": "No ha cambiado nada. {{names}} administran la lista ahora, así que solo un administrador del grupo se la puede quitar"
       },
       "delete": "Eliminar esta lista",
       "accessFor": "Qué puede hacer {{name}} con esta lista",
@@ -929,7 +934,7 @@
     },
     "gone": {
       "byOthers": "Otra persona borró esta línea",
-      "unavailable": "Esta línea se borró y ya no está disponible",
+      "unavailable": "Esa línea ya no está en esta lista",
       "close": "Cerrar"
     },
     "error": {
@@ -1749,8 +1754,8 @@
       "body_one": "Nadie más podrá entrar. La {{count}} persona que ya está comprando sigue hasta que acabe su tiempo.",
       "body_other": "Nadie más podrá entrar. Las {{count}} personas que ya están comprando siguen hasta que acabe su tiempo.",
       "bodyNone": "Nadie más podrá entrar.",
-      "cascade_one": "Quitar también al {{count}} invitado que se unió con él",
-      "cascade_other": "Quitar también a los {{count}} invitados que se unieron con él",
+      "cascade_one": "Quitar también a la {{count}} persona que se unió con él",
+      "cascade_other": "Quitar también a las {{count}} personas que se unieron con él",
       "cascadeHint": "Pierden la lista en su siguiente acción. Marca esto solo si el enlace ha llegado a quien no debía.",
       "confirm": "Revocar el enlace",
       "cancel": "Conservarlo"

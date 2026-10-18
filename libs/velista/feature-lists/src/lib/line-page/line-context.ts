@@ -5,6 +5,7 @@ import {
   MemberNames,
   ZoneStore,
 } from '@portfolio/velista/data-access';
+import { listErrorEffect } from '../list-error-copy';
 
 /**
  * Read what a page about one line needs, when nothing has read it yet (velista
@@ -60,13 +61,23 @@ export function loadLineContext(
  *
  * - `loading`: the list was not read to the point where it can say.
  * - `failed`: the read of the lines did not answer.
- * - `missing`: the list is read to its end and the line is not on it.
+ * - `gone`: the read of the lines was refused, or the list does not exist. The
+ *   list page's `listErrorEffect` decides it, so the line pages and the list page
+ *   say the same sentence for the same answer (velista 0156).
+ * - `missing`: the list is read to its end and the line is not on it. That is a
+ *   deleted line, or a line of another list, and only a backend read could tell
+ *   the two apart, so the copy claims neither.
  * - `ready`: the line is held.
  *
  * Only a list read to its end can say a line is not on it, which is the rule
  * `watchLineGone` follows. Before that, a line that is absent has not arrived.
  */
-export type LinePageStatus = 'loading' | 'failed' | 'missing' | 'ready';
+export type LinePageStatus =
+  | 'loading'
+  | 'failed'
+  | 'gone'
+  | 'missing'
+  | 'ready';
 
 export function linePageStatus(
   lines: LineStore,
@@ -79,7 +90,9 @@ export function linePageStatus(
 
   const state = lines.stateOf(listId);
   if (state === 'failed') {
-    return 'failed';
+    return listErrorEffect(lines.errorOf(listId), 'lines.read') === 'gone'
+      ? 'gone'
+      : 'failed';
   }
   return state === 'loaded' && lines.isComplete(listId) ? 'missing' : 'loading';
 }

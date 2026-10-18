@@ -684,3 +684,48 @@ describe('ShareSheet: people', () => {
     );
   });
 });
+
+/**
+ * Velista `0152`, F6.3: the cascade takes everybody the link let in, guests and
+ * accounts alike (backend plan `0114`), so the tick says "people" and not "guests".
+ * The words through a real i18next, because the testing translator echoes keys.
+ */
+describe('ShareSheet: the cascade names the people who joined (velista 0152)', () => {
+  async function said(lng: string, count: number): Promise<string> {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const i18next = (await import('i18next')).default;
+    const file = resolve(__dirname, `../../../../ui/assets/i18n/${lng}.json`);
+    const instance = i18next.createInstance();
+    await instance.init({
+      lng,
+      resources: {
+        [lng]: { translation: JSON.parse(readFileSync(file, 'utf8')) },
+      },
+    });
+    return instance.t('basket.revoke.cascade', { count });
+  }
+
+  it('draws the cascade for the two who joined with the link', async () => {
+    const fixture = await render();
+
+    const [trigger] = footer(fixture);
+    trigger.click();
+    fixture.detectChanges();
+
+    const label = (fixture.nativeElement as HTMLElement).querySelector(
+      '.cascade-label'
+    );
+    expect(label?.textContent?.trim()).toBe('basket.revoke.cascade');
+    expect(fixture.componentInstance.joinedCount()).toBe(2);
+  });
+
+  it.each([
+    ['en', 2, 'Also remove the 2 people who joined with it'],
+    ['en', 1, 'Also remove the 1 person who joined with it'],
+    ['es', 2, 'Quitar también a las 2 personas que se unieron con él'],
+    ['es', 1, 'Quitar también a la 1 persona que se unió con él'],
+  ])('reads in %s for %i joiners', async (lng, count, text) => {
+    expect(await said(lng, count)).toBe(text);
+  });
+});

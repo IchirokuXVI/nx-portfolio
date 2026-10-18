@@ -1,10 +1,12 @@
 import { inject } from '@angular/core';
 import {
   Router,
+  UrlSegment,
+  UrlSegmentGroup,
+  UrlTree,
   type CanActivateFn,
   type CanMatchFn,
   type Route,
-  type UrlSegment,
 } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import { ZoneStore } from '@portfolio/velista/data-access';
@@ -51,7 +53,7 @@ export const zoneIdGuard: CanMatchFn = (
   // `segments` is what is left after the parent consumed its own, so the id is the
   // second: `zones` then the id. Read positionally rather than from a param map,
   // because at `canMatch` time the route has not been matched and there are no params.
-  return UUID.test(segments[1]?.path ?? '');
+  return canonicalId(segments[1]?.path);
 };
 
 /**
@@ -82,8 +84,52 @@ export const listIdGuard: CanMatchFn = (
   // Read positionally rather than from a param map, because at `canMatch` time the
   // route has not been matched and there are no params. `zoneIdGuard` runs beside this
   // one and checks the zone half, so each guard states one thing.
-  return UUID.test(segments[3]?.path ?? '');
+  return canonicalId(segments[3]?.path);
 };
+
+/**
+ * Whether a segment is an id, and the lower case URL when it is one typed in upper
+ * case (velista 0156).
+ *
+ * The pattern accepts both cases, and so does the backend, but every store here keys
+ * on the id as typed: an upper case list id read its lines under one key, looked for
+ * itself among the group's lists under another, found nothing, and drew the gone
+ * block over a list that every read answered. One URL per resource is the fix, so the
+ * address bar, the stores and the last list storage all hold the lower case form.
+ *
+ * Every id in the URL is lower cased in one redirect rather than this segment alone,
+ * so a link with two upper case ids lands in one hop. The redirected URL is asked
+ * again and answers `true`, so it cannot loop.
+ */
+function canonicalId(path: string | undefined): boolean | UrlTree {
+  if (path === undefined || !UUID.test(path)) {
+    return false;
+  }
+  if (path === path.toLowerCase()) {
+    return true;
+  }
+
+  const url = inject(Router).currentNavigation()?.extractedUrl;
+  if (url === undefined) {
+    return true;
+  }
+  return new UrlTree(lowerCaseIds(url.root), url.queryParams, url.fragment);
+}
+
+function lowerCaseIds(group: UrlSegmentGroup): UrlSegmentGroup {
+  const children: Record<string, UrlSegmentGroup> = {};
+  for (const [outlet, child] of Object.entries(group.children)) {
+    children[outlet] = lowerCaseIds(child);
+  }
+  return new UrlSegmentGroup(
+    group.segments.map((segment) =>
+      UUID.test(segment.path)
+        ? new UrlSegment(segment.path.toLowerCase(), segment.parameters)
+        : segment
+    ),
+    children
+  );
+}
 
 /**
  * The sheets over the group page, for the people who may actually use them.
@@ -204,5 +250,5 @@ export const basketIdGuard: CanMatchFn = (
 ) => {
   // `shopping-lists` then the id, read positionally: at `canMatch` time the route
   // has not been matched and there are no params to read.
-  return UUID.test(segments[1]?.path ?? '');
+  return canonicalId(segments[1]?.path);
 };

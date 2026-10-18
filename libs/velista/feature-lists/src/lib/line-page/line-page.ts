@@ -145,7 +145,7 @@ export class LinePage {
     selectAbilities(this._list()?.myPermissions ?? [])
   );
 
-  /** Loading, failed, missing or ready (section 4). */
+  /** Loading, failed, gone, missing or ready (section 4, velista 0156). */
   readonly status = computed(() =>
     linePageStatus(this._lines, this.listId(), this.lineId())
   );
@@ -476,6 +476,19 @@ export class LinePage {
   /** Back to whatever was on screen before this line, its list being the usual one. */
   async back(): Promise<void> {
     await this._pages.back(this._listUrl());
+  }
+
+  /** A list that is not readable: its group, replacing this page's entry. */
+  async leaveToGroup(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(
+        this._localeStore.locale(),
+        this._basePath,
+        'zones',
+        this.zoneId()
+      ),
+      { replaceUrl: true }
+    );
   }
 
   /** A line that is gone: its list, replacing this page's entry. */

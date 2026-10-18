@@ -27,6 +27,8 @@ import {
   DueLineStore,
   ItemNames,
   LineStore,
+  LIST_SERVICE,
+  type ListServiceI,
   ListStore,
   type ListViewSnapshot,
   ListViewStore,
@@ -51,7 +53,6 @@ import {
   lineName,
   type LineName,
   type LineRowVm,
-  type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
   NO_CATEGORY,
@@ -399,8 +400,11 @@ export class ListPage {
   private readonly _errorKey = signal<string | null>(null);
   private readonly _correlationId = signal<string | null>(null);
 
-  /** Why the page is gone, if it is. */
-  private readonly _gone = signal<ListGoneReason | null>(null);
+  /**
+   * Whether the reader cannot read this list, or the id names nothing (velista 0156).
+   * One state for both, because a reader cannot tell them apart.
+   */
+  private readonly _gone = signal(false);
 
   /**
    * Whether this visit has actually read the zone's lists.
@@ -654,6 +658,97 @@ export class ListPage {
   readonly loaded = computed(() => {
     const current = this.state();
     return current.kind === 'loaded' ? current : null;
+  });
+
+  // --- Who an empty list is shared with (velista 0152, item 4) -------------------
+
+  private readonly _listService = inject<ListServiceI>(LIST_SERVICE);
+
+  /**
+   * Whether anybody but the reader holds a row on this list, and for which list, once
+   * read.
+   *
+   * Read only for a list that is empty, not shared with the group, and managed by the
+   * reader, because the access read needs `MANAGE`. A reader without it was given the
+   * list by somebody, so the shared wording is true for them without a read.
+   *
+   * Not cached for the visit. The settings sheet is a child route, so this page outlives
+   * it, and a grant or a flip made there changes the answer: the read runs again each
+   * time a sheet closes, and the answer is dropped whenever the list stops being one
+   * the read is for.
+   */
+  private readonly _othersHold = signal<{
+    readonly listId: string;
+    readonly others: boolean;
+  } | null>(null);
+
+  /** Counts the sheets that closed over this page, so the read above runs again. */
+  private readonly _sheetCloses = signal(0);
+
+  private readonly _sheetOutlet = viewChild(RouterOutlet);
+
+  private readonly _watchSheets = effect((onCleanup) => {
+    const outlet = this._sheetOutlet();
+    if (outlet === undefined) {
+      return;
+    }
+    const closes = outlet.deactivateEvents.subscribe(() =>
+      this._sheetCloses.update((count) => count + 1)
+    );
+    onCleanup(() => closes.unsubscribe());
+  });
+
+  private readonly _privateList = computed(() => {
+    const current = this.state();
+    const listId = this.listId();
+    const list = this._lists
+      .listsIn(this.zoneId())
+      .find((candidate) => candidate.id === listId);
+    return current.kind === 'loaded' &&
+      current.empty &&
+      list?.sharedWithZone === false &&
+      list.myPermissions.includes('MANAGE')
+      ? listId
+      : null;
+  });
+
+  private readonly _readHolders = effect((onCleanup) => {
+    const listId = this._privateList();
+    this._sheetCloses();
+    if (listId === null) {
+      this._othersHold.set(null);
+      return;
+    }
+    // A read that a newer one replaced answers nothing.
+    let current = true;
+    onCleanup(() => (current = false));
+    const zoneId = this.zoneId();
+    void this._listService.getListAccess(listId).then(
+      (entries) => {
+        if (!current) {
+          return;
+        }
+        const me = this._names
+          .membersOf(zoneId)
+          .find((member) => member.userId === this._session.userId())?.id;
+        const others = entries.some(
+          (entry) => entry.membershipId !== me && entry.permissions.length > 0
+        );
+        this._othersHold.set({ listId, others });
+      },
+      // Quiet: the last answer stays, and with none the shared wording, which is the old
+      // copy and never a wrong claim that a list is private.
+      () => undefined
+    );
+  });
+
+  /** The empty list's body: the private wording only when nobody else has the list. */
+  readonly emptyBodyKey = computed(() => {
+    const listId = this._privateList();
+    const held = this._othersHold();
+    return listId !== null && held?.listId === listId && !held.others
+      ? 'list.empty.bodyPrivate'
+      : 'list.empty.body';
   });
 
   // --- The search, the order and one category (velista 0082) ----------------
@@ -1259,7 +1354,10 @@ export class ListPage {
       const listId = this.listId();
       untracked(() => {
         this._errorKey.set(null);
-        this._gone.set(null);
+        this._gone.set(false);
+        // Another list under the same unreadable group: the zone effect does not run
+        // again, so the group's answer is read here (velista 0156).
+        this._afterZoneRead(this.zoneId());
         void this._loadLines(listId);
       });
     });
@@ -1275,7 +1373,9 @@ export class ListPage {
     effect(() => {
       const zoneId = this.zoneId();
       untracked(() => {
-        void this._zones.loadZone(zoneId);
+        void this._zones
+          .loadZone(zoneId)
+          .then(() => this._afterZoneRead(zoneId));
         void this._checkStillShared(zoneId);
         // The zone's members, for the names on comments and the rows in the share
         // sheet. One request per zone, and it is the only source of a username
@@ -1326,16 +1426,32 @@ export class ListPage {
       const checked = this._listsChecked();
 
       untracked(() => {
-        if (!checked || lists.state !== 'loaded' || this._gone() !== null) {
+        if (!checked || lists.state !== 'loaded' || this._gone()) {
           return;
         }
 
         if (!lists.lists.some((list) => list.id === listId)) {
-          // Deleted and unshared are indistinguishable from here, and the copy differs
-          // only because one of them is worth naming when the store saw the delete
-          // event itself. Absent that, unshared is the safer thing to say: it does not
-          // claim something was destroyed.
-          this._gone.set('unshared');
+          // Deleted and unshared are indistinguishable from here, so the page says
+          // the one sentence that covers both and claims neither (velista 0156).
+          this._gone.set(true);
+        }
+      });
+    });
+
+    // A sheet URL over a list this reader cannot read (velista 0156). The outlet is
+    // not drawn in that state, so the address would name a sheet nobody sees: it is
+    // replaced with the page's own, which is what is on screen. Replaced and not
+    // pushed, so back does not reopen the sheet URL.
+    effect(() => {
+      if (this.state().kind !== 'gone') {
+        return;
+      }
+      untracked(() => {
+        if (this._route.firstChild) {
+          void this._router.navigate(['.'], {
+            relativeTo: this._route,
+            replaceUrl: true,
+          });
         }
       });
     });
@@ -2059,6 +2175,26 @@ export class ListPage {
     this._listsChecked.set(true);
   }
 
+  /**
+   * A group this reader cannot read, or one that does not exist, makes the list under
+   * it unreadable too (velista 0156). Without this a real list under a mistyped group
+   * id drew its lines read only, because the lines answered and the group did not.
+   *
+   * Only an uncached group counts: a refetch that fails over a cached one leaves its
+   * state loaded, which is `ZoneStore`'s rule for a background reconcile.
+   */
+  private _afterZoneRead(zoneId: string): void {
+    if (
+      zoneId !== this.zoneId() ||
+      this._zones.zoneState().get(zoneId) !== 'failed'
+    ) {
+      return;
+    }
+    if (listErrorEffect(this._zones.error(), 'lines.read') === 'gone') {
+      this._gone.set(true);
+    }
+  }
+
   private async _loadLines(listId: string): Promise<void> {
     await this._lines.load(listId);
 
@@ -2184,7 +2320,7 @@ export class ListPage {
   private _applyEffect(error: unknown, operation: ListOperation): boolean {
     switch (listErrorEffect(error, operation)) {
       case 'gone':
-        this._gone.set('unshared');
+        this._gone.set(true);
         return true;
       case 'reread':
         void this._lines.refresh(this.listId());

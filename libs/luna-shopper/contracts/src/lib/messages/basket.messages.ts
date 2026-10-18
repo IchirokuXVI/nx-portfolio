@@ -453,16 +453,39 @@ export interface BasketResult extends BasketView {
    */
   shop: BasketShopView | null;
   /**
-   * What each scope an offer names **is**: one entry per scope id that appears
-   * on any `bestOffer` above, and no others (plan 0066, section 4).
+   * Every scope the basket's profile resolves to, named (plan 0066, section 4;
+   * plan 0213), and the quoted scope of the read's shop when it has one.
    *
    * A price scope is the set of stores a chain charges the same in. It is the
    * right key for a price and not something to show a person, so this is how
    * "0.95 EUR at scope 3f2a…" becomes "0.95 EUR at Mercadona, Ronda de los
-   * Tejares". Empty when nothing is priced, and empty too when the gateway could
-   * not name the scopes it priced against.
+   * Tejares". Since plan 0213 a scope that quotes nothing on this basket is
+   * here too, with {@link BasketPriceScopeView.quotesBasket} false, so a shop
+   * picker that reads this list alone offers every chain of the profile.
+   *
+   * Empty when the profile resolves to nothing, or when no profile is set.
+   * When the gateway could not list everything, {@link scopesIncomplete} says
+   * so, and the list may be empty or partial.
    */
   scopes: BasketPriceScopeView[];
+  /**
+   * True when `scopes` may be missing scopes or shops this time (plan 0213),
+   * so it is not the whole of the profile. It may still be non-empty: the
+   * scopes and shops that could be listed are kept. The causes are a lookup
+   * that failed (the basket's search scope, the profile's resolution, the
+   * chains, the shops), a scope whose chain could not be named, and a shop
+   * search that ran past its page bound.
+   *
+   * False with an empty `scopes` means the profile resolves to no chain, or
+   * the basket has no profile. A client that reads true says the shops could
+   * not all be listed and offers a retry, rather than drawing the list as
+   * whole.
+   *
+
+   * Optional only for a mixed fleet during a deploy: a gateway from before
+   * plan 0213 leaves it out, and absent reads as false.
+   */
+  scopesIncomplete?: boolean;
 }
 
 /**
@@ -481,10 +504,22 @@ export interface BasketResult extends BasketView {
  */
 export interface BasketPriceScopeView extends PriceScopeChainView {
   /**
-   * The shops of this scope. Empty for a reader the server withheld them from,
-   * and empty for a scope catalog cannot place; both draw the chain alone.
+   * The shops of this scope that lie in the profile's postal codes (plan
+   * 0213), the same shops the supermarkets page counts, so the list does not
+   * move with the basket's rows. Empty for a reader the server withheld them
+   * from, and empty for a scope with no shop in those codes; both draw the
+   * chain alone.
    */
   locations: BasketScopeLocationView[];
+  /**
+   * Whether at least one product of this basket has an offer at this scope
+   * (plan 0213). False names a chain of the profile that has no price for
+   * anything here yet.
+   *
+   * Optional only for a mixed fleet during a deploy: a gateway from before
+   * plan 0213 leaves it out, and named only the scopes that quote something.
+   */
+  quotesBasket?: boolean;
 }
 
 /**
