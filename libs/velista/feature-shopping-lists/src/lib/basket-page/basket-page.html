@@ -99,21 +99,27 @@
     />
   }
 
-  @if (revoked()) {
-    <p class="stale" role="status">
-      <lib-offline-icon class="stale-glyph" />
-      <!--
-        Removed, or a visit that ran out. Two different things to whoever is
-        holding the phone, and the reason comes from the refusal rather than
-        from a clock (velista 0094, section 2).
-      -->
-      <span>{{ endedNotice().titleKey | rokuT }}</span>
-    </p>
-  } @else if (!live()) {
-    <p class="stale" role="status">
-      <lib-offline-icon class="stale-glyph" />
-      <span>{{ 'basket.notLive' | rokuT }}</span>
-    </p>
+  <!--
+    Over the basket only (velista 0154). Every other state is a block that says
+    the whole of it, and a note above it would say a second, different thing.
+  -->
+  @if (state() === 'ready') {
+    @if (revoked()) {
+      <p class="stale" role="status">
+        <lib-offline-icon class="stale-glyph" />
+        <!--
+          Removed, or a visit that ran out. Two different things to whoever is
+          holding the phone, and the reason comes from the refusal rather than
+          from a clock (velista 0094, section 2).
+        -->
+        <span>{{ endedNotice().titleKey | rokuT }}</span>
+      </p>
+    } @else if (!live()) {
+      <p class="stale" role="status">
+        <lib-offline-icon class="stale-glyph" />
+        <span>{{ 'basket.notLive' | rokuT }}</span>
+      </p>
+    }
   }
 
   <!--
@@ -196,13 +202,38 @@
         <p class="notice-body">
           {{ endedNotice().bodyKey | rokuT: endedNotice().args }}
         </p>
+        <button (click)="goHome()" class="notice-action" type="button">
+          {{ 'basket.goHome' | rokuT }}
+        </button>
       </div>
     }
 
-    @case ('needsJoin') {
+    <!--
+      Refused with nothing behind the request (velista 0154). Signing in comes
+      back here, and the basket opens if the account is on it.
+    -->
+    @case ('needsSignIn') {
       <div class="notice" role="status">
-        <p class="notice-title">{{ 'basket.join.dead' | rokuT }}</p>
-        <p class="notice-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+        <p class="notice-title">{{ 'basket.needsSignIn.title' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.needsSignIn.body' | rokuT }}</p>
+        <button (click)="signInHere()" class="notice-action" type="button">
+          {{ 'basket.needsSignIn.action' | rokuT }}
+        </button>
+      </div>
+    }
+
+    <!--
+      A signed in reader this device never saw on the basket. A stranger, or a
+      member removed on another device: the gateway answers both alike, and
+      "not yours" is true of both.
+    -->
+    @case ('notYours') {
+      <div class="notice" role="status">
+        <p class="notice-title">{{ 'basket.notYours.title' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.notYours.body' | rokuT }}</p>
+        <button (click)="goHome()" class="notice-action" type="button">
+          {{ 'basket.goHome' | rokuT }}
+        </button>
       </div>
     }
 

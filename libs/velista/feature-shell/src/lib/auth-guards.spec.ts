@@ -54,9 +54,38 @@ function run(
     guard(snapshotOf(frontDoor, page), { url } as RouterStateSnapshot)
   );
 
+  // The path alone: where somebody lands. The page they came from rides along in
+  // the query, and `returnUrlOf` reads that half.
   return result === true
     ? true
-    : TestBed.inject(Router).serializeUrl(result as UrlTree);
+    : pathOf(TestBed.inject(Router).serializeUrl(result as UrlTree));
+}
+
+/** A URL without its query. */
+function pathOf(url: string): string {
+  return url.split('?')[0];
+}
+
+/** The `returnUrl` a guard's redirect carries, or null. */
+function returnUrlOf(
+  guard: Guard,
+  identity: FakeIdentity,
+  frontDoor: string,
+  page = ''
+): string | null {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [provideRouter([]), provideFakeSessionStore(identity)],
+  });
+
+  const url = page === '' ? frontDoor : `${frontDoor}/${page}`;
+  const result = TestBed.runInInjectionContext(() =>
+    guard(snapshotOf(frontDoor, page), { url } as RouterStateSnapshot)
+  );
+
+  return result === true
+    ? null
+    : (result as UrlTree).queryParamMap.get('returnUrl');
 }
 
 /**
@@ -136,6 +165,19 @@ describe('authenticatedGuard', () => {
         '/velista/en'
       );
     }
+  });
+
+  it('carries the page it dropped as returnUrl', () => {
+    // F4.7: a signed out deep link used to drop its target for good
+    // (velista 0154, target 5).
+    const id = '3f7c1a2e-9b4d-4f1a-8c2e-5d6b7a8c9e01';
+
+    expect(
+      returnUrlOf(authenticatedGuard, 'anonymous', '/velista/en', `zones/${id}`)
+    ).toBe(`/velista/en/zones/${id}`);
+    expect(returnUrlOf(authenticatedGuard, 'anonymous', '/en', 'home')).toBe(
+      '/en/home'
+    );
   });
 
   it('sends them to the front door from a sheet over a page it guards', () => {
@@ -344,7 +386,10 @@ describe('an anonymous deep link settles', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl(url);
 
-    expect(router.url).toBe('/velista/en');
+    expect(pathOf(router.url)).toBe('/velista/en');
+    expect(router.parseUrl(router.url).queryParamMap.get('returnUrl')).toBe(
+      url
+    );
   });
 
   /**
@@ -382,6 +427,6 @@ describe('an anonymous deep link settles', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl(`/velista/en/shopping-lists/${id}/sheet/get`);
 
-    expect(router.url).toBe(`/velista/en/shopping-lists/${id}`);
+    expect(pathOf(router.url)).toBe(`/velista/en/shopping-lists/${id}`);
   });
 });

@@ -53,6 +53,7 @@ import {
   VISIT_WARNING_MINUTES,
 } from '@portfolio/velista/models';
 import {
+  appPath,
   BrowserFacade,
   ColumnScroll,
   ListSearchNavigation,
@@ -101,7 +102,7 @@ import {
   visitTime,
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
-import { SHOP_ASK_SEGMENTS } from '../basket-paths';
+import { basketPath, SHOP_ASK_SEGMENTS } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import {
   basketGroupScope,
@@ -724,6 +725,12 @@ export class BasketPage {
     readonly text: string;
     readonly dismissLabel: string | null;
   } | null>(() => {
+    // F6.7: "you are on this list until" says nothing true over a state block or
+    // a finished trip, and sat above "no longer on this list" (velista `0154`).
+    if (this.state() !== 'ready' || this.finished()) {
+      return null;
+    }
+
     const endsAt = this._visit();
     if (endsAt === null) {
       return null;
@@ -1645,6 +1652,38 @@ export class BasketPage {
 
   protected retry(): void {
     void this._store.refresh();
+  }
+
+  /**
+   * Sign in, and come back to this basket (velista `0154`, target 6). The sign
+   * in page reads `returnUrl`; the literal is written here because that page is in
+   * a library this one may not import.
+   */
+  protected signInHere(): void {
+    void this._router.navigate(
+      [appPath(this._locale(), this._basePath, 'auth', 'login')],
+      {
+        queryParams: {
+          returnUrl: basketPath(
+            this._locale(),
+            this._basePath,
+            this._store.address()
+          ),
+        },
+      }
+    );
+  }
+
+  /**
+   * The one action of a basket the reader cannot use: home for an account, the
+   * front door for anybody else (velista `0154`).
+   */
+  protected goHome(): void {
+    void this._router.navigateByUrl(
+      this._session.isAuthenticated()
+        ? appPath(this._locale(), this._basePath, 'home')
+        : appPath(this._locale(), this._basePath)
+    );
   }
 
   // --- The tools row and the search (plan 0074) -----------------------------

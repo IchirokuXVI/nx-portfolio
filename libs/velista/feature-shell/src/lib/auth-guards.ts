@@ -31,6 +31,12 @@ const HOME_PATH = 'home';
 const AUTH_PATH = 'auth';
 
 /**
+ * The page to come back to after signing in (velista `0154`). A literal, because the
+ * sign in page that reads it is in a lazily loaded library this one may not import.
+ */
+const RETURN_URL_PARAM = 'returnUrl';
+
+/**
  * Builds a sibling URL out of the one the guard was handed.
  *
  * Neither the locale segment nor the `velista` mount segment may be written down: the
@@ -95,8 +101,15 @@ export const authenticatedGuard: CanActivateFn = (route, state) => {
   // Keep the mount and the locale, drop the page. Written as "how much of the URL is
   // above this page" rather than as a suffix to remove, because the pages this guards
   // are one, two and four segments long and their sheets add more on top.
+  //
+  // The dropped page rides along as `returnUrl` (velista `0154`), so signing in from
+  // the front door can come back to it. The sign in page decides whether to trust it.
   const frontDoor = segmentsAbove(route);
-  return retarget(state.url, (segments) => segments.slice(0, frontDoor));
+  const target = retarget(state.url, (segments) =>
+    segments.slice(0, frontDoor)
+  );
+  target.queryParams = { ...target.queryParams, [RETURN_URL_PARAM]: state.url };
+  return target;
 };
 
 /**
