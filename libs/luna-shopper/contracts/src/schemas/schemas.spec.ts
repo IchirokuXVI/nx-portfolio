@@ -388,6 +388,7 @@ describe('contract schemas', () => {
             // read as "this server does not say".
             claimed: false,
             claimedByUserId: null,
+            commentCount: null,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
@@ -433,6 +434,7 @@ describe('contract schemas', () => {
             // 0052, section 3.3).
             claimed: false,
             claimedByUserId: null,
+            commentCount: null,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
@@ -1445,6 +1447,7 @@ describe('contract schemas', () => {
         lastSettlementOutcome: null,
         claimed: false,
         claimedByUserId: null,
+        commentCount: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
@@ -1467,6 +1470,41 @@ describe('contract schemas', () => {
       expect(
         validateMessageResponse('line.update', { ...line, named: null }).valid
       ).toBe(false);
+    });
+
+    it('a line carries its comment count, a number or null and never absent (plan 0214)', () => {
+      const line = {
+        id: 'l',
+        listId: 'li',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: [],
+        itemSetHash: null,
+        productGroupId: null,
+        groupItemIds: [],
+        favoriteItemId: null,
+        preferredSupermarketId: null,
+        named: true,
+        position: 1,
+        approvalStatus: 'PENDING',
+        createdByUserId: 'u',
+        approvedByUserId: null,
+        version: 1,
+        boughtCount: 0,
+        lastSettlementOutcome: null,
+        claimed: false,
+        claimedByUserId: null,
+        commentCount: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const valid = (value: unknown) =>
+        validateMessageResponse('line.update', value).valid;
+      expect(valid(line)).toBe(true);
+      expect(valid({ ...line, commentCount: null })).toBe(true);
+      expect(valid({ ...line, commentCount: -1 })).toBe(false);
+      const { commentCount: _dropped, ...without } = line;
+      expect(valid(without)).toBe(false);
     });
 
     it('every write of a line takes an optional boolean `named` (plan 0207)', () => {
