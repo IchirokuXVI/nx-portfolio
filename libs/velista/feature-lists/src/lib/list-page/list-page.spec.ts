@@ -88,7 +88,9 @@ import {
   ToBuyHeading,
   TripGroup,
 } from '@portfolio/velista/ui';
-import { BehaviorSubject, of } from 'rxjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BehaviorSubject } from 'rxjs';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -220,6 +222,12 @@ interface Options {
   readonly returned?: unknown;
   /** Writes an earlier document of this tab lost to the network (velista `0159`). */
   readonly dropped?: readonly DroppedWriteDraft[];
+  /** What the read of the lines failed with, beside `linesState: 'failed'`. */
+  readonly linesError?: unknown;
+  /** What the read of the group failed with, on a group that is not cached (velista 0156). */
+  readonly zoneError?: unknown;
+  /** A sheet URL over the page: the route has a child (velista 0156). */
+  readonly sheetOpen?: boolean;
   /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
   readonly access?: readonly ListAccessEntry[];
 }
@@ -260,7 +268,10 @@ async function render(options: Options = {}): Promise<{
 
   const tone = { play: jest.fn() };
 
-  const zones = fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] });
+  const zones =
+    options.zoneError === undefined
+      ? fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] })
+      : failedZoneStore(options.zoneError);
   const lists = fakeListStore({
     lists: options.lists ?? [
       list({
@@ -274,6 +285,7 @@ async function render(options: Options = {}): Promise<{
     lines: options.lines ?? [line('ln-1')],
     state: options.linesState ?? 'loaded',
     complete: options.complete ?? true,
+    error: options.linesError,
   });
   const realtime = new RealtimeMemory();
   realtime.setConnected(options.connected ?? true);
@@ -324,7 +336,8 @@ async function render(options: Options = {}): Promise<{
   };
   const activatedRoute = route(
     options.line,
-    options.search === true ? { search: '1' } : {}
+    options.search === true ? { search: '1' } : {},
+    options.sheetOpen ?? false
   );
   // The bottom bar's owner, as a double (velista `0117`): the router here is a
   // fake with no state to read, and what matters is what the page tells it.
@@ -434,8 +447,13 @@ async function render(options: Options = {}): Promise<{
  * because none of this page's three line sheets simply shows a line and all three do
  * something to one.
  */
-function route(line?: string, extra: Record<string, string> = {}) {
+function route(
+  line?: string,
+  extra: Record<string, string> = {},
+  sheetOpen = false
+) {
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
+  const paramMap = new BehaviorSubject(map);
   const queryOf = (params: Record<string, string>) =>
     convertToParamMap(line === undefined ? params : { line, ...params });
   const queryParamMap = new BehaviorSubject(queryOf(extra));
@@ -446,10 +464,12 @@ function route(line?: string, extra: Record<string, string> = {}) {
   };
 
   return {
-    paramMap: of(map),
+    paramMap,
     queryParamMap,
     snapshot,
     parent: null,
+    // A sheet URL is a child route of the page (velista 0156).
+    firstChild: sheetOpen ? { snapshot: {} } : null,
     /**
      * The URL's query changing under the page, as a navigation or the phone's back
      * button changes it (velista `0109`). `?line=` is kept, as the router keeps it.
@@ -458,6 +478,24 @@ function route(line?: string, extra: Record<string, string> = {}) {
       snapshot.queryParamMap = queryOf(params);
       queryParamMap.next(snapshot.queryParamMap);
     },
+    /** Another list of the same group, as a navigation between them moves it. */
+    setList(listId: string): void {
+      snapshot.paramMap = convertToParamMap({ zoneId: ZONE_ID, listId });
+      paramMap.next(snapshot.paramMap);
+    },
+  };
+}
+
+/**
+ * A group that is not cached and whose read failed (velista 0156): the shape the real
+ * `ZoneStore` leaves after `loadZone` on an uncached id that answered an error.
+ */
+function failedZoneStore(error: unknown) {
+  const fake = fakeZoneStore({ zones: [], error });
+  return {
+    ...fake,
+    zoneState: signal(new Map([[ZONE_ID, 'failed' as const]])).asReadonly(),
+    loadZone: async () => undefined,
   };
 }
 
@@ -731,7 +769,9 @@ describe('ListPage', () => {
     it('calls the page gone once the lists came back without it', async () => {
       const { fixture } = await render({ lists: [], listsState: 'loaded' });
 
-      expect(fixture.nativeElement.textContent).toContain('list.gone.unshared');
+      expect(fixture.nativeElement.textContent).toContain(
+        'list.error.notAvailable'
+      );
     });
 
     it('shows the name on the first frame when it was cached', async () => {
@@ -3005,5 +3045,211 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
     });
 
     expect(notice(fixture)).toBeNull();
+  });
+});
+
+/**
+ * Velista 0156: a list this reader cannot read, or whose id names nothing, draws one
+ * translated sentence and one way back, with no sheet over it. A 403 and a 404 keep
+ * the same sentence, because a reader cannot tell them apart and must not learn which
+ * lists exist.
+ */
+describe('ListPage: a list you cannot read says one thing (velista 0156)', () => {
+  const forbidden = new GatewayError({
+    code: 'forbidden',
+    status: 403,
+    correlationId: 'cid-403',
+  });
+  const missing = new GatewayError({
+    code: 'not_found',
+    status: 404,
+    correlationId: 'cid-404',
+  });
+
+  it('draws the not available sentence on a 403 of the lines, and no raw key', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+    });
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('list.error.notAvailable');
+    expect(text).not.toContain('list.gone');
+    expect(query(fixture, 'lib-error-state')).toBeNull();
+    expect(query(fixture, 'main .state-action')?.textContent?.trim()).toBe(
+      'list.header.back'
+    );
+  });
+
+  it('draws the same sentence on a 404, so the two cannot be told apart', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: missing,
+    });
+
+    expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+      'list.error.notAvailable'
+    );
+  });
+
+  it('takes the reader back to the group', async () => {
+    const { fixture, router } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+    });
+
+    query(fixture, 'main .state-action')?.click();
+    await fixture.whenStable();
+
+    expect(router.navigateByUrl).toHaveBeenCalledWith(
+      `/velista/en/zones/${ZONE_ID}`
+    );
+  });
+
+  it('draws no sheet over a gone list, and replaces the sheet URL with the page', async () => {
+    const { fixture, router, activatedRoute } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+      sheetOpen: true,
+    });
+
+    expect(query(fixture, 'router-outlet')).toBeNull();
+    expect(router.navigate).toHaveBeenCalledWith(['.'], {
+      relativeTo: activatedRoute,
+      replaceUrl: true,
+    });
+  });
+
+  it('draws no sheet over a list the lists came back without', async () => {
+    const { fixture } = await render({
+      lists: [],
+      listsState: 'loaded',
+      sheetOpen: true,
+    });
+
+    expect(query(fixture, 'router-outlet')).toBeNull();
+  });
+
+  it('draws no sheet over a list whose lines failed for another reason', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: new Error('offline'),
+    });
+
+    expect(query(fixture, 'lib-error-state')).not.toBeNull();
+    expect(query(fixture, 'router-outlet')).toBeNull();
+  });
+
+  it('keeps the sheets over a list that loads or loaded, and leaves its URL alone', async () => {
+    const loading = await render({ linesState: 'loading', sheetOpen: true });
+    expect(query(loading.fixture, 'router-outlet')).not.toBeNull();
+
+    const loaded = await render({ sheetOpen: true });
+    expect(query(loaded.fixture, 'router-outlet')).not.toBeNull();
+    expect(loaded.router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('draws the sentence and never the lines when the group read is refused', async () => {
+    for (const error of [forbidden, missing]) {
+      const { fixture } = await render({ zoneError: error });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+        'list.error.notAvailable'
+      );
+      expect(query(fixture, 'lib-line-list')).toBeNull();
+      expect(query(fixture, 'lib-list-notice')).toBeNull();
+    }
+  });
+
+  it('stays unreadable on another list of the same refused group', async () => {
+    // Both lists in the group's answer, so only the group read can say the second one
+    // is unreadable.
+    const { fixture, activatedRoute } = await render({
+      zoneError: forbidden,
+      lists: [list({ myPermissions: ADMIN }), list({ id: 'list-2' })],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    activatedRoute.setList('list-2');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+      'list.error.notAvailable'
+    );
+    expect(query(fixture, 'lib-line-list')).toBeNull();
+  });
+
+  it('keeps the lines when the group read fails for another reason', async () => {
+    const { fixture } = await render({ zoneError: new Error('offline') });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-line-list')).not.toBeNull();
+  });
+});
+
+/**
+ * Velista 0156: the gone block drew `list.gone.unshared`, a key plan 0083 had removed,
+ * and the spec asserting it passed because the testing translator echoes keys. So this
+ * walks every translation key the list page and the line pages name in their templates
+ * and asserts each exists in both locale files, read from disk at test time.
+ */
+describe('every key the list and line page templates name exists in both locales', () => {
+  const LIB = join(__dirname, '..');
+  const I18N = join(__dirname, '..', '..', '..', '..', 'ui', 'assets', 'i18n');
+  const TEMPLATES = [
+    'list-page/list-page.html',
+    'line-page/line-page.html',
+    'line-history-page/line-history-page.html',
+  ];
+
+  /** Every quoted literal shaped like a key, and every literal key input. */
+  function keysIn(template: string): string[] {
+    const withoutComments = template.replace(/<!--[\s\S]*?-->/g, '');
+    const quoted = [...withoutComments.matchAll(/'([a-zA-Z]\w*(?:\.\w+)+)'/g)];
+    const inputs = [
+      ...withoutComments.matchAll(/\b(?:messageKey|labelKey)="([\w.]+)"/g),
+    ];
+    return [...quoted, ...inputs].map((match) => match[1]);
+  }
+
+  function has(locale: Record<string, unknown>, key: string): boolean {
+    const parts = key.split('.');
+    const last = parts.pop() as string;
+    let node: unknown = locale;
+    for (const part of parts) {
+      node = (node as Record<string, unknown> | undefined)?.[part];
+    }
+    const leaf = node as Record<string, unknown> | undefined;
+    // A key read with a count resolves to its plural forms.
+    return [last, `${last}_one`, `${last}_other`].some(
+      (name) => typeof leaf?.[name] === 'string'
+    );
+  }
+
+  for (const locale of ['en', 'es']) {
+    it(`finds every key in ${locale}.json`, () => {
+      const json = JSON.parse(
+        readFileSync(join(I18N, `${locale}.json`), 'utf8')
+      ) as Record<string, unknown>;
+
+      const absent = TEMPLATES.flatMap((template) =>
+        keysIn(readFileSync(join(LIB, template), 'utf8'))
+          .filter((key) => !has(json, key))
+          .map((key) => `${template}: ${key}`)
+      );
+
+      expect(absent).toEqual([]);
+    });
+  }
+
+  it('reads the keys it checks, so an empty walk cannot pass', () => {
+    const keys = keysIn(readFileSync(join(LIB, TEMPLATES[0]), 'utf8'));
+    expect(keys).toContain('list.header.back');
+    expect(keys).toContain('list.readOnly.banner');
   });
 });

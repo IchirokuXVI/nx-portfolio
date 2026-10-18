@@ -18,6 +18,7 @@ import {
   fakeMemberNames,
   fakeShoppingProfileStore,
   fakeZoneStore,
+  GatewayError,
   provideFakeGroupMembers,
   provideFakeGroupNames,
   provideFakeItemNames,
@@ -121,6 +122,9 @@ interface Options {
   readonly moreSettlements?: Readonly<
     Record<string, readonly LineSettlement[]>
   >;
+  readonly linesState?: 'idle' | 'loading' | 'loaded' | 'failed';
+  /** What the read of the lines failed with, beside `linesState: 'failed'`. */
+  readonly linesError?: unknown;
 }
 
 async function render<T>(
@@ -130,16 +134,19 @@ async function render<T>(
   fixture: ComponentFixture<T>;
   lines: FakeLineStore;
   pages: { back: jest.Mock };
+  router: { navigateByUrl: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
   const lines = fakeLineStore({
     lines: options.lines ?? [line()],
-    state: 'loaded',
+    state: options.linesState ?? 'loaded',
+    error: options.linesError,
     settlements: options.settlements ?? { [LINE_ID]: [] },
     moreSettlements: options.moreSettlements,
   });
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
+  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
   const catalog: CatalogServiceI = {
     suggest: jest.fn().mockResolvedValue([]),
     itemsByIds: jest.fn().mockResolvedValue([]),
@@ -196,7 +203,7 @@ async function render<T>(
       provideFakeSessionStore('REGISTERED'),
       { provide: CATALOG_SERVICE, useValue: catalog },
       { provide: PageNavigation, useValue: pages },
-      { provide: Router, useValue: { navigateByUrl: jest.fn() } },
+      { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
@@ -212,7 +219,7 @@ async function render<T>(
   const fixture = TestBed.createComponent(component);
   await drain(fixture);
 
-  return { fixture, lines, pages };
+  return { fixture, lines, pages, router };
 }
 
 async function drain<T>(fixture: ComponentFixture<T>): Promise<void> {
@@ -305,5 +312,29 @@ describe('LineHistoryPage', () => {
     await fixture.componentInstance.back();
 
     expect(pages.back).toHaveBeenCalledWith(LINE_URL);
+  });
+
+  it('says a list you cannot read is not available, with a way back to the group and no retry (velista 0156)', async () => {
+    const { fixture, router } = await render(LineHistoryPage, {
+      lines: [],
+      linesState: 'failed',
+      linesError: new GatewayError({
+        code: 'forbidden',
+        status: 403,
+        correlationId: 'cid-403',
+      }),
+    });
+
+    expect(textOf(fixture)).toContain('list.error.notAvailable');
+    expect(textOf(fixture)).not.toContain('list.page.failed');
+    expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
+
+    buttonWith(fixture, 'list.header.back')?.click();
+    await drain(fixture);
+
+    expect(router.navigateByUrl).toHaveBeenCalledWith(
+      `/velista/en/zones/${ZONE_ID}`,
+      { replaceUrl: true }
+    );
   });
 });

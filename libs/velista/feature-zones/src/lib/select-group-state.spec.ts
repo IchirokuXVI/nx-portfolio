@@ -1,4 +1,9 @@
-import type { MyZone, ShoppingListSummary } from '@portfolio/velista/models';
+import { GatewayError } from '@portfolio/velista/data-access';
+import type {
+  ErrorCode,
+  MyZone,
+  ShoppingListSummary,
+} from '@portfolio/velista/models';
 import { selectGroupState } from './select-group-state';
 
 /**
@@ -43,12 +48,18 @@ function list(id: string): ShoppingListSummary {
   };
 }
 
+function gatewayError(code: ErrorCode, status: number): GatewayError {
+  return new GatewayError({ code, status, correlationId: 'ref-1' });
+}
+
 function select(input: {
   zone?: MyZone;
   zoneState?: 'idle' | 'loading' | 'loaded' | 'failed';
   lists?: readonly ShoppingListSummary[];
   listsState?: 'idle' | 'loading' | 'loaded' | 'failed';
   stale?: boolean;
+  /** What the zone read failed with, when it failed (plan 0157). */
+  zoneError?: unknown;
   /** Who is in the group, named and already without the reader (plan 0022). */
   online?: readonly string[];
   /** Who is shopping each list, by list id. */
@@ -59,6 +70,7 @@ function select(input: {
     zoneState: input.zoneState ?? 'loaded',
     lists: input.lists ?? [],
     listsState: input.listsState ?? 'loaded',
+    zoneError: input.zoneError ?? null,
     correlationId: 'ref-1',
     stale: input.stale ?? false,
     online: input.online ?? [],
@@ -80,6 +92,56 @@ describe('selectGroupState', () => {
         kind: 'error',
         correlationId: 'ref-1',
       });
+    });
+
+    /**
+     * Plan 0157, item 1. Core answers `not_found` to a stranger and `forbidden` to a
+     * pending member, and the two must read alike: telling them apart would tell a
+     * reader which groups exist.
+     */
+    it.each<[ErrorCode, number]>([
+      ['not_found', 404],
+      ['forbidden', 403],
+    ])('is not available, with no reference, on a %s', (code, status) => {
+      expect(
+        select({
+          zone: undefined,
+          zoneState: 'failed',
+          zoneError: gatewayError(code, status),
+        })
+      ).toEqual({ kind: 'not-available' });
+    });
+
+    it('stays the generic error, with its reference, on a server failure', () => {
+      expect(
+        select({
+          zone: undefined,
+          zoneState: 'failed',
+          zoneError: gatewayError('internal', 500),
+        })
+      ).toEqual({ kind: 'error', correlationId: 'ref-1' });
+    });
+
+    it('stays the generic error on a request that never reached the server', () => {
+      expect(
+        select({
+          zone: undefined,
+          zoneState: 'failed',
+          zoneError: new Error('offline'),
+        })
+      ).toEqual({ kind: 'error', correlationId: 'ref-1' });
+    });
+
+    it('waits for the read rather than answering from an older refusal', () => {
+      // The store's error is one signal for every zone, so a `not_found` left over
+      // from another group must not decide a group whose read is still out.
+      expect(
+        select({
+          zone: undefined,
+          zoneState: 'loading',
+          zoneError: gatewayError('not_found', 404),
+        })
+      ).toEqual({ kind: 'loading', header: null });
     });
 
     it('shows the cached header immediately and skeletons only the rows', () => {
