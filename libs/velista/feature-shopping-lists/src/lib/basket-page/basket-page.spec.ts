@@ -4880,3 +4880,111 @@ describe('the first buy asks where you are', () => {
     );
   });
 });
+
+/**
+ * A tap never undoes another person's buy, and a refused tap says why (velista
+ * `0151`).
+ */
+describe("the row's tap and somebody else's buy", () => {
+  function row(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const me = participant(owner('p-me'));
+
+  /** Three bought: one by `first` at ten, two by `second` five minutes on. */
+  const shared = (first: string, second: string) =>
+    line('Milk', {
+      left: 0,
+      bought: 3,
+      state: 'DONE',
+      touchedBy: second,
+      entries: [
+        entry('l-a', 'row-Milk', 0, {
+          bought: 1,
+          asked: 1,
+          state: 'DONE',
+          act: {
+            participantId: first,
+            at: '2026-10-16T10:00:00Z',
+            outcome: 'BOUGHT',
+          },
+        }),
+        entry('l-b', 'zl-b', 0, {
+          bought: 2,
+          asked: 2,
+          state: 'DONE',
+          act: {
+            participantId: second,
+            at: '2026-10-16T10:05:00Z',
+            outcome: 'BOUGHT',
+          },
+        }),
+      ],
+    });
+
+  it('takes back only the units this person bought', async () => {
+    const { fixture, store } = await render({
+      lines: [shared('p-other', 'p-me')],
+      me,
+    });
+
+    row(fixture).revert.emit();
+    await settleWrites(fixture);
+
+    expect(store.revert.mock.calls[0][1]).toEqual({
+      target: 'UNITS',
+      units: 2,
+      from: 3,
+    });
+  });
+
+  it('opens the sheet when the newest units are somebody else', async () => {
+    const { fixture, store } = await render({
+      lines: [shared('p-me', 'p-other')],
+      me,
+    });
+
+    row(fixture).revert.emit();
+    await settleWrites(fixture);
+
+    expect(store.revert).not.toHaveBeenCalled();
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'settle'],
+      expect.anything()
+    );
+  });
+
+  it('says so on the row when a tick lands on a finished trip', async () => {
+    const { fixture, store } = await render({
+      lines: [line('Milk', { left: 5 })],
+    });
+    store.settle.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'basket_finished' as ErrorCode,
+          status: 409,
+          correlationId: 'ref-1',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.basketFinished');
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.error.basketFinished'
+    );
+  });
+});

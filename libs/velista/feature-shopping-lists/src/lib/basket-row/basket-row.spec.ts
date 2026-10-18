@@ -12,7 +12,7 @@ import {
   type BasketRowEntry,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { BasketRow as BasketRowComponent } from './basket-row';
+import { BasketRow as BasketRowComponent, ownBoughtUnits } from './basket-row';
 
 /**
  * The row's status control (plan 0052, section 6).
@@ -251,7 +251,11 @@ describe('BasketRowComponent: what a tap does', () => {
   });
 
   it('reopens a finished line rather than settling it again', async () => {
+    // Bought by the reader: a row somebody else bought opens the sheet instead
+    // (velista `0151`).
     const fixture = await render(bought());
+    fixture.componentRef.setInput('meId', 'p-1');
+    fixture.detectChanges();
     const reopened: unknown[] = [];
     const settled: unknown[] = [];
     fixture.componentInstance.revert.subscribe(() => reopened.push(1));
@@ -1143,5 +1147,164 @@ describe('BasketRow: a crossed out row with no mark (velista 0142, section 5)', 
     ).toContain('basket.line.removed');
     expect(element.querySelector('.mark')).toBeNull();
     expect(element.querySelector('button')).toBeNull();
+  });
+});
+
+/**
+ * The round control undoes only what this person did (velista `0151`).
+ *
+ * F6.1 of the e2e report of 2026-10-16: a tap meant to tick landed after the
+ * other person's tick arrived, became Undo, and took their buy back.
+ */
+describe("BasketRow: a tap never undoes another person's buy (velista 0151)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  /** Every act the row reported, in order. */
+  function acts(fixture: Awaited<ReturnType<typeof render>>): string[] {
+    const seen: string[] = [];
+    fixture.componentInstance.settle.subscribe(() => seen.push('settle'));
+    fixture.componentInstance.revert.subscribe(() => seen.push('revert'));
+    fixture.componentInstance.open.subscribe(() => seen.push('open'));
+    return seen;
+  }
+
+  async function renderAs(row: BasketRow, meId: string) {
+    const fixture = await render(row);
+    fixture.componentRef.setInput('meId', meId);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('opens the sheet on a row somebody else bought', async () => {
+    const fixture = await renderAs(bought(), 'p-2');
+    const seen = acts(fixture);
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['open']);
+  });
+
+  it('undoes a row this person bought', async () => {
+    const fixture = await renderAs(bought(), 'p-1');
+    const seen = acts(fixture);
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['revert']);
+  });
+
+  it('opens the sheet on a row somebody else said the shop had none of', async () => {
+    const fixture = await renderAs(unavailable(), 'p-2');
+    const seen = acts(fixture);
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['open']);
+  });
+
+  it('opens the sheet when the newest units are somebody else, under a heading of mine', async () => {
+    const mine = entry('l-a', {
+      bought: 1,
+      left: 0,
+      asked: 1,
+      state: 'DONE',
+      act: {
+        participantId: 'p-1',
+        at: '2026-10-16T10:00:00Z',
+        outcome: 'BOUGHT',
+      },
+    });
+    const theirs = entry('l-b', {
+      bought: 1,
+      left: 0,
+      asked: 1,
+      state: 'DONE',
+      act: {
+        participantId: 'p-2',
+        at: '2026-10-16T10:05:00Z',
+        outcome: 'BOUGHT',
+      },
+    });
+    const row = line({
+      left: 0,
+      bought: 2,
+      asked: 2,
+      state: 'DONE',
+      touchedBy: 'p-2',
+      entries: [mine, theirs],
+    });
+    const fixture = await render(row, { entry: mine });
+    fixture.componentRef.setInput('meId', 'p-1');
+    fixture.detectChanges();
+    const seen = acts(fixture);
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['open']);
+  });
+
+  it('holds the control for a beat after somebody else finished the row', async () => {
+    jest.useFakeTimers();
+    const fixture = await renderAs(line(), 'p-2');
+    const seen = acts(fixture);
+
+    fixture.componentRef.setInput('row', bought());
+    fixture.detectChanges();
+    (status(fixture) as HTMLButtonElement).click();
+    expect(seen).toEqual([]);
+
+    jest.advanceTimersByTime(251);
+    (status(fixture) as HTMLButtonElement).click();
+    expect(seen).toEqual(['open']);
+  });
+
+  it('holds a tap that lands before the screen caught up', async () => {
+    jest.useFakeTimers();
+    const fixture = await renderAs(line(), 'p-2');
+    const seen = acts(fixture);
+
+    // The change is in, and no frame has drawn it yet.
+    fixture.componentRef.setInput('row', bought());
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual([]);
+  });
+
+  it('holds nothing after this person finished the row', async () => {
+    jest.useFakeTimers();
+    const fixture = await renderAs(line(), 'p-1');
+    const seen = acts(fixture);
+
+    fixture.componentRef.setInput('row', bought());
+    fixture.detectChanges();
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['revert']);
+  });
+});
+
+describe('ownBoughtUnits (velista 0151)', () => {
+  const act = (participantId: string, at: string) => ({
+    participantId,
+    at,
+    outcome: 'BOUGHT',
+  });
+
+  it("counts this person's units from the newest end, and stops at somebody else's", () => {
+    const row = line({
+      bought: 4,
+      entries: [
+        entry('l-a', { bought: 1, act: act('p-1', '2026-10-16T10:00:00Z') }),
+        entry('l-b', { bought: 1, act: act('p-2', '2026-10-16T10:02:00Z') }),
+        entry('l-c', { bought: 2, act: act('p-1', '2026-10-16T10:04:00Z') }),
+      ],
+    });
+
+    expect(ownBoughtUnits(row, 'p-1')).toBe(2);
+    expect(ownBoughtUnits(row, 'p-2')).toBe(0);
+  });
+
+  it('answers every unit on a row that cannot tell', () => {
+    expect(ownBoughtUnits(line({ bought: 3 }), 'p-1')).toBe(3);
   });
 });

@@ -2445,3 +2445,47 @@ describe('SettleSheet: the first buy asks where you are', () => {
     expect(report).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Two people change what one list asks for at once (velista `0151`, F6.2).
+ *
+ * The loser reads the number the line says now, and the quiet read that the
+ * other person's change brings does not turn it into "That did not save".
+ */
+describe('SettleSheet: a demand somebody else changed first (velista 0151)', () => {
+  it('names the number the line says now, and keeps it through a quiet read', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockImplementation(async () => {
+      store.error.set(
+        new GatewayError({
+          code: 'stale_quantity',
+          status: 409,
+          correlationId: 'r9',
+        })
+      );
+      store.rows.set([
+        line({
+          entries: [entry('l1', 'zl1', 6, { asked: 6 }), entry('l2', 'zl2', 1)],
+        }),
+      ]);
+      return null;
+    });
+
+    await commitReel(fixture, 'ask-reel', { from: 3, to: 5 });
+    fixture.detectChanges();
+
+    const failed = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+        ?.textContent ?? '';
+    expect(failed()).toContain('basket.error.staleLine');
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
+
+    // The quiet read the other person's change causes clears the store's error.
+    store.error.set(null);
+    fixture.detectChanges();
+
+    expect(failed()).toContain('basket.error.staleLine');
+    expect(failed()).not.toContain('basket.error.failed');
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
+  });
+});
