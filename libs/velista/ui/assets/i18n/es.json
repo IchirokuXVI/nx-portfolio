@@ -163,6 +163,20 @@
       "reload": "Reintentar"
     }
   },
+  "notFound": {
+    "checking": {
+      "title": "Buscando una versión nueva de velista",
+      "body": "Puede que esta página sea nueva. Si lo es, velista se actualiza y la abre. Tarda unos segundos."
+    },
+    "updating": {
+      "title": "velista se está actualizando",
+      "body": "La versión nueva está lista. velista se vuelve a abrir en esta página."
+    },
+    "missing": {
+      "title": "Esta página no existe",
+      "body": "Puede que el enlace sea antiguo o esté mal escrito."
+    }
+  },
   "auth": {
     "back": "Atrás",
     "signIn": {

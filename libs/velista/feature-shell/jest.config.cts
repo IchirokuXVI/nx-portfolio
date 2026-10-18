@@ -12,6 +12,13 @@ module.exports = {
       },
     ],
   },
+  moduleNameMapper: {
+    // The 404 page renders a `ui` icon, and those inline their glyph with a `?raw`
+    // import. Without this mapping the bundler-only query suffix reaches Jest as a
+    // literal file path and fails to resolve.
+    '\\.(avif|png|jpe?g|gif|webp|svg|ttf|woff2?|mp4|webm|pdf)(\\?.*)?$':
+      '<rootDir>/src/asset-file-mock.ts',
+  },
   transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$)'],
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',

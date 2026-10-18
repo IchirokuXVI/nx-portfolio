@@ -5,7 +5,6 @@ import {
   localizedTitle,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { NotFoundComponent } from '@portfolio/shared/ui';
 import {
   BasketChangeStore,
   BasketSocket,
@@ -32,6 +31,7 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
+import { NotFoundPage } from './not-found-page/not-found-page';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -1836,10 +1836,12 @@ export const AppShellRoutes: Route[] = [
          * So the app claims every path below its mount and the guard settles the
          * locale for all of them. Anything still here afterwards carries a
          * supported canonical locale and simply is not a route, which is this
-         * app's own 404, drawn in a language the visitor can read.
+         * app's own 404, drawn in a language the visitor can read. It asks for a
+         * newer version before it says so (plan 0150), because a link from a newer
+         * release can name a route this build does not have.
          */
         path: '**',
-        component: NotFoundComponent,
+        component: NotFoundPage,
       },
     ],
   },

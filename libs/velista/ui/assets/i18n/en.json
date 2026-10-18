@@ -163,6 +163,20 @@
       "reload": "Try again"
     }
   },
+  "notFound": {
+    "checking": {
+      "title": "Looking for a newer velista",
+      "body": "This page may be new. If it is, velista updates itself and opens it. It takes a few seconds."
+    },
+    "updating": {
+      "title": "velista is updating",
+      "body": "The new version is ready. velista opens again on this page."
+    },
+    "missing": {
+      "title": "This page does not exist",
+      "body": "The link may be old or typed wrong."
+    }
+  },
   "auth": {
     "back": "Back",
     "signIn": {

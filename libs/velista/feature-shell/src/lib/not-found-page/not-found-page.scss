@@ -1,0 +1,46 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// Centred, because nothing else is on the screen, and text pinned to the top of a
+// phone looks like a page that failed to load.
+.content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100%;
+  padding: var(--app-space-8) var(--app-space-6);
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-4);
+  text-align: center;
+}
+
+.mark {
+  font-size: var(--app-icon-lg);
+  color: var(--app-text-muted);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-2xl);
+  font-weight: 400;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.body {
+  margin: 0;
+  max-inline-size: 30ch;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
