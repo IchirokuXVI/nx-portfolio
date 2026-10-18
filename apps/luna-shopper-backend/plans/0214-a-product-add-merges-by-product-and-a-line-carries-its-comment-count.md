@@ -1,3 +1,5 @@
+> **PR:** [#752](https://github.com/IchirokuXVI/nx-portfolio/pull/752)
+
 # 0214: a product add merges by product, and a line carries its comment count
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -127,3 +129,36 @@ has.
   existing merge specs do not cover.
 - **Nullable on events.** The alternative, a page level map of counts, is harder for the
   client to apply per line.
+
+## What the build decided
+
+The build of 2026-10-18 settled the points below. Each one is a choice of the builder that
+the owner can overturn, except the first, which is the owner's to decide. Where this section
+and a section above disagree, this section is right.
+
+1. **Owner decision, open: an unnamed add never lands on a named line.** An add with
+   `named: false` does not raise a line that somebody named, even when both hold one set,
+   and a named add does not raise an unnamed line either. The two key shapes cannot meet:
+   a key with a name holds a null character and a key with none never does. Every line
+   that existed before plan `0207` is named, so on those lists an add from the composer
+   makes a second line beside an old line of the same product until somebody merges them
+   by hand. The owner has not decided otherwise. A change is one line in `lineIdentities`.
+2. **The flag of an add is the flag the new line would carry.** `add` and `addMany` pass
+   `namedOnAdd(req.named, holdsProduct)` and not the raw `req.named`. An add with no
+   product is therefore named and meets free text by its folded name, as before.
+3. **Two items of one batch fold only when their flags agree.** The plan `0207` spec that
+   folded `{ named: false }` and `{ named: absent }` of one product into one line now
+   expects two lines, and a new spec folds two unnamed items in two languages into one.
+   The integration spec that raised lines across flags now asserts the opposite.
+4. **`toLineView` takes the count as an optional fifth argument that defaults to null.**
+   The other arguments of that mapper have no default on purpose. Null is the truth for
+   every caller except the lines read, so a default here cannot hide a wrong answer, and
+   it keeps the basket, settlement and group sync callers unchanged.
+5. **The count is raw SQL** (`count(*)::int ... WHERE "lineId" = ANY($1::uuid[]) GROUP BY 1`)
+   beside the settlement summary, run in the same `Promise.all` as the three other page
+   reads. A line with no row answers 0.
+6. **The schema states `commentCount` as required, `['integer', 'null']`, minimum 0.**
+7. **Item 3 is not built.** `hasLists` needs a second count in the zone summary query,
+   whose index plan `zone-summary.integration.spec.ts` asserts with EXPLAIN, plus the
+   summary reader, the zone counts broadcast and the zone schemas. That is a second query
+   pattern outside the scope of this plan. It can be its own plan.
