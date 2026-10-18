@@ -1,3 +1,5 @@
+> **PR:** [#760](https://github.com/IchirokuXVI/nx-portfolio/pull/760)
+
 # 0159: a write that the network dropped is reported, not forgotten
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -130,3 +132,42 @@ offline.
   seen would keep a page that cannot talk to the server on screen with stale data.
 - **Resend only when the attempt never left.** The person is told the truth in every
   case, and a double increment is worse than one extra tap.
+
+## What the build decided
+
+- **The ledger names its page by a key, not by the URL.** An entry holds `list:<listId>`
+  (`listWritesPage` in `mutations.ts`). The URL holds the locale, the mount and a possible
+  `sheet` segment, and none of them says which page the change was made on. The list page
+  takes its entries when it opens, and again when the list in the URL changes.
+- **"Never left" is read from `navigator.onLine` as the request starts.** Angular reports
+  status 0 for a request the browser refused and for one whose answer was lost, so the
+  error itself cannot tell the two apart. When the browser is offline, Chrome refuses the
+  request before it is sent (`ERR_INTERNET_DISCONNECTED`). That case keeps the replay. A
+  `NetworkError` while the browser is online keeps none, and so does an rxjs `TimeoutError`.
+  A captive portal is online by that measure, so it gets the safe answer.
+- **The notice without a replay says "may not have been saved"**, with "Check the number
+  before you change it again". Target state 3 says "not saved", but such a write may
+  have landed, and "not saved" would then be false. The owner can change it.
+- **A 4xx or a 5xx records nothing.** A response proves the network works, so no reload
+  follows it, and the inline note on the row still says that the change did not save.
+- **A write that lands clears the entries of its subject** (the overlay key
+  `<lineId>:quantity`). Thus "Tap to try again" on the row, used before any reload,
+  leaves no stale notice behind.
+- **The page draws the name the row draws.** The entry holds the line's own text. The
+  page puts the name it draws for the line in its place while the line is loaded.
+- **The two sentences take the name and the delta directly**
+  (`list.dropped.quantity.lost` and `.unsure`). They are not built from a nested
+  description key, because i18next escapes each value, and a nested sentence would
+  escape an `&` in a line name twice.
+- **The offline icon is a static `?raw` import**, so it ships in the velista/ui chunk with
+  the screen that draws it. The other icons keep their lazy `import()`, and the three
+  pages that draw this one were not touched.
+- **The notice reuses the list page's `trips-failed` classes** (a sentence and quiet
+  actions in one wrapping row), because `list-page.scss` is not in this plan's scope.
+- **The ledger keeps 5 entries.**
+- **Writes for a follow up, none of them built here:** a rename of a line (`updateLine`
+  through `_write`), the approval of a line, a tick or an undo on the basket, a change
+  of the quantity on the basket rows and on the line page, and the delete of a line.
+  Only the quantity carries a replay that is a pure delta. For the others the notice can
+  say what was lost, but a resend needs a separate check that the record still has the
+  value that the write was made against.
