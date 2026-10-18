@@ -176,8 +176,11 @@ sentence next to the control that sent it.
 4. **The hold is a second field, not `_deafUntil`.** The status control and the words keep
    separate beats, so a reel that closed itself does not silence the tick. An effect watches
    the press that is drawn. `toggle()` also catches a flip that no frame has drawn yet. A
-   flip whose actor is this person holds nothing. A flip after this person's own revert holds
-   for 250 ms, because the actor that is left is the older act. That is harmless.
+   flip whose actor is this person holds nothing. This person's own press holds nothing
+   either: a settle or a revert from `toggle()` sets a one shot `_ownPress`, and the next
+   flip clears it and starts no hold. The store is not optimistic, so after an undo the act
+   that is left on the entry is the older one (somebody else's, or none). Without the flag
+   that flip read as remote, and a quick re-tick after an undo was dropped with no word.
 5. **The walk at 400 ms lands inside the hold.** On slot 1 against backend slot 4, the
    patch reached the second phone 241 ms after the tick, and the tap at 404 ms did nothing.
    The buy stood, and a second tap opened the sheet. At 707 ms the patch arrived at 207 ms,

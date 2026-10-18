@@ -1281,6 +1281,43 @@ describe("BasketRow: a tap never undoes another person's buy (velista 0151)", ()
 
     expect(seen).toEqual(['revert']);
   });
+
+  it.each([
+    ['somebody else', 'p-2'],
+    ['nobody', null],
+  ])(
+    "holds nothing after this person's own undo leaves %s's act standing",
+    async (_who, touchedBy) => {
+      jest.useFakeTimers();
+      const fixture = await renderAs(bought(), 'p-1');
+      const seen = acts(fixture);
+
+      (status(fixture) as HTMLButtonElement).click();
+      fixture.componentRef.setInput('row', line({ touchedBy }));
+      fixture.detectChanges();
+      (status(fixture) as HTMLButtonElement).click();
+
+      expect(seen).toEqual(['revert', 'settle']);
+    }
+  );
+
+  it('holds a remote flip again once the own press came back', async () => {
+    jest.useFakeTimers();
+    const fixture = await renderAs(bought(), 'p-1');
+    const seen = acts(fixture);
+
+    (status(fixture) as HTMLButtonElement).click();
+    fixture.componentRef.setInput('row', line({ touchedBy: 'p-2' }));
+    fixture.detectChanges();
+    fixture.componentRef.setInput(
+      'row',
+      line({ ...bought(), touchedBy: 'p-2' })
+    );
+    fixture.detectChanges();
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(seen).toEqual(['revert']);
+  });
 });
 
 describe('ownBoughtUnits (velista 0151)', () => {

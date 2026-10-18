@@ -632,10 +632,19 @@ export class BasketRow {
   private _flipDeafUntil = 0;
 
   /**
+   * Whether this person's own settle or revert is still on its way back. The
+   * store is not optimistic, so the flip it causes arrives later, and after an
+   * undo it arrives with somebody else's act (or none) standing on the entry.
+   * The next flip clears it and starts no hold.
+   */
+  private _ownPress = false;
+
+  /**
    * A change somebody else made that turns the control into another act holds
    * it deaf for the reel's beat (velista `0151`): a finger already on its way
    * lands on nothing rather than on the act the change just put under it. The
-   * person's own write moves the control too, and holds nothing.
+   * person's own press moves the control too, and holds nothing, also when it
+   * was an undo that leaves somebody else's act standing.
    */
   private readonly _flipWatch = effect(() => {
     const press = this._press();
@@ -646,6 +655,10 @@ export class BasketRow {
   });
 
   private _holdIfRemote(): void {
+    if (this._ownPress) {
+      this._ownPress = false;
+      return;
+    }
     if (this._actor() !== this.meId()) {
       this._flipDeafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
     }
@@ -901,10 +914,12 @@ export class BasketRow {
       return;
     }
     if (press === 'revert') {
+      this._ownPress = true;
       this.revert.emit();
     } else if (press === 'open') {
       this.open.emit();
     } else {
+      this._ownPress = true;
       this.settle.emit();
     }
   }
