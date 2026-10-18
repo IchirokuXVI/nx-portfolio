@@ -12,6 +12,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BASKET_SERVICE,
+  GatewayError,
   SessionStore,
   type BasketServiceI,
 } from '@portfolio/velista/data-access';
@@ -23,8 +24,30 @@ import {
 import { appPath, InstallStore } from '@portfolio/velista/platform';
 import { basketPath } from '../basket-paths';
 
-/** How the screen is getting on, which is the whole of what it branches on. */
-type JoinState = 'checking' | 'offering' | 'dead' | 'joining' | 'failed';
+/**
+ * How the screen is getting on, which is the whole of what it branches on.
+ *
+ * `unreachable` is a preview that never answered, and `removed` is a signed in
+ * reader the basket refused (velista `0154`).
+ */
+type JoinState =
+  | 'checking'
+  | 'unreachable'
+  | 'offering'
+  | 'dead'
+  | 'joining'
+  | 'failed'
+  | 'removed';
+
+/**
+ * The shape of a whole link secret: 32 random bytes as base64url, which the backend
+ * mints (`randomBytes(32).toString('base64url')`).
+ *
+ * Read only to choose a sentence on a dead link (velista `0154`, target 4). A
+ * secret of another shape was cut short on its way here, and "no longer accepting
+ * people" would be false of it. It never decides whether to ask the server.
+ */
+const WHOLE_SECRET = /^[A-Za-z0-9_-]{43}$/;
 
 /**
  * The first thing a stranger sees (plan 0044, section 3).
@@ -32,14 +55,15 @@ type JoinState = 'checking' | 'offering' | 'dead' | 'joining' | 'failed';
  * ## The hierarchy is decided, not discovered
  *
  * Top to bottom: what this list is, an optional name, and **"Continue as guest"
- * as the primary action of the page**. Sign in and register sit below it and
- * visibly secondary; the install prompt is lower still.
+ * as the primary action of the page**. Sign in sits below it and visibly
+ * secondary; the install prompt is lower still.
  *
- * This is the app's best acquisition moment and the plan is deliberate about not
- * spending it: a person holding a real list in a real shop is the most engaged
- * user velista will ever have, and making them register would kill the feature
- * that got them there. Register is offered because this is the right moment to
- * offer it, and it is never a step.
+ * A person holding a real list in a real shop is the most engaged user velista
+ * will ever have, and making them register would kill the feature that got them
+ * there. So the guest path is the way in, and nothing here offers register
+ * (velista `0154`, target 3): an account can be made later from the account
+ * page, and upgrade keeps the memberships (rule C2). The Google button went with
+ * it, because it opened register and no Google sign in exists yet.
  *
  * ## The name field is optional and looks it
  *
@@ -57,7 +81,9 @@ type JoinState = 'checking' | 'offering' | 'dead' | 'joining' | 'failed';
  * existed all reach {@link JoinState} `dead`, and this screen **must not try to
  * tell them apart**: it cannot, because they answer identically, and that
  * indistinguishability is the security property (section 3.1). So there is one
- * sentence, and it offers nothing to try.
+ * sentence, and one action that leaves for the app (velista `0154`). The only
+ * other sentence is for a secret of the wrong shape, which the server never saw
+ * as a link, so telling it apart leaks nothing.
  *
  * ## Somebody already signed in does not see this screen
  *
@@ -94,6 +120,15 @@ export class JoinPage {
 
   protected readonly state = this._state.asReadonly();
   protected readonly preview = this._preview.asReadonly();
+
+  /** Whether the reader is signed in, who is never offered the guest path. */
+  protected readonly signedIn = this._session.isAuthenticated;
+
+  /**
+   * Whether the secret is the shape a whole link has, which only chooses the
+   * sentence a dead link says. See {@link WHOLE_SECRET}.
+   */
+  protected readonly incomplete = !WHOLE_SECRET.test(this._secret);
 
   /** What the guest typed. Never trimmed into a name here; the API does that. */
   protected readonly name = signal('');
@@ -138,7 +173,16 @@ export class JoinPage {
       return;
     }
 
-    const preview = await this._service.previewLink(this._secret);
+    let preview: BasketLinkPreview;
+    try {
+      preview = await this._service.previewLink(this._secret);
+    } catch {
+      // F6.5: the preview never fails on purpose (backend `0051`, section 4), so
+      // a rejection is the network or the server. It says so and offers the one
+      // thing that can help, rather than a spinner that never ends.
+      this._state.set('unreachable');
+      return;
+    }
     this._preview.set(preview);
 
     if (!preview.joinable) {
@@ -173,13 +217,50 @@ export class JoinPage {
           basketId: session.basketId,
         })
       );
-    } catch {
-      // A link that died between the preview and the tap lands here, and so does
-      // a lost network. Neither is worth distinguishing on a phone in a shop: the
-      // offer stays on screen with a line saying it did not work, so the obvious
-      // second tap is available.
-      this._state.set('failed');
+    } catch (error) {
+      this._state.set(this._failedJoin(error));
     }
+  }
+
+  /**
+   * Which state a refused join lands on (velista `0154`, target 2).
+   *
+   * A signed in reader the basket refuses by name was taken off it, and the link
+   * cannot undo that (backend `0140`, section 5). A 404 is the link dying between
+   * the preview and the tap, which is the dead link. Anything else is a hiccup:
+   * the line saying it did not work stays, so the obvious second tap is there.
+   */
+  private _failedJoin(error: unknown): JoinState {
+    if (
+      error instanceof GatewayError &&
+      error.code === 'not_a_participant' &&
+      this.signedIn()
+    ) {
+      return 'removed';
+    }
+    if (error instanceof GatewayError && error.status === 404) {
+      return 'dead';
+    }
+    return 'failed';
+  }
+
+  /** Ask about the link again, after a preview that never answered. */
+  protected retryCheck(): void {
+    this._state.set('checking');
+    void this._check();
+  }
+
+  /**
+   * Where "Open Velista" and "Go home" go: home for an account, the front door
+   * for anybody else. The front door's own guard would send an account home
+   * anyway, and saying so here saves a redirect.
+   */
+  protected goHome(): void {
+    void this._router.navigateByUrl(
+      this.signedIn()
+        ? appPath(this._locale(), this._basePath, 'home')
+        : appPath(this._locale(), this._basePath)
+    );
   }
 
   /** Offer the install, from inside the tap, because the prompt needs a gesture. */
@@ -187,15 +268,20 @@ export class JoinPage {
     await this._install.prompt();
   }
 
+  /**
+   * Sign in, and come back to this link (velista `0154`, target 5).
+   *
+   * The sign in page reads `returnUrl` and lands here again, where a signed in
+   * reader is joined as themselves without a prompt.
+   */
   protected signIn(): void {
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'auth', 'login')
-    );
-  }
-
-  protected register(): void {
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'auth', 'register')
+    void this._router.navigate(
+      [appPath(this._locale(), this._basePath, 'auth', 'login')],
+      {
+        queryParams: {
+          returnUrl: appPath(this._locale(), this._basePath, 's', this._secret),
+        },
+      }
     );
   }
 }

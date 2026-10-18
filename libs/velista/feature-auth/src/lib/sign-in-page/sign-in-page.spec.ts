@@ -19,6 +19,8 @@ interface Options {
   readonly identity?: FakeIdentity;
   /** `?email=`, which the register screen's conflict message carries. */
   readonly email?: string;
+  /** `?returnUrl=`, which the share link page and the basket page carry. */
+  readonly returnUrl?: string;
 }
 
 async function render(options: Options = {}) {
@@ -40,7 +42,11 @@ async function render(options: Options = {}) {
           snapshot: {
             queryParamMap: {
               get: (key: string) =>
-                key === 'email' ? (options.email ?? null) : null,
+                key === 'email'
+                  ? (options.email ?? null)
+                  : key === 'returnUrl'
+                    ? (options.returnUrl ?? null)
+                    : null,
             },
           },
         },
@@ -107,6 +113,41 @@ describe('SignInPage', () => {
         { method: 'login', email: 'marta@example.com' },
       ]);
       expect(router.navigateByUrl).toHaveBeenCalledWith('/en/home');
+    });
+
+    it('lands back on the page that sent them, such as a share link', async () => {
+      // F6.6: signing in from a share link used to drop the link and land on
+      // the dashboard (velista 0154, target 5).
+      const { fixture, router } = await render({ returnUrl: '/en/s/abc' });
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/s/abc');
+    });
+
+    it('goes home when the page to return to is not inside the app', async () => {
+      const { fixture, router } = await render({
+        returnUrl: 'https://evil.example/en/home',
+      });
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/home');
+    });
+
+    it('carries the page to return to on to register', async () => {
+      const { fixture, router } = await render({ returnUrl: '/en/s/abc' });
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      fixture.componentInstance.createAccount();
+
+      expect(navigate).toHaveBeenCalledWith(['/en/auth/register'], {
+        queryParams: { returnUrl: '/en/s/abc' },
+      });
     });
 
     it('submits from the form, so the phone keyboard Go key works', async () => {

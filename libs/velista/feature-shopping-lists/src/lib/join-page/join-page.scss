@@ -176,12 +176,14 @@
   white-space: nowrap;
 }
 
-// --- The dead link ----------------------------------------------------------
+// --- A state the reader cannot use ------------------------------------------
 
-// Says so plainly and offers nothing to try. It does not distinguish a link that
-// was revoked from one that never existed, because it cannot: they answer
-// identically, and that is the security property (backend 0051, section 3.1).
-.dead {
+// A dead link, a link that could not be checked, a removed reader: each says so
+// plainly with one action (velista 0154). The dead link does not distinguish a
+// link that was revoked from one that never existed, because it cannot: they
+// answer identically, and that is the security property (backend 0051, section
+// 3.1).
+.card {
   @include shared.card;
 
   display: flex;
@@ -189,7 +191,12 @@
   gap: var(--app-space-2);
 }
 
-.dead-title {
+// The action sits apart from the words, like the offer's primary does.
+.card .primary {
+  margin-block-start: var(--app-space-3);
+}
+
+.card-title {
   margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
@@ -199,7 +206,7 @@
   text-wrap: balance;
 }
 
-.dead-body {
+.card-body {
   margin: 0;
   font-size: var(--app-text-sm);
   line-height: var(--app-leading-body);

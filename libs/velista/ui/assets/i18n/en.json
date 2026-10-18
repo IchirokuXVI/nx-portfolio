@@ -1512,6 +1512,16 @@
       "title": "You are no longer on this list",
       "body": "Whoever shared it took it back."
     },
+    "goHome": "Go home",
+    "needsSignIn": {
+      "title": "Sign in to open this list",
+      "body": "Only the people on this list can open it. If you are one of them, sign in.",
+      "action": "Sign in"
+    },
+    "notYours": {
+      "title": "This list is not yours",
+      "body": "Only the people on it can open it. Ask the person who sent it to share it with you."
+    },
     "ended": {
       "title": "Your time on this list has ended",
       "bodyAccount": "A link lasts 12 hours. Ask {{name}} for a new one, or to add you so you stay.",
@@ -1782,7 +1792,16 @@
       "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.",
       "checking": "Checking the link",
       "joining": "Joining",
-      "failed": "That did not work. Try again."
+      "failed": "That did not work. Try again.",
+      "unreachable": "We could not check the link",
+      "unreachableBody": "Check that you are online, then try again.",
+      "retry": "Try again",
+      "incomplete": "This link is not complete",
+      "incompleteBody": "Part of it may have been cut off. Ask whoever sent it to send it again.",
+      "openApp": "Open Velista",
+      "removed": "You were taken off this list",
+      "removedBody": "Ask the person who shared it to add you again.",
+      "home": "Go home"
     },
     "history": {
       "open": "Show line history",

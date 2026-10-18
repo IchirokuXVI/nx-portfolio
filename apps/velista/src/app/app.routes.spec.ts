@@ -72,7 +72,9 @@ describe('velista on its own origin', () => {
 
     await router.navigateByUrl('/en/home');
 
-    expect(router.url).toBe('/en');
+    // The refused page rides along, so signing in can come back to it (velista
+    // 0154).
+    expect(router.url).toBe('/en?returnUrl=%2Fen%2Fhome');
   });
 
   it.each([

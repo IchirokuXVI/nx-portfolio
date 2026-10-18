@@ -1512,6 +1512,16 @@
       "title": "Ya no estás en esta lista",
       "body": "Quien la compartió la ha retirado."
     },
+    "goHome": "Ir al inicio",
+    "needsSignIn": {
+      "title": "Entra para abrir esta lista",
+      "body": "Solo la gente que está en esta lista puede abrirla. Si eres una de esas personas, entra con tu cuenta.",
+      "action": "Entrar"
+    },
+    "notYours": {
+      "title": "Esta lista no es tuya",
+      "body": "Solo la gente que está en ella puede abrirla. Pide a quien te la mandó que la comparta contigo."
+    },
     "ended": {
       "title": "Tu tiempo en esta lista ha acabado",
       "bodyAccount": "Un enlace dura 12 horas. Pide a {{name}} uno nuevo, o que te añada para quedarte.",
@@ -1782,7 +1792,16 @@
       "deadBody": "Pídele uno nuevo a quien te lo mandó. Si ya estabas haciendo esta compra, tu propio enlace en este navegador sigue funcionando.",
       "checking": "Comprobando el enlace",
       "joining": "Uniéndote",
-      "failed": "No ha funcionado. Inténtalo de nuevo."
+      "failed": "No ha funcionado. Inténtalo de nuevo.",
+      "unreachable": "No hemos podido comprobar el enlace",
+      "unreachableBody": "Comprueba que tienes conexión y vuelve a intentarlo.",
+      "retry": "Inténtalo de nuevo",
+      "incomplete": "Este enlace no está completo",
+      "incompleteBody": "Puede que se haya cortado una parte. Pide a quien te lo mandó que te lo envíe otra vez.",
+      "openApp": "Abrir Velista",
+      "removed": "Te han quitado de esta lista",
+      "removedBody": "Pide a quien la compartió que te vuelva a añadir.",
+      "home": "Ir al inicio"
     },
     "history": {
       "open": "Ver el historial de la línea",

@@ -1,3 +1,5 @@
+> **PR:** [#755](https://github.com/IchirokuXVI/nx-portfolio/pull/755)
+
 # 0214: a product add merges by product, and a line carries its comment count
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -127,3 +129,35 @@ has.
   existing merge specs do not cover.
 - **Nullable on events.** The alternative, a page level map of counts, is harder for the
   client to apply per line.
+
+## What the build decided
+
+The build of 2026-10-18 settled the points below. Each one is a choice of the builder that
+the owner can overturn, except the first, which is the owner's to decide. Where this section
+and a section above disagree, this section is right.
+
+1. **The plan landed in two PRs.** Items 2 and 4 (the comment count on `LineView` and its
+   contract, schema, OpenAPI document and wire types) are in PR #755. Item 1 (the merge key)
+   is built in PR #752, which is now a draft and waits on the owner.
+2. **Owner decision, open: the merge key of item 1.** Migration
+   `1756003900000-LineNamed.ts` defaulted every existing row to `named = true`, and velista
+   sends `named: false` on every product add. So every line made before plan `0207` is
+   named, and the key as specified (an unnamed product line is met by `set:<hash>` or
+   `group:<id>` alone, never by its name) stops the same name merges on those lists: an
+   add of "Huevos" from the composer makes a second line beside the old "Huevos" line of
+   the same product, where today it merges. The owner has two options:
+   - (a) land #752 as written and accept the duplicates on old lists;
+   - (b) let an unnamed add also match a named line whose folded name equals the add's.
+     That keeps today's same name merge and still never joins "Eggs" to "Huevos".
+3. **`toLineView` takes the count as an optional fifth argument that defaults to null.**
+   The other arguments of that mapper have no default on purpose. Null is the truth for
+   every caller except the lines read, so a default here cannot hide a wrong answer, and
+   it keeps the basket, settlement and group sync callers unchanged.
+4. **The count is raw SQL** (`count(*)::int ... WHERE "lineId" = ANY($1::uuid[]) GROUP BY 1`)
+   beside the settlement summary, run in the same `Promise.all` as the three other page
+   reads. A line with no row answers 0.
+5. **The schema states `commentCount` as required, `['integer', 'null']`, minimum 0.**
+6. **Item 3 is not built.** `hasLists` needs a second count in the zone summary query,
+   whose index plan `zone-summary.integration.spec.ts` asserts with EXPLAIN, plus the
+   summary reader, the zone counts broadcast and the zone schemas. That is a second query
+   pattern outside the scope of this plan. It can be its own plan.

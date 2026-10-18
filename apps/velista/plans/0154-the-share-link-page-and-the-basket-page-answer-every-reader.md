@@ -1,3 +1,5 @@
+> **PR:** [#749](https://github.com/IchirokuXVI/nx-portfolio/pull/749)
+
 # 0154: the share link page and the basket page answer every reader
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -179,3 +181,52 @@ Basket page:
 - **The guest path is the only way in from a link.** A person who wants an account can
   make one from the account page after joining as a guest, and upgrade keeps the
   memberships (rule C2).
+
+## 3. What the build decided
+
+- **Two files outside Scope were edited, because the target state needs them.**
+  `BasketLoad` is in `libs/velista/models/src/lib/basket-view.ts`, so `needsSignIn` and
+  `notYours` were added there. They replace `needsJoin`, which nothing sets any more.
+  `libs/velista/feature-landing/src/lib/landing-page/landing-page.ts` now passes its query
+  on to sign in (`queryParamsHandling: 'preserve'`). Without that, the `returnUrl` that
+  `authenticatedGuard` puts on the front door is dropped there, and F4.7 stays open.
+- **The guard keeps its redirect target.** It still sends a refused reader to the front
+  door. It only adds `returnUrl` beside any query that was already there. A guarded sheet
+  over a basket keeps the basket as its target, and `returnUrl` names the sheet.
+- **`safeReturnUrl()` is in `feature-auth/src/lib/return-url.ts`.** The pages that write
+  the parameter (the share link page, the basket page, the guard) use the literal
+  `returnUrl`, because a lazily loaded library cannot be imported. It accepts a value
+  that starts with `/`, is not `//` or `/\`, and has no backslash and no control
+  character. The decoded value must pass the same check. Register also honours the
+  parameter and passes it back on "Sign in instead", so "Create an account" on the sign
+  in page does not lose the link.
+- **The ended marker takes the credential's key.** `BasketSessionStore.end()` writes
+  `{ ended: reason }` under `basketSessionKey`, `ended()` reads it, and `read()` never
+  returns it as a credential. It has no expiry and needs none: a join writes over it, and
+  `forget()` (Leave) removes it. No two hour expiry of the secret exists in this store,
+  so the marker collides with nothing. The `basket.unshared` event writes the marker
+  too, so a reload after the owner removes somebody says the same thing.
+- **The order `_fail()` reads in.** A credential held: `revoked` with the code's reason.
+  An ended marker: `revoked` with the marker's reason. A `participant_expired` with
+  neither: `revoked`, `EXPIRED`. Otherwise `notYours` if signed in, `needsSignIn` if not.
+  `SessionStore` is injected optionally, because the sheet specs build this store with no
+  account. A missing one reads as signed out.
+- **A removed member on a new device reads "This list is not yours".** The gateway
+  answers a stranger and an ended row with the same `not_a_participant`, and nothing is
+  on the device to tell them apart. This is true enough. Backend plan `0114` can give an
+  ended row its own code later.
+- **"Not complete" is decided after the preview, by the shape.** A whole secret is 43
+  base64url characters (`randomBytes(32).toString('base64url')`). The preview still
+  runs for every secret, so a later change to the secret's format cannot make a live
+  link unreachable. Only the dead sentence uses the shape.
+- **One action for each state block.** The share link page has Try again
+  (`unreachable`, and `failed` for a signed in reader), Open Velista (`dead`) and Go
+  home (`removed`). The basket page has Sign in (`needsSignIn`) and Go home (`notYours`,
+  `revoked`). Go home goes to `home` for a signed in reader and to the front door
+  otherwise.
+- **Both stale notes draw only over a `ready` basket.** That covers the socket's revoked
+  latch and "not updating". A reader with no place on a basket has no socket either, so
+  "not updating" over "Sign in to open this list" was a second, contradictory banner.
+- **A network failure of the preview also raises the app's connection lost screen.**
+  That screen is app wide and reloads by itself. The `unreachable` state is what stays
+  after it, and what a 503 draws.

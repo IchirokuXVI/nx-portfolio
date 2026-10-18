@@ -224,7 +224,12 @@ export class LandingPage {
    * locale segment nor the mount is written down here (extraction contract, item 5).
    */
   signInWithEmail(): void {
-    void this._router.navigate(['auth', 'login'], { relativeTo: this._route });
+    // The query is kept, because `authenticatedGuard` leaves the page it refused
+    // there as `returnUrl` (velista `0154`), and sign in comes back to it.
+    void this._router.navigate(['auth', 'login'], {
+      relativeTo: this._route,
+      queryParamsHandling: 'preserve',
+    });
   }
 
   /**

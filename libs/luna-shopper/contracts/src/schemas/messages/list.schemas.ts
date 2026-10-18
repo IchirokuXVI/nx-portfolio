@@ -206,6 +206,10 @@ const lineViewProperties: Record<string, JsonSchema> = {
   // since left the zone reports `true` with a null name (section 6).
   claimed: boolean(),
   claimedByUserId: nullableString(),
+  // How many comments the line has (plan 0214, section 2). Required and
+  // nullable: a number on the lines read, null on events and on the answer of
+  // a write, where null means "unknown" and never "none".
+  commentCount: { type: ['integer', 'null'], minimum: 0 },
   ...timestamps,
 };
 const lineViewRequired = [
@@ -229,6 +233,7 @@ const lineViewRequired = [
   'lastSettlementOutcome',
   'claimed',
   'claimedByUserId',
+  'commentCount',
   ...timestampKeys,
 ];
 const lineView = object(
