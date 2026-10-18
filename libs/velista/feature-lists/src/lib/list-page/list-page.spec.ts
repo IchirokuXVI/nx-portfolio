@@ -27,6 +27,8 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  LINE_SERVICE,
+  LineStore,
   LIST_SERVICE,
   ListViewStore,
   ProductPickStore,
@@ -51,6 +53,7 @@ import {
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type LineServiceI,
   type ListServiceI,
   type TripServiceI,
 } from '@portfolio/velista/data-access';
@@ -222,6 +225,11 @@ interface Options {
   readonly returned?: unknown;
   /** Writes an earlier document of this tab lost to the network (velista `0159`). */
   readonly dropped?: readonly DroppedWriteDraft[];
+  /**
+   * What the lines read answers. Set, the page gets the real `LineStore` over a
+   * service that answers this, in place of the fake (velista `0158`, item 6).
+   */
+  readonly lineRead?: readonly Line[];
   /** What the read of the lines failed with, beside `linesState: 'failed'`. */
   readonly linesError?: unknown;
   /** What the read of the group failed with, on a group that is not cached (velista 0156). */
@@ -350,7 +358,20 @@ async function render(options: Options = {}): Promise<{
       provideFakeBrowserFacade(storage),
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
-      provideFakeLineStore(lines),
+      ...(options.lineRead === undefined
+        ? [provideFakeLineStore(lines)]
+        : [
+            LineStore,
+            {
+              provide: LINE_SERVICE,
+              useValue: {
+                listLines: async () => ({
+                  items: options.lineRead ?? [],
+                  nextCursor: null,
+                }),
+              } as Partial<LineServiceI>,
+            },
+          ]),
       // What the route provides beside the page (velista `0082`), real, over the
       // fakes above, so a spec asserts what the page draws of a real view.
       ListViewStore,
@@ -778,6 +799,26 @@ describe('ListPage', () => {
       const { fixture } = await render();
 
       expect(fixture.nativeElement.textContent).toContain('Weekly shop');
+    });
+  });
+
+  describe('the comment badge on a cold load (velista 0158, item 6)', () => {
+    it('draws the count the lines read carries', async () => {
+      // The real store over a read that counts, which is what a reload is: no
+      // comment page loaded and no event watched, and the badge still shows.
+      const { fixture } = await render({
+        lineRead: [
+          line('ln-1', { commentCount: 2 }),
+          line('ln-2', { position: 2, commentCount: null }),
+        ],
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const badges = fixture.debugElement.queryAll(By.css('.comment-count'));
+      expect(badges).toHaveLength(1);
+      // The glyph's stub reads as text in a spec, so the number is matched at the end.
+      expect(badges[0].nativeElement.textContent.trim()).toMatch(/(^|\s)2$/);
     });
   });
 

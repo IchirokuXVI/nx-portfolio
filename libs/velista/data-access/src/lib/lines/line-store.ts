@@ -148,7 +148,12 @@ export class LineStore {
     new Map()
   );
 
-  /** How many comments the client has actually observed, per line. */
+  /**
+   * How many comments each line has, per line, as far as this client knows.
+   *
+   * From the lines read (backend `0214`), a comment page a sheet loaded, and the
+   * `comment.added` events since. A line with no entry has an unknown count.
+   */
   private readonly _commentCounts = signal<ReadonlyMap<string, number>>(
     new Map()
   );
@@ -389,6 +394,7 @@ export class LineStore {
       // snapshot, or a line past position 100 patched mid read would draw its old row.
       const local = this._localLines(listId);
       this._setLines(listId, this._mergeRead(local, page.items));
+      this._recordReadCounts(local, page.items);
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -421,6 +427,7 @@ export class LineStore {
 
       const local = this._localLines(listId);
       this._setLines(listId, this._mergeRead(local, page.items));
+      this._recordReadCounts(local, page.items);
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -1064,11 +1071,11 @@ export class LineStore {
   }
 
   /**
-   * Record how many comments a line has, from a page the caller actually loaded.
+   * Record how many comments a line has, from a source that knows.
    *
-   * The only honest source there is. `LineView` carries no count and nothing on the
-   * wire does, so the row shows a number exactly when the client has seen the
-   * comments and nothing at all otherwise.
+   * The lines read counts them (backend `0214`), and so does a comment page the
+   * caller loaded. Events and write answers carry null, which means unknown, so they
+   * never reach here: the row keeps the count it has rather than drawing a zero.
    */
   recordCommentCount(lineId: string, count: number): void {
     this._commentCounts.update((current) =>
@@ -1250,6 +1257,7 @@ export class LineStore {
           ...(this._byList().get(listId) ?? []),
           ...this._mergeRead(local, page.items),
         ]);
+        this._recordReadCounts(local, page.items);
         cursor = page.nextCursor;
         this._setCursor(listId, cursor);
       }
@@ -1459,6 +1467,46 @@ export class LineStore {
     return incoming.map((line) => {
       const mine = local.get(line.id);
       return mine !== undefined && this._keepsLocal(mine, line) ? mine : line;
+    });
+  }
+
+  /**
+   * The comment counts a read knows, recorded in one write (velista `0158`, item 6).
+   *
+   * The same rule as {@link _mergeRead}: a line kept from the local copy keeps its
+   * count too, and a line whose read says null or nothing keeps the count this device
+   * already holds. Only a number replaces one.
+   *
+   * A number never lowers a count this device already knows. Posting a comment does
+   * not bump the version of its line, so a read whose count query ran before the
+   * comment committed can land after the `comment.added` event and answer 2 where the
+   * event already made 3. The larger value is safe because a comment is never deleted
+   * on its own (only with its line), so a count can only grow.
+   */
+  private _recordReadCounts(
+    local: ReadonlyMap<string, Line>,
+    incoming: readonly Line[]
+  ): void {
+    const known = incoming.filter((line) => {
+      const mine = local.get(line.id);
+      return (
+        typeof line.commentCount === 'number' &&
+        (mine === undefined || !this._keepsLocal(mine, line))
+      );
+    });
+    if (known.length === 0) {
+      return;
+    }
+
+    this._commentCounts.update((current) => {
+      const next = new Map(current);
+      for (const line of known) {
+        next.set(
+          line.id,
+          Math.max(next.get(line.id) ?? 0, line.commentCount as number)
+        );
+      }
+      return next;
     });
   }
 

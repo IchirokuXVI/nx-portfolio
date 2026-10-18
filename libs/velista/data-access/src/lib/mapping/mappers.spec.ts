@@ -1,3 +1,7 @@
+import {
+  LIST_SCHEMA_IDS,
+  validateSchema,
+} from '@portfolio/luna-shopper/contracts';
 import type { CatalogSuggestion } from '@portfolio/velista/models';
 import {
   toAssistantReply,
@@ -320,6 +324,8 @@ describe('toLine', () => {
     claimed: true,
     named: true,
     claimedByUserId: 'u9',
+    // The count the lines read carries (backend `0214`).
+    commentCount: 2,
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
     version: 7,
@@ -327,6 +333,38 @@ describe('toLine', () => {
 
   it('maps a well formed line', () => {
     expect(toLine(valid)).toEqual(valid);
+  });
+
+  it('reads a comment count as known only when it is a whole number (velista 0158)', () => {
+    expect(toLine({ ...valid, commentCount: 0 })?.commentCount).toBe(0);
+    // Null is what an event and a write answer send, and it means unknown, as an
+    // absent field from a server that predates the count does.
+    expect(toLine({ ...valid, commentCount: null })?.commentCount).toBeNull();
+    expect(
+      toLine({ ...valid, commentCount: undefined })?.commentCount
+    ).toBeNull();
+    expect(toLine({ ...valid, commentCount: -1 })?.commentCount).toBeNull();
+    expect(toLine({ ...valid, commentCount: 1.5 })?.commentCount).toBeNull();
+    expect(toLine({ ...valid, commentCount: '2' })?.commentCount).toBeNull();
+  });
+
+  it('reads the count of a line the contract schema accepts (velista 0158)', () => {
+    // Written to the schema the gateway answers with, not to suit the mapper.
+    const wire = {
+      ...valid,
+      itemSetHash: null,
+      approvedByUserId: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(validateSchema(LIST_SCHEMA_IDS.lineView, wire).valid).toBe(true);
+    expect(toLine(wire)?.commentCount).toBe(2);
+
+    const unknownCount = { ...wire, commentCount: null };
+    expect(validateSchema(LIST_SCHEMA_IDS.lineView, unknownCount).valid).toBe(
+      true
+    );
+    expect(toLine(unknownCount)?.commentCount).toBeNull();
   });
 
   it('reads whether a person named the line, and names it for anything but false (velista 0144)', () => {
