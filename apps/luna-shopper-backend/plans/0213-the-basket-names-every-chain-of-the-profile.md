@@ -1,3 +1,5 @@
+> **PR:** [#753](https://github.com/IchirokuXVI/nx-portfolio/pull/753)
+
 # 0213: the basket names every chain of the profile, and says which quote it
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -120,3 +122,28 @@ each scope by the profile's postal codes so that the count does not move with th
 - **Shops by postal code.** It is what the supermarkets page shows, and a person expects
   the two lists to agree.
 - **A visible `scopesIncomplete`.** A silent `[]` is what hid S17 and part of F5.3.
+
+## 3. What the build decided
+
+Built in PR #753. These choices were the builder's, not the owner's:
+
+- **One shop search, not one list per scope.** `supermarketLocation.list` has no postal
+  code filter, and catalog is outside this plan's scope. So the read asks
+  `supermarketLocation.search` one time with the profile's postal codes and refusals (up to
+  five pages of 100). A scope gets each shop whose `priceScopeIds` holds it. The refusals are
+  also applied in the gateway.
+- **Every entry of `resolved.scopes`, deduplicated**, including the less specific tiers of a
+  shop's stack (a Lidl REGION above its STORE scopes). The picker already shows a shop one
+  time. The scopes that quote something come first, in their old order.
+- **When the selection cannot be read**, the shops come from the resolution's `coverage`
+  codes, with no refusals. Before, the shops were listed with no refusals.
+- **`scopesIncomplete` is also true when a scope of the profile has no chain** in the
+  listing. Those scopes are left out and the named ones stay. A throw answers `scopes: []`.
+  Both cases log a warning with the correlation id. `CatalogSuggestService.namedChains` is
+  the form that throws, and `chainsOf` still never throws for the dropdown.
+- **`quotesBasket` is set over the final list**, so a scope that the read's shop adds is
+  flagged too. The read always sends `scopesIncomplete`.
+- **No flag when the profile does not resolve.** `describeScopes` returning undefined
+  happens before `scopesOf` and still answers empty scopes with no flag.
+- **Latency on slot 5:** five synthetic chains (36 scopes, 61 shops) gave a median of
+  330 ms after the change. `origin/dev`, which named one scope, gave 380 ms.
