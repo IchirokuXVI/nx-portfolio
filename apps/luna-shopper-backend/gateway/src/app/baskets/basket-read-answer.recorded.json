@@ -1255,6 +1255,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1315,6 +1316,7 @@
           "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1341,6 +1343,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1483,6 +1486,7 @@
           "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1509,6 +1513,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1919,6 +1924,7 @@
           "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "supermarketLocation.shopAvailability",
         "basket.live.priceChoices",
@@ -2019,6 +2025,7 @@
           "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "supermarketLocation.shopAvailability",
         "basket.live.priceChoices",

@@ -463,16 +463,25 @@ export interface BasketResult extends BasketView {
    * here too, with {@link BasketPriceScopeView.quotesBasket} false, so a shop
    * picker that reads this list alone offers every chain of the profile.
    *
-   * Empty when the profile resolves to nothing, and empty too when the gateway
-   * could not name the scopes, which {@link scopesIncomplete} tells apart.
+   * Empty when the profile resolves to nothing, or when no profile is set.
+   * When the gateway could not list everything, {@link scopesIncomplete} says
+   * so, and the list may be empty or partial.
    */
   scopes: BasketPriceScopeView[];
   /**
-   * True when naming the scopes failed this time, so `scopes` is empty for
-   * that reason and not because the profile resolves to nothing (plan 0213).
-   * A client says "shops could not be listed" rather than drawing an empty
-   * picker.
+   * True when `scopes` may be missing scopes or shops this time (plan 0213),
+   * so it is not the whole of the profile. It may still be non-empty: the
+   * scopes and shops that could be listed are kept. The causes are a lookup
+   * that failed (the basket's search scope, the profile's resolution, the
+   * chains, the shops), a scope whose chain could not be named, and a shop
+   * search that ran past its page bound.
    *
+   * False with an empty `scopes` means the profile resolves to no chain, or
+   * the basket has no profile. A client that reads true says the shops could
+   * not all be listed and offers a retry, rather than drawing the list as
+   * whole.
+   *
+
    * Optional only for a mixed fleet during a deploy: a gateway from before
    * plan 0213 leaves it out, and absent reads as false.
    */

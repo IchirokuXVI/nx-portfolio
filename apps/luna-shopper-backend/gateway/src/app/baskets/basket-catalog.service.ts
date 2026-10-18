@@ -67,17 +67,34 @@ const NO_REFUSALS: ShopRefusalIds = {
  * The most pages of shops one read asks for (plan 0213). A page is
  * {@link MAX_PAGE_SIZE} shops and a profile's codes hold dozens, so the bound
  * is only there to keep a read finite.
+ *
+ * A search still holding a cursor after the last page is not a whole answer:
+ * catalog sorts by postal code, so the shops of the later codes are the ones
+ * left out. The read keeps what it listed and says `incomplete`.
  */
 const SHOP_PAGES_MAX = 5;
 
 /** The scopes of a read, and whether naming them failed (plan 0213). */
 export interface BasketScopesRead {
   scopes: BasketPriceScopeView[];
-  /** True when a lookup failed, or a scope of the profile could not be named. */
+  /**
+   * True when the list may be missing scopes or shops: a lookup failed, a
+   * scope of the profile could not be named, the shops ran past
+   * {@link SHOP_PAGES_MAX} pages, or the profile's resolution could not be
+   * read. `scopes` may hold entries all the same.
+   */
   incomplete: boolean;
 }
 
 const NO_SCOPES: BasketScopesRead = { scopes: [], incomplete: false };
+
+/** The owner's search scope and what its profile resolved to. */
+interface OwnerScope {
+  scope: BasketSearchScope;
+  view: CatalogScopeView | undefined;
+  /** True when the resolution threw, rather than there being no profile. */
+  failed: boolean;
+}
 
 /**
  * What the gateway priced before it read the rows (plan 0201, section 1).
@@ -92,6 +109,11 @@ export interface BasketReadPrices {
   picks: BasketLinePick[];
   /** What the owner's profile resolved to, or undefined when it did not. */
   resolved: CatalogScopeView | undefined;
+  /**
+   * True when `resolved` is undefined because the lookup threw, and not
+   * because the basket has no profile (plan 0213).
+   */
+  resolutionFailed: boolean;
   /** The scopes {@link items} were priced at. */
   priceScopeIds: string[];
   /** Every product of the priced lines, with the offer of every scope. */
@@ -215,7 +237,11 @@ export class BasketCatalogService {
         ? this.ownerScopeOf(basket.id, participantId)
         : prices && searchScope
           ? // The pricing before the rows already resolved the profile.
-            { scope: searchScope, view: prices.resolved }
+            {
+              scope: searchScope,
+              view: prices.resolved,
+              failed: prices.resolutionFailed,
+            }
           : this.ownerScopeFrom(searchScope),
       shopId ? this.shopAt(shopId, itemIds) : Promise.resolve(null),
       // Plan 0167: which of the shop's sections each product is in. Beside the
@@ -240,6 +266,17 @@ export class BasketCatalogService {
         ? await this.selectionOf(owner.scope.ownerUserId, profileId)
         : null;
 
+    // A resolution that threw is not a profile with no chains (plan 0213):
+    // null is core failing `basket.searchScope`, and `failed` is the scopes of
+    // the profile failing. No profile at all, a guest's case, is neither.
+    const resolutionFailed = owner === null || owner.failed;
+    if (resolutionFailed) {
+      this.log.warn(
+        owner === null
+          ? `Basket scopes: the search scope of basket ${basket.id} could not be read (correlation ${correlationId()})`
+          : `Basket scopes: profile ${owner.scope.profileId} of basket ${basket.id} could not be resolved (correlation ${correlationId()})`
+      );
+    }
     const described =
       owner && resolved
         ? await this.scopesOf(
@@ -249,7 +286,9 @@ export class BasketCatalogService {
             basket.servesLocations,
             selection
           )
-        : NO_SCOPES;
+        : resolutionFailed
+          ? { scopes: [], incomplete: true }
+          : NO_SCOPES;
     const listed = shop
       ? withShopInScopes(described.scopes, shop, basket.servesLocations)
       : described.scopes;
@@ -493,9 +532,9 @@ export class BasketCatalogService {
     if (lines.length === 0) {
       return null;
     }
-    const resolved = searchScope
-      ? await this.describeScopes(searchScope)
-      : undefined;
+    const { view: resolved, failed: resolutionFailed } = searchScope
+      ? await this.resolutionOf(searchScope)
+      : { view: undefined, failed: false };
     const quoted = shop ? quotedScopeOf(shop) : null;
     const counted = shopId
       ? quoted
@@ -512,6 +551,7 @@ export class BasketCatalogService {
       return {
         picks: picksOf(lines, items, counted),
         resolved,
+        resolutionFailed,
         priceScopeIds,
         items,
       };
@@ -691,7 +731,9 @@ export class BasketCatalogService {
    * A lookup that throws is logged with the correlation id and answers no
    * scopes with `incomplete` true, so a client can say "shops could not be
    * listed" rather than draw an empty picker. A scope of the profile whose
-   * chain the listing did not name is left out and sets `incomplete` too.
+   * chain the listing did not name is left out and sets `incomplete` too, and
+   * so does a shop search that ran past {@link SHOP_PAGES_MAX} pages. Both of
+   * those keep the scopes that were named.
    */
   async scopesOf(
     products: ItemView[],
@@ -725,6 +767,11 @@ export class BasketCatalogService {
           : Promise.resolve(null),
       ]);
       const unnamed = ids.length - chains.length;
+      if (shops?.capped) {
+        this.log.warn(
+          `Basket scopes: the shops of profile ${resolved.profileId} ran past ${SHOP_PAGES_MAX} pages, so later postal codes are left out (correlation ${correlationId()})`
+        );
+      }
       if (unnamed > 0) {
         this.log.warn(
           `Basket scopes: ${unnamed} of ${ids.length} scopes of profile ${resolved.profileId} have no chain to name them (correlation ${correlationId()})`
@@ -754,7 +801,7 @@ export class BasketCatalogService {
           quotesBasket: quoting.has(chain.priceScopeId),
         })
       );
-      return { scopes, incomplete: unnamed > 0 };
+      return { scopes, incomplete: unnamed > 0 || shops?.capped === true };
     } catch (error) {
       this.log.warn(
         `Basket scopes could not be named for profile ${resolved.profileId} (correlation ${correlationId()}): ${(error as Error).message}`
@@ -785,21 +832,17 @@ export class BasketCatalogService {
   private async ownerScopeOf(
     basketId: string,
     participantId: string
-  ): Promise<{
-    scope: BasketSearchScope;
-    view: CatalogScopeView | undefined;
-  } | null> {
+  ): Promise<OwnerScope | null> {
     return this.ownerScopeFrom(
       await this.searchScopeOf(basketId, participantId)
     );
   }
 
   /** The same answer, from a `basket.searchScope` already asked. */
-  private async ownerScopeFrom(scope: BasketSearchScope | null): Promise<{
-    scope: BasketSearchScope;
-    view: CatalogScopeView | undefined;
-  } | null> {
-    return scope ? { scope, view: await this.describeScopes(scope) } : null;
+  private async ownerScopeFrom(
+    scope: BasketSearchScope | null
+  ): Promise<OwnerScope | null> {
+    return scope ? { scope, ...(await this.resolutionOf(scope)) } : null;
   }
 
   /** Core's `basket.searchScope`, or null when core could not answer it. */
@@ -828,20 +871,34 @@ export class BasketCatalogService {
   async describeScopes(
     scope: BasketSearchScope
   ): Promise<CatalogScopeView | undefined> {
+    return (await this.resolutionOf(scope)).view;
+  }
+
+  /**
+   * {@link describeScopes}, and whether its lookup threw (plan 0213). A basket
+   * with no profile is not a failure.
+   */
+  private async resolutionOf(
+    scope: BasketSearchScope
+  ): Promise<{ view: CatalogScopeView | undefined; failed: boolean }> {
     if (!scope.profileId) {
-      return undefined;
+      return { view: undefined, failed: false };
     }
     try {
       // `describe` rather than `forRead`: the same cached pair of round trips,
       // and the whole view carries which chain each scope belongs to, which is
       // what naming a price's place needs without a third catalog call.
-      return await this.scopes.describe(scope.ownerUserId, {
-        profileId: scope.profileId,
-      });
+      return {
+        view: await this.scopes.describe(scope.ownerUserId, {
+          profileId: scope.profileId,
+        }),
+        failed: false,
+      };
     } catch {
       // A profile emptied or deleted since, which the shopper in the aisle can
-      // neither see nor fix. It fails empty, never loudly.
-      return undefined;
+      // neither see nor fix. The read stays unpriced, and the full read says
+      // `scopesIncomplete` so that its picker does not read as no chains.
+      return { view: undefined, failed: true };
     }
   }
 
@@ -863,12 +920,14 @@ export class BasketCatalogService {
    * 0068), so it does not rely on that alone.
    *
    * **It throws** when catalog cannot answer, which {@link scopesOf} reports.
+   * `capped` is true when a cursor was left after {@link SHOP_PAGES_MAX}
+   * pages, so `views` holds only the shops of the earlier postal codes.
    */
   private async shopsOf(
     userId: string,
     resolved: CatalogScopeView,
     selection: ShopperSelection | null | undefined
-  ): Promise<{ views: ShopView[]; refused: ShopRefusalIds }> {
+  ): Promise<{ views: ShopView[]; refused: ShopRefusalIds; capped: boolean }> {
     const chosen =
       selection === undefined
         ? resolved.profileId
@@ -880,7 +939,7 @@ export class BasketCatalogService {
       : resolved.coverage.map((entry) => entry.postalCode);
     const refused = refusalsFrom(chosen);
     if (codes.length === 0) {
-      return { views: [], refused };
+      return { views: [], refused, capped: false };
     }
 
     const views: ShopView[] = [];
@@ -899,12 +958,12 @@ export class BasketCatalogService {
         req
       );
       views.push(...answer.items);
-      if (!answer.nextCursor) {
+      cursor = answer.nextCursor ?? undefined;
+      if (!cursor) {
         break;
       }
-      cursor = answer.nextCursor;
     }
-    return { views, refused };
+    return { views, refused, capped: cursor !== undefined };
   }
 
   /**

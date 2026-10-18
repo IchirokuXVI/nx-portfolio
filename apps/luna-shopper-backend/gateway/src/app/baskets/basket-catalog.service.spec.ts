@@ -148,8 +148,13 @@ const SHOPS: ShopView[] = [
 interface World {
   /** The products of the basket's rows, as catalog prices them. */
   readonly items: ItemView[];
-  /** Which catalog question throws. */
-  readonly throws?: 'chains' | 'shops';
+  /** Which question throws. */
+  readonly throws?: 'chains' | 'shops' | 'resolution';
+  /**
+   * How many pages the shop search answers before its last, each with a
+   * cursor to the next. Absent for one page holding every shop.
+   */
+  readonly shopPages?: number;
 }
 
 function build(world: World) {
@@ -181,11 +186,17 @@ function build(world: World) {
         }
         // Catalog narrows by postal code, as `summarizeByChain` does.
         const req = payload as SearchShopsRequest;
+        const found = SHOPS.filter((each) =>
+          req.postalCodes.includes(each.location.postalCode ?? '')
+        );
+        if (world.shopPages === undefined) {
+          return { items: found, nextCursor: null };
+        }
+        // One shop a page, and a cursor on each of the first `shopPages`.
+        const page = req.cursor ? Number(req.cursor) : 0;
         return {
-          items: SHOPS.filter((found) =>
-            req.postalCodes.includes(found.location.postalCode ?? '')
-          ),
-          nextCursor: null,
+          items: [found[page % found.length]],
+          nextCursor: page + 1 < world.shopPages ? String(page + 1) : null,
         };
       }
       default:
@@ -193,7 +204,12 @@ function build(world: World) {
     }
   });
   const scopes = {
-    describe: jest.fn(async () => resolution()),
+    describe: jest.fn(async () => {
+      if (world.throws === 'resolution') {
+        throw new Error('core slow');
+      }
+      return resolution();
+    }),
     forShops: jest.fn(async () => selection()),
   };
   const catalog = new BasketCatalogService(
@@ -220,13 +236,18 @@ const SEARCH_SCOPE = {
   supermarketLocationId: null,
 };
 
-async function read(world: World, productIds: string[]) {
+async function read(
+  world: World,
+  productIds: string[],
+  /** What core answered `basket.searchScope` with, null when it failed. */
+  searchScope: object | null = SEARCH_SCOPE
+) {
   const { catalog, calls } = build(world);
   const answer = await catalog.compose(
     basket(productIds),
     'p-owner',
     undefined,
-    SEARCH_SCOPE as never
+    searchScope as never
   );
   return { answer, calls };
 }
@@ -303,4 +324,71 @@ describe('a basket read names every scope of the profile (plan 0213)', () => {
       expect(answer.products.map((p) => p.id)).toEqual(['i-milk']);
     }
   );
+
+  it('keeps the shops it listed and says scopesIncomplete when a cursor is left after the last page', async () => {
+    // Six pages: the read asks for five and is still handed a cursor.
+    const { answer, calls } = await read(
+      { items: [item('i-milk', [MERCADONA])], shopPages: 6 },
+      ['i-milk']
+    );
+
+    expect(
+      calls.filter(
+        (call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.search
+      )
+    ).toHaveLength(5);
+    expect(answer.scopesIncomplete).toBe(true);
+    // The scopes and the shops of the pages read are kept.
+    expect(answer.scopes.map((s) => s.priceScopeId)).toEqual(
+      expect.arrayContaining([MERCADONA, LIDL_STORE])
+    );
+    const mercadona = answer.scopes.find((s) => s.priceScopeId === MERCADONA);
+    expect(mercadona && shopIds(mercadona)).toContain('loc-mercadona');
+  });
+
+  it('says scopesIncomplete false when the last page carries no cursor', async () => {
+    const { answer } = await read(
+      { items: [item('i-milk', [MERCADONA])], shopPages: 5 },
+      ['i-milk']
+    );
+
+    expect(answer.scopesIncomplete).toBe(false);
+  });
+
+  it('says scopesIncomplete true when the resolution of the profile throws', async () => {
+    const { answer } = await read(
+      { items: [item('i-milk', [MERCADONA])], throws: 'resolution' },
+      ['i-milk']
+    );
+
+    expect(answer.scopes).toEqual([]);
+    expect(answer.scopesIncomplete).toBe(true);
+  });
+
+  it('says scopesIncomplete true when core could not answer basket.searchScope', async () => {
+    const { answer } = await read(
+      { items: [item('i-milk', [MERCADONA])] },
+      ['i-milk'],
+      null
+    );
+
+    expect(answer.scopes).toEqual([]);
+    expect(answer.scopesIncomplete).toBe(true);
+  });
+
+  it('says scopesIncomplete false for a basket with no profile', async () => {
+    const { answer, calls } = await read(
+      { items: [item('i-milk', [MERCADONA])] },
+      ['i-milk'],
+      { ...SEARCH_SCOPE, profileId: null }
+    );
+
+    expect(answer.scopes).toEqual([]);
+    expect(answer.scopesIncomplete).toBe(false);
+    expect(
+      calls.some(
+        (call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.search
+      )
+    ).toBe(false);
+  });
 });

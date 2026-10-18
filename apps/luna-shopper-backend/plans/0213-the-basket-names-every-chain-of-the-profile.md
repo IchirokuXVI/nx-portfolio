@@ -143,7 +143,21 @@ Built in PR #753. These choices were the builder's, not the owner's:
   the form that throws, and `chainsOf` still never throws for the dropdown.
 - **`quotesBasket` is set over the final list**, so a scope that the read's shop adds is
   flagged too. The read always sends `scopesIncomplete`.
-- **No flag when the profile does not resolve.** `describeScopes` returning undefined
-  happens before `scopesOf` and still answers empty scopes with no flag.
+- **A resolution that threw sets the flag; no profile does not** (review round). When core
+  cannot answer `basket.searchScope`, or `scopes.describe` throws for the owner's profile,
+  the read answers the scopes it has (none, or the read's shop) with `scopesIncomplete:
+  true` and logs a warning with the correlation id. A basket with no profile, a guest's
+  case, and a profile that resolves to no scope keep the flag false. A deleted profile also
+  throws in `describe`, so it now reads as incomplete too: the gateway cannot tell it from a
+  failure without an error code, and a retry that answers the same is the honest cost.
+  `pricesFor` carries `resolutionFailed` so the full read learns it without asking again.
+  Seven cases of `basket-read-answer.recorded.json` moved, each by that one field.
+- **A shop search past five pages sets the flag** (review round). Catalog sorts the search
+  by postal code, so a cursor left after the fifth page means the shops of the later codes
+  are missing, and the supermarkets page (`summarizeByChain`) would disagree. The read keeps
+  the scopes and shops it listed, sets `scopesIncomplete: true`, and logs a warning with the
+  correlation id. The contract's doc now says the list may be partial and non empty when
+  the flag is true, and that the client offers a retry.
+
 - **Latency on slot 5:** five synthetic chains (36 scopes, 61 shops) gave a median of
   330 ms after the change. `origin/dev`, which named one scope, gave 380 ms.
