@@ -438,6 +438,11 @@ export function toLine(raw: unknown): Line | null {
     // distinction: the page draws no filled star and "Any".
     favoriteItemId: nullableStr(raw['favoriteItemId']),
     preferredSupermarketId: nullableStr(raw['preferredSupermarketId']),
+    // A count only from a whole number of zero or more (backend `0214`). Null and
+    // absent are both unknown, which is what an event, a write answer and a server
+    // that predates the field send. Reading unknown as zero would erase a count the
+    // store knows.
+    commentCount: toCommentCount(raw['commentCount']),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather
@@ -445,6 +450,13 @@ export function toLine(raw: unknown): Line | null {
     // field was absent is the one outcome worth defaulting against.
     version: numOr(raw['version'], 0),
   };
+}
+
+/** A line's comment count: a whole number from 0, or null for unknown. */
+function toCommentCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0
+    ? raw
+    : null;
 }
 
 /**
