@@ -1,4 +1,4 @@
-> **PR:** [#750](https://github.com/IchirokuXVI/nx-portfolio/pull/750)
+> **PR:** [#750](https://github.com/IchirokuXVI/nx-portfolio/pull/750) stage 1, [#759](https://github.com/IchirokuXVI/nx-portfolio/pull/759) stage 2
 
 # 0153: a chosen shop prices only what it sells, and the picker names every chain
 
@@ -176,3 +176,37 @@ touched.
 - The walk on slot 4 could not choose a shop with no prices, because its only priced shop
   quotes the basket and the picker lists no other (that is stage 2). The no price case was
   walked with the basket read rewritten in the browser so that every `atShop` price was null.
+
+### Stage 2
+
+Items 4 and 5 are in PR #759, after backend `0213` landed in PR #753. These choices were the
+builder's, not the owner's:
+
+- `BasketPriceScope.quotesBasket` and `Basket.scopesIncomplete` are required booleans in the
+  model. The mapper reads `quotesBasket` as false only for a JSON `false`, and
+  `scopesIncomplete` as true only for a JSON `true`, so a server from before `0213` draws as
+  before.
+- A chain is "no prices" when every scope of it says `quotesBasket: false`. One scope of the
+  chain that quotes something draws no line. The line is drawn on the chain's button, under
+  its count, and on the chain's own screen, under "N shops in your areas". The button stays a
+  button, and a pick writes the shop as any other.
+- The chain buttons are drawn by `FranchiseButtons`, so the line goes there through a new
+  `noPrices` input, a set of chain keys. Only the picker sets it. The supermarkets page and
+  the catalog pass nothing.
+- "The shops could not be listed." and its "Try again" button are one line at the root of
+  `ShopPicker`, over the Near you results, the recent shops, the search and the chains. The
+  "Near me" button sits in the sheet's title row, which the sheet owns, so the line is under
+  that row. The button calls `BasketStore.refresh()` and is disabled while that read is out.
+  The line is not drawn on a chain's own screen.
+- A rows read keeps the held `scopesIncomplete` with the held scopes
+  (`BasketStore._withCatalog`). Without that, any socket event would take the line away
+  while the short list stayed.
+- Three files outside the Scope changed for the build: `basket-memory.ts` sets the two new
+  fields, `basket-store.ts` as above, and one `toEqual` in `basket-prices-mappers.spec.ts`.
+- The mapper spec checks both fields against the contract: a scope with and without
+  `quotesBasket` is valid by `BASKET_SCHEMA_IDS.priceScopeView`, and neither field is
+  required by the scope schema or the result schema.
+- The walk on slot 4 rewrote the basket read in the browser, because that backend runs code
+  from before `0213`. It read the Lidl button with "No prices here yet", a pick there, the
+  short list line over an empty list and over one chain, one more read after "Try again",
+  and a read with neither field drawn as before.
