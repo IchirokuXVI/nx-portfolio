@@ -217,6 +217,24 @@ export type BasketPriceMark =
         readonly currency: string | null;
         readonly chain: string;
       } | null;
+    }
+  /**
+   * The chosen shop prices no line of this basket, so nothing says it does not
+   * sell this one: "No price here" (velista `0153`).
+   *
+   * {@link elsewhere} is the cheapest price another of the basket's shops quotes,
+   * or null. It is drawn in the mark and never in the price column, and the total
+   * never adds it: it is not a price of this shop.
+   */
+  | {
+      readonly kind: 'noPriceHere';
+      /** The chosen shop's chain. */
+      readonly chain: string;
+      readonly elsewhere: {
+        readonly price: number;
+        readonly currency: string | null;
+        readonly chain: string;
+      } | null;
     };
 
 /** One drawn row. A row, and under `grouping: 'list'` the entry it is drawn for. */
@@ -503,11 +521,12 @@ function usualNote(
  * what the shop is known not to have (velista `0078`; `0102`).
  *
  * Null when the products were not read at the chosen shop: no shop is chosen, which
- * is the default, or a read at a newly chosen one is still out. With a shop, the
- * price half is empty for **a shop that prices nothing on this basket**, which is
- * velista `0078` section 5.1 and is the case that matters today: a shop nobody has
- * priced is not a shop that stocks nothing, and marking every line "not listed at
- * Mercadona" there would be the app inventing a fact. The shelf half does not wait
+ * is the default, or a read at a newly chosen one is still out. With a shop that
+ * prices nothing on this basket, every line with a product says it has **no price
+ * here** (velista `0153`) and never that it is not sold: velista `0078` section 5.1
+ * holds, a shop nobody has priced is not a shop that stocks nothing, and marking
+ * every line "not listed at Mercadona" there would be the app inventing a fact.
+ * The shelf half does not wait
  * for prices, because a shop can say what it lacks without saying what anything
  * costs, and the one source of shop availability today prints no prices at all.
  */
@@ -542,9 +561,8 @@ function priceView(
     }
 
     const product = basketRowPick(row, context.products);
-    if (!priced || product === undefined) {
-      // No price anywhere at this shop, or no product to be unlisted: the row says
-      // nothing about prices.
+    if (product === undefined) {
+      // No product to price: the row says nothing about prices.
       continue;
     }
 
@@ -554,6 +572,13 @@ function priceView(
       here?.priceScopeId ?? null,
       context
     );
+
+    if (!priced) {
+      // No price anywhere at this shop (velista `0153`): the row draws no price,
+      // says so, and names the cheapest price elsewhere beside it.
+      marks.set(row.rowKey, { kind: 'noPriceHere', chain, elsewhere: best });
+      continue;
+    }
 
     if (here === null || here.price === null) {
       // "Not sold here" (velista `0139`, section 1). The row stays in its group:
@@ -592,20 +617,18 @@ export function basketReadAtShop(
 }
 
 /**
- * Whether every row on this screen quotes the chosen shop's price (velista `0078`,
+ * Whether the chosen shop prices any row on this screen (velista `0078`,
  * sections 5 and 5.1; `0102`).
  *
- * Exported because the **row component** and the **settle** need the same answer
- * the pipeline needs: a row draws its product's `atShop` price when this is true and
- * the cheapest anywhere when it is false, and a settle names the scope of whichever
- * it drew. One question, so the price a row shows, the marks the pipeline writes and
- * the scope a settle sends cannot come from different places.
+ * **Not the price** since velista `0153`: which price a row draws, the total
+ * adds and a settle names is {@link basketReadAtShop}'s question: at a shop, the
+ * shop's price or none, and never the cheapest at another chain under its chip.
  *
  * False when no shop is chosen, when the read at it is still out, and for **a shop
  * that prices nothing on this basket**: a shop nobody has priced is not a shop that
- * stocks nothing, so every row draws as under "any of your shops" and nothing claims
- * a line is unlisted. One priced product is enough to say somebody has priced this
- * shop, which is what makes its silence about the rest worth drawing.
+ * stocks nothing, so nothing claims a line is unlisted there, and each line says it
+ * has no price here instead. One priced product is enough to say somebody has
+ * priced this shop, which is what makes its silence about the rest worth drawing.
  */
 export function basketPricedAtShop(
   rows: readonly BasketRow[],
