@@ -139,9 +139,10 @@ export class GroupPage {
       zoneState: this._zones.zoneState().get(id) ?? 'idle',
       lists: lists.lists,
       listsState: lists.state,
-      zoneError: this._zones.error(),
+      zoneError: this._zones.zoneErrorOf(id),
       correlationId:
-        correlationIdOf(this._zones.error()) ?? correlationIdOf(lists.error),
+        correlationIdOf(this._zones.zoneErrorOf(id)) ??
+        correlationIdOf(lists.error),
       stale: this._zones.staleZoneIds().has(id),
       online: this._online(),
       listViewers: (listId) => this._listViewers().get(listId) ?? [],

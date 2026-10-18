@@ -26,11 +26,12 @@ export function selectGroupState(input: {
   readonly lists: readonly ShoppingListSummary[];
   readonly listsState: 'idle' | 'loading' | 'loaded' | 'failed';
   /**
-   * What the last zone read failed with, or null (velista 0157).
+   * What the last read of **this** zone failed with, or null (velista 0157).
    *
-   * Read only when this zone's own state is `failed`, because the store keeps one
-   * error for every zone and a refusal left over from another group must not decide
-   * this one.
+   * The container passes `ZoneStore.zoneErrorOf(id)`, not the store's shared `error`:
+   * that one slot is cleared by a read of any other group, so a realtime event that
+   * reloaded group B turned group A's "not available" into a Try again. It is read
+   * only when this zone's own state is `failed`.
    */
   readonly zoneError: unknown;
   readonly correlationId: string | null;

@@ -103,22 +103,32 @@ interface Options {
 }
 
 /**
- * The zone double with a read that fails, the way `ZoneStore.loadZone` fails.
+ * The zone double with a read of this group that fails, the way `ZoneStore.loadZone`
+ * fails.
  *
- * The real store swallows the error into its `error` signal and marks the zone
- * `failed`. The shared double's read always succeeds, so this replaces the two
- * members a failed read touches and leaves the rest of the double as it was.
+ * The real store keeps the error twice: in the `error` slot every read shares, and
+ * against the zone in `zoneErrorOf`. It marks the zone `failed`. A read of any other
+ * zone succeeds and clears the shared slot, as the real one does, which is what a
+ * realtime event that reloads another group looks like to this page (velista 0157).
  */
 function failingZoneLoad(store: FakeZoneStore, cause: unknown): FakeZoneStore {
   const states = signal<ReadonlyMap<string, ZoneLoadState>>(new Map());
+  const errors = signal<ReadonlyMap<string, unknown>>(new Map());
 
   return {
     ...store,
     zoneState: states.asReadonly(),
+    zoneErrorOf: (zoneId: string) => errors().get(zoneId) ?? null,
     loadZone: async (zoneId: string) => {
       await Promise.resolve();
-      store.setState('loaded', cause);
-      states.set(new Map([[zoneId, 'failed']]));
+      const failed = zoneId === ZONE_ID;
+      store.setState('loaded', failed ? cause : null);
+      states.update((current) =>
+        new Map(current).set(zoneId, failed ? 'failed' : 'loaded')
+      );
+      if (failed) {
+        errors.update((current) => new Map(current).set(zoneId, cause));
+      }
     },
   };
 }
@@ -387,6 +397,22 @@ describe('GroupPage', () => {
         ).toBe('nav.home');
       }
     );
+
+    it('stays not available when another group is read', async () => {
+      // A realtime `zone created` or membership event reloads a different group.
+      // That read clears the store's shared error, and a page drawn from the shared
+      // slot flipped to the generic block with Try again.
+      const { fixture, zones } = await render({
+        zoneLoadError: failure('not_found', 404),
+      });
+
+      await zones.loadZone('another-zone');
+      fixture.detectChanges();
+
+      expect(zones.error()).toBeNull();
+      expect(text(fixture)).toContain('zone.error.notAvailable');
+      expect(query(fixture, 'lib-error-state')).toBeNull();
+    });
 
     it('goes to the dashboard from Home', async () => {
       const { fixture, router } = await render({

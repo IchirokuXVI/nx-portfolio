@@ -117,8 +117,19 @@ under a group opens its sheet on a cold load for a reader who holds the role.
 - **The not available choice reads the copy table.** `selectGroupState` takes the zone
   error and picks `not-available` when `zoneErrorKey(error, 'zone.read')` answers
   `zone.error.notAvailable`. The mapping of `not_found` and `forbidden` thus lives in
-  one place. The error is read only when this zone's own state is `failed`, because
-  `ZoneStore` keeps one error for every zone.
+  one place. The error is read only when this zone's own state is `failed`.
+- **`ZoneStore` keeps a read error per zone, outside Scope (review fix round).** The
+  store's `error` is one slot for every read: `loadZone` and `load` clear it when any
+  read starts and set it when any read fails. A realtime `zone created` or membership
+  event that reloaded group B thus cleared group A's 404, and A's page flipped to the
+  generic block with Try again. A 500 on A followed by a 404 on B made A read as not
+  available. `zone-store.ts` now keeps a map beside `_zoneState`, cleared when that
+  zone's read starts and set when it fails, and exposes `zoneErrorOf(id)`. The group
+  page passes that to `selectGroupState` and to its reference line. `error()` stays
+  for its other readers. The shared double in `testing/store-doubles.ts` gains a
+  `zoneErrorOf` that answers null, because every page spec built on it now reads one.
+- **The page's three top states are three `@if` blocks**, as the template comment says,
+  not an `@else if` chain.
 - **The block is the page's own `.state` section**, the one the pending state uses: an
   `h2` with the sentence and a `.primary` Home button that navigates forward to `/home`.
   It is not `EmptyState`, which wants a body, and not `ErrorState`, which always draws
