@@ -378,7 +378,11 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, this._mergeRead(listId, page.items));
+      // Taken before the first page replaces the array. That replacement drops every
+      // local line past the first page, and the later pages are merged against this
+      // snapshot, or a line past position 100 patched mid read would draw its old row.
+      const local = this._localLines(listId);
+      this._setLines(listId, this._mergeRead(local, page.items));
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -386,7 +390,7 @@ export class LineStore {
       // function and loses only drag until this finishes, which is rule L4's cost and
       // it is paid in the background rather than in front of the reader.
       if (page.nextCursor !== null) {
-        void this._loadRest(listId, page.nextCursor);
+        void this._loadRest(listId, page.nextCursor, local);
       }
     } catch (error) {
       this._setError(listId, error);
@@ -409,12 +413,13 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, this._mergeRead(listId, page.items));
+      const local = this._localLines(listId);
+      this._setLines(listId, this._mergeRead(local, page.items));
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
       if (page.nextCursor !== null) {
-        void this._loadRest(listId, page.nextCursor);
+        void this._loadRest(listId, page.nextCursor, local);
       }
     } catch {
       // Deliberately quiet. What is on screen is not made worse by a reread that did
@@ -1192,7 +1197,18 @@ export class LineStore {
     return 'succeeded';
   }
 
-  private async _loadRest(listId: string, from: string): Promise<void> {
+  /**
+   * Follow the cursor to the end of a list.
+   *
+   * `local` is the list's lines as they stood before the first page replaced them.
+   * Each later page is merged against it by the same rule as the first (plan 0158,
+   * item 2), because by now the store no longer holds the lines past the first page.
+   */
+  private async _loadRest(
+    listId: string,
+    from: string,
+    local: ReadonlyMap<string, Line>
+  ): Promise<void> {
     let cursor: string | null = from;
     // Cursors already followed. A server that answered with the cursor it was handed
     // would otherwise put this loop into a request per turn, forever, on a phone. It
@@ -1211,7 +1227,7 @@ export class LineStore {
 
         this._setLines(listId, [
           ...(this._byList().get(listId) ?? []),
-          ...page.items,
+          ...this._mergeRead(local, page.items),
         ]);
         cursor = page.nextCursor;
         this._setCursor(listId, cursor);
@@ -1416,17 +1432,20 @@ export class LineStore {
    * order.
    */
   private _mergeRead(
-    listId: string,
+    local: ReadonlyMap<string, Line>,
     incoming: readonly Line[]
   ): readonly Line[] {
-    const local = new Map(
-      (this._byList().get(listId) ?? []).map((line) => [line.id, line])
-    );
-
     return incoming.map((line) => {
       const mine = local.get(line.id);
       return mine !== undefined && this._keepsLocal(mine, line) ? mine : line;
     });
+  }
+
+  /** The lines this device holds for one list, by id. */
+  private _localLines(listId: string): ReadonlyMap<string, Line> {
+    return new Map(
+      (this._byList().get(listId) ?? []).map((line) => [line.id, line])
+    );
   }
 
   /** Whether the local copy of a line outranks a read of it. */

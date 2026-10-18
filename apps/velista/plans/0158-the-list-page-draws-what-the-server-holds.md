@@ -176,5 +176,8 @@ Stage 2, after backend `0214`:
   no counts, and the store then keeps the counts it already holds (rule D4). The event
   type in `realtime-events.ts` gained `counts`. That file is outside the Scope above, but
   the mapper cannot hand the counts on without it.
-- **Left out:** `_loadRest`, which reads the pages after the first, still appends without
-  the merge. Only a list longer than one page (100 lines) is exposed.
+- **The pages after the first are merged too.** The first page replaces the array, and
+  that drops every local line past position 100. `load` and `refresh` thus take a
+  snapshot of the local lines before the first page lands and hand it to `_loadRest`,
+  which merges each later page against it with the same `_keepsLocal` rule. A merge
+  against the current store would find nothing for those lines.

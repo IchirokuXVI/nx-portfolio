@@ -51,6 +51,8 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
 function service(seed: readonly Line[]) {
   let served = seed;
   let nextCursor: string | null = null;
+  /** Pages answered one per read, in order, when a spec stages a list of several. */
+  let pages: (readonly Line[])[] = [];
   let failWith: Error | null = null;
   /** What the next write answers, so a version race can be staged rather than raced. */
   let answerWith: Line | null = null;
@@ -88,6 +90,14 @@ function service(seed: readonly Line[]) {
         const error = readFailsWith;
         readFailsWith = null;
         throw error;
+      }
+
+      if (pages.length > 0) {
+        const items = pages.shift() ?? [];
+        return {
+          items,
+          nextCursor: pages.length > 0 ? `cursor-${pages.length}` : null,
+        };
       }
 
       // The cursor is handed out once, exactly as a real endpoint does it: the follow
@@ -186,6 +196,10 @@ function service(seed: readonly Line[]) {
     setServed: (next: readonly Line[], cursor: string | null = null) => {
       served = next;
       nextCursor = cursor;
+    },
+    /** The next read answers these pages in order, each with a cursor to the next. */
+    setPages: (next: readonly (readonly Line[])[]) => {
+      pages = [...next];
     },
     failNext: (error: Error) => {
       failWith = error;
@@ -732,6 +746,28 @@ describe('LineStore', () => {
       await store.refresh(LIST);
 
       expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-3']);
+    });
+
+    it('keeps a patched line past the first page when a later page is older', async () => {
+      // A list over one page: the first page replaces the array and drops every line
+      // past it, so the later pages must be merged against what stood before.
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const { store, lines } = await build();
+      lines.setPages([[line('a')], [line('b', { position: 2, version: 1 })]]);
+      await store.load(LIST);
+      await settle();
+
+      await store.updateLine('b', { itemIds: ['item-9'] });
+      lines.setPages([
+        [line('a')],
+        [line('b', { itemIds: [], position: 2, version: 1 })],
+      ]);
+      await store.load(LIST);
+      await settle();
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['a', 'b']);
+      expect(store.linesIn(LIST)[1].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[1].version).toBe(2);
     });
 
     it('lets the read decide which lines exist', async () => {
