@@ -1,3 +1,5 @@
+> **PR:** [#746](https://github.com/IchirokuXVI/nx-portfolio/pull/746)
+
 # 0212: a private list speaks only to its readers
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -143,3 +145,30 @@ page and the purchase store of velista keep receiving every event they consume t
 - **A private `list.created` goes to staff by user id.** The alternative, publishing after
   the admit sweep, changes the consumer's order for one event kind. Addressing by user id is
   what `list.myAccessChanged` already does.
+
+## 3. What the build decided
+
+**Item 3 is built in PR #746**, with the part of item 4 that belongs to it. Both emit sites
+of `list.myAccessChanged` in `list.service.ts` (`setAccess`, and the `sharedWithZone` switch
+in `applyListUpdate`) address the event to `{ userIds: [member.userId] }` and nothing else.
+The doc comment of `RealtimeEvent.ListMyAccessChanged` in `realtime.events.ts` says so. The
+list cache invalidation that the envelope's `listId` gave this event still happens, because
+`list.accessChanged` and `list.updated` carry the list id and are published first.
+`list-set-access.spec.ts` and `shared-list-grant.spec.ts` assert the audience. No schema
+changed and velista changed nothing.
+
+**Items 1, 2 and 5 are blocked, and wait on the owner.** They make the presence room
+`list:{id}:presence` the target of list events. That room is filled only when a socket
+subscribes to the zone and by the admit sweep on `list.created` (`sweeps.ts`). A member who
+gets access while their socket is open is never admitted, and would miss every event of the
+list until they reconnect. Three sequences reach that state:
+
+1. An owner grants a member access directly through `setAccess`.
+2. An owner switches a private list to `sharedWithZone`.
+3. An owner promotes a member to ADMIN, which gives access to every list of the zone.
+
+The fix that would close it is an admit sweep in `sweeps.ts` on `list.accessChanged`,
+`member.roleChanged` and `list.updated`, beside the evict sweep that already runs on
+`list.accessChanged`. That file is outside this plan's Scope, so the owner decides whether
+to widen the plan. The routing half of item 4 (the presence room and `jetstream.consumer.ts`
+comments) waits with items 1 and 2.
