@@ -700,6 +700,75 @@ describe('LineComposer, the field and its results', () => {
       expect(fixture.componentInstance.quantity()).toBe(1);
       expect(document.activeElement).not.toBe(field(fixture));
     });
+
+    describe('the cross in the field', () => {
+      function cross(
+        fixture: ComponentFixture<LineComposer>
+      ): HTMLButtonElement | null {
+        return host(fixture).querySelector<HTMLButtonElement>('button.clear');
+      }
+
+      it('is drawn only while something is typed', async () => {
+        const { fixture } = await onPage();
+        expect(cross(fixture)).toBeNull();
+
+        type(fixture, 'oat');
+
+        expect(cross(fixture)?.getAttribute('aria-label')).toBe(
+          'list.add.clear'
+        );
+        expect(cross(fixture)?.type).toBe('button');
+      });
+
+      it('empties the words, says so, and keeps the quantity', async () => {
+        const { fixture } = await onPage();
+        const queries: string[] = [];
+        fixture.componentInstance.queryChanged.subscribe((q) =>
+          queries.push(q)
+        );
+        type(fixture, 'oat');
+        fixture.componentInstance.quantity.set(3);
+
+        cross(fixture)?.click();
+        fixture.detectChanges();
+
+        expect(field(fixture).value).toBe('');
+        expect(queries).toEqual(['oat', '']);
+        expect(fixture.componentInstance.quantity()).toBe(3);
+        expect(cross(fixture)).toBeNull();
+      });
+
+      it('submits nothing', async () => {
+        const { fixture } = await onPage();
+        const sent: unknown[] = [];
+        fixture.componentInstance.submitted.subscribe((one) => sent.push(one));
+        type(fixture, 'oat');
+
+        cross(fixture)?.click();
+        fixture.detectChanges();
+
+        expect(sent).toEqual([]);
+      });
+
+      it('keeps the keyboard up: a press leaves focus in the field', async () => {
+        const { fixture } = await onPage();
+        type(fixture, 'oat');
+        field(fixture).focus();
+        const blurs: boolean[] = [];
+        fixture.componentInstance.fieldFocused.subscribe((one) =>
+          blurs.push(one)
+        );
+        const press = new MouseEvent('mousedown', { cancelable: true });
+
+        cross(fixture)?.dispatchEvent(press);
+        cross(fixture)?.click();
+        fixture.detectChanges();
+
+        expect(press.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(field(fixture));
+        expect(blurs).toEqual([]);
+      });
+    });
   });
 
   it('keeps the words on Escape where the page says so', async () => {

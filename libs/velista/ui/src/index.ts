@@ -44,6 +44,7 @@ export * from './lib/entry/invite-card';
 export * from './lib/entry/join-code';
 export * from './lib/entry/join-code-field';
 export * from './lib/entry/sheet-shell';
+export * from './lib/field/clears-field';
 export * from './lib/home/app-bar';
 export * from './lib/home/auth-actions';
 export * from './lib/home/bottom-action-bar';

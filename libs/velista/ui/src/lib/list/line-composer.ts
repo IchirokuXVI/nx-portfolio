@@ -28,7 +28,14 @@ import {
   type SilenceDetectorI,
   type SilenceWatch,
 } from '@portfolio/velista/platform';
-import { MicIcon, PlusIcon, StopIcon, TrashIcon } from '../icons/icons';
+import { ClearsField } from '../field/clears-field';
+import {
+  CloseIcon,
+  MicIcon,
+  PlusIcon,
+  StopIcon,
+  TrashIcon,
+} from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
 
 /** What the one button at the end of the row is for. */
@@ -139,6 +146,8 @@ export interface LineComposerSubmit {
     MicIcon,
     StopIcon,
     TrashIcon,
+    CloseIcon,
+    ClearsField,
     QuantityStepper,
   ],
   templateUrl: './line-composer.html',
@@ -590,6 +599,16 @@ export class LineComposer {
   clear(): void {
     this.content.set('');
     this.quantity.set(1);
+    this.queryChanged.emit('');
+  }
+
+  /**
+   * The cross in the field: the words go, the quantity stays. Somebody who set a
+   * count and then mistyped the name is retyping the name, not the count. Focus is
+   * {@link ClearsField}'s rule, so a keyboard that was up stays up.
+   */
+  protected clearTyped(): void {
+    this.content.set('');
     this.queryChanged.emit('');
   }
 
