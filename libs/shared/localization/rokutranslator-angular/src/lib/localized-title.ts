@@ -20,10 +20,18 @@ import { RokuTranslatorService } from './rokutranslator-service';
  * the first resolves from the buffer and costs nothing.
  *
  * Install it on the app's parent route, the same one carrying the locale guard, so the
- * title is set in the language the page is about to render in:
+ * title is set in the language the page is about to render in. That route must re-run
+ * the guard when the locale segment changes (plan 0006), or a browser back from `/es`
+ * to `/en` keeps the Spanish strings and the Spanish title:
  *
  * ```ts
- * { path: '', canActivate: [localeGuard], title: localizedTitle('app-title'), ... }
+ * {
+ *   path: '',
+ *   canActivate: [localeGuard],
+ *   runGuardsAndResolvers: rerunOnLocaleSegmentChange,
+ *   title: localizedTitle('app-title'),
+ *   ...
+ * }
  * ```
  *
  * @param key the translation key.

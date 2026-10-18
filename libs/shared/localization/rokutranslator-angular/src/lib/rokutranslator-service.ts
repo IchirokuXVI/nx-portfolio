@@ -20,6 +20,9 @@ export const ROKU_TRANSLATOR_NAMESPACES = new InjectionToken<string[]>(
 export const ROKU_TRANSLATOR_DEFAULT_NAMESPACE = new InjectionToken<string>(
   'Default namespace for RokuTranslator'
 );
+export const ROKU_TRANSLATOR_DEFAULT_LOCALE = new InjectionToken<
+  string | undefined
+>('Locale RokuTranslator starts with when no browser language is supported');
 export const ROKU_TRANSLATOR_LOADER = new InjectionToken<LoaderFunction>(
   'Loader function for RokuTranslator'
 );
@@ -51,6 +54,9 @@ export class RokuTranslatorService implements OnDestroy {
   private _namespaces: string[] = inject(ROKU_TRANSLATOR_NAMESPACES);
   private _defaultNamespace: string = inject(ROKU_TRANSLATOR_DEFAULT_NAMESPACE);
   private _loader: LoaderFunction = inject(ROKU_TRANSLATOR_LOADER);
+  private _defaultLocale = inject(ROKU_TRANSLATOR_DEFAULT_LOCALE, {
+    optional: true,
+  });
 
   private _store = inject(RokuLocaleStore);
 
@@ -116,6 +122,9 @@ export class RokuTranslatorService implements OnDestroy {
     const ready = this._translator
       .init({
         supportedLocales: [...this._locales],
+        // Where a browser that speaks none of the supported languages starts
+        // (plan 0006). Without it the core takes the first supported locale.
+        defaultLocale: this._defaultLocale ?? undefined,
         namespaces: [...this._ownedNamespaces],
         lowercaseLocale: true,
       })

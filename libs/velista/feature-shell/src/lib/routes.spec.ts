@@ -1,5 +1,12 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router, type Route } from '@angular/router';
+import {
+  provideRouter,
+  Router,
+  type Route,
+  type RouterStateSnapshot,
+} from '@angular/router';
+import { localeGuard } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_PATHS,
   CATALOG_PICK_DATA,
@@ -28,6 +35,9 @@ import {
  * (velista `0098`, section 3).
  */
 const SIGNED_IN = [authenticatedGuard, setupGuard];
+
+@Component({ selector: 'lib-blank', template: '' })
+class Blank {}
 
 /**
  * Everything below the app's layout route, which is where the pages live.
@@ -84,6 +94,48 @@ describe('AppShellRoutes', () => {
 
     expect(() => TestBed.inject(Router)).not.toThrow();
     expect(TestBed.inject(Router).config).toHaveLength(AppShellRoutes.length);
+  });
+
+  /**
+   * Rokutranslator plan 0006. The guard sits on the componentless parent and the
+   * locale is the `:locale` child's param, so with the router default a history move
+   * from `/en` to `/es` never re-ran it. Driven through a real router with this
+   * table's own parent settings, and pages a test can activate in their place.
+   */
+  it('runs the locale guard again when only the locale segment changes', async () => {
+    const parent = AppShellRoutes[0];
+    const visited: string[] = [];
+
+    expect(parent.canActivate).toEqual([localeGuard]);
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            path: parent.path,
+            runGuardsAndResolvers: parent.runGuardsAndResolvers,
+            canActivate: [
+              (_route: unknown, state: RouterStateSnapshot) => {
+                visited.push(state.url);
+                return true;
+              },
+            ],
+            children: [
+              { path: ':locale', children: [{ path: '**', component: Blank }] },
+            ],
+          },
+        ]),
+      ],
+    });
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl('/en/home');
+    await router.navigateByUrl('/es/home');
+    // A list or line id change below the locale does not re-run it.
+    await router.navigateByUrl('/es/zones');
+
+    expect(visited).toEqual(['/en/home', '/es/home']);
   });
 
   it('has exactly one empty path among the pages', () => {

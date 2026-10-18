@@ -103,6 +103,31 @@ export const localeGuard: CanActivateFn = async (
 };
 
 /**
+ * The `runGuardsAndResolvers` of the route that carries `localeGuard` (plan 0006).
+ *
+ * The guard sits on a componentless parent and the locale is a `:locale` child, so
+ * with the router default (`paramsChange`) a move from `/en` to `/es` changes only the
+ * child's param and the guard does not run. A browser back after a language switch
+ * then kept the old language under the new URL.
+ *
+ * It compares the first segment below the guarded route, which is the locale segment
+ * whichever child matched (the `:locale` route, or the `**` one with a segment the
+ * guard is about to correct), and nothing else. `'always'` would re-run the guard on
+ * every list and line id change in velista. The re-run after a language switch costs
+ * nothing, because `changeLocale` returns early for a locale it already announced.
+ */
+export function rerunOnLocaleSegmentChange(
+  from: ActivatedRouteSnapshot,
+  to: ActivatedRouteSnapshot
+): boolean {
+  return firstSegmentBelow(from) !== firstSegmentBelow(to);
+}
+
+function firstSegmentBelow(route: ActivatedRouteSnapshot): string | undefined {
+  return route.firstChild?.url[0]?.path;
+}
+
+/**
  * Collect the guard's configuration from anywhere along the activated route chain,
  * deepest definition winning.
  *

@@ -3,6 +3,7 @@ import { type Route } from '@angular/router';
 import {
   localeGuard,
   localizedTitle,
+  rerunOnLocaleSegmentChange,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -661,6 +662,11 @@ export const AppShellRoutes: Route[] = [
     // way, since both enter through `app-providers.ts`. Only the injector changed, and
     // it moved in the direction that has more above it rather than less.
     canActivate: [localeGuard],
+    // The locale is the `:locale` child's param, so a history move from `/en` to
+    // `/es` changes nothing on this route and the default would not re-run the guard
+    // (rokutranslator plan 0006). This re-runs it when the locale segment changes and
+    // for nothing else, so a list or line id change does not.
+    runGuardsAndResolvers: rerunOnLocaleSegmentChange,
     // No page of this app is created until its strings have arrived (plan 0006,
     // section 4). On the parent, so it is decided once for the app rather than
     // repeated by every page ever added, and after the locale guard: Angular runs a

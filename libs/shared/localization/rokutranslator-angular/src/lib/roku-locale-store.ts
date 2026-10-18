@@ -1,4 +1,4 @@
-import { inject, Injectable, signal, Signal } from '@angular/core';
+import { DOCUMENT, inject, Injectable, signal, Signal } from '@angular/core';
 import { Router, UrlSegment } from '@angular/router';
 import { canonicalLocale } from '@portfolio/localization/rokutranslator';
 import { BehaviorSubject, Observable } from 'rxjs';
@@ -34,6 +34,7 @@ import { ROKU_TRANSLATOR } from './roku-translator-token';
 export class RokuLocaleStore {
   private _router = inject(Router);
   private _translator = inject(ROKU_TRANSLATOR);
+  private _document = inject(DOCUMENT);
 
   private readonly _initial = this.readInitialLocale();
 
@@ -72,6 +73,7 @@ export class RokuLocaleStore {
   readonly locale: Signal<string> = this._locale.asReadonly();
 
   constructor() {
+    this.writeDocumentLang(this._initial);
     this._translator.onLocaleChange((locale) => this.publish(locale));
   }
 
@@ -79,6 +81,17 @@ export class RokuLocaleStore {
   private publish(locale: string): void {
     this._locale.set(locale);
     this._locale$.next(locale);
+    this.writeDocumentLang(locale);
+  }
+
+  /**
+   * `<html lang>` follows the locale (plan 0006). Every `index.html` ships `lang="en"`,
+   * and every change passes through `publish` (the guard, the switcher and init), so
+   * this is the one place that can keep it true for every app. In the mounted mode two
+   * apps share one document and the last to publish wins, which is the app on screen.
+   */
+  private writeDocumentLang(locale: string): void {
+    this._document.documentElement.lang = locale;
   }
 
   /**
