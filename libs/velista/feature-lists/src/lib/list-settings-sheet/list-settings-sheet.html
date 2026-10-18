@@ -72,19 +72,54 @@
         <label class="choice-label" for="list-settings-shared">
           <input
             (change)="setSharedWithZone($event)"
+            [attr.aria-describedby]="
+              showsSharedHint() ? 'list-settings-shared-hint' : null
+            "
             [checked]="sharedWithZone()"
             [disabled]="submitting()"
-            aria-describedby="list-settings-shared-hint"
             class="checkbox"
             id="list-settings-shared"
             type="checkbox"
           />
           <span>{{ 'list.settings.sharedWithZone.label' | rokuT }}</span>
         </label>
-        <p class="choice-hint" id="list-settings-shared-hint">
-          {{ 'list.settings.sharedWithZone.hint' | rokuT }}
-        </p>
+        @if (showsSharedHint()) {
+          <p class="choice-hint" id="list-settings-shared-hint">
+            {{ 'list.settings.sharedWithZone.hint' | rokuT }}
+          </p>
+        }
       </div>
+
+      <!--
+        Offered only right after the switch went off, and only when somebody has the
+        list (plan 0152). Off by default: taking a list from people is the larger act,
+        so it needs its own tick, and Save is what does it. The names say who, because
+        a count alone hides the thing the owner decides on.
+      -->
+      @if (offersTakeBack()) {
+        <div class="choice">
+          <label class="choice-label" for="list-settings-take-back">
+            <input
+              (change)="takeBack.set($any($event.target).checked)"
+              [checked]="takeBack()"
+              [disabled]="submitting()"
+              aria-describedby="list-settings-take-back-names"
+              class="checkbox"
+              id="list-settings-take-back"
+              type="checkbox"
+            />
+            <span>
+              {{
+                'list.settings.sharedWithZone.takeBack'
+                  | rokuT: { count: holders().length }
+              }}
+            </span>
+          </label>
+          <p class="choice-hint" id="list-settings-take-back-names">
+            {{ holderNames() }}
+          </p>
+        </div>
+      }
 
       <!--
         No inner scroll. The list grows to whatever height it needs and the panel scrolls
@@ -150,6 +185,15 @@
 
   @if (errorKey(); as key) {
     <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  @if (keepers(); as kept) {
+    <p class="error" role="alert">
+      {{
+        'list.settings.sharedWithZone.keepers'
+          | rokuT: { count: kept.count, names: kept.names }
+      }}
+    </p>
   }
 
   <!--

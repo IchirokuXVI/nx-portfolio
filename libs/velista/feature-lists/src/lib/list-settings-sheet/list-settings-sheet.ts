@@ -53,6 +53,27 @@ function samePermissions(
   return a.length === b.length && a.every((value, at) => value === b[at]);
 }
 
+/** `Intl.ListFormat`, which the TypeScript library of this workspace does not declare. */
+type ListFormatConstructor = new (
+  locale: string,
+  options: { readonly style: 'long'; readonly type: 'conjunction' }
+) => { format(items: readonly string[]): string };
+
+/** "Toni, Leo and Marta", in the reader's language. */
+function namesOf(names: readonly string[], locale: string): string {
+  const ListFormat = (Intl as unknown as { ListFormat?: ListFormatConstructor })
+    .ListFormat;
+  try {
+    return ListFormat === undefined
+      ? names.join(', ')
+      : new ListFormat(locale, { style: 'long', type: 'conjunction' }).format(
+          names
+        );
+  } catch {
+    return names.join(', ');
+  }
+}
+
 /**
  * Rename this list, configure it, decide who can use it, and delete it.
  *
@@ -220,6 +241,85 @@ export class ListSettingsSheet {
    */
   readonly sharedWithZone = signal(false);
 
+  /**
+   * Whether the switch above went from on to off in this sheet (plan 0152, item 1).
+   *
+   * Only then is the tick offered. A list that opens already private has nothing a
+   * switch just gave, and the rows below are how one person is taken off it.
+   */
+  readonly turnedOff = signal(false);
+
+  /** The tick under the switch. Off by default, because taking a list is the larger act. */
+  readonly takeBack = signal(false);
+
+  /**
+   * The people who would lose the list: every non staff row that holds anything and
+   * not `MANAGE`.
+   *
+   * Read from what the server returned, not from edits. A row holding `MANAGE` stays
+   * out, because backend rule 3 refuses a caller who is not group staff that clears
+   * one, and one refused row fails the whole request. Staff rows never come back from
+   * the read and are drawn fixed, so they are out too. The entity cannot say which
+   * rows the switch made, so the copy says "the people who have it".
+   */
+  readonly holders = computed(() => {
+    const loaded = new Map(
+      this._loadedAccess().map((entry) => [
+        entry.membershipId,
+        entry.permissions,
+      ])
+    );
+    return this._names
+      .membersOf(this.zoneId())
+      .filter(
+        (member) =>
+          member.status === 'APPROVED' &&
+          member.role !== 'OWNER' &&
+          member.role !== 'ADMIN'
+      )
+      .filter((member) => {
+        const permissions = loaded.get(member.id) ?? [];
+        return permissions.length > 0 && !permissions.includes('MANAGE');
+      })
+      .map((member) => ({
+        membershipId: member.id,
+        username: member.username,
+      }));
+  });
+
+  /** The holders' names in one sentence, in the reader's language. */
+  readonly holderNames = computed(() =>
+    namesOf(
+      this.holders().map((holder) => holder.username),
+      this._locale()
+    )
+  );
+
+  /** Whether the tick is drawn: the switch was turned off here and somebody has the list. */
+  readonly offersTakeBack = computed(
+    () =>
+      this.turnedOff() && !this.sharedWithZone() && this.holders().length > 0
+  );
+
+  /** Whether the hint under the switch is drawn. Not after a turn off that left nobody. */
+  readonly showsSharedHint = computed(
+    () => !this.turnedOff() || this.holders().length > 0
+  );
+
+  /** Whether Save will take the list from the holders. */
+  readonly takeBackOn = computed(
+    () => this.offersTakeBack() && this.takeBack()
+  );
+
+  /**
+   * Who kept the list after a refused take back, or null.
+   *
+   * The race the plan accepts: somebody was made a list admin between the read and the
+   * write, rule 3 refused the request, and nothing changed. The sheet rereads the rows
+   * and names the people who now hold `MANAGE`.
+   */
+  readonly keepers = signal<{ names: string; count: number } | null>(null);
+
   /** Whether deleting needs the name typed. Only when there is something to lose. */
   readonly needsTypedName = computed(
     () => this._lines.linesIn(this.listId()).length > 0
@@ -254,7 +354,7 @@ export class ListSettingsSheet {
   readonly canSave = computed(
     () =>
       this.seeded() &&
-      (this._nameChanged() || this.hasAccessEdits()) &&
+      (this._nameChanged() || this.hasAccessEdits() || this.takeBackOn()) &&
       !this.submitting()
   );
 
@@ -426,7 +526,9 @@ export class ListSettingsSheet {
    *
    * **Turning it off does not revoke anybody**, which is what the hint under it says,
    * because the opposite reading is the natural one and it is the reading that loses
-   * somebody their access. Removing one person is one row in the list below.
+   * somebody their access. Removing one person is one row in the list below, and
+   * removing everybody who has it is the tick a turn off offers, sent by Save (plan
+   * 0152). The flip itself still revokes nobody.
    *
    * Turning it **on** grants, so the access the sheet is showing is now stale: the
    * rows are reread rather than guessed at, since a guess here is somebody's access
@@ -444,6 +546,8 @@ export class ListSettingsSheet {
         sharedWithZone: next,
       });
       await this._lists.refresh(this.zoneId());
+      this.turnedOff.set(previous && !next);
+      this.takeBack.set(false);
       if (next) {
         await this._loadAccess();
       }
@@ -506,6 +610,7 @@ export class ListSettingsSheet {
 
     this.submitting.set(true);
     this.errorKey.set(null);
+    this.keepers.set(null);
 
     try {
       if (this._nameChanged()) {
@@ -514,20 +619,67 @@ export class ListSettingsSheet {
         });
         await this._lists.refresh(this.zoneId());
       }
-      if (this.hasAccessEdits()) {
-        await this._listService.setListAccess(
-          this.listId(),
-          [...this._edits()].map(([membershipId, permissions]) => ({
-            membershipId,
-            permissions,
-          }))
-        );
+      const takeBack = this.takeBackOn();
+      const revoked = takeBack
+        ? this.holders().map((holder) => holder.membershipId)
+        : [];
+      if (this.hasAccessEdits() || takeBack) {
+        // One request. The take back names each holder with the empty set, which the
+        // server reads as "delete the row" (rule 5), over any edit of the same row.
+        const entries = new Map(this._edits());
+        for (const membershipId of revoked) {
+          entries.set(membershipId, []);
+        }
+        try {
+          await this._listService.setListAccess(
+            this.listId(),
+            [...entries].map(([membershipId, permissions]) => ({
+              membershipId,
+              permissions,
+            }))
+          );
+        } catch (error) {
+          if (takeBack) {
+            await this._reportKeepers(revoked);
+          }
+          throw error;
+        }
+        if (takeBack) {
+          await this._loadAccess();
+        }
       }
       await this.dismiss();
     } catch (error) {
       this.submitting.set(false);
-      this.errorKey.set(listErrorKey(error, 'list.manage'));
+      if (this.keepers() === null) {
+        this.errorKey.set(listErrorKey(error, 'list.manage'));
+      }
     }
+  }
+
+  /**
+   * After a refused take back, reread the rows and name who now holds `MANAGE`.
+   *
+   * Null when nobody does, and the ordinary error is shown instead.
+   */
+  private async _reportKeepers(revoked: readonly string[]): Promise<void> {
+    await this._loadAccess();
+    const managing = new Set(
+      this._loadedAccess()
+        .filter((entry) => entry.permissions.includes('MANAGE'))
+        .map((entry) => entry.membershipId)
+    );
+    const names = this._names
+      .membersOf(this.zoneId())
+      .filter(
+        (member) => revoked.includes(member.id) && managing.has(member.id)
+      )
+      .map((member) => member.username);
+    this.keepers.set(
+      names.length === 0
+        ? null
+        : { names: namesOf(names, this._locale()), count: names.length }
+    );
   }
 
   startDelete(): void {

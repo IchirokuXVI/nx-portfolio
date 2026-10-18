@@ -21,6 +21,7 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  LIST_SERVICE,
   ListViewStore,
   ProductPickStore,
   provideFakeCategoryStore,
@@ -43,6 +44,7 @@ import {
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type ListServiceI,
   type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
@@ -51,6 +53,7 @@ import type {
   DueLine,
   Line,
   LineRowVm,
+  ListAccessEntry,
   ListPermission,
   Membership,
   MyZone,
@@ -208,6 +211,8 @@ interface Options {
   readonly connected?: boolean;
   /** What `PageReturn` hands back, which makes this arrival a return to the page. */
   readonly returned?: unknown;
+  /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
+  readonly access?: readonly ListAccessEntry[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -372,6 +377,13 @@ async function render(options: Options = {}): Promise<{
       // The blip that says a recording left the device. A fake, so a spec can ask
       // whether it was played without a browser and without making a noise.
       { provide: NOTIFICATION_TONE, useValue: tone },
+      // Who else holds an empty private list (velista `0152`, item 4).
+      {
+        provide: LIST_SERVICE,
+        useValue: {
+          getListAccess: async () => options.access ?? [],
+        } as unknown as ListServiceI,
+      },
     ],
   }).compileComponents();
 
@@ -1323,6 +1335,53 @@ describe('ListPage', () => {
 
       expect(fixture.nativeElement.textContent).toContain('list.empty.title');
       expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    // Velista `0152`, item 4: "everyone here sees it" is false on a private list.
+    const body = (fixture: ComponentFixture<ListPage>) =>
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.state-body')
+        ?.textContent?.trim();
+
+    async function emptyList(options: Options) {
+      const rendered = await render({
+        lines: [],
+        members: [member('u1', 'Me', 'MEMBER')],
+        ...options,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('says nobody else has it when the list is private and nobody holds it', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [{ membershipId: 'm-u1', permissions: ADMIN }],
+      });
+
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+    });
+
+    it('keeps the shared wording when somebody else holds the private list', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [
+          { membershipId: 'm-u1', permissions: ADMIN },
+          { membershipId: 'm-toni', permissions: ['READ'] },
+        ],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('keeps the shared wording on a list shared with the group', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: true, lineCount: 0 })],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
     });
   });
 

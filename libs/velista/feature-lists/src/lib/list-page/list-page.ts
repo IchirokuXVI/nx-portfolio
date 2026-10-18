@@ -27,6 +27,8 @@ import {
   DueLineStore,
   ItemNames,
   LineStore,
+  LIST_SERVICE,
+  type ListServiceI,
   ListStore,
   type ListViewSnapshot,
   ListViewStore,
@@ -654,6 +656,65 @@ export class ListPage {
   readonly loaded = computed(() => {
     const current = this.state();
     return current.kind === 'loaded' ? current : null;
+  });
+
+  // --- Who an empty list is shared with (velista 0152, item 4) -------------------
+
+  private readonly _listService = inject<ListServiceI>(LIST_SERVICE);
+
+  /**
+   * Whether anybody but the reader holds a row on this list, per list id, once read.
+   *
+   * Read only for a list that is empty, not shared with the group, and managed by the
+   * reader, because the access read needs `MANAGE`. A reader without it was given the
+   * list by somebody, so the shared wording is true for them without a read.
+   */
+  private readonly _othersHold = signal<ReadonlyMap<string, boolean>>(
+    new Map()
+  );
+
+  private readonly _privateList = computed(() => {
+    const current = this.state();
+    const listId = this.listId();
+    const list = this._lists
+      .listsIn(this.zoneId())
+      .find((candidate) => candidate.id === listId);
+    return current.kind === 'loaded' &&
+      current.empty &&
+      list?.sharedWithZone === false &&
+      list.myPermissions.includes('MANAGE')
+      ? listId
+      : null;
+  });
+
+  private readonly _readHolders = effect(() => {
+    const listId = this._privateList();
+    if (listId === null || untracked(this._othersHold).has(listId)) {
+      return;
+    }
+    const zoneId = this.zoneId();
+    void this._listService.getListAccess(listId).then(
+      (entries) => {
+        const me = this._names
+          .membersOf(zoneId)
+          .find((member) => member.userId === this._session.userId())?.id;
+        const others = entries.some(
+          (entry) => entry.membershipId !== me && entry.permissions.length > 0
+        );
+        this._othersHold.update((held) => new Map(held).set(listId, others));
+      },
+      // Quiet: the shared wording stays, which is the old copy and never a wrong claim
+      // that a list is private.
+      () => undefined
+    );
+  });
+
+  /** The empty list's body: the private wording only when nobody else has the list. */
+  readonly emptyBodyKey = computed(() => {
+    const listId = this._privateList();
+    return listId !== null && this._othersHold().get(listId) === false
+      ? 'list.empty.bodyPrivate'
+      : 'list.empty.body';
   });
 
   // --- The search, the order and one category (velista 0082) ----------------
