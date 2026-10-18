@@ -191,6 +191,12 @@ Stage 2, after backend `0214`:
   from the read and whose count is a number. A line kept from the local copy keeps its
   count, and a read that says null or nothing keeps the count the device has. Events and
   write answers never record a count, so their null erases nothing.
+- **A read never lowers a known count.** Posting a comment saves only `line_comments`
+  and does not bump the version of the line. A read whose count query ran before a
+  comment committed can thus land after the `comment.added` event and answer 2 where the
+  event made 3. `_recordReadCounts` records the larger of the known count and the read.
+  That is safe because a comment is never deleted on its own (only with its line), and
+  velista has no way to delete one, so a count can only grow.
 - **`hasLists` is not built.** Backend `0214` did not ship it, so a plain member keeps the
   member count heuristic in `selectGroupState`.
 - **The walk needed an intercept.** The shared backend slot ran code from before PR #755,

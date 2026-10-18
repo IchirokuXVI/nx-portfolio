@@ -995,6 +995,29 @@ describe('LineStore', () => {
       expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
       expect(store.commentCountOf('a')).toBe(3);
     });
+
+    it('never lowers a count an event already raised', async () => {
+      // Posting a comment does not bump the version of its line, so a read whose
+      // count ran before the comment committed can land after the event.
+      const { store, lines, realtime } = await build([
+        line('a', { commentCount: 2 }),
+      ]);
+      await store.load(LIST);
+
+      realtime.emit('comment.added', {
+        id: 'c3',
+        lineId: 'a',
+        authorUserId: 'user-toni',
+        body: 'hi',
+        createdAt: new Date().toISOString(),
+      });
+      expect(store.commentCountOf('a')).toBe(3);
+
+      lines.setServed([line('a', { commentCount: 2 })]);
+      await store.refresh(LIST);
+
+      expect(store.commentCountOf('a')).toBe(3);
+    });
   });
 
   describe('reordering', () => {

@@ -1455,6 +1455,12 @@ export class LineStore {
    * The same rule as {@link _mergeRead}: a line kept from the local copy keeps its
    * count too, and a line whose read says null or nothing keeps the count this device
    * already holds. Only a number replaces one.
+   *
+   * A number never lowers a count this device already knows. Posting a comment does
+   * not bump the version of its line, so a read whose count query ran before the
+   * comment committed can land after the `comment.added` event and answer 2 where the
+   * event already made 3. The larger value is safe because a comment is never deleted
+   * on its own (only with its line), so a count can only grow.
    */
   private _recordReadCounts(
     local: ReadonlyMap<string, Line>,
@@ -1474,7 +1480,10 @@ export class LineStore {
     this._commentCounts.update((current) => {
       const next = new Map(current);
       for (const line of known) {
-        next.set(line.id, line.commentCount as number);
+        next.set(
+          line.id,
+          Math.max(next.get(line.id) ?? 0, line.commentCount as number)
+        );
       }
       return next;
     });
