@@ -727,7 +727,8 @@ export class BasketPage {
   } | null>(() => {
     // F6.7: "you are on this list until" says nothing true over a state block or
     // a finished trip, and sat above "no longer on this list" (velista `0154`).
-    if (this.state() !== 'ready' || this.finished()) {
+    // The socket's latch says that while the state is still `ready`.
+    if (this.state() !== 'ready' || this.finished() || this.revoked()) {
       return null;
     }
 

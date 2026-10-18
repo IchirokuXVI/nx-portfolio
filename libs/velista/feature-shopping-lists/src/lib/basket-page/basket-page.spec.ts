@@ -2830,6 +2830,22 @@ describe('a visit that ends', () => {
       expect(query(rendered.fixture, '.stale')).toBeNull();
       expect(title(rendered.fixture)).toBe('basket.revoked.title');
     });
+
+    it('draws no visit notice when only the socket has said so', async () => {
+      // The removal's event latches `revoked` while the read is still `ready`,
+      // and the page draws "no longer on this list" from that alone.
+      const me = visitor(guest('p-9', 1), 240);
+      const { fixture, store } = await render({
+        me,
+        participants: [namedOwner(), me],
+      });
+      expect(query(fixture, 'lib-visit-notice')).not.toBeNull();
+
+      store.revoked.set(true);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-visit-notice')).toBeNull();
+    });
   });
 
   it('draws no visit notice on a finished basket', async () => {

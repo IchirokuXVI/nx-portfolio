@@ -1966,11 +1966,12 @@ describe('BasketStore: sharing with people', () => {
       expect(socket.opened).toEqual([]);
     });
 
-    it('never offers the join screen, because there is no participant to be', async () => {
+    it('never offers a participant screen, because there is no participant to be', async () => {
       // A 401 here is an account session that has ended, which the interceptor
-      // answers for the whole app. Neither reading of the participant surface's
-      // 401 is about this reader, and `needsJoin` on the caller's own basket
-      // would offer a link nobody has.
+      // answers for the whole app. None of the readings of the participant
+      // surface's 401 is about this reader: `revoked`, `needsSignIn` and
+      // `notYours` on the caller's own basket would each answer a credential
+      // nobody holds.
       const { store } = build({
         getLiveBasket: () =>
           Promise.reject(
