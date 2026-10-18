@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-import { signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   convertToParamMap,
@@ -17,17 +16,12 @@ import { ZoneStore } from '@portfolio/velista/data-access';
 import type { MyZone } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import {
+  basketIdGuard,
   listIdGuard,
   zoneIdGuard,
   zoneMemberGuard,
   zoneStaffGuard,
 } from './zone-guards';
-=======
-import { Component } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router, UrlSegment, type Route } from '@angular/router';
-import { basketIdGuard, listIdGuard, zoneIdGuard } from './zone-guards';
->>>>>>> origin/dev
 
 /**
  * Plan 0010, rule G1: `zones/:zoneId` matches only a UUID.
@@ -144,7 +138,6 @@ describe('listIdGuard', () => {
 });
 
 /**
-<<<<<<< HEAD
  * Plan 0157, item 2: the role guards on the sheets under a group load the group when
  * the cache does not hold it, so a cold link to a sheet opens the sheet.
  *
@@ -286,7 +279,10 @@ describe('the role guards on a cold load', () => {
 
     expect(await roleDecides(zoneStaffGuard, store)).toBe(GROUP_PAGE);
     expect(store.loadZone).not.toHaveBeenCalled();
-=======
+  });
+});
+
+/**
  * Velista 0156: an id typed in upper case lands on the lower case URL.
  *
  * The pattern accepts both cases, and so does the backend, but the stores key on the id
@@ -377,6 +373,5 @@ describe('the id guards on an upper case id', () => {
     const at = router();
     await at.navigateByUrl(`/en/zones/${ZONE}/lists/${LIST}`);
     expect(at.url).toBe(`/en/zones/${ZONE}/lists/${LIST}`);
->>>>>>> origin/dev
   });
 });
