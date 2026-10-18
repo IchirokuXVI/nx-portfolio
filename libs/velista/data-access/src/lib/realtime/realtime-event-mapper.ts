@@ -10,6 +10,7 @@ import {
   toComment,
   toLine,
   toLineSettlement,
+  toListCounts,
   toListPermissions,
   toListPresence,
   toMembership,
@@ -132,7 +133,9 @@ export function toRealtimeEvent(
     case 'list.created':
     case 'list.updated': {
       const list = toShoppingList(payload);
-      return list === null ? null : { type: name, list };
+      return list === null
+        ? null
+        : { type: name, list, counts: toListCounts(payload) };
     }
 
     case 'list.deleted': {

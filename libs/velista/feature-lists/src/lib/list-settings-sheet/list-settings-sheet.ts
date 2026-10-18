@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -25,6 +27,7 @@ import {
   type ListAccessEntry,
   type ListPermission,
   type ShareRowVm,
+  type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -249,7 +252,10 @@ export class ListSettingsSheet {
    * controls save themselves.
    */
   readonly canSave = computed(
-    () => (this._nameChanged() || this.hasAccessEdits()) && !this.submitting()
+    () =>
+      this.seeded() &&
+      (this._nameChanged() || this.hasAccessEdits()) &&
+      !this.submitting()
   );
 
   /**
@@ -332,14 +338,43 @@ export class ListSettingsSheet {
       );
   }
 
+  /**
+   * Whether the fields hold the list's own values yet (plan 0158, item 1).
+   *
+   * False on a cold load of the sheet's URL, where the list store is still empty, and
+   * Save stays disabled until it turns true, because a save from the empty start sends
+   * `''` and `false` as if somebody had chosen them.
+   */
+  readonly seeded = signal(false);
+
   constructor() {
-    this.name.set(this.list()?.name ?? '');
-    this.autoApprove.set(this.list()?.autoApproveLines ?? false);
-    this.sharedWithZone.set(this.list()?.sharedWithZone ?? false);
+    effect(() => {
+      const list = this.list();
+      if (list !== undefined) {
+        untracked(() => this._seedFromList(list));
+      }
+    });
 
     if (this.shareAvailable) {
       void this._loadAccess();
     }
+  }
+
+  /**
+   * Copy the list into the fields, once: the first time the list is known.
+   *
+   * The one place the sheet's starting values come from. A later store fill (a refresh
+   * after a flip, a live event) does not run it again, so a name somebody has started
+   * typing is never put back under them.
+   */
+  private _seedFromList(list: ShoppingListSummary): void {
+    if (this.seeded()) {
+      return;
+    }
+    this.name.set(list.name);
+    this.autoApprove.set(list.autoApproveLines);
+    this.sharedWithZone.set(list.sharedWithZone);
+    this.seeded.set(true);
   }
 
   onNameInput(event: Event): void {

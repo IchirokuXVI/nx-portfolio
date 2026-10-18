@@ -225,6 +225,26 @@ function readListCounts(raw: Record<string, unknown>): {
 }
 
 /**
+ * The counts of a list off the wire, or null when the payload carries none.
+ *
+ * For a realtime list event (plan 0158, item 4), where an absent count is unknown
+ * rather than zero (rule D4): a store holding the real number keeps it, and only a row
+ * it hears about for the first time starts at zero.
+ */
+export function toListCounts(
+  raw: unknown
+): { lineCount: number; wantedCount: number } | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const nested = raw['counts'];
+  if (!isRecord(nested) && typeof raw['lineCount'] !== 'number') {
+    return null;
+  }
+  return readListCounts(raw);
+}
+
+/**
  * From `ZoneListPreview` **or** `ListView`.
  *
  * One mapper for both, which is what the contract's matching field names were for. The
