@@ -116,20 +116,33 @@ export class CatalogSuggestService {
     priceScopeIds: readonly string[],
     resolved: CatalogScopeView
   ): Promise<PriceScopeChainView[]> {
+    try {
+      return await this.namedChains(userId, priceScopeIds, resolved);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The same naming, which **throws** when the chain listing fails rather
+   * than answering none (plan 0213). The basket read uses it, so that a
+   * failure reaches the client as `scopesIncomplete` and not as a basket
+   * whose profile seems to have no chains.
+   */
+  async namedChains(
+    userId: string,
+    priceScopeIds: readonly string[],
+    resolved: CatalogScopeView
+  ): Promise<PriceScopeChainView[]> {
     if (priceScopeIds.length === 0 || resolved.scopes.length === 0) {
       // Nothing to name, or nothing to name it with: a caller who named scope
       // ids outright is described with no scopes at all.
       return [];
     }
-    let chains: SupermarketPage;
-    try {
-      chains = await this.nats.send<SupermarketPage>(
-        SUPERMARKET_PATTERNS.list,
-        { userId, limit: MAX_PAGE_SIZE } satisfies ListSupermarketsRequest
-      );
-    } catch {
-      return [];
-    }
+    const chains = await this.nats.send<SupermarketPage>(
+      SUPERMARKET_PATTERNS.list,
+      { userId, limit: MAX_PAGE_SIZE } satisfies ListSupermarketsRequest
+    );
     const chainById = new Map(chains.items.map((c) => [c.id, c]));
     const views: PriceScopeChainView[] = [];
     for (const priceScopeId of priceScopeIds) {
