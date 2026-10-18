@@ -1218,7 +1218,11 @@
       "tooManyResets": "Too many requests. You can ask for another in {{wait}}",
       "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
       "gone": "That account no longer exists",
-      "failed": "That did not go through. Try again"
+      "failed": "That did not go through. Try again",
+      "nameLength": "A name needs 2 to 40 characters",
+      "nameCharacters": "A name can only use letters, numbers, spaces and . _ ' -",
+      "nameLetter": "A name needs at least one letter",
+      "nameReserved": "The app uses “former member” for people who left, so a name cannot start with it"
     },
     "app": {
       "section": "The app",
@@ -2130,7 +2134,8 @@
       "another": "Pick another one",
       "keep": "Keep {{name}}",
       "continue": "Continue as {{name}}",
-      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too."
+      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too.",
+      "continuePlain": "Continue"
     },
     "place": {
       "title": "Where do you shop?",

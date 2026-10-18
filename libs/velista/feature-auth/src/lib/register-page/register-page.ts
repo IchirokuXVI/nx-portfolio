@@ -34,6 +34,14 @@ import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 const ERROR_ID = 'register-error';
 
 /**
+ * Something, an @, something, a dot, something, with no spaces (velista `0160`).
+ *
+ * Looser than the gateway's `@IsEmail()` on purpose: this only answers the obvious
+ * miss before a round trip, and the server still refuses whatever this lets past.
+ */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
  * Making an account, for somebody who has nothing to lose yet.
  *
  * ## Rule C2 is enforced above this, at the route
@@ -123,6 +131,10 @@ export class RegisterPage {
    * press with no message saying why. A short password comes back as a
    * `validation_failed` against the password field and a mismatch is answered by
    * `submit`, and both are sentences somebody can act on (section 5.5).
+   *
+   * Since velista `0160`, `submit` also answers the address shape and the length before
+   * the request. The button still presses: the check spares the round trip and draws
+   * the same sentence the server's 400 would, and it is not a condition on the button.
    */
   readonly canSubmit = computed(
     () =>
@@ -143,6 +155,24 @@ export class RegisterPage {
 
   async submit(): Promise<void> {
     if (!this.canSubmit()) {
+      return;
+    }
+
+    // Before the request, with the sentence the server's 400 would draw (velista
+    // `0160`). The server still checks both, and stays the authority.
+    if (!EMAIL_SHAPE.test(this.email().trim())) {
+      this.error.set({ key: 'auth.error.badEmail', placement: 'email' });
+      this._focusFirstField();
+      return;
+    }
+
+    // Code points, as the DTO counts them, so an emoji is one character here too.
+    if (Array.from(this.password()).length < PASSWORD_MIN_LENGTH) {
+      this.error.set({
+        key: 'auth.error.shortPassword',
+        placement: 'password',
+      });
+      this._focusPasswordField();
       return;
     }
 
@@ -217,6 +247,13 @@ export class RegisterPage {
   private _focusFirstField(): void {
     this._host.nativeElement
       .querySelector<HTMLInputElement>('input[type="email"]')
+      ?.focus();
+  }
+
+  /** The first password box, which is the one a short password is about. */
+  private _focusPasswordField(): void {
+    this._host.nativeElement
+      .querySelector<HTMLInputElement>('#register-password')
       ?.focus();
   }
 

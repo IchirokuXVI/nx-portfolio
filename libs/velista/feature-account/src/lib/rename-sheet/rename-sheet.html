@@ -26,10 +26,13 @@
     <input
       (input)="onTyped($event)"
       [attr.aria-describedby]="
-        failure() ? 'account-rename-error' : 'account-rename-rule'
+        problemKey()
+          ? 'account-rename-problem'
+          : failure()
+            ? 'account-rename-error'
+            : 'account-rename-rule'
       "
-      [attr.aria-invalid]="failure() ? 'true' : null"
-      [attr.maxlength]="maxLength"
+      [attr.aria-invalid]="problemKey() || failure() ? 'true' : null"
       [readonly]="busy()"
       [value]="typed()"
       autocapitalize="words"
@@ -44,6 +47,14 @@
       <span>{{ 'account.name.rule' | rokuT }}</span>
       <span class="count">{{ length() }} / {{ maxLength }}</span>
     </p>
+
+    <!-- The server's other rules, drawn as they are broken (velista 0160). The live
+         region stays in the page so a rule appearing inside it is read out. -->
+    <div aria-live="polite">
+      @if (problemKey(); as rule) {
+        <p class="error" id="account-rename-problem">{{ rule | rokuT }}</p>
+      }
+    </div>
 
     @if (failure(); as problem) {
       <p class="error" id="account-rename-error" role="alert">
