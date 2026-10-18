@@ -117,6 +117,7 @@
     },
     "error": {
       "notAvailable": "Este grupo no está disponible para ti. Puede que se haya eliminado o que te hayan sacado",
+      "loadFailed": "No se ha podido cargar este grupo",
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "alreadyClaimed": "Otra persona ya se ha hecho cargo del grupo",
       "tooManyRenames": "Demasiados cambios de nombre. Podrás cambiarlo otra vez en {{wait}}",

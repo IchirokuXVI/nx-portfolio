@@ -129,6 +129,16 @@ export class ZoneStore {
   );
 
   /**
+   * What the last read of one specific zone failed with, keyed by id (velista 0157).
+   *
+   * Beside `_zoneState` and for its reason. `_error` is one slot for every read, so a
+   * realtime event that reloads group B cleared the refusal group A's page was drawn
+   * from, and B's 404 could make A's 500 read as not available. An entry is cleared
+   * when that zone's own read starts and set when that zone's own read fails.
+   */
+  private readonly _zoneError = signal<ReadonlyMap<string, unknown>>(new Map());
+
+  /**
    * Rooms currently held, so they can be released and re-joined on a change.
    *
    * The staff flag is stored alongside the release, because a subscription held under
@@ -160,6 +170,16 @@ export class ZoneStore {
 
   /** How the load of one particular zone is going, for the group page's skeleton. */
   readonly zoneState = this._zoneState.asReadonly();
+
+  /**
+   * What the last read of this zone failed with, or null (velista 0157).
+   *
+   * Reads a signal, so a `computed` that calls it follows the answer. Only this zone's
+   * own read writes it, unlike `error`, which every read shares.
+   */
+  zoneErrorOf(zoneId: string): unknown {
+    return this._zoneError().get(zoneId) ?? null;
+  }
 
   /** The caller's zones, in the order the server returned them. */
   readonly myZones = computed<readonly MyZone[]>(() => {
@@ -346,12 +366,14 @@ export class ZoneStore {
   async loadZone(zoneId: string): Promise<void> {
     const cached = this.zoneById(zoneId);
     this._setZoneState(zoneId, cached === undefined ? 'loading' : 'loaded');
+    this._setZoneError(zoneId, null);
     this._error.set(null);
 
     try {
       this.upsert(await this._zones.getZone(zoneId));
       this._setZoneState(zoneId, 'loaded');
     } catch (error) {
+      this._setZoneError(zoneId, error);
       this._error.set(error);
       // A refetch that failed over a zone already on screen leaves the screen alone.
       // The cached header is still the best thing available, and replacing a correct
@@ -498,6 +520,18 @@ export class ZoneStore {
 
   private _setZoneState(zoneId: string, state: ZoneLoadState): void {
     this._zoneState.update((current) => new Map(current).set(zoneId, state));
+  }
+
+  private _setZoneError(zoneId: string, error: unknown): void {
+    this._zoneError.update((current) => {
+      const next = new Map(current);
+      if (error === null) {
+        next.delete(zoneId);
+      } else {
+        next.set(zoneId, error);
+      }
+      return next;
+    });
   }
 
   /**

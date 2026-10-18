@@ -117,6 +117,7 @@
     },
     "error": {
       "notAvailable": "This group is not available to you. It may have been deleted, or you may have been removed",
+      "loadFailed": "This group could not be loaded",
       "roleChanged": "Your role in this group changed",
       "alreadyClaimed": "Somebody else has already taken this group on",
       "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",

@@ -17,7 +17,8 @@
 
     Each state is its own `@if` on `current.kind` rather than an `@else if` chain,
     because a chain does not narrow a discriminated union far enough for the compiler
-    to accept the branches that carry extra fields.
+    to accept the branches that carry extra fields. The two states that replace the
+    whole page are read the same way, with a third `@if` for everything else.
   -->
   @let current = state();
 
@@ -26,9 +27,25 @@
       (retry)="retry()"
       [body]="'home.error.body' | rokuT"
       [correlationId]="current.correlationId"
-      [title]="'zone.error.notAvailable' | rokuT"
+      [title]="'zone.error.loadFailed' | rokuT"
     />
-  } @else {
+  }
+
+  @if (current.kind === 'not-available') {
+    <!--
+      A group this reader may not read, or one that does not exist (velista 0157). One
+      sentence and a way home: no retry, since asking again answers the same, and no
+      reference, since nothing broke.
+    -->
+    <section class="state">
+      <h2 class="state-title">{{ 'zone.error.notAvailable' | rokuT }}</h2>
+      <button (click)="goHome()" class="primary" type="button">
+        {{ 'nav.home' | rokuT }}
+      </button>
+    </section>
+  }
+
+  @if (current.kind !== 'error' && current.kind !== 'not-available') {
     <!--
       The summary comes from the cache when the caller arrived from the dashboard, so
       the common path shows the group's role and its ways in immediately and skeletons
