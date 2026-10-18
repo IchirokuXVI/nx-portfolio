@@ -268,9 +268,11 @@ describe('LandingPage', () => {
       ) as HTMLButtonElement[];
       buttons[3]?.click();
 
+      // The query goes with it: a refused deep link left its page there as
+      // `returnUrl` (velista 0154).
       expect(router.navigate).toHaveBeenCalledWith(
         ['auth', 'login'],
-        expect.anything()
+        expect.objectContaining({ queryParamsHandling: 'preserve' })
       );
     });
 

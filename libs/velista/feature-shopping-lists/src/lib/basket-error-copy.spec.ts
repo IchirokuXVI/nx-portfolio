@@ -118,8 +118,9 @@ describe('basketErrorKey', () => {
 
     it('gives it to a 401 too, because the screen has already said better', () => {
       // `unauthorized` deliberately has no row: `BasketStore._fail` turns it into the
-      // `revoked` or `needsJoin` state, which is a whole screen rather than a
-      // sentence. Reaching a row here would draw copy over a better answer.
+      // `revoked`, `needsSignIn` or `notYours` state, which is a whole screen
+      // rather than a sentence. Reaching a row here would draw copy over a
+      // better answer.
       expect(
         basketErrorKey(gateway('unauthorized', 401), 'basket.settle')
       ).toBe('basket.error.failed');

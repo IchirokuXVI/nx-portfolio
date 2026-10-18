@@ -2,8 +2,8 @@ import {
   ListPermission,
   type CommentView,
   type LineClaim,
-  type LineSettlementSummary,
   type LineSettlementHistoryView,
+  type LineSettlementSummary,
   type LineSettlementView,
   type LineView,
   type ListCounts,
@@ -99,12 +99,20 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  * that resolved it would be a join per row of a page, and an edit that announced
  * an unclaimed line because a call site forgot it would take the indicator off a
  * line somebody is holding in a shop right now.
+ *
+ * The comment count is the one argument with a default (plan 0214, section 2),
+ * and the default is the truth rather than a stand in: null means "this answer
+ * does not say", which every event and every write answers so that none of
+ * them pays for a count. Only the lines read knows the number, and it passes
+ * it. A client keeps the count it holds when a line arrives with null, so a
+ * forgotten argument here costs a badge nothing.
  */
 export function toLineView(
   line: ListLine,
   items: LineItemSet,
   settlements: LineSettlementSummary,
-  claim: LineClaim
+  claim: LineClaim,
+  commentCount: number | null = null
 ): LineView {
   return {
     id: line.id,
@@ -134,6 +142,7 @@ export function toLineView(
     lastSettlementOutcome: settlements.lastOutcome,
     claimed: claim.claimed,
     claimedByUserId: claim.claimedByUserId,
+    commentCount,
     createdAt: line.createdAt.toISOString(),
     updatedAt: line.updatedAt.toISOString(),
   };
