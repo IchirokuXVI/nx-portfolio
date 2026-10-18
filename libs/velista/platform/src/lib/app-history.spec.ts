@@ -389,6 +389,60 @@ describe('AppHistory', () => {
     });
   });
 
+  describe('whether the arrival in flight is a return', () => {
+    /** What `arrivingByPop` says while each navigation is between its start and end. */
+    function answersDuring(history: AppHistory, router: FakeRouter): boolean[] {
+      const answers: boolean[] = [];
+      router.events.subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          answers.push(history.arrivingByPop());
+        }
+      });
+      return answers;
+    }
+
+    it('says yes while a popstate arrives, and no for a push or a replace', () => {
+      const { history, router } = setUp();
+      const answers = answersDuring(history, router);
+
+      arriveAt(router, '/velista/en/zones/z1/lists/l1');
+      const list = router.go({ url: '/velista/en/zones/z1/lists/l1/lines/a' });
+      router.go({
+        url: '/velista/en/zones/z1/lists/l1',
+        trigger: 'popstate',
+        restoredId: list,
+      });
+
+      expect(answers).toEqual([false, false, true]);
+    });
+
+    it('says no once the navigation has ended', () => {
+      const { history, router } = setUp();
+
+      arriveAt(router, '/velista/en/zones/z1/lists/l1');
+      router.go({
+        url: '/velista/en/home',
+        trigger: 'popstate',
+        restoredId: 1,
+      });
+
+      expect(history.arrivingByPop()).toBe(false);
+    });
+
+    it('says no unwatched, so every arrival is a fresh visit', () => {
+      const { history, router } = setUp(false);
+      const answers = answersDuring(history, router);
+
+      router.go({
+        url: '/velista/en/home',
+        trigger: 'popstate',
+        restoredId: 1,
+      });
+
+      expect(answers).toEqual([false]);
+    });
+  });
+
   it('says no about a navigation it was started too late to see the start of', () => {
     // Under the shell this service is constructed while the navigation that mounts the
     // app is already running, so the first end it sees has no before to compare with.

@@ -37,6 +37,12 @@ import {
   type ListViewMemory,
 } from './list-view-memory';
 
+/** What {@link ListViewStore.snapshot} keeps for a return to the page. */
+export interface ListViewSnapshot {
+  readonly state: ListViewState;
+  readonly openTrips: ReadonlySet<string>;
+}
+
 /**
  * What the zone list page draws of a list, as opposed to what the list holds
  * (velista `0082`).
@@ -382,6 +388,24 @@ export class ListViewStore {
   reset(): void {
     this._state.set(DEFAULT_LIST_VIEW_STATE);
     this._write(NO_LIST_VIEW_MEMORY);
+  }
+
+  /**
+   * What the page is showing of the list, for `PageReturn`: the filter sheet's
+   * choices and the trips that are open. The search is the page's, from its field.
+   */
+  snapshot(): ListViewSnapshot {
+    return { state: this._state(), openTrips: this._openTrips() };
+  }
+
+  /**
+   * Come back to what {@link snapshot} kept, after {@link open} for the same list.
+   * The trips count as seeded, so a trip that was closed stays closed.
+   */
+  resume(kept: ListViewSnapshot): void {
+    this._state.set(kept.state);
+    this._openTrips.set(kept.openTrips);
+    this._tripsSeeded = true;
   }
 
   /**
