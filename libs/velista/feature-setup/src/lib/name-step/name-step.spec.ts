@@ -250,6 +250,29 @@ describe('NameStep', () => {
 
       expect(element(fixture, '.counter').textContent?.trim()).toBe('2 / 40');
     });
+
+    it('takes 25 letters outside the basic plane, which are 50 UTF-16 units', async () => {
+      const { fixture } = await render();
+      const name = '𝔄'.repeat(25);
+
+      await type(fixture, name);
+
+      const field = element<HTMLInputElement>(fixture, '#setup-name');
+      // A `maxlength` counts UTF-16 units and would have stopped this name at 20.
+      expect(field.hasAttribute('maxlength')).toBe(false);
+      expect(element(fixture, '.counter').textContent?.trim()).toBe('25 / 40');
+      expect(element<HTMLButtonElement>(fixture, '.primary').disabled).toBe(
+        false
+      );
+    });
+
+    it('counts the name that is sent, not the spaces around it', async () => {
+      const { fixture } = await render();
+
+      await type(fixture, 'Ana  ');
+
+      expect(element(fixture, '.counter').textContent?.trim()).toBe('3 / 40');
+    });
   });
 
   it('puts focus on the question when it arrives', async () => {

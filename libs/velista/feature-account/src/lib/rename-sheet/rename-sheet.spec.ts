@@ -278,6 +278,25 @@ describe('RenameSheet', () => {
       expect(primary(fixture).disabled).toBe(false);
     });
 
+    it('takes 25 letters outside the basic plane, which are 50 UTF-16 units', async () => {
+      const { fixture } = await render();
+
+      type(fixture, '𝔄'.repeat(25));
+
+      // A `maxlength` counts UTF-16 units and would have stopped this name at 20.
+      expect(field(fixture).hasAttribute('maxlength')).toBe(false);
+      expect(fixture.componentInstance.length()).toBe(25);
+      expect(primary(fixture).disabled).toBe(false);
+    });
+
+    it('counts the name that is sent, with its spaces collapsed', async () => {
+      const { fixture } = await render();
+
+      type(fixture, ' Ana   Ruiz ');
+
+      expect(fixture.componentInstance.length()).toBe(8);
+    });
+
     it('draws the rule an emoji breaks, before any request (velista 0160)', async () => {
       const { fixture, profile } = await render();
 

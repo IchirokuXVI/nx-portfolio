@@ -171,10 +171,24 @@ below, and each one is a choice of the builder that the owner can overturn.
 - **The register address check is looser than `@IsEmail()`** (something, an @,
   something, a dot, something, no spaces). It answers the obvious miss and never refuses
   an address the server accepts in practice.
-- **A character typed into a full join code field is ignored**, which is what `maxlength`
-  did for typing. Only a paste or an insertion that leaves more than eight characters is
-  cleaned and cut from the front, so a share link still yields its code.
+- **Anything that grows a full join code field is ignored, except a paste**, which is
+  what `maxlength` did for typing. The rule names the whole value input types
+  (`insertFromPaste`, `insertFromDrop`, `insertFromYank`) and not the typing ones,
+  because Gboard types with `insertCompositionText` and autocorrect with
+  `insertReplacementText`: a rule that waited for `insertText` let both reach the cut,
+  which drops the first character (review of PR #761). A paste is cleaned and cut from
+  the front, so a share link still yields its code.
 - **S2 is in the PR.** A mismatch no longer marks the first password box invalid, only
   the confirmation. It was one attribute.
+- **Neither name field has a `maxlength`** (review of PR #761). The attribute counts
+  UTF-16 units and the counter code points, so 20 letters outside the basic plane read
+  `20 / 40` and the field took no more. `usernameProblem` answers `'length'` instead.
+- **Both name counters count the name that is sent**, `usernameLength(normalizedUsername(typed))`
+  (spaces collapsed, trimmed, NFC), so "Ana  " reads 3 in the setup step as in the
+  rename sheet (review of PR #761).
+- **The two name steps keep their own sentence maps.** The rename sheet's has no
+  `length` entry and the setup step's has one, so one shared map would need a second
+  shape anyway. The rename sheet's map now sits above the component's doc block, which
+  had attached itself to the map (review of PR #761).
 - The sentences sit after the last key of `account.error` (shared by the name step and
   the rename sheet), in the same positions in `en.json` and `es.json`.

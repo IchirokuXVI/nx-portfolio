@@ -99,6 +99,19 @@ describe('JoinCodeField', () => {
     expect(fixture.componentInstance.code()).toBe('6WQKCPKS');
   });
 
+  it.each(['insertCompositionText', 'insertReplacementText'])(
+    'ignores a ninth character a phone keyboard sends as %p',
+    async (inputType) => {
+      const fixture = await render();
+
+      enter(fixture, '6WQKCPKS', 'insertFromPaste');
+      enter(fixture, '6WQKCPKSX', inputType);
+
+      expect(field(fixture).value).toBe('6WQKCPKS');
+      expect(fixture.componentInstance.code()).toBe('6WQKCPKS');
+    }
+  );
+
   it('takes a character typed over a selected full code', async () => {
     const fixture = await render();
 

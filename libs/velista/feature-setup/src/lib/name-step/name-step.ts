@@ -16,6 +16,7 @@ import {
 import {
   USERNAME_MAX_LENGTH,
   USERNAME_SCOPE_DEFAULT,
+  normalizedUsername,
   usernameLength,
   usernameProblem,
   type UsernameProblem,
@@ -101,8 +102,13 @@ export class NameStep {
 
   protected readonly trimmed = computed(() => this.typed().trim());
 
-  /** Code points, so an emoji counts once, as the server counts it. */
-  protected readonly length = computed(() => usernameLength(this.typed()));
+  /**
+   * Code points of the name as the server stores it (spaces collapsed, trimmed, NFC),
+   * so an emoji counts once, as the server counts it.
+   */
+  protected readonly length = computed(() =>
+    usernameLength(normalizedUsername(this.typed()))
+  );
 
   /** The key of the rule the typed name breaks, or null. A blank field breaks none. */
   protected readonly problem = computed(() => {

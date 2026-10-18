@@ -10,6 +10,13 @@ import { JOIN_CODE_LENGTH } from '@portfolio/velista/models';
 import { CopyIcon } from '../icons/icons';
 import { normalizeJoinCode } from './join-code';
 
+/** The input types that bring a whole value at once, which is cleaned before it is cut. */
+const PASTED_INPUT_TYPES: ReadonlySet<string> = new Set([
+  'insertFromPaste',
+  'insertFromDrop',
+  'insertFromYank',
+]);
+
 /**
  * The eight character field, its rules, and the paste button beside it.
  *
@@ -62,14 +69,17 @@ export class JoinCodeField {
    * bound value did not change, and after filtering it usually has not.
    *
    * There is no `maxlength`, so a paste is cleaned whole before it is cut to eight
-   * (velista `0160`). A character **typed** into a full field is ignored instead, which
+   * (velista `0160`). Anything else that grows a full field is ignored instead, which
    * is what `maxlength` did: cutting from the front would push the first character out
-   * from under the person typing.
+   * from under the person typing. That is decided by naming the pastes and not the
+   * typing, because a phone keyboard types with `insertCompositionText` and an
+   * autocorrect with `insertReplacementText`, and a rule that waited for
+   * `insertText` let both through to the cut.
    */
   onInput(event: Event): void {
     const input = event.target as HTMLInputElement;
     const typedIntoFull =
-      (event as InputEvent).inputType === 'insertText' &&
+      !PASTED_INPUT_TYPES.has((event as InputEvent).inputType) &&
       input.value.length > JOIN_CODE_LENGTH &&
       this.value().length === JOIN_CODE_LENGTH;
     const cleaned = typedIntoFull

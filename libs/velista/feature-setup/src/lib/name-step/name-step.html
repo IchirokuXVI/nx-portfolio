@@ -21,7 +21,6 @@
       (input)="onInput($event)"
       [attr.aria-describedby]="describedBy()"
       [attr.aria-invalid]="invalid() ? 'true' : null"
-      [attr.maxlength]="maxLength"
       [placeholder]="'setup.name.placeholder' | rokuT"
       [readOnly]="saving()"
       [value]="typed()"

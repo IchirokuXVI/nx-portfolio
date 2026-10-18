@@ -12,6 +12,7 @@ import {
 import { ProfileStore, SessionStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  normalizedUsername,
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
   USERNAME_SCOPE_DEFAULT,
@@ -24,6 +25,16 @@ import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { accountFailure, asClock } from '../account-error-copy';
 import { RenameAnnouncement } from '../rename-announcement';
+
+/**
+ * The sentence each broken name rule draws. The length has none here: its rule is on
+ * screen from the start (section 3.3).
+ */
+const PROBLEM_KEYS: Record<Exclude<UsernameProblem, 'length'>, string> = {
+  characters: 'account.error.nameCharacters',
+  letter: 'account.error.nameLetter',
+  reserved: 'account.error.nameReserved',
+};
 
 /**
  * Changing your own name, and deciding whether the change follows you into your groups.
@@ -67,13 +78,6 @@ import { RenameAnnouncement } from '../rename-announcement';
  * the server's cases, which is what keeps the mirror from drifting, and the server stays
  * the authority: its 400 still draws `account.error.badName`.
  */
-/** The sentence each broken name rule draws, shared with the setup name step. */
-const PROBLEM_KEYS: Record<Exclude<UsernameProblem, 'length'>, string> = {
-  characters: 'account.error.nameCharacters',
-  letter: 'account.error.nameLetter',
-  reserved: 'account.error.nameReserved',
-};
-
 @Component({
   selector: 'lib-rename-sheet',
   imports: [RokuTranslatorPipe, SheetShell, SpinnerIcon],
@@ -108,8 +112,13 @@ export class RenameSheet {
   /** The failure's copy and the wait it interpolates, or null. */
   readonly failure = signal<{ key: string; wait: string } | null>(null);
 
-  /** Code points, so an emoji counts once and the counter matches the server's rule. */
-  readonly length = computed(() => usernameLength(this.typed().trim()));
+  /**
+   * Code points of the name as the server stores it (spaces collapsed, trimmed, NFC),
+   * so an emoji counts once and the counter matches the server's rule.
+   */
+  readonly length = computed(() =>
+    usernameLength(normalizedUsername(this.typed()))
+  );
 
   /** The server's rule the typed name breaks, or null. */
   private readonly _problem = computed(() => usernameProblem(this.typed()));
