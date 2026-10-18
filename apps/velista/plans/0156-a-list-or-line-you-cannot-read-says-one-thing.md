@@ -181,5 +181,17 @@ An id typed in upper case lands on the same page as its lower case form.
 - **The template key walk** covers `list-page.html`, `line-page.html` and
   `line-history-page.html`. It reads the templates and both locale files from disk at test
   time. A one-off static scan of every template in `feature-lists` found no other missing
-  key. Two comments in `data-access` (`list-store.ts:243`, `list-store.spec.ts:247`) still
-  name the old `gone: 'unshared'` state. They are outside this plan's scope.
+  key. Two comments in `data-access` (`list-store.ts:243`, `list-store.spec.ts:247`)
+  named the old `gone: 'unshared'` state. The review round changed each to `gone`.
+- **The line page draws its outlet while the line is `ready` or `missing`** (review
+  round). The first build drew it only while `ready`. A `line.deleted` from another user
+  removes the line, the status turns `missing`, and an open sheet then vanished: its
+  `list.gone.byOthers` notice (plan 0083) was never drawn, unsaved rename text was lost
+  and the address stayed on the sheet URL. The outlet is now hidden only for `gone`,
+  `failed` and `loading`, so a sheet URL of a line the reader cannot read still opens
+  nothing. A spec under a real router opens the delete sheet, deletes the line by others,
+  and asserts the sheet and its notice stay.
+- **The list page reads the group's answer again on a move to another list** (review
+  round). The `listId` effect resets the gone state, and the group read runs only when
+  the zone id changes. A second list under the same refused group thus drew read only.
+  The `listId` effect now calls `_afterZoneRead(zoneId)` after its reset.

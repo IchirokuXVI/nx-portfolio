@@ -244,7 +244,7 @@ describe('ListStore', () => {
       });
 
       it('takes the list away when the set is empty', async () => {
-        // The existing `gone: 'unshared'` path: the page reaches it from the list no
+        // The existing `gone` path: the page reaches it from the list no
         // longer being in the zone's answer, and the event is the answer.
         const { store, realtime } = await build([
           list('list-1'),

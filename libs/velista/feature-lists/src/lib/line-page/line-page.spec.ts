@@ -1,7 +1,17 @@
-import { signal } from '@angular/core';
+import {
+  type EnvironmentProviders,
+  type Provider,
+  signal,
+} from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+  Router,
+} from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -36,10 +46,15 @@ import {
   type MyZone,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { AppHistory, provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  AppHistory,
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { of } from 'rxjs';
+import { DeleteLineSheet } from '../delete-line-sheet/delete-line-sheet';
 import { LinePage } from './line-page';
 
 /**
@@ -186,10 +201,6 @@ async function render(options: Options = {}): Promise<{
       offers(itemId === 'normal' ? 2.15 : 3.45)
     ),
   };
-  const holding: Pick<LineServiceI, 'listsHoldingItem'> = {
-    listsHoldingItem: async () =>
-      options.alsoOn ?? { places: [], hasMore: false },
-  };
   const map = convertToParamMap({
     zoneId: ZONE_ID,
     listId: LIST_ID,
@@ -199,34 +210,8 @@ async function render(options: Options = {}): Promise<{
   await TestBed.configureTestingModule({
     imports: [LinePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
-      provideVelistaTesting({ basePath: '/velista' }),
-      provideFakeLineStore(lines),
-      provideFakeListStore(
-        fakeListStore({
-          lists: [list(options.permissions ?? ADMIN)],
-          state: 'loaded',
-        })
-      ),
-      provideFakeZoneStore(fakeZoneStore({ zones: [zone()] })),
-      provideFakeMemberNames(fakeMemberNames({})),
-      provideFakeItemNames(
-        fakeItemNames({
-          items: [
-            item('normal', 'Shampoo for normal hair'),
-            item('classic', 'Classic care shampoo'),
-          ],
-        })
-      ),
-      provideFakeSessionStore('REGISTERED'),
-      {
-        provide: CATALOG_BROWSE_SERVICE,
-        useValue: browse as unknown as CatalogBrowseServiceI,
-      },
-      { provide: LINE_SERVICE, useValue: holding },
-      ProductPickStore,
-      { provide: AppHistory, useValue: { depth: () => 4 } },
+      ...pageProviders(options, lines, browse),
       { provide: Router, useValue: router },
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
         useValue: {
@@ -245,10 +230,95 @@ async function render(options: Options = {}): Promise<{
 }
 
 /**
+ * The page under a real router, with the delete sheet in its outlet, for what only a
+ * routed child can show: a sheet that stays drawn while the line leaves the list.
+ */
+async function renderRouted(url: string): Promise<{
+  harness: RouterTestingHarness;
+  lines: FakeLineStore;
+}> {
+  TestBed.resetTestingModule();
+
+  const lines = fakeLineStore({ lines: [line()], state: 'loaded' });
+  const browse = {
+    context: jest.fn().mockResolvedValue(CONTEXT),
+    scopeOffers: jest.fn(async () => offers(2.15)),
+  };
+
+  await TestBed.configureTestingModule({
+    imports: [RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      ...pageProviders({}, lines, browse),
+      provideRouter([
+        {
+          path: 'velista/en/zones/:zoneId/lists/:listId/lines/:lineId',
+          component: LinePage,
+          children: [{ path: 'sheet/delete', component: DeleteLineSheet }],
+        },
+      ]),
+      {
+        provide: SheetNavigation,
+        useValue: {
+          dismiss: jest.fn().mockResolvedValue(undefined),
+          leaveTo: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ],
+  }).compileComponents();
+
+  const harness = await RouterTestingHarness.create(url);
+  await drain(harness.fixture);
+
+  return { harness, lines };
+}
+
+/** What both harnesses share: every store and service the page reads. */
+function pageProviders(
+  options: Options,
+  lines: FakeLineStore,
+  browse: { context: jest.Mock; scopeOffers: jest.Mock }
+): (Provider | EnvironmentProviders)[] {
+  const holding: Pick<LineServiceI, 'listsHoldingItem'> = {
+    listsHoldingItem: async () =>
+      options.alsoOn ?? { places: [], hasMore: false },
+  };
+
+  return [
+    provideVelistaTesting({ basePath: '/velista' }),
+    provideFakeLineStore(lines),
+    provideFakeListStore(
+      fakeListStore({
+        lists: [list(options.permissions ?? ADMIN)],
+        state: 'loaded',
+      })
+    ),
+    provideFakeZoneStore(fakeZoneStore({ zones: [zone()] })),
+    provideFakeMemberNames(fakeMemberNames({})),
+    provideFakeItemNames(
+      fakeItemNames({
+        items: [
+          item('normal', 'Shampoo for normal hair'),
+          item('classic', 'Classic care shampoo'),
+        ],
+      })
+    ),
+    provideFakeSessionStore('REGISTERED'),
+    {
+      provide: CATALOG_BROWSE_SERVICE,
+      useValue: browse as unknown as CatalogBrowseServiceI,
+    },
+    { provide: LINE_SERVICE, useValue: holding },
+    ProductPickStore,
+    { provide: AppHistory, useValue: { depth: () => 4 } },
+    { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+  ];
+}
+
+/**
  * Let the effects wake and their promises land. The price and "also on" reads
  * resolve through promises that `whenStable` does not wait for in a zoneless test.
  */
-async function drain(fixture: ComponentFixture<LinePage>): Promise<void> {
+async function drain(fixture: ComponentFixture<unknown>): Promise<void> {
   for (let round = 0; round < 3; round += 1) {
     fixture.detectChanges();
     for (let tick = 0; tick < 8; tick += 1) {
@@ -712,7 +782,7 @@ describe('LinePage', () => {
       expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
     });
 
-    it('draws no sheet unless the line is here', async () => {
+    it('draws no sheet over a line it cannot read', async () => {
       const gone = await render({
         lines: [],
         linesState: 'failed',
@@ -722,15 +792,23 @@ describe('LinePage', () => {
         gone.fixture.nativeElement.querySelector('router-outlet')
       ).toBeNull();
 
-      const missing = await render({ lines: [] });
-      expect(
-        missing.fixture.nativeElement.querySelector('router-outlet')
-      ).toBeNull();
-
       const ready = await render();
       expect(
         ready.fixture.nativeElement.querySelector('router-outlet')
       ).not.toBeNull();
+    });
+
+    it('keeps the sheet that is open when another user deletes the line, so its notice is drawn', async () => {
+      const { harness, lines } = await renderRouted(LINE_URL + '/sheet/delete');
+      const page = harness.fixture.nativeElement as HTMLElement;
+      expect(page.querySelector('lib-delete-line-sheet')).not.toBeNull();
+
+      lines.deleteByOthers(LINE_ID);
+      await drain(harness.fixture);
+
+      expect(page.querySelector('router-outlet')).not.toBeNull();
+      expect(page.querySelector('lib-delete-line-sheet')).not.toBeNull();
+      expect(page.textContent).toContain('list.gone.byOthers');
     });
 
     it('says a line absent from a loaded list is no longer in this list, in both languages', async () => {

@@ -1262,6 +1262,9 @@ export class ListPage {
       untracked(() => {
         this._errorKey.set(null);
         this._gone.set(false);
+        // Another list under the same unreadable group: the zone effect does not run
+        // again, so the group's answer is read here (velista 0156).
+        this._afterZoneRead(this.zoneId());
         void this._loadLines(listId);
       });
     });

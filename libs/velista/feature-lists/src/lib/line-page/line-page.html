@@ -304,9 +304,10 @@
 
 <!--
   The sheets over this page: the menu, the name, the supermarket, the comments, the
-  delete. Drawn only over a line that is here, so a sheet URL of a line nobody may read
-  opens nothing (velista 0156).
+  delete. Not drawn over a line nobody may read, so its sheet URL opens nothing
+  (velista 0156). Still drawn over a line that left the list, so a sheet open when
+  another user deletes it stays and says so (plan 0083).
 -->
-@if (status() === 'ready') {
+@if (status() === 'ready' || status() === 'missing') {
   <router-outlet />
 }

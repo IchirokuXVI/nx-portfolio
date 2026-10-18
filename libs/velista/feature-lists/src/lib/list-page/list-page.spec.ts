@@ -80,7 +80,7 @@ import {
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -428,6 +428,7 @@ function route(
   sheetOpen = false
 ) {
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
+  const paramMap = new BehaviorSubject(map);
   const queryOf = (params: Record<string, string>) =>
     convertToParamMap(line === undefined ? params : { line, ...params });
   const queryParamMap = new BehaviorSubject(queryOf(extra));
@@ -438,7 +439,7 @@ function route(
   };
 
   return {
-    paramMap: of(map),
+    paramMap,
     queryParamMap,
     snapshot,
     parent: null,
@@ -451,6 +452,11 @@ function route(
     setQuery(params: Record<string, string>): void {
       snapshot.queryParamMap = queryOf(params);
       queryParamMap.next(snapshot.queryParamMap);
+    },
+    /** Another list of the same group, as a navigation between them moves it. */
+    setList(listId: string): void {
+      snapshot.paramMap = convertToParamMap({ zoneId: ZONE_ID, listId });
+      paramMap.next(snapshot.paramMap);
     },
   };
 }
@@ -2946,6 +2952,26 @@ describe('ListPage: a list you cannot read says one thing (velista 0156)', () =>
       expect(query(fixture, 'lib-line-list')).toBeNull();
       expect(query(fixture, 'lib-list-notice')).toBeNull();
     }
+  });
+
+  it('stays unreadable on another list of the same refused group', async () => {
+    // Both lists in the group's answer, so only the group read can say the second one
+    // is unreadable.
+    const { fixture, activatedRoute } = await render({
+      zoneError: forbidden,
+      lists: [list({ myPermissions: ADMIN }), list({ id: 'list-2' })],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    activatedRoute.setList('list-2');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+      'list.error.notAvailable'
+    );
+    expect(query(fixture, 'lib-line-list')).toBeNull();
   });
 
   it('keeps the lines when the group read fails for another reason', async () => {
