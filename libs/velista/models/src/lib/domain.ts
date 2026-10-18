@@ -352,6 +352,16 @@ export interface Line {
    * reads the list sees the same one.
    */
   readonly preferredSupermarketId: string | null;
+  /**
+   * How many comments the line has, as the server counted them, or null when the
+   * answer did not say (backend `0214`, velista `0158` item 6).
+   *
+   * Only the lines read counts. Events and write answers carry null, which means
+   * unknown and never zero. Optional so a line made on this device needs no value.
+   * Screens do not read it: `LineStore` records a known count from a read and
+   * `LineStore.commentCountOf` is what they draw.
+   */
+  readonly commentCount?: number | null;
   readonly createdByUserId: string;
   readonly approvedByUserId: string | null;
   readonly version: number;

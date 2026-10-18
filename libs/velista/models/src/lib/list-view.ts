@@ -242,14 +242,16 @@ export interface LineRowVm {
    */
   readonly overwrittenBy: string | null;
   /**
-   * How many comments this line has, as far as the client has **seen**.
+   * How many comments this line has, as far as the client **knows**.
    *
-   * Undefined rather than zero when nothing has been observed, and the row draws
-   * nothing in both cases. There is no comment count anywhere on the wire:
-   * `LineView` does not carry one, so the only honest sources are a comment page
-   * this session loaded and the `comment.added` events it has watched go by.
-   * Rendering a confident zero for a line with nine comments on it would be worse
-   * than rendering nothing.
+   * The lines read carries the server's count (backend `0214`), so a row draws it
+   * on a cold load and after a reload. A comment page this session loaded and the
+   * `comment.added` events since keep it current. Events and write answers say
+   * null, which means unknown, and they leave the count alone.
+   *
+   * Undefined rather than zero when no source has said, and the row draws nothing
+   * in both cases. Rendering a confident zero for a line with nine comments on it
+   * would be worse than rendering nothing.
    */
   readonly commentCount?: number;
   /**
