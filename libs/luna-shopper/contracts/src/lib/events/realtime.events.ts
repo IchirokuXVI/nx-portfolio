@@ -61,6 +61,10 @@ export enum RealtimeEvent {
    * adequate for everybody who **kept** access and useless for the two people the
    * change is actually about: it names nobody, and somebody who has just been
    * granted access was never in the room to receive it.
+   *
+   * The envelope names that one member's `userIds` and nothing else: no zone and
+   * no list (plan 0212). On the zone room every member would receive a set that
+   * is not theirs, and an empty one makes a client drop the list.
    */
   ListMyAccessChanged = 'list.myAccessChanged',
   /**

@@ -423,9 +423,10 @@ export class ListService {
     // room event names nobody and by construction cannot reach the one person it
     // most needs to: somebody just **granted** access was never in the room to
     // hear it. One event each rather than one for all of them, since the payload
-    // is that person's own new set and no two need be the same. The audience
-    // carries the zone and the list as well as the user, so the event reaches
-    // them whether or not they hold either room.
+    // is that person's own new set and no two need be the same. The audience is
+    // that person alone (plan 0212): a copy on the zone or list room would hand
+    // every other member a set that is not theirs, and an empty one makes their
+    // client drop the list.
     for (const member of affected) {
       const payload: ListMyAccessChangedEvent = {
         listId: req.listId,
@@ -434,7 +435,7 @@ export class ListService {
       };
       this.events.emitTo(
         RealtimeEvent.ListMyAccessChanged,
-        { userIds: [member.userId], zoneId: list.zoneId, listId: req.listId },
+        { userIds: [member.userId] },
         payload
       );
     }
@@ -612,7 +613,7 @@ export class ListService {
     // (plan 0042, section 2.3), nothing else tells them: they are already members
     // looking at a zone they have no reason to refetch, and this is precisely the
     // case plan 0036 section 8 names, access changing under somebody who is
-    // already looking.
+    // already looking. Addressed to that person alone, as in setAccess.
     for (const member of granted) {
       const payload: ListMyAccessChangedEvent = {
         listId: list.id,
@@ -621,7 +622,7 @@ export class ListService {
       };
       this.events.emitTo(
         RealtimeEvent.ListMyAccessChanged,
-        { userIds: [member.userId], zoneId: list.zoneId, listId: list.id },
+        { userIds: [member.userId] },
         payload
       );
     }
