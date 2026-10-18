@@ -27,6 +27,8 @@ import {
   DueLineStore,
   ItemNames,
   LineStore,
+  LIST_SERVICE,
+  type ListServiceI,
   ListStore,
   type ListViewSnapshot,
   ListViewStore,
@@ -654,6 +656,97 @@ export class ListPage {
   readonly loaded = computed(() => {
     const current = this.state();
     return current.kind === 'loaded' ? current : null;
+  });
+
+  // --- Who an empty list is shared with (velista 0152, item 4) -------------------
+
+  private readonly _listService = inject<ListServiceI>(LIST_SERVICE);
+
+  /**
+   * Whether anybody but the reader holds a row on this list, and for which list, once
+   * read.
+   *
+   * Read only for a list that is empty, not shared with the group, and managed by the
+   * reader, because the access read needs `MANAGE`. A reader without it was given the
+   * list by somebody, so the shared wording is true for them without a read.
+   *
+   * Not cached for the visit. The settings sheet is a child route, so this page outlives
+   * it, and a grant or a flip made there changes the answer: the read runs again each
+   * time a sheet closes, and the answer is dropped whenever the list stops being one
+   * the read is for.
+   */
+  private readonly _othersHold = signal<{
+    readonly listId: string;
+    readonly others: boolean;
+  } | null>(null);
+
+  /** Counts the sheets that closed over this page, so the read above runs again. */
+  private readonly _sheetCloses = signal(0);
+
+  private readonly _sheetOutlet = viewChild(RouterOutlet);
+
+  private readonly _watchSheets = effect((onCleanup) => {
+    const outlet = this._sheetOutlet();
+    if (outlet === undefined) {
+      return;
+    }
+    const closes = outlet.deactivateEvents.subscribe(() =>
+      this._sheetCloses.update((count) => count + 1)
+    );
+    onCleanup(() => closes.unsubscribe());
+  });
+
+  private readonly _privateList = computed(() => {
+    const current = this.state();
+    const listId = this.listId();
+    const list = this._lists
+      .listsIn(this.zoneId())
+      .find((candidate) => candidate.id === listId);
+    return current.kind === 'loaded' &&
+      current.empty &&
+      list?.sharedWithZone === false &&
+      list.myPermissions.includes('MANAGE')
+      ? listId
+      : null;
+  });
+
+  private readonly _readHolders = effect((onCleanup) => {
+    const listId = this._privateList();
+    this._sheetCloses();
+    if (listId === null) {
+      this._othersHold.set(null);
+      return;
+    }
+    // A read that a newer one replaced answers nothing.
+    let current = true;
+    onCleanup(() => (current = false));
+    const zoneId = this.zoneId();
+    void this._listService.getListAccess(listId).then(
+      (entries) => {
+        if (!current) {
+          return;
+        }
+        const me = this._names
+          .membersOf(zoneId)
+          .find((member) => member.userId === this._session.userId())?.id;
+        const others = entries.some(
+          (entry) => entry.membershipId !== me && entry.permissions.length > 0
+        );
+        this._othersHold.set({ listId, others });
+      },
+      // Quiet: the last answer stays, and with none the shared wording, which is the old
+      // copy and never a wrong claim that a list is private.
+      () => undefined
+    );
+  });
+
+  /** The empty list's body: the private wording only when nobody else has the list. */
+  readonly emptyBodyKey = computed(() => {
+    const listId = this._privateList();
+    const held = this._othersHold();
+    return listId !== null && held?.listId === listId && !held.others
+      ? 'list.empty.bodyPrivate'
+      : 'list.empty.body';
   });
 
   // --- The search, the order and one category (velista 0082) ----------------

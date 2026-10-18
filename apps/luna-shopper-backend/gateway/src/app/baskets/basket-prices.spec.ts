@@ -206,6 +206,7 @@ const location = (id: string, address: string) => ({
   id,
   supermarketId: 'mercadona',
   priceScopeId: SCOPE_A,
+  priceScopeIds: [SCOPE_A],
   label: null,
   address,
   city: 'Córdoba',
@@ -245,7 +246,7 @@ const resolution = (): CatalogScopeView => ({
       approximate: false,
     },
   ],
-  coverage: [],
+  coverage: [{ postalCode: '14008', served: true }],
   approximate: false,
   profileId: PROFILE,
   explicit: false,
@@ -361,12 +362,18 @@ function build(world: World = {}) {
           ],
           nextCursor: null,
         };
-      case SUPERMARKET_LOCATION_PATTERNS.list:
+      case SUPERMARKET_LOCATION_PATTERNS.search:
+        // Plan 0213: every chain's shops in the profile's codes, at once.
         return {
           items: [
             location('loc-tejares', 'Ronda de los Tejares 32'),
             location('loc-lagartijo', 'Avenida del Gran Capitán 5'),
-          ],
+          ].map((found) => ({
+            location: found,
+            supermarket: { id: 'mercadona' },
+            excluded: false,
+            excludedChain: false,
+          })),
           nextCursor: null,
         };
       default:
@@ -416,8 +423,8 @@ function build(world: World = {}) {
       );
   const locationReads = () =>
     calls
-      .filter((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.list)
-      .map((call) => call.payload as { priceScopeId?: string; userId: string });
+      .filter((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.search)
+      .map((call) => call.payload as { postalCodes: string[]; userId: string });
 
   const live = new BasketLiveController({ send } as never, catalog);
 
@@ -494,16 +501,23 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
     expect(result.scopes).toEqual([]);
   });
 
-  it('answers the basket with no products and no scopes when catalog throws', async () => {
+  it('answers the basket with no products, and the chains quoting nothing, when the products cannot be read', async () => {
     const { controller } = build({ items: 'throws' });
 
     const result = await controller.get(participant(), BASKET_ID);
 
     // Failing to price, or to name, is never failing to read: the rows are the
-    // basket and a shopper in an aisle keeps them.
+    // basket and a shopper in an aisle keeps them. The profile's chains are
+    // still named (plan 0213), and none quotes a product that was not read.
     expect(result.id).toBe(BASKET_ID);
     expect(result.products).toEqual([]);
-    expect(result.scopes).toEqual([]);
+    expect(
+      result.scopes.map((scope) => [scope.priceScopeId, scope.quotesBasket])
+    ).toEqual([
+      [SCOPE_A, false],
+      [SCOPE_B, false],
+    ]);
+    expect(result.scopesIncomplete).toBe(false);
   });
 
   it('gives a guest the chain and no shops (section 5)', async () => {
@@ -520,6 +534,14 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
         supermarketId: 'mercadona',
         supermarketName: { en: 'Mercadona', es: 'Mercadona' },
         locations: [],
+        quotesBasket: true,
+      },
+      {
+        priceScopeId: SCOPE_B,
+        supermarketId: 'carrefour',
+        supermarketName: { en: 'Carrefour', es: 'Carrefour' },
+        locations: [],
+        quotesBasket: false,
       },
     ]);
     // Not fetched and then dropped: never asked for. The address is the
@@ -541,16 +563,18 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
       BASKET_ID
     );
 
-    expect(result.scopes).toHaveLength(1);
+    expect(result.scopes).toHaveLength(2);
     expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
     expect(result.scopes[0].locations).toEqual([
       named('loc-tejares', 'Ronda de los Tejares 32'),
       named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
     ]);
-    // The shops of the one scope the offers name, read as the owner: the
-    // profile behind them is the owner's, whoever is looking.
+    // Carrefour has no shop in the profile's codes, so it lists none.
+    expect(result.scopes[1].locations).toEqual([]);
+    // The shops in the profile's codes, read once as the owner: the profile
+    // behind them is the owner's, whoever is looking (plan 0213).
     expect(locationReads()).toEqual([
-      expect.objectContaining({ priceScopeId: SCOPE_A, userId: OWNER }),
+      expect.objectContaining({ postalCodes: ['14008'], userId: OWNER }),
     ]);
   });
 
@@ -575,12 +599,21 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
             named('loc-tejares', 'Ronda de los Tejares 32'),
             named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
           ],
+          // Plan 0213: after the shops, so the keys before it did not move.
+          quotesBasket: true,
+        },
+        {
+          priceScopeId: SCOPE_B,
+          supermarketId: 'carrefour',
+          supermarketName: { en: 'Carrefour', es: 'Carrefour' },
+          locations: [],
+          quotesBasket: false,
         },
       ])
     );
   });
 
-  it('describes exactly the scopes the offers reference, with no extras (section 4)', async () => {
+  it('describes every scope of the profile, the quoted ones first (plan 0213)', async () => {
     // The profile resolves to two scopes; every offer came from the first.
     const { controller } = build({ servesLocations: true });
 
@@ -589,7 +622,12 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
       BASKET_ID
     );
 
-    expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([SCOPE_A]);
+    expect(
+      result.scopes.map((scope) => [scope.priceScopeId, scope.quotesBasket])
+    ).toEqual([
+      [SCOPE_A, true],
+      [SCOPE_B, false],
+    ]);
   });
 
   it("never names a shop the basket's profile switched off (section 4)", async () => {
@@ -629,11 +667,13 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
     );
 
     // The chain still names the price, because the price is real and came from
-    // a resolution made before the chain was refused. Its shops are not
-    // fetched and then dropped: never asked for.
+    // a resolution made before the chain was refused. Its shops are refused
+    // to catalog on the one read of the profile's shops, and dropped here too.
     expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
     expect(result.scopes[0].locations).toEqual([]);
-    expect(locationReads()).toEqual([]);
+    expect(locationReads()).toEqual([
+      expect.objectContaining({ excludedSupermarketIds: ['mercadona'] }),
+    ]);
   });
 
   it('does not ask what a reader who sees no shops has refused', async () => {
@@ -711,6 +751,9 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
     // much". The client is written to resolve a scope id to nothing.
     expect(result.products[0].bestOffer?.price).toBe(0.95);
     expect(result.scopes).toEqual([]);
+    // Plan 0213: and it says so, rather than reading as a profile with no
+    // chains.
+    expect(result.scopesIncomplete).toBe(true);
   });
 });
 
@@ -782,14 +825,19 @@ describe('GET /v1/baskets/:id: every shop (plan 0109)', () => {
     ]);
   });
 
-  it('still describes nothing when no scope quoted anything', async () => {
+  it('describes every scope of the profile, quoting nothing, when no scope quoted anything (plan 0213)', async () => {
     const { controller } = build({
       items: [{ ...item('i-unpriced', null), offers: [] }],
     });
 
     const result = await controller.get(participant(), BASKET_ID);
 
-    expect(result.scopes).toEqual([]);
+    expect(
+      result.scopes.map((scope) => [scope.priceScopeId, scope.quotesBasket])
+    ).toEqual([
+      [SCOPE_A, false],
+      [SCOPE_B, false],
+    ]);
   });
 
   it('asks for the cheapest alone when the basket resolves to no scopes', async () => {
@@ -923,6 +971,8 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
           sections: [],
         },
       ],
+      // The shop's quoted scope quotes the product priced there.
+      quotesBasket: true,
     });
     // A `LIVE` or unlocked basket has no shop of its own to name.
     expect(result.shop).toBeNull();

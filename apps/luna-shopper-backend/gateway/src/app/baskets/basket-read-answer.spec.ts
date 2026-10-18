@@ -96,7 +96,7 @@ type Failure =
   | 'catalog: the products, for the picks'
   | 'catalog: the products, for the rows'
   | 'catalog: the chains'
-  | 'catalog: the shops of a chain';
+  | 'catalog: the shops of the profile';
 
 const FAILURES: Failure[] = [
   'core: searchScope',
@@ -109,7 +109,7 @@ const FAILURES: Failure[] = [
   'catalog: the products, for the picks',
   'catalog: the products, for the rows',
   'catalog: the chains',
-  'catalog: the shops of a chain',
+  'catalog: the shops of the profile',
 ];
 
 interface World {
@@ -408,7 +408,7 @@ const resolution = (): CatalogScopeView => ({
       priced: true,
     },
   ],
-  coverage: [],
+  coverage: [{ postalCode: '14008', served: true }],
   approximate: false,
   profileId: PROFILE,
   explicit: false,
@@ -521,18 +521,27 @@ function build(world: World) {
           ],
           nextCursor: null,
         };
-      case SUPERMARKET_LOCATION_PATTERNS.list: {
-        fail('catalog: the shops of a chain');
-        const chain = asked.supermarketId ?? '';
-        const scope = asked.priceScopeId ?? '';
+      case SUPERMARKET_LOCATION_PATTERNS.search: {
+        // Plan 0213: every chain's shops in the profile's codes, at once.
+        fail('catalog: the shops of the profile');
+        const shopsOf = (supermarketId: string, scope: string, ids: string[]) =>
+          ids.map((id) => ({
+            location: locationOf(id, supermarketId, scope),
+            supermarket: {
+              id: supermarketId,
+              name: { en: supermarketId, es: supermarketId },
+            },
+            excluded: false,
+            excludedChain: false,
+          }));
         return {
-          items:
-            chain === 'mercadona'
-              ? [
-                  locationOf('loc-mercadona-1', chain, scope),
-                  locationOf('loc-mercadona-refused', chain, scope),
-                ]
-              : [locationOf('loc-carrefour-1', chain, scope)],
+          items: [
+            ...shopsOf('mercadona', SCOPE_MERCADONA, [
+              'loc-mercadona-1',
+              'loc-mercadona-refused',
+            ]),
+            ...shopsOf('carrefour', SCOPE_CARREFOUR, ['loc-carrefour-1']),
+          ],
           nextCursor: null,
         };
       }
@@ -895,12 +904,18 @@ describe('the rows alone (plan 0205, section 3)', () => {
   const COMPOSITION: string[] = [
     SECTION_PATTERNS.itemsAtLocation,
     SUPERMARKET_PATTERNS.list,
-    SUPERMARKET_LOCATION_PATTERNS.list,
+    SUPERMARKET_LOCATION_PATTERNS.search,
   ];
 
   /** The full answer with the catalog half taken off. */
   const coreHalfOf = (full: BasketResult): BasketView => {
-    const { products: _products, shop: _shop, scopes: _scopes, ...rest } = full;
+    const {
+      products: _products,
+      shop: _shop,
+      scopes: _scopes,
+      scopesIncomplete: _scopesIncomplete,
+      ...rest
+    } = full;
     return rest;
   };
 

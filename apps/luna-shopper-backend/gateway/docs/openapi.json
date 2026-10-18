@@ -35641,6 +35641,9 @@
             "items": {
               "$ref": "#/components/schemas/basket.BasketScopeLocationView"
             }
+          },
+          "quotesBasket": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -36023,6 +36026,9 @@
             "items": {
               "$ref": "#/components/schemas/basket.BasketPriceScopeView"
             }
+          },
+          "scopesIncomplete": {
+            "type": "boolean"
           }
         },
         "required": [
