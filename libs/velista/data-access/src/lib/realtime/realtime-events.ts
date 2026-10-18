@@ -125,6 +125,14 @@ export type RealtimeEvent =
   | {
       readonly type: 'list.created' | 'list.updated';
       readonly list: ShoppingList;
+      /**
+       * The list's counts, which the payload carries as a `ListView` does. Null when it
+       * carries none, which reads as unknown and not as zero (plan 0158, item 4).
+       */
+      readonly counts: {
+        readonly lineCount: number;
+        readonly wantedCount: number;
+      } | null;
     }
   | { readonly type: 'list.deleted'; readonly listId: string }
   | { readonly type: 'list.accessChanged'; readonly listId: string }

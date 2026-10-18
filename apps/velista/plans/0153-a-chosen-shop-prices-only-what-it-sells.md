@@ -1,3 +1,5 @@
+> **PR:** [#750](https://github.com/IchirokuXVI/nx-portfolio/pull/750)
+
 # 0153: a chosen shop prices only what it sells, and the picker names every chain
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -142,3 +144,35 @@ Stage 2, after backend `0213`:
   wrong fact about that shop. The elsewhere mark keeps the useful part.
 - **A chain with no quotes stays choosable.** A person at that shop still wants the list
   and the ticks; only the prices are missing.
+
+## 3. What the build decided
+
+Stage 1 (items 1, 2 and 3) is in PR #750. Stage 2 (items 4 and 5) waits on backend `0213`,
+which is not on `dev` yet. The picker, `BasketPriceScope` and the basket mapper are not
+touched.
+
+- The page hands each row `readAtShop()` as `atShop`. `basketTotal`, the settle sheet and
+  `BasketViewStore.settleShop` read `readAtShop` too. `BasketTotalContext.pricedAtShop` is
+  removed, because nothing reads it any more. `readAtShop` itself is unchanged.
+- The new mark is `{ kind: 'noPriceHere', chain, elsewhere }`. Each line with a product gets
+  it when the shop prices no line of the basket, also when no other shop quotes it
+  (`elsewhere: null`). The row draws `basket.row.noPriceHere` ("No price here", "Aquí no
+  tiene precio"), then `basket.price.cheaperAt` when there is an elsewhere price. It uses
+  the muted `is-unlisted` style. A line with no product gets no mark.
+- At such a shop `withPrice` is 0, so the total number is not drawn and the "No prices
+  yet" row is drawn instead. That row now gets `shopChosen` from `readAtShop`, so it also
+  says to choose another shop. At a shop that prices some lines, the popover's existing
+  "{{count}} of those {{products}} have a price at {{chain}}" says how many have a price. No
+  new total key was needed.
+- `basket-page.spec.ts` had a spec that asserted the defect: "is none for a chosen shop that
+  prices nothing here, whose rows quote the cheapest anywhere". It now asserts that no number
+  is drawn and that the small row is drawn with `shopChosen` true. No `basket-total` spec
+  asserted the defect.
+- The `product()` helper of `compose-basket-view.spec.ts` now gives `offer: null`,
+  `offers: []` and `atShop: null`. The aisle fixtures had no `offers`, and the mark now
+  looks for an elsewhere price at a shop with no prices.
+- The change sheet still loads its candidates with `pricedAtShop`. It is not in this plan's
+  scope.
+- The walk on slot 4 could not choose a shop with no prices, because its only priced shop
+  quotes the basket and the picker lists no other (that is stage 2). The no price case was
+  walked with the basket read rewritten in the browser so that every `atShop` price was null.

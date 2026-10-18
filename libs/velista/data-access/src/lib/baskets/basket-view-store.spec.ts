@@ -1806,6 +1806,73 @@ describe('BasketViewStore: the estimated total', () => {
     expect(harnessed.view.total().totalCents).toBe(345);
   });
 
+  /**
+   * Velista `0153`: a shop that prices no row of this basket (Deza) totals zero,
+   * and a settle there names the shop and no price scope, because the row drew no
+   * price. The cheapest price at another chain is never borrowed.
+   */
+  it('totals zero at a shop that prices no row, and settles there with no scope', () => {
+    const unpricedHere = (item: BasketProduct): BasketProduct => ({
+      ...item,
+      atShop: {
+        priceScopeId: null,
+        price: null,
+        currency: null,
+        available: null,
+      },
+    });
+    const harnessed = withLists(
+      harness(
+        basket,
+        new Map(
+          [...products].map(([id, item]) => [id, unpricedHere(item)] as const)
+        )
+      )
+    );
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-deza',
+          {
+            priceScopeId: 'scope-deza',
+            supermarketId: 'sm-deza',
+            logoUrl: null,
+            supermarketName: { en: 'Deza', es: 'Deza' },
+            locations: [
+              {
+                id: 'loc-deza',
+                label: null,
+                address: 'Avenida de la Libertad 1',
+                city: 'Córdoba',
+                postalCode: '14013',
+                sections: [],
+              },
+            ],
+          },
+        ],
+      ])
+    );
+
+    harnessed.view.setShop('loc-deza');
+
+    expect(harnessed.view.pricedAtShop()).toBe(false);
+    expect(harnessed.view.readAtShop()).toBe(true);
+    expect(harnessed.view.total()).toEqual({
+      lines: 3,
+      withProduct: 2,
+      withPrice: 0,
+      boughtCents: 0,
+      leftCents: 0,
+      totalCents: 0,
+      currency: null,
+    });
+    expect(
+      harnessed.view.settleShop(
+        unpricedHere(products.get('item-milk') as BasketProduct)
+      )
+    ).toEqual({ supermarketLocationId: 'loc-deza' });
+  });
+
   it('moves when a row is settled, with nothing subscribed', () => {
     const harnessed = withLists(harness(basket, products));
 

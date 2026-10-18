@@ -4739,17 +4739,26 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
       expect(words).toContain('"amount":"€3.00"');
     });
 
-    it('is none for a chosen shop that prices nothing here, whose rows quote the cheapest anywhere', async () => {
-      const words = await popover({
+    /**
+     * Velista `0153`: a chosen shop that prices nothing here adds no price, so
+     * there is no number to name it beside. The cheapest price at another chain
+     * is not borrowed under its chip, and the small row says there is no price.
+     */
+    it('draws no number at a chosen shop that prices nothing here, and the small row instead', async () => {
+      const { fixture } = await render({
         lines: lines(),
         products: priced(),
         readAtShop: MERCADONA,
       });
 
-      expect(words).toContain(
-        'basket.total.withPrice:{"count":1,"products":1}'
-      );
-      expect(words).not.toContain('Mercadona');
+      expect(query(fixture, NUMBER)).toBeNull();
+      expect(query(fixture, NOTE)).not.toBeNull();
+      expect(
+        (
+          fixture.debugElement.query(By.directive(NoPricesNote))
+            .componentInstance as NoPricesNote
+        ).shopChosen()
+      ).toBe(true);
     });
   });
 

@@ -1,3 +1,5 @@
+> **PR:** [#751](https://github.com/IchirokuXVI/nx-portfolio/pull/751)
+
 # 0158: the list page draws what the server holds
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -156,3 +158,26 @@ Stage 2, after backend `0214`:
   overlay already marks a line this device is writing.
 - **Staff only for the empty reason.** It is the one case the client can answer with
   certainty today.
+
+## What the build decided
+
+- **Stage 1 (items 1 to 5) is in PR #751. Stage 2 (item 6, `commentCount`) waits on
+  backend `0214`** and is not built.
+- **The sheet seeds in one place.** An `effect` hands the list to `_seedFromList` the first
+  time `list()` is defined, and a `seeded` signal makes it run once. `canSave` also
+  requires `seeded`. Plan `0152` builds on `_seedFromList`.
+- **"While an overlay claims it" reads the line's pending write note.** `Mutations` has no
+  per record query, and a line has an overlay key for each set of fields, so `_keepsLocal`
+  checks that the note `writeNoteOf(lineId)` reads is `pending`. Every write of a line sets that note
+  before its request and clears it after. `mutations.ts` is unchanged.
+- **The read still decides which lines exist and their order.** Only the row of a line
+  that the read names can be kept from the local copy.
+- **Counts on a list event are optional.** `toListCounts` returns null when the payload has
+  no counts, and the store then keeps the counts it already holds (rule D4). The event
+  type in `realtime-events.ts` gained `counts`. That file is outside the Scope above, but
+  the mapper cannot hand the counts on without it.
+- **The pages after the first are merged too.** The first page replaces the array, and
+  that drops every local line past position 100. `load` and `refresh` thus take a
+  snapshot of the local lines before the first page lands and hand it to `_loadRest`,
+  which merges each later page against it with the same `_keepsLocal` rule. A merge
+  against the current store would find nothing for those lines.

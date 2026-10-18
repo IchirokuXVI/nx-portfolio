@@ -15,6 +15,7 @@ import {
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakeZoneStore,
+  type FakeListStore,
   type ListServiceI,
 } from '@portfolio/velista/data-access';
 import type {
@@ -97,6 +98,8 @@ interface Options {
   /** The **caller's** role in the group, which is what gates the MANAGE box. */
   readonly myRole?: ZoneRole;
   readonly list?: ShoppingListSummary;
+  /** Start the store empty, as a cold load of the sheet's own URL does. */
+  readonly coldStore?: boolean;
   readonly access?: readonly ListAccessEntry[];
 }
 
@@ -104,6 +107,7 @@ async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ListSettingsSheet>;
   updates: UpdateListRequest[];
   saved: (readonly ListAccessEntry[])[];
+  lists: FakeListStore;
 }> {
   TestBed.resetTestingModule();
 
@@ -127,6 +131,9 @@ async function render(options: Options = {}): Promise<{
   } as unknown as ListServiceI;
 
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
+  const lists = options.coldStore
+    ? fakeListStore({ lists: [], state: 'loading' })
+    : fakeListStore({ lists: [options.list ?? list()], state: 'loaded' });
 
   await TestBed.configureTestingModule({
     imports: [ListSettingsSheet, RokuTranslatorTestingModule.forTesting()],
@@ -135,9 +142,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeZoneStore(
         fakeZoneStore({ zones: [zone(options.myRole ?? 'MEMBER')] })
       ),
-      provideFakeListStore(
-        fakeListStore({ lists: [options.list ?? list()], state: 'loaded' })
-      ),
+      provideFakeListStore(lists),
       provideFakeLineStore(fakeLineStore({ lines: [], state: 'loaded' })),
       provideFakeMemberNames(fakeMemberNames({}, MEMBERS)),
       { provide: LIST_SERVICE, useValue: service },
@@ -159,7 +164,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, updates, saved };
+  return { fixture, updates, saved, lists };
 }
 
 function rowFor(
@@ -515,6 +520,55 @@ describe('ListSettingsSheet', () => {
       await fixture.componentInstance.save();
 
       expect(updates).toEqual([{ name: 'Sunday shop' }]);
+    });
+  });
+
+  describe('a cold load of the sheet URL (plan 0158, item 1)', () => {
+    it('takes the list values when the store fills after the sheet opened', async () => {
+      const { fixture, lists } = await render({ coldStore: true });
+      const sheet = fixture.componentInstance;
+
+      expect(sheet.seeded()).toBe(false);
+
+      lists.set([
+        list({
+          name: 'Weekly shop',
+          autoApproveLines: true,
+          sharedWithZone: true,
+        }),
+      ]);
+      fixture.detectChanges();
+
+      expect(sheet.name()).toBe('Weekly shop');
+      expect(sheet.autoApprove()).toBe(true);
+      expect(sheet.sharedWithZone()).toBe(true);
+      expect(sheet.seeded()).toBe(true);
+    });
+
+    it('keeps a name typed before a second fill', async () => {
+      const { fixture, lists } = await render({ coldStore: true });
+      const sheet = fixture.componentInstance;
+
+      lists.set([list({ name: 'Weekly shop' })]);
+      fixture.detectChanges();
+      sheet.name.set('Sunday shop');
+
+      lists.set([list({ name: 'Renamed elsewhere', sharedWithZone: true })]);
+      fixture.detectChanges();
+
+      expect(sheet.name()).toBe('Sunday shop');
+    });
+
+    it('keeps Save disabled until the list is known', async () => {
+      const { fixture, updates } = await render({ coldStore: true });
+      const sheet = fixture.componentInstance;
+
+      sheet.name.set('Sunday shop');
+      fixture.detectChanges();
+      await sheet.save();
+
+      expect(sheet.canSave()).toBe(false);
+      expect(updates).toEqual([]);
     });
   });
 });

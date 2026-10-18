@@ -51,6 +51,8 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
 function service(seed: readonly Line[]) {
   let served = seed;
   let nextCursor: string | null = null;
+  /** Pages answered one per read, in order, when a spec stages a list of several. */
+  let pages: (readonly Line[])[] = [];
   let failWith: Error | null = null;
   /** What the next write answers, so a version race can be staged rather than raced. */
   let answerWith: Line | null = null;
@@ -88,6 +90,14 @@ function service(seed: readonly Line[]) {
         const error = readFailsWith;
         readFailsWith = null;
         throw error;
+      }
+
+      if (pages.length > 0) {
+        const items = pages.shift() ?? [];
+        return {
+          items,
+          nextCursor: pages.length > 0 ? `cursor-${pages.length}` : null,
+        };
       }
 
       // The cursor is handed out once, exactly as a real endpoint does it: the follow
@@ -186,6 +196,10 @@ function service(seed: readonly Line[]) {
     setServed: (next: readonly Line[], cursor: string | null = null) => {
       served = next;
       nextCursor = cursor;
+    },
+    /** The next read answers these pages in order, each with a cursor to the next. */
+    setPages: (next: readonly (readonly Line[])[]) => {
+      pages = [...next];
     },
     failNext: (error: Error) => {
       failWith = error;
@@ -690,6 +704,95 @@ describe('LineStore', () => {
       realtime.emit('line.updated', line('elsewhere', { listId: 'other' }));
 
       expect(store.linesIn(LIST)).toHaveLength(1);
+    });
+  });
+
+  describe('a read that lands after a write (plan 0158, item 2)', () => {
+    it('keeps the patched line when the read carries an older version', async () => {
+      // The catalog's "Use this product": the list page PATCHes the answer and loads
+      // its lines in one construction, and a read started before the write committed
+      // answers with the old row after it.
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: [], version: 1 })]);
+      await store.load(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[0].version).toBe(2);
+    });
+
+    it('keeps the local line while this device is writing to it', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      lines.holdWrites();
+      const writing = store.updateLine('a', { itemIds: ['item-9'] });
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+
+      lines.releaseWrites();
+      await writing;
+    });
+
+    it('takes a read that is newer than the local line', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: ['item-3'], version: 3 })]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-3']);
+    });
+
+    it('keeps a patched line past the first page when a later page is older', async () => {
+      // A list over one page: the first page replaces the array and drops every line
+      // past it, so the later pages must be merged against what stood before.
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const { store, lines } = await build();
+      lines.setPages([[line('a')], [line('b', { position: 2, version: 1 })]]);
+      await store.load(LIST);
+      await settle();
+
+      await store.updateLine('b', { itemIds: ['item-9'] });
+      lines.setPages([
+        [line('a')],
+        [line('b', { itemIds: [], position: 2, version: 1 })],
+      ]);
+      await store.load(LIST);
+      await settle();
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['a', 'b']);
+      expect(store.linesIn(LIST)[1].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[1].version).toBe(2);
+    });
+
+    it('lets the read decide which lines exist', async () => {
+      const { store, lines } = await build([line('a'), line('b')]);
+      await store.load(LIST);
+
+      lines.setServed([line('b'), line('c')]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['b', 'c']);
+    });
+
+    it('refuses an event older than the local line', async () => {
+      const { store, realtime } = await build([
+        line('a', { content: 'Bread', version: 1 }),
+      ]);
+      await store.load(LIST);
+      await store.updateLine('a', { content: 'Sourdough' });
+
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Bread', version: 1 })
+      );
+
+      expect(store.linesIn(LIST)[0].content).toBe('Sourdough');
     });
   });
 

@@ -844,12 +844,14 @@ export interface ShownPrice {
 /**
  * The price a basket row draws for its product (velista `0078`, section 5; `0102`).
  *
- * **The shop's**, when the rows are priced at one: the product's `atShop`, which the
- * server decided from that shop's stack. The cheapest at the run's scopes otherwise.
- * Null when there is no price, which draws the same blank either way.
+ * **The shop's**, when the rows are read at one: the product's `atShop`, which the
+ * server decided from that shop's stack, or null when the shop has no price for
+ * it, also at a shop that prices nothing on the basket (velista `0153`). The
+ * cheapest at the run's scopes otherwise. Null when there is no price, which draws
+ * the same blank either way.
  *
- * @param atShop Whether the rows are priced at a chosen shop, which is
- *   `basketPricedAtShop` and never a test of this product alone.
+ * @param atShop Whether the rows are read at a chosen shop, which is
+ *   `basketReadAtShop` and never a test of this product alone.
  */
 export function shownOffer(
   product: BasketProduct | null | undefined,
@@ -907,7 +909,7 @@ export function shownPriceScope(
  *
  * @param shop The chosen shop's id, the basket's own on a basket started at one, or
  *   null for any of your shops.
- * @param atShop Whether the rows are priced at that shop (`basketPricedAtShop`).
+ * @param atShop Whether the rows are read at that shop (`basketReadAtShop`).
  */
 export function basketSettleShop(
   product: BasketProduct | null | undefined,

@@ -111,8 +111,15 @@ export function selectGroupState(input: {
  * asking, which is harmless, instead of towards telling somebody a populated group is
  * empty, which is false and faintly insulting. Section 5.8 records the `hasLists`
  * boolean that would replace this with a fact.
+ *
+ * **Staff need no heuristic** (plan 0158, item 3). An `OWNER` or `ADMIN` reads every
+ * list in the group, so for them zero readable lists is zero lists, and an owner told
+ * "nothing shared with you" in their own group was being told something false.
  */
 function emptyReason(zone: MyZone): 'no-lists' | 'no-access' {
+  if (zone.myRole === 'OWNER' || zone.myRole === 'ADMIN') {
+    return 'no-lists';
+  }
   return zone.counts.memberCount > 1 ? 'no-access' : 'no-lists';
 }
 

@@ -284,6 +284,15 @@ describe('LinePage', () => {
     expect(textOf(fixture)).toContain('list.page.addedBy');
   });
 
+  it('names the list on the chevron, which is where it goes (plan 0158)', async () => {
+    const { fixture } = await render();
+    const chevron = fixture.nativeElement.querySelector(
+      'lib-page-header button.lead'
+    ) as HTMLButtonElement | null;
+
+    expect(chevron?.getAttribute('aria-label')).toBe('list.page.toList');
+  });
+
   describe('a line with no name of its own (velista 0144, section 5)', () => {
     const addName = (fixture: ComponentFixture<LinePage>) =>
       fixture.nativeElement.querySelector(
