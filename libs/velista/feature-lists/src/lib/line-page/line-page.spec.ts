@@ -15,6 +15,7 @@ import {
   fakeListStore,
   fakeMemberNames,
   fakeZoneStore,
+  GatewayError,
   LINE_SERVICE,
   type LineServiceI,
   ProductPickStore,
@@ -36,6 +37,8 @@ import {
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import { AppHistory, provideVelistaTesting } from '@portfolio/velista/platform';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { of } from 'rxjs';
 import { LinePage } from './line-page';
 
@@ -158,6 +161,8 @@ interface Options {
   readonly lines?: readonly Line[];
   readonly permissions?: readonly ListPermission[];
   readonly linesState?: 'idle' | 'loading' | 'loaded' | 'failed';
+  /** What the read of the lines failed with, beside `linesState: 'failed'`. */
+  readonly linesError?: unknown;
   readonly alsoOn?: AlsoOnVm;
 }
 
@@ -172,6 +177,7 @@ async function render(options: Options = {}): Promise<{
   const lines = fakeLineStore({
     lines: options.lines ?? [line()],
     state: options.linesState ?? 'loaded',
+    error: options.linesError,
   });
   const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
   const browse = {
@@ -656,6 +662,99 @@ describe('LinePage', () => {
 
       expect(textOf(fixture)).toContain('list.page.failed');
       expect(lines.loadCount()).toBe(1);
+    });
+  });
+
+  /**
+   * Velista 0156. A line of a list this reader may not read drew the generic failure
+   * and a Try again that only asked to be refused again; a line of another list said
+   * it was deleted.
+   */
+  describe('a line you cannot read (velista 0156)', () => {
+    const forbidden = new GatewayError({
+      code: 'forbidden',
+      status: 403,
+      correlationId: 'cid-403',
+    });
+
+    it('draws the not available sentence and a way back to the group, and no retry', async () => {
+      const { fixture, router } = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: forbidden,
+      });
+
+      expect(textOf(fixture)).toContain('list.error.notAvailable');
+      expect(textOf(fixture)).not.toContain('list.page.failed');
+      expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
+
+      buttonWith(fixture, 'list.header.back')?.click();
+      await drain(fixture);
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}`,
+        { replaceUrl: true }
+      );
+    });
+
+    it('says the same on a 404, so the two cannot be told apart', async () => {
+      const { fixture } = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'cid-404',
+        }),
+      });
+
+      expect(textOf(fixture)).toContain('list.error.notAvailable');
+      expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
+    });
+
+    it('draws no sheet unless the line is here', async () => {
+      const gone = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: forbidden,
+      });
+      expect(
+        gone.fixture.nativeElement.querySelector('router-outlet')
+      ).toBeNull();
+
+      const missing = await render({ lines: [] });
+      expect(
+        missing.fixture.nativeElement.querySelector('router-outlet')
+      ).toBeNull();
+
+      const ready = await render();
+      expect(
+        ready.fixture.nativeElement.querySelector('router-outlet')
+      ).not.toBeNull();
+    });
+
+    it('says a line absent from a loaded list is no longer in this list, in both languages', async () => {
+      const { fixture } = await render({ lines: [] });
+
+      expect(textOf(fixture)).toContain('list.gone.unavailable');
+      expect(buttonWith(fixture, 'list.page.toList')).not.toBeNull();
+
+      // The testing translator echoes the key, so the words are read from the files.
+      const i18n = join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'ui',
+        'assets',
+        'i18n'
+      );
+      const words = (locale: string): string =>
+        JSON.parse(readFileSync(join(i18n, `${locale}.json`), 'utf8')).list.gone
+          .unavailable;
+      expect(words('en')).toBe('That line is no longer in this list');
+      expect(words('es')).toBe('Esa línea ya no está en esta lista');
     });
   });
 });

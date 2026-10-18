@@ -928,7 +928,7 @@
     },
     "gone": {
       "byOthers": "This line was deleted by another user",
-      "unavailable": "This line was deleted and is no longer available",
+      "unavailable": "That line is no longer in this list",
       "close": "Close"
     },
     "error": {

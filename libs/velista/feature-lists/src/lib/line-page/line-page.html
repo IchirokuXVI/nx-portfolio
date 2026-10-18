@@ -52,8 +52,26 @@
       </div>
     }
 
+    @case ('gone') {
+      <!--
+        The list is not readable, or does not exist: the list page's own sentence and
+        way out, and no Try again, which would only ask again to be refused (velista
+        0156).
+      -->
+      <div class="state">
+        <p class="state-body">{{ 'list.error.notAvailable' | rokuT }}</p>
+        <button (click)="leaveToGroup()" class="state-action" type="button">
+          {{ 'list.header.back' | rokuT }}
+        </button>
+      </div>
+    }
+
     @case ('missing') {
-      <!-- The words a sheet about a deleted line says, on a page (plan 0083). -->
+      <!--
+        The words a sheet about a line that is not on the list says, on a page (plan
+        0083). A line of another list reads the same, because only a backend read
+        could tell it from a deleted one (velista 0156).
+      -->
       <div class="state">
         <p class="state-body">{{ 'list.gone.unavailable' | rokuT }}</p>
         <button (click)="leave()" class="state-action" type="button">
@@ -284,5 +302,11 @@
   }
 </main>
 
-<!-- The sheets over this page: the menu, the name, the supermarket, the comments, the delete. -->
-<router-outlet />
+<!--
+  The sheets over this page: the menu, the name, the supermarket, the comments, the
+  delete. Drawn only over a line that is here, so a sheet URL of a line nobody may read
+  opens nothing (velista 0156).
+-->
+@if (status() === 'ready') {
+  <router-outlet />
+}

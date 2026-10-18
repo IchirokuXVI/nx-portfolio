@@ -1,5 +1,7 @@
-import { UrlSegment, type Route } from '@angular/router';
-import { listIdGuard, zoneIdGuard } from './zone-guards';
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter, Router, UrlSegment, type Route } from '@angular/router';
+import { basketIdGuard, listIdGuard, zoneIdGuard } from './zone-guards';
 
 /**
  * Plan 0010, rule G1: `zones/:zoneId` matches only a UUID.
@@ -25,10 +27,6 @@ describe('zoneIdGuard', () => {
     // Every id in the product comes from `@PrimaryGeneratedColumn('uuid')`, so this
     // is checkable rather than agreed.
     expect(matches('zones', '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71')).toBe(true);
-  });
-
-  it('is case insensitive, since a pasted link may be upper case', () => {
-    expect(matches('zones', '8F14E45F-CEEA-4E2C-9E0B-9C1A6A3F2B71')).toBe(true);
   });
 
   it('declines `new`, which is what keeps the create sheet reachable', () => {
@@ -87,10 +85,6 @@ describe('listIdGuard', () => {
     expect(listMatches('zones', ZONE, 'lists', LIST)).toBe(true);
   });
 
-  it('is case insensitive, since a pasted link may be upper case', () => {
-    expect(listMatches('zones', ZONE, 'lists', LIST.toUpperCase())).toBe(true);
-  });
-
   it('declines `new`, which is what keeps the create sheet reachable', () => {
     // The whole point of the rule. Without it, `/zones/<uuid>/lists/new` is swallowed
     // and the person who tapped Start a list gets a list page firing
@@ -120,5 +114,99 @@ describe('listIdGuard', () => {
     // read from the wrong end would match the zone id and let `/lists/new` through.
     expect(listMatches('zones', ZONE, 'lists', 'new')).toBe(false);
     expect(listMatches('zones', 'new', 'lists', LIST)).toBe(true);
+  });
+});
+
+/**
+ * Velista 0156: an id typed in upper case lands on the lower case URL.
+ *
+ * The pattern accepts both cases, and so does the backend, but the stores key on the id
+ * as typed. So an upper case id is not declined: the guard answers a tree with every id
+ * lower cased, and the page under it only ever sees the one form. Exercised through a
+ * real router, because the tree is built from the navigation the guard runs in.
+ */
+describe('the id guards on an upper case id', () => {
+  const ZONE = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
+  const LIST = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
+  const BASKET = '5b2e7c41-9d03-4f6a-8e1b-2c4d6f8a0b13';
+
+  @Component({ template: '' })
+  class Blank {}
+
+  function router(): Router {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            // The locale is consumed above the guarded routes, as in the app, so
+            // each guard reads its id where the real table puts it.
+            path: 'en',
+            children: [
+              {
+                path: 'zones/:zoneId/lists/:listId',
+                canMatch: [zoneIdGuard, listIdGuard],
+                component: Blank,
+              },
+              {
+                path: 'zones/:zoneId',
+                canMatch: [zoneIdGuard],
+                component: Blank,
+              },
+              {
+                path: 'shopping-lists/:basketId',
+                canMatch: [basketIdGuard],
+                component: Blank,
+              },
+            ],
+          },
+          { path: '**', component: Blank },
+        ]),
+      ],
+    });
+    return TestBed.inject(Router);
+  }
+
+  it('listIdGuard answers a tree with the lower case list id', async () => {
+    const at = router();
+    await at.navigateByUrl(
+      `/en/zones/${ZONE}/lists/${LIST.toUpperCase()}?q=milk`
+    );
+    expect(at.url).toBe(`/en/zones/${ZONE}/lists/${LIST}?q=milk`);
+  });
+
+  it('lets an upper case id through outside a navigation, with nothing to rebuild', () => {
+    router();
+    const segments = ['zones', ZONE, 'lists', LIST.toUpperCase()].map(
+      (path) => new UrlSegment(path, {})
+    );
+    TestBed.runInInjectionContext(() => {
+      expect(listIdGuard({} as Route, segments)).toBe(true);
+    });
+  });
+
+  it('lower cases every id of the URL in one redirect', async () => {
+    const at = router();
+    await at.navigateByUrl(
+      `/en/zones/${ZONE.toUpperCase()}/lists/${LIST.toUpperCase()}`
+    );
+    expect(at.url).toBe(`/en/zones/${ZONE}/lists/${LIST}`);
+  });
+
+  it('zoneIdGuard lands an upper case group id on the lower case URL', async () => {
+    const at = router();
+    await at.navigateByUrl(`/en/zones/${ZONE.toUpperCase()}`);
+    expect(at.url).toBe(`/en/zones/${ZONE}`);
+  });
+
+  it('basketIdGuard lands an upper case basket id on the lower case URL', async () => {
+    const at = router();
+    await at.navigateByUrl(`/en/shopping-lists/${BASKET.toUpperCase()}`);
+    expect(at.url).toBe(`/en/shopping-lists/${BASKET}`);
+  });
+
+  it('leaves a lower case URL alone', async () => {
+    const at = router();
+    await at.navigateByUrl(`/en/zones/${ZONE}/lists/${LIST}`);
+    expect(at.url).toBe(`/en/zones/${ZONE}/lists/${LIST}`);
   });
 });
