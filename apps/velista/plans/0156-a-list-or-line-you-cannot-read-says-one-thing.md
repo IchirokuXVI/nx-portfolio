@@ -1,3 +1,5 @@
+> **PR:** [#757](https://github.com/IchirokuXVI/nx-portfolio/pull/757)
+
 # 0156: a list or line you cannot read says one thing
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -152,3 +154,32 @@ An id typed in upper case lands on the same page as its lower case form.
   answer on a cold load.
 - **A canonical redirect for case.** Lower casing inside `paramSignal` would leave the
   address bar and the last list storage with whatever was typed.
+
+## 3. What the build decided
+
+- **No `deleted` branch.** `ListGoneReason` is removed, and the gone state is
+  `{ kind: 'gone' }`. `selectListState` takes `gone: boolean`.
+- **Item 6 changes the words of `list.gone.unavailable`** and adds no key. It now reads
+  "That line is no longer in this list" (es: "Esa línea ya no está en esta lista"). The
+  line page, the history page and every line sheet's notice (`line-gone.ts`, outside this
+  plan's scope) already draw that key, so the detail sheet says the same thing without an
+  edit to its code. A spec reads both locale files to assert the words, because the
+  testing translator echoes keys.
+- **The case redirect lower cases every id in the URL** in one `UrlTree`, not only the
+  guard's own segment. A link with two upper case ids thus lands in one hop. The tree is
+  built from `Router.currentNavigation().extractedUrl`. When no navigation exists, the
+  guard lets the id through. A line id is lower cased only when a zone, list or basket id
+  in the same URL triggers the redirect, because there is no line id guard.
+- **The sheet URL is replaced from an effect on the gone state.** When the page's route
+  has a child, the effect calls `navigate(['.'], { relativeTo, replaceUrl: true })`. The
+  outlet is drawn only while loading or loaded. So a list whose lines failed for another
+  reason (the error state) draws no sheet either. Its URL is left as it is.
+- **Item 5 uses the list not available sentence**, because plan 0157 was not on `dev`. Only
+  an uncached group whose read failed counts: `ZoneStore` keeps a cached group `loaded`
+  after a failed refetch. The mapping is `listErrorEffect(zones.error(), 'lines.read')`,
+  reused unchanged.
+- **The template key walk** covers `list-page.html`, `line-page.html` and
+  `line-history-page.html`. It reads the templates and both locale files from disk at test
+  time. A one-off static scan of every template in `feature-lists` found no other missing
+  key. Two comments in `data-access` (`list-store.ts:243`, `list-store.spec.ts:247`) still
+  name the old `gone: 'unshared'` state. They are outside this plan's scope.
