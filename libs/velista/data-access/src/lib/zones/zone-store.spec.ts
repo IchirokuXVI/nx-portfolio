@@ -1037,6 +1037,33 @@ describe('ZoneStore', () => {
       expect(store.zoneState().get('z1')).toBe('loaded');
       expect(store.zoneById('z1')?.name).toBe('Flat 3B');
     });
+
+    it('keeps each zone its own read error (velista 0157)', async () => {
+      // `error` is one slot every read shares. A group page drawn from it flipped
+      // from "not available" to the generic block when a realtime event reloaded a
+      // different group, so the page reads the error of its own zone instead.
+      await store.loadZone('z-gone');
+      const refusal = store.zoneErrorOf('z-gone');
+
+      await store.loadZone('z1');
+
+      expect(refusal).toBeInstanceOf(Error);
+      expect(store.zoneErrorOf('z-gone')).toBe(refusal);
+      expect(store.zoneErrorOf('z1')).toBeNull();
+      // The shared slot still behaves as before for its other readers.
+      expect(store.error()).toBeNull();
+    });
+
+    it('clears a zone error when that zone is read again', async () => {
+      getResult = 'throw';
+      await store.loadZone('z1');
+      expect(store.zoneErrorOf('z1')).toBeInstanceOf(Error);
+
+      getResult = null;
+      await store.loadZone('z1');
+
+      expect(store.zoneErrorOf('z1')).toBeNull();
+    });
   });
 
   describe('rule G3, the staff room', () => {

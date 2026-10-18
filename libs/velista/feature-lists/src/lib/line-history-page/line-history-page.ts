@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -19,8 +20,8 @@ import {
   SessionStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
-import type { HistoryScope } from '@portfolio/velista/models';
-import { PageNavigation } from '@portfolio/velista/platform';
+import { APP_BASE_PATH, type HistoryScope } from '@portfolio/velista/models';
+import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import { PageHeader } from '@portfolio/velista/ui';
 import { linePageStatus, loadLineContext } from '../line-page/line-context';
 import { lineUrls } from '../line-page/line-urls';
@@ -52,6 +53,8 @@ export class LineHistoryPage {
   private readonly _itemNames = inject(ItemNames);
   private readonly _session = inject(SessionStore);
   private readonly _pages = inject(PageNavigation);
+  private readonly _router = inject(Router);
+  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _urls = lineUrls();
 
@@ -159,6 +162,14 @@ export class LineHistoryPage {
   /** Back to the line, which is where this page is always opened from. */
   async back(): Promise<void> {
     await this._pages.back(this._urls.line());
+  }
+
+  /** A list that is not readable: its group, replacing this page's entry. */
+  async leaveToGroup(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'zones', this._urls.zoneId()),
+      { replaceUrl: true }
+    );
   }
 
   /**

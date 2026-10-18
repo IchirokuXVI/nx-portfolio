@@ -840,8 +840,8 @@ describe('LineStore', () => {
     });
 
     it('does not invent a count it has never seen', async () => {
-      // Nothing on the wire carries a comment count, so starting one at 1 from an
-      // event would claim a line with nine comments has one.
+      // A read that does not say leaves the count unknown, so starting one at 1 from
+      // an event would claim a line with nine comments has one.
       const { store, realtime } = await build([line('a')]);
       await store.load(LIST);
 
@@ -923,6 +923,100 @@ describe('LineStore', () => {
         expect(store.commentsOf('a')).toBeUndefined();
         expect(store.commentCountOf('a')).toBe(10);
       });
+    });
+  });
+
+  describe('the comment count the read carries (plan 0158, item 6)', () => {
+    it('records the count of a cold load', async () => {
+      const { store } = await build([line('a', { commentCount: 2 })]);
+
+      await store.load(LIST);
+
+      expect(store.commentCountOf('a')).toBe(2);
+      expect(store.forList(LIST)().commentCounts.get('a')).toBe(2);
+    });
+
+    it('records the count on a refresh and on the pages after the first', async () => {
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const { store, lines } = await build();
+      lines.setPages([
+        [line('a', { commentCount: 1 })],
+        [line('b', { position: 2, commentCount: 4 })],
+      ]);
+
+      await store.load(LIST);
+      await settle();
+
+      expect(store.commentCountOf('b')).toBe(4);
+
+      lines.setServed([line('a', { commentCount: 5 })]);
+      await store.refresh(LIST);
+
+      expect(store.commentCountOf('a')).toBe(5);
+    });
+
+    it('keeps a known count when an event says null', async () => {
+      const { store, realtime } = await build([line('a', { commentCount: 2 })]);
+      await store.load(LIST);
+
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Theirs', commentCount: null, version: 2 })
+      );
+
+      expect(store.linesIn(LIST)[0].content).toBe('Theirs');
+      expect(store.commentCountOf('a')).toBe(2);
+    });
+
+    it('keeps the local count when a read does not say', async () => {
+      const { store, lines } = await build([line('a', { commentCount: 2 })]);
+      await store.load(LIST);
+
+      lines.setServed([line('a', { commentCount: null })]);
+      await store.refresh(LIST);
+      expect(store.commentCountOf('a')).toBe(2);
+
+      // A server that predates the field leaves it out, which is unknown too.
+      lines.setServed([line('a')]);
+      await store.refresh(LIST);
+      expect(store.commentCountOf('a')).toBe(2);
+    });
+
+    it('keeps the count of a line it keeps from the local copy', async () => {
+      const { store, lines } = await build([
+        line('a', { commentCount: 3, version: 1 }),
+      ]);
+      await store.load(LIST);
+      await store.updateLine('a', { itemIds: ['item-9'] });
+
+      lines.setServed([line('a', { commentCount: 1, version: 1 })]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+      expect(store.commentCountOf('a')).toBe(3);
+    });
+
+    it('never lowers a count an event already raised', async () => {
+      // Posting a comment does not bump the version of its line, so a read whose
+      // count ran before the comment committed can land after the event.
+      const { store, lines, realtime } = await build([
+        line('a', { commentCount: 2 }),
+      ]);
+      await store.load(LIST);
+
+      realtime.emit('comment.added', {
+        id: 'c3',
+        lineId: 'a',
+        authorUserId: 'user-toni',
+        body: 'hi',
+        createdAt: new Date().toISOString(),
+      });
+      expect(store.commentCountOf('a')).toBe(3);
+
+      lines.setServed([line('a', { commentCount: 2 })]);
+      await store.refresh(LIST);
+
+      expect(store.commentCountOf('a')).toBe(3);
     });
   });
 
