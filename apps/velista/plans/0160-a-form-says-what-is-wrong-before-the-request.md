@@ -1,3 +1,5 @@
+> **PR:** [#761](https://github.com/IchirokuXVI/nx-portfolio/pull/761)
+
 # 0160: a form says what is wrong before the request
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -139,3 +141,40 @@ refused value as accepted.
   honest.
 - **The password rule spares the request and keeps the button enabled.** It keeps the
   letter of plan `0009` section 5.5 and still answers before a round trip.
+
+## What the build decided
+
+The build of 2026-10-18 (PR #761) follows the plan, items 1 to 5. It made the choices
+below, and each one is a choice of the builder that the owner can overturn.
+
+- **For the owner: the register page checks the password length locally and the button
+  stays enabled.** `submit()` counts code points against `PASSWORD_MIN_LENGTH`, draws
+  `auth.error.shortPassword` with placement `password`, focuses the password box and
+  sends nothing. The button is still pressable, which keeps the letter of plan `0009`
+  section 5.5. This changes a recorded choice (a short password used to reach the
+  server), so it is the owner's to confirm or reverse.
+- **For the owner: emoji in names stay refused.** The client mirrors the current server
+  rule. Allowing them is a backend change to `ALLOWED_CHARACTERS`.
+- **The checks run in the server's order**, and the forbidden characters are tested on
+  the raw value before the spaces collapse, as on the server. So a tab inside a name is
+  `'characters'`, not a space, and a lone emoji is `'length'` (one code point) before it
+  is `'characters'`.
+- **The name step says only "Continue" while a name breaks a rule** (a new key,
+  `setup.name.continuePlain`) and hides the note that repeats the name. The button is
+  disabled, so it never promises a name it would not keep.
+- **The rule sits in a polite live region** that stays in the page, so a screen reader
+  hears it while the person is still typing. The field is marked with `aria-invalid`
+  only; the setup field mixin draws no red border, and none was added.
+- **The rename sheet draws three rules, not four.** The length rule is already on screen
+  beside its counter, and its section 3.3 says a name is too short for most of the time
+  it takes to write one, so a short name only disables the primary, as before.
+- **The register address check is looser than `@IsEmail()`** (something, an @,
+  something, a dot, something, no spaces). It answers the obvious miss and never refuses
+  an address the server accepts in practice.
+- **A character typed into a full join code field is ignored**, which is what `maxlength`
+  did for typing. Only a paste or an insertion that leaves more than eight characters is
+  cleaned and cut from the front, so a share link still yields its code.
+- **S2 is in the PR.** A mismatch no longer marks the first password box invalid, only
+  the confirmation. It was one attribute.
+- The sentences sit after the last key of `account.error` (shared by the name step and
+  the rename sheet), in the same positions in `en.json` and `es.json`.
