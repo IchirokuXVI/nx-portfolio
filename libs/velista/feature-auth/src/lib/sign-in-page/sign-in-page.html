@@ -6,7 +6,7 @@
 >
   <!-- A real form with a submit button, so the phone keyboard's Go key works and
        needs no handler of its own (plan 0009, section 7). -->
-  <form (submit)="onSubmit($event)" class="form">
+  <form (submit)="onSubmit($event)" class="form" novalidate>
     <lib-email-field
       [(value)]="email"
       [describedBy]="error() === null ? null : errorId"

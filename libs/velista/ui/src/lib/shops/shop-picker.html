@@ -4,6 +4,25 @@
   region that is always there, so the reason line, the failure line and the
   candidates are heard when they arrive rather than only seen.
 -->
+<!--
+  The shops could not all be listed (velista 0153). Above Near me, so a short
+  list or an empty one is never drawn without the reason and a way to ask again.
+-->
+@if (openKey() === null && incomplete()) {
+  <p class="line is-alone incomplete" role="status">
+    <lib-info-icon class="line-glyph" />
+    <span>{{ 'basket.view.shop.incomplete' | rokuT }}</span>
+    <button
+      (click)="retried.emit()"
+      [disabled]="retrying()"
+      class="retry"
+      type="button"
+    >
+      {{ 'basket.view.shop.retry' | rokuT }}
+    </button>
+  </p>
+}
+
 @if (openKey() === null) {
   <div aria-live="polite" class="near-region">
     @switch (near().state) {
@@ -218,6 +237,7 @@
     <lib-franchise-buttons
       (chosen)="chosen.emit($event)"
       [chains]="chains()"
+      [noPrices]="noPrices()"
       [openKey]="pickedChain()"
     />
   }

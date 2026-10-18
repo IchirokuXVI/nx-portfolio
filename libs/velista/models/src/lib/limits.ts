@@ -31,6 +31,72 @@ export const USERNAME_MIN_LENGTH = 2;
 export const USERNAME_MAX_LENGTH = 40;
 
 /**
+ * Which of the server's name rules a typed name breaks, or null (velista `0160`).
+ *
+ * `'characters'` covers both of the server's character checks: the control and
+ * formatting characters, and anything outside letters, marks, digits, spaces and
+ * `. _ ' -`. An emoji is refused by the second.
+ */
+export type UsernameProblem = 'length' | 'characters' | 'letter' | 'reserved';
+
+/** The deleted member marker a name may not start with (backend plan 0011). */
+const USERNAME_RESERVED_PREFIX = 'former member';
+
+/** Letters, marks, digits, spaces and the short punctuation set, as on the server. */
+const USERNAME_ALLOWED_CHARACTERS = /^[\p{L}\p{M}\p{N} ._'-]+$/u;
+
+/** At least one letter or mark, as on the server. */
+const USERNAME_HAS_LETTER = /[\p{L}\p{M}]/u;
+
+/** Control, zero width and bidirectional formatting characters, as on the server. */
+const USERNAME_FORBIDDEN_CHARACTERS =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u001F\u007F-\u009F\u00AD\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+
+/**
+ * The server's `validateUsername`, as a question rather than a throw.
+ *
+ * Copied, not imported: that rule lives in the backend platform library, and rule D4
+ * keeps this app's models its own. `limits.spec.ts` carries the server spec's cases, so
+ * the two cannot drift without a red spec. The checks run in the server's order, and the
+ * forbidden characters are tested on the raw value, before the spaces collapse, as they
+ * are there. Lengths are code points after NFC, so an emoji counts once.
+ *
+ * The server stays the authority. This only spares a request that would be refused.
+ */
+export function usernameProblem(raw: string): UsernameProblem | null {
+  if (USERNAME_FORBIDDEN_CHARACTERS.test(raw)) {
+    return 'characters';
+  }
+
+  const name = normalizedUsername(raw);
+  const length = usernameLength(name);
+  if (length < USERNAME_MIN_LENGTH || length > USERNAME_MAX_LENGTH) {
+    return 'length';
+  }
+  if (!USERNAME_ALLOWED_CHARACTERS.test(name)) {
+    return 'characters';
+  }
+  if (!USERNAME_HAS_LETTER.test(name)) {
+    return 'letter';
+  }
+  if (name.toLowerCase().startsWith(USERNAME_RESERVED_PREFIX)) {
+    return 'reserved';
+  }
+  return null;
+}
+
+/** A name as the server stores it: spaces collapsed, trimmed, NFC. */
+export function normalizedUsername(raw: string): string {
+  return raw.replace(/\s+/gu, ' ').trim().normalize('NFC');
+}
+
+/** Code points, which is how the server counts a name. */
+export function usernameLength(name: string): number {
+  return Array.from(name).length;
+}
+
+/**
  * `AddLineDto.content` and `UpdateLineDto.content`.
  *
  * The counter appears only near the cap rather than always, because a running character

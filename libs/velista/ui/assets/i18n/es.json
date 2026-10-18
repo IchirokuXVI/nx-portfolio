@@ -1226,7 +1226,11 @@
       "tooManyResets": "Demasiadas peticiones. Puedes pedir otro en {{wait}}",
       "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
       "gone": "Esa cuenta ya no existe",
-      "failed": "No se pudo completar. Inténtalo de nuevo"
+      "failed": "No se pudo completar. Inténtalo de nuevo",
+      "nameLength": "Un nombre necesita de 2 a 40 caracteres",
+      "nameCharacters": "Un nombre solo admite letras, números, espacios y . _ ' -",
+      "nameLetter": "Un nombre necesita al menos una letra",
+      "nameReserved": "La aplicación usa «former member» para quien se fue, así que un nombre no puede empezar así"
     },
     "app": {
       "section": "La app",
@@ -1637,7 +1641,10 @@
           "headingHint": "donde compraste, lo más reciente primero",
           "today": "Hoy",
           "yesterday": "Ayer"
-        }
+        },
+        "noPrices": "Aquí aún no hay precios",
+        "incomplete": "No se pudieron mostrar las tiendas.",
+        "retry": "Intentar de nuevo"
       },
       "lists": {
         "legend": "Listas",
@@ -2135,7 +2142,8 @@
       "another": "Elegir otro",
       "keep": "Quedarme con {{name}}",
       "continue": "Seguir como {{name}}",
-      "note": "Puedes cambiarlo luego en tu cuenta. Los nombres no son únicos, así que otra persona también puede llamarse {{name}}."
+      "note": "Puedes cambiarlo luego en tu cuenta. Los nombres no son únicos, así que otra persona también puede llamarse {{name}}.",
+      "continuePlain": "Seguir"
     },
     "place": {
       "title": "¿Dónde compras?",

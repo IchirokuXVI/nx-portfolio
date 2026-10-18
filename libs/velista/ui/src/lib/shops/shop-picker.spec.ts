@@ -63,6 +63,9 @@ async function render(options: {
   readonly pickedChain?: string | null;
   readonly state?: ShopPickerState;
   readonly searchPending?: boolean;
+  readonly noPrices?: ReadonlySet<string>;
+  readonly incomplete?: boolean;
+  readonly retrying?: boolean;
 }): Promise<ComponentFixture<ShopPicker>> {
   TestBed.resetTestingModule();
 
@@ -84,6 +87,15 @@ async function render(options: {
     'searchPending',
     options.searchPending ?? false
   );
+  if (options.noPrices !== undefined) {
+    fixture.componentRef.setInput('noPrices', options.noPrices);
+  }
+  if (options.incomplete !== undefined) {
+    fixture.componentRef.setInput('incomplete', options.incomplete);
+  }
+  if (options.retrying !== undefined) {
+    fixture.componentRef.setInput('retrying', options.retrying);
+  }
   fixture.detectChanges();
 
   return fixture;
@@ -501,5 +513,71 @@ describe('ShopPicker, the question at the first buy', () => {
       .click();
 
     expect(picked).toEqual([]);
+  });
+});
+
+/** A chain that prices nothing, and a list that could not be read whole (velista `0153`). */
+describe('ShopPicker: the chains with no prices, and a short list', () => {
+  it('draws "No prices here yet" on the chain that prices nothing, which stays a button', async () => {
+    const fixture = await render({ noPrices: new Set(['dia']) });
+    const chosen: string[] = [];
+    fixture.componentInstance.chosen.subscribe((key) => chosen.push(key));
+
+    const buttons = element(fixture).querySelectorAll<HTMLButtonElement>(
+      'lib-franchise-buttons .chip'
+    );
+    expect(buttons[0].textContent).not.toContain('basket.view.shop.noPrices');
+    expect(buttons[1].textContent).toContain('basket.view.shop.noPrices');
+
+    buttons[1].click();
+    expect(chosen).toEqual(['dia']);
+  });
+
+  it('draws no line when every chain prices something', async () => {
+    const fixture = await render({});
+
+    expect(element(fixture).textContent).not.toContain(
+      'basket.view.shop.noPrices'
+    );
+  });
+
+  it('says the shops could not be listed, above the Near you results, with a button to try again', async () => {
+    const fixture = await render({ incomplete: true });
+    let retried = 0;
+    fixture.componentInstance.retried.subscribe(() => retried++);
+
+    const line = element(fixture).querySelector('.incomplete');
+    expect(line?.textContent).toContain('basket.view.shop.incomplete');
+    expect(
+      line?.compareDocumentPosition(
+        element(fixture).querySelector('.near-region') as Node
+      )
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // The chains it did list stay under it.
+    expect(
+      element(fixture).querySelectorAll('lib-franchise-buttons .chip')
+    ).toHaveLength(2);
+
+    const retry = line?.querySelector<HTMLButtonElement>('.retry');
+    expect(retry?.textContent).toContain('basket.view.shop.retry');
+    retry?.click();
+    expect(retried).toBe(1);
+  });
+
+  it('holds the button while the read is out', async () => {
+    const fixture = await render({ incomplete: true, retrying: true });
+
+    expect(
+      element(fixture).querySelector<HTMLButtonElement>('.retry')?.disabled
+    ).toBe(true);
+  });
+
+  it('draws no line for a whole list, nor on a chain screen', async () => {
+    expect(element(await render({})).querySelector('.incomplete')).toBeNull();
+    expect(
+      element(
+        await render({ incomplete: true, openKey: 'merca' })
+      ).querySelector('.incomplete')
+    ).toBeNull();
   });
 });

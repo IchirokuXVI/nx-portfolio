@@ -184,6 +184,22 @@ export class ShopPicker {
    */
   readonly showAbout = input(true);
 
+  /**
+   * The chains that price nothing here, keyed as {@link chains} is (velista
+   * `0153`). Each draws "No prices here yet" on its button and stays choosable.
+   */
+  readonly noPrices = input<ReadonlySet<string>>(new Set());
+
+  /**
+   * Whether the shops could not all be listed this time (backend `0213`). The
+   * root then draws one line with a button to try again, above everything
+   * else, so a short list or an empty one always says why.
+   */
+  readonly incomplete = input(false);
+
+  /** Whether the read that try again asked for is still out. */
+  readonly retrying = input(false);
+
   /** Something was typed. The container decides what it matches. */
   readonly queried = output<string>();
 
@@ -204,6 +220,9 @@ export class ShopPicker {
    * page (velista `0121`). Every host opens `shops/:locationId`.
    */
   readonly about = output<string>();
+
+  /** "Try again" was pressed, under {@link incomplete}. The host reads again. */
+  readonly retried = output<void>();
 
   private readonly _locale = inject(RokuLocaleStore).locale;
 
