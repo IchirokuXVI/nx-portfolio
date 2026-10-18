@@ -27,6 +27,7 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
+import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 
 /** The id the rejection carries, and the id both fields are described by. */
 const ERROR_ID = 'sign-in-error';
@@ -80,6 +81,15 @@ export class SignInPage {
     this._route.snapshot.queryParamMap.get('email') ?? ''
   );
   readonly password = signal('');
+
+  /**
+   * The page that sent somebody here, when it is one to trust (velista `0154`).
+   * The share link page and the basket page send it, so signing in lands back on
+   * the link and not on the dashboard.
+   */
+  private readonly _returnUrl = safeReturnUrl(
+    this._route.snapshot.queryParamMap.get(RETURN_URL_PARAM)
+  );
 
   readonly submitting = signal(false);
 
@@ -138,7 +148,7 @@ export class SignInPage {
       // The pair is already in `TokenStore`, so the dashboard's own guard passes and
       // its constructor loads the groups. Nothing here needs to fetch anything.
       await this._router.navigateByUrl(
-        appPath(this._locale(), this._basePath, 'home')
+        this._returnUrl ?? appPath(this._locale(), this._basePath, 'home')
       );
     } catch (error) {
       this.submitting.set(false);
@@ -165,9 +175,13 @@ export class SignInPage {
     );
   }
 
+  /** To register, carrying the page to come back to on (velista `0154`). */
   createAccount(): void {
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'auth', 'register')
+    void this._router.navigate(
+      [appPath(this._locale(), this._basePath, 'auth', 'register')],
+      this._returnUrl === null
+        ? {}
+        : { queryParams: { [RETURN_URL_PARAM]: this._returnUrl } }
     );
   }
 
