@@ -101,6 +101,14 @@ interface Options {
   /** Start the store empty, as a cold load of the sheet's own URL does. */
   readonly coldStore?: boolean;
   readonly access?: readonly ListAccessEntry[];
+  /** The zone's memberships. {@link MEMBERS} by default. */
+  readonly members?: readonly Membership[];
+  /** What a second and later access read answers, after a write changed the rows. */
+  readonly accessAfter?: readonly ListAccessEntry[];
+  /** Whether `setListAccess` refuses, as rule 3 does for a row holding MANAGE. */
+  readonly refuseAccess?: boolean;
+  /** Whether every access read fails. */
+  readonly failAccessRead?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -108,15 +116,28 @@ async function render(options: Options = {}): Promise<{
   updates: UpdateListRequest[];
   saved: (readonly ListAccessEntry[])[];
   lists: FakeListStore;
+  /** Every request the sheet made, in order, by method name. */
+  calls: string[];
 }> {
   TestBed.resetTestingModule();
 
   const updates: UpdateListRequest[] = [];
   const saved: (readonly ListAccessEntry[])[] = [];
+  const calls: string[] = [];
 
   const service = {
-    getListAccess: async () => options.access ?? [],
+    getListAccess: async () => {
+      const first = !calls.includes('getListAccess');
+      calls.push('getListAccess');
+      if (options.failAccessRead === true) {
+        throw new Error('unreadable');
+      }
+      return first
+        ? (options.access ?? [])
+        : (options.accessAfter ?? options.access ?? []);
+    },
     updateList: async (_listId: string, changes: UpdateListRequest) => {
+      calls.push('updateList');
       updates.push(changes);
       return list();
     },
@@ -124,6 +145,10 @@ async function render(options: Options = {}): Promise<{
       _listId: string,
       entries: readonly ListAccessEntry[]
     ) => {
+      calls.push('setListAccess');
+      if (options.refuseAccess === true) {
+        throw new Error('refused');
+      }
       saved.push(entries);
       return LIST_ID;
     },
@@ -144,7 +169,7 @@ async function render(options: Options = {}): Promise<{
       ),
       provideFakeListStore(lists),
       provideFakeLineStore(fakeLineStore({ lines: [], state: 'loaded' })),
-      provideFakeMemberNames(fakeMemberNames({}, MEMBERS)),
+      provideFakeMemberNames(fakeMemberNames({}, options.members ?? MEMBERS)),
       { provide: LIST_SERVICE, useValue: service },
       { provide: Router, useValue: { navigateByUrl: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -164,7 +189,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, updates, saved, lists };
+  return { fixture, updates, saved, lists, calls };
 }
 
 function rowFor(
@@ -487,6 +512,162 @@ describe('ListSettingsSheet', () => {
 
       expect(updates).toEqual([{ sharedWithZone: false }]);
       expect(saved).toEqual([]);
+    });
+  });
+
+  describe('taking back what the switch gave (plan 0152)', () => {
+    const PEOPLE: readonly Membership[] = [
+      ...MEMBERS,
+      member('m-leo', 'user-leo', 'Leo', 'MEMBER'),
+    ];
+    // Two rows a switch could have made and one list admin, whom rule 3 protects.
+    const ACCESS: readonly ListAccessEntry[] = [
+      { membershipId: 'm-toni', permissions: ['READ', 'WRITE'] },
+      { membershipId: 'm-leo', permissions: ['READ'] },
+      {
+        membershipId: 'm-ana',
+        permissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+      },
+    ];
+
+    async function turnedOff(options: Options = {}) {
+      const rendered = await render({
+        list: list({ sharedWithZone: true }),
+        members: PEOPLE,
+        access: ACCESS,
+        ...options,
+      });
+      await rendered.fixture.componentInstance.setSharedWithZone({
+        target: { checked: false },
+      } as unknown as Event);
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    const tick = (fixture: ComponentFixture<ListSettingsSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        '#list-settings-take-back'
+      );
+
+    it('offers a tick, off, naming the two people who have it', async () => {
+      const { fixture } = await turnedOff();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(tick(fixture)?.checked).toBe(false);
+      expect(fixture.componentInstance.holders().length).toBe(2);
+      expect(host.textContent).toContain(
+        'list.settings.sharedWithZone.takeBack'
+      );
+      expect(
+        host
+          .querySelector('#list-settings-take-back-names')
+          ?.textContent?.trim()
+      ).toBe('Toni and Leo');
+      // Today's hint stays beside it.
+      expect(host.querySelector('#list-settings-shared-hint')).not.toBeNull();
+    });
+
+    it('offers no tick on a list that opened private', async () => {
+      const { fixture } = await render({ members: PEOPLE, access: ACCESS });
+
+      expect(tick(fixture)).toBeNull();
+    });
+
+    it('with the tick on, Save sends the switch, then one revoke of both, then rereads', async () => {
+      const { fixture, updates, saved, calls } = await turnedOff();
+      const sheet = fixture.componentInstance;
+
+      sheet.takeBack.set(true);
+      fixture.detectChanges();
+      expect(sheet.canSave()).toBe(true);
+      await sheet.save();
+
+      expect(updates).toEqual([{ sharedWithZone: false }]);
+      expect(saved).toEqual([
+        [
+          { membershipId: 'm-toni', permissions: [] },
+          { membershipId: 'm-leo', permissions: [] },
+        ],
+      ]);
+      expect(calls).toEqual([
+        'getListAccess',
+        'updateList',
+        'setListAccess',
+        'getListAccess',
+      ]);
+    });
+
+    it('with the tick off, sends the switch only', async () => {
+      const { fixture, updates, saved } = await turnedOff();
+      const sheet = fixture.componentInstance;
+
+      // Drawn and left as it came.
+      expect(tick(fixture)?.checked).toBe(false);
+      expect(sheet.canSave()).toBe(false);
+      await sheet.save();
+
+      expect(updates).toEqual([{ sharedWithZone: false }]);
+      expect(saved).toEqual([]);
+    });
+
+    it('draws no tick and no hint when nobody has it', async () => {
+      const { fixture } = await turnedOff({ access: [ACCESS[2]] });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(tick(fixture)).toBeNull();
+      expect(host.querySelector('#list-settings-shared-hint')).toBeNull();
+    });
+
+    it('keeps the hint when the access read failed, since nobody is not known', async () => {
+      const { fixture } = await turnedOff({ failAccessRead: true });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(fixture.componentInstance.turnedOff()).toBe(true);
+      expect(tick(fixture)).toBeNull();
+      expect(host.querySelector('#list-settings-shared-hint')).not.toBeNull();
+    });
+
+    it('follows the server when a turn on lands and the refresh after it fails', async () => {
+      const { fixture, lists } = await turnedOff();
+      const sheet = fixture.componentInstance;
+      expect(tick(fixture)).not.toBeNull();
+
+      jest.spyOn(lists, 'refresh').mockRejectedValueOnce(new Error('offline'));
+      await sheet.setSharedWithZone({
+        target: { checked: true },
+      } as unknown as Event);
+      fixture.detectChanges();
+
+      // The server shares the list, so the switch says so and no tick offers to take
+      // away what the flip just gave.
+      expect(sheet.sharedWithZone()).toBe(true);
+      expect(sheet.turnedOff()).toBe(false);
+      expect(sheet.takeBackOn()).toBe(false);
+      expect(tick(fixture)).toBeNull();
+    });
+
+    it('names who kept it when the server refuses, and changes nothing', async () => {
+      const { fixture, saved } = await turnedOff({
+        refuseAccess: true,
+        // Leo was made a list admin between the read and the write.
+        accessAfter: [
+          ACCESS[0],
+          { membershipId: 'm-leo', permissions: ['READ', 'MANAGE'] },
+          ACCESS[2],
+        ],
+      });
+      const sheet = fixture.componentInstance;
+
+      sheet.takeBack.set(true);
+      await sheet.save();
+      fixture.detectChanges();
+
+      expect(saved).toEqual([]);
+      expect(sheet.keepers()).toEqual({ names: 'Leo', count: 1 });
+      expect(sheet.errorKey()).toBeNull();
+      expect(sheet.holders().map((holder) => holder.username)).toEqual([
+        'Toni',
+      ]);
     });
   });
 
