@@ -505,7 +505,35 @@ describeIntegration('the flag of a line (real Postgres)', () => {
       expect((await row(line.id)).named).toBe(true);
     });
 
-    it('leaves the flag of a line that the add raises, in both directions', async () => {
+    it('raises an unnamed line from an unnamed add in another language, and keeps its name and flag (plan 0214)', async () => {
+      const notNamed = await seedLine({
+        content: 'Bebida de avena',
+        position: 1,
+        itemIds: [OAT],
+        named: false,
+      });
+
+      const { line, merged } = await add({
+        content: 'Oat drink',
+        itemIds: [OAT],
+        named: false,
+      });
+
+      expect(merged).toBe(true);
+      expect(line).toMatchObject({
+        id: notNamed.id,
+        content: 'Bebida de avena',
+        quantity: 2,
+        named: false,
+      });
+      expect(await row(notNamed.id)).toMatchObject({
+        content: 'Bebida de avena',
+        named: false,
+        quantity: 2,
+      });
+    });
+
+    it('raises a line only when the flags agree, in both directions (plan 0214)', async () => {
       const notNamed = await seedLine({
         content: 'Oat drink',
         position: 1,
@@ -519,7 +547,9 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         named: true,
       });
 
-      // No flag means "a person typed it" on a new line. Here it raises one.
+      // No flag means "a person typed it", so it does not meet the line that
+      // is not named. And an add that is not named never lands on a line that
+      // somebody named, even with the same set.
       const first = await add({
         content: 'oat drink',
         itemIds: [OAT],
@@ -531,16 +561,45 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         named: false,
       });
 
-      expect(first).toMatchObject({
-        merged: true,
-        line: { id: notNamed.id, quantity: 3, named: false },
+      expect(first.merged).toBe(false);
+      expect(first.line).toMatchObject({ named: true, quantity: 2 });
+      expect(first.line.id).not.toBe(notNamed.id);
+      expect(second.merged).toBe(false);
+      expect(second.line).toMatchObject({ named: false, quantity: 1 });
+      expect(second.line.id).not.toBe(named.id);
+      expect(await row(notNamed.id)).toMatchObject({
+        named: false,
+        quantity: 1,
       });
-      expect(second).toMatchObject({
-        merged: true,
-        line: { id: named.id, quantity: 2, named: true },
-      });
-      expect((await row(notNamed.id)).named).toBe(false);
-      expect((await row(named.id)).named).toBe(true);
+      expect(await row(named.id)).toMatchObject({ named: true, quantity: 1 });
+    });
+  });
+
+  describe('the comment count of the lines read (plan 0214, section 2)', () => {
+    it('answers 2 for a line with two comments and 0 for one with none, and null on the event', async () => {
+      const talked = await seedLine({ content: 'Bread', position: 1 });
+      const quiet = await seedLine({ content: 'Butter', position: 2 });
+      const comments = dataSource.getRepository(LineComment);
+      await comments.save([
+        comments.create({
+          lineId: talked.id,
+          authorUserId: ids.owner,
+          body: 'The seeded one',
+        }),
+        comments.create({
+          lineId: talked.id,
+          authorUserId: ids.owner,
+          body: 'Or rye',
+        }),
+      ]);
+
+      expect((await read(talked.id)).commentCount).toBe(2);
+      expect((await read(quiet.id)).commentCount).toBe(0);
+
+      const added = await add({ content: 'Jam' });
+      expect(added.line.commentCount).toBeNull();
+      expect(emit.mock.calls[0][2]).toMatchObject({ commentCount: null });
+      expect((await read(added.line.id)).commentCount).toBe(0);
     });
   });
 
@@ -589,7 +648,8 @@ describeIntegration('the flag of a line (real Postgres)', () => {
           { content: 'Oat drink', itemIds: [OAT], named: false },
           { content: 'Eggs', named: false },
           { content: 'Whole milk', itemIds: [WHOLE], named: true },
-          { content: 'semi milk', itemIds: [SEMI] },
+          // Another language, and still the line of its product (plan 0214).
+          { content: 'Leche semidesnatada', itemIds: [SEMI], named: false },
         ],
       });
 

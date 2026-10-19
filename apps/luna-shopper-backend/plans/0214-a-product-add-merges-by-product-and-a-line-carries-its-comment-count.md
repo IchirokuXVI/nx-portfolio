@@ -1,4 +1,4 @@
-> **PR:** [#755](https://github.com/IchirokuXVI/nx-portfolio/pull/755)
+> **PR:** [#755](https://github.com/IchirokuXVI/nx-portfolio/pull/755) (the comment count), [#752](https://github.com/IchirokuXVI/nx-portfolio/pull/752) (the merge key)
 
 # 0214: a product add merges by product, and a line carries its comment count
 
@@ -133,31 +133,38 @@ has.
 ## What the build decided
 
 The build of 2026-10-18 settled the points below. Each one is a choice of the builder that
-the owner can overturn, except the first, which is the owner's to decide. Where this section
+the owner can overturn, except the second, which the owner decided. Where this section
 and a section above disagree, this section is right.
 
 1. **The plan landed in two PRs.** Items 2 and 4 (the comment count on `LineView` and its
    contract, schema, OpenAPI document and wire types) are in PR #755. Item 1 (the merge key)
-   is built in PR #752, which is now a draft and waits on the owner.
-2. **Owner decision, open: the merge key of item 1.** Migration
-   `1756003900000-LineNamed.ts` defaulted every existing row to `named = true`, and velista
-   sends `named: false` on every product add. So every line made before plan `0207` is
-   named, and the key as specified (an unnamed product line is met by `set:<hash>` or
-   `group:<id>` alone, never by its name) stops the same name merges on those lists: an
-   add of "Huevos" from the composer makes a second line beside the old "Huevos" line of
-   the same product, where today it merges. The owner has two options:
-   - (a) land #752 as written and accept the duplicates on old lists;
-   - (b) let an unnamed add also match a named line whose folded name equals the add's.
-     That keeps today's same name merge and still never joins "Eggs" to "Huevos".
-3. **`toLineView` takes the count as an optional fifth argument that defaults to null.**
+   is in PR #752, which waited on the decision below and then took dev.
+2. **Owner decision, 2026-10-19: an unnamed add never lands on a named line.** An add with
+   `named: false` does not raise a line that somebody named, even when both hold one set,
+   and a named add does not raise an unnamed line either. The two key shapes cannot meet:
+   a key with a name holds a null character and a key with none never does. The cost is
+   known and accepted. Migration `1756003900000-LineNamed.ts` defaulted every existing row
+   to `named = true`, and velista sends `named: false` on every product add. So every line
+   that existed before plan `0207` is named, and on those lists an add from the composer
+   makes a second line beside an old line of the same product until somebody merges them
+   by hand, where before this plan it merged. The alternative that was not taken: let an
+   unnamed add also match a named line whose folded name equals the add's.
+3. **The flag of an add is the flag the new line would carry.** `add` and `addMany` pass
+   `namedOnAdd(req.named, holdsProduct)` and not the raw `req.named`. An add with no
+   product is therefore named and meets free text by its folded name, as before.
+4. **Two items of one batch fold only when their flags agree.** The plan `0207` spec that
+   folded `{ named: false }` and `{ named: absent }` of one product into one line now
+   expects two lines, and a new spec folds two unnamed items in two languages into one.
+   The integration spec that raised lines across flags now asserts the opposite.
+5. **`toLineView` takes the count as an optional fifth argument that defaults to null.**
    The other arguments of that mapper have no default on purpose. Null is the truth for
    every caller except the lines read, so a default here cannot hide a wrong answer, and
    it keeps the basket, settlement and group sync callers unchanged.
-4. **The count is raw SQL** (`count(*)::int ... WHERE "lineId" = ANY($1::uuid[]) GROUP BY 1`)
+6. **The count is raw SQL** (`count(*)::int ... WHERE "lineId" = ANY($1::uuid[]) GROUP BY 1`)
    beside the settlement summary, run in the same `Promise.all` as the three other page
    reads. A line with no row answers 0.
-5. **The schema states `commentCount` as required, `['integer', 'null']`, minimum 0.**
-6. **Item 3 is not built.** `hasLists` needs a second count in the zone summary query,
+7. **The schema states `commentCount` as required, `['integer', 'null']`, minimum 0.**
+8. **Item 3 is not built.** `hasLists` needs a second count in the zone summary query,
    whose index plan `zone-summary.integration.spec.ts` asserts with EXPLAIN, plus the
    summary reader, the zone counts broadcast and the zone schemas. That is a second query
    pattern outside the scope of this plan. It can be its own plan.

@@ -893,6 +893,11 @@ export class LineService {
    * product group, or the same product set, or free text on both sides.
    * Otherwise it creates a line beside the one that shares its name.
    *
+   * **A line that is not named is met by its products alone** (plan 0214). Its
+   * name is a product's name in the adder's locale, so an add of the same set
+   * with `named: false` lands on it in any language. It never lands on a line
+   * somebody named, even one that holds the same set.
+   *
    * What a merge does and refuses to do is {@link raiseForAdd}, and which line it
    * lands on is {@link findAddTarget}. The answer says which of the two
    * happened, because a caller reading it back to a person cannot tell from the
@@ -935,8 +940,11 @@ export class LineService {
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
 
+      // The flag the new line would carry, so an add that is not named meets
+      // a line that is not named by its products alone (plan 0214, section 1).
       const identities = lineIdentities({
         content: req.content,
+        named: namedOnAdd(req.named, itemIds.length > 0),
         itemSetHash: itemSetHash(itemIds),
         productGroupId,
       });
@@ -1082,6 +1090,7 @@ export class LineService {
       (item, index) =>
         lineIdentities({
           content: item.content,
+          named: namedOnAdd(item.named, itemSets[index].length > 0),
           itemSetHash: itemSetHash(itemSets[index]),
           productGroupId: null,
         })[0]
@@ -1392,7 +1401,10 @@ export class LineService {
     listId: string,
     keys: readonly string[],
     keysOf: (
-      candidate: Pick<ListLine, 'content' | 'itemSetHash' | 'productGroupId'>
+      candidate: Pick<
+        ListLine,
+        'content' | 'named' | 'itemSetHash' | 'productGroupId'
+      >
     ) => readonly string[]
   ): Promise<Map<string, ListLine>> {
     const wanted = new Set(keys);
@@ -1407,6 +1419,9 @@ export class LineService {
       select: {
         id: true,
         content: true,
+        // Half of what an add compares since plan 0214: a line that is not
+        // named is met by its products, whatever its name.
+        named: true,
         itemSetHash: true,
         productGroupId: true,
         approvalStatus: true,
