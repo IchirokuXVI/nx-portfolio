@@ -61,14 +61,12 @@
 
 <main #column class="page">
   @if (current.kind === 'gone') {
+    <!--
+      One sentence for a list this reader cannot read and for an id that names nothing,
+      because the reader cannot tell the two apart (velista 0156).
+    -->
     <div class="state">
-      <p class="state-body">
-        @if (current.reason === 'deleted') {
-          {{ 'list.gone.deleted' | rokuT }}
-        } @else {
-          {{ 'list.gone.unshared' | rokuT }}
-        }
-      </p>
+      <p class="state-body">{{ 'list.error.notAvailable' | rokuT }}</p>
 
       <button (click)="leave()" class="state-action" type="button">
         {{ 'list.header.back' | rokuT }}
@@ -96,6 +94,39 @@
     @if (header(); as list) {
       <lib-list-header [header]="list" />
     }
+
+    <!--
+      A quantity change the network dropped before the reconnect reloaded this page
+      (velista 0159). Said once, in the person's words, with a resend only when the
+      first attempt never left the phone. The live region is drawn while the page
+      loads and filled once it has, because a region inserted already filled is often
+      not announced.
+    -->
+    <div class="dropped" role="status">
+      @if (current.kind === 'loaded') {
+        @for (notice of droppedNotices(); track notice.id) {
+          <div class="trips-failed">
+            <p class="trips-failed-body">{{ notice.text }}</p>
+            @if (notice.canResend) {
+              <button
+                (click)="resendDropped(notice.id)"
+                class="state-action"
+                type="button"
+              >
+                {{ 'list.dropped.resend' | rokuT }}
+              </button>
+            }
+            <button
+              (click)="dismissDropped(notice.id)"
+              class="state-action"
+              type="button"
+            >
+              {{ 'list.dropped.dismiss' | rokuT }}
+            </button>
+          </div>
+        }
+      }
+    </div>
   }
 
   @if (current.kind === 'loading') {
@@ -209,7 +240,7 @@
     } @else if (current.empty) {
       <div class="state">
         <p class="state-title">{{ 'list.empty.title' | rokuT }}</p>
-        <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
+        <p class="state-body">{{ emptyBodyKey() | rokuT }}</p>
       </div>
     } @else {
       @let shown = groups();
@@ -471,5 +502,11 @@
   }
 }
 
-<!-- The four sheets. Routes, not template flags, so the back button dismisses them. -->
-<router-outlet />
+<!--
+  The sheets. Routes, not template flags, so the back button dismisses them. Drawn only
+  while the list is loading or loaded: over a list that is gone or failed a sheet would
+  open over nothing, and a write from it would only be refused (velista 0156).
+-->
+@if (current.kind === 'loading' || current.kind === 'loaded') {
+  <router-outlet />
+}

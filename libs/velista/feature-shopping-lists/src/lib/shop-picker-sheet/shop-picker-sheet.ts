@@ -404,6 +404,38 @@ export class ShopPickerSheet {
     return [...buttons.values()];
   });
 
+  /**
+   * The chains that price nothing on this basket (velista `0153`): every scope
+   * of the chain says `quotesBasket: false`. Backend `0213` names every scope of
+   * the profile, so such a chain has a button, says so under its name and stays
+   * choosable. A chain with one scope that quotes something is not in here.
+   */
+  protected readonly noPrices = computed<ReadonlySet<string>>(() => {
+    const quotes = new Map<string, boolean>();
+    for (const scope of this._view.priceScopes()) {
+      const key = chainKeyOf(scope);
+      quotes.set(
+        key,
+        (quotes.get(key) ?? false) || scope.quotesBasket !== false
+      );
+    }
+    return new Set(
+      [...quotes].filter(([, quoted]) => !quoted).map(([key]) => key)
+    );
+  });
+
+  /**
+   * Whether the read could not list every scope or shop of the profile
+   * (backend `0213`), which the picker says above the Near you results with a way to read
+   * again. The list may still hold some shops.
+   */
+  protected readonly incomplete = computed(
+    () => this._basket.basket()?.scopesIncomplete === true
+  );
+
+  /** Whether the read that "Try again" asked for is still out. */
+  protected readonly retrying = signal(false);
+
   /** The chain of the shop being bought at, whose button draws a tick. */
   protected readonly pickedChain = computed<string | null>(() => {
     const picked = this.pickedId();
@@ -458,6 +490,7 @@ export class ShopPickerSheet {
     readonly name: string;
     readonly logo: ChainLogoView;
     readonly count: number;
+    readonly noPrices: boolean;
   } | null>(() => {
     const open = this.openChain();
     const chain = this.chains().find((row) => row.key === open);
@@ -470,6 +503,7 @@ export class ShopPickerSheet {
       name,
       logo: { logoUrl: chain.logoUrl, name, store: false },
       count: chain.locations,
+      noPrices: this.noPrices().has(chain.key),
     };
   });
 
@@ -497,6 +531,23 @@ export class ShopPickerSheet {
 
   onQuery(query: string): void {
     this.typed.set(query);
+  }
+
+  /**
+   * "Try again" under the line that says the shops could not all be listed
+   * (velista `0153`): read the basket again, which brings the scopes again.
+   * One read at a time, so a second press waits for the first.
+   */
+  async retry(): Promise<void> {
+    if (this.retrying()) {
+      return;
+    }
+    this.retrying.set(true);
+    try {
+      await this._basket.refresh();
+    } finally {
+      this.retrying.set(false);
+    }
   }
 
   /**

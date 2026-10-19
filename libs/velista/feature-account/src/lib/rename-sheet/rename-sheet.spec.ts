@@ -125,9 +125,10 @@ describe('RenameSheet', () => {
     it('offers no way to reach ALL_ZONES', async () => {
       const { fixture } = await render();
 
-      expect(
-        radios(fixture).map((option) => option.value)
-      ).toEqual(['MY_GROUPS_TOO', 'ONLY_HERE']);
+      expect(radios(fixture).map((option) => option.value)).toEqual([
+        'MY_GROUPS_TOO',
+        'ONLY_HERE',
+      ]);
     });
 
     it('shows both options at once, so the consequence is not hidden', async () => {
@@ -268,13 +269,66 @@ describe('RenameSheet', () => {
       expect(profile.calls.filter((c) => c.method === 'rename')).toEqual([]);
     });
 
-    it('counts code points, so an emoji counts once', async () => {
+    it('counts code points, so a letter outside the basic plane counts once', async () => {
       const { fixture } = await render();
 
-      type(fixture, '🌊M');
+      type(fixture, '𝔄M');
 
       expect(fixture.componentInstance.length()).toBe(2);
       expect(primary(fixture).disabled).toBe(false);
+    });
+
+    it('takes 25 letters outside the basic plane, which are 50 UTF-16 units', async () => {
+      const { fixture } = await render();
+
+      type(fixture, '𝔄'.repeat(25));
+
+      // A `maxlength` counts UTF-16 units and would have stopped this name at 20.
+      expect(field(fixture).hasAttribute('maxlength')).toBe(false);
+      expect(fixture.componentInstance.length()).toBe(25);
+      expect(primary(fixture).disabled).toBe(false);
+    });
+
+    it('counts the name that is sent, with its spaces collapsed', async () => {
+      const { fixture } = await render();
+
+      type(fixture, ' Ana   Ruiz ');
+
+      expect(fixture.componentInstance.length()).toBe(8);
+    });
+
+    it('draws the rule an emoji breaks, before any request (velista 0160)', async () => {
+      const { fixture, profile } = await render();
+
+      type(fixture, 'Bruno 🍋 Peña');
+
+      const problem = fixture.nativeElement.querySelector(
+        '#account-rename-problem'
+      ) as HTMLElement | null;
+      expect(problem?.textContent?.trim()).toBe('account.error.nameCharacters');
+      expect(field(fixture).getAttribute('aria-invalid')).toBe('true');
+      expect(field(fixture).getAttribute('aria-describedby')).toBe(
+        'account-rename-problem'
+      );
+      expect(primary(fixture).disabled).toBe(true);
+
+      fixture.nativeElement
+        .querySelector('form')
+        .dispatchEvent(new Event('submit'));
+      await fixture.whenStable();
+      expect(profile.calls.filter((c) => c.method === 'rename')).toEqual([]);
+    });
+
+    it.each([
+      ['123', 'account.error.nameLetter'],
+      ['former member Marta', 'account.error.nameReserved'],
+    ])('draws the rule %s breaks', async (value, key) => {
+      const { fixture } = await render();
+
+      type(fixture, value);
+
+      expect(text(fixture)).toContain(key);
+      expect(primary(fixture).disabled).toBe(true);
     });
 
     it('states the rule rather than echoing the server on a bad name', async () => {
@@ -287,7 +341,9 @@ describe('RenameSheet', () => {
         }),
       });
 
-      type(fixture, 'former member Marta');
+      // A name the client's mirror accepts, refused by the server all the same: the
+      // server stays the authority.
+      type(fixture, 'Marta');
       primary(fixture).click();
       await fixture.whenStable();
 

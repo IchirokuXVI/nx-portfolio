@@ -30,6 +30,8 @@ interface FranchiseRow extends FranchiseButton {
   readonly other: boolean;
   readonly open: boolean;
   readonly logo: ChainLogoView;
+  /** Whether the line that says this chain prices nothing here is drawn. */
+  readonly noPrices: boolean;
 }
 
 /**
@@ -85,6 +87,14 @@ export class FranchiseButtons {
   readonly openKey = input<string | null>(null);
 
   /**
+   * The chains that price nothing here, which draw "No prices here yet" under
+   * their count and stay pressable (velista `0153`). Only the shop picker sets
+   * it: a basket names every chain of the profile, and some quote none of its
+   * products. Empty everywhere else.
+   */
+  readonly noPrices = input<ReadonlySet<string>>(new Set());
+
+  /**
    * A button was pressed: open it, or close it if it was already open.
    *
    * The only thing this list emits. Refusing a brand sits on the open franchise rather
@@ -104,6 +114,7 @@ export class FranchiseButtons {
   protected readonly rows = computed<readonly FranchiseRow[]>(() => {
     const locale = this._locale();
     const open = this.openKey();
+    const noPrices = this.noPrices();
 
     return this.chains().map((chain) => {
       // `catalogName`, because a chain the catalog named only in Spanish would
@@ -114,6 +125,7 @@ export class FranchiseButtons {
         label,
         other: chain.name === null,
         open: chain.key === open,
+        noPrices: noPrices.has(chain.key),
         logo: {
           logoUrl: chain.logoUrl,
           name: label,

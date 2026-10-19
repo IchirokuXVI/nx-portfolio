@@ -19,7 +19,13 @@ import {
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { Mutations, overlayKey, type Overlay } from '../mutations';
+import {
+  listWritesPage,
+  Mutations,
+  overlayKey,
+  type DroppedWriteDraft,
+  type Overlay,
+} from '../mutations';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -142,7 +148,12 @@ export class LineStore {
     new Map()
   );
 
-  /** How many comments the client has actually observed, per line. */
+  /**
+   * How many comments each line has, per line, as far as this client knows.
+   *
+   * From the lines read (backend `0214`), a comment page a sheet loaded, and the
+   * `comment.added` events since. A line with no entry has an unknown count.
+   */
   private readonly _commentCounts = signal<ReadonlyMap<string, number>>(
     new Map()
   );
@@ -378,7 +389,12 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, page.items);
+      // Taken before the first page replaces the array. That replacement drops every
+      // local line past the first page, and the later pages are merged against this
+      // snapshot, or a line past position 100 patched mid read would draw its old row.
+      const local = this._localLines(listId);
+      this._setLines(listId, this._mergeRead(local, page.items));
+      this._recordReadCounts(local, page.items);
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
@@ -386,7 +402,7 @@ export class LineStore {
       // function and loses only drag until this finishes, which is rule L4's cost and
       // it is paid in the background rather than in front of the reader.
       if (page.nextCursor !== null) {
-        void this._loadRest(listId, page.nextCursor);
+        void this._loadRest(listId, page.nextCursor, local);
       }
     } catch (error) {
       this._setError(listId, error);
@@ -409,12 +425,14 @@ export class LineStore {
         order: 'position',
       });
 
-      this._setLines(listId, page.items);
+      const local = this._localLines(listId);
+      this._setLines(listId, this._mergeRead(local, page.items));
+      this._recordReadCounts(local, page.items);
       this._setCursor(listId, page.nextCursor);
       this._setState(listId, 'loaded');
 
       if (page.nextCursor !== null) {
-        void this._loadRest(listId, page.nextCursor);
+        void this._loadRest(listId, page.nextCursor, local);
       }
     } catch {
       // Deliberately quiet. What is on screen is not made worse by a reread that did
@@ -633,10 +651,16 @@ export class LineStore {
    * negation of the delta: by the time a failure returns, somebody else's delta may
    * have landed, and subtracting ours from their result would invent a third number
    * nobody asked for.
+   *
+   * @param options.reportDropped write a delta the network dropped down for the list
+   *   page's next document (velista `0159`). Only the list page passes it: the
+   *   notice and its "Send it again" are drawn there, and an entry recorded by the
+   *   line page or the catalog would surface on a page that never made the write.
    */
   async addQuantity(
     lineId: string,
-    delta: number
+    delta: number,
+    options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
@@ -651,7 +675,23 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta)
+      () => this._lines.addQuantity(lineId, delta),
+      // Velista `0159`: the reconnect reloads the page and this row's note goes with
+      // it, so a delta the network dropped is written down for the next document.
+      // The name is the line's own text, which the page swaps for the name it draws.
+      options.reportDropped === true
+        ? {
+            page: listWritesPage(before.listId),
+            subject: overlayKey(lineId, 'quantity'),
+            lineId,
+            key: 'list.dropped.quantity',
+            args: {
+              name: before.content,
+              delta: delta > 0 ? `+${delta}` : `${delta}`,
+            },
+            replay: { kind: 'line-quantity', lineId, delta },
+          }
+        : undefined
     );
   }
 
@@ -1040,11 +1080,11 @@ export class LineStore {
   }
 
   /**
-   * Record how many comments a line has, from a page the caller actually loaded.
+   * Record how many comments a line has, from a source that knows.
    *
-   * The only honest source there is. `LineView` carries no count and nothing on the
-   * wire does, so the row shows a number exactly when the client has seen the
-   * comments and nothing at all otherwise.
+   * The lines read counts them (backend `0214`), and so does a comment page the
+   * caller loaded. Events and write answers carry null, which means unknown, so they
+   * never reach here: the row keeps the count it has rather than drawing a zero.
    */
   recordCommentCount(lineId: string, count: number): void {
     this._commentCounts.update((current) =>
@@ -1147,7 +1187,8 @@ export class LineStore {
     before: Line,
     fields: readonly string[],
     apply: (line: Line) => Line,
-    send: () => Promise<Line>
+    send: () => Promise<Line>,
+    dropped?: DroppedWriteDraft
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const listId = before.listId;
 
@@ -1166,7 +1207,8 @@ export class LineStore {
       overlay,
       send,
       (line) => line.version,
-      before.version
+      before.version,
+      dropped
     );
 
     if (outcome.state === 'failed') {
@@ -1192,7 +1234,18 @@ export class LineStore {
     return 'succeeded';
   }
 
-  private async _loadRest(listId: string, from: string): Promise<void> {
+  /**
+   * Follow the cursor to the end of a list.
+   *
+   * `local` is the list's lines as they stood before the first page replaced them.
+   * Each later page is merged against it by the same rule as the first (plan 0158,
+   * item 2), because by now the store no longer holds the lines past the first page.
+   */
+  private async _loadRest(
+    listId: string,
+    from: string,
+    local: ReadonlyMap<string, Line>
+  ): Promise<void> {
     let cursor: string | null = from;
     // Cursors already followed. A server that answered with the cursor it was handed
     // would otherwise put this loop into a request per turn, forever, on a phone. It
@@ -1211,8 +1264,9 @@ export class LineStore {
 
         this._setLines(listId, [
           ...(this._byList().get(listId) ?? []),
-          ...page.items,
+          ...this._mergeRead(local, page.items),
         ]);
+        this._recordReadCounts(local, page.items);
         cursor = page.nextCursor;
         this._setCursor(listId, cursor);
       }
@@ -1376,6 +1430,13 @@ export class LineStore {
    * changing away from.
    */
   private _reconcile(local: Line, incoming: Line): Line {
+    // An event older than what this device holds is refused whole (plan 0158, item 2).
+    // Events carry no origin and arrive in no promised order, so without this the
+    // echo of an earlier state that lands last would put that state back.
+    if (incoming.version < local.version) {
+      return local;
+    }
+
     const claims = (field: string): boolean =>
       this._mutations.claims(overlayKey(local.id, field)) ||
       this._mutations.claims(overlayKey(local.id, 'content+quantity'));
@@ -1395,6 +1456,82 @@ export class LineStore {
       // therefore correct, and stating it here is what stops somebody "fixing" it
       // into the pattern above the next time a field is added.
     };
+  }
+
+  /**
+   * A read of one list's lines against what this device already holds, line by line
+   * (plan 0158, item 2).
+   *
+   * The read decides which lines exist and in what order. For each line it names, the
+   * local copy is kept when it is newer than the read, or while this device is writing
+   * to it. A read started before a write committed and answered after it carries the
+   * old row, and replacing the array whole put that old row back: a product chosen in
+   * the catalog vanished from its own list until a reload. Version wins, not arrival
+   * order.
+   */
+  private _mergeRead(
+    local: ReadonlyMap<string, Line>,
+    incoming: readonly Line[]
+  ): readonly Line[] {
+    return incoming.map((line) => {
+      const mine = local.get(line.id);
+      return mine !== undefined && this._keepsLocal(mine, line) ? mine : line;
+    });
+  }
+
+  /**
+   * The comment counts a read knows, recorded in one write (velista `0158`, item 6).
+   *
+   * The same rule as {@link _mergeRead}: a line kept from the local copy keeps its
+   * count too, and a line whose read says null or nothing keeps the count this device
+   * already holds. Only a number replaces one.
+   *
+   * A number never lowers a count this device already knows. Posting a comment does
+   * not bump the version of its line, so a read whose count query ran before the
+   * comment committed can land after the `comment.added` event and answer 2 where the
+   * event already made 3. The larger value is safe because a comment is never deleted
+   * on its own (only with its line), so a count can only grow.
+   */
+  private _recordReadCounts(
+    local: ReadonlyMap<string, Line>,
+    incoming: readonly Line[]
+  ): void {
+    const known = incoming.filter((line) => {
+      const mine = local.get(line.id);
+      return (
+        typeof line.commentCount === 'number' &&
+        (mine === undefined || !this._keepsLocal(mine, line))
+      );
+    });
+    if (known.length === 0) {
+      return;
+    }
+
+    this._commentCounts.update((current) => {
+      const next = new Map(current);
+      for (const line of known) {
+        next.set(
+          line.id,
+          Math.max(next.get(line.id) ?? 0, line.commentCount as number)
+        );
+      }
+      return next;
+    });
+  }
+
+  /** The lines this device holds for one list, by id. */
+  private _localLines(listId: string): ReadonlyMap<string, Line> {
+    return new Map(
+      (this._byList().get(listId) ?? []).map((line) => [line.id, line])
+    );
+  }
+
+  /** Whether the local copy of a line outranks a read of it. */
+  private _keepsLocal(local: Line, incoming: Line): boolean {
+    return (
+      local.version > incoming.version ||
+      this._writes().get(local.id)?.outcome === 'pending'
+    );
   }
 
   private _nextPosition(listId: string): number {

@@ -59,6 +59,36 @@
   color: var(--app-status-info-fg);
 }
 
+// The shops could not all be listed (velista `0153`): the line and its button
+// on one row, the button falling under the words on a narrow phone.
+.incomplete {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.retry {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: none;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:disabled {
+    color: var(--app-text-muted);
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
 // The placeholder rows while the device and the server answer, in the shape of
 // the shop list's own card and rows.
 .card {

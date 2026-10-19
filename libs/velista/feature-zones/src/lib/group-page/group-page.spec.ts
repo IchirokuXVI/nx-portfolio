@@ -11,6 +11,7 @@ import {
   fakeMemberNames,
   fakePresenceStore,
   fakeZoneStore,
+  GatewayError,
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
@@ -19,8 +20,13 @@ import {
   type FakeListStore,
   type FakePresenceOptions,
   type FakeZoneStore,
+  type ZoneLoadState,
 } from '@portfolio/velista/data-access';
-import type { MyZone, ShoppingListSummary } from '@portfolio/velista/models';
+import type {
+  ErrorCode,
+  MyZone,
+  ShoppingListSummary,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -87,6 +93,44 @@ interface Options {
   readonly browser?: Partial<BrowserFacade>;
   /** The mount. `/velista` unless a test is about the standalone build. */
   readonly basePath?: string;
+  /**
+   * What reading the group fails with, on a cold deep link (plan 0157).
+   *
+   * Set, the group is not cached and every `loadZone` fails the way the real store
+   * does: the error is kept and the zone's own state turns `failed`.
+   */
+  readonly zoneLoadError?: unknown;
+}
+
+/**
+ * The zone double with a read of this group that fails, the way `ZoneStore.loadZone`
+ * fails.
+ *
+ * The real store keeps the error twice: in the `error` slot every read shares, and
+ * against the zone in `zoneErrorOf`. It marks the zone `failed`. A read of any other
+ * zone succeeds and clears the shared slot, as the real one does, which is what a
+ * realtime event that reloads another group looks like to this page (velista 0157).
+ */
+function failingZoneLoad(store: FakeZoneStore, cause: unknown): FakeZoneStore {
+  const states = signal<ReadonlyMap<string, ZoneLoadState>>(new Map());
+  const errors = signal<ReadonlyMap<string, unknown>>(new Map());
+
+  return {
+    ...store,
+    zoneState: states.asReadonly(),
+    zoneErrorOf: (zoneId: string) => errors().get(zoneId) ?? null,
+    loadZone: async (zoneId: string) => {
+      await Promise.resolve();
+      const failed = zoneId === ZONE_ID;
+      store.setState('loaded', failed ? cause : null);
+      states.update((current) =>
+        new Map(current).set(zoneId, failed ? 'failed' : 'loaded')
+      );
+      if (failed) {
+        errors.update((current) => new Map(current).set(zoneId, cause));
+      }
+    },
+  };
 }
 
 async function render(options: Options = {}): Promise<{
@@ -99,9 +143,13 @@ async function render(options: Options = {}): Promise<{
   TestBed.resetTestingModule();
 
   const seeded = options.zone ?? zone();
-  const zones = fakeZoneStore({
-    zones: options.noZoneCached === true ? [] : [seeded],
-  });
+  const cold =
+    options.noZoneCached === true || options.zoneLoadError !== undefined;
+  const seededZones = fakeZoneStore({ zones: cold ? [] : [seeded] });
+  const zones =
+    options.zoneLoadError === undefined
+      ? seededZones
+      : failingZoneLoad(seededZones, options.zoneLoadError);
   const lists = fakeListStore({
     lists: options.lists ?? [],
     state: options.listsState ?? 'loaded',
@@ -318,6 +366,80 @@ describe('GroupPage', () => {
     });
 
     expect(text(fixture)).toContain('Weekly shop');
+  });
+
+  /**
+   * Plan 0157, item 1: a group URL the reader may not read draws one sentence and a
+   * way home. It used to draw "not available to you" over "something went wrong on
+   * our side", a Try again and a reference line, which said two opposite things.
+   */
+  describe('a group the reader cannot read', () => {
+    const failure = (code: ErrorCode, status: number) =>
+      new GatewayError({ code, status, correlationId: 'ref-7' });
+
+    it.each<[ErrorCode, number]>([
+      ['not_found', 404],
+      ['forbidden', 403],
+    ])(
+      'draws one sentence and Home on a %s, with no retry and no reference',
+      async (code, status) => {
+        const { fixture } = await render({
+          zoneLoadError: failure(code, status),
+        });
+
+        expect(text(fixture)).toContain('zone.error.notAvailable');
+        expect(text(fixture)).not.toContain('home.error.body');
+        expect(query(fixture, 'lib-error-state')).toBeNull();
+        expect(query(fixture, '.reference')).toBeNull();
+        expect(text(fixture)).not.toContain('home.error.retry');
+        expect(
+          query(fixture, 'main .state .primary')?.textContent?.trim()
+        ).toBe('nav.home');
+      }
+    );
+
+    it('stays not available when another group is read', async () => {
+      // A realtime `zone created` or membership event reloads a different group.
+      // That read clears the store's shared error, and a page drawn from the shared
+      // slot flipped to the generic block with Try again.
+      const { fixture, zones } = await render({
+        zoneLoadError: failure('not_found', 404),
+      });
+
+      await zones.loadZone('another-zone');
+      fixture.detectChanges();
+
+      expect(zones.error()).toBeNull();
+      expect(text(fixture)).toContain('zone.error.notAvailable');
+      expect(query(fixture, 'lib-error-state')).toBeNull();
+    });
+
+    it('goes to the dashboard from Home', async () => {
+      const { fixture, router } = await render({
+        zoneLoadError: failure('not_found', 404),
+      });
+
+      (query(fixture, 'main .state .primary') as HTMLButtonElement).click();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
+    });
+
+    it('keeps the generic block, its title and its reference on a 500', async () => {
+      const { fixture } = await render({
+        zoneLoadError: failure('internal', 500),
+      });
+      const block = query(fixture, 'lib-error-state');
+
+      expect(block?.querySelector('.title')?.textContent?.trim()).toBe(
+        'zone.error.loadFailed'
+      );
+      expect(block?.querySelector('.body')?.textContent?.trim()).toBe(
+        'home.error.body'
+      );
+      expect(block?.querySelector('.reference')).not.toBeNull();
+      expect(text(fixture)).toContain('home.error.retry');
+      expect(text(fixture)).not.toContain('zone.error.notAvailable');
+    });
   });
 
   describe('a membership that is still waiting', () => {

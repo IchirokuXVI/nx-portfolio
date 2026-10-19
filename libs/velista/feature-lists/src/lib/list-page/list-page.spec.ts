@@ -1,7 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  RouterOutlet,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -11,6 +16,7 @@ import {
   AssistantMemory,
   CATALOG_SERVICE,
   CatalogMemory,
+  DroppedWrites,
   DUE_LINE_SERVICE,
   DueLineStore,
   fakeItemNames,
@@ -21,7 +27,11 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  LINE_SERVICE,
+  LineStore,
+  LIST_SERVICE,
   ListViewStore,
+  overlayKey,
   ProductPickStore,
   provideFakeCategoryStore,
   provideFakeItemNames,
@@ -37,12 +47,15 @@ import {
   TRIP_SERVICE,
   TripStore,
   type AssistantServiceI,
+  type DroppedWriteDraft,
   type DueLineServiceI,
   type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type LineServiceI,
+  type ListServiceI,
   type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
@@ -51,6 +64,7 @@ import type {
   DueLine,
   Line,
   LineRowVm,
+  ListAccessEntry,
   ListPermission,
   Membership,
   MyZone,
@@ -78,7 +92,9 @@ import {
   ToBuyHeading,
   TripGroup,
 } from '@portfolio/velista/ui';
-import { BehaviorSubject, of } from 'rxjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BehaviorSubject } from 'rxjs';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -208,6 +224,21 @@ interface Options {
   readonly connected?: boolean;
   /** What `PageReturn` hands back, which makes this arrival a return to the page. */
   readonly returned?: unknown;
+  /** Writes an earlier document of this tab lost to the network (velista `0159`). */
+  readonly dropped?: readonly DroppedWriteDraft[];
+  /**
+   * What the lines read answers. Set, the page gets the real `LineStore` over a
+   * service that answers this, in place of the fake (velista `0158`, item 6).
+   */
+  readonly lineRead?: readonly Line[];
+  /** What the read of the lines failed with, beside `linesState: 'failed'`. */
+  readonly linesError?: unknown;
+  /** What the read of the group failed with, on a group that is not cached (velista 0156). */
+  readonly zoneError?: unknown;
+  /** A sheet URL over the page: the route has a child (velista 0156). */
+  readonly sheetOpen?: boolean;
+  /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
+  readonly access?: readonly ListAccessEntry[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -246,7 +277,10 @@ async function render(options: Options = {}): Promise<{
 
   const tone = { play: jest.fn() };
 
-  const zones = fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] });
+  const zones =
+    options.zoneError === undefined
+      ? fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] })
+      : failedZoneStore(options.zoneError);
   const lists = fakeListStore({
     lists: options.lists ?? [
       list({
@@ -260,6 +294,7 @@ async function render(options: Options = {}): Promise<{
     lines: options.lines ?? [line('ln-1')],
     state: options.linesState ?? 'loaded',
     complete: options.complete ?? true,
+    error: options.linesError,
   });
   const realtime = new RealtimeMemory();
   realtime.setConnected(options.connected ?? true);
@@ -310,7 +345,8 @@ async function render(options: Options = {}): Promise<{
   };
   const activatedRoute = route(
     options.line,
-    options.search === true ? { search: '1' } : {}
+    options.search === true ? { search: '1' } : {},
+    options.sheetOpen ?? false
   );
   // The bottom bar's owner, as a double (velista `0117`): the router here is a
   // fake with no state to read, and what matters is what the page tells it.
@@ -323,7 +359,20 @@ async function render(options: Options = {}): Promise<{
       provideFakeBrowserFacade(storage),
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
-      provideFakeLineStore(lines),
+      ...(options.lineRead === undefined
+        ? [provideFakeLineStore(lines)]
+        : [
+            LineStore,
+            {
+              provide: LINE_SERVICE,
+              useValue: {
+                listLines: async () => ({
+                  items: options.lineRead ?? [],
+                  nextCursor: null,
+                }),
+              } as Partial<LineServiceI>,
+            },
+          ]),
       // What the route provides beside the page (velista `0082`), real, over the
       // fakes above, so a spec asserts what the page draws of a real view.
       ListViewStore,
@@ -372,8 +421,19 @@ async function render(options: Options = {}): Promise<{
       // The blip that says a recording left the device. A fake, so a spec can ask
       // whether it was played without a browser and without making a noise.
       { provide: NOTIFICATION_TONE, useValue: tone },
+      // Who else holds an empty private list (velista `0152`, item 4).
+      {
+        provide: LIST_SERVICE,
+        useValue: {
+          getListAccess: async () => options.access ?? [],
+        } as unknown as ListServiceI,
+      },
     ],
   }).compileComponents();
+
+  for (const dropped of options.dropped ?? []) {
+    TestBed.inject(DroppedWrites).record(dropped);
+  }
 
   const fixture = TestBed.createComponent(ListPage);
   fixture.detectChanges();
@@ -409,8 +469,13 @@ async function render(options: Options = {}): Promise<{
  * because none of this page's three line sheets simply shows a line and all three do
  * something to one.
  */
-function route(line?: string, extra: Record<string, string> = {}) {
+function route(
+  line?: string,
+  extra: Record<string, string> = {},
+  sheetOpen = false
+) {
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
+  const paramMap = new BehaviorSubject(map);
   const queryOf = (params: Record<string, string>) =>
     convertToParamMap(line === undefined ? params : { line, ...params });
   const queryParamMap = new BehaviorSubject(queryOf(extra));
@@ -421,10 +486,12 @@ function route(line?: string, extra: Record<string, string> = {}) {
   };
 
   return {
-    paramMap: of(map),
+    paramMap,
     queryParamMap,
     snapshot,
     parent: null,
+    // A sheet URL is a child route of the page (velista 0156).
+    firstChild: sheetOpen ? { snapshot: {} } : null,
     /**
      * The URL's query changing under the page, as a navigation or the phone's back
      * button changes it (velista `0109`). `?line=` is kept, as the router keeps it.
@@ -433,6 +500,24 @@ function route(line?: string, extra: Record<string, string> = {}) {
       snapshot.queryParamMap = queryOf(params);
       queryParamMap.next(snapshot.queryParamMap);
     },
+    /** Another list of the same group, as a navigation between them moves it. */
+    setList(listId: string): void {
+      snapshot.paramMap = convertToParamMap({ zoneId: ZONE_ID, listId });
+      paramMap.next(snapshot.paramMap);
+    },
+  };
+}
+
+/**
+ * A group that is not cached and whose read failed (velista 0156): the shape the real
+ * `ZoneStore` leaves after `loadZone` on an uncached id that answered an error.
+ */
+function failedZoneStore(error: unknown) {
+  const fake = fakeZoneStore({ zones: [], error });
+  return {
+    ...fake,
+    zoneState: signal(new Map([[ZONE_ID, 'failed' as const]])).asReadonly(),
+    loadZone: async () => undefined,
   };
 }
 
@@ -706,13 +791,35 @@ describe('ListPage', () => {
     it('calls the page gone once the lists came back without it', async () => {
       const { fixture } = await render({ lists: [], listsState: 'loaded' });
 
-      expect(fixture.nativeElement.textContent).toContain('list.gone.unshared');
+      expect(fixture.nativeElement.textContent).toContain(
+        'list.error.notAvailable'
+      );
     });
 
     it('shows the name on the first frame when it was cached', async () => {
       const { fixture } = await render();
 
       expect(fixture.nativeElement.textContent).toContain('Weekly shop');
+    });
+  });
+
+  describe('the comment badge on a cold load (velista 0158, item 6)', () => {
+    it('draws the count the lines read carries', async () => {
+      // The real store over a read that counts, which is what a reload is: no
+      // comment page loaded and no event watched, and the badge still shows.
+      const { fixture } = await render({
+        lineRead: [
+          line('ln-1', { commentCount: 2 }),
+          line('ln-2', { position: 2, commentCount: null }),
+        ],
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const badges = fixture.debugElement.queryAll(By.css('.comment-count'));
+      expect(badges).toHaveLength(1);
+      // The glyph's stub reads as text in a spec, so the number is matched at the end.
+      expect(badges[0].nativeElement.textContent.trim()).toMatch(/(^|\s)2$/);
     });
   });
 
@@ -1323,6 +1430,108 @@ describe('ListPage', () => {
 
       expect(fixture.nativeElement.textContent).toContain('list.empty.title');
       expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    // Velista `0152`, item 4: "everyone here sees it" is false on a private list.
+    const body = (fixture: ComponentFixture<ListPage>) =>
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.state-body')
+        ?.textContent?.trim();
+
+    async function emptyList(options: Options) {
+      const rendered = await render({
+        lines: [],
+        members: [member('u1', 'Me', 'MEMBER')],
+        ...options,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('says nobody else has it when the list is private and nobody holds it', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [{ membershipId: 'm-u1', permissions: ADMIN }],
+      });
+
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+    });
+
+    it('keeps the shared wording when somebody else holds the private list', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access: [
+          { membershipId: 'm-u1', permissions: ADMIN },
+          { membershipId: 'm-toni', permissions: ['READ'] },
+        ],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    // The settings sheet is a child route, so the page outlives it and must not keep
+    // the answer it read before the sheet opened.
+    const closeSheet = async (fixture: ComponentFixture<ListPage>) => {
+      fixture.debugElement
+        .query(By.directive(RouterOutlet))
+        .injector.get(RouterOutlet)
+        .deactivateEvents.emit({});
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    };
+
+    it('reads again when a sheet closes, so a grant made there brings the shared wording back', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      // Toni was given a row in the settings sheet, which then closed.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      await closeSheet(fixture);
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('reads again after the list is shared with the group and made private again', async () => {
+      const access: ListAccessEntry[] = [
+        { membershipId: 'm-u1', permissions: ADMIN },
+      ];
+      const { fixture, lists } = await emptyList({
+        lists: [list({ sharedWithZone: false, lineCount: 0 })],
+        access,
+      });
+      expect(body(fixture)).toBe('list.empty.bodyPrivate');
+
+      lists.set([list({ sharedWithZone: true, lineCount: 0 })]);
+      fixture.detectChanges();
+      expect(body(fixture)).toBe('list.empty.body');
+
+      // The flip on gave Toni a row, and turning it off took nothing back.
+      access.push({ membershipId: 'm-toni', permissions: ['READ'] });
+      lists.set([list({ sharedWithZone: false, lineCount: 0 })]);
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(body(fixture)).toBe('list.empty.body');
+    });
+
+    it('keeps the shared wording on a list shared with the group', async () => {
+      const { fixture } = await emptyList({
+        lists: [list({ sharedWithZone: true, lineCount: 0 })],
+      });
+
+      expect(body(fixture)).toBe('list.empty.body');
     });
   });
 
@@ -2796,5 +3005,310 @@ describe('ListPage: a row with no product (velista 0145)', () => {
     ).click();
 
     expect(itemNames.refreshed.at(-1)).toEqual(['milk']);
+  });
+});
+
+/**
+ * Velista `0159`: the reconnect reloads the page, and the inline note of a quantity
+ * that did not save goes with it. The store wrote the change down first, and the page
+ * it was made on says what was lost.
+ */
+describe('ListPage: a write the network dropped (velista 0159)', () => {
+  function dropped(
+    overrides: Partial<DroppedWriteDraft> = {}
+  ): DroppedWriteDraft {
+    return {
+      page: `list:${LIST_ID}`,
+      // Built as the store builds it, so a spec that settles the entry by its
+      // subject would find it.
+      subject: overlayKey('ln-1', 'quantity'),
+      lineId: 'ln-1',
+      key: 'list.dropped.quantity',
+      args: { name: 'Pan de pueblo', delta: '+1' },
+      replay: { kind: 'line-quantity', lineId: 'ln-1', delta: 1 },
+      ...overrides,
+    };
+  }
+
+  function notice(fixture: ComponentFixture<ListPage>) {
+    return query(fixture, '.dropped');
+  }
+
+  /** How many lost changes the region holds. The region itself is always drawn. */
+  function entries(fixture: ComponentFixture<ListPage>): number {
+    return notice(fixture)?.querySelectorAll('.trips-failed').length ?? 0;
+  }
+
+  function action(fixture: ComponentFixture<ListPage>, name: string) {
+    return [...(notice(fixture)?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent?.trim() === name
+    ) as HTMLButtonElement | undefined;
+  }
+
+  it('names the change it lost, and sends it again through the normal path', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped()],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.lost'
+    );
+
+    action(fixture, 'list.dropped.resend')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'ln-1',
+      delta: 1,
+    });
+    expect(entries(fixture)).toBe(0);
+    // Read once and cleared: a reload now draws nothing.
+    expect(TestBed.inject(DroppedWrites).take(`list:${LIST_ID}`)).toEqual([]);
+  });
+
+  it('offers no resend for a change that may have reached the server', async () => {
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped({ replay: null })],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.unsure'
+    );
+    expect(action(fixture, 'list.dropped.resend')).toBeUndefined();
+
+    action(fixture, 'list.dropped.dismiss')?.click();
+    fixture.detectChanges();
+
+    expect(entries(fixture)).toBe(0);
+    expect(lines.calls).not.toContainEqual(
+      expect.objectContaining({ kind: 'quantity' })
+    );
+  });
+
+  it('draws nothing for a change made on another list', async () => {
+    const { fixture } = await render({
+      dropped: [dropped({ page: 'list:another' })],
+    });
+
+    expect(entries(fixture)).toBe(0);
+  });
+
+  it('keeps the live region on the page before it has anything to say', async () => {
+    // A region inserted already filled is often not announced, so it is there
+    // empty and the sentence arrives into it.
+    const { fixture } = await render({});
+
+    expect(notice(fixture)?.getAttribute('role')).toBe('status');
+    expect(entries(fixture)).toBe(0);
+  });
+});
+
+/**
+ * Velista 0156: a list this reader cannot read, or whose id names nothing, draws one
+ * translated sentence and one way back, with no sheet over it. A 403 and a 404 keep
+ * the same sentence, because a reader cannot tell them apart and must not learn which
+ * lists exist.
+ */
+describe('ListPage: a list you cannot read says one thing (velista 0156)', () => {
+  const forbidden = new GatewayError({
+    code: 'forbidden',
+    status: 403,
+    correlationId: 'cid-403',
+  });
+  const missing = new GatewayError({
+    code: 'not_found',
+    status: 404,
+    correlationId: 'cid-404',
+  });
+
+  it('draws the not available sentence on a 403 of the lines, and no raw key', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+    });
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('list.error.notAvailable');
+    expect(text).not.toContain('list.gone');
+    expect(query(fixture, 'lib-error-state')).toBeNull();
+    expect(query(fixture, 'main .state-action')?.textContent?.trim()).toBe(
+      'list.header.back'
+    );
+  });
+
+  it('draws the same sentence on a 404, so the two cannot be told apart', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: missing,
+    });
+
+    expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+      'list.error.notAvailable'
+    );
+  });
+
+  it('takes the reader back to the group', async () => {
+    const { fixture, router } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+    });
+
+    query(fixture, 'main .state-action')?.click();
+    await fixture.whenStable();
+
+    expect(router.navigateByUrl).toHaveBeenCalledWith(
+      `/velista/en/zones/${ZONE_ID}`
+    );
+  });
+
+  it('draws no sheet over a gone list, and replaces the sheet URL with the page', async () => {
+    const { fixture, router, activatedRoute } = await render({
+      linesState: 'failed',
+      linesError: forbidden,
+      sheetOpen: true,
+    });
+
+    expect(query(fixture, 'router-outlet')).toBeNull();
+    expect(router.navigate).toHaveBeenCalledWith(['.'], {
+      relativeTo: activatedRoute,
+      replaceUrl: true,
+    });
+  });
+
+  it('draws no sheet over a list the lists came back without', async () => {
+    const { fixture } = await render({
+      lists: [],
+      listsState: 'loaded',
+      sheetOpen: true,
+    });
+
+    expect(query(fixture, 'router-outlet')).toBeNull();
+  });
+
+  it('draws no sheet over a list whose lines failed for another reason', async () => {
+    const { fixture } = await render({
+      linesState: 'failed',
+      linesError: new Error('offline'),
+    });
+
+    expect(query(fixture, 'lib-error-state')).not.toBeNull();
+    expect(query(fixture, 'router-outlet')).toBeNull();
+  });
+
+  it('keeps the sheets over a list that loads or loaded, and leaves its URL alone', async () => {
+    const loading = await render({ linesState: 'loading', sheetOpen: true });
+    expect(query(loading.fixture, 'router-outlet')).not.toBeNull();
+
+    const loaded = await render({ sheetOpen: true });
+    expect(query(loaded.fixture, 'router-outlet')).not.toBeNull();
+    expect(loaded.router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('draws the sentence and never the lines when the group read is refused', async () => {
+    for (const error of [forbidden, missing]) {
+      const { fixture } = await render({ zoneError: error });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+        'list.error.notAvailable'
+      );
+      expect(query(fixture, 'lib-line-list')).toBeNull();
+      expect(query(fixture, 'lib-list-notice')).toBeNull();
+    }
+  });
+
+  it('stays unreadable on another list of the same refused group', async () => {
+    // Both lists in the group's answer, so only the group read can say the second one
+    // is unreadable.
+    const { fixture, activatedRoute } = await render({
+      zoneError: forbidden,
+      lists: [list({ myPermissions: ADMIN }), list({ id: 'list-2' })],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    activatedRoute.setList('list-2');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'main .state-body')?.textContent?.trim()).toBe(
+      'list.error.notAvailable'
+    );
+    expect(query(fixture, 'lib-line-list')).toBeNull();
+  });
+
+  it('keeps the lines when the group read fails for another reason', async () => {
+    const { fixture } = await render({ zoneError: new Error('offline') });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-line-list')).not.toBeNull();
+  });
+});
+
+/**
+ * Velista 0156: the gone block drew `list.gone.unshared`, a key plan 0083 had removed,
+ * and the spec asserting it passed because the testing translator echoes keys. So this
+ * walks every translation key the list page and the line pages name in their templates
+ * and asserts each exists in both locale files, read from disk at test time.
+ */
+describe('every key the list and line page templates name exists in both locales', () => {
+  const LIB = join(__dirname, '..');
+  const I18N = join(__dirname, '..', '..', '..', '..', 'ui', 'assets', 'i18n');
+  const TEMPLATES = [
+    'list-page/list-page.html',
+    'line-page/line-page.html',
+    'line-history-page/line-history-page.html',
+  ];
+
+  /** Every quoted literal shaped like a key, and every literal key input. */
+  function keysIn(template: string): string[] {
+    const withoutComments = template.replace(/<!--[\s\S]*?-->/g, '');
+    const quoted = [...withoutComments.matchAll(/'([a-zA-Z]\w*(?:\.\w+)+)'/g)];
+    const inputs = [
+      ...withoutComments.matchAll(/\b(?:messageKey|labelKey)="([\w.]+)"/g),
+    ];
+    return [...quoted, ...inputs].map((match) => match[1]);
+  }
+
+  function has(locale: Record<string, unknown>, key: string): boolean {
+    const parts = key.split('.');
+    const last = parts.pop() as string;
+    let node: unknown = locale;
+    for (const part of parts) {
+      node = (node as Record<string, unknown> | undefined)?.[part];
+    }
+    const leaf = node as Record<string, unknown> | undefined;
+    // A key read with a count resolves to its plural forms.
+    return [last, `${last}_one`, `${last}_other`].some(
+      (name) => typeof leaf?.[name] === 'string'
+    );
+  }
+
+  for (const locale of ['en', 'es']) {
+    it(`finds every key in ${locale}.json`, () => {
+      const json = JSON.parse(
+        readFileSync(join(I18N, `${locale}.json`), 'utf8')
+      ) as Record<string, unknown>;
+
+      const absent = TEMPLATES.flatMap((template) =>
+        keysIn(readFileSync(join(LIB, template), 'utf8'))
+          .filter((key) => !has(json, key))
+          .map((key) => `${template}: ${key}`)
+      );
+
+      expect(absent).toEqual([]);
+    });
+  }
+
+  it('reads the keys it checks, so an empty walk cannot pass', () => {
+    const keys = keysIn(readFileSync(join(LIB, TEMPLATES[0]), 'utf8'));
+    expect(keys).toContain('list.header.back');
+    expect(keys).toContain('list.readOnly.banner');
   });
 });

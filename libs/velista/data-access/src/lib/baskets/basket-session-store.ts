@@ -1,5 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import type { BasketSession } from '@portfolio/velista/models';
+import {
+  BASKET_ACCESS_ENDED_REASONS,
+  type BasketAccessEnded,
+  type BasketSession,
+} from '@portfolio/velista/models';
 import { basketSessionKey, BrowserFacade } from '@portfolio/velista/platform';
 
 /**
@@ -68,7 +72,8 @@ export class BasketSessionStore {
         participantId: session.participantId,
         secret: session.secret,
         socketToken: session.socketToken,
-        socketTokenExpiresAt: session.socketTokenExpiresAt?.toISOString() ?? null,
+        socketTokenExpiresAt:
+          session.socketTokenExpiresAt?.toISOString() ?? null,
       })
     );
   }
@@ -86,15 +91,51 @@ export class BasketSessionStore {
   }
 
   /**
+   * Drop a refused credential and remember why it ended (velista `0154`).
+   *
+   * The marker takes the credential's place under the same key, so nothing that
+   * reads a credential finds one: {@link read} answers null for it. What it keeps is
+   * the one fact a reload needs. Without it a guest who was removed and reloads
+   * holds nothing, and reads as somebody who never joined.
+   *
+   * It has no expiry of its own and needs none. A join through a new link writes a
+   * credential over it, and {@link forget} removes it with everything else.
+   */
+  end(basketId: string, reason: BasketAccessEnded): void {
+    this._browser.writeStorage(
+      basketSessionKey(basketId),
+      JSON.stringify({ ended: reason })
+    );
+  }
+
+  /** Why this device's place on a basket ended, or null when it holds no marker. */
+  ended(basketId: string): BasketAccessEnded | null {
+    const raw = this._browser.readStorage(basketSessionKey(basketId));
+    if (raw === null) {
+      return null;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const reason =
+        typeof parsed === 'object' && parsed !== null
+          ? (parsed as Record<string, unknown>)['ended']
+          : undefined;
+      return (
+        BASKET_ACCESS_ENDED_REASONS.find((known) => known === reason) ?? null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Rebuild a session from what was stored, or null if it is not one.
    *
    * The basket id comes from the caller rather than from the stored object: it is
    * in the key, so storing it again would be a second copy that could disagree.
    */
-  private _revive(
-    basketId: string,
-    raw: unknown
-  ): BasketSession | null {
+  private _revive(basketId: string, raw: unknown): BasketSession | null {
     if (typeof raw !== 'object' || raw === null) {
       return null;
     }

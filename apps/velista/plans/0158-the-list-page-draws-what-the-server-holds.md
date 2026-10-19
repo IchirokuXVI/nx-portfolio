@@ -1,3 +1,5 @@
+> **PR:** [#751](https://github.com/IchirokuXVI/nx-portfolio/pull/751) stage 1, [#758](https://github.com/IchirokuXVI/nx-portfolio/pull/758) stage 2
+
 # 0158: the list page draws what the server holds
 
 > Asked for by the owner on 2026-10-16: "create plans to fix the most important problems from
@@ -156,3 +158,47 @@ Stage 2, after backend `0214`:
   overlay already marks a line this device is writing.
 - **Staff only for the empty reason.** It is the one case the client can answer with
   certainty today.
+
+## What the build decided
+
+- **Stage 1 (items 1 to 5) is in PR #751. Stage 2 (item 6, `commentCount`) is in PR
+  #758**, on top of backend `0214` (PR #755).
+- **The sheet seeds in one place.** An `effect` hands the list to `_seedFromList` the first
+  time `list()` is defined, and a `seeded` signal makes it run once. `canSave` also
+  requires `seeded`. Plan `0152` builds on `_seedFromList`.
+- **"While an overlay claims it" reads the line's pending write note.** `Mutations` has no
+  per record query, and a line has an overlay key for each set of fields, so `_keepsLocal`
+  checks that the note `writeNoteOf(lineId)` reads is `pending`. Every write of a line sets that note
+  before its request and clears it after. `mutations.ts` is unchanged.
+- **The read still decides which lines exist and their order.** Only the row of a line
+  that the read names can be kept from the local copy.
+- **Counts on a list event are optional.** `toListCounts` returns null when the payload has
+  no counts, and the store then keeps the counts it already holds (rule D4). The event
+  type in `realtime-events.ts` gained `counts`. That file is outside the Scope above, but
+  the mapper cannot hand the counts on without it.
+- **The pages after the first are merged too.** The first page replaces the array, and
+  that drops every local line past position 100. `load` and `refresh` thus take a
+  snapshot of the local lines before the first page lands and hand it to `_loadRest`,
+  which merges each later page against it with the same `_keepsLocal` rule. A merge
+  against the current store would find nothing for those lines.
+- **Stage 2: the count travels on `Line` and lives in the store.** The read reaches
+  `LineStore` as mapped lines through `LineApi`. Thus `Line` (in `domain.ts`, outside the
+  Scope above) gained an optional `commentCount?: number | null`. Screens still read
+  `commentCountOf`. `toLine` takes a whole number from 0 as known, and null, an absent
+  field or any other value as unknown.
+- **A read records only what it knows.** `_recordReadCounts` runs after each page of
+  `load`, `refresh` and `_loadRest`. A count is recorded for a line that the merge took
+  from the read and whose count is a number. A line kept from the local copy keeps its
+  count, and a read that says null or nothing keeps the count the device has. Events and
+  write answers never record a count, so their null erases nothing.
+- **A read never lowers a known count.** Posting a comment saves only `line_comments`
+  and does not bump the version of the line. A read whose count query ran before a
+  comment committed can thus land after the `comment.added` event and answer 2 where the
+  event made 3. `_recordReadCounts` records the larger of the known count and the read.
+  That is safe because a comment is never deleted on its own (only with its line), and
+  velista has no way to delete one, so a count can only grow.
+- **`hasLists` is not built.** Backend `0214` did not ship it, so a plain member keeps the
+  member count heuristic in `selectGroupState`.
+- **The walk needed an intercept.** The shared backend slot ran code from before PR #755,
+  so Playwright added the real count to the lines read. After two comments and a reload,
+  the row showed the badge "2".

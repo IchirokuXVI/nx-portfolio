@@ -6,6 +6,7 @@ import {
   applyBasketPatch,
   BASKET_PATCH_READ,
   type Basket,
+  type BasketAccessEnded,
   type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
@@ -17,6 +18,7 @@ import {
   provideFakeBrowserFacade,
 } from '@portfolio/velista/platform';
 import { Subject } from 'rxjs';
+import { SessionStore } from '../auth/session-store';
 import { MEMORY_CATEGORIES, memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -62,6 +64,7 @@ import { HeldProductChoices } from './held-product-choices';
 /** A session store over a plain object, so nothing here touches `localStorage`. */
 class FakeSessions {
   private readonly _held = new Map<string, BasketSession>();
+  private readonly _ended = new Map<string, BasketAccessEnded>();
 
   read(basketId: string): BasketSession | null {
     return this._held.get(basketId) ?? null;
@@ -73,6 +76,17 @@ class FakeSessions {
 
   forget(basketId: string): void {
     this._held.delete(basketId);
+    this._ended.delete(basketId);
+  }
+
+  /** The ended marker takes the credential's place, as the real store's does. */
+  end(basketId: string, reason: BasketAccessEnded): void {
+    this._held.delete(basketId);
+    this._ended.set(basketId, reason);
+  }
+
+  ended(basketId: string): BasketAccessEnded | null {
+    return this._ended.get(basketId) ?? null;
   }
 
   /** Seeds a credential, which is what a guest who has joined would hold. */
@@ -333,14 +347,95 @@ describe('BasketStore', () => {
       expect(store.state()).toBe('revoked');
     });
 
-    it('reads as needing a join when it held none', async () => {
-      const { store } = build({
-        getBasket: () => Promise.reject(unauthorized()),
+    /** The reader's account, as the one signal the store reads off it. */
+    const account = (signedIn: boolean): Provider => ({
+      provide: SessionStore,
+      useValue: { isAuthenticated: signal(signedIn) },
+    });
+
+    const notAParticipant = (): GatewayError =>
+      new GatewayError({
+        code: 'not_a_participant',
+        status: 401,
+        correlationId: 'spec',
       });
+
+    it('asks a signed out reader who held none to sign in', async () => {
+      const { store } = build(
+        { getBasket: () => Promise.reject(unauthorized()) },
+        undefined,
+        undefined,
+        undefined,
+        [account(false)]
+      );
 
       await store.open('basket-saturday');
 
-      expect(store.state()).toBe('needsJoin');
+      expect(store.state()).toBe('needsSignIn');
+    });
+
+    it('tells a signed in reader who held none that the list is not theirs', async () => {
+      const { store } = build(
+        { getBasket: () => Promise.reject(notAParticipant()) },
+        undefined,
+        undefined,
+        undefined,
+        [account(true)]
+      );
+
+      await store.open('basket-saturday');
+
+      expect(store.state()).toBe('notYours');
+    });
+
+    it('says a visit ran out even with no credential behind it', async () => {
+      const { store } = build(
+        {
+          getBasket: () =>
+            Promise.reject(
+              new GatewayError({
+                code: 'participant_expired',
+                status: 401,
+                correlationId: 'spec',
+              })
+            ),
+        },
+        undefined,
+        undefined,
+        undefined,
+        [account(true)]
+      );
+
+      await store.open('basket-saturday');
+
+      expect(store.state()).toBe('revoked');
+      expect(store.accessEnded()).toBe('EXPIRED');
+    });
+
+    it('still reads as revoked after a reload, from the marker it left', async () => {
+      // F6.8: a guest removed by name reloads. The credential is gone, and
+      // without the marker the reload read as somebody who never joined.
+      const sessions = new FakeSessions();
+      sessions.seed('basket-saturday');
+      const first = build(
+        { getBasket: () => Promise.reject(notAParticipant()) },
+        sessions
+      );
+      await first.store.open('basket-saturday');
+      expect(first.store.state()).toBe('revoked');
+
+      TestBed.resetTestingModule();
+      const reloaded = build(
+        { getBasket: () => Promise.reject(unauthorized()) },
+        sessions,
+        undefined,
+        undefined,
+        [account(false)]
+      );
+      await reloaded.store.open('basket-saturday');
+
+      expect(reloaded.store.state()).toBe('revoked');
+      expect(reloaded.store.accessEnded()).toBe('REMOVED');
     });
 
     it('drops the credential either way, so no tap is refused twice', async () => {
@@ -1871,11 +1966,12 @@ describe('BasketStore: sharing with people', () => {
       expect(socket.opened).toEqual([]);
     });
 
-    it('never offers the join screen, because there is no participant to be', async () => {
+    it('never offers a participant screen, because there is no participant to be', async () => {
       // A 401 here is an account session that has ended, which the interceptor
-      // answers for the whole app. Neither reading of the participant surface's
-      // 401 is about this reader, and `needsJoin` on the caller's own basket
-      // would offer a link nobody has.
+      // answers for the whole app. None of the readings of the participant
+      // surface's 401 is about this reader: `revoked`, `needsSignIn` and
+      // `notYours` on the caller's own basket would each answer a credential
+      // nobody holds.
       const { store } = build({
         getLiveBasket: () =>
           Promise.reject(

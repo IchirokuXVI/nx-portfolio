@@ -42,6 +42,7 @@ import {
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { AppResumed } from '@portfolio/velista/platform';
+import { SessionStore } from '../auth/session-store';
 import { endedReasonOf, GatewayError, hasResponse } from '../errors';
 import {
   REALTIME_CLIENT,
@@ -143,6 +144,12 @@ interface HeldPatch {
 export class BasketStore {
   private readonly _service = inject<BasketServiceI>(BASKET_SERVICE);
   private readonly _sessions = inject(BasketSessionStore);
+  /**
+   * Whether the reader is signed in, which splits a refusal with no credential
+   * behind it in two (velista `0154`). Optional because the sheet specs build this
+   * store with no account at all, and absent reads as signed out.
+   */
+  private readonly _account = inject(SessionStore, { optional: true });
   private readonly _socket = inject(BasketSocket);
   /**
    * The account socket, for the one basket event that cannot reach the basket's own
@@ -311,7 +318,8 @@ export class BasketStore {
         event.basketId === this._id
       ) {
         this._cancelReads();
-        this._sessions.forget(this._id);
+        // A marker in the credential's place, so a reload says the same thing.
+        this._sessions.end(this._id, BASKET_ACCESS_ENDED_FALLBACK);
         // The event says the reader is off the basket and never why: its
         // payload is the basket id alone (backend `0140`, section 7 emits it
         // from the same `announceEnded` a removal does). So the reason is
@@ -782,8 +790,8 @@ export class BasketStore {
    * Load a basket, deciding first whether this browser may even ask.
    *
    * No stored credential and no account token means the reader is a stranger on a
-   * link, which is `needsJoin` rather than a failure: the join screen is the
-   * answer, not an error.
+   * link, which is `needsSignIn` rather than a failure: signing in is the answer,
+   * not an error.
    */
   async open(basketId: string): Promise<void> {
     this._id = basketId;
@@ -1075,6 +1083,7 @@ export class BasketStore {
       ...rows,
       products: held.products,
       scopes: held.scopes,
+      scopesIncomplete: held.scopesIncomplete,
       shop: held.shop,
     };
   }
@@ -1835,9 +1844,9 @@ export class BasketStore {
    *
    * A 401 here means one thing: the credential this browser holds no longer names
    * a live participant, because it was revoked, or the link that minted it was
-   * revoked with the cascade ticked. The stored secret is dropped at the same
-   * moment, so the person is offered the join screen — where the link they still
-   * have may let them back in — rather than a basket that refuses every tap.
+   * revoked with the cascade ticked. The stored secret is replaced by an ended
+   * marker at the same moment, so the person is told what happened, on this load
+   * and the next, rather than shown a basket that refuses every tap.
    */
   private _fail(basketId: string | null, error: unknown): void {
     this._error.set(error);
@@ -1851,13 +1860,16 @@ export class BasketStore {
       hasResponse(error) &&
       (error as { status: number }).status === 401
     ) {
-      // The two readings of one status, told apart by what this browser was
-      // holding. A credential that has stopped working was **revoked**, and the
-      // person should be told so. No credential at all is a stranger who has
-      // followed a link and simply has not joined yet, which is not a failure
-      // and must not be reported as one.
+      // The readings of one status, told apart by what this browser was holding
+      // and by whether the reader is signed in, all read before anything is
+      // dropped (velista `0154`). A credential that has stopped working was
+      // **revoked**, and the person should be told so. A marker left by an
+      // earlier refusal says the same after a reload. With neither, a signed out
+      // reader is asked to sign in, and a signed in one is told the list is not
+      // theirs.
       const held = this._sessions.read(basketId);
-      this._sessions.forget(basketId);
+      const endedBefore = this._sessions.ended(basketId);
+      const signedIn = this._account?.isAuthenticated() ?? false;
       if (held === null && this._state() === 'revoked') {
         // The credential is gone because an earlier refusal of this basket just
         // dropped it, not because this is a stranger. A revoked guest's tap and the
@@ -1871,9 +1883,24 @@ export class BasketStore {
         // refusal (backend `0140`, section 8). Anything else, including a 401
         // with no readable body, falls back to the reason that draws the
         // ordinary sentence.
-        this._accessEnded.set(endedReasonOf(error));
+        const reason = endedReasonOf(error);
+        this._sessions.end(basketId, reason);
+        this._accessEnded.set(reason);
+        this._state.set('revoked');
+        return;
       }
-      this._state.set(held === null ? 'needsJoin' : 'revoked');
+      if (endedBefore !== null) {
+        this._accessEnded.set(endedBefore);
+        this._state.set('revoked');
+        return;
+      }
+      if (endedReasonOf(error) === 'EXPIRED') {
+        // A visit that ran out names itself, credential or not.
+        this._accessEnded.set('EXPIRED');
+        this._state.set('revoked');
+        return;
+      }
+      this._state.set(signedIn ? 'notYours' : 'needsSignIn');
       return;
     }
 

@@ -603,6 +603,34 @@ describeIntegration('the flag of a line (real Postgres)', () => {
     });
   });
 
+  describe('the comment count of the lines read (plan 0214, section 2)', () => {
+    it('answers 2 for a line with two comments and 0 for one with none, and null on the event', async () => {
+      const talked = await seedLine({ content: 'Bread', position: 1 });
+      const quiet = await seedLine({ content: 'Butter', position: 2 });
+      const comments = dataSource.getRepository(LineComment);
+      await comments.save([
+        comments.create({
+          lineId: talked.id,
+          authorUserId: ids.owner,
+          body: 'The seeded one',
+        }),
+        comments.create({
+          lineId: talked.id,
+          authorUserId: ids.owner,
+          body: 'Or rye',
+        }),
+      ]);
+
+      expect((await read(talked.id)).commentCount).toBe(2);
+      expect((await read(quiet.id)).commentCount).toBe(0);
+
+      const added = await add({ content: 'Jam' });
+      expect(added.line.commentCount).toBeNull();
+      expect(emit.mock.calls[0][2]).toMatchObject({ commentCount: null });
+      expect((await read(added.line.id)).commentCount).toBe(0);
+    });
+  });
+
   describe('the batch add', () => {
     it('decides each item by itself, and leaves the flag of a line it raises', async () => {
       const milk = await seedLine({

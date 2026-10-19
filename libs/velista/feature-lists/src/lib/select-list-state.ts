@@ -114,7 +114,7 @@ export interface ListStateInput {
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
-  readonly gone: 'deleted' | 'unshared' | null;
+  readonly gone: boolean;
 }
 
 /** What the rows of a list read of the catalog (velista `0145`, sections 2 and 7). */
@@ -148,8 +148,8 @@ export interface ListStateCatalog {
  * once, and here is the only place that can be true of.
  */
 export function selectListState(input: ListStateInput): ListPageState {
-  if (input.gone !== null) {
-    return { kind: 'gone', reason: input.gone };
+  if (input.gone) {
+    return { kind: 'gone' };
   }
 
   if (input.errorKey !== null) {

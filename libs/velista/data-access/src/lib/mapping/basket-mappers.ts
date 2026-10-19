@@ -722,6 +722,10 @@ function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
         logoUrl: nullableStr(raw['supermarketLogoUrl']),
         supermarketName: toLocalizedName(raw['supermarketName']),
         locations: mapArray(raw['locations'], toScopeLocation),
+        // Only a JSON false says the scope prices nothing here (backend `0213`).
+        // A server from before it named only the scopes that quote something,
+        // so a missing field draws the chain as it always did.
+        quotesBasket: raw['quotesBasket'] !== false,
       };
 }
 
@@ -791,6 +795,9 @@ export function toBasket(raw: unknown): Basket | null {
         scope,
       ])
     ),
+    // Only a JSON true says the list may be short (backend `0213`). A server
+    // from before it never said so, which draws the picker as it always did.
+    scopesIncomplete: raw['scopesIncomplete'] === true,
     // A shop named without the lock that makes it the basket's is not the
     // basket's shop, so it is dropped rather than drawn locked or unlocked.
     shop: lockedShopId === null ? null : toBasketShop(raw['shop']),

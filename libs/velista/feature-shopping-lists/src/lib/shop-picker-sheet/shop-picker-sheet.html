@@ -68,6 +68,9 @@
     <p class="count">
       {{ 'shops.chain.inAreas' | rokuT: { count: head.count } }}
     </p>
+    @if (head.noPrices) {
+      <p class="count">{{ 'basket.view.shop.noPrices' | rokuT }}</p>
+    }
   }
 
   <!--
@@ -82,11 +85,14 @@
     (noShop)="noShop()"
     (picked)="pickShop($event)"
     (queried)="onQuery($event)"
+    (retried)="retry()"
     [chains]="chains()"
     [groups]="groups()"
+    [incomplete]="incomplete()"
     [matchCount]="matches()"
     [matches]="flat()"
     [near]="near()"
+    [noPrices]="noPrices()"
     [offerNoShop]="asking"
     [openKey]="openChain()"
     [pickChecked]="asking"
@@ -94,6 +100,7 @@
     [pickedId]="pickedId()"
     [query]="typed()"
     [recent]="recent()"
+    [retrying]="retrying()"
     [showAbout]="!asking"
     fieldId="basket-shop-search"
   />

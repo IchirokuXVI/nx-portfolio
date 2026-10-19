@@ -611,11 +611,13 @@ describe('a product add merges by product (plan 0214, section 1)', () => {
     expect(results[0].line).toMatchObject({ content: 'Eggs', quantity: 2 });
     expect(results[2].line.id).not.toBe(results[0].line.id);
   });
+});
 
+describe('the comment count of an add (plan 0214, section 2)', () => {
   it('carries commentCount null on the line.added payload', async () => {
     const w = build({});
 
-    const { line } = await add(w, 'Eggs', { itemIds: [WHOLE], named: false });
+    const { line } = await add(w, 'Eggs', { itemIds: [WHOLE] });
 
     expect(line.commentCount).toBeNull();
     expect(w.events).toEqual([

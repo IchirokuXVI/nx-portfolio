@@ -75,12 +75,24 @@ export class GatewayError extends Error {
 export class NetworkError extends Error {
   readonly correlationId: string;
   readonly operation: string;
+  /**
+   * Whether the browser reported itself offline at the moment the request was handed
+   * on, so it was refused before it left and the server cannot have applied it
+   * (velista `0159`). False whenever the request may have gone out, which is the
+   * safe answer: only a write known never to have left may be sent again.
+   */
+  readonly refusedOffline: boolean;
 
-  constructor(correlationId: string, operation: string) {
+  constructor(
+    correlationId: string,
+    operation: string,
+    refusedOffline = false
+  ) {
     super(`network failure during ${operation} ref ${correlationId}`);
     this.name = 'NetworkError';
     this.correlationId = correlationId;
     this.operation = operation;
+    this.refusedOffline = refusedOffline;
   }
 }
 

@@ -17,6 +17,7 @@ import {
 import {
   AppUpdates,
   BackendReadiness,
+  BrowserFacade,
   ConnectionState,
   provideFakeBrowserFacade,
   StorageKeys,
@@ -296,6 +297,72 @@ describe('gatewayInterceptor', () => {
       const error = (await failure) as NetworkError;
       expect(error).toBeInstanceOf(NetworkError);
       expect(connection.offline()).toBe(true);
+    });
+
+    /**
+     * Velista `0159`: a dropped write may be sent again only when it never left, and
+     * the moment it is handed on is the only one that can say so.
+     */
+    describe('whether the browser refused the request', () => {
+      let online: boolean;
+
+      beforeEach(() => {
+        online = true;
+        Object.assign(TestBed.inject(BrowserFacade), { onLine: () => online });
+      });
+
+      it('says so when the browser was offline as the request was handed on', async () => {
+        online = false;
+
+        const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+        httpMock
+          .expectOne(`${GATEWAY}/v1/zones`)
+          .error(new ProgressEvent('error'), { status: 0 });
+
+        const error = (await failure) as NetworkError;
+        expect(error.refusedOffline).toBe(true);
+      });
+
+      it('does not when the connection came back during a token refresh', async () => {
+        // Offline when the call was made, but a stale token makes the request wait
+        // for a refresh, and it left once the connection was back. Its answer may be
+        // what was lost, so a second +1 could double the first.
+        online = false;
+        tokens.set(pair(staleToken()));
+
+        const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+        await tick();
+        online = true;
+        httpMock.expectOne(`${GATEWAY}/v1/auth/refresh`).flush({
+          userId: 'u1',
+          kind: 'REGISTERED',
+          accessToken: freshToken(),
+          refreshToken: 'refresh-2',
+        });
+        await tick();
+        httpMock
+          .expectOne(`${GATEWAY}/v1/zones`)
+          .error(new ProgressEvent('error'), { status: 0 });
+
+        const error = (await failure) as NetworkError;
+        expect(error).toBeInstanceOf(NetworkError);
+        expect(error.refusedOffline).toBe(false);
+      });
+
+      it('does not when the browser cannot say', async () => {
+        Object.assign(TestBed.inject(BrowserFacade), {
+          onLine: () => {
+            throw new Error('no navigator');
+          },
+        });
+
+        const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+        httpMock
+          .expectOne(`${GATEWAY}/v1/zones`)
+          .error(new ProgressEvent('error'), { status: 0 });
+
+        expect(((await failure) as NetworkError).refusedOffline).toBe(false);
+      });
     });
 
     it('treats a 503 as reachable, so a deploy does not strand the user offline', async () => {

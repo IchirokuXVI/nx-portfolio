@@ -1,5 +1,18 @@
 import { TestBed } from '@angular/core/testing';
-import { Mutations, overlayKey, type Overlay } from './mutations';
+import {
+  provideFakeBrowserFacade,
+  StorageKeys,
+} from '@portfolio/velista/platform';
+import { TimeoutError } from 'rxjs';
+import { GatewayError, NetworkError } from './errors';
+import {
+  DROPPED_WRITES_KEPT,
+  DroppedWrites,
+  Mutations,
+  overlayKey,
+  type DroppedWriteDraft,
+  type Overlay,
+} from './mutations';
 
 interface Line {
   id: string;
@@ -106,5 +119,262 @@ describe('Mutations', () => {
     const outcome = await mutations.run(null, async () => 'ok');
 
     expect(outcome).toEqual({ state: 'succeeded', value: 'ok' });
+  });
+});
+
+/**
+ * The ledger of writes the network dropped (velista `0159`). A reload wipes the inline
+ * note of a failed row, so the store writes what was lost where the next document of
+ * this tab can read it.
+ */
+describe('a write the network dropped', () => {
+  const PAGE = 'list:l1';
+
+  function draft(
+    overrides: Partial<DroppedWriteDraft> = {}
+  ): DroppedWriteDraft {
+    return {
+      page: PAGE,
+      subject: 'ln1:quantity',
+      lineId: 'ln1',
+      key: 'list.dropped.quantity',
+      args: { name: 'Pan de pueblo', delta: '+1' },
+      replay: { kind: 'line-quantity', lineId: 'ln1', delta: 1 },
+      ...overrides,
+    };
+  }
+
+  function build(): {
+    mutations: Mutations;
+    ledger: DroppedWrites;
+    session: Map<string, string>;
+  } {
+    TestBed.resetTestingModule();
+    const session = new Map<string, string>();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeBrowserFacade(new Map(), {
+          readSessionStorage: (key: string) => session.get(key) ?? null,
+          writeSessionStorage: (key: string, value: string) =>
+            void session.set(key, value),
+          removeSessionStorage: (key: string) => void session.delete(key),
+        }),
+      ],
+    });
+    return {
+      mutations: TestBed.inject(Mutations),
+      ledger: TestBed.inject(DroppedWrites),
+      session,
+    };
+  }
+
+  it('keeps the replay of a write that failed before it was sent', async () => {
+    // The interceptor saw the browser offline as it handed the request on: it was
+    // refused before it left, so the server cannot have applied it and sending it
+    // again is safe.
+    const { mutations, ledger } = build();
+
+    const outcome = await mutations.run(
+      null,
+      async () => {
+        throw new NetworkError('c1', 'lines.quantity', true);
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(outcome.state).toBe('failed');
+    const [entry] = ledger.take(PAGE);
+    expect(entry).toMatchObject({
+      key: 'list.dropped.quantity',
+      args: { name: 'Pan de pueblo', delta: '+1' },
+      replay: { kind: 'line-quantity', lineId: 'ln1', delta: 1 },
+    });
+  });
+
+  it('keeps no replay when the request may have reached the server', async () => {
+    // Online as it was handed on, so the answer may have been lost on the way back.
+    // The route has no idempotency key, and a second +1 would be a double increment.
+    const { mutations, ledger } = build();
+
+    await mutations.run(
+      null,
+      async () => {
+        throw new NetworkError('c1', 'lines.quantity');
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(ledger.take(PAGE)).toEqual([
+      expect.objectContaining({ replay: null }),
+    ]);
+  });
+
+  it('does not read the connection itself, because the request can leave later', async () => {
+    // Offline as `run` starts, but the request waited on a token refresh and left
+    // once the connection was back. Only the interceptor knows, and it said no.
+    TestBed.resetTestingModule();
+    const session = new Map<string, string>();
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeBrowserFacade(new Map(), {
+          onLine: (() => false) as never,
+          readSessionStorage: (key: string) => session.get(key) ?? null,
+          writeSessionStorage: (key: string, value: string) =>
+            void session.set(key, value),
+          removeSessionStorage: (key: string) => void session.delete(key),
+        }),
+      ],
+    });
+
+    await TestBed.inject(Mutations).run(
+      null,
+      async () => {
+        throw new NetworkError('c1', 'lines.quantity', false);
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(TestBed.inject(DroppedWrites).take(PAGE)).toEqual([
+      expect.objectContaining({ replay: null }),
+    ]);
+  });
+
+  it('keeps no replay after a timeout', async () => {
+    const { mutations, ledger } = build();
+
+    await mutations.run(
+      null,
+      async () => {
+        throw new TimeoutError();
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(ledger.take(PAGE)).toEqual([
+      expect.objectContaining({ replay: null }),
+    ]);
+  });
+
+  it('writes nothing for a refusal the server answered', async () => {
+    // A 4xx or a 5xx leaves no reload behind it, so the inline note on the row is
+    // still there to say so.
+    const { mutations, ledger, session } = build();
+
+    await mutations.run(
+      null,
+      async () => {
+        throw new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'c1',
+        });
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(ledger.take(PAGE)).toEqual([]);
+    expect(session.has(StorageKeys.droppedWrites)).toBe(false);
+  });
+
+  it('forgets a dropped write once the same change lands', async () => {
+    const { mutations, ledger } = build();
+    const fail = async (): Promise<never> => {
+      throw new NetworkError('c1', 'lines.quantity');
+    };
+    await mutations.run(null, fail, undefined, undefined, draft());
+
+    await mutations.run(null, async () => 'ok', undefined, undefined, draft());
+
+    expect(ledger.take(PAGE)).toEqual([]);
+  });
+
+  it('clears what it read, and only for the page that read it', async () => {
+    const { mutations, ledger } = build();
+    const fail = async (): Promise<never> => {
+      throw new NetworkError('c1', 'lines.quantity');
+    };
+    await mutations.run(null, fail, undefined, undefined, draft());
+    await mutations.run(
+      null,
+      fail,
+      undefined,
+      undefined,
+      draft({ page: 'list:l2', subject: 'ln2:quantity' })
+    );
+
+    expect(ledger.take(PAGE)).toHaveLength(1);
+    expect(ledger.take(PAGE)).toEqual([]);
+    expect(ledger.take('list:l2')).toHaveLength(1);
+  });
+
+  it('holds only the last few entries', async () => {
+    const { mutations, ledger } = build();
+    const fail = async (): Promise<never> => {
+      throw new NetworkError('c1', 'lines.quantity');
+    };
+    for (let i = 0; i < DROPPED_WRITES_KEPT + 3; i++) {
+      await mutations.run(
+        null,
+        fail,
+        undefined,
+        undefined,
+        draft({
+          subject: `ln${i}:quantity`,
+          args: { name: `n${i}`, delta: '+1' },
+        })
+      );
+    }
+
+    const kept = ledger.take(PAGE);
+    expect(kept).toHaveLength(DROPPED_WRITES_KEPT);
+    expect(kept.at(-1)?.args['name']).toBe(`n${DROPPED_WRITES_KEPT + 2}`);
+  });
+
+  it('reads a ledger it cannot parse as empty', () => {
+    const { ledger, session } = build();
+    session.set(StorageKeys.droppedWrites, '{not json');
+
+    expect(ledger.take(PAGE)).toEqual([]);
+  });
+
+  it('survives storage that refuses every call', async () => {
+    TestBed.resetTestingModule();
+    const refuse = (): never => {
+      throw new Error('SecurityError');
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        provideFakeBrowserFacade(new Map(), {
+          onLine: (() => false) as never,
+          readSessionStorage: refuse,
+          writeSessionStorage: refuse,
+          removeSessionStorage: refuse,
+        }),
+      ],
+    });
+    const mutations = TestBed.inject(Mutations);
+
+    const outcome = await mutations.run(
+      null,
+      async () => {
+        throw new NetworkError('c1', 'lines.quantity');
+      },
+      undefined,
+      undefined,
+      draft()
+    );
+
+    expect(outcome.state).toBe('failed');
+    expect(TestBed.inject(DroppedWrites).take(PAGE)).toEqual([]);
   });
 });

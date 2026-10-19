@@ -4,6 +4,10 @@
     keypad would make the letters unreachable. Autocapitalize, autocorrect and
     spellcheck are all off because a code is not a word, and a phone that tries to
     help turns HK7M into Hk7m or into something else entirely.
+
+    No `maxlength`: it cuts the raw paste before the field can clean it, so " 6WQKCPKS"
+    arrived as " 6WQKCPK" and lost its last character (velista 0160). The field cuts
+    to eight itself, after it drops what does not belong.
   -->
   <input
     (input)="onInput($event)"
@@ -18,7 +22,6 @@
     autocorrect="off"
     class="field"
     inputmode="text"
-    maxlength="8"
     spellcheck="false"
     type="text"
   />

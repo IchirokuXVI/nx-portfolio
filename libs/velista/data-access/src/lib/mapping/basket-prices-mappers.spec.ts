@@ -139,6 +139,8 @@ describe('toBasket: prices and places (velista 0062)', () => {
           ],
         },
       ],
+      // A wire scope from before backend 0213 quotes the basket.
+      quotesBasket: true,
     });
   });
 

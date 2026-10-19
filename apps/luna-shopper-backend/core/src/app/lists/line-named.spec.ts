@@ -345,6 +345,42 @@ function build(options: Options = {}) {
   return { service, add, update, read, saved, events, queries };
 }
 
+describe('the lines read counts the comments of each line (plan 0214, section 2)', () => {
+  it('answers the count the batched query finds', async () => {
+    const w = build({ comments: 2 });
+
+    const page = await w.read();
+
+    expect(page.items.map((item) => [item.id, item.commentCount])).toEqual([
+      [LINE_ID, 2],
+    ]);
+    const counts = w.queries.filter((q) => q.sql.includes('"line_comments"'));
+    expect(counts).toHaveLength(1);
+    expect(counts[0].sql).toContain('GROUP BY');
+    expect(counts[0].parameters).toEqual([[LINE_ID]]);
+  });
+
+  it('answers 0 for a line with no comment, and never null', async () => {
+    const w = build();
+
+    const page = await w.read();
+
+    expect(page.items[0].commentCount).toBe(0);
+  });
+
+  it('answers null on the payload of a write, which pays for no count', async () => {
+    const w = build({ comments: 2 });
+
+    const view = await w.update({ quantity: 3 });
+
+    expect(view.commentCount).toBeNull();
+    expect(w.events.map((e) => e.line.commentCount)).toEqual([null]);
+    expect(w.queries.filter((q) => q.sql.includes('"line_comments"'))).toEqual(
+      []
+    );
+  });
+});
+
 describe('LineService.add writes the flag (plan 0207, section 1.3)', () => {
   it('names a line when the request says nothing, with a product or with none', async () => {
     const w = build();
