@@ -1,0 +1,76 @@
+{
+  "title": "Velista: one product card",
+  "lede": "Every place velista draws a catalog product, on one card. Plans <code>0161</code> to <code>0164</code>. Drawn on Day, phone width, after an audit of the running app on 2026-10-20 (https://claude.ai/artifact/AZuvmtf9UcY1Hn1mnkwDbA has the screenshots of today). Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Card.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 660,
+      "title": "The card and its compact size"
+    },
+    {
+      "file": "Search.dc.html",
+      "x": 960,
+      "y": 0,
+      "w": 430,
+      "h": 650,
+      "title": "Search on the shopping list"
+    },
+    {
+      "file": "Catalog.dc.html",
+      "x": 1450,
+      "y": 0,
+      "w": 430,
+      "h": 600,
+      "title": "The catalog tab"
+    },
+    {
+      "file": "Sheets.dc.html",
+      "x": 0,
+      "y": 740,
+      "w": 1310,
+      "h": 580,
+      "title": "Three sheets on the compact card"
+    },
+    {
+      "file": "BasketRows.dc.html",
+      "x": 1370,
+      "y": 740,
+      "w": 430,
+      "h": 640,
+      "title": "Shopping list rows with a picture"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "owner",
+      "x": 0,
+      "y": -360,
+      "w": 470,
+      "text": "THE OWNER'S CHOICES, 2026-10-20.\n1. Option A: rows on hairlines, not boxed cards.\n2. The Details link goes. Pressing the card opens the product.\n3. Radios at the right edge in the change sheet and in Which one.\n4. Shopping list rows get a picture.\n5. The missing photo in search is fixed first, on its own (0161)."
+    },
+    {
+      "id": "c1",
+      "x": 530,
+      "y": -360,
+      "w": 470,
+      "text": "RULE PC1: ONE CARD, ONE PICTURE. lib-product-row is the card. Every product photo goes through lib-product-picture, which is the only place that knows a photo can fail to load. The line page tiles and the product page header keep their own layout and use that picture."
+    },
+    {
+      "id": "c2",
+      "x": 1060,
+      "y": -360,
+      "w": 470,
+      "text": "RULE PC2: ONE CONTROL SLOT, AT THE RIGHT. Add, radio, tick or stepper, 44 px, and never two of them. The rest of the card opens the product, except where the page chooses, where the whole card is the label of its radio or tick."
+    },
+    {
+      "id": "c3",
+      "x": 1590,
+      "y": -360,
+      "w": 470,
+      "text": "RULE PC3: QUIET. No tinted control column, no violet label over the lines that hold the product: the heading \"On Compra semanal\" says it. The only tint left is the stepper of a held line, which the app already uses."
+    }
+  ]
+}
