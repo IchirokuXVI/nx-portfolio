@@ -8,6 +8,7 @@ import {
   QUANTITY_REEL_IDLE_MS,
   type BasketListRef,
   type BasketParticipant,
+  type BasketProduct,
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
@@ -93,6 +94,8 @@ async function render(
     finished?: boolean;
     /** What the basket is being searched for, already folded (velista `0074`). */
     highlight?: string;
+    /** The products the row may resolve, by id (velista `0164`). */
+    products?: ReadonlyMap<string, BasketProduct>;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -112,7 +115,7 @@ async function render(
     'people',
     options.people ?? new Map<string, BasketParticipant>()
   );
-  fixture.componentRef.setInput('products', new Map());
+  fixture.componentRef.setInput('products', options.products ?? new Map());
   fixture.componentRef.setInput('lists', options.lists ?? new Map());
   fixture.componentRef.setInput('busy', options.busy ?? false);
   fixture.componentRef.setInput('notice', options.notice ?? null);
@@ -1343,5 +1346,131 @@ describe('ownBoughtUnits (velista 0151)', () => {
 
   it('answers every unit on a row that cannot tell', () => {
     expect(ownBoughtUnits(line({ bought: 3 }), 'p-1')).toBe(3);
+  });
+});
+
+/**
+ * The product's picture (velista `0164`): the list rows' square after the status
+ * control, an empty one on a row with no product and on a crossed out row, and
+ * never a control of its own.
+ */
+describe("BasketRow: the product's picture (velista 0164)", () => {
+  const milk = (imageUrl: string | null): [string, BasketProduct] => [
+    'i-milk',
+    {
+      id: 'i-milk',
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      brand: 'Hacendado',
+      imageUrl,
+      productGroupId: null,
+      size: 1,
+      unit: 'LITER',
+      offer: null,
+    } as BasketProduct,
+  ];
+
+  const element = (fixture: Awaited<ReturnType<typeof render>>) =>
+    fixture.nativeElement as HTMLElement;
+
+  it('draws the photo of a row with a product, after the status control', async () => {
+    const fixture = await render(line({ productId: 'i-milk' }), {
+      products: new Map([milk('https://img.example/milk.jpg')]),
+    });
+
+    const picture = element(fixture).querySelector('lib-product-picture');
+    expect(picture).not.toBeNull();
+    expect(picture?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.example/milk.jpg'
+    );
+    expect(element(fixture).querySelector('.picture.is-empty')).toBeNull();
+
+    const row = element(fixture).querySelector('.row') as HTMLElement;
+    const order = [...row.children].map((child) => child.classList[0]);
+    expect(order.indexOf('status')).toBe(0);
+    expect(order.indexOf('picture')).toBe(1);
+    expect(order.indexOf('body')).toBe(2);
+  });
+
+  it('draws the product glyph for a product with no photo', async () => {
+    const fixture = await render(line({ productId: 'i-milk' }), {
+      products: new Map([milk(null)]),
+    });
+
+    const picture = element(fixture).querySelector('lib-product-picture');
+    expect(picture?.querySelector('img')).toBeNull();
+    expect(picture?.querySelector('lib-product-icon')).not.toBeNull();
+  });
+
+  it('keeps an empty square on a row with no product', async () => {
+    const fixture = await render(line());
+
+    expect(element(fixture).querySelector('lib-product-picture')).toBeNull();
+    expect(
+      element(fixture)
+        .querySelector('.picture.is-empty')
+        ?.getAttribute('aria-hidden')
+    ).toBe('true');
+  });
+
+  it.each([
+    ['REMOVED', line({ state: 'REMOVED', productId: 'i-milk', entries: [] })],
+    [
+      'BOUGHT_ELSEWHERE',
+      line({
+        state: 'BOUGHT_ELSEWHERE',
+        productId: 'i-milk',
+        left: 0,
+        asked: 0,
+        boughtElsewhere: 2,
+        entries: [
+          entry(null, {
+            left: 0,
+            asked: 0,
+            boughtElsewhere: 2,
+            state: 'BOUGHT_ELSEWHERE',
+          }),
+        ],
+      }),
+    ],
+  ] as const)(
+    'keeps the square empty on a crossed out %s row, even with a product',
+    async (_state, row) => {
+      const fixture = await render(row, {
+        products: new Map([milk('https://img.example/milk.jpg')]),
+      });
+
+      expect(
+        element(fixture).querySelector('.row.is-removed .picture.is-empty')
+      ).not.toBeNull();
+      expect(element(fixture).querySelector('lib-product-picture')).toBeNull();
+    }
+  );
+
+  it('is hidden from a screen reader and adds no control', async () => {
+    const products = new Map([milk('https://img.example/milk.jpg')]);
+    const plain = await render(line(), { products });
+    const plainButtons = element(plain).querySelectorAll('button').length;
+
+    const fixture = await render(line({ productId: 'i-milk' }), { products });
+    const picture = element(fixture).querySelector('lib-product-picture');
+
+    expect(picture?.getAttribute('aria-hidden')).toBe('true');
+    expect(picture?.querySelector('button')).toBeNull();
+    expect(element(fixture).querySelectorAll('button').length).toBe(
+      plainButtons
+    );
+  });
+
+  it('leaves the status control and the body their names', async () => {
+    const fixture = await render(line({ productId: 'i-milk' }), {
+      products: new Map([milk('https://img.example/milk.jpg')]),
+    });
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.got'
+    );
+    expect(body(fixture)?.getAttribute('aria-label')).toMatch(
+      /^Whole milk Hacendado\./
+    );
   });
 });

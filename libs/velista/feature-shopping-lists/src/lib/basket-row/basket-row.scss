@@ -57,6 +57,32 @@
   }
 }
 
+// The product's picture (velista 0164): the list rows' square, beside the status
+// control and pulled up with it, so the two share one band and a row of two lines
+// does not grow to hold it.
+.picture {
+  flex: none;
+  margin-block-start: calc(var(--app-space-1) * -1);
+}
+
+// A row with no product, or a crossed out one: the same square, empty, drawn as a
+// dashed outline so the names of all rows start at one edge.
+.picture.is-empty {
+  box-sizing: border-box;
+  inline-size: var(--app-line-picture-size);
+  block-size: var(--app-line-picture-size);
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: var(--app-line-picture-radius);
+}
+
+// A crossed out row has no status control, so its empty square is pushed past the
+// status column and lines up with the pictures above and below it. The row centres
+// its contents, so the pull up is not needed.
+.is-removed .picture {
+  margin-block-start: 0;
+  margin-inline-start: calc(var(--app-touch-target) + var(--app-space-3));
+}
+
 // A finished line with no reopen route behind it. It states rather than offers, so
 // it takes no hover and no pointer: there is nothing here to press, and a control
 // shaped like one that does nothing is worse than a mark.

@@ -36,6 +36,7 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
+  ProductPicture,
   QuantityReel,
   SlashCircleIcon,
   SwapIcon,
@@ -210,6 +211,7 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
     ClockIcon,
     HalfCircleIcon,
     NgTemplateOutlet,
+    ProductPicture,
     QuantityReel,
     RokuTranslatorPipe,
     SlashCircleIcon,
@@ -939,6 +941,14 @@ export class BasketRow {
 
   /** Whether the row is a product, which cuts its name to one line. */
   protected readonly isProduct = computed(() => this._product() !== null);
+
+  /**
+   * The product's photo, drawn after the status control (velista `0164`), or
+   * null for the product glyph. Read only on a row where {@link isProduct} holds.
+   */
+  protected readonly imageUrl = computed(
+    () => this._product()?.imageUrl ?? null
+  );
 
   /**
    * The product this row is, or null (backend `0201`): one product or none, the
