@@ -48,6 +48,7 @@ import {
   CautionLine,
   describedByOf,
   FieldRow,
+  labelIdOf,
   LockedValue,
   RecordId,
   RecordSection,
@@ -290,6 +291,7 @@ const ID = {
             <lib-field-row
               [changed]="changed().has('daysOfWeek')"
               [controlId]="ids.days"
+              [group]="true"
               [label]="'harvest.schedules.field.days' | rokuT"
               [messages]="daysSaid"
               [required]="true"
@@ -297,7 +299,7 @@ const ID = {
             >
               <div
                 [attr.aria-describedby]="describedBy(ids.days, daysSaid, false)"
-                [attr.aria-label]="'harvest.schedules.field.days' | rokuT"
+                [attr.aria-labelledby]="labelId(ids.days)"
                 class="days"
                 role="group"
               >
@@ -387,7 +389,9 @@ const ID = {
                   [id]="ids.consent"
                   type="checkbox"
                 />
-                <span>{{ consentText() }}</span>
+                <!-- A second label of the box: the sentence it agrees to is
+                     part of its name, and a click on it ticks the box. -->
+                <label [for]="ids.consent">{{ consentText() }}</label>
               </div>
             </lib-field-row>
           </div>
@@ -460,7 +464,13 @@ const ID = {
                   <dd>
                     <span>{{ outcomeKey(outcome) | rokuT }}</span>
                     @if (row()?.lastOutcomeNote; as note) {
-                      <span class="muted" data-note>{{ note }}</span>
+                      @if (busyRun(outcome, note); as link) {
+                        <a [routerLink]="link" data-note>{{
+                          'harvest.schedules.busyRun' | rokuT
+                        }}</a>
+                      } @else {
+                        <span class="muted" data-note>{{ note }}</span>
+                      }
                     }
                   </dd>
                 </div>
@@ -1011,6 +1021,24 @@ export class ScheduleView {
     help: boolean
   ): string | null {
     return describedByOf(controlId, messages.length, help);
+  }
+
+  labelId(controlId: string): string {
+    return labelIdOf(controlId);
+  }
+
+  /**
+   * The run that was in the way of a busy slot: its note is that run's ID
+   * (backend plan 0206). `null` for any other outcome, or a note that is a
+   * sentence and not an ID.
+   */
+  busyRun(
+    outcome: Wire.EnumsHarvestScheduleOutcome,
+    note: string
+  ): readonly string[] | null {
+    return outcome === 'SKIPPED_BUSY' && /^\S+$/.test(note)
+      ? harvestRunPath(note)
+      : null;
   }
 
   dayShort(day: number): string {

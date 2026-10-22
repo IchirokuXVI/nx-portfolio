@@ -264,9 +264,17 @@ describe('the page of a schedule, what the last slot did', () => {
       expect(said?.textContent).toContain(
         `harvest.schedules.outcome.${outcome}`
       );
-      expect(said?.querySelector('[data-note]')?.textContent ?? null).toBe(
-        outcome === 'STARTED' ? null : 'run-in-the-way'
-      );
+      const note = said?.querySelector('[data-note]');
+      if (outcome === 'SKIPPED_BUSY') {
+        // The note is the run that was in the way, so it is a link to it.
+        expect(note?.tagName).toBe('A');
+        expect(note?.getAttribute('href')).toBe('/harvest/runs/run-in-the-way');
+        expect(note?.textContent?.trim()).toBe('harvest.schedules.busyRun');
+      } else {
+        expect(note?.textContent ?? null).toBe(
+          outcome === 'STARTED' ? null : 'run-in-the-way'
+        );
+      }
     });
   }
 
@@ -339,6 +347,28 @@ describe('the page of a schedule, the rows', () => {
     ).store();
     expect(store.draft()['daysOfWeek']).toBe('1,3');
   });
+
+  it('names the days by their label, and a click on the label presses no day', async () => {
+    const { harness } = await open(`/harvest/setup/schedules/new`);
+    const page = harness.routeNativeElement as HTMLElement;
+    const row = page.querySelector('[data-field="daysOfWeek"]');
+    const label = row?.querySelector<HTMLElement>('#schedule-day-1-label');
+
+    expect(row?.querySelector('label')).toBeNull();
+    expect(label?.textContent?.trim()).toBe('harvest.schedules.field.days');
+    expect(
+      row?.querySelector('[role="group"]')?.getAttribute('aria-labelledby')
+    ).toBe('schedule-day-1-label');
+
+    label?.click();
+    harness.detectChanges();
+
+    expect(
+      [...page.querySelectorAll('[data-day]')].map((day) =>
+        day.getAttribute('aria-pressed')
+      )
+    ).toEqual(Array(7).fill('false'));
+  });
 });
 
 describe('the page of a schedule, adding one', () => {
@@ -367,6 +397,34 @@ describe('the page of a schedule, adding one', () => {
     const consent = page.querySelector('[data-consent]');
     expect(consent?.querySelector('input[type="checkbox"]')).not.toBeNull();
     expect(consent?.textContent).toContain('harvest.schedules.consent.text');
+  });
+
+  it('names the box by the sentence it agrees to, and a click on it ticks the box', async () => {
+    const { harness } = await open('/harvest/setup/schedules/new');
+    const page = await fill(harness);
+    await settle(harness);
+    const box = page.querySelector<HTMLInputElement>('#schedule-consent');
+    const sentence = [
+      ...page.querySelectorAll<HTMLLabelElement>(
+        '[data-consent] label[for="schedule-consent"]'
+      ),
+    ].find((label) =>
+      label.textContent?.includes('harvest.schedules.consent.text')
+    );
+
+    expect(sentence).toBeDefined();
+    expect(box?.checked).toBe(false);
+
+    sentence?.click();
+    harness.detectChanges();
+
+    expect(box?.checked).toBe(true);
+    const store = (
+      harness.routeDebugElement?.componentInstance as {
+        store: () => { draft: () => Record<string, unknown> };
+      }
+    ).store();
+    expect(store.draft()['acknowledgedAutomaticFetch']).toBe(true);
   });
 
   it('opens with the preset a link named', async () => {
@@ -457,5 +515,88 @@ describe('the page of a schedule, turning it on', () => {
         input: { enabled: true, acknowledgedAutomaticFetch: true },
       },
     ]);
+  });
+});
+
+@Component({ template: '<p data-panel>The panel</p>' })
+class PanelStub {}
+
+/**
+ * What the page keeps of the record page's contract. Its template is a copy
+ * of the record page's, so each piece is pinned here: a piece the record page
+ * gains or changes and this page does not is a failing case and not a drift.
+ */
+describe('the page of a schedule, what it keeps of the record page', () => {
+  const at = `/harvest/setup/schedules/${SCHEDULE}`;
+
+  it('draws the header, with the More menu of the named actions', async () => {
+    const { harness } = await open(at);
+    const page = harness.routeDebugElement?.componentInstance as SchedulePage;
+    const root = harness.routeNativeElement as HTMLElement;
+
+    expect(root.querySelector('lib-page-header')).not.toBeNull();
+    expect(page.plainActions().map((action) => action.name)).toEqual([
+      'turn-off',
+    ]);
+  });
+
+  it('draws the question of a named action', async () => {
+    // Turning a schedule on is the action that asks.
+    const { harness } = await open(at, view({ enabled: false }));
+    const page = harness.routeDebugElement?.componentInstance as SchedulePage;
+
+    page.asking.set(page.plainActions()[0]);
+    harness.detectChanges();
+
+    expect(
+      (harness.routeNativeElement as HTMLElement).querySelector(
+        '[data-action-question]'
+      )
+    ).not.toBeNull();
+  });
+
+  it('draws the line a named action said once it went through', async () => {
+    const { harness } = await open(at);
+    const page = harness.routeDebugElement?.componentInstance as SchedulePage;
+
+    page.done.set({ kind: 'line', key: 'harvest.schedules.done' });
+    harness.detectChanges();
+
+    expect(
+      (harness.routeNativeElement as HTMLElement).querySelector(
+        '[data-action-done]'
+      )?.textContent
+    ).toContain('harvest.schedules.done');
+  });
+
+  it('draws the panel a named action answered with', async () => {
+    const { harness } = await open(at);
+    const page = harness.routeDebugElement?.componentInstance as SchedulePage;
+
+    page.panel.set({
+      kind: 'panel',
+      heading: 'harvest.schedules.panel',
+      panel: PanelStub,
+      inputs: {},
+    });
+    harness.detectChanges();
+
+    expect(
+      (harness.routeNativeElement as HTMLElement).querySelector(
+        'lib-action-outcome-dialog [data-panel]'
+      )
+    ).not.toBeNull();
+  });
+
+  it('draws the question of leaving with changes', async () => {
+    const { harness } = await open(at);
+    const page = harness.routeDebugElement?.componentInstance as SchedulePage;
+
+    page.leaving.set(true);
+    harness.detectChanges();
+
+    expect(
+      (harness.routeNativeElement as HTMLElement).querySelector('[data-leave]')
+    ).not.toBeNull();
   });
 });

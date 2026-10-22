@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { RecordPage } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  ActionOutcomeDialog,
+  RecordPage,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CautionLine,
   ConfirmDialog,
@@ -33,6 +36,7 @@ import { ScheduleView } from './schedule-view';
   imports: [
     RouterLink,
     RokuTranslatorPipe,
+    ActionOutcomeDialog,
     CautionLine,
     ConfirmDialog,
     PageHeader,
@@ -112,6 +116,15 @@ import { ScheduleView } from './schedule-view';
       @if (status === 'loading') {
         <p class="sr-only" role="status">{{ heading() }}</p>
       }
+      <!-- What a named action said once it went through, as on the record
+           page. -->
+      @if (done(); as said) {
+        <lib-caution-line
+          [text]="said.key | rokuT: said.args ?? {}"
+          tone="saved"
+          data-action-done
+        />
+      }
       @for (key of keys(); track key) {
         <lib-schedule-view
           (addAnother)="addAnother()"
@@ -158,6 +171,16 @@ import { ScheduleView } from './schedule-view';
           data-action-question
         />
       }
+    }
+
+    @if (panel(); as shown) {
+      <lib-action-outcome-dialog
+        (closed)="panel.set(null)"
+        [headingArgs]="{ name: title() }"
+        [headingKey]="shown.heading"
+        [inputs]="shown.inputs"
+        [panel]="shown.panel"
+      />
     }
   `,
   styles: `

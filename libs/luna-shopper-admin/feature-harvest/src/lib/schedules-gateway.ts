@@ -164,7 +164,7 @@ export class SchedulesGateway implements ResourceGateway<Schedule> {
   private _refusal(field: string, key: string): GatewayError {
     return new GatewayError({
       code: 'validation_failed',
-      status: 422,
+      status: 400,
       correlationId: '',
       fieldErrors: { [field]: [this._translator.t(key)] },
     });

@@ -1843,6 +1843,7 @@
       "chainFromPreset": "Comes from the preset",
       "noPreset": "Choose a preset first",
       "thisChain": "this chain",
+      "busyRun": "the run that was going",
       "cadence": {
         "days": "{{days}} at {{time}}",
         "daily": "Every day at {{time}}"
