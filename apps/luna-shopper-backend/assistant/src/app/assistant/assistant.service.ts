@@ -82,6 +82,20 @@ export const NOTHING_HEARD = 'I did not catch that. Could you say it again?';
 export const RAN_OUT_OF_TIME =
   'That took me too long, so I stopped partway. Have a look at the list before asking again, in case some of it went on.';
 
+/**
+ * What a turn that ran its tools and then replied with nothing is answered with
+ * (plan 0224, section 2.2).
+ *
+ * The "got stuck" sentence asks the person to say it again, and here that would
+ * write a second time what the tools already wrote. So the sentence says the
+ * work happened and points at the list, for `RAN_OUT_OF_TIME`'s reason.
+ *
+ * English, for `NOTHING_HEARD`'s reason: the service speaks here, and the service
+ * has no translator.
+ */
+export const ANSWERED_WITHOUT_WORDS =
+  'I did that, but lost the words for it. Have a look at the list to see what changed.';
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -444,11 +458,16 @@ export class AssistantService {
         // Out of rounds with no answer is a real, if rare, outcome. Saying
         // nothing would be worse than saying so, and there is no useful sentence
         // to invent here that would not be a guess about what happened.
+        //
+        // A reply with no text and no calls gets the same sentence (plan 0224,
+        // section 2.2). A refusal from Claude reads that way, and an empty
+        // bubble is worse than an apology. When tools already ran this turn,
+        // asking again would repeat their writes, so the sentence says so.
         const text =
           reply.text ||
-          (reply.toolCalls.length > 0
-            ? 'Sorry, I got stuck on that one. Could you say it a different way?'
-            : '');
+          (calledTools.length > 0
+            ? ANSWERED_WITHOUT_WORDS
+            : 'Sorry, I got stuck on that one. Could you say it a different way?');
 
         this.record({
           userId: request.userId,

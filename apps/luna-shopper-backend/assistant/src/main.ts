@@ -63,10 +63,33 @@ async function bootstrap() {
   logger.log(
     `luna-shopper-backend-assistant bound to NATS; health on http://localhost:${config.port}/health/live`
   );
-  if (config.geminiApiKey.length === 0) {
+  // The key of the provider that answers, named, because with the switch on
+  // `claude` an empty GEMINI_API_KEY no longer means "no assistant" (plan 0224,
+  // section 5).
+  const turnKey =
+    config.provider === 'claude'
+      ? { name: 'ANTHROPIC_API_KEY', value: config.anthropicApiKey }
+      : { name: 'GEMINI_API_KEY', value: config.geminiApiKey };
+  if (turnKey.value.length === 0) {
     logger.warn(
-      'GEMINI_API_KEY is empty: the service is up and healthy, and every turn ' +
+      `${turnKey.name} is empty: the service is up and healthy, and every turn ` +
         'answers 501 not_configured. This is a supported deployment (plan 0026).'
+    );
+  }
+  if (config.provider === 'claude' && config.geminiApiKey.length === 0) {
+    logger.warn(
+      'GEMINI_API_KEY is empty: the assistant answers and cannot hear. Claude ' +
+        'takes no audio, so the voice route answers 501 and a voice comment ' +
+        'settles UNAVAILABLE (plan 0224, section 3).'
+    );
+  }
+  // A slot or deployment that switched to claude keeps the ASSISTANT_MODEL it
+  // had, and a Gemini name sent to the Messages API fails every turn.
+  if (config.provider === 'claude' && config.model.startsWith('gemini')) {
+    logger.warn(
+      `ASSISTANT_PROVIDER is claude and the model is ${config.model}, a Gemini ` +
+        'model: every turn will fail. Blank ASSISTANT_MODEL to use the Claude ' +
+        'default (plan 0224, section 5).'
     );
   }
 }

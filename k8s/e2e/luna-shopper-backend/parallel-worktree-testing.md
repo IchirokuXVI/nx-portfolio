@@ -314,8 +314,8 @@ this way, which is why a rehearsal no longer disturbs the stack you are serving.
 ### A re-run never overwrites what you edited
 
 Every `.env` this script writes is a file somebody may have edited by hand: a
-pasted `GEMINI_API_KEY`, a `HARVEST_ENABLED` flipped on for a crawl, a
-`MERCADONA_BASE_URL` pointed at a local recording. Those are exactly the values
+pasted `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`, a `HARVEST_ENABLED` flipped on
+for a crawl, a `MERCADONA_BASE_URL` pointed at a local recording. Those are exactly the values
 nobody can regenerate, so only the keys the **slot** decides are rewritten.
 `DERIVED_KEYS`, at the top of `luna-slot.sh`, names them per file, and the rule is:
 
