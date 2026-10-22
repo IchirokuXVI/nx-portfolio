@@ -4,8 +4,14 @@
 // `apps/velista/plans/mocks/product-card/Card.dc.html`: a row on the page's ground
 // with a hairline under it, not a box. The host draws the hairline, so a list can
 // take it off its last card.
+//
+// Its own stacking context. The picture, the plus, the steppers and the held block
+// carry `z-index: 1` to sit over the open control's press area; without this, that 1
+// competed with the sticky band a page keeps over its results, and a card scrolling
+// under the catalog's search band was drawn on top of it.
 :host {
   display: block;
+  isolation: isolate;
   border-block-end: 1px solid var(--app-border-subtle);
 }
 
