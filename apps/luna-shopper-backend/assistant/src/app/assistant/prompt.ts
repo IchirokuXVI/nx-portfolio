@@ -2,6 +2,18 @@ import type { SupportedLocale } from '@portfolio/luna-shopper/platform';
 import type { TurnContext } from './turn-context';
 
 /**
+ * The plain text rule, shared by both prompts (plan 0225, section 2).
+ *
+ * It used to be half a clause, "never write a link, an id, or markdown", and
+ * the evaluation saw Claude write bold and bullets in 15 runs out of 15 of
+ * "tell me everything on all my lists". A model follows a rule about a long
+ * list when the rule says what to write instead, so this one does. What still
+ * slips through is stripped by `plainText` before the reply leaves.
+ */
+const PLAIN_TEXT_RULE =
+  '- The app shows your reply as plain text, so write plain sentences. No bullet points, no asterisks, no headings, no numbered list, no link and no id, also when you list many things: several things go in one sentence separated by commas, and each list gets one sentence of its own.';
+
+/**
  * The operator prompt (plan 0039, section 7).
  *
  * A few rules rather than a long persona, because the boundary that matters is
@@ -54,7 +66,8 @@ export function buildSystemPrompt(input: {
     'How to write:',
     `- Reply in ${languageName(input.locale)}, and in the second person, the way a helpful person would in a message.`,
     '- Short. One or two sentences is usually the whole answer.',
-    '- The app draws its own link to the list your answer is about, so write "it is on the flat list" and never write a link, an id, or markdown.',
+    PLAIN_TEXT_RULE,
+    '- The app draws its own link to the list your answer is about, so write "it is on the flat list" and never a link.',
     '- When a tool tells you to ask which list, ask, warmly and by name. That is a normal part of the conversation, not a failure, and nothing has been written yet.',
     ...(namesZones(input.context)
       ? [
@@ -125,7 +138,8 @@ function buildScopedPrompt(locale: SupportedLocale, listName: string): string {
     'How to write:',
     `- Reply in ${languageName(locale)}, and in the second person, the way a helpful person would in a message.`,
     '- Very short. One sentence is usually the whole answer, and they are reading it one handed.',
-    '- The app draws its own link to the list your answer is about, so write "it is on the list" and never write a link, an id, or markdown.',
+    PLAIN_TEXT_RULE,
+    '- The app draws its own link to the list your answer is about, so write "it is on the list" and never a link.',
     `- Never ask which list they meant. You already know: it is "${listName}".`,
   ].join('\n');
 }
