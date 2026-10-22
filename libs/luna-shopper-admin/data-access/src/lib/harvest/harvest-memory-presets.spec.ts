@@ -27,7 +27,10 @@ describe('HarvestMemory, presets', () => {
     expect(page.items[1].lastRun).toEqual(
       expect.objectContaining({ id: 'run-catalog-completed' })
     );
-    expect((await memory.listPresets(DEZA)).items).toEqual([]);
+    // DEZA holds the one preset a seeded schedule names (admin plan 0067).
+    expect(
+      (await memory.listPresets(DEZA)).items.map((preset) => preset.name)
+    ).toEqual(['Catalog walk']);
   });
 
   it('refuses a name the chain already holds, in any case, as the API does', async () => {
@@ -88,6 +91,13 @@ describe('HarvestMemory, presets', () => {
 
   it('keeps the runs of a deleted preset', async () => {
     const memory = new HarvestMemory();
+    // A preset a schedule names cannot be deleted (admin plan 0067), so its
+    // two seeded schedules go first.
+    for (const schedule of (
+      await memory.listSchedules({ presetId: MERCADONA_WEEKLY_PRESET })
+    ).items) {
+      await memory.deleteSchedule(schedule.id);
+    }
 
     await memory.deletePreset(MERCADONA_WEEKLY_PRESET);
 

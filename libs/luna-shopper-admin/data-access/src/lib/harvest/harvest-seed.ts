@@ -40,6 +40,15 @@ const MERCADONA_4804 = '55555555-5555-4555-8555-555555555555';
 /** Fixed, so a spec can name the seeded preset and the run started from it. */
 export const MERCADONA_WEEKLY_PRESET = '66666666-6666-4666-8666-666666666661';
 
+/** The DEZA walk, which a schedule names while the chain may not be fetched. */
+export const DEZA_CATALOG_PRESET = '66666666-6666-4666-8666-666666666662';
+
+/** Fixed, so a spec can name the seeded schedules (admin plan 0067). */
+export const MERCADONA_WEEKDAYS_SCHEDULE =
+  '77777777-7777-4777-8777-777777777771';
+export const MERCADONA_SUNDAY_SCHEDULE = '77777777-7777-4777-8777-777777777772';
+export const DEZA_NIGHTLY_SCHEDULE = '77777777-7777-4777-8777-777777777773';
+
 const NOW = '2026-09-03T10:00:00.000Z';
 
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
@@ -162,7 +171,10 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     supermarketId: MERCADONA,
     sourceId: 'source-mercadona',
     mode: 'CATALOG_DISCOVERY',
-    trigger: 'MANUAL',
+    // A schedule started it (admin plan 0067), so the runs list has a run to
+    // mark "Scheduled" and a schedule a last run to link to.
+    trigger: 'SCHEDULED',
+    scheduleId: MERCADONA_WEEKDAYS_SCHEDULE,
     status: 'COMPLETED',
     requestedAt: '2026-09-02T06:00:00.000Z',
     startedAt: '2026-09-02T06:00:02.000Z',
@@ -1508,5 +1520,96 @@ export const HARVEST_RUN_PRESET_SEED: readonly Omit<
     },
     createdAt: '2026-08-28T08:00:00.000Z',
     updatedAt: '2026-08-28T08:00:00.000Z',
+  },
+  {
+    // A walk of the second storefront, whose source row is off: the schedule
+    // that names it says it will not run.
+    id: DEZA_CATALOG_PRESET,
+    supermarketId: DEZA,
+    name: 'Catalog walk',
+    input: { mode: 'CATALOG_DISCOVERY' },
+    createdAt: '2026-10-01T08:00:00.000Z',
+    updatedAt: '2026-10-01T08:00:00.000Z',
+  },
+];
+
+/**
+ * A schedule as the memory back end holds it (admin plan 0067, target 11).
+ *
+ * What the harvester stores, and not what it answers: `nextRunAt`,
+ * `blockedBy`, `presetName`, `lastRun` and `estimate` are worked out on each
+ * read, from the clock, the sources, the presets and the runs, as the
+ * harvester works them out.
+ */
+export interface StoredSchedule {
+  readonly id: string;
+  readonly presetId: string;
+  readonly supermarketId: string;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  timezone: string;
+  enabled: boolean;
+  readonly lastSlotAt: string | null;
+  readonly lastOutcome: Wire.EnumsHarvestScheduleOutcome | null;
+  readonly lastOutcomeAt: string | null;
+  readonly lastOutcomeNote: string | null;
+  readonly lastRunId: string | null;
+  readonly createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * The schedules with nothing listening: one that is on and runs, one that is
+ * off, and one that is on and will not run, because its chain may not be
+ * fetched. None of them starts anything: the memory back end has no timer.
+ */
+export const HARVEST_SCHEDULE_SEED: readonly StoredSchedule[] = [
+  {
+    id: MERCADONA_WEEKDAYS_SCHEDULE,
+    presetId: MERCADONA_WEEKLY_PRESET,
+    supermarketId: MERCADONA,
+    timeOfDay: '06:00',
+    daysOfWeek: [1, 3, 5],
+    timezone: 'Europe/Madrid',
+    enabled: true,
+    lastSlotAt: '2026-09-02T04:00:00.000Z',
+    lastOutcome: 'STARTED',
+    lastOutcomeAt: '2026-09-02T04:00:01.000Z',
+    lastOutcomeNote: null,
+    lastRunId: 'run-catalog-completed',
+    createdAt: '2026-08-29T08:00:00.000Z',
+    updatedAt: '2026-08-29T08:00:00.000Z',
+  },
+  {
+    id: MERCADONA_SUNDAY_SCHEDULE,
+    presetId: MERCADONA_WEEKLY_PRESET,
+    supermarketId: MERCADONA,
+    timeOfDay: '22:00',
+    daysOfWeek: [7],
+    timezone: 'Europe/Madrid',
+    enabled: false,
+    lastSlotAt: '2026-08-30T20:00:00.000Z',
+    lastOutcome: 'SKIPPED_BUSY',
+    lastOutcomeAt: '2026-08-30T20:00:01.000Z',
+    lastOutcomeNote: 'run-catalog-failed',
+    lastRunId: null,
+    createdAt: '2026-08-29T08:05:00.000Z',
+    updatedAt: '2026-09-01T09:00:00.000Z',
+  },
+  {
+    id: DEZA_NIGHTLY_SCHEDULE,
+    presetId: DEZA_CATALOG_PRESET,
+    supermarketId: DEZA,
+    timeOfDay: '03:30',
+    daysOfWeek: [2, 4],
+    timezone: 'Europe/Madrid',
+    enabled: true,
+    lastSlotAt: null,
+    lastOutcome: null,
+    lastOutcomeAt: null,
+    lastOutcomeNote: null,
+    lastRunId: null,
+    createdAt: '2026-10-01T08:10:00.000Z',
+    updatedAt: '2026-10-01T08:10:00.000Z',
   },
 ];

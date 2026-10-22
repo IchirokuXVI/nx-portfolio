@@ -18,6 +18,7 @@ export { HarvestReviewPage } from './lib/review-page';
 export { HARVEST_SEGMENT, HARVEST_TABS, harvestRoutes } from './lib/routes';
 export { RunPage } from './lib/run-page';
 export { RunsPage } from './lib/runs-page';
+export { SCHEDULES } from './lib/schedules';
 export { HarvestSetupPage } from './lib/setup-page';
 export { ShopsQueuePage } from './lib/shops-queue-page';
 export { SOURCES } from './lib/sources';
