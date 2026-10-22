@@ -444,11 +444,13 @@ export class AssistantService {
         // Out of rounds with no answer is a real, if rare, outcome. Saying
         // nothing would be worse than saying so, and there is no useful sentence
         // to invent here that would not be a guess about what happened.
+        //
+        // A reply with no text and no calls gets the same sentence (plan 0224,
+        // section 2.2). A refusal from Claude reads that way, and an empty
+        // bubble is worse than an apology.
         const text =
           reply.text ||
-          (reply.toolCalls.length > 0
-            ? 'Sorry, I got stuck on that one. Could you say it a different way?'
-            : '');
+          'Sorry, I got stuck on that one. Could you say it a different way?';
 
         this.record({
           userId: request.userId,

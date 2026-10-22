@@ -101,6 +101,15 @@ export interface ModelUsage {
   promptTokens: number | null;
   responseTokens: number | null;
   totalTokens: number | null;
+  /**
+   * How much of the prompt the provider read from its own cache rather than
+   * paying for it again (plan 0224, section 8).
+   *
+   * Logged in the turn record so a dashboard can tell a cached prefix from a
+   * paid one, which is the number that decides whether the cache breakpoint on
+   * the tool catalog earns its place. `null` when the provider reported nothing.
+   */
+  cachedPromptTokens: number | null;
 }
 
 export interface ModelReply {
