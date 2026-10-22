@@ -4,7 +4,7 @@
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
-    ":pinDigests",
+    "docker:pinDigests",
     ":semanticCommits"
   ],
   "baseBranchPatterns": ["dev"],
