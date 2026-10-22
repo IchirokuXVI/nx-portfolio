@@ -1,3 +1,5 @@
+> **PR:** [#803](https://github.com/IchirokuXVI/nx-portfolio/pull/803)
+
 # 0224: a Claude model answers the turn, and Gemini still hears
 
 > The assistant has one model provider, Gemini, reached over `fetch` behind the
