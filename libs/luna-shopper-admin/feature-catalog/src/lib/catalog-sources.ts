@@ -18,7 +18,7 @@ import {
 import { categoryMemoryRules, itemMemoryRules } from './category-rules';
 import { sectionMemoryRules } from './section-rules';
 import { SECTION_SEED } from './section-seed';
-import { SUPERMARKETS_PATH } from './supermarkets';
+import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /**
  * Where each catalog resource lives, and how it departs from ordinary CRUD.
@@ -44,6 +44,9 @@ import { SUPERMARKETS_PATH } from './supermarkets';
  * | location items  | one `PUT` for create and change, keyed on `(itemId, supermarketLocationId)`, and no delete |
  * | sections        | listed, created and ordered under a shop, read and changed at their own path |
  */
+
+/** Where the back office reads and writes chains (backend plan 0073). */
+export const SUPERMARKETS_PATH = '/v1/admin/catalog/supermarkets';
 
 /** Where the back office reads and writes shops (backend plan 0073). */
 const LOCATIONS_PATH = '/v1/admin/catalog/locations';
@@ -156,8 +159,13 @@ export function itemSource(): ResourceSource<Wire.CatalogItemView> {
   return {
     path: ITEMS_PATH,
     seed: ITEM_SEED,
-    memory: itemMemoryRules(categorySource, priceSource),
+    memory: itemMemoryRules(categorySource, priceSource, supermarketSource),
   };
+}
+
+/** The chains, whose photo switch a product's chain links follow. */
+export function supermarketSource(): ResourceSource<Wire.CatalogSupermarketView> {
+  return { path: SUPERMARKETS_PATH, seed: SUPERMARKET_SEED };
 }
 
 /**

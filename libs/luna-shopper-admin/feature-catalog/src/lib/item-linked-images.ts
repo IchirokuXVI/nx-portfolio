@@ -8,7 +8,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import { firstValueFrom } from 'rxjs';
 import { seededLinks } from './catalog-seed';
-import { ITEMS_PATH } from './catalog-sources';
+import { ITEMS_PATH, supermarketSource } from './catalog-sources';
 
 /** The chain photo saved for one source row, as the Sources tab draws it. */
 export interface ItemSourcePhoto {
@@ -71,7 +71,9 @@ export class ItemLinkedImages {
 
   async read(itemId: string): Promise<ReadonlyMap<string, ItemSourcePhoto>> {
     if (this._gateways instanceof ResourceMemoryGateways) {
-      return toItemSourcePhotos({ images: seededLinks(itemId) });
+      // Each shown or not as its chain is switched now.
+      const chains = this._gateways.tables().table(supermarketSource());
+      return toItemSourcePhotos({ images: seededLinks(itemId, chains) });
     }
     const http = this._http;
     const urls = this._urls;

@@ -47,6 +47,11 @@ const PINNED: Readonly<
   // Stopping the fetch of a chain destroys nothing: each of the two is taken
   // back by the other, with one press (admin plan 0059).
   sources: { danger: [], plain: ['stop-fetching', 'allow-fetching'] },
+  // One press hides every chain's photos, and only one request per chain shows them again (admin plan 0066).
+  supermarkets: {
+    danger: ['hide-every-chain-photos'],
+    plain: ['show-photos', 'hide-photos'],
+  },
   users: {
     danger: ['delete-account'],
     plain: [
