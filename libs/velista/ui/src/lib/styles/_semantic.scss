@@ -373,6 +373,10 @@ $app-content-max: 480px;
   // A product's picture on its own page: the one product there, so nearly twice
   // the row's.
   --app-product-page-image-size: 96px;
+  // The same photo after a press on its picture (the photo viewer): as wide as the
+  // phone column, and never so tall that the name under it leaves the screen.
+  --app-photo-viewer-size: 480px;
+  --app-photo-viewer-max-height: 70svh;
   // A chart (velista 0134, section 6): how thick a line of data is, and the mark
   // under the chosen range.
   --app-chart-line-width: 2px;

@@ -24,3 +24,24 @@
   font-size: var(--app-icon-md);
   color: var(--app-text-muted);
 }
+
+// A picture that opens its photo large: the whole square is the button. The ring
+// is drawn on the square, because the square clips what is inside it.
+.zoom {
+  display: flex;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+:host(:has(.zoom:focus-visible)) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+}
