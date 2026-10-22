@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   input,
@@ -20,6 +21,7 @@ import {
   toSourceEntryStatus,
   type SourceEntryStatus,
 } from '@portfolio/luna-shopper-admin/models';
+import { ItemLinkedImages, type ItemSourcePhoto } from './item-linked-images';
 
 /** How many source rows one page asks for. */
 const ENTRY_PAGE_SIZE = 50;
@@ -108,8 +110,15 @@ function text(value: unknown): string {
  * products end up bound to one, so the chip says how many rows share it rather
  * than leaving it to be noticed.
  *
+ * **A row with a saved chain photo shows it** (admin plan 0065, target 4):
+ * the picture, and whether a shopper is shown it or the chain is off. The
+ * photos are one read for the panel, joined on the row's id. A row with no
+ * photo draws nothing in that column, and the column is drawn only when a
+ * row has one.
+ *
  * It fails on its own: an error here is a line inside the panel with a retry,
- * and the product form around it keeps working.
+ * and the product form around it keeps working. The photos fail on their own
+ * too, with a line, and the rows stay.
  */
 @Component({
   selector: 'lib-item-source-entries',
@@ -134,6 +143,11 @@ function text(value: unknown): string {
       } @else if (rows().length === 0) {
         <p class="muted">{{ 'catalog.items.sources.empty' | rokuT }}</p>
       } @else {
+        @if (photosFailed()) {
+          <p class="muted" role="status" data-photos-failed>
+            {{ 'catalog.items.sources.photosFailed' | rokuT }}
+          </p>
+        }
         <div class="scroll">
           <table>
             <thead>
@@ -141,6 +155,11 @@ function text(value: unknown): string {
                 <th scope="col">
                   {{ 'catalog.items.sources.chain' | rokuT }}
                 </th>
+                @if (hasPhotos()) {
+                  <th scope="col">
+                    {{ 'catalog.items.sources.photo' | rokuT }}
+                  </th>
+                }
                 <th scope="col">
                   {{ 'catalog.items.sources.externalId' | rokuT }}
                 </th>
@@ -158,6 +177,36 @@ function text(value: unknown): string {
               @for (row of rows(); track row.id) {
                 <tr>
                   <td>{{ chainName(row.supermarketId) }}</td>
+                  @if (hasPhotos()) {
+                    <td>
+                      @if (photoOf(row.id); as photo) {
+                        <span [attr.data-photo]="row.id" class="photo">
+                          <!-- A chain's photo: no referrer goes with the
+                               request (backend plan 0198, section 3.1), and
+                               one that does not load leaves the grey square.
+                               The word beside it and the chain of the row
+                               name it, so the alt is empty. -->
+                          <span class="thumb">
+                            @if (!failed().has(photo.url)) {
+                              <img
+                                (error)="markFailed(photo.url)"
+                                [src]="photo.url"
+                                alt=""
+                                loading="lazy"
+                                referrerpolicy="no-referrer"
+                              />
+                            }
+                          </span>
+                          <span [class.muted]="!photo.enabled">{{
+                            (photo.enabled
+                              ? 'catalog.items.sources.photoShown'
+                              : 'catalog.items.sources.photoSaved'
+                            ) | rokuT
+                          }}</span>
+                        </span>
+                      }
+                    </td>
+                  }
                   <td class="mono">{{ row.externalId }}</td>
                   <td>{{ row.name }}</td>
                   <td>
@@ -268,6 +317,32 @@ function text(value: unknown): string {
       color: var(--admin-accent-on-wash);
     }
 
+    .photo {
+      display: inline-flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    /* 48 px, and the photo covers it: a row is scanned, not studied. */
+    .thumb {
+      display: block;
+      flex: none;
+      inline-size: 3rem;
+      block-size: 3rem;
+      overflow: hidden;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-neutral-wash);
+    }
+
+    img {
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      object-fit: cover;
+    }
+
     .chip.shared {
       margin-inline-start: var(--admin-space-2);
       background: var(--admin-waiting-wash);
@@ -279,6 +354,7 @@ function text(value: unknown): string {
 export class ItemSourceEntries {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _references = inject(ResourceReferences);
+  private readonly _photos = inject(ItemLinkedImages);
 
   /** The product whose source rows are drawn. */
   readonly itemId = input.required<string>();
@@ -288,16 +364,41 @@ export class ItemSourceEntries {
   readonly loading = signal(false);
   readonly errorKey = signal<string | null>(null);
 
+  /** The saved chain photos of the product, by the source row they are on. */
+  readonly photos = signal<ReadonlyMap<string, ItemSourcePhoto>>(new Map());
+  readonly photosFailed = signal(false);
+  /** The addresses of the photos that did not load. */
+  readonly failed = signal<ReadonlySet<string>>(new Set());
+  /** Whether a row drawn has a photo, which is when the column is drawn. */
+  readonly hasPhotos = computed(() => {
+    const photos = this.photos();
+    return this.rows().some((row) => photos.has(row.id));
+  });
+
   private readonly _chainNames = signal<ReadonlyMap<string, string>>(new Map());
   private readonly _askedChains = new Set<string>();
   /** The read this panel is on, so a slower earlier answer cannot land last. */
   private _generation = 0;
+  /** The same, for the photos. */
+  private _photoGeneration = 0;
 
   constructor() {
     effect(() => {
       const itemId = this.itemId();
-      untracked(() => void this._read(itemId, undefined));
+      untracked(() => {
+        void this._read(itemId, undefined);
+        void this._readPhotos(itemId);
+      });
     });
+  }
+
+  /** The saved photo of one source row, or `null`. */
+  photoOf(entryId: string): ItemSourcePhoto | null {
+    return this.photos().get(entryId) ?? null;
+  }
+
+  markFailed(url: string): void {
+    this.failed.update((held) => new Set(held).add(url));
   }
 
   /** A chain's name, or its id until the lookup answers or when it cannot. */
@@ -361,6 +462,24 @@ export class ItemSourceEntries {
     } finally {
       if (generation === this._generation) {
         this.loading.set(false);
+      }
+    }
+  }
+
+  /** Once for the product, and not again for "Show more". */
+  private async _readPhotos(itemId: string): Promise<void> {
+    this._photoGeneration += 1;
+    const generation = this._photoGeneration;
+    this.photos.set(new Map());
+    this.photosFailed.set(false);
+    try {
+      const photos = await this._photos.read(itemId);
+      if (generation === this._photoGeneration) {
+        this.photos.set(photos);
+      }
+    } catch {
+      if (generation === this._photoGeneration) {
+        this.photosFailed.set(true);
       }
     }
   }

@@ -180,3 +180,31 @@ describe('LineProductRail', () => {
     });
   });
 });
+
+describe('LineProductRail, the picture (velista 0162, section 3)', () => {
+  it('draws the shared picture: the photo, or the glyph for none and for a failed one', async () => {
+    const { fixture } = await render({
+      cards: [
+        card({ itemId: 'a', imageUrl: 'https://img.test/a.jpg' }),
+        card({ itemId: 'b', imageUrl: null }),
+      ],
+    });
+    const pictures = [
+      ...root(fixture).querySelectorAll('button.open > lib-product-picture'),
+    ];
+
+    expect(pictures).toHaveLength(2);
+    expect(pictures[0]?.querySelector('img')?.getAttribute('src')).toBe(
+      'https://img.test/a.jpg'
+    );
+    expect(pictures[1]?.querySelector('lib-product-icon')).not.toBeNull();
+    // Inside the card's button, so it opens nothing of its own.
+    expect(pictures[0]?.querySelector('button')).toBeNull();
+
+    pictures[0]?.querySelector('img')?.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+
+    expect(pictures[0]?.querySelector('img')).toBeNull();
+    expect(pictures[0]?.querySelector('lib-product-icon')).not.toBeNull();
+  });
+});

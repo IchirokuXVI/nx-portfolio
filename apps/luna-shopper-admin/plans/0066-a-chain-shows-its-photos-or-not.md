@@ -1,3 +1,5 @@
+> **PR:** [#802](https://github.com/IchirokuXVI/nx-portfolio/pull/802)
+
 # 0066 A chain shows its photos, or not
 
 > Backend half: plan `0198` of `apps/luna-shopper-backend/plans/`, built in PR #691. It says

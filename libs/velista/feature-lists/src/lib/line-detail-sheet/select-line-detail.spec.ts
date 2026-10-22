@@ -3,6 +3,7 @@ import type {
   Line,
   LineDetailVm,
   LineSettlement,
+  ProductOffer,
 } from '@portfolio/velista/models';
 import { selectLineDetail, type LineDetailInput } from './select-line-detail';
 
@@ -80,8 +81,31 @@ function item(
     size: 1,
     unit: 'LITER',
     productGroupId: null,
+    categories: [],
+    offer: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
   };
 }
+
+function offer(price: number, priceScopeId: string): ProductOffer {
+  return {
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: null,
+    observedAt: null,
+    sourceKind: 'OFFICIAL_WEB',
+    stale: false,
+    priceScopeId,
+  };
+}
+
+/** The size as words, so the detail line can be read in an assertion. */
+const translate = (key: string, args?: Record<string, unknown>): string =>
+  key === 'list.add.size.LITER' ? `${String(args?.['size'])} L` : key;
 
 const CATALOG: readonly CatalogItem[] = [
   item('item-milk-a', 'Whole milk', 'Hacendado'),
@@ -99,6 +123,7 @@ function select(overrides: Partial<LineDetailInput> = {}): LineDetailVm | null {
     claimedBy: null,
     callerUserId: ME,
     locale: 'en',
+    translate,
     canSettle: true,
     indicators: [],
     busy: false,
@@ -323,14 +348,154 @@ describe('selectLineDetail', () => {
           name: 'Whole milk',
           brand: 'Hacendado',
           removable: true,
+          imageUrl: null,
+          detail: 'Hacendado · 1 L',
+          price: null,
+          chain: null,
         },
         {
           itemId: 'item-milk-b',
           name: 'Semi-skimmed milk',
           brand: 'Pascual',
           removable: true,
+          imageUrl: null,
+          detail: 'Pascual · 1 L',
+          price: null,
+          chain: null,
         },
       ]);
+    });
+
+    it('carry the photo and the best known price with the chain that has it (velista 0163)', () => {
+      const cheap = offer(0.92, 'scope-mercadona');
+      const photographed: CatalogItem = {
+        ...item('item-milk-a', 'Whole milk', 'Hacendado'),
+        imageUrl: 'https://img.test/milk.png',
+        offer: cheap,
+        chainPrices: [
+          {
+            chain: {
+              id: 'chain-mercadona',
+              name: { en: 'Mercadona', es: 'Mercadona' },
+            },
+            offer: cheap,
+          },
+        ],
+      };
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        itemNameOf: (itemId) =>
+          itemId === 'item-milk-a'
+            ? photographed
+            : (CATALOG.find((row) => row.id === itemId) ?? null),
+      });
+
+      expect(detail?.choices[0]).toMatchObject({
+        imageUrl: 'https://img.test/milk.png',
+        price: '€0.92',
+        chain: 'Mercadona',
+      });
+    });
+
+    it('read the price near the reader only for a product whose record has none', () => {
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        pricesOf: (itemId) =>
+          itemId === 'item-milk-b'
+            ? [
+                {
+                  supermarketId: 'chain-lidl',
+                  chain: { en: 'Lidl', es: 'Lidl' },
+                  logoUrl: null,
+                  kind: 'priced',
+                  offer: offer(1.15, 'scope-lidl'),
+                  cheapest: true,
+                },
+              ]
+            : [],
+      });
+
+      expect(detail?.choices[1]).toMatchObject({
+        price: '€1.15',
+        chain: 'Lidl',
+      });
+      expect(detail?.choices[0]).toMatchObject({ price: null, chain: null });
+    });
+
+    it("take the record's own priced offer over the price near the reader", () => {
+      const own = offer(0.92, 'scope-mercadona');
+      const priced: CatalogItem = {
+        ...item('item-milk-a', 'Whole milk', 'Hacendado'),
+        offer: own,
+        chainPrices: [
+          {
+            chain: {
+              id: 'chain-mercadona',
+              name: { en: 'Mercadona', es: 'Mercadona' },
+            },
+            offer: own,
+          },
+        ],
+      };
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        itemNameOf: (itemId) =>
+          itemId === 'item-milk-a'
+            ? priced
+            : (CATALOG.find((row) => row.id === itemId) ?? null),
+        pricesOf: () => [
+          {
+            supermarketId: 'chain-lidl',
+            chain: { en: 'Lidl', es: 'Lidl' },
+            logoUrl: null,
+            kind: 'priced',
+            offer: offer(0.5, 'scope-lidl'),
+            cheapest: true,
+          },
+        ],
+      });
+
+      expect(detail?.choices[0]).toMatchObject({
+        price: '€0.92',
+        chain: 'Mercadona',
+      });
+    });
+
+    it('name no chain for an offer whose scope no chain price carries', () => {
+      const priced: CatalogItem = {
+        ...item('item-milk-a', 'Whole milk', 'Hacendado'),
+        offer: offer(0.92, 'scope-unknown'),
+        chainPrices: [
+          {
+            chain: {
+              id: 'chain-mercadona',
+              name: { en: 'Mercadona', es: 'Mercadona' },
+            },
+            offer: offer(0.95, 'scope-mercadona'),
+          },
+        ],
+      };
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        itemNameOf: (itemId) =>
+          itemId === 'item-milk-a'
+            ? priced
+            : (CATALOG.find((row) => row.id === itemId) ?? null),
+      });
+
+      expect(detail?.choices[0]).toMatchObject({ price: '€0.92', chain: null });
+    });
+
+    it('keep an unnamed product unnamed, with no detail', () => {
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-gone'] }),
+      });
+
+      expect(detail?.choices[1]).toMatchObject({
+        name: null,
+        detail: null,
+        imageUrl: null,
+      });
     });
   });
 

@@ -255,7 +255,16 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: GEMINI_API_KEY
-{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_TRANSCRIPTION_MODEL" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS") }}
+# The Claude key (plan 0224), optional by the same rule and in the same list. It
+# answers a turn only when ASSISTANT_PROVIDER is `claude`; Gemini still hears, so
+# the key above stays. ANTHROPIC_BASE_URL is not here, like GEMINI_BASE_URL: a
+# stand in is a development thing.
+- name: ANTHROPIC_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: ANTHROPIC_API_KEY
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_PROVIDER" "ASSISTANT_CLAUDE_EFFORT" "ASSISTANT_CLAUDE_THINKING" "ASSISTANT_MODEL" "ASSISTANT_TRANSCRIPTION_MODEL" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

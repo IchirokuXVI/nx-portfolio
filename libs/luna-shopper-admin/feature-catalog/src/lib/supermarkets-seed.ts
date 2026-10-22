@@ -23,7 +23,8 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     // The national scope, as every chain gets since backend plan 0153. The
     // others carry none, which is what a chain made before it reads as.
     defaultPriceScopeId: 'ps_mercadona_national',
-    linkedImagesEnabled: false,
+    // On, as in production since 2026-10-17 (backend plan 0198).
+    linkedImagesEnabled: true,
     // The shops `LOCATION_SEED` holds for it, as catalog counts them on a read
     // (admin plan 0042, section 2).
     locationCount: 3,

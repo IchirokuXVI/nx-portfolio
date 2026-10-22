@@ -600,10 +600,13 @@ export class CatalogPage {
           id: itemId,
           name,
           detail: null,
+          caption: null,
           imageUrl: null,
           price: null,
-          caption: null,
+          unitPrice: null,
+          seen: null,
           stale: false,
+          chains: null,
           label: name,
           summary: null,
         }),
@@ -1058,6 +1061,7 @@ export class CatalogPage {
       itemId: row.id,
       name: row.name,
       detail: row.summary,
+      imageUrl: row.imageUrl,
     });
   }
 
@@ -1069,7 +1073,12 @@ export class CatalogPage {
     }
     this.addFailed.set(false);
     void this._adds.step(
-      { listId: target.listId, itemId: row.id, detail: row.summary },
+      {
+        listId: target.listId,
+        itemId: row.id,
+        detail: row.summary,
+        imageUrl: row.imageUrl,
+      },
       step.lineId,
       step.by
     );

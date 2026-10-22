@@ -43,6 +43,12 @@ const OUTSIDE: Readonly<
   // from four reads that each fail alone, and its editor adds many codes at
   // once and reports on each (admin plan 0060, section 1).
   'postal-codes': ['editor', 'detail'],
+
+  // Seven day toggles, a time of day and the box of a consent are no field
+  // kind, and admin plan 0067 adds no kind to the contract. Its editor is
+  // `RecordPage` itself, with a body of its own built from the parts of the
+  // record page.
+  schedules: ['editor'],
 };
 
 /**
@@ -64,6 +70,10 @@ const HAND_MOUNTED: Readonly<Record<string, readonly [string, string]>> = {
   // The editor and the detail of `postal-codes`, above.
   'harvest/setup/postal-codes/new': ['postal-codes', 'PostalCodeAddPage'],
   'harvest/setup/postal-codes/:id': ['postal-codes', 'PostalCodeDetailPage'],
+
+  // The editor of `schedules`, above.
+  'harvest/setup/schedules/new': ['schedules', 'SchedulePage'],
+  'harvest/setup/schedules/:id': ['schedules', 'SchedulePage'],
 
   // A price rule opens inside its row of the six rules and not on a page.
   // The form in the row is `RecordView` on a `RecordStore`, so it is the
@@ -180,8 +190,12 @@ describe('the pages that are not the record page', () => {
     expect(found).toEqual(OUTSIDE);
   });
 
-  it('holds two entries, and can only shrink', () => {
-    expect(Object.keys(OUTSIDE).sort()).toEqual(['postal-codes', 'prices']);
+  it('holds three entries, and can only shrink', () => {
+    expect(Object.keys(OUTSIDE).sort()).toEqual([
+      'postal-codes',
+      'prices',
+      'schedules',
+    ]);
   });
 });
 
@@ -219,7 +233,7 @@ describe('the routes that open a record', () => {
     expect(outside).toEqual(HAND_MOUNTED);
   });
 
-  it('holds four entries, and can only shrink', () => {
-    expect(Object.keys(HAND_MOUNTED)).toHaveLength(4);
+  it('holds six entries, and can only shrink', () => {
+    expect(Object.keys(HAND_MOUNTED)).toHaveLength(6);
   });
 });

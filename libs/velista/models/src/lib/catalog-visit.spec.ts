@@ -20,6 +20,7 @@ const MILK: VisitProduct = {
   listId: 'weekly',
   itemId: 'milk',
   detail: '1 L · 1,09 € at Carrefour',
+  imageUrl: 'https://img.test/milk.png',
 };
 
 const NAME = 'Leche semidesnatada';
@@ -61,6 +62,23 @@ function entry(overrides: Partial<VisitAddition> = {}): VisitAddition {
 }
 
 describe('the record of a visit', () => {
+  it('keeps the photo of the row the plus was pressed on (velista 0163)', () => {
+    const added = visitAfterAdd([], MILK, line(), false);
+    const stepped = visitAfterStep(
+      [],
+      { ...MILK, imageUrl: null },
+      line({ lineId: 'line-2', quantity: 2 }),
+      1
+    );
+
+    expect(added[0]?.imageUrl).toBe('https://img.test/milk.png');
+    expect(visitSections(added, null)[0]?.entries[0]?.imageUrl).toBe(
+      'https://img.test/milk.png'
+    );
+    // A product with no photo keeps none, which the sheet draws as the glyph.
+    expect(stepped[0]?.imageUrl).toBeNull();
+  });
+
   it('starts an entry for a new line at nothing before, made by the visit', () => {
     const visit = visitAfterAdd([], MILK, line(), false);
 

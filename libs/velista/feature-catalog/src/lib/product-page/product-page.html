@@ -54,19 +54,11 @@
         long one to a line.
       -->
       <div class="product">
-        <span aria-hidden="true" class="picture">
-          @if (image(); as src) {
-            <img
-              (error)="brokenImage.set(src)"
-              [src]="src"
-              alt=""
-              class="picture-image"
-              decoding="async"
-            />
-          } @else {
-            <lib-product-icon class="picture-glyph" />
-          }
-        </span>
+        <lib-product-picture
+          [imageUrl]="imageUrl()"
+          class="picture"
+          loading="eager"
+        />
         <div class="about">
           <p class="about-name">{{ name() }}</p>
           @if (detail(); as text) {

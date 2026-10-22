@@ -21,7 +21,7 @@ import {
   runWithRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import {
-  DEFAULT_ASSISTANT_MODEL,
+  DEFAULT_GEMINI_MODEL,
   type AssistantConfig,
 } from '../config/app-config';
 import { FakeModelProvider } from '../provider/fake-model.provider';
@@ -31,6 +31,7 @@ import {
   type ModelProvider,
 } from '../provider/model-provider';
 import {
+  ANSWERED_WITHOUT_WORDS,
   AssistantService,
   capTranscript,
   NOTHING_HEARD,
@@ -259,8 +260,13 @@ const CONFIG: AssistantConfig = {
   gatewayInternalUrl: 'http://gateway.invalid',
   geminiApiKey: 'not-used-by-the-fake',
   geminiBaseUrl: 'http://provider.invalid',
-  model: DEFAULT_ASSISTANT_MODEL,
-  transcriptionModel: DEFAULT_ASSISTANT_MODEL,
+  provider: 'gemini',
+  anthropicApiKey: '',
+  anthropicBaseUrl: 'http://provider.invalid',
+  claudeEffort: 'low',
+  claudeThinking: 'adaptive',
+  model: DEFAULT_GEMINI_MODEL,
+  transcriptionModel: DEFAULT_GEMINI_MODEL,
   audioMaxBytes: 2 * 1024 * 1024,
   audioMimeTypes: ['audio/webm', 'audio/ogg', 'audio/mp4'],
   maxTurns: 20,
@@ -3009,5 +3015,51 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       // Still not this one (plan 0044, section 2.2).
       expect(names).not.toContain('rename_me');
     });
+  });
+});
+
+describe('a reply with nothing in it (plan 0224, section 2.2)', () => {
+  it('answers the "got stuck" sentence rather than an empty bubble', async () => {
+    // A refusal from Claude reads as no text and no calls. The caller is owed a
+    // sentence, and an apology is better than nothing on the screen.
+    const service = build(
+      new FakeModelProvider([FakeModelProvider.says('')]),
+      new RecordingApi()
+    );
+
+    const response = await service.turn(turnRequest('hola'));
+
+    expect(response.reply).toBe(
+      'Sorry, I got stuck on that one. Could you say it a different way?'
+    );
+  });
+
+  it('says the work was done when tools ran before the empty reply', async () => {
+    // "Say it again" after a write would write it twice.
+    const logged: string[] = [];
+    jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message: unknown) => {
+        logged.push(String(message));
+      });
+
+    const service = build(
+      new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.says(''),
+      ]),
+      new RecordingApi()
+    );
+
+    const response = await service.turn(turnRequest('hay leche?'));
+
+    const record = logged
+      .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+      .find((entry) => entry['event'] === 'assistant.turn');
+
+    expect(response.reply).toBe(ANSWERED_WITHOUT_WORDS);
+    expect(record?.['outcome']).toBe('acted');
+
+    jest.restoreAllMocks();
   });
 });

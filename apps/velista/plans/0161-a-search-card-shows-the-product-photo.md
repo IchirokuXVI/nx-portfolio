@@ -1,3 +1,5 @@
+> **PR:** [#800](https://github.com/IchirokuXVI/nx-portfolio/pull/800)
+
 # 0161: a search card shows the product photo
 
 > Asked for by the owner on 2026-10-20, after an audit of every place velista draws a

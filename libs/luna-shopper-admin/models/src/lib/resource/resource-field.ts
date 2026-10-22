@@ -175,7 +175,28 @@ export interface TextField<T extends ResourceRow> extends FieldBase<T> {
    * page reads: "Open on a map" says more than the address of a map does.
    */
   readonly linkLabel?: string;
+  /**
+   * Where the picture comes from, drawn in place of its address (admin plan
+   * 0065). Only for `format: 'image'`, and only on a field the form cannot
+   * change: "Shoppers see" of a product says "Ours", or names the chain.
+   *
+   * With no picture, a word is the whole value: "No photo" says more than
+   * "None" does. A method for the reason {@link FieldBase.read} is one.
+   */
+  caption?(row: T): ImageCaption;
 }
+
+/**
+ * Where a picture comes from: a word, or the record it came from, which the
+ * page names as it names a reference.
+ */
+export type ImageCaption =
+  | { readonly kind: 'word'; readonly key: string }
+  | {
+      readonly kind: 'reference';
+      readonly resource: string;
+      readonly id: string;
+    };
 
 /** A count or a measure. Not money, which is its own kind for a reason. */
 export interface NumberField<T extends ResourceRow> extends FieldBase<T> {

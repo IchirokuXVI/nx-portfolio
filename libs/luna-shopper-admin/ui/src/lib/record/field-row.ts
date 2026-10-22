@@ -17,6 +17,11 @@ export function errorIdsOf(controlId: string, count: number): string[] {
   );
 }
 
+/** The id of the label of a row whose control is a group. */
+export function labelIdOf(controlId: string): string {
+  return `${controlId}-label`;
+}
+
 /** The id of the line of help under a control. */
 export function helpIdOf(controlId: string): string {
   return `${controlId}-help`;
@@ -100,7 +105,11 @@ export function describedByOf(
     @if (controlId(); as id) {
       <div class="row editing">
         <div class="label">
-          <label [for]="id">{{ label() }}</label>
+          @if (group()) {
+            <span [id]="labelId(id)">{{ label() }}</span>
+          } @else {
+            <label [for]="id">{{ label() }}</label>
+          }
           <!-- Hidden from a screen reader: the control itself says it is
                required, and a star read aloud says nothing. -->
           @if (required()) {
@@ -251,6 +260,17 @@ export class FieldRow {
   readonly messages = input<readonly FieldMessage[]>([]);
   /** A grey bar in place of the value. */
   readonly loading = input(false);
+  /**
+   * The control is a group of controls, such as the days of a week. The label
+   * is then text with the id from {@link labelIdOf}, which the group names in
+   * `aria-labelledby`: a label `for` one of them would press it on a click.
+   * `controlId` still names the refusals.
+   */
+  readonly group = input(false);
+
+  labelId(controlId: string): string {
+    return labelIdOf(controlId);
+  }
 
   /** The id of one refusal, or `null` while there is no control to name it. */
   errorId(index: number): string | null {

@@ -24,6 +24,8 @@ import { HarvestReviewPage } from './review-page';
 import { HARVEST_SEGMENT, HARVEST_TABS, harvestRoutes } from './routes';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
+import { SchedulePage } from './schedule-page';
+import { SCHEDULES } from './schedules';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
 import { SOURCES } from './sources';
@@ -198,9 +200,42 @@ describe('harvestRoutes, Setup', () => {
   const [page, forms] = routes.filter((route) => route.path === 'setup');
 
   /** Target 6: one page, and each part is a child of it. */
-  it('is a page with the three parts as its children', () => {
+  it('is a page with the four parts as its children', () => {
     expect(page.component).toBe(HarvestSetupPage);
-    expect(childPaths(page)).toEqual(['', 'sources', 'brands', 'postal-codes']);
+    expect(childPaths(page)).toEqual([
+      '',
+      'sources',
+      'schedules',
+      'brands',
+      'postal-codes',
+    ]);
+  });
+
+  /**
+   * The schedules (admin plan 0067): the generic list as a part, and a page
+   * of their own at `new` and at an ID, which is the record page with its
+   * body.
+   */
+  it('lists the schedules as a part, and opens one on its own page', () => {
+    const tab = page.children?.find((child) => child.path === 'schedules');
+    expect(tab?.component).toBe(ResourceListPage);
+    expect(tab?.data?.[RESOURCE_DESCRIPTOR]).toBe(SCHEDULES);
+
+    const schedules = forms.children?.find(
+      (child) => child.path === 'schedules'
+    );
+    expect(
+      (schedules?.children ?? []).map((child) => [child.path, child.component])
+    ).toEqual([
+      ['new', SchedulePage],
+      [':id', SchedulePage],
+    ]);
+    expect(schedules?.children?.[0].data?.[RESOURCE_FORM_MODE]).toBe('create');
+    for (const child of schedules?.children ?? []) {
+      expect(child.canDeactivate?.length).toBe(1);
+    }
+    // The record page itself, with a body of its own.
+    expect(Object.getPrototypeOf(SchedulePage)).toBe(RecordPage);
   });
 
   /**
@@ -250,7 +285,12 @@ describe('harvestRoutes, Setup', () => {
   it('mounts the forms of each resource beside the page, and not inside it', () => {
     expect(forms.component).toBeUndefined();
     expect(routes.indexOf(page)).toBeLessThan(routes.indexOf(forms));
-    expect(childPaths(forms)).toEqual(['sources', 'brands', 'postal-codes']);
+    expect(childPaths(forms)).toEqual([
+      'sources',
+      'schedules',
+      'brands',
+      'postal-codes',
+    ]);
 
     const codes = forms.children?.find(
       (child) => child.path === 'postal-codes'
@@ -296,8 +336,9 @@ describe('harvestRoutes, Setup', () => {
       (route) => route.path === 'setup'
     );
 
-    expect(childPaths(bareByItself)).toEqual(['', 'sources']);
-    expect(childPaths(bareForms)).toEqual(['sources']);
+    // The sources and the schedules are this library's own.
+    expect(childPaths(bareByItself)).toEqual(['', 'sources', 'schedules']);
+    expect(childPaths(bareForms)).toEqual(['sources', 'schedules']);
   });
 });
 

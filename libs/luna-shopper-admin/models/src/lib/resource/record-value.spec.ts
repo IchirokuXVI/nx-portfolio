@@ -80,6 +80,37 @@ describe('toRecordValue', () => {
     });
   });
 
+  /** Admin plan 0065: "Shoppers see" of a product. */
+  it('puts where a picture comes from in place of its address, and says so when there is none', () => {
+    const shown: Field = {
+      ...text,
+      format: 'image',
+      editable: false,
+      caption: (row) =>
+        row['value'] === null
+          ? { kind: 'word', key: 'none' }
+          : { kind: 'reference', resource: 'supermarkets', id: 'sm_1' },
+    };
+
+    expect(read(shown, 'https://cdn/x.png')).toEqual({
+      kind: 'image',
+      src: 'https://cdn/x.png',
+      caption: { kind: 'reference', resource: 'supermarkets', id: 'sm_1' },
+    });
+    // With no picture, the word is the whole value.
+    expect(read(shown, null)).toEqual({ kind: 'word', key: 'none' });
+    // A caption that is not a word says nothing about an empty value.
+    expect(
+      read(
+        {
+          ...shown,
+          caption: () => ({ kind: 'reference', resource: 'r', id: 'i' }),
+        },
+        null
+      )
+    ).toEqual({ kind: 'none' });
+  });
+
   it('reads a text in several languages as one line for each, in the order of the field', () => {
     expect(read(name, { en: 'Whole milk', es: 'Leche entera' })).toEqual({
       kind: 'lines',

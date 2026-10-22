@@ -16,6 +16,7 @@ import {
   harvestRoutes,
   HarvestStatus,
   POSTAL_CODES,
+  SCHEDULES,
   SOURCES,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
@@ -165,13 +166,14 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     //
     // The chain sources are held too (admin plan 0059), so that the registry
     // knows where a source is. They are the harvester's own, so its route
-    // table mounts them without being handed them.
+    // table mounts them without being handed them. So are the schedules of
+    // the presets (admin plan 0067), for the same reason.
     key: 'harvest',
     label: 'shell.sections.harvest',
     icon: InboxIcon,
     segment: HARVEST_SEGMENT,
     landing: HARVEST_REVIEW_TAB,
-    held: [SOURCES, BRANDS, POSTAL_CODES],
+    held: [SOURCES, SCHEDULES, BRANDS, POSTAL_CODES],
     heldUnder: HARVEST_SETUP_TAB,
     screens: harvestRoutes({
       brandsQueue: BrandSuggestionsPage,

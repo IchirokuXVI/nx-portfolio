@@ -625,6 +625,61 @@ describe('the runs list, and the filter over it', () => {
     await drain();
     expect(listed.at(-1)).toEqual({ limit: 20 });
   });
+
+  /** Admin plan 0067, target 10: started by anyone, a person, a schedule. */
+  it('filters by who started a run, and sends none for anyone', async () => {
+    const { fixture, listed } = await render();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="trigger"]'
+    );
+
+    expect(
+      [...select.querySelectorAll('option')].map((option) => [
+        option.value,
+        option.textContent?.trim(),
+      ])
+    ).toEqual([
+      ['', 'harvest.schedules.runs.anyone'],
+      ['MANUAL', 'harvest.schedules.runs.MANUAL'],
+      ['SCHEDULED', 'harvest.schedules.runs.SCHEDULED'],
+    ]);
+
+    select.value = 'SCHEDULED';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    fixture.detectChanges();
+    expect(listed.at(-1)).toEqual({ limit: 20, trigger: 'SCHEDULED' });
+    expect(fixture.componentInstance.runs().map((run) => run.id)).toEqual([
+      'run-catalog-completed',
+    ]);
+
+    select.value = 'MANUAL';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    expect(listed.at(-1)).toEqual({ limit: 20, trigger: 'MANUAL' });
+
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    expect(listed.at(-1)).toEqual({ limit: 20 });
+  });
+
+  it('says Scheduled beside a run a schedule started, and beside no other', async () => {
+    const { fixture } = await render();
+
+    const marked = [
+      ...fixture.nativeElement.querySelectorAll('[data-scheduled]'),
+    ] as HTMLElement[];
+
+    expect(marked).toHaveLength(1);
+    expect(marked[0].textContent).toContain('harvest.schedules.runs.scheduled');
+    expect(
+      fixture.componentInstance.scheduledBy('run-catalog-completed')
+    ).not.toBeNull();
+    expect(
+      fixture.componentInstance.scheduledBy('run-catalog-failed')
+    ).toBeNull();
+  });
 });
 
 /**

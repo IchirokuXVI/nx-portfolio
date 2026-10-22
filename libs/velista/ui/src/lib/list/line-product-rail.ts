@@ -3,11 +3,11 @@ import {
   Component,
   input,
   output,
-  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { LineProductCardVm } from '@portfolio/velista/models';
-import { ProductIcon, StarFilledIcon, StarIcon } from '../icons/icons';
+import { StarFilledIcon, StarIcon } from '../icons/icons';
+import { ProductPicture } from './product-picture';
 
 /**
  * The products of a line, as cards that scroll sideways (velista `0135`,
@@ -33,30 +33,13 @@ import { ProductIcon, StarFilledIcon, StarIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-line-product-rail',
-  imports: [RokuTranslatorPipe, ProductIcon, StarIcon, StarFilledIcon],
+  imports: [RokuTranslatorPipe, ProductPicture, StarIcon, StarFilledIcon],
   template: `
     <ul (scroll)="onScroll($event)" class="rail">
       @for (card of cards(); track card.itemId) {
         <li class="card">
-          <button
-            (click)="opened.emit(card.itemId)"
-            class="open"
-            type="button"
-          >
-            <span aria-hidden="true" class="picture">
-              @if (imageOf(card); as src) {
-                <img
-                  (error)="markBroken(src)"
-                  [src]="src"
-                  alt=""
-                  class="image"
-                  decoding="async"
-                  loading="lazy"
-                />
-              } @else {
-                <lib-product-icon class="glyph" />
-              }
-            </span>
+          <button (click)="opened.emit(card.itemId)" class="open" type="button">
+            <lib-product-picture [imageUrl]="card.imageUrl" class="picture" />
 
             <span class="name">{{
               card.name ?? ('list.detail.unnamedProduct' | rokuT)
@@ -159,14 +142,6 @@ export class LineProductRail {
    */
   readonly reached = output<number>();
 
-  /** Pictures that failed to load, so the carton takes their place. */
-  private readonly _broken = signal<ReadonlySet<string>>(new Set());
-
-  protected imageOf(card: LineProductCardVm): string | null {
-    const src = card.imageUrl;
-    return src !== null && !this._broken().has(src) ? src : null;
-  }
-
   protected onScroll(event: Event): void {
     const rail = event.currentTarget as HTMLElement;
     const first = rail.firstElementChild as HTMLElement | null;
@@ -180,13 +155,7 @@ export class LineProductRail {
         ? first.offsetWidth
         : second.offsetLeft - first.offsetLeft;
     if (step > 0) {
-      this.reached.emit(
-        Math.ceil((rail.scrollLeft + rail.clientWidth) / step)
-      );
+      this.reached.emit(Math.ceil((rail.scrollLeft + rail.clientWidth) / step));
     }
-  }
-
-  protected markBroken(src: string): void {
-    this._broken.update((broken) => new Set([...broken, src]));
   }
 }

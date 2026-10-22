@@ -1,3 +1,5 @@
+> **PR:** [#807](https://github.com/IchirokuXVI/nx-portfolio/pull/807)
+
 # 0163: three sheets draw the compact card
 
 > Asked for by the owner on 2026-10-20, with plan `0162`: the places that choose or list
