@@ -1848,7 +1848,6 @@
         "daily": "Every day at {{time}}"
       },
       "info": {
-        "title": "Schedules",
         "what": "A schedule starts a preset by itself at a time of day, on the days it names.",
         "source": "The source of the chain must stay on. A schedule of a chain whose source is off starts nothing.",
         "production": "Only production starts schedules. On any other cluster each one says why it will not run."

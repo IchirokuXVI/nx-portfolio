@@ -138,7 +138,8 @@ export const SCHEDULES = defineResource<Schedule>({
   },
 
   info: {
-    title: 'harvest.schedules.info.title',
+    // The name of the screen, as the other panels name theirs.
+    title: 'harvest.schedules.many',
     points: [
       'harvest.schedules.info.what',
       'harvest.schedules.info.source',
