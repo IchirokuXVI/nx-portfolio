@@ -23,12 +23,13 @@
     "schedule": ["* 0-5 * * 1"]
   },
   "vulnerabilityAlerts": {
-    "enabled": true,
     "minimumReleaseAge": null,
     "schedule": ["at any time"],
-    "labels": ["security"]
+    "labels": ["security"],
+    "groupName": "{{#if (containsString packageName '@nestjs/')}}nest monorepo{{else}}{{{packageName}}}{{/if}}"
   },
   "osvVulnerabilityAlerts": true,
+  "dependencyDashboardOSVVulnerabilitySummary": "unresolved",
   "customManagers": [
     {
       "description": "Versions pinned in the cluster bootstrap, each under a `# renovate:` comment",
@@ -92,6 +93,11 @@
         "angular-eslint"
       ],
       "enabled": false
+    },
+    {
+      "description": "Nest packages need each other at matching versions, so a security fix joins the nest monorepo branch (vulnerabilityAlerts.groupName) instead of a branch of its own. A branch takes its schedule from its first upgrade, so the family runs at any time, or the fix would wait for Monday",
+      "matchPackageNames": ["@nestjs/**"],
+      "schedule": ["at any time"]
     },
     {
       "description": "Our own images are tagged by the pipeline, not by Renovate",
