@@ -53,6 +53,12 @@ describe('createElJamonFetch', () => {
   it('keeps a cookie a redirect sets: sent on the next request and on the final response', async () => {
     const cookies: Array<string | undefined> = [];
     handler = (request, response) => {
+      // The earlier tests abandon requests to `/silent`. On a slow machine the
+      // server can parse one after this handler is in place, so only this
+      // test's own paths are recorded; the rest are left unanswered.
+      if (request.url !== '/start' && request.url !== '/end') {
+        return;
+      }
       cookies.push(request.headers.cookie);
       if (request.url === '/start') {
         response.writeHead(302, {
