@@ -396,10 +396,19 @@ describe('SuggestionList, the cards', () => {
       expect(link?.getAttribute('aria-label')).toContain('Product a');
     });
 
-    it('is no link where the page cannot open a product', async () => {
+    it('is no link, no button and no tab stop where the page cannot open a product', async () => {
       const { fixture } = await render([item('a')]);
+      const card = cards(fixture)[0];
 
       expect(root(fixture).querySelector('a.open')).toBeNull();
+      expect(root(fixture).querySelector('button.open')).toBeNull();
+      expect(card?.querySelector('.open')?.tagName).toBe('SPAN');
+      expect(card?.querySelector('.open .name')?.textContent?.trim()).toBe(
+        'Product a'
+      );
+      expect(
+        card?.querySelector('.open[tabindex], .open button, .open a')
+      ).toBeNull();
     });
   });
 
@@ -676,6 +685,21 @@ describe('SuggestionList, the cards', () => {
         ?.querySelectorAll<HTMLButtonElement>('.step');
 
       expect([...(steps ?? [])].every((step) => step.disabled)).toBe(true);
+    });
+
+    it('disables a line’s stepper while a write to its row is in flight, and sends nothing', async () => {
+      const { fixture, changed } = await render([item('held')], {
+        holdings: holdings.map((one, index) =>
+          index === 0 ? { ...one, busy: true } : one
+        ),
+      });
+      const steps = root(fixture)
+        .querySelectorAll('.held-line')[0]
+        ?.querySelectorAll<HTMLButtonElement>('.step');
+
+      expect([...(steps ?? [])].every((step) => step.disabled)).toBe(true);
+      await press(fixture, steps?.[1] ?? null);
+      expect(changed).toEqual([]);
     });
 
     it('draws no section on a card no line holds', async () => {

@@ -119,6 +119,15 @@ lib-product-picture.thumb:not(.has-photo),
   grid-column: 2 / 3;
 }
 
+// A card on a page that cannot open the product: its words, nothing to press.
+.open.is-inert {
+  cursor: auto;
+
+  &::before {
+    content: none;
+  }
+}
+
 .open:disabled {
   cursor: default;
   opacity: 0.6;

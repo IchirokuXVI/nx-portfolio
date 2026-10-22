@@ -53,6 +53,12 @@ export interface SuggestionHolding {
   readonly quantity: number;
   /** Whether the stepper may move. A caller who may not change it sees it disabled. */
   readonly editable: boolean;
+  /**
+   * A write to the line is in flight. The stepper is disabled until it lands, as
+   * the page's own row is, so a second press cannot resend the same step from a
+   * count the server has not answered yet. Absent is not busy.
+   */
+  readonly busy?: boolean;
 }
 
 /** A holding's stepper moved, once per press. */
@@ -185,7 +191,8 @@ export class SuggestionList {
   /**
    * The URL a press on a card opens for one product, or null for none. A page that
    * cannot open a product, a guest's basket, passes null, and its cards open
-   * nothing.
+   * nothing: no link, no button and no press area, only the card's words. Nothing
+   * here listens to the card's `opened`, so a link is the only way a card opens.
    */
   readonly productLink = input<((itemId: string) => string) | null>(null);
 
@@ -351,7 +358,7 @@ export class SuggestionList {
     const holding = this.holdingsOf()(card.suggestion).find(
       (candidate) => candidate.lineId === step.lineId
     );
-    if (holding === undefined) {
+    if (holding === undefined || holding.busy === true) {
       return;
     }
     this.holdingChanged.emit({
@@ -387,7 +394,7 @@ function addOf(
       lineId: holding.lineId,
       name: holding.text,
       quantity: holding.quantity,
-      editable: holding.editable,
+      editable: holding.editable && holding.busy !== true,
       pending: false,
       list: list === null ? holding.listName : null,
       stepperLabel: t('list.add.card.alreadyQuantity', { line: holding.text }),
