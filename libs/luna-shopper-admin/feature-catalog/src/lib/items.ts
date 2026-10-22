@@ -39,6 +39,12 @@ export const PRODUCT_SOURCES_TAB = 'sources';
  */
 export type Item = Wire.CatalogItemView & {
   readonly categoryIds: readonly string[];
+  /**
+   * No column: the "Shoppers see" fact, read off `images`. A field has to be
+   * named by a property, and `images` is a wire key whose value is an array,
+   * which an address prefill or a server field error would land on.
+   */
+  readonly shownPhoto?: string | null;
 } & ScopePriced;
 
 /** A product row with the ids its categories carry, in their order. */
@@ -50,10 +56,26 @@ export function withCategoryIds(row: Wire.CatalogItemView): Item {
 }
 
 /**
- * The item gateway, with {@link Item.categoryIds} on every row it answers.
+ * A product row as the back office holds it: the ids of its categories, and
+ * our own photo in `imageUrl` (admin plan 0065, section 2).
  *
- * Nothing it sends changes: a form sends `categoryIds` only when the operator
- * changed them, which is what the update route takes.
+ * The view answers two photos. `imageUrl` is the one a shopper sees, which is
+ * a chain's photo when we have none and that chain's photos are on.
+ * `ownImageUrl` is ours, the column the update route writes as `imageUrl`. A
+ * form filled from the shown photo saves a chain's address as ours on the
+ * first save, so the field reads ours. What a shopper sees stays on the row
+ * in `images`, whose first entry is that photo, with its `source` and its
+ * chain: a reader that wants the shown photo reads it there.
+ */
+export function toItemRow(view: Wire.CatalogItemView): Item {
+  return { ...withCategoryIds(view), imageUrl: view.ownImageUrl ?? null };
+}
+
+/**
+ * The item gateway, with every row it answers as {@link toItemRow} reads it.
+ *
+ * Nothing it sends changes: a form sends `categoryIds` and `imageUrl` only
+ * when the operator changed them, which is what the update route takes.
  */
 export function itemGateway(
   inner: ResourceGateway<Wire.CatalogItemView>
@@ -61,13 +83,18 @@ export function itemGateway(
   return {
     list: async (query) => {
       const page = await inner.list(query);
-      return { ...page, items: page.items.map(withCategoryIds) };
+      return { ...page, items: page.items.map(toItemRow) };
     },
-    read: async (id) => withCategoryIds(await inner.read(id)),
-    create: async (input) => withCategoryIds(await inner.create(input)),
-    update: async (id, input) => withCategoryIds(await inner.update(id, input)),
+    read: async (id) => toItemRow(await inner.read(id)),
+    create: async (input) => toItemRow(await inner.create(input)),
+    update: async (id, input) => toItemRow(await inner.update(id, input)),
     remove: (id) => inner.remove(id),
   };
+}
+
+/** The photo a shopper sees, or `null`: the first entry of `images`. */
+function shownImage(row: Item): Wire.CatalogItemImageView | null {
+  return Array.isArray(row.images) ? (row.images[0] ?? null) : null;
 }
 
 /**
@@ -195,13 +222,44 @@ export const ITEMS = defineResource<Item>({
       nullable: true,
     },
     {
+      // Our photo, and the only one the back office writes. The row holds
+      // `ownImageUrl` here (see `toItemRow`), and a save sends it under the
+      // name the update route reads.
       kind: 'text',
       name: 'imageUrl',
       label: 'catalog.items.imageUrl',
+      help: 'catalog.items.imageUrlHelp',
       // Its address, with the picture beside it.
       format: 'image',
       nullable: true,
       maxLength: 500,
+    },
+    {
+      // What a shopper sees, and where it comes from. Never editable, so no
+      // draft holds it and no save sends it.
+      kind: 'text',
+      name: 'shownPhoto',
+      label: 'catalog.items.shown',
+      editable: false,
+      setBy: 'catalog.items.shownSetBy',
+      format: 'image',
+      read: (row) => shownImage(row)?.url ?? null,
+      caption: (row) => {
+        const shown = shownImage(row);
+        if (shown === null) {
+          return { kind: 'word', key: 'catalog.items.shownFrom.none' };
+        }
+        if (shown.source === 'OWNER') {
+          return { kind: 'word', key: 'catalog.items.shownFrom.owner' };
+        }
+        return shown.supermarketId === null
+          ? { kind: 'word', key: 'catalog.items.shownFrom.chain' }
+          : {
+              kind: 'reference',
+              resource: 'supermarkets',
+              id: shown.supermarketId,
+            };
+      },
     },
   ],
 
@@ -285,7 +343,7 @@ export const ITEMS = defineResource<Item>({
       },
       {
         title: 'catalog.items.section.sold',
-        fields: ['defaultUnit', 'unitSize', 'imageUrl'],
+        fields: ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
       },
     ],
     children: [

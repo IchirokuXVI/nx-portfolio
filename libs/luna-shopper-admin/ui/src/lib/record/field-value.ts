@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -72,9 +73,36 @@ interface ReferenceLine {
  */
 @Component({
   selector: 'lib-field-value',
-  imports: [RokuTranslatorPipe, RouterLink, ScopeMark],
+  imports: [NgTemplateOutlet, RokuTranslatorPipe, RouterLink, ScopeMark],
   template: `
     @let shown = value();
+
+    <!-- One reference, by the name the page knows for it. A reference value
+         draws it, and so does the caption of a picture that names the record
+         it came from. -->
+    <ng-template #one let-target>
+      @if (target.name === undefined) {
+        <span class="none" data-resolving>{{
+          'resource.reference.resolving' | rokuT
+        }}</span>
+      } @else if (target.name === null) {
+        <span class="gone" data-gone>{{ 'record.value.gone' | rokuT }}</span>
+      } @else if (target.name === unread) {
+        @if (target.link !== null) {
+          <a [routerLink]="target.link" data-unread>{{
+            'record.value.unread' | rokuT
+          }}</a>
+        } @else {
+          <span class="none" data-unread>{{
+            'record.value.unread' | rokuT
+          }}</span>
+        }
+      } @else if (target.link !== null) {
+        <a [routerLink]="target.link">{{ target.name }}</a>
+      } @else {
+        <span>{{ target.name }}</span>
+      }
+    </ng-template>
 
     <!-- How specific a price scope is, before its name. The word beside it
          says the kind, so the mark is named only where no word does. -->
@@ -110,9 +138,11 @@ interface ReferenceLine {
 
       @case ('image') {
         <span class="picture">
-          <!-- An empty alt: the address beside the picture names it. A picture
-               that does not load leaves the grey square, and the address is
-               still a link. -->
+          <!-- An empty alt: the address beside the picture, or where it comes
+               from, names it. A picture that does not load leaves the grey
+               square. No referrer goes with the request, so the host of a
+               chain's photo learns nothing of this app (backend plan 0198,
+               section 3.1). -->
           <span class="thumb">
             @if (!broken()) {
               <img
@@ -120,12 +150,25 @@ interface ReferenceLine {
                 [src]="shown.src"
                 alt=""
                 loading="lazy"
+                referrerpolicy="no-referrer"
               />
             }
           </span>
-          <a [href]="shown.src" rel="noopener noreferrer" target="_blank">{{
-            shown.src
-          }}</a>
+          @if (shown.caption; as caption) {
+            @if (caption.kind === 'word') {
+              <span data-caption>{{ caption.key | rokuT }}</span>
+            } @else {
+              <span data-caption>
+                <ng-container
+                  *ngTemplateOutlet="one; context: { $implicit: single() }"
+                />
+              </span>
+            }
+          } @else {
+            <a [href]="shown.src" rel="noopener noreferrer" target="_blank">{{
+              shown.src
+            }}</a>
+          }
         </span>
       }
 
@@ -159,26 +202,10 @@ interface ReferenceLine {
         @let target = single();
         @if (target === null) {
           <span class="none">{{ 'resource.value.none' | rokuT }}</span>
-        } @else if (target.name === undefined) {
-          <span class="none" data-resolving>{{
-            'resource.reference.resolving' | rokuT
-          }}</span>
-        } @else if (target.name === null) {
-          <span class="gone" data-gone>{{ 'record.value.gone' | rokuT }}</span>
-        } @else if (target.name === unread) {
-          @if (target.link !== null) {
-            <a [routerLink]="target.link" data-unread>{{
-              'record.value.unread' | rokuT
-            }}</a>
-          } @else {
-            <span class="none" data-unread>{{
-              'record.value.unread' | rokuT
-            }}</span>
-          }
-        } @else if (target.link !== null) {
-          <a [routerLink]="target.link">{{ target.name }}</a>
         } @else {
-          <span>{{ target.name }}</span>
+          <ng-container
+            *ngTemplateOutlet="one; context: { $implicit: target }"
+          />
         }
       }
 
@@ -413,20 +440,29 @@ export class FieldValue {
     return value.kind === 'word' && value.key === value.scope?.label;
   });
 
-  /** One reference, with whichever name is known for it. */
+  /**
+   * One reference, with whichever name is known for it: the value's own, or
+   * the record a picture came from.
+   */
   readonly single = computed<ReferenceLine | null>(() => {
     const value = this.value();
-    if (value.kind !== 'reference') {
+    const target =
+      value.kind === 'reference'
+        ? { id: value.id, name: value.name }
+        : value.kind === 'image' && value.caption?.kind === 'reference'
+          ? { id: value.caption.id, name: null }
+          : null;
+    if (target === null) {
       return null;
     }
     const names = this.names();
     return {
-      id: value.id,
+      id: target.id,
       name:
-        value.name ??
+        target.name ??
         this.name() ??
-        (value.id in names ? names[value.id] : undefined),
-      link: this.link() ?? this.links()[value.id] ?? null,
+        (target.id in names ? names[target.id] : undefined),
+      link: this.link() ?? this.links()[target.id] ?? null,
     };
   });
 
