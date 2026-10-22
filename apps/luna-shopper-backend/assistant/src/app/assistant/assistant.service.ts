@@ -336,7 +336,10 @@ export class AssistantService {
       ],
       // The roles `transcript` drops, reduced to the one fact a confirming tool
       // needs: whether the assistant has asked anything yet (plan 0225,
-      // section 3).
+      // section 3). The roles come from the client's transcript, so this check
+      // aims at the model skipping its question, not at a hostile client; the
+      // tools' own checks (ids from this turn, the gateway's permissions)
+      // remain the boundary.
       priorAssistantTurns: transcript.filter(
         (entry) => entry.role === AssistantRole.ASSISTANT
       ).length,
