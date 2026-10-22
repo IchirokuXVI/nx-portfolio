@@ -607,6 +607,10 @@
       "stay": "Seguir eligiendo"
     }
   },
+  "photo": {
+    "open": "Ver la foto de {{name}} en grande",
+    "close": "Cerrar la foto"
+  },
   "home": {
     "loading": "Cargando tus grupos",
     "or": "O",

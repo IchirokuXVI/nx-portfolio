@@ -81,7 +81,15 @@
   @if (line().product; as product) {
     @switch (product.kind) {
       @case ('shown') {
-        <lib-product-picture [imageUrl]="product.imageUrl" class="picture" />
+        <!--
+          A press on the photo opens it large and nothing else. Not in reorder mode,
+          where the row is a thing being dragged.
+        -->
+        <lib-product-picture
+          [imageUrl]="product.imageUrl"
+          [zoom]="reordering() ? null : (product.name ?? line().content)"
+          class="picture"
+        />
       }
       @case ('loading') {
         <span aria-hidden="true" class="picture bone"></span>
