@@ -309,6 +309,7 @@ export type ProductRowExpanded = 'shops' | 'members';
       [class.compact]="compact()"
       [class.has-control]="slot() === 'add' || slot() === 'stepper'"
       [class.is-chosen]="choice()?.checked === true"
+      [class.price-in-detail]="!priceShown()"
       class="row"
     >
       <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
@@ -633,7 +634,7 @@ export class ProductRow {
   /**
    * Whether the price column is drawn. False leaves it empty, also with no price,
    * where the detail already carries the price (the sheet of what a visit added,
-   * velista `0163`).
+   * velista `0163`), and lets the detail wrap so the price in it is never cut.
    */
   readonly priceShown = input(true);
 

@@ -172,6 +172,12 @@ lib-product-picture.thumb:not(.has-photo),
   white-space: nowrap;
 }
 
+// The detail carries the price where the price column is empty (the sheet of
+// what a visit added), so it wraps rather than cutting the price off.
+.row.price-in-detail .detail {
+  white-space: normal;
+}
+
 .caption {
   color: var(--app-text-secondary);
   font-size: var(--app-text-xs);

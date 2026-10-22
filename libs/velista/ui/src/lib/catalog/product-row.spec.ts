@@ -1098,6 +1098,10 @@ describe('ProductRow, the one card', () => {
     it('leaves the price column empty where the detail carries the price', async () => {
       const priced = await card({ compact: true, priceShown: false });
       expect(el(priced).querySelector('.price')).toBeNull();
+      // The detail says the price there, so it wraps rather than being cut.
+      expect(
+        el(priced).querySelector('.row')?.classList.contains('price-in-detail')
+      ).toBe(true);
 
       const unpriced = await card(
         { compact: true, priceShown: false },
