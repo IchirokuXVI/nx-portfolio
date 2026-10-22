@@ -202,6 +202,8 @@ makes that case say the same sentence as "got stuck" (`assistant.service.ts:447`
 `:451`), because an empty bubble is worse than an apology. Haiku has no server side
 fallback and the request carries none (section 11).
 
+When tools already ran in the turn, an empty reply says `ANSWERED_WITHOUT_WORDS` instead, which tells the person the work was done and to look at the list, because "say it again" would repeat the writes.
+
 ### 2.3 The turns, and the signature
 
 `messages` is built from `ModelTurn[]`:

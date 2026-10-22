@@ -31,6 +31,7 @@ import {
   type ModelProvider,
 } from '../provider/model-provider';
 import {
+  ANSWERED_WITHOUT_WORDS,
   AssistantService,
   capTranscript,
   NOTHING_HEARD,
@@ -2762,5 +2763,34 @@ describe('a reply with nothing in it (plan 0224, section 2.2)', () => {
     expect(response.reply).toBe(
       'Sorry, I got stuck on that one. Could you say it a different way?'
     );
+  });
+
+  it('says the work was done when tools ran before the empty reply', async () => {
+    // "Say it again" after a write would write it twice.
+    const logged: string[] = [];
+    jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message: unknown) => {
+        logged.push(String(message));
+      });
+
+    const service = build(
+      new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.says(''),
+      ]),
+      new RecordingApi()
+    );
+
+    const response = await service.turn(turnRequest('hay leche?'));
+
+    const record = logged
+      .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+      .find((entry) => entry['event'] === 'assistant.turn');
+
+    expect(response.reply).toBe(ANSWERED_WITHOUT_WORDS);
+    expect(record?.['outcome']).toBe('acted');
+
+    jest.restoreAllMocks();
   });
 });
