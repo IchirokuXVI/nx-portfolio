@@ -51,6 +51,27 @@ async function settle(
 const PHOTO = 'https://img.example/milk.jpg';
 
 describe('ProductPicture', () => {
+  it('loads lazily, and eagerly where the host asks (velista 0162)', async () => {
+    const lazy = await render({ imageUrl: PHOTO });
+    expect(query(lazy, 'img')?.getAttribute('loading')).toBe('lazy');
+
+    lazy.componentRef.setInput('loading', 'eager');
+    await settle(lazy);
+    expect(query(lazy, 'img')?.getAttribute('loading')).toBe('eager');
+  });
+
+  it('marks a photo, so it sits on the raised surface, and not the icon', async () => {
+    const fixture = await render({ imageUrl: PHOTO });
+    expect(host(fixture).classList.contains('has-photo')).toBe(true);
+
+    query(fixture, 'img')?.dispatchEvent(new Event('error'));
+    await settle(fixture);
+    expect(host(fixture).classList.contains('has-photo')).toBe(false);
+
+    const none = await render({ imageUrl: null });
+    expect(host(none).classList.contains('has-photo')).toBe(false);
+  });
+
   it('is decoration with no name: hidden, and nothing to press', async () => {
     const fixture = await render({ imageUrl: PHOTO });
 

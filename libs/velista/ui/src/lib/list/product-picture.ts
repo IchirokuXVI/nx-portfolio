@@ -23,8 +23,12 @@ import { PhotoViewer } from '../photo/photo-viewer';
  * it does not also open its sheet. The icon stays decoration: there is nothing
  * bigger to show.
  *
- * The cards of the line page draw the same picture with their own markup. Moving
- * them onto this is a later cleanup (section 10).
+ * **It is the only place that draws a product photo** (velista `0162`, section 3):
+ * the card of the catalog and the search, a row of a list, a tile of the line page
+ * and the header of a product page. Each host sets the size it wants through the
+ * custom properties this reads (`--app-line-picture-size`,
+ * `--app-line-picture-radius` and `--app-line-picture-glyph`), so the picture has
+ * no size input.
  */
 @Component({
   selector: 'lib-product-picture',
@@ -65,17 +69,20 @@ import { PhotoViewer } from '../photo/photo-viewer';
     <ng-template #photo let-src>
       <img
         (error)="broken.set(src)"
+        [attr.loading]="loading()"
         [src]="src"
         alt=""
         class="image"
         decoding="async"
-        loading="lazy"
       />
     </ng-template>
   `,
   styleUrl: './product-picture.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[attr.aria-hidden]': 'zoomable() ? null : "true"' },
+  host: {
+    '[attr.aria-hidden]': 'zoomable() ? null : "true"',
+    '[class.has-photo]': 'image() !== null',
+  },
 })
 export class ProductPicture {
   /** The photo, or null to draw the icon. */
@@ -86,6 +93,12 @@ export class ProductPicture {
    * that does nothing.
    */
   readonly zoom = input<string | null>(null);
+
+  /**
+   * `eager` for a picture above the fold, the header of a product page, so the
+   * browser does not wait for layout to fetch it. Lazy everywhere else.
+   */
+  readonly loading = input<'lazy' | 'eager'>('lazy');
 
   /** A photo that failed to load, so the icon takes its place. */
   protected readonly broken = signal<string | null>(null);

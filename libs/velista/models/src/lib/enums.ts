@@ -456,7 +456,7 @@ export type UnitOfMeasure = (typeof UNITS_OF_MEASURE)[number];
  * the least.
  *
  * `UNIT` is a count, and a count is the one unit whose size is suppressed below
- * two (see `SuggestionList.sizeOf`), so an unrecognised unit on a 0.35 lands on
+ * two (see `productSizeText` in `velista/ui`), so an unrecognised unit on a 0.35 lands on
  * a row that says nothing rather than on a row that confidently says "0.35
  * units" about a value the backend measured in kilograms. Guessing a mass or a
  * volume here would be inventing the very fact the row exists to state.

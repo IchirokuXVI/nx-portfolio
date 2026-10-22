@@ -25,11 +25,12 @@ async function pastSkeletonDelay(
 }
 
 /**
- * The composer's product cards (velista `0101`), `placement: 'above'`.
+ * The search's product cards (velista `0101`), each the one product card since
+ * velista `0162`.
  *
  * What a card **says** is `suggestion-card-view.spec.ts`. This is what it does:
- * which press adds, which do not, that nothing in the panel takes the focus, and
- * what opens where.
+ * that each is a `lib-product-row`, which press adds, which do not, that nothing
+ * in the panel takes the focus, and what opens where.
  */
 function offer(price: number | null): ProductOffer {
   return {
@@ -114,7 +115,7 @@ async function render(
     query?: string | null;
     emptyFor?: string | null;
     freeText?: boolean;
-    placement?: 'page' | 'below';
+    listName?: string | null;
   } = {}
 ): Promise<Rendered> {
   TestBed.resetTestingModule();
@@ -124,7 +125,6 @@ async function render(
   }).compileComponents();
 
   const fixture = TestBed.createComponent(SuggestionList);
-  fixture.componentRef.setInput('placement', inputs.placement ?? 'page');
   fixture.componentRef.setInput('suggestions', offered);
   fixture.componentRef.setInput('loading', inputs.loading ?? false);
   const holdings = inputs.holdings ?? [];
@@ -139,6 +139,7 @@ async function render(
   fixture.componentRef.setInput('query', inputs.query ?? null);
   fixture.componentRef.setInput('emptyFor', inputs.emptyFor ?? null);
   fixture.componentRef.setInput('freeText', inputs.freeText ?? false);
+  fixture.componentRef.setInput('listName', inputs.listName ?? null);
 
   const chose: CatalogSuggestion[] = [];
   const changed: SuggestionHoldingChange[] = [];
@@ -159,12 +160,16 @@ function root(fixture: ComponentFixture<SuggestionList>): HTMLElement {
 }
 
 function cards(fixture: ComponentFixture<SuggestionList>): HTMLElement[] {
-  return [...root(fixture).querySelectorAll<HTMLElement>('.sug')];
+  return [
+    ...root(fixture).querySelectorAll<HTMLElement>(
+      '[role="grid"] > lib-product-row'
+    ),
+  ];
 }
 
 function cardNames(fixture: ComponentFixture<SuggestionList>): string[] {
   return cards(fixture).map(
-    (card) => card.querySelector('.sug-name')?.textContent?.trim() ?? ''
+    (card) => card.querySelector('.name')?.textContent?.trim() ?? ''
   );
 }
 
@@ -194,7 +199,7 @@ function mousedownCancelled(element: Element | null): boolean {
 }
 
 describe('SuggestionList, the cards', () => {
-  it('draws a card per suggestion, the server’s best answer first', async () => {
+  it('draws one product card per suggestion, the server’s best answer first', async () => {
     const { fixture } = await render([item('a'), item('b'), item('c')]);
 
     // Read from the top of the page's results (velista 0117).
@@ -206,7 +211,12 @@ describe('SuggestionList, the cards', () => {
     const panel = root(fixture).querySelector('[role="grid"]');
 
     expect(panel).not.toBeNull();
-    expect(cards(fixture)[0]?.getAttribute('role')).toBe('row');
+    expect(cards(fixture)[0]?.querySelector('.row')?.getAttribute('role')).toBe(
+      'row'
+    );
+    expect(
+      cards(fixture)[0]?.querySelectorAll('.row > [role="gridcell"]').length
+    ).toBeGreaterThan(0);
     expect(root(fixture).querySelector('[role="option"]')).toBeNull();
   });
 
@@ -222,7 +232,9 @@ describe('SuggestionList, the cards', () => {
     const panel = root(fixture).querySelector('[role="status"]');
 
     expect(panel?.getAttribute('aria-busy')).toBe('true');
-    expect(root(fixture).querySelectorAll('.sk')).toHaveLength(3);
+    expect(
+      root(fixture).querySelectorAll('lib-product-row-skeleton')
+    ).toHaveLength(3);
   });
 
   describe('a search that found nothing (0108, target 1)', () => {
@@ -230,14 +242,18 @@ describe('SuggestionList, the cards', () => {
       const { fixture } = await render([], { loading: true });
       await pastSkeletonDelay(fixture, SKELETON_DELAY_MS / 3);
 
-      expect(root(fixture).querySelectorAll('.sk')).toHaveLength(0);
+      expect(
+        root(fixture).querySelectorAll('lib-product-row-skeleton')
+      ).toHaveLength(0);
 
       fixture.componentRef.setInput('loading', false);
       fixture.componentRef.setInput('emptyFor', 'zzzz');
       fixture.detectChanges();
       await pastSkeletonDelay(fixture);
 
-      expect(root(fixture).querySelectorAll('.sk')).toHaveLength(0);
+      expect(
+        root(fixture).querySelectorAll('lib-product-row-skeleton')
+      ).toHaveLength(0);
       expect(root(fixture).querySelector('.none')).not.toBeNull();
     });
 
@@ -257,7 +273,9 @@ describe('SuggestionList, the cards', () => {
       );
       // One row and nothing else: no card panel, no card, no skeleton.
       expect(
-        root(fixture).querySelectorAll('[role="grid"], .sug, .sk')
+        root(fixture).querySelectorAll(
+          '[role="grid"], lib-product-row, lib-product-row-skeleton'
+        )
       ).toHaveLength(0);
     });
 
@@ -301,28 +319,38 @@ describe('SuggestionList, the cards', () => {
     const { fixture } = await render([item('a')], { loading: true });
 
     expect(cards(fixture)).toHaveLength(1);
-    expect(root(fixture).querySelectorAll('.sk')).toHaveLength(0);
+    expect(
+      root(fixture).querySelectorAll('lib-product-row-skeleton')
+    ).toHaveLength(0);
   });
 
-  describe('the card is not the target (rule 1)', () => {
-    it('adds the product when its button is pressed', async () => {
+  describe('the plus is the one control that adds (rule 1)', () => {
+    it('adds the product when its plus is pressed, with the plus as the anchor', async () => {
       const offered = item('a');
       const { fixture, chose } = await render([offered]);
+      const anchors: HTMLElement[] = [];
+      fixture.componentInstance.chose.subscribe((one) =>
+        anchors.push(one.anchor)
+      );
+      const plus = root(fixture).querySelector('button.add');
 
-      await press(fixture, root(fixture).querySelector('.pick'));
+      await press(fixture, plus);
 
       expect(chose).toEqual([offered]);
+      expect(anchors).toEqual([plus]);
     });
 
-    it('adds nothing when the card, the chain row, the reveal or the link is pressed', async () => {
+    it('adds nothing when the card, the chain line or the reveal is pressed', async () => {
       const { fixture, chose } = await render([item('a'), group(6, 5)], {
         productLink: (id) => `/en/catalog/sheet/products/${id}`,
       });
 
-      await press(fixture, root(fixture).querySelector('.sug-name'));
-      await press(fixture, root(fixture).querySelector('.chains'));
+      await press(fixture, root(fixture).querySelector('.chains-press'));
       await press(fixture, root(fixture).querySelector('.reveal'));
-      await press(fixture, root(fixture).querySelector('.group-badge'));
+      await press(
+        fixture,
+        cards(fixture)[1]?.querySelector('button.open') ?? null
+      );
 
       expect(chose).toEqual([]);
     });
@@ -331,23 +359,64 @@ describe('SuggestionList, the cards', () => {
       const { fixture } = await render([item('a')]);
 
       expect(
-        root(fixture).querySelector('.pick')?.getAttribute('aria-label')
+        root(fixture).querySelector('button.add')?.getAttribute('aria-label')
       ).toContain('list.add.card.add');
+    });
+
+    it('draws no "Details" link, no tinted column and no violet label', async () => {
+      const { fixture } = await render([item('held')], {
+        productLink: (id) => `/en/catalog/sheet/products/${id}`,
+        holdings: [
+          {
+            key: 'l1',
+            lineId: 'l1',
+            text: 'Leche entera',
+            listName: null,
+            quantity: 2,
+            editable: true,
+          },
+        ],
+      });
+
+      expect(root(fixture).textContent).not.toContain('list.add.card.details');
+      expect(
+        root(fixture).querySelector('.details, .pick-cell, .already-h, .sug')
+      ).toBeNull();
+    });
+  });
+
+  describe('a press on the card opens the product', () => {
+    it('is a link to the product the page names, named for the product', async () => {
+      const { fixture } = await render([item('a')], {
+        productLink: (id) => `/en/catalog/sheet/products/${id}`,
+      });
+
+      const link = cards(fixture)[0]?.querySelector('a.open');
+      expect(link?.getAttribute('href')).toBe('/en/catalog/sheet/products/a');
+      expect(link?.getAttribute('aria-label')).toContain('Product a');
+    });
+
+    it('is no link where the page cannot open a product', async () => {
+      const { fixture } = await render([item('a')]);
+
+      expect(root(fixture).querySelector('a.open')).toBeNull();
     });
   });
 
   describe('nothing in the panel closes the keyboard (rule 2)', () => {
     it('cancels mousedown on every control and on the card itself', async () => {
-      const { fixture } = await render([item('a'), group(6, 5)]);
+      const { fixture } = await render([item('a'), group(6, 5)], {
+        productLink: (id) => `/en/catalog/sheet/products/${id}`,
+      });
       const panel = root(fixture);
 
-      expect(mousedownCancelled(panel.querySelector('.pick'))).toBe(true);
-      expect(mousedownCancelled(panel.querySelector('.chains'))).toBe(true);
-      expect(mousedownCancelled(panel.querySelector('.reveal'))).toBe(true);
-      expect(mousedownCancelled(panel.querySelector('.group-badge'))).toBe(
+      expect(mousedownCancelled(panel.querySelector('button.add'))).toBe(true);
+      expect(mousedownCancelled(panel.querySelector('.chains-press'))).toBe(
         true
       );
-      expect(mousedownCancelled(panel.querySelector('.sug-name'))).toBe(true);
+      expect(mousedownCancelled(panel.querySelector('.reveal'))).toBe(true);
+      expect(mousedownCancelled(panel.querySelector('a.open'))).toBe(true);
+      expect(mousedownCancelled(panel.querySelector('.name'))).toBe(true);
     });
 
     it('cancels mousedown on the stepper of a line already holding it', async () => {
@@ -365,15 +434,15 @@ describe('SuggestionList, the cards', () => {
       });
 
       expect(
-        mousedownCancelled(root(fixture).querySelector('.already .step'))
+        mousedownCancelled(root(fixture).querySelector('.held .step'))
       ).toBe(true);
     });
   });
 
   describe('every chain’s price', () => {
-    it('opens under the chain row and closes again', async () => {
+    it('opens under the chain line and closes again', async () => {
       const { fixture } = await render([item('a')]);
-      const button = root(fixture).querySelector('.chains');
+      const button = root(fixture).querySelector('.chains-press');
 
       expect(root(fixture).querySelector('.shops')).toBeNull();
       expect(button?.getAttribute('aria-expanded')).toBe('false');
@@ -393,7 +462,23 @@ describe('SuggestionList, the cards', () => {
       expect(root(fixture).querySelector('.shops')).toBeNull();
     });
 
-    it('draws no chain row for a product no chain could be named for', async () => {
+    it('keeps one card open at a time', async () => {
+      const { fixture } = await render([item('a'), item('b')]);
+
+      await press(
+        fixture,
+        cards(fixture)[0]?.querySelector('.chains-press') ?? null
+      );
+      await press(
+        fixture,
+        cards(fixture)[1]?.querySelector('.chains-press') ?? null
+      );
+
+      expect(root(fixture).querySelectorAll('.shops')).toHaveLength(1);
+      expect(cards(fixture)[1]?.querySelector('.shops')).not.toBeNull();
+    });
+
+    it('draws no chain line for a product no chain could be named for', async () => {
       const { fixture } = await render([item('a', { chainPrices: [] })]);
 
       expect(root(fixture).querySelector('.chains')).toBeNull();
@@ -419,15 +504,15 @@ describe('SuggestionList, the cards', () => {
     it('names the synonym under the name when that is what matched', async () => {
       const { fixture } = await render([pads], { query: 'alg' });
 
-      expect(
-        root(fixture).querySelector('.sug-also')?.textContent?.trim()
-      ).toBe('list.add.card.alsoCalled');
+      expect(root(fixture).querySelector('.also')?.textContent?.trim()).toBe(
+        'list.add.card.alsoCalled'
+      );
     });
 
     it('says nothing new when the name matched', async () => {
       const { fixture } = await render([pads], { query: 'discos' });
 
-      expect(root(fixture).querySelector('.sug-also')).toBeNull();
+      expect(root(fixture).querySelector('.also')).toBeNull();
     });
   });
 
@@ -445,52 +530,54 @@ describe('SuggestionList, the cards', () => {
       ).toContain('list.add.card.groupMore');
     });
 
-    it('opens the popover from its badge, and closes it on Escape', async () => {
+    it('opens its members on a press on the card, as the reveal does', async () => {
+      const { fixture } = await render([group(6, 5)], {
+        productLink: (id) => `/en/catalog/sheet/products/${id}`,
+      });
+      const open = root(fixture).querySelector('button.open');
+
+      expect(root(fixture).querySelector('a.open')).toBeNull();
+      await press(fixture, open);
+
+      expect(open?.getAttribute('aria-expanded')).toBe('true');
+      expect(root(fixture).querySelectorAll('.inside-row')).toHaveLength(5);
+
+      await press(fixture, open);
+      expect(root(fixture).querySelector('.inside')).toBeNull();
+    });
+
+    it('draws the crate and the word "Group"', async () => {
       const { fixture } = await render([group(6, 5)]);
-      const badge = root(fixture).querySelector('.group-badge');
 
-      await press(fixture, badge);
-      const dialog = document.querySelector('.pop[role="dialog"]');
-      expect(dialog).not.toBeNull();
-      expect(badge?.getAttribute('aria-expanded')).toBe('true');
-
-      document.body.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      expect(
+        root(fixture).querySelector('.crate lib-basket-icon')
+      ).not.toBeNull();
+      expect(root(fixture).querySelector('lib-product-picture')).toBeNull();
+      expect(root(fixture).querySelector('.group-word')?.textContent).toContain(
+        'list.add.card.groupBadge'
       );
-      fixture.detectChanges();
-      await fixture.whenStable();
-
-      expect(document.querySelector('.pop[role="dialog"]')).toBeNull();
     });
   });
 
-  describe('the thumbnail (0161)', () => {
-    function thumb(fixture: ComponentFixture<SuggestionList>): HTMLElement {
-      const found = root(fixture).querySelector<HTMLElement>('.sug-thumb');
-      if (found === null) {
-        throw new Error('no thumbnail');
-      }
-      return found;
-    }
-
-    it('draws the photo of an item that has one', async () => {
+  describe('the picture (0161)', () => {
+    it('draws the photo of an item that has one, which opens it large', async () => {
       const { fixture } = await render([
         item('a', { imageUrl: 'https://img.test/a.jpg' }),
       ]);
 
-      const image = thumb(fixture).querySelector('lib-product-picture img');
-      expect(image?.getAttribute('src')).toBe('https://img.test/a.jpg');
-      expect(thumb(fixture).querySelector('lib-product-icon')).toBeNull();
-      expect(thumb(fixture).getAttribute('aria-hidden')).toBe('true');
+      const picture = root(fixture).querySelector('lib-product-picture');
+      expect(picture?.querySelector('img')?.getAttribute('src')).toBe(
+        'https://img.test/a.jpg'
+      );
+      expect(picture?.querySelector('button.zoom')).not.toBeNull();
     });
 
     it('draws the product glyph for an item with no photo', async () => {
       const { fixture } = await render([item('a')]);
 
-      expect(thumb(fixture).querySelector('img')).toBeNull();
-      expect(
-        thumb(fixture).querySelector('lib-product-picture lib-product-icon')
-      ).not.toBeNull();
+      const picture = root(fixture).querySelector('lib-product-picture');
+      expect(picture?.querySelector('img')).toBeNull();
+      expect(picture?.querySelector('lib-product-icon')).not.toBeNull();
     });
 
     it('draws the glyph in place of a photo that does not load', async () => {
@@ -498,19 +585,12 @@ describe('SuggestionList, the cards', () => {
         item('a', { imageUrl: 'https://img.test/gone.jpg' }),
       ]);
 
-      thumb(fixture).querySelector('img')?.dispatchEvent(new Event('error'));
+      root(fixture).querySelector('img')?.dispatchEvent(new Event('error'));
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(thumb(fixture).querySelector('img')).toBeNull();
-      expect(thumb(fixture).querySelector('lib-product-icon')).not.toBeNull();
-    });
-
-    it('draws the crate for a group', async () => {
-      const { fixture } = await render([group(6, 5)]);
-
-      expect(thumb(fixture).querySelector('lib-basket-icon')).not.toBeNull();
-      expect(thumb(fixture).querySelector('lib-product-picture')).toBeNull();
+      expect(root(fixture).querySelector('img')).toBeNull();
+      expect(root(fixture).querySelector('lib-product-icon')).not.toBeNull();
     });
   });
 
@@ -534,19 +614,34 @@ describe('SuggestionList, the cards', () => {
       },
     ];
 
-    it('names each line in its own words, and the list above it', async () => {
+    it('names each line in its own words, and its list where they differ', async () => {
       const { fixture } = await render([item('held')], { holdings });
 
       expect(
-        [...root(fixture).querySelectorAll('.already-line')].map((one) =>
+        [...root(fixture).querySelectorAll('.held-name')].map((one) =>
           one.textContent?.trim()
         )
       ).toEqual(['Leche entera', 'leche para el café']);
       expect(
-        [...root(fixture).querySelectorAll('.already-list')].map((one) =>
+        [...root(fixture).querySelectorAll('.held-list')].map((one) =>
           one.textContent?.trim()
         )
       ).toEqual(['Compra semanal', 'Fin de semana']);
+      expect(root(fixture).querySelector('.held-title')?.textContent).toContain(
+        'catalog.held.titleMany'
+      );
+    });
+
+    it('heads the lines with the list the page names, and names no list on a line', async () => {
+      const { fixture } = await render([item('held')], {
+        holdings: holdings.map((one) => ({ ...one, listName: null })),
+        listName: 'Compra semanal',
+      });
+
+      expect(root(fixture).querySelector('.held-title')?.textContent).toContain(
+        'catalog.held.title'
+      );
+      expect(root(fixture).querySelector('.held-list')).toBeNull();
     });
 
     it('steps a line up with the app’s own stepper, from and to', async () => {
@@ -554,7 +649,7 @@ describe('SuggestionList, the cards', () => {
         holdings,
       });
       const steps = root(fixture)
-        .querySelectorAll('.already-row')[0]
+        .querySelectorAll('.held-line')[0]
         ?.querySelectorAll('.step');
 
       await press(fixture, steps?.[1] ?? null);
@@ -563,10 +658,21 @@ describe('SuggestionList, the cards', () => {
       expect(chose).toEqual([]);
     });
 
+    it('steps a line down, from and to', async () => {
+      const { fixture, changed } = await render([item('held')], { holdings });
+      const steps = root(fixture)
+        .querySelectorAll('.held-line')[0]
+        ?.querySelectorAll('.step');
+
+      await press(fixture, steps?.[0] ?? null);
+
+      expect(changed).toEqual([{ holding: holdings[0], from: 2, to: 1 }]);
+    });
+
     it('disables the stepper on a line the reader may not change', async () => {
       const { fixture } = await render([item('held')], { holdings });
       const steps = root(fixture)
-        .querySelectorAll('.already-row')[1]
+        .querySelectorAll('.held-line')[1]
         ?.querySelectorAll<HTMLButtonElement>('.step');
 
       expect([...(steps ?? [])].every((step) => step.disabled)).toBe(true);
@@ -575,28 +681,12 @@ describe('SuggestionList, the cards', () => {
     it('draws no section on a card no line holds', async () => {
       const { fixture } = await render([item('a')], { holdings });
 
-      expect(root(fixture).querySelector('.already')).toBeNull();
+      expect(root(fixture).querySelector('.held')).toBeNull();
     });
   });
 
-  it('links to the product the page names, and to nothing without a link', async () => {
-    const linked = await render([item('a')], {
-      productLink: (id) => `/en/catalog/sheet/products/${id}`,
-    });
-    expect(
-      root(linked.fixture).querySelector('a.details')?.getAttribute('href')
-    ).toBe('/en/catalog/sheet/products/a');
-
-    const bare = await render([item('a')]);
-    expect(root(bare.fixture).querySelector('a.details')).toBeNull();
-  });
-});
-
-describe('SuggestionList, in a page’s results', () => {
   it('draws the cards in the server’s order, with no panel around them', async () => {
-    const { fixture } = await render([item('first'), item('second')], {
-      placement: 'page',
-    });
+    const { fixture } = await render([item('first'), item('second')]);
 
     const grid = root(fixture).querySelector('[role="grid"]');
     expect(grid).not.toBeNull();
@@ -609,15 +699,5 @@ describe('SuggestionList, in a page’s results', () => {
       expect.stringContaining('first'),
       expect.stringContaining('second'),
     ]);
-  });
-
-  it('says so when the catalog found nothing for the words', async () => {
-    const { fixture } = await render([], {
-      placement: 'page',
-      emptyFor: 'zzzz',
-      freeText: true,
-    });
-
-    expect(root(fixture).textContent).toContain('list.add.card.noMatch');
   });
 });
