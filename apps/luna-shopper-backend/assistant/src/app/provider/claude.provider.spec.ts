@@ -260,6 +260,26 @@ describe('toClaudeRequest', () => {
       { role: 'user', content: [{ type: 'text', text: 'b' }] },
     ]);
   });
+  it('leaves out a transcript turn whose text is empty or only whitespace', () => {
+    const body = toClaudeRequest(
+      request({
+        turns: [
+          { role: ModelTurnRole.USER, text: 'a' },
+          { role: ModelTurnRole.MODEL, text: ' ' },
+          { role: ModelTurnRole.USER, text: ' ' },
+          { role: ModelTurnRole.MODEL, text: '' },
+          { role: ModelTurnRole.USER, text: '' },
+          { role: ModelTurnRole.USER, text: 'b' },
+        ],
+      }),
+      OPTIONS
+    );
+
+    expect(body['messages']).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'a' }] },
+      { role: 'user', content: [{ type: 'text', text: 'b' }] },
+    ]);
+  });
 });
 
 describe('readClaudeReply', () => {

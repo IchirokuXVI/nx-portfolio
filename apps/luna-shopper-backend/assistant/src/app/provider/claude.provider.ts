@@ -218,7 +218,12 @@ function toClaudeMessage(turn: ModelTurn): Record<string, unknown> | null {
   }
 
   if (turn.role === ModelTurnRole.USER) {
-    return { role: 'user', content: [{ type: 'text', text: turn.text ?? '' }] };
+    // The API rejects a text block that is empty or only whitespace, and the
+    // gateway's transcript DTO does not stop a client from sending one. Kept,
+    // it would fail every later turn of the conversation as unavailable.
+    return turn.text?.trim()
+      ? { role: 'user', content: [{ type: 'text', text: turn.text }] }
+      : null;
   }
 
   // The raw content the model produced, back unchanged (section 2.3). It carries
@@ -233,7 +238,7 @@ function toClaudeMessage(turn: ModelTurn): Record<string, unknown> | null {
   // A turn from the client's transcript: prose and no calls, which the API
   // accepts with no thinking block.
   const content: Record<string, unknown>[] = [];
-  if (turn.text) {
+  if (turn.text?.trim()) {
     content.push({ type: 'text', text: turn.text });
   }
   for (const call of turn.toolCalls ?? []) {
@@ -244,8 +249,8 @@ function toClaudeMessage(turn: ModelTurn): Record<string, unknown> | null {
       input: call.args,
     });
   }
-  // An empty text block is rejected, and so is an empty content array. A model
-  // turn with nothing in it says nothing, so it is left out; the API joins the
+  // An empty or whitespace text block is rejected, and so is an empty content
+  // array. A model turn with nothing in it says nothing, so it is left out; the API joins the
   // two user messages on either side of the gap into one turn.
   return content.length > 0 ? { role: 'assistant', content } : null;
 }
