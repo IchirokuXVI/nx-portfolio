@@ -296,7 +296,7 @@ describe('ProductRow', () => {
       expect(opened).toEqual([]);
     });
 
-    it('marks the chosen card with its edge as well as its radio', async () => {
+    it('marks the chosen card with a class hook and checks its radio', async () => {
       const fixture = await choosing(true);
 
       expect(host(fixture).querySelector('.row.is-chosen')).not.toBeNull();
@@ -955,6 +955,59 @@ describe('ProductRow, the one card', () => {
     expect(el(fixture).querySelector('button.open')).toBeNull();
   });
 
+  it('opens nothing on a page that cannot open the product: no button, no link, no tab stop', async () => {
+    const fixture = await card({ openable: false });
+    const opened: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+    const open = el(fixture).querySelector<HTMLElement>('.open');
+    expect(open?.tagName).toBe('SPAN');
+    expect(open?.classList.contains('is-inert')).toBe(true);
+    expect(open?.querySelector('.name')?.textContent).toBe(OIL.name.en);
+    expect(open?.hasAttribute('tabindex')).toBe(false);
+    expect(el(fixture).querySelector('button.open, a.open')).toBeNull();
+
+    open?.click();
+    expect(opened).toEqual([]);
+  });
+
+  it('keeps the link where the host has a URL, even when it is not openable otherwise', async () => {
+    const fixture = await card({
+      openable: false,
+      link: '/en/catalog/product/item-oil',
+    });
+
+    expect(el(fixture).querySelector('a.open')).not.toBeNull();
+    expect(el(fixture).querySelector('.open.is-inert')).toBeNull();
+  });
+
+  describe('one control in the slot, by precedence', () => {
+    const STEPPER = { value: 1, label: 'How many of oil' };
+    const ADD = { list: 'Weekly', lines: [] };
+
+    it('draws the radio alone when a choice and a stepper are both set', async () => {
+      const fixture = await card({
+        choice: { name: 'pick', checked: false },
+        stepper: STEPPER,
+        add: ADD,
+      });
+
+      expect(el(fixture).querySelector('input.pick')).not.toBeNull();
+      expect(el(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+      expect(el(fixture).querySelector('button.add')).toBeNull();
+      expect(
+        el(fixture).querySelector('.row')?.classList.contains('has-control')
+      ).toBe(false);
+    });
+
+    it('draws the plus alone when the plus and a stepper are both set', async () => {
+      const fixture = await card({ stepper: STEPPER, add: ADD });
+
+      expect(el(fixture).querySelector('button.add')).not.toBeNull();
+      expect(el(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+    });
+  });
+
   it('draws the glyph in place of a photo that does not load', async () => {
     const fixture = await card(
       {},
@@ -1029,14 +1082,14 @@ describe('ProductRow, the one card', () => {
     it('draws words with nothing to open, beside its stepper', async () => {
       const fixture = await card({
         compact: true,
-        opens: false,
+        openable: false,
         stepper: { value: 1, label: 'How many of oil' },
       });
 
       expect(el(fixture).querySelector('button.open')).toBeNull();
-      expect(el(fixture).querySelector('.open.static .name')?.textContent).toBe(
-        'Extra virgin olive oil'
-      );
+      expect(
+        el(fixture).querySelector('.open.is-inert .name')?.textContent
+      ).toBe('Extra virgin olive oil');
       expect(
         el(fixture).querySelectorAll('lib-quantity-stepper button')
       ).toHaveLength(2);
@@ -1178,6 +1231,19 @@ describe('ProductRow, the one card', () => {
       expect(
         el(fixture).querySelector('button.open')?.getAttribute('aria-expanded')
       ).toBe('true');
+    });
+
+    it('draws nothing under a group with no members, and its press opens nothing', async () => {
+      const empty = { members: [], reveal: null, more: null };
+      const fixture = await card({ group: empty, expanded: 'members' }, ROW);
+      const toggled: string[] = [];
+      fixture.componentInstance.expandToggled.subscribe((part) =>
+        toggled.push(part)
+      );
+
+      expect(el(fixture).querySelector('.inside')).toBeNull();
+      el(fixture).querySelector<HTMLButtonElement>('button.open')?.click();
+      expect(toggled).toEqual([]);
     });
 
     it('draws no "no price" for a group nobody prices', async () => {

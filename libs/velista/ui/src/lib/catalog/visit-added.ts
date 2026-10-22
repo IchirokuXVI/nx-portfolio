@@ -86,7 +86,7 @@ export interface VisitAddedStep {
                   })
                 "
                 [compact]="true"
-                [opens]="false"
+                [openable]="false"
                 [priceShown]="false"
                 [row]="viewOf(row, 'catalog.added.pending' | rokuT)"
                 [stepper]="{

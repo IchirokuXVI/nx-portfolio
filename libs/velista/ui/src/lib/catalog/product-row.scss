@@ -119,9 +119,9 @@ lib-product-picture.thumb:not(.has-photo),
   grid-column: 2 / 3;
 }
 
-// Text on a card with nothing to open: no press area, and no pointer.
-.open.static {
-  cursor: default;
+// A card on a page that cannot open the product: its words, nothing to press.
+.open.is-inert {
+  cursor: auto;
 
   &::before {
     content: none;

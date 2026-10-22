@@ -211,6 +211,9 @@ export type ProductRowExpanded = 'shops' | 'members';
  * edge, never two. In a mode that chooses, the whole card is the label of its radio
  * or tick, so a press anywhere on it chooses and opens nothing.
  *
+ * A host that sets more than one of them gets one, by this precedence: `choice`,
+ * then `add` (with its held lines), then `stepper`. The others are not drawn.
+ *
  * ## The lines that hold the product are under it, one stepper each
  *
  * A list can hold one product on several lines, so the card shows every line of
@@ -304,9 +307,8 @@ export type ProductRowExpanded = 'shops' | 'members';
     <div
       [attr.role]="grid() ? 'row' : null"
       [class.compact]="compact()"
-      [class.has-control]="add() !== null || stepper() !== null"
+      [class.has-control]="slot() === 'add' || slot() === 'stepper'"
       [class.is-chosen]="choice()?.checked === true"
-      [class.is-group]="group() !== null"
       class="row"
     >
       <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
@@ -367,7 +369,7 @@ export type ProductRowExpanded = 'shops' | 'members';
         } @else if (group(); as grouped) {
           <!-- A group has no page of its own: a press opens its products. -->
           <button
-            (click)="expandToggled.emit('members')"
+            (click)="pressGroup()"
             [attr.aria-controls]="
               grouped.members.length > 0 ? row().id + '-inside' : null
             "
@@ -380,19 +382,11 @@ export type ProductRowExpanded = 'shops' | 'members';
           >
             <ng-container [ngTemplateOutlet]="content" />
           </button>
-        } @else if (!opens()) {
-          <!--
-            A card with nothing to open (the sheet of what a visit added): its
-            words are text, and the stepper is its one control.
-          -->
-          <div class="open static">
-            <ng-container [ngTemplateOutlet]="content" />
-          </div>
         } @else if (link(); as href) {
           <a [attr.aria-label]="row().label" [routerLink]="href" class="open">
             <ng-container [ngTemplateOutlet]="content" />
           </a>
-        } @else {
+        } @else if (openable()) {
           <button
             (click)="opened.emit(row().id)"
             [attr.aria-label]="
@@ -406,6 +400,14 @@ export type ProductRowExpanded = 'shops' | 'members';
           >
             <ng-container [ngTemplateOutlet]="content" />
           </button>
+        } @else {
+          <!--
+            A page that cannot open the product (a guest's basket): the card's words
+            and nothing to press, so no button, no press area and no tab stop.
+          -->
+          <span class="open is-inert">
+            <ng-container [ngTemplateOutlet]="content" />
+          </span>
         }
 
         @if (chainsPress() || group()?.reveal) {
@@ -468,37 +470,38 @@ export type ProductRowExpanded = 'shops' | 'members';
           </ul>
         }
 
-        @if (expanded() === 'members' && group(); as grouped) {
-          <!-- What a group is, then five products, cheapest first, and the count of the rest. -->
+        @if (expanded() === 'members' && members().length > 0) {
+          <!--
+            What a group is, then five products, cheapest first, and the count of
+            the rest. A group with no members opens nothing, so nothing is drawn.
+          -->
           <div [id]="row().id + '-inside'" class="inside">
             <p class="inside-help">
               {{ 'list.add.card.groupHelpBody' | rokuT }}
             </p>
-            @if (grouped.members.length > 0) {
-              <ul class="inside-rows">
-                @for (member of grouped.members; track member.id) {
-                  <li class="inside-row">
-                    <span class="inside-what">
-                      <span class="inside-name">{{ member.name }}</span>
-                      @if (member.brand; as brand) {
-                        <span class="inside-brand">{{ brand }}</span>
-                      }
-                    </span>
-                    @if (member.price; as price) {
-                      <span class="inside-price">{{ price }}</span>
+            <ul class="inside-rows">
+              @for (member of members(); track member.id) {
+                <li class="inside-row">
+                  <span class="inside-what">
+                    <span class="inside-name">{{ member.name }}</span>
+                    @if (member.brand; as brand) {
+                      <span class="inside-brand">{{ brand }}</span>
                     }
-                  </li>
-                }
-                @if (grouped.more; as more) {
-                  <li class="inside-more">{{ more }}</li>
-                }
-              </ul>
-            }
+                  </span>
+                  @if (member.price; as price) {
+                    <span class="inside-price">{{ price }}</span>
+                  }
+                </li>
+              }
+              @if (group()?.more; as more) {
+                <li class="inside-more">{{ more }}</li>
+              }
+            </ul>
           </div>
         }
       </div>
 
-      @if (add(); as adding) {
+      @if (slot() === 'add' && add(); as adding) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <button
             (click)="pressAdd($event)"
@@ -513,7 +516,7 @@ export type ProductRowExpanded = 'shops' | 'members';
             <span class="add-dot"><lib-plus-icon /></span>
           </button>
         </div>
-      } @else if (stepper(); as stepping) {
+      } @else if (slot() === 'stepper' && stepper(); as stepping) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <lib-quantity-stepper
             (stepped)="stepped.emit($event)"
@@ -529,7 +532,7 @@ export type ProductRowExpanded = 'shops' | 'members';
         </div>
       }
 
-      @if (heldLines().length > 0) {
+      @if (slot() === 'add' && heldLines().length > 0) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <div class="held">
             <span class="held-title">{{
@@ -619,15 +622,18 @@ export class ProductRow {
   readonly link = input<string | null>(null);
 
   /**
-   * Whether a press on the card opens the product. False draws its words as text,
-   * for a card whose one control is its stepper (the sheet of what a visit added,
-   * velista `0163`).
+   * Whether a press on the card can open the product where there is no
+   * {@link link}: a host that listens to {@link opened}. False draws the card's
+   * words with nothing to press (a guest's basket), because a button that opens
+   * nothing is a dead tab stop announced as a control. A link, a group and a mode
+   * that chooses ignore it.
    */
-  readonly opens = input(true);
+  readonly openable = input(true);
 
   /**
    * Whether the price column is drawn. False leaves it empty, also with no price,
-   * where the detail already carries the price (the sheet of what a visit added).
+   * where the detail already carries the price (the sheet of what a visit added,
+   * velista `0163`).
    */
   readonly priceShown = input(true);
 
@@ -675,9 +681,36 @@ export class ProductRow {
     () => this.row().chains !== null && this.shops().length > 0
   );
 
+  /**
+   * Which control the trailing slot draws, one at most: a choice lives inside the
+   * card's label and takes the slot from the plus and the stepper, and the plus
+   * takes it from the stepper. Null for none.
+   */
+  protected readonly slot = computed((): 'choice' | 'add' | 'stepper' | null =>
+    this.choice() !== null
+      ? 'choice'
+      : this.add() !== null
+        ? 'add'
+        : this.stepper() !== null
+          ? 'stepper'
+          : null
+  );
+
+  /** A group's products, empty for a product or a group with none. */
+  protected readonly members = computed(
+    (): readonly ProductRowMember[] => this.group()?.members ?? []
+  );
+
   protected readonly heldLines = computed(
     (): readonly ProductRowHeldLine[] => this.add()?.lines ?? []
   );
+
+  /** A group opens its products, and one with none has nothing to open. */
+  protected pressGroup(): void {
+    if (this.members().length > 0) {
+      this.expandToggled.emit('members');
+    }
+  }
 
   protected pressAdd(event: Event): void {
     this.added.emit({
