@@ -179,10 +179,19 @@ part of the render and would trip that very check.
   # the edge twice.
   #
   # The model is a value rather than a literal, so changing it is an env edit and
-  # a restart. `gemini-3.1-flash-lite` is the first thing to try if quality
-  # disappoints, and the version numbers do not order those two the way they look.
+  # a restart. Empty means the default of the provider that answers (plan 0224,
+  # section 5): the default moved into the service because it depends on
+  # ASSISTANT_PROVIDER, and a Gemini name written here would reach Claude the day
+  # the switch flips.
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Values.namespace) | quote }}
-  ASSISTANT_MODEL: {{ $assistant.model | default "gemini-3.5-flash-lite" | quote }}
+  ASSISTANT_MODEL: {{ $assistant.model | default "" | quote }}
+  # Which provider answers a turn (plan 0224). `claude` answers with Claude and
+  # still hears with Gemini, because Claude takes no audio. Empty effort and
+  # thinking mean the service's own defaults (Haiku, adaptive thinking, effort
+  # low), which the evaluation of 2026-10-22 chose.
+  ASSISTANT_PROVIDER: {{ $assistant.provider | default "gemini" | quote }}
+  ASSISTANT_CLAUDE_EFFORT: {{ $assistant.claudeEffort | default "" | quote }}
+  ASSISTANT_CLAUDE_THINKING: {{ $assistant.claudeThinking | default "" | quote }}
   # Voice input (plan 0041). The transcription model is its own key so a different
   # model can do that job than answers the turn without a code change; empty means
   # the same one, which is the default and the only setting anybody has evidence

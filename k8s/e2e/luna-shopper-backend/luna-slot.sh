@@ -1541,7 +1541,17 @@ GEMINI_API_KEY=
 # Empty is the provider's own endpoint. Point it at a local stand in to drive the
 # turn loop without a key and without leaving the machine.
 GEMINI_BASE_URL=
-ASSISTANT_MODEL=gemini-3.5-flash-lite
+# Which provider answers a turn (plan 0224): gemini or claude. With claude, Gemini
+# still transcribes, so a spoken turn needs GEMINI_API_KEY too. A key pasted
+# below survives a re-run: none of these is derived from the slot.
+ASSISTANT_PROVIDER=gemini
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=
+# Empty means the defaults: low and adaptive.
+ASSISTANT_CLAUDE_EFFORT=
+ASSISTANT_CLAUDE_THINKING=
+# Empty means the default model of the provider that answers.
+ASSISTANT_MODEL=
 # Voice input (plan 0041). An empty transcription model means the model that
 # answers the turn also transcribes it, which is the default everywhere.
 ASSISTANT_TRANSCRIPTION_MODEL=

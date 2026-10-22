@@ -138,7 +138,9 @@ BACKUP_SECRET=luna-shopper-backend-backup-secret
 # section 11): with it empty the assistant boots, its health probes pass, and
 # /v1/assistant answers 501 not_configured. An operator who never wanted an
 # assistant should not be told their deploy will fail when it will not.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY"
+# ANTHROPIC_API_KEY joins by the same rule (plan 0224): it answers a turn only
+# when the values file sets `assistant.provider: claude`.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY ANTHROPIC_API_KEY"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -585,6 +587,7 @@ fi
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
 SMTP_PASS="$(existing "$APP_SECRET" SMTP_PASS)"
 GEMINI_API_KEY="$(existing "$APP_SECRET" GEMINI_API_KEY)"
+ANTHROPIC_API_KEY="$(existing "$APP_SECRET" ANTHROPIC_API_KEY)"
 if [ -t 0 ]; then
   if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
     read -rsp "  Google client secret (blank to leave Google unconfigured): " GOOGLE_CLIENT_SECRET
@@ -598,8 +601,12 @@ if [ -t 0 ]; then
     read -rsp "  Gemini API key (blank to leave the assistant unconfigured): " GEMINI_API_KEY
     echo
   fi
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    read -rsp "  Anthropic API key (blank unless assistant.provider is claude): " ANTHROPIC_API_KEY
+    echo
+  fi
 else
-  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and GEMINI_API_KEY as they are"
+  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS, GEMINI_API_KEY and ANTHROPIC_API_KEY as they are"
 fi
 
 # ---------------------------------------------------------------------------
@@ -643,7 +650,8 @@ apply_secret "$APP_SECRET" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
-  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY"
+  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
+  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
 
 # The backup credentials (plan 0005). Both environments render the CronJobs:
 # production runs them nightly, and staging keeps them suspended for the release
@@ -697,6 +705,7 @@ ${APP_SECRET}/HARVESTER_ACTOR_ID: ${HARVESTER_ACTOR_ID}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
 ${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}
+${APP_SECRET}/ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:
 ${JWT_PRIVATE_KEY}
