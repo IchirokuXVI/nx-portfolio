@@ -17,16 +17,30 @@
 
 set -euo pipefail
 
-# Pinned versions. Envoy Gateway v1.9.0 bundles Gateway API v1.6.1, so the two
-# below are a matched pair; bump them together, and re-check the pairing with
+# Pinned versions. Renovate reads the `# renovate:` line above each one and
+# opens a pull request when a new release is out (k8s plan 0013). The
+# host-maintenance workflow then applies the merged version to staging first and
+# to production after the soak, so a version here is the version both clusters
+# run, and the version a rebuilt host gets.
+#
+# Envoy Gateway v1.9.0 bundles Gateway API v1.6.1, so the two below are a matched
+# pair; bump them together, and re-check the pairing with
 #   helm pull oci://docker.io/envoyproxy/gateway-helm --version <v> --untar
 #   grep -rh bundle-version gateway-helm/
+# renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.1}"
+# renovate: datasource=docker depName=envoyproxy/gateway-helm
 ENVOY_GATEWAY_VERSION="${ENVOY_GATEWAY_VERSION:-v1.9.0}"
+# renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.1}"
 # Chart version, which tracks the app version one for one. Check what is current
 # with `helm search repo metallb/metallb --versions`.
+# renovate: datasource=helm depName=metallb registryUrl=https://metallb.github.io/metallb
 METALLB_VERSION="${METALLB_VERSION:-0.16.1}"
+# The k3s release a new host installs and nx-host-patch upgrades to. Both
+# clusters ran this one when it was pinned (2026-10-22).
+# renovate: datasource=github-releases depName=k3s-io/k3s
+K3S_VERSION="${K3S_VERSION:-v1.36.3+k3s1}"
 
 IMPLEMENTATION=envoy
 ISSUER=letsencrypt
@@ -83,24 +97,43 @@ esac
 #             property you want in the layer that decides whether the site is
 #             reachable.
 #
-# --write-kubeconfig-mode 644 lets a non root user (and the CI deploy user) read
+# write-kubeconfig-mode 644 lets a non root user (and the CI deploy user) read
 # /etc/rancher/k3s/k3s.yaml without sudo.
 #
-# No version is pinned here. Gateway API v1.5+ CRDs need a Kubernetes API server
-# of 1.31 or newer, and the current k3s stable channel has been past that since
-# well before this script existed, so pinning would only mean a stale channel to
-# maintain. Pass INSTALL_K3S_VERSION or INSTALL_K3S_CHANNEL through the
-# environment if a specific release is ever needed.
+# The flags live in /etc/rancher/k3s/config.yaml, not on the installer's command
+# line (k8s plan 0013). The installer rewrites the systemd unit from whatever
+# arguments it is given, so an upgrade that forgot them would quietly bring
+# traefik back onto ports 80 and 443. k3s reads config.yaml on every start, so an
+# upgrade needs no arguments at all. The file is written on every --k3s run,
+# which also moves a host installed before this change onto it.
+#
+# The version is pinned (K3S_VERSION above), and so is the installer, which comes
+# from the same tag. A rebuilt host therefore gets the k3s the other cluster
+# runs, not whatever the stable channel holds that day. Gateway API v1.5+ CRDs
+# need a Kubernetes API server of 1.31 or newer, which every pinned k3s is.
 # ---------------------------------------------------------------------------
 if [ "$INSTALL_K3S" = true ]; then
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "--k3s writes /etc/rancher/k3s and installs a system service. Run it as root." >&2
+    exit 1
+  fi
+  install -d -m 755 /etc/rancher/k3s
+  cat > /etc/rancher/k3s/config.yaml <<'YAML'
+# Written by k8s/bootstrap/install.sh. Read by k3s on every start.
+disable:
+  - traefik
+  - servicelb
+write-kubeconfig-mode: '0644'
+YAML
+
   if command -v k3s >/dev/null 2>&1; then
     echo "==> k3s already installed, skipping (k3s $(k3s --version | head -1 | awk '{print $3}'))"
+    echo "    upgrades go through nx-host-patch, which the host-maintenance workflow"
+    echo "    runs (k8s plan 0013)"
   else
-    echo "==> installing k3s (traefik and servicelb disabled)"
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
-      --disable traefik \
-      --disable servicelb \
-      --write-kubeconfig-mode 644" sh -
+    echo "==> installing k3s $K3S_VERSION (traefik and servicelb disabled)"
+    curl -sfL "https://raw.githubusercontent.com/k3s-io/k3s/${K3S_VERSION}/install.sh" \
+      | INSTALL_K3S_VERSION="$K3S_VERSION" sh -
   fi
 
   export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"

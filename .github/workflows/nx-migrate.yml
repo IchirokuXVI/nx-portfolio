@@ -1,0 +1,138 @@
+name: Nx migrate
+
+# Monthly: move Nx, Angular and the packages Nx manages to the next version
+# through `nx migrate`, and open the result as a pull request into dev (k8s
+# plan 0013).
+#
+# Renovate leaves these packages alone (renovate.json), because a version bump
+# is only half of their update: `nx migrate` also rewrites configuration and
+# code, and Renovate cannot run it.
+#
+# One major at a time, the way Nx and Angular support it. Two majors behind
+# means two months, or a manual run after the first one merges.
+#
+# The pull request is pushed with AUTOMATION_TOKEN, a fine grained token with
+# contents and pull requests write on this repository. GitHub does not start
+# workflows for a push made with the default GITHUB_TOKEN, so without it the PR
+# would arrive with no checks at all.
+
+on:
+  schedule:
+    # Every Monday, and the first step skips all but the first Monday of the
+    # month. A cron that names both a day of the month and a day of the week
+    # matches either one, not both.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+    steps:
+      - name: First Monday of the month, and a token to push with
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = schedule ] && [ "$(date -u +%d)" -gt 7 ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "not the first Monday"; exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=AUTOMATION_TOKEN is unset::Create a fine grained token with contents and pull requests write on this repository and save it as the AUTOMATION_TOKEN secret."
+            exit 1
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout dev
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          token: ${{ secrets.AUTOMATION_TOKEN }}
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Pick the target version
+        if: steps.gate.outputs.run == 'true'
+        id: target
+        run: |
+          current="$(node -p "require('./package.json').devDependencies.nx || require('./package.json').dependencies.nx")"
+          current="${current#^}"; current="${current#~}"
+          major="${current%%.*}"
+          latest="$(npm view nx version)"
+          if [ "${latest%%.*}" -gt $((major + 1)) ]; then
+            # Further than one major ahead: the newest release of the next one.
+            target="$(npm view "nx@^$((major + 1))" version --json | jq -r 'if type == "array" then .[-1] else . end')"
+          else
+            target="$latest"
+          fi
+          echo "current=$current target=$target"
+          branch="chore/nx-migrate-$target"
+          if [ "$current" = "$target" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "already on $target"; exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"; echo "$branch already exists, its PR is waiting"; exit 0
+          fi
+          {
+            echo "skip=false"
+            echo "current=$current"
+            echo "target=$target"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: nx migrate
+        if: steps.gate.outputs.run == 'true' && steps.target.outputs.skip == 'false'
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          npm ci --no-audit --no-fund
+          npx nx migrate "$TARGET"
+          npm install --no-audit --no-fund
+          git add package.json package-lock.json
+          git commit -m "chore(deps): nx $TARGET package versions"
+          if [ -f migrations.json ]; then
+            # One commit per migration, so a reviewer can read each rewrite on
+            # its own and revert one without the rest.
+            npx nx migrate --run-migrations=migrations.json --create-commits \
+              --commit-prefix='chore(deps): nx migration '
+            rm -f migrations.json
+          fi
+          # Anything a migration left uncommitted (a formatted file, a lock
+          # file it touched) goes in one last commit.
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(deps): nx $TARGET leftovers"
+          fi
+          git push origin "$BRANCH"
+
+      - name: Open the pull request
+        if: steps.gate.outputs.run == 'true' && steps.target.outputs.skip == 'false'
+        env:
+          CURRENT: ${{ steps.target.outputs.current }}
+          TARGET: ${{ steps.target.outputs.target }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          gh pr create --base dev --head "$BRANCH" \
+            --title "chore(deps): nx $TARGET migration" \
+            --body "$(cat <<EOF
+          \`nx migrate\` from $CURRENT to $TARGET, opened by nx-migrate.yml (k8s plan 0013).
+
+          Each migration is its own commit. When a check fails, the fix goes on this branch: an
+          Angular or Nx major usually needs a few hand edits that no migration makes. Read the
+          release notes of both before merging a major.
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          EOF
+          )"

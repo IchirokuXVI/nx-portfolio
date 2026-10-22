@@ -1,0 +1,147 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependency updates, k8s plan 0013. Patch and minor merge themselves once every check passes; majors wait for a tick on the Dependency Dashboard.",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":pinDigests",
+    ":semanticCommits"
+  ],
+  "baseBranchPatterns": ["dev"],
+  "timezone": "Europe/Madrid",
+  "schedule": ["* 0-5 * * 1"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 0,
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "platformAutomerge": false,
+  "automergeType": "pr",
+  "rebaseWhen": "conflicted",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": ["* 0-5 * * 1"]
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "minimumReleaseAge": null,
+    "schedule": ["at any time"],
+    "labels": ["security"]
+  },
+  "osvVulnerabilityAlerts": true,
+  "customManagers": [
+    {
+      "description": "Versions pinned in the cluster bootstrap, each under a `# renovate:` comment",
+      "customType": "regex",
+      "managerFilePatterns": ["/^k8s/bootstrap/install\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\n[A-Z0-9_]+=\"\\$\\{[A-Z0-9_]+:-(?<currentValue>[^}]+)\\}\""
+      ]
+    },
+    {
+      "description": "Plain `image: name:tag` lines in the Helm values, which the helm-values manager does not read",
+      "customType": "regex",
+      "managerFilePatterns": ["/^k8s/helm/values[^/]*\\.yaml$/"],
+      "matchStrings": [
+        "image:\\s+['\"]?(?<depName>[a-z0-9][a-z0-9./_-]*):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?['\"]?\\s"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "The build image named in the deploy workflows (k8s plan 0007)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "BUILD_IMAGE:\\s+(?<depName>[a-z0-9./_-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Patch, minor and digest updates merge themselves once every check is green",
+      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Below 1.0 a minor can break, so it is reviewed like a major",
+      "matchCurrentVersion": "/^v?0\\./",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "Majors open only after a tick on the Dependency Dashboard",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "minimumReleaseAge": "7 days",
+      "automerge": false
+    },
+    {
+      "description": "Nx, Angular and the compiler move together through nx migrate (nx-migrate.yml), which also rewrites code",
+      "matchPackageNames": [
+        "nx",
+        "@nx/**",
+        "@angular/**",
+        "@angular-devkit/**",
+        "@angular-eslint/**",
+        "@schematics/angular",
+        "@module-federation/**",
+        "@rspack/**",
+        "typescript",
+        "jest-preset-angular",
+        "angular-eslint"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Our own images are tagged by the pipeline, not by Renovate",
+      "matchPackageNames": ["ghcr.io/ichirokuxvi/**", "nx-portfolio/**"],
+      "enabled": false
+    },
+    {
+      "description": "One Node image for the build and every runtime, so the two never disagree",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["node"],
+      "groupName": "node images"
+    },
+    {
+      "description": "Postgres: the backup Job uses the server's image so pg_dump matches. A major needs pg_upgrade or a dump and restore, as a release task",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "groupName": "postgres images"
+    },
+    {
+      "description": "Data services hold state, so even a minor is read before it merges",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres", "redis", "valkey/valkey", "nats"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "Envoy Gateway bundles one Gateway API version, so the two move together and are read first",
+      "matchFileNames": ["k8s/bootstrap/install.sh"],
+      "matchPackageNames": [
+        "kubernetes-sigs/gateway-api",
+        "envoyproxy/gateway-helm"
+      ],
+      "groupName": "gateway api and envoy gateway",
+      "automerge": false
+    },
+    {
+      "description": "k3s and cert-manager minors change cluster behaviour, so they are read first. Patches merge themselves and reach production only through the host-maintenance soak",
+      "matchFileNames": ["k8s/bootstrap/install.sh"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "k3s tags carry the build after a plus (v1.36.3+k3s1), which semver ignores. Release candidates never match",
+      "matchPackageNames": ["k3s-io/k3s"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+k3s(?<build>\\d+)$"
+    },
+    {
+      "description": "GitHub Actions in one weekly PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    }
+  ]
+}
