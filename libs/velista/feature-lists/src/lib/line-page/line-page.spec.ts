@@ -1,7 +1,17 @@
-import { signal } from '@angular/core';
+import {
+  type EnvironmentProviders,
+  type Provider,
+  signal,
+} from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+  Router,
+} from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -15,6 +25,7 @@ import {
   fakeListStore,
   fakeMemberNames,
   fakeZoneStore,
+  GatewayError,
   LINE_SERVICE,
   type LineServiceI,
   ProductPickStore,
@@ -35,8 +46,15 @@ import {
   type MyZone,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { AppHistory, provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  AppHistory,
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { of } from 'rxjs';
+import { DeleteLineSheet } from '../delete-line-sheet/delete-line-sheet';
 import { LinePage } from './line-page';
 
 /**
@@ -56,6 +74,7 @@ const MERCADONA = 'chain-mercadona';
 
 const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
 const READER: readonly ListPermission[] = ['READ'];
+const WRITER: readonly ListPermission[] = ['READ', 'WRITE'];
 
 function line(overrides: Partial<Line> = {}): Line {
   return {
@@ -157,6 +176,8 @@ interface Options {
   readonly lines?: readonly Line[];
   readonly permissions?: readonly ListPermission[];
   readonly linesState?: 'idle' | 'loading' | 'loaded' | 'failed';
+  /** What the read of the lines failed with, beside `linesState: 'failed'`. */
+  readonly linesError?: unknown;
   readonly alsoOn?: AlsoOnVm;
 }
 
@@ -171,6 +192,7 @@ async function render(options: Options = {}): Promise<{
   const lines = fakeLineStore({
     lines: options.lines ?? [line()],
     state: options.linesState ?? 'loaded',
+    error: options.linesError,
   });
   const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
   const browse = {
@@ -178,10 +200,6 @@ async function render(options: Options = {}): Promise<{
     scopeOffers: jest.fn(async (itemId: string) =>
       offers(itemId === 'normal' ? 2.15 : 3.45)
     ),
-  };
-  const holding: Pick<LineServiceI, 'listsHoldingItem'> = {
-    listsHoldingItem: async () =>
-      options.alsoOn ?? { places: [], hasMore: false },
   };
   const map = convertToParamMap({
     zoneId: ZONE_ID,
@@ -192,34 +210,8 @@ async function render(options: Options = {}): Promise<{
   await TestBed.configureTestingModule({
     imports: [LinePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
-      provideVelistaTesting({ basePath: '/velista' }),
-      provideFakeLineStore(lines),
-      provideFakeListStore(
-        fakeListStore({
-          lists: [list(options.permissions ?? ADMIN)],
-          state: 'loaded',
-        })
-      ),
-      provideFakeZoneStore(fakeZoneStore({ zones: [zone()] })),
-      provideFakeMemberNames(fakeMemberNames({})),
-      provideFakeItemNames(
-        fakeItemNames({
-          items: [
-            item('normal', 'Shampoo for normal hair'),
-            item('classic', 'Classic care shampoo'),
-          ],
-        })
-      ),
-      provideFakeSessionStore('REGISTERED'),
-      {
-        provide: CATALOG_BROWSE_SERVICE,
-        useValue: browse as unknown as CatalogBrowseServiceI,
-      },
-      { provide: LINE_SERVICE, useValue: holding },
-      ProductPickStore,
-      { provide: AppHistory, useValue: { depth: () => 4 } },
+      ...pageProviders(options, lines, browse),
       { provide: Router, useValue: router },
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
         useValue: {
@@ -238,10 +230,95 @@ async function render(options: Options = {}): Promise<{
 }
 
 /**
+ * The page under a real router, with the delete sheet in its outlet, for what only a
+ * routed child can show: a sheet that stays drawn while the line leaves the list.
+ */
+async function renderRouted(url: string): Promise<{
+  harness: RouterTestingHarness;
+  lines: FakeLineStore;
+}> {
+  TestBed.resetTestingModule();
+
+  const lines = fakeLineStore({ lines: [line()], state: 'loaded' });
+  const browse = {
+    context: jest.fn().mockResolvedValue(CONTEXT),
+    scopeOffers: jest.fn(async () => offers(2.15)),
+  };
+
+  await TestBed.configureTestingModule({
+    imports: [RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      ...pageProviders({}, lines, browse),
+      provideRouter([
+        {
+          path: 'velista/en/zones/:zoneId/lists/:listId/lines/:lineId',
+          component: LinePage,
+          children: [{ path: 'sheet/delete', component: DeleteLineSheet }],
+        },
+      ]),
+      {
+        provide: SheetNavigation,
+        useValue: {
+          dismiss: jest.fn().mockResolvedValue(undefined),
+          leaveTo: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+    ],
+  }).compileComponents();
+
+  const harness = await RouterTestingHarness.create(url);
+  await drain(harness.fixture);
+
+  return { harness, lines };
+}
+
+/** What both harnesses share: every store and service the page reads. */
+function pageProviders(
+  options: Options,
+  lines: FakeLineStore,
+  browse: { context: jest.Mock; scopeOffers: jest.Mock }
+): (Provider | EnvironmentProviders)[] {
+  const holding: Pick<LineServiceI, 'listsHoldingItem'> = {
+    listsHoldingItem: async () =>
+      options.alsoOn ?? { places: [], hasMore: false },
+  };
+
+  return [
+    provideVelistaTesting({ basePath: '/velista' }),
+    provideFakeLineStore(lines),
+    provideFakeListStore(
+      fakeListStore({
+        lists: [list(options.permissions ?? ADMIN)],
+        state: 'loaded',
+      })
+    ),
+    provideFakeZoneStore(fakeZoneStore({ zones: [zone()] })),
+    provideFakeMemberNames(fakeMemberNames({})),
+    provideFakeItemNames(
+      fakeItemNames({
+        items: [
+          item('normal', 'Shampoo for normal hair'),
+          item('classic', 'Classic care shampoo'),
+        ],
+      })
+    ),
+    provideFakeSessionStore('REGISTERED'),
+    {
+      provide: CATALOG_BROWSE_SERVICE,
+      useValue: browse as unknown as CatalogBrowseServiceI,
+    },
+    { provide: LINE_SERVICE, useValue: holding },
+    ProductPickStore,
+    { provide: AppHistory, useValue: { depth: () => 4 } },
+    { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+  ];
+}
+
+/**
  * Let the effects wake and their promises land. The price and "also on" reads
  * resolve through promises that `whenStable` does not wait for in a zoneless test.
  */
-async function drain(fixture: ComponentFixture<LinePage>): Promise<void> {
+async function drain(fixture: ComponentFixture<unknown>): Promise<void> {
   for (let round = 0; round < 3; round += 1) {
     fixture.detectChanges();
     for (let tick = 0; tick < 8; tick += 1) {
@@ -281,6 +358,15 @@ describe('LinePage', () => {
     );
     expect(textOf(fixture)).toContain('list.page.where');
     expect(textOf(fixture)).toContain('list.page.addedBy');
+  });
+
+  it('names the list on the chevron, which is where it goes (plan 0158)', async () => {
+    const { fixture } = await render();
+    const chevron = fixture.nativeElement.querySelector(
+      'lib-page-header button.lead'
+    ) as HTMLButtonElement | null;
+
+    expect(chevron?.getAttribute('aria-label')).toBe('list.page.toList');
   });
 
   describe('a line with no name of its own (velista 0144, section 5)', () => {
@@ -337,6 +423,22 @@ describe('LinePage', () => {
         { kind: 'quantity', lineId: LINE_ID, delta: 1 },
         { kind: 'quantity', lineId: LINE_ID, delta: -1 },
       ]);
+    });
+
+    it('asks for no record of a write the network drops (velista 0159)', async () => {
+      // The notice and its "Send it again" are the list page's, so an entry recorded
+      // here would surface on a page that never made the write.
+      const { fixture, lines } = await render();
+      const addQuantity = jest.spyOn(lines, 'addQuantity');
+      const [, more] = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement);
+
+      more.click();
+      await drain(fixture);
+
+      expect(addQuantity).toHaveBeenCalledTimes(1);
+      expect(addQuantity.mock.calls[0]).toEqual([LINE_ID, 1]);
     });
 
     it('is a number with no buttons for a reader without DECIDE', async () => {
@@ -438,6 +540,21 @@ describe('LinePage', () => {
       await drain(fixture);
       expect(router.navigateByUrl).toHaveBeenCalledWith(`${LINE_URL}/products`);
       expect(TestBed.inject(ProductPickStore).request()?.chosenIds).toEqual([]);
+    });
+
+    it('offers Change and Choose a product to a writer on an approved line (backend 0076)', async () => {
+      const withProducts = await render({ permissions: WRITER });
+      expect(
+        buttonWith(withProducts.fixture, 'list.page.productsChange')
+      ).not.toBeNull();
+
+      const empty = await render({
+        permissions: WRITER,
+        lines: [line({ itemIds: [] })],
+      });
+      expect(
+        buttonWith(empty.fixture, 'list.page.productsChoose')
+      ).not.toBeNull();
     });
 
     it('offers neither Change nor Choose a product to a reader who may not edit', async () => {
@@ -631,6 +748,107 @@ describe('LinePage', () => {
 
       expect(textOf(fixture)).toContain('list.page.failed');
       expect(lines.loadCount()).toBe(1);
+    });
+  });
+
+  /**
+   * Velista 0156. A line of a list this reader may not read drew the generic failure
+   * and a Try again that only asked to be refused again; a line of another list said
+   * it was deleted.
+   */
+  describe('a line you cannot read (velista 0156)', () => {
+    const forbidden = new GatewayError({
+      code: 'forbidden',
+      status: 403,
+      correlationId: 'cid-403',
+    });
+
+    it('draws the not available sentence and a way back to the group, and no retry', async () => {
+      const { fixture, router } = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: forbidden,
+      });
+
+      expect(textOf(fixture)).toContain('list.error.notAvailable');
+      expect(textOf(fixture)).not.toContain('list.page.failed');
+      expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
+
+      buttonWith(fixture, 'list.header.back')?.click();
+      await drain(fixture);
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}`,
+        { replaceUrl: true }
+      );
+    });
+
+    it('says the same on a 404, so the two cannot be told apart', async () => {
+      const { fixture } = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'cid-404',
+        }),
+      });
+
+      expect(textOf(fixture)).toContain('list.error.notAvailable');
+      expect(buttonWith(fixture, 'list.page.retry')).toBeNull();
+    });
+
+    it('draws no sheet over a line it cannot read', async () => {
+      const gone = await render({
+        lines: [],
+        linesState: 'failed',
+        linesError: forbidden,
+      });
+      expect(
+        gone.fixture.nativeElement.querySelector('router-outlet')
+      ).toBeNull();
+
+      const ready = await render();
+      expect(
+        ready.fixture.nativeElement.querySelector('router-outlet')
+      ).not.toBeNull();
+    });
+
+    it('keeps the sheet that is open when another user deletes the line, so its notice is drawn', async () => {
+      const { harness, lines } = await renderRouted(LINE_URL + '/sheet/delete');
+      const page = harness.fixture.nativeElement as HTMLElement;
+      expect(page.querySelector('lib-delete-line-sheet')).not.toBeNull();
+
+      lines.deleteByOthers(LINE_ID);
+      await drain(harness.fixture);
+
+      expect(page.querySelector('router-outlet')).not.toBeNull();
+      expect(page.querySelector('lib-delete-line-sheet')).not.toBeNull();
+      expect(page.textContent).toContain('list.gone.byOthers');
+    });
+
+    it('says a line absent from a loaded list is no longer in this list, in both languages', async () => {
+      const { fixture } = await render({ lines: [] });
+
+      expect(textOf(fixture)).toContain('list.gone.unavailable');
+      expect(buttonWith(fixture, 'list.page.toList')).not.toBeNull();
+
+      // The testing translator echoes the key, so the words are read from the files.
+      const i18n = join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'ui',
+        'assets',
+        'i18n'
+      );
+      const words = (locale: string): string =>
+        JSON.parse(readFileSync(join(i18n, `${locale}.json`), 'utf8')).list.gone
+          .unavailable;
+      expect(words('en')).toBe('That line is no longer in this list');
+      expect(words('es')).toBe('Esa línea ya no está en esta lista');
     });
   });
 });

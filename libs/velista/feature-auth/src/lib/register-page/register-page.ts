@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -29,8 +29,17 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
+import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 
 const ERROR_ID = 'register-error';
+
+/**
+ * Something, an @, something, a dot, something, with no spaces (velista `0160`).
+ *
+ * Looser than the gateway's `@IsEmail()` on purpose: this only answers the obvious
+ * miss before a round trip, and the server still refuses whatever this lets past.
+ */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Making an account, for somebody who has nothing to lose yet.
@@ -99,6 +108,11 @@ export class RegisterPage {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
+  /** The page to come back to, carried on from sign in (velista `0154`). */
+  private readonly _returnUrl = safeReturnUrl(
+    inject(ActivatedRoute).snapshot.queryParamMap.get(RETURN_URL_PARAM)
+  );
+
   readonly errorId = ERROR_ID;
   readonly minPasswordLength = PASSWORD_MIN_LENGTH;
 
@@ -117,6 +131,10 @@ export class RegisterPage {
    * press with no message saying why. A short password comes back as a
    * `validation_failed` against the password field and a mismatch is answered by
    * `submit`, and both are sentences somebody can act on (section 5.5).
+   *
+   * Since velista `0160`, `submit` also answers the address shape and the length before
+   * the request. The button still presses: the check spares the round trip and draws
+   * the same sentence the server's 400 would, and it is not a condition on the button.
    */
   readonly canSubmit = computed(
     () =>
@@ -137,6 +155,24 @@ export class RegisterPage {
 
   async submit(): Promise<void> {
     if (!this.canSubmit()) {
+      return;
+    }
+
+    // Before the request, with the sentence the server's 400 would draw (velista
+    // `0160`). The server still checks both, and stays the authority.
+    if (!EMAIL_SHAPE.test(this.email().trim())) {
+      this.error.set({ key: 'auth.error.badEmail', placement: 'email' });
+      this._focusFirstField();
+      return;
+    }
+
+    // Code points, as the DTO counts them, so an emoji is one character here too.
+    if (Array.from(this.password()).length < PASSWORD_MIN_LENGTH) {
+      this.error.set({
+        key: 'auth.error.shortPassword',
+        placement: 'password',
+      });
+      this._focusPasswordField();
       return;
     }
 
@@ -166,7 +202,7 @@ export class RegisterPage {
       this._notice.set('registered', email);
 
       await this._router.navigateByUrl(
-        appPath(this._locale(), this._basePath, 'home')
+        this._returnUrl ?? appPath(this._locale(), this._basePath, 'home')
       );
     } catch (error) {
       this.submitting.set(false);
@@ -191,7 +227,14 @@ export class RegisterPage {
     const email = this.email().trim();
     void this._router.navigate(
       [appPath(this._locale(), this._basePath, 'auth', 'login')],
-      email === '' ? {} : { queryParams: { email } }
+      {
+        queryParams: {
+          ...(email === '' ? {} : { email }),
+          ...(this._returnUrl === null
+            ? {}
+            : { [RETURN_URL_PARAM]: this._returnUrl }),
+        },
+      }
     );
   }
 
@@ -204,6 +247,13 @@ export class RegisterPage {
   private _focusFirstField(): void {
     this._host.nativeElement
       .querySelector<HTMLInputElement>('input[type="email"]')
+      ?.focus();
+  }
+
+  /** The first password box, which is the one a short password is about. */
+  private _focusPasswordField(): void {
+    this._host.nativeElement
+      .querySelector<HTMLInputElement>('#register-password')
       ?.focus();
   }
 

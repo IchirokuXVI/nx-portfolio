@@ -39,6 +39,7 @@ import {
   basketRowProduct,
   type BasketViewRow,
   type BasketViewSection,
+  type BasketViewState,
   catalogName,
   type CatalogSuggestion,
   cheaperInGroup,
@@ -52,9 +53,12 @@ import {
   VISIT_WARNING_MINUTES,
 } from '@portfolio/velista/models';
 import {
+  appPath,
   BrowserFacade,
+  ColumnScroll,
   ListSearchNavigation,
   NavChrome,
+  PageReturn,
   productPagePath,
   searchOpenOf,
   sheetSegments,
@@ -90,7 +94,7 @@ import {
   SuggestionList,
   VisitNotice,
 } from '@portfolio/velista/ui';
-import { basketErrorKey } from '../basket-error-copy';
+import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
 import {
   listPickerRows,
   outstandingCaption,
@@ -98,8 +102,8 @@ import {
   visitTime,
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
-import { SHOP_ASK_SEGMENTS } from '../basket-paths';
-import { BasketRow } from '../basket-row/basket-row';
+import { basketPath, SHOP_ASK_SEGMENTS } from '../basket-paths';
+import { BasketRow, ownBoughtUnits } from '../basket-row/basket-row';
 import {
   basketGroupScope,
   changeableLineIds,
@@ -118,6 +122,22 @@ import { SeenTarget } from './seen-target';
  * with weeks left on it.
  */
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * What the basket showed when somebody left it for another page, handed back when
+ * they come back to it (`PageReturn`).
+ */
+interface BasketPageReturn {
+  readonly view: BasketViewState;
+  /** The words in the field, put back only onto an entry whose search is open. */
+  readonly words: string;
+  readonly scrollTop: number;
+}
+
+/** One basket's place. The caller's own is `live`, since its URL holds no id. */
+function basketReturnKey(live: boolean, id: string): string {
+  return `basket:${live ? 'live' : id}`;
+}
 
 /**
  * The basket: a list of lines with quantities, which whoever is holding the
@@ -279,6 +299,20 @@ export class BasketPage {
    * basket's address is replaced by another's: see {@link _followBasket}.
    */
   private _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+
+  private readonly _returns = inject(PageReturn);
+
+  /**
+   * What this basket showed when it was left, when this arrival is a return to it:
+   * the back button from the product picker or a product's page. Null on a fresh
+   * visit, which starts unsearched and at the top (`0076`, section 4.7).
+   */
+  private readonly _back = this._returns.recall<BasketPageReturn>(
+    basketReturnKey(this._live, this._id)
+  );
+
+  /** The column's scroll, read as it moves and put back on a return. */
+  private readonly _scroll = new ColumnScroll(this._back?.scrollTop ?? null);
 
   /**
    * What this reader may reach from here, which the menu sheet over this page asks
@@ -691,6 +725,13 @@ export class BasketPage {
     readonly text: string;
     readonly dismissLabel: string | null;
   } | null>(() => {
+    // F6.7: "you are on this list until" says nothing true over a state block or
+    // a finished trip, and sat above "no longer on this list" (velista `0154`).
+    // The socket's latch says that while the state is still `ready`.
+    if (this.state() !== 'ready' || this.finished() || this.revoked()) {
+      return null;
+    }
+
     const endsAt = this._visit();
     if (endsAt === null) {
       return null;
@@ -953,10 +994,36 @@ export class BasketPage {
      * date passes while the shopper is standing in an aisle must not move the rows
      * in front of them.
      */
+    const back = this._back;
     void (
       this._live ? this._store.openLive() : this._store.open(this._id)
     ).then(() => {
       this._view.restore();
+      // A return to this basket comes back to what it showed (`PageReturn`).
+      if (back !== null) {
+        this._view.resume(back.view);
+      }
+    });
+
+    // The words go back at once, before any effect runs, so the search entry's
+    // effect finds them on `?search=1` rather than taking the entry off for an
+    // empty field. The field itself is drawn once the basket is ready.
+    if (back !== null && this.searchOpen() && back.words.trim() !== '') {
+      const words = back.words;
+      this.onComposerQuery(words);
+      const filled = effect(() => {
+        const composer = this._composer();
+        if (composer !== undefined) {
+          composer.fill(words);
+          filled.destroy();
+        }
+      });
+    }
+
+    // The scroll it was left at, once the rows are there to scroll over.
+    afterRenderEffect(() => {
+      this._scroll.attach(this._column()?.nativeElement ?? null);
+      this._scroll.settle(this.state() === 'ready');
     });
 
     /**
@@ -1014,6 +1081,16 @@ export class BasketPage {
       followed.unsubscribe();
       // The bar comes back with whatever screen is next (velista `0117`).
       this._chrome.setComposing(false);
+      // What a return to this basket comes back to, taken before the stores let go.
+      this._returns.keep<BasketPageReturn>(
+        basketReturnKey(this._live, this._id),
+        {
+          view: this._view.snapshot(),
+          words: this._query(),
+          scrollTop: this._scroll.top,
+        }
+      );
+      this._scroll.detach();
       this._letGo();
     });
   }
@@ -1257,13 +1334,24 @@ export class BasketPage {
    * and deciding it here from two numbers is the arithmetic velista `0090` removed.
    */
   protected revertRow(row: BasketRowModel): void {
-    void this._toggle(row, () =>
-      this._store.revert(
-        row.rowKey,
-        row.state === 'NOT_AVAILABLE'
-          ? { target: 'CLOSE' }
-          : { target: 'UNITS', units: row.bought, from: row.bought }
-      )
+    // Only this person's own units, as far as the row can tell (velista `0151`):
+    // the server takes units back newest first, whoever bought them.
+    const me = this.meId();
+    const units = me === null ? row.bought : ownBoughtUnits(row, me);
+    if (row.state !== 'NOT_AVAILABLE' && units === 0) {
+      this.openRow(row);
+      return;
+    }
+    void this._toggle(
+      row,
+      () =>
+        this._store.revert(
+          row.rowKey,
+          row.state === 'NOT_AVAILABLE'
+            ? { target: 'CLOSE' }
+            : { target: 'UNITS', units, from: row.bought }
+        ),
+      () => this._reportSettle(row.rowKey, 'basket.reopen')
     );
   }
 
@@ -1278,14 +1366,17 @@ export class BasketPage {
    * A failure needs no branch here. It has already moved `BasketStore.state` or is a
    * transient the next refresh resolves, and the row is drawn from the store either
    * way; the sheet is where a failure gets a sentence, and the person opens it.
-   * `refused` is for a held buy only (velista `0141`): its numbers are the press's,
-   * so a refusal there is the window the question was open, and the row says so.
+   * `refused` says the refusal on the row, for every tap (velista `0151`): a tick
+   * the server refused because the trip finished, or because somebody else moved
+   * first, said nothing before. A held buy passes its own (velista `0141`), which
+   * reports through the same sentence.
    */
   private async _toggle(
     row: BasketRowModel,
     write: () => Promise<{ skippedCount: number } | null>,
-    refused: () => void = () => undefined
+    refused: () => void = () => this._reportSettle(row.rowKey)
   ): Promise<void> {
+    this._notice.set(null);
     const result = await write();
     if (result === null) {
       refused();
@@ -1458,8 +1549,11 @@ export class BasketPage {
    * a refused reel. The row is found again by the key of the press, because a
    * patch can have re-keyed it while the question was open.
    */
-  private _reportSettle(rowKey: string): void {
-    const key = basketErrorKey(this._store.error(), 'basket.settle');
+  private _reportSettle(
+    rowKey: string,
+    operation: BasketOperation = 'basket.settle'
+  ): void {
+    const key = basketErrorKey(this._store.error(), operation);
     const found = this._store.rowFor(rowKey);
     const count = found?.left ?? 0;
 
@@ -1578,6 +1672,38 @@ export class BasketPage {
     void this._store.refresh();
   }
 
+  /**
+   * Sign in, and come back to this basket (velista `0154`, target 6). The sign
+   * in page reads `returnUrl`; the literal is written here because that page is in
+   * a library this one may not import.
+   */
+  protected signInHere(): void {
+    void this._router.navigate(
+      [appPath(this._locale(), this._basePath, 'auth', 'login')],
+      {
+        queryParams: {
+          returnUrl: basketPath(
+            this._locale(),
+            this._basePath,
+            this._store.address()
+          ),
+        },
+      }
+    );
+  }
+
+  /**
+   * The one action of a basket the reader cannot use: home for an account, the
+   * front door for anybody else (velista `0154`).
+   */
+  protected goHome(): void {
+    void this._router.navigateByUrl(
+      this._session.isAuthenticated()
+        ? appPath(this._locale(), this._basePath, 'home')
+        : appPath(this._locale(), this._basePath)
+    );
+  }
+
   // --- The tools row and the search (plan 0074) -----------------------------
 
   /**
@@ -1680,15 +1806,22 @@ export class BasketPage {
    * Not further, unlike the zone list: the basket's bar is inside this column
    * rather than above it, so scrolling the heading to the top would take the bar
    * off the screen, and the bar stays while typing.
+   *
+   * Not on a return to the basket: the results were already on screen when
+   * somebody left, and the place they were reading in is what {@link _scroll} puts
+   * back.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
     const shown = this.typing();
     const column = this._column()?.nativeElement;
     if (!shown || column === undefined) {
-      this._resultsDrawn = false;
+      if (!this._scroll.returning) {
+        this._resultsDrawn = false;
+      }
       return;
     }
-    if (this._resultsDrawn) {
+    if (this._resultsDrawn || this._scroll.returning) {
+      this._resultsDrawn = true;
       return;
     }
     this._resultsDrawn = true;
@@ -1833,14 +1966,22 @@ export class BasketPage {
   );
 
   /**
-   * Whether every row quotes the chosen shop's price, or the cheapest anywhere
-   * (`0078`; `0102`).
+   * Whether the chosen shop prices any row of this basket (`0078`; `0102`), which
+   * is what lets the total's popover name the shop.
    *
-   * Asked once for the whole basket and handed to each row, which is what this page
-   * already does with `canReopen` and its own name: a component built once per line
-   * has no business asking the same question a dozen times.
+   * Asked once for the whole basket, which is what this page already does with
+   * `canReopen` and its own name: a component built once per line has no business
+   * asking the same question a dozen times. {@link readAtShop} is asked the same
+   * way.
    */
   protected readonly pricedAtShop = this._view.pricedAtShop;
+
+  /**
+   * Whether the rows are read at the chosen shop, priced there or not, which
+   * decides the price each row draws (velista `0153`): the shop's own or none,
+   * and never the cheapest at another chain under the shop's chip.
+   */
+  protected readonly readAtShop = this._view.readAtShop;
 
   /** How many of the five properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;
@@ -1863,10 +2004,10 @@ export class BasketPage {
    * The chain the popover names in "have a price at Mercadona", or null.
    *
    * Only while {@link pricedAtShop} is true, and not whenever a shop is chosen.
-   * A read at a new shop still out, and a shop that prices nothing on this
-   * basket, both leave every row on the cheapest price anywhere. The sum reads
-   * those same prices, so naming the shop then would be a claim about prices the
-   * number does not hold.
+   * A read at a new shop still out leaves every row on the cheapest price
+   * anywhere, and the sum reads those same prices, so naming the shop then would
+   * be a claim about prices the number does not hold. A shop that prices nothing
+   * on this basket adds no price at all (velista `0153`), so no number is drawn.
    */
   protected readonly totalChain = computed(() =>
     this.pricedAtShop() ? (this._view.chosenShop()?.chain ?? null) : null

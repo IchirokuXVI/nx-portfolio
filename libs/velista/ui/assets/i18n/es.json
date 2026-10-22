@@ -117,6 +117,7 @@
     },
     "error": {
       "notAvailable": "Este grupo no está disponible para ti. Puede que se haya eliminado o que te hayan sacado",
+      "loadFailed": "No se ha podido cargar este grupo",
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "alreadyClaimed": "Otra persona ya se ha hecho cargo del grupo",
       "tooManyRenames": "Demasiados cambios de nombre. Podrás cambiarlo otra vez en {{wait}}",
@@ -161,6 +162,20 @@
       "title": "velista no ha podido actualizarse",
       "body": "Cierra velista del todo y vuelve a abrirlo. Si así no funciona, ábrelo una vez en tu navegador.",
       "reload": "Reintentar"
+    }
+  },
+  "notFound": {
+    "checking": {
+      "title": "Buscando una versión nueva de velista",
+      "body": "Puede que esta página sea nueva. Si lo es, velista se actualiza y la abre. Tarda unos segundos."
+    },
+    "updating": {
+      "title": "velista se está actualizando",
+      "body": "La versión nueva está lista. velista se vuelve a abrir en esta página."
+    },
+    "missing": {
+      "title": "Esta página no existe",
+      "body": "Puede que el enlace sea antiguo o esté mal escrito."
     }
   },
   "auth": {
@@ -728,6 +743,7 @@
       "fewer": "Uno menos",
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
+      "clear": "Borrar lo escrito",
       "discard": "Descartar esta grabación",
       "listening": "Escuchando",
       "heard": "He oído",
@@ -787,6 +803,7 @@
     "empty": {
       "title": "Todavía no hay nada en esta lista",
       "body": "Escribe lo primero y todos lo verán",
+      "bodyPrivate": "Escribe lo primero. Todavía no has compartido esta lista con nadie",
       "short": "La lista está vacía"
     },
     "readOnly": {
@@ -889,7 +906,11 @@
       },
       "sharedWithZone": {
         "label": "Todo el mundo de este grupo puede usar esta lista",
-        "hint": "Quien se una más adelante también la tendrá. Desactivarlo no se la quita a nadie que ya la tenga"
+        "hint": "Quien se una más adelante también la tendrá. Desactivarlo no se la quita a nadie que ya la tenga",
+        "takeBack_one": "Quitársela también a la {{count}} persona que la tiene",
+        "takeBack_other": "Quitársela también a las {{count}} personas que la tienen",
+        "keepers_one": "No ha cambiado nada. {{names}} administra la lista ahora, así que solo un administrador del grupo se la puede quitar",
+        "keepers_other": "No ha cambiado nada. {{names}} administran la lista ahora, así que solo un administrador del grupo se la puede quitar"
       },
       "delete": "Eliminar esta lista",
       "accessFor": "Qué puede hacer {{name}} con esta lista",
@@ -913,7 +934,7 @@
     },
     "gone": {
       "byOthers": "Otra persona borró esta línea",
-      "unavailable": "Esta línea se borró y ya no está disponible",
+      "unavailable": "Esa línea ya no está en esta lista",
       "close": "Cerrar"
     },
     "error": {
@@ -1127,6 +1148,14 @@
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
       "retry": "Reintentar"
+    },
+    "dropped": {
+      "quantity": {
+        "lost": "Tu cambio en {{name}} ({{delta}}) no se guardó mientras estabas sin conexión.",
+        "unsure": "Puede que tu cambio en {{name}} ({{delta}}) no se guardara mientras estabas sin conexión. Mira la cantidad antes de volver a cambiarla."
+      },
+      "resend": "Enviarlo otra vez",
+      "dismiss": "Descartar"
     }
   },
   "account": {
@@ -1197,7 +1226,11 @@
       "tooManyResets": "Demasiadas peticiones. Puedes pedir otro en {{wait}}",
       "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
       "gone": "Esa cuenta ya no existe",
-      "failed": "No se pudo completar. Inténtalo de nuevo"
+      "failed": "No se pudo completar. Inténtalo de nuevo",
+      "nameLength": "Un nombre necesita de 2 a 40 caracteres",
+      "nameCharacters": "Un nombre solo admite letras, números, espacios y . _ ' -",
+      "nameLetter": "Un nombre necesita al menos una letra",
+      "nameReserved": "La aplicación usa «former member» para quien se fue, así que un nombre no puede empezar así"
     },
     "app": {
       "section": "La app",
@@ -1492,6 +1525,16 @@
       "title": "Ya no estás en esta lista",
       "body": "Quien la compartió la ha retirado."
     },
+    "goHome": "Ir al inicio",
+    "needsSignIn": {
+      "title": "Entra para abrir esta lista",
+      "body": "Solo la gente que está en esta lista puede abrirla. Si eres una de esas personas, entra con tu cuenta.",
+      "action": "Entrar"
+    },
+    "notYours": {
+      "title": "Esta lista no es tuya",
+      "body": "Solo la gente que está en ella puede abrirla. Pide a quien te la mandó que la comparta contigo."
+    },
     "ended": {
       "title": "Tu tiempo en esta lista ha acabado",
       "bodyAccount": "Un enlace dura 12 horas. Pide a {{name}} uno nuevo, o que te añada para quedarte.",
@@ -1598,7 +1641,10 @@
           "headingHint": "donde compraste, lo más reciente primero",
           "today": "Hoy",
           "yesterday": "Ayer"
-        }
+        },
+        "noPrices": "Aquí aún no hay precios",
+        "incomplete": "No se pudieron mostrar las tiendas.",
+        "retry": "Intentar de nuevo"
       },
       "lists": {
         "legend": "Listas",
@@ -1723,8 +1769,8 @@
       "body_one": "Nadie más podrá entrar. La {{count}} persona que ya está comprando sigue hasta que acabe su tiempo.",
       "body_other": "Nadie más podrá entrar. Las {{count}} personas que ya están comprando siguen hasta que acabe su tiempo.",
       "bodyNone": "Nadie más podrá entrar.",
-      "cascade_one": "Quitar también al {{count}} invitado que se unió con él",
-      "cascade_other": "Quitar también a los {{count}} invitados que se unieron con él",
+      "cascade_one": "Quitar también a la {{count}} persona que se unió con él",
+      "cascade_other": "Quitar también a las {{count}} personas que se unieron con él",
       "cascadeHint": "Pierden la lista en su siguiente acción. Marca esto solo si el enlace ha llegado a quien no debía.",
       "confirm": "Revocar el enlace",
       "cancel": "Conservarlo"
@@ -1762,7 +1808,16 @@
       "deadBody": "Pídele uno nuevo a quien te lo mandó. Si ya estabas haciendo esta compra, tu propio enlace en este navegador sigue funcionando.",
       "checking": "Comprobando el enlace",
       "joining": "Uniéndote",
-      "failed": "No ha funcionado. Inténtalo de nuevo."
+      "failed": "No ha funcionado. Inténtalo de nuevo.",
+      "unreachable": "No hemos podido comprobar el enlace",
+      "unreachableBody": "Comprueba que tienes conexión y vuelve a intentarlo.",
+      "retry": "Inténtalo de nuevo",
+      "incomplete": "Este enlace no está completo",
+      "incompleteBody": "Puede que se haya cortado una parte. Pide a quien te lo mandó que te lo envíe otra vez.",
+      "openApp": "Abrir Velista",
+      "removed": "Te han quitado de esta lista",
+      "removedBody": "Pide a quien la compartió que te vuelva a añadir.",
+      "home": "Ir al inicio"
     },
     "history": {
       "open": "Ver el historial de la línea",
@@ -1830,7 +1885,8 @@
       "listsAndMore_other": "{{names}} y {{count}} listas más",
       "otherLists_one": "Otra lista",
       "otherLists_other": "Otras {{count}} listas",
-      "notSoldHere": "No lo venden aquí"
+      "notSoldHere": "No lo venden aquí",
+      "noPriceHere": "Aquí no tiene precio"
     },
     "skip": {
       "action": "Hoy no",
@@ -2086,7 +2142,8 @@
       "another": "Elegir otro",
       "keep": "Quedarme con {{name}}",
       "continue": "Seguir como {{name}}",
-      "note": "Puedes cambiarlo luego en tu cuenta. Los nombres no son únicos, así que otra persona también puede llamarse {{name}}."
+      "note": "Puedes cambiarlo luego en tu cuenta. Los nombres no son únicos, así que otra persona también puede llamarse {{name}}.",
+      "continuePlain": "Seguir"
     },
     "place": {
       "title": "¿Dónde compras?",

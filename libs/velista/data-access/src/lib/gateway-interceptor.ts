@@ -18,6 +18,7 @@ import {
 import {
   AppUpdates,
   BackendReadiness,
+  BrowserFacade,
   ConnectionState,
 } from '@portfolio/velista/platform';
 import {
@@ -76,6 +77,10 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   // optionally, so a spec that knows nothing of support sessions needs no double for
   // one. The app constructs the service in every tab anyway, through its initializer.
   const injector = inject(Injector);
+  // Read at the moment each attempt is handed on, never when the call started: a
+  // stale token makes the request wait for a refresh, and the connection can come
+  // back during it (velista `0159`).
+  const attempt = dispatcher(next, inject(BrowserFacade));
 
   // Stamped here rather than in `decorate`, and that is the one header that is.
   // `retryAfterRefresh` builds the second attempt from this request, so a header put
@@ -105,7 +110,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
 
   return accessToken$.pipe(
     switchMap((token) =>
-      send(next, decorate(stamped, token, i18n.getLocale(), correlationId))
+      attempt.send(decorate(stamped, token, i18n.getLocale(), correlationId))
     ),
     // Any response at all, including a 500 or a 503, proves the network works.
     tap({ next: (event) => reportIfResponse(event, connection) }),
@@ -119,7 +124,10 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
         // answering, and this is the case where the client minted id is the only one
         // that exists because there is no body to read one from.
         connection.reportNetworkFailure();
-        return throwError(() => new NetworkError(correlationId, operation));
+        return throwError(
+          () =>
+            new NetworkError(correlationId, operation, attempt.refusedOffline())
+        );
       }
 
       connection.reportReachable();
@@ -158,7 +166,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
 
         return retryAfterRefresh(
           stamped,
-          next,
+          attempt,
           tokens,
           i18n.getLocale(),
           correlationId,
@@ -259,7 +267,7 @@ function noticeRefusal(
  */
 function retryAfterRefresh(
   req: HttpRequest<unknown>,
-  next: HttpHandlerFn,
+  attempt: Dispatcher,
   tokens: TokenStore,
   locale: string,
   correlationId: string,
@@ -278,33 +286,39 @@ function retryAfterRefresh(
       // The retry's own error handling lives inside this closure so that the pair it
       // presented is in scope below. A 401 has to be reported against **that** pair,
       // because "was this still ours" is the whole question.
-      return send(
-        next,
-        decorate(req, refreshed.accessToken, locale, correlationId)
-      ).pipe(
-        tap({ next: (event) => reportIfResponse(event, connection) }),
-        catchError((error: unknown) => {
-          if (!(error instanceof HttpErrorResponse)) {
-            return throwError(() => error);
-          }
+      return attempt
+        .send(decorate(req, refreshed.accessToken, locale, correlationId))
+        .pipe(
+          tap({ next: (event) => reportIfResponse(event, connection) }),
+          catchError((error: unknown) => {
+            if (!(error instanceof HttpErrorResponse)) {
+              return throwError(() => error);
+            }
 
-          if (error.status === 0) {
-            connection.reportNetworkFailure();
-            return throwError(() => new NetworkError(correlationId, operation));
-          }
+            if (error.status === 0) {
+              connection.reportNetworkFailure();
+              return throwError(
+                () =>
+                  new NetworkError(
+                    correlationId,
+                    operation,
+                    attempt.refusedOffline()
+                  )
+              );
+            }
 
-          connection.reportReachable();
+            connection.reportReachable();
 
-          if (error.status === 401) {
-            // Refused twice, the second time holding a pair issued between the two.
-            tokens.reportRejected(refreshed);
-          }
+            if (error.status === 401) {
+              // Refused twice, the second time holding a pair issued between the two.
+              tokens.reportRejected(refreshed);
+            }
 
-          return throwError(() =>
-            toGatewayError(error.error, error.status, correlationId)
-          );
-        })
-      );
+            return throwError(() =>
+              toGatewayError(error.error, error.status, correlationId)
+            );
+          })
+        );
     })
   );
 }
@@ -329,11 +343,35 @@ function decorate(
   return req.clone({ setHeaders: headers });
 }
 
-function send(
-  next: HttpHandlerFn,
-  req: HttpRequest<unknown>
-): Observable<HttpEvent<unknown>> {
-  return next(req);
+/**
+ * Hands a request on, and remembers whether the browser was offline as it did
+ * (velista `0159`). Only that moment can say a request never left: before it, a
+ * token refresh may still be in flight, and the connection can return during it.
+ */
+interface Dispatcher {
+  send(req: HttpRequest<unknown>): Observable<HttpEvent<unknown>>;
+  /** Whether the last attempt was handed on while the browser said offline. */
+  refusedOffline(): boolean;
+}
+
+function dispatcher(next: HttpHandlerFn, browser: BrowserFacade): Dispatcher {
+  let offline = false;
+  return {
+    send(req) {
+      offline = !isOnline(browser);
+      return next(req);
+    },
+    refusedOffline: () => offline,
+  };
+}
+
+/** Online unless the browser says otherwise, and online when it cannot say. */
+function isOnline(browser: BrowserFacade): boolean {
+  try {
+    return browser.onLine();
+  } catch {
+    return true;
+  }
 }
 
 function reportIfResponse(

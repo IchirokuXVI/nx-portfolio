@@ -282,6 +282,12 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
 
     zoneState: zoneStates.asReadonly(),
 
+    /**
+     * No zone read has failed (velista 0157). A spec about a failed read replaces
+     * this beside `loadZone`, as the group page spec does.
+     */
+    zoneErrorOf: (): unknown => null,
+
     departure: departure.asReadonly(),
     clearDeparture: () => departure.set(null),
 

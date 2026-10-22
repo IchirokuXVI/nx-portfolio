@@ -33,7 +33,9 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type BasketKind,
   type BasketRun,
+  type BasketStatus,
   type BasketSummary,
   type CatalogItem,
   type CatalogScope,
@@ -220,6 +222,26 @@ function readListCounts(raw: Record<string, unknown>): {
     // costs the user their trust in every other count on the page.
     wantedCount: Math.min(wantedCount, lineCount),
   };
+}
+
+/**
+ * The counts of a list off the wire, or null when the payload carries none.
+ *
+ * For a realtime list event (plan 0158, item 4), where an absent count is unknown
+ * rather than zero (rule D4): a store holding the real number keeps it, and only a row
+ * it hears about for the first time starts at zero.
+ */
+export function toListCounts(
+  raw: unknown
+): { lineCount: number; wantedCount: number } | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const nested = raw['counts'];
+  if (!isRecord(nested) && typeof raw['lineCount'] !== 'number') {
+    return null;
+  }
+  return readListCounts(raw);
 }
 
 /**
@@ -416,6 +438,11 @@ export function toLine(raw: unknown): Line | null {
     // distinction: the page draws no filled star and "Any".
     favoriteItemId: nullableStr(raw['favoriteItemId']),
     preferredSupermarketId: nullableStr(raw['preferredSupermarketId']),
+    // A count only from a whole number of zero or more (backend `0214`). Null and
+    // absent are both unknown, which is what an event, a write answer and a server
+    // that predates the field send. Reading unknown as zero would erase a count the
+    // store knows.
+    commentCount: toCommentCount(raw['commentCount']),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather
@@ -423,6 +450,13 @@ export function toLine(raw: unknown): Line | null {
     // field was absent is the one outcome worth defaulting against.
     version: numOr(raw['version'], 0),
   };
+}
+
+/** A line's comment count: a whole number from 0, or null for unknown. */
+function toCommentCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0
+    ? raw
+    : null;
 }
 
 /**
@@ -1660,4 +1694,52 @@ export function toBasketFromView(raw: unknown): BasketSummary | null {
   }).length;
 
   return { ...summary, lineCount: lines.length, settledLineCount: settled };
+}
+
+/**
+ * What a `basket.updated` frame says moved (velista `0155`): the header of one
+ * basket, and nothing that a summary counts.
+ *
+ * Its own shape rather than a `BasketSummary` with holes. A summary carries counts and
+ * a date that other code trusts, and the event carries neither.
+ */
+export interface BasketHeaderUpdate {
+  readonly basketId: string;
+  readonly kind: BasketKind;
+  readonly name: string | null;
+  readonly status: BasketStatus;
+}
+
+/**
+ * From the payload of `basket.updated` (backend `0139`, section 4), which is
+ * `{ basketId, kind, name, status }` and not the basket view `basket.created` sends.
+ *
+ * All four are required on the wire, so a payload missing one is dropped. `name` has
+ * to be present as a string or null, because an absent name and a basket with its
+ * name cleared would otherwise read the same. An unknown kind or status reads as the
+ * fallback, as it does on every other basket read.
+ */
+export function toBasketUpdated(raw: unknown): BasketHeaderUpdate | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const basketId = str(raw['basketId']);
+  const name = raw['name'];
+  if (
+    basketId === null ||
+    basketId === '' ||
+    typeof raw['kind'] !== 'string' ||
+    typeof raw['status'] !== 'string' ||
+    (name !== null && typeof name !== 'string')
+  ) {
+    return null;
+  }
+
+  return {
+    basketId,
+    kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
+    name,
+    status: oneOf(raw['status'], BASKET_STATUSES, BASKET_STATUS_FALLBACK),
+  };
 }

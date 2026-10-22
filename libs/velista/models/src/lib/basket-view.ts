@@ -421,6 +421,14 @@ export interface BasketPriceScope {
    * only to be collapsed at every call site.
    */
   readonly locations: readonly ScopeLocation[];
+  /**
+   * Whether this scope quotes at least one product of the basket (backend
+   * `0213`). False for a scope of the profile that prices nothing here, which
+   * the shop picker still lists so that its chain stays choosable, and draws
+   * with a line that says so (velista `0153`). True from a server that did not
+   * send it, which only named the scopes that quote something.
+   */
+  readonly quotesBasket: boolean;
 }
 
 /**
@@ -844,12 +852,14 @@ export interface ShownPrice {
 /**
  * The price a basket row draws for its product (velista `0078`, section 5; `0102`).
  *
- * **The shop's**, when the rows are priced at one: the product's `atShop`, which the
- * server decided from that shop's stack. The cheapest at the run's scopes otherwise.
- * Null when there is no price, which draws the same blank either way.
+ * **The shop's**, when the rows are read at one: the product's `atShop`, which the
+ * server decided from that shop's stack, or null when the shop has no price for
+ * it, also at a shop that prices nothing on the basket (velista `0153`). The
+ * cheapest at the run's scopes otherwise. Null when there is no price, which draws
+ * the same blank either way.
  *
- * @param atShop Whether the rows are priced at a chosen shop, which is
- *   `basketPricedAtShop` and never a test of this product alone.
+ * @param atShop Whether the rows are read at a chosen shop, which is
+ *   `basketReadAtShop` and never a test of this product alone.
  */
 export function shownOffer(
   product: BasketProduct | null | undefined,
@@ -907,7 +917,7 @@ export function shownPriceScope(
  *
  * @param shop The chosen shop's id, the basket's own on a basket started at one, or
  *   null for any of your shops.
- * @param atShop Whether the rows are priced at that shop (`basketPricedAtShop`).
+ * @param atShop Whether the rows are read at that shop (`basketReadAtShop`).
  */
 export function basketSettleShop(
   product: BasketProduct | null | undefined,
@@ -1040,6 +1050,13 @@ export interface Basket {
    * scope is not here resolves to no place and is still a price.
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
+  /**
+   * Whether {@link scopes} may be missing scopes or shops of the profile this
+   * time (backend `0213`). It may still hold some. The shop picker then says
+   * the shops could not all be listed and offers to read again (velista
+   * `0153`). False from a server that did not send it.
+   */
+  readonly scopesIncomplete: boolean;
   /**
    * The shop this basket was started at, or null (velista `0102`; backend `0163`,
    * section 1).
@@ -1416,8 +1433,17 @@ export interface BasketMergeRequiredBasket {
 /** How the basket screen's one read has got on. */
 export type BasketLoad =
   | 'loading'
-  /** No participant session for this basket, so the join screen is the answer. */
-  | 'needsJoin'
+  /**
+   * Refused, with no credential and no account behind the request (velista
+   * `0154`). Signing in is the way forward, and it comes back here.
+   */
+  | 'needsSignIn'
+  /**
+   * Refused for a signed in reader this device has never seen on the basket
+   * (velista `0154`). A stranger, or a member removed on another device: the
+   * gateway answers both with one code.
+   */
+  | 'notYours'
   | 'ready'
   | 'failed'
   /** The participant was revoked, or the link they held was cascaded. */

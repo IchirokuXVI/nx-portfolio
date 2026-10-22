@@ -67,15 +67,34 @@ export function normalizeContent(content: string): string {
  *
  * The kinds are namespaced apart, so a digest can never collide with a group id
  * or with the absence of both.
+ *
+ * ## A line that is not named is met by its products alone (plan 0214)
+ *
+ * The name of a line with `named === false` is the name of its product in the
+ * locale of whoever added it (plan 0207), so "Eggs" from one phone and "Huevos"
+ * from another name the same set. Its keys therefore carry no name part, and an
+ * add of the same set or group in any locale lands on it. A named line and a
+ * free text line keep the name in every key, because there the name is a
+ * person's own words. The two shapes cannot meet: a key with a name always
+ * holds the null character below, and a key with none never does, so an add
+ * that is not named never lands on a line somebody named, even with one set.
+ *
+ * `named` is the flag as the row holds it, or as `namedOnAdd` decides it for a
+ * new line. A line with neither a set nor a group is free text and keeps its
+ * name whatever the flag says.
  */
 export function lineIdentities(line: {
   content: string;
+  named: boolean;
   itemSetHash: string | null;
   productGroupId: string | null;
 }): string[] {
+  const byProduct =
+    line.named === false &&
+    (line.itemSetHash !== null || line.productGroupId !== null);
   // A null character, which no name can hold once it has been through a text
   // column, so a name cannot spell another line's meaning.
-  const name = `${normalizeContent(line.content)}\u0000`;
+  const name = byProduct ? '' : `${normalizeContent(line.content)}\u0000`;
   const identities: string[] = [];
   if (line.productGroupId !== null) {
     identities.push(`${name}group:${line.productGroupId}`);

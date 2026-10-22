@@ -2255,6 +2255,40 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       expect(body['priceScopeId']).toBe('s-dia');
     });
 
+    /**
+     * Velista `0153`: at a shop that prices nothing on this basket, the sheet
+     * quotes no price and a buy names the shop and no scope. The cheapest price at
+     * another chain is not what was paid here.
+     */
+    it('quotes no price and sends no scope at a shop that prices nothing here', async () => {
+      const unpriced: BasketProduct = {
+        ...AT_SHOP,
+        atShop: {
+          priceScopeId: null,
+          price: null,
+          currency: null,
+          available: null,
+        },
+      };
+      const { fixture, store } = await render({
+        lines: [line({ productId: unpriced.id })],
+        products: new Map([[unpriced.id, unpriced]]),
+        scopes: SCOPES,
+        readAt: 'loc-merca',
+      });
+
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('.subtitle')
+          ?.textContent?.trim()
+      ).toBe('basket.sheet.toGet');
+
+      await gotOne(fixture);
+      const body = (store.settle as unknown as jest.Mock).mock.calls[0][1];
+      expect(body['supermarketLocationId']).toBe('loc-merca');
+      expect(body).not.toHaveProperty('priceScopeId');
+    });
+
     it('names the shop on "they had none" too, and no scope', async () => {
       const body = await press('loc-merca', (button) =>
         (button.textContent ?? '').includes('basket.settle.none')
@@ -2443,5 +2477,49 @@ describe('SettleSheet: the first buy asks where you are', () => {
     await held.release();
 
     expect(report).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Two people change what one list asks for at once (velista `0151`, F6.2).
+ *
+ * The loser reads the number the line says now, and the quiet read that the
+ * other person's change brings does not turn it into "That did not save".
+ */
+describe('SettleSheet: a demand somebody else changed first (velista 0151)', () => {
+  it('names the number the line says now, and keeps it through a quiet read', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockImplementation(async () => {
+      store.error.set(
+        new GatewayError({
+          code: 'stale_quantity',
+          status: 409,
+          correlationId: 'r9',
+        })
+      );
+      store.rows.set([
+        line({
+          entries: [entry('l1', 'zl1', 6, { asked: 6 }), entry('l2', 'zl2', 1)],
+        }),
+      ]);
+      return null;
+    });
+
+    await commitReel(fixture, 'ask-reel', { from: 3, to: 5 });
+    fixture.detectChanges();
+
+    const failed = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+        ?.textContent ?? '';
+    expect(failed()).toContain('basket.error.staleLine');
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
+
+    // The quiet read the other person's change causes clears the store's error.
+    store.error.set(null);
+    fixture.detectChanges();
+
+    expect(failed()).toContain('basket.error.staleLine');
+    expect(failed()).not.toContain('basket.error.failed');
+    expect(fixture.componentInstance['errorArgs']()).toEqual({ count: 6 });
   });
 });

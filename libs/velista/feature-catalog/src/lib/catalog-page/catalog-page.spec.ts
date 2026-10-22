@@ -464,6 +464,27 @@ describe('CatalogPage', () => {
     expect(lastQuery(browse)).toMatchObject({ query: '', order: 'category' });
   });
 
+  it('keeps the keyboard up when the cross clears the search', async () => {
+    const { fixture } = await render();
+
+    const input = field(fixture);
+    input.value = 'leche';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    input.focus();
+
+    const cross =
+      host(fixture).querySelector<HTMLButtonElement>('.field-clear');
+    const press = new MouseEvent('mousedown', { cancelable: true });
+    cross?.dispatchEvent(press);
+    cross?.click();
+    await settle(fixture);
+
+    expect(press.defaultPrevented).toBe(true);
+    expect(field(fixture).value).toBe('');
+    expect(document.activeElement).toBe(field(fixture));
+  });
+
   it('draws the tools as the field and one row of two selectors, with nothing chosen', async () => {
     const { fixture } = await render();
 

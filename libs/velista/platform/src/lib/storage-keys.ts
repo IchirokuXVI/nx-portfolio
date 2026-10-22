@@ -123,6 +123,23 @@ export const StorageKeys = {
    */
   updateAttempt: `update-attempt:${APP_KEY}`,
   /**
+   * The URL this tab last reloaded for because no route matched it and a newer
+   * version was ready (plan 0150).
+   *
+   * In `sessionStorage` for the reason `updateAttempt` is: it must survive the reload
+   * it records and die with the tab. It is kept apart from `updateAttempt`, because a
+   * spent attempt there means the server refuses this build, and a 404 does not.
+   */
+  notFoundUpdate: `not-found-update:${APP_KEY}`,
+  /**
+   * The writes this tab lost to the network, so the page they were made on can say so
+   * after the reconnect reloads it (velista `0159`).
+   *
+   * In `sessionStorage` for the reason `updateAttempt` is: it must survive the reload
+   * and die with the tab. It holds the last few entries and is cleared as it is read.
+   */
+  droppedWrites: `dropped-writes:${APP_KEY}`,
+  /**
    * That this tab holds a support session: an operator opened the app as a user
    * (velista `0133`, backend `0194`).
    *

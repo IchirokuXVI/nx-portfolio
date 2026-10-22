@@ -390,7 +390,7 @@
   -->
   @if (errorKey(); as key) {
     <p aria-live="assertive" class="failed" role="alert">
-      {{ key | rokuT }}
+      {{ key | rokuT: errorArgs() }}
       @if (correlationId(); as reference) {
         <span class="reference">
           {{ 'basket.error.reference' | rokuT: { correlationId: reference } }}

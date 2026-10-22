@@ -24,11 +24,17 @@ import {
   type AssistantServiceI,
   CATALOG_SERVICE,
   type CatalogServiceI,
+  type DroppedWrite,
+  DroppedWrites,
   DueLineStore,
   ItemNames,
   LineStore,
+  LIST_SERVICE,
+  type ListServiceI,
   ListStore,
+  type ListViewSnapshot,
   ListViewStore,
+  listWritesPage,
   MemberNames,
   presenceNames,
   presencePeople,
@@ -50,7 +56,6 @@ import {
   lineName,
   type LineName,
   type LineRowVm,
-  type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
   NO_CATEGORY,
@@ -68,6 +73,7 @@ import {
   AppResumed,
   AudioRecorder,
   BrowserFacade,
+  ColumnScroll,
   formatMoney,
   lineQueryOf,
   listIdOf,
@@ -75,6 +81,7 @@ import {
   NavChrome,
   NOTIFICATION_TONE,
   PageNavigation,
+  PageReturn,
   productPagePath,
   productPickPath,
   productsPickPath,
@@ -132,6 +139,23 @@ const RECONNECT_AFTER_RESUME_MS = 15_000;
 
 interface ListRowPick {
   readonly from: typeof LIST_ROW_PICK;
+}
+
+/**
+ * What the page was showing when somebody left it for another page, handed back
+ * when they come back to it (`PageReturn`).
+ */
+interface ListPageReturn {
+  readonly view: ListViewSnapshot;
+  /** The words in the field, put back only onto an entry whose search is open. */
+  readonly words: string;
+  readonly dueExpanded: boolean;
+  readonly scrollTop: number;
+}
+
+/** One list's place, so another list on this same page never takes it. */
+function listReturnKey(listId: string): string {
+  return `list:${listId}`;
 }
 
 /**
@@ -359,14 +383,31 @@ export class ListPage {
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
 
+  private readonly _returns = inject(PageReturn);
+
+  /**
+   * What this page showed when it was left, when this arrival is a return to it: the
+   * back button from the line page or the product picker. Null on a fresh visit,
+   * which starts unsearched and at the top.
+   */
+  private readonly _back = this._returns.recall<ListPageReturn>(
+    listReturnKey(this.listId())
+  );
+
+  /** The column's scroll, read as it moves and put back on a return. */
+  private readonly _scroll = new ColumnScroll(this._back?.scrollTop ?? null);
+
   readonly reordering = signal(false);
 
   /** The page's own failure, as a key. Distinct from a per row failure. */
   private readonly _errorKey = signal<string | null>(null);
   private readonly _correlationId = signal<string | null>(null);
 
-  /** Why the page is gone, if it is. */
-  private readonly _gone = signal<ListGoneReason | null>(null);
+  /**
+   * Whether the reader cannot read this list, or the id names nothing (velista 0156).
+   * One state for both, because a reader cannot tell them apart.
+   */
+  private readonly _gone = signal(false);
 
   /**
    * Whether this visit has actually read the zone's lists.
@@ -620,6 +661,97 @@ export class ListPage {
   readonly loaded = computed(() => {
     const current = this.state();
     return current.kind === 'loaded' ? current : null;
+  });
+
+  // --- Who an empty list is shared with (velista 0152, item 4) -------------------
+
+  private readonly _listService = inject<ListServiceI>(LIST_SERVICE);
+
+  /**
+   * Whether anybody but the reader holds a row on this list, and for which list, once
+   * read.
+   *
+   * Read only for a list that is empty, not shared with the group, and managed by the
+   * reader, because the access read needs `MANAGE`. A reader without it was given the
+   * list by somebody, so the shared wording is true for them without a read.
+   *
+   * Not cached for the visit. The settings sheet is a child route, so this page outlives
+   * it, and a grant or a flip made there changes the answer: the read runs again each
+   * time a sheet closes, and the answer is dropped whenever the list stops being one
+   * the read is for.
+   */
+  private readonly _othersHold = signal<{
+    readonly listId: string;
+    readonly others: boolean;
+  } | null>(null);
+
+  /** Counts the sheets that closed over this page, so the read above runs again. */
+  private readonly _sheetCloses = signal(0);
+
+  private readonly _sheetOutlet = viewChild(RouterOutlet);
+
+  private readonly _watchSheets = effect((onCleanup) => {
+    const outlet = this._sheetOutlet();
+    if (outlet === undefined) {
+      return;
+    }
+    const closes = outlet.deactivateEvents.subscribe(() =>
+      this._sheetCloses.update((count) => count + 1)
+    );
+    onCleanup(() => closes.unsubscribe());
+  });
+
+  private readonly _privateList = computed(() => {
+    const current = this.state();
+    const listId = this.listId();
+    const list = this._lists
+      .listsIn(this.zoneId())
+      .find((candidate) => candidate.id === listId);
+    return current.kind === 'loaded' &&
+      current.empty &&
+      list?.sharedWithZone === false &&
+      list.myPermissions.includes('MANAGE')
+      ? listId
+      : null;
+  });
+
+  private readonly _readHolders = effect((onCleanup) => {
+    const listId = this._privateList();
+    this._sheetCloses();
+    if (listId === null) {
+      this._othersHold.set(null);
+      return;
+    }
+    // A read that a newer one replaced answers nothing.
+    let current = true;
+    onCleanup(() => (current = false));
+    const zoneId = this.zoneId();
+    void this._listService.getListAccess(listId).then(
+      (entries) => {
+        if (!current) {
+          return;
+        }
+        const me = this._names
+          .membersOf(zoneId)
+          .find((member) => member.userId === this._session.userId())?.id;
+        const others = entries.some(
+          (entry) => entry.membershipId !== me && entry.permissions.length > 0
+        );
+        this._othersHold.set({ listId, others });
+      },
+      // Quiet: the last answer stays, and with none the shared wording, which is the old
+      // copy and never a wrong claim that a list is private.
+      () => undefined
+    );
+  });
+
+  /** The empty list's body: the private wording only when nobody else has the list. */
+  readonly emptyBodyKey = computed(() => {
+    const listId = this._privateList();
+    const held = this._othersHold();
+    return listId !== null && held?.listId === listId && !held.others
+      ? 'list.empty.bodyPrivate'
+      : 'list.empty.body';
   });
 
   // --- The search, the order and one category (velista 0082) ----------------
@@ -933,15 +1065,21 @@ export class ListPage {
    * When the results first appear, the column scrolls so their heading sits under
    * the header. The list's progress block goes above the fold while typing and comes
    * back with the list.
+   *
+   * Not on a return to the page: the results were already on screen when somebody
+   * left, and the place they were reading in is what {@link _scroll} puts back.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
     const heading = this._resultsHeading()?.nativeElement;
     const column = this._column()?.nativeElement;
     if (heading === undefined || column === undefined) {
-      this._resultsDrawn = false;
+      if (!this._scroll.returning) {
+        this._resultsDrawn = false;
+      }
       return;
     }
-    if (this._resultsDrawn) {
+    if (this._resultsDrawn || this._scroll.returning) {
+      this._resultsDrawn = true;
       return;
     }
     this._resultsDrawn = true;
@@ -1034,7 +1172,90 @@ export class ListPage {
     this._view.reset();
   }
 
+  // Velista `0159`: the quantity changes an earlier document of this tab lost to the
+  // network. The reconnect reloads the page and the row's own note goes with it, so
+  // the store wrote each one down, and this page reads its own once and clears them.
+  // Taken again when the list in the URL changes, so another list's entries wait.
+  private readonly _droppedLedger = inject(DroppedWrites);
+  private readonly _dropped = signal<readonly DroppedWrite[]>([]);
+  private readonly _takeDropped = effect(() => {
+    const page = listWritesPage(this.listId());
+    untracked(() => this._dropped.set(this._droppedLedger.take(page)));
+  });
+
+  /** One sentence per lost change, named as the row names the line. */
+  readonly droppedNotices = computed(() => {
+    const locale = this._locale();
+    // Read so the sentence redraws once the translations of a cold load arrive.
+    this._translator.loaded();
+    const lines = this._lineById();
+    return this._dropped().map((entry) => {
+      const replay = entry.replay;
+      // Off the entry, not the replay, so an unsure entry is named as the row names
+      // the line too.
+      const line = lines.get(entry.lineId);
+      const name =
+        line === undefined ? entry.args['name'] : this._lineName(line);
+      return {
+        id: entry.id,
+        text: this._translator.t(
+          `${entry.key}.${replay === null ? 'unsure' : 'lost'}`,
+          undefined,
+          locale,
+          { ...entry.args, name }
+        ),
+        canResend: replay !== null,
+      };
+    });
+  });
+
+  dismissDropped(id: string): void {
+    this._dropped.update((entries) =>
+      entries.filter((entry) => entry.id !== id)
+    );
+  }
+
+  /** "Send it again": the same delta, through the same path as a turn of the reel. */
+  async resendDropped(id: string): Promise<void> {
+    const replay = this._dropped().find((entry) => entry.id === id)?.replay;
+    this.dismissDropped(id);
+    if (replay !== null && replay !== undefined) {
+      await this.changeQuantity({ lineId: replay.lineId, delta: replay.delta });
+    }
+  }
+
   constructor() {
+    // A return to this page comes back to what it showed (`PageReturn`). Applied
+    // here, before any effect runs, so the search entry's effect finds the words it
+    // expects on `?search=1` rather than taking the entry off for an empty field.
+    const back = this._back;
+    const words =
+      back !== null && this.searchOpen() && back.words.trim() !== ''
+        ? back.words
+        : null;
+    if (back !== null) {
+      this._view.open(this.listId());
+      this._view.resume(back.view);
+      this._dueExpanded.set(back.dueExpanded);
+    }
+    if (words !== null) {
+      this.onComposerQuery(words);
+      // The field is drawn once the list has loaded, so the words wait for it.
+      const filled = effect(() => {
+        const composer = this._composer();
+        if (composer !== undefined) {
+          composer.fill(words);
+          filled.destroy();
+        }
+      });
+    }
+
+    // The scroll it was left at, once the rows are there to scroll over.
+    afterRenderEffect(() => {
+      this._scroll.attach(this._column()?.nativeElement ?? null);
+      this._scroll.settle(this.loaded() !== null);
+    });
+
     // The view store follows the list in the URL. Opening another list restores the
     // remembered order and starts with no search and all lines.
     effect(() => {
@@ -1049,9 +1270,16 @@ export class ListPage {
     });
 
     // Another list starts folded to three suggestions again (velista 0089, section 2).
+    // The list this page was returned to keeps the fold it had.
+    let foldedFor = back === null ? null : this.listId();
     effect(() => {
-      this.listId();
-      untracked(() => this._dueExpanded.set(false));
+      const listId = this.listId();
+      untracked(() => {
+        if (listId !== foldedFor) {
+          foldedFor = listId;
+          this._dueExpanded.set(false);
+        }
+      });
     });
 
     // The due lines, once the lines have arrived and never in front of them (velista
@@ -1076,13 +1304,16 @@ export class ListPage {
     });
 
     // Rows load on first open and stay loaded for the visit. The store asks only for a
-    // trip it has not asked for, so this can run on every change to the heads.
+    // trip it has not asked for, so this can run on every change to the heads. A picked
+    // category asks for every trip's rows, because only the rows can say whether a
+    // trip holds a line in it, and a trip that cannot say is not drawn (`0088`, 6).
     effect(() => {
       const open = this._view.openTrips();
+      const filtered = this._view.picked() !== null;
       const trips = [...this._trips.live(), ...this._trips.past()];
       untracked(() => {
         for (const trip of trips) {
-          if (open.has(tripKey(trip))) {
+          if (filtered || open.has(tripKey(trip))) {
             this._trips.ensureRows(trip);
           }
         }
@@ -1178,7 +1409,10 @@ export class ListPage {
       const listId = this.listId();
       untracked(() => {
         this._errorKey.set(null);
-        this._gone.set(null);
+        this._gone.set(false);
+        // Another list under the same unreadable group: the zone effect does not run
+        // again, so the group's answer is read here (velista 0156).
+        this._afterZoneRead(this.zoneId());
         void this._loadLines(listId);
       });
     });
@@ -1194,7 +1428,9 @@ export class ListPage {
     effect(() => {
       const zoneId = this.zoneId();
       untracked(() => {
-        void this._zones.loadZone(zoneId);
+        void this._zones
+          .loadZone(zoneId)
+          .then(() => this._afterZoneRead(zoneId));
         void this._checkStillShared(zoneId);
         // The zone's members, for the names on comments and the rows in the share
         // sheet. One request per zone, and it is the only source of a username
@@ -1245,16 +1481,32 @@ export class ListPage {
       const checked = this._listsChecked();
 
       untracked(() => {
-        if (!checked || lists.state !== 'loaded' || this._gone() !== null) {
+        if (!checked || lists.state !== 'loaded' || this._gone()) {
           return;
         }
 
         if (!lists.lists.some((list) => list.id === listId)) {
-          // Deleted and unshared are indistinguishable from here, and the copy differs
-          // only because one of them is worth naming when the store saw the delete
-          // event itself. Absent that, unshared is the safer thing to say: it does not
-          // claim something was destroyed.
-          this._gone.set('unshared');
+          // Deleted and unshared are indistinguishable from here, so the page says
+          // the one sentence that covers both and claims neither (velista 0156).
+          this._gone.set(true);
+        }
+      });
+    });
+
+    // A sheet URL over a list this reader cannot read (velista 0156). The outlet is
+    // not drawn in that state, so the address would name a sheet nobody sees: it is
+    // replaced with the page's own, which is what is on screen. Replaced and not
+    // pushed, so back does not reopen the sheet URL.
+    effect(() => {
+      if (this.state().kind !== 'gone') {
+        return;
+      }
+      untracked(() => {
+        if (this._route.firstChild) {
+          void this._router.navigate(['.'], {
+            relativeTo: this._route,
+            replaceUrl: true,
+          });
         }
       });
     });
@@ -1342,6 +1594,14 @@ export class ListPage {
     inject(DestroyRef).onDestroy(() => {
       // The bar comes back with whatever screen is next (velista `0117`).
       this._chrome.setComposing(false);
+      // What a return to this list comes back to, taken before the stores let go.
+      this._returns.keep<ListPageReturn>(listReturnKey(this.listId()), {
+        view: this._view.snapshot(),
+        words: this._query(),
+        dueExpanded: this._dueExpanded(),
+        scrollTop: this._scroll.top,
+      });
+      this._scroll.detach();
       // The view store is provided on the route and is never destroyed, so it is
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();
@@ -1434,7 +1694,11 @@ export class ListPage {
       return;
     }
 
-    const outcome = await this._lines.addQuantity(event.lineId, event.delta);
+    // Only this page's writes are written down if the network drops them, because
+    // only this page draws the notice (velista `0159`).
+    const outcome = await this._lines.addQuantity(event.lineId, event.delta, {
+      reportDropped: true,
+    });
     this._afterWrite(outcome, event.lineId, 'lines.write');
 
     if (outcome === 'succeeded') {
@@ -1880,7 +2144,9 @@ export class ListPage {
 
     const rows = this.dueSection()?.rows ?? [];
     const at = rows.findIndex((row) => row.lineId === event.lineId);
-    const pending = this._lines.addQuantity(event.lineId, delta);
+    const pending = this._lines.addQuantity(event.lineId, delta, {
+      reportDropped: true,
+    });
 
     const next = this.dueSection()?.rows[Math.max(0, at)];
     this._focusAfterRender(
@@ -1968,6 +2234,26 @@ export class ListPage {
     }
 
     this._listsChecked.set(true);
+  }
+
+  /**
+   * A group this reader cannot read, or one that does not exist, makes the list under
+   * it unreadable too (velista 0156). Without this a real list under a mistyped group
+   * id drew its lines read only, because the lines answered and the group did not.
+   *
+   * Only an uncached group counts: a refetch that fails over a cached one leaves its
+   * state loaded, which is `ZoneStore`'s rule for a background reconcile.
+   */
+  private _afterZoneRead(zoneId: string): void {
+    if (
+      zoneId !== this.zoneId() ||
+      this._zones.zoneState().get(zoneId) !== 'failed'
+    ) {
+      return;
+    }
+    if (listErrorEffect(this._zones.error(), 'lines.read') === 'gone') {
+      this._gone.set(true);
+    }
   }
 
   private async _loadLines(listId: string): Promise<void> {
@@ -2095,7 +2381,7 @@ export class ListPage {
   private _applyEffect(error: unknown, operation: ListOperation): boolean {
     switch (listErrorEffect(error, operation)) {
       case 'gone':
-        this._gone.set('unshared');
+        this._gone.set(true);
         return true;
       case 'reread':
         void this._lines.refresh(this.listId());

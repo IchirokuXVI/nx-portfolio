@@ -8,7 +8,7 @@
        number of groups, which is what turns a general promise into a specific one. -->
   <lib-success-note [message]="keepsafe()" class="keepsafe" />
 
-  <form (submit)="onSubmit($event)" class="form">
+  <form (submit)="onSubmit($event)" class="form" novalidate>
     <lib-email-field
       [(value)]="email"
       [describedBy]="error()?.placement === 'password' ? null : errorId"

@@ -85,6 +85,7 @@
         [attr.aria-controls]="resultsId()"
         [attr.aria-label]="'list.add.placeholder' | rokuT"
         [attr.maxlength]="maxLength"
+        [class.clearable]="content() !== ''"
         [placeholder]="'list.add.placeholder' | rokuT"
         [value]="content()"
         #field
@@ -95,6 +96,23 @@
         role="searchbox"
         type="text"
       />
+
+      <!--
+        The cross, while there is something to clear. The field is used for one item
+        after another, so emptying it is one press rather than a run of deletes. A
+        press leaves focus where it was, so the keyboard does not drop (ClearsField).
+      -->
+      @if (content() !== '') {
+        <button
+          (click)="clearTyped()"
+          [attr.aria-label]="'list.add.clear' | rokuT"
+          [libClearsField]="field"
+          class="clear"
+          type="button"
+        >
+          <lib-close-icon class="clear-glyph" />
+        </button>
+      }
 
       <!--
       Only past 350. A live region so the number is announced as it approaches, and

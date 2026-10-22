@@ -21,9 +21,10 @@ import { GatewayError } from '@portfolio/velista/data-access';
  *
  * **`unauthorized`, `not_a_participant` and `participant_expired` have no row.**
  * All three are 401s, and `BasketStore._fail` already turns a 401 into the
- * `revoked` or `needsJoin` state, which is a whole screen rather than a
- * sentence, and that stays where it is. Reaching a row here for one would mean
- * drawing a sentence over a screen that has already said something better.
+ * `revoked`, `needsSignIn` or `notYours` state, which is a whole screen rather
+ * than a sentence, and that stays where it is. Reaching a row here for one
+ * would mean drawing a sentence over a screen that has already said something
+ * better.
  *
  * The third is the newest and the least obviously absent (backend `0140`,
  * section 8): it says a visit ran out, which is very much a thing to tell

@@ -1,8 +1,13 @@
+import type { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Line, Page } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { GatewayError } from '../errors';
-import { Mutations } from '../mutations';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
+import { TimeoutError } from 'rxjs';
+import { GatewayError, NetworkError } from '../errors';
+import { DroppedWrites, Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
 import { LINE_SERVICE, type LineServiceI } from './line-service';
@@ -51,6 +56,8 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
 function service(seed: readonly Line[]) {
   let served = seed;
   let nextCursor: string | null = null;
+  /** Pages answered one per read, in order, when a spec stages a list of several. */
+  let pages: (readonly Line[])[] = [];
   let failWith: Error | null = null;
   /** What the next write answers, so a version race can be staged rather than raced. */
   let answerWith: Line | null = null;
@@ -88,6 +95,14 @@ function service(seed: readonly Line[]) {
         const error = readFailsWith;
         readFailsWith = null;
         throw error;
+      }
+
+      if (pages.length > 0) {
+        const items = pages.shift() ?? [];
+        return {
+          items,
+          nextCursor: pages.length > 0 ? `cursor-${pages.length}` : null,
+        };
       }
 
       // The cursor is handed out once, exactly as a real endpoint does it: the follow
@@ -187,6 +202,10 @@ function service(seed: readonly Line[]) {
       served = next;
       nextCursor = cursor;
     },
+    /** The next read answers these pages in order, each with a cursor to the next. */
+    setPages: (next: readonly (readonly Line[])[]) => {
+      pages = [...next];
+    },
     failNext: (error: Error) => {
       failWith = error;
     },
@@ -212,7 +231,7 @@ function service(seed: readonly Line[]) {
   };
 }
 
-async function build(seed: readonly Line[] = []) {
+async function build(seed: readonly Line[] = [], extra: Provider[] = []) {
   TestBed.resetTestingModule();
 
   const lines = service(seed);
@@ -225,6 +244,7 @@ async function build(seed: readonly Line[] = []) {
       LineStore,
       { provide: LINE_SERVICE, useValue: lines },
       { provide: REALTIME_CLIENT, useValue: realtime },
+      ...extra,
     ],
   }).compileComponents();
 
@@ -475,6 +495,65 @@ describe('LineStore', () => {
       expect(store.writeNoteOf('a')?.outcome).toBe('failed');
     });
 
+    /**
+     * Velista `0159`: the reconnect reloads the page and the inline note goes with
+     * it, so a write the network dropped is also written down for the next document.
+     */
+    it('writes down a quantity the network dropped before it was sent, with its replay', async () => {
+      const { store, lines } = await build(
+        [line('a', { content: 'Pan de pueblo', quantity: 1 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+      expect(await store.addQuantity('a', 1, { reportDropped: true })).toBe(
+        'failed'
+      );
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
+        expect.objectContaining({
+          subject: 'a:quantity',
+          lineId: 'a',
+          key: 'list.dropped.quantity',
+          args: { name: 'Pan de pueblo', delta: '+1' },
+          replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
+        }),
+      ]);
+    });
+
+    it('writes down a quantity lost to a timeout with no replay', async () => {
+      const { store, lines } = await build(
+        [line('a', { content: 'Pan de pueblo', quantity: 3 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new TimeoutError());
+
+      await store.addQuantity('a', -2, { reportDropped: true });
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
+        expect.objectContaining({
+          args: { name: 'Pan de pueblo', delta: '-2' },
+          replay: null,
+        }),
+      ]);
+    });
+
+    it('writes nothing down for a caller that did not ask, as the line page does not', async () => {
+      // Only the list page draws the notice, so only its writes are recorded.
+      const { store, lines } = await build(
+        [line('a', { quantity: 1 })],
+        [provideFakeBrowserFacade(new Map())]
+      );
+      await store.load(LIST);
+      lines.failNext(new NetworkError('c1', 'lines.quantity', true));
+
+      expect(await store.addQuantity('a', 1)).toBe('failed');
+
+      expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([]);
+    });
+
     it('reports overwritten when the server moved further than this write alone', async () => {
       const { store, lines } = await build([line('a', { version: 1 })]);
       await store.load(LIST);
@@ -693,6 +772,95 @@ describe('LineStore', () => {
     });
   });
 
+  describe('a read that lands after a write (plan 0158, item 2)', () => {
+    it('keeps the patched line when the read carries an older version', async () => {
+      // The catalog's "Use this product": the list page PATCHes the answer and loads
+      // its lines in one construction, and a read started before the write committed
+      // answers with the old row after it.
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: [], version: 1 })]);
+      await store.load(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[0].version).toBe(2);
+    });
+
+    it('keeps the local line while this device is writing to it', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      lines.holdWrites();
+      const writing = store.updateLine('a', { itemIds: ['item-9'] });
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+
+      lines.releaseWrites();
+      await writing;
+    });
+
+    it('takes a read that is newer than the local line', async () => {
+      const { store, lines } = await build([line('a', { version: 1 })]);
+      await store.load(LIST);
+
+      await store.updateLine('a', { itemIds: ['item-9'] });
+      lines.setServed([line('a', { itemIds: ['item-3'], version: 3 })]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-3']);
+    });
+
+    it('keeps a patched line past the first page when a later page is older', async () => {
+      // A list over one page: the first page replaces the array and drops every line
+      // past it, so the later pages must be merged against what stood before.
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const { store, lines } = await build();
+      lines.setPages([[line('a')], [line('b', { position: 2, version: 1 })]]);
+      await store.load(LIST);
+      await settle();
+
+      await store.updateLine('b', { itemIds: ['item-9'] });
+      lines.setPages([
+        [line('a')],
+        [line('b', { itemIds: [], position: 2, version: 1 })],
+      ]);
+      await store.load(LIST);
+      await settle();
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['a', 'b']);
+      expect(store.linesIn(LIST)[1].itemIds).toEqual(['item-9']);
+      expect(store.linesIn(LIST)[1].version).toBe(2);
+    });
+
+    it('lets the read decide which lines exist', async () => {
+      const { store, lines } = await build([line('a'), line('b')]);
+      await store.load(LIST);
+
+      lines.setServed([line('b'), line('c')]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST).map((each) => each.id)).toEqual(['b', 'c']);
+    });
+
+    it('refuses an event older than the local line', async () => {
+      const { store, realtime } = await build([
+        line('a', { content: 'Bread', version: 1 }),
+      ]);
+      await store.load(LIST);
+      await store.updateLine('a', { content: 'Sourdough' });
+
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Bread', version: 1 })
+      );
+
+      expect(store.linesIn(LIST)[0].content).toBe('Sourdough');
+    });
+  });
+
   describe('the other events', () => {
     it('takes a deleted row away without announcing it', async () => {
       const { store, realtime } = await build([line('a'), line('b')]);
@@ -737,8 +905,8 @@ describe('LineStore', () => {
     });
 
     it('does not invent a count it has never seen', async () => {
-      // Nothing on the wire carries a comment count, so starting one at 1 from an
-      // event would claim a line with nine comments has one.
+      // A read that does not say leaves the count unknown, so starting one at 1 from
+      // an event would claim a line with nine comments has one.
       const { store, realtime } = await build([line('a')]);
       await store.load(LIST);
 
@@ -820,6 +988,100 @@ describe('LineStore', () => {
         expect(store.commentsOf('a')).toBeUndefined();
         expect(store.commentCountOf('a')).toBe(10);
       });
+    });
+  });
+
+  describe('the comment count the read carries (plan 0158, item 6)', () => {
+    it('records the count of a cold load', async () => {
+      const { store } = await build([line('a', { commentCount: 2 })]);
+
+      await store.load(LIST);
+
+      expect(store.commentCountOf('a')).toBe(2);
+      expect(store.forList(LIST)().commentCounts.get('a')).toBe(2);
+    });
+
+    it('records the count on a refresh and on the pages after the first', async () => {
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const { store, lines } = await build();
+      lines.setPages([
+        [line('a', { commentCount: 1 })],
+        [line('b', { position: 2, commentCount: 4 })],
+      ]);
+
+      await store.load(LIST);
+      await settle();
+
+      expect(store.commentCountOf('b')).toBe(4);
+
+      lines.setServed([line('a', { commentCount: 5 })]);
+      await store.refresh(LIST);
+
+      expect(store.commentCountOf('a')).toBe(5);
+    });
+
+    it('keeps a known count when an event says null', async () => {
+      const { store, realtime } = await build([line('a', { commentCount: 2 })]);
+      await store.load(LIST);
+
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Theirs', commentCount: null, version: 2 })
+      );
+
+      expect(store.linesIn(LIST)[0].content).toBe('Theirs');
+      expect(store.commentCountOf('a')).toBe(2);
+    });
+
+    it('keeps the local count when a read does not say', async () => {
+      const { store, lines } = await build([line('a', { commentCount: 2 })]);
+      await store.load(LIST);
+
+      lines.setServed([line('a', { commentCount: null })]);
+      await store.refresh(LIST);
+      expect(store.commentCountOf('a')).toBe(2);
+
+      // A server that predates the field leaves it out, which is unknown too.
+      lines.setServed([line('a')]);
+      await store.refresh(LIST);
+      expect(store.commentCountOf('a')).toBe(2);
+    });
+
+    it('keeps the count of a line it keeps from the local copy', async () => {
+      const { store, lines } = await build([
+        line('a', { commentCount: 3, version: 1 }),
+      ]);
+      await store.load(LIST);
+      await store.updateLine('a', { itemIds: ['item-9'] });
+
+      lines.setServed([line('a', { commentCount: 1, version: 1 })]);
+      await store.refresh(LIST);
+
+      expect(store.linesIn(LIST)[0].itemIds).toEqual(['item-9']);
+      expect(store.commentCountOf('a')).toBe(3);
+    });
+
+    it('never lowers a count an event already raised', async () => {
+      // Posting a comment does not bump the version of its line, so a read whose
+      // count ran before the comment committed can land after the event.
+      const { store, lines, realtime } = await build([
+        line('a', { commentCount: 2 }),
+      ]);
+      await store.load(LIST);
+
+      realtime.emit('comment.added', {
+        id: 'c3',
+        lineId: 'a',
+        authorUserId: 'user-toni',
+        body: 'hi',
+        createdAt: new Date().toISOString(),
+      });
+      expect(store.commentCountOf('a')).toBe(3);
+
+      lines.setServed([line('a', { commentCount: 2 })]);
+      await store.refresh(LIST);
+
+      expect(store.commentCountOf('a')).toBe(3);
     });
   });
 

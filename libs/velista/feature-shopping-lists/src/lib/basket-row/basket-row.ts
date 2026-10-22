@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -64,6 +65,42 @@ import {
  * (velista `0052`, section 6.3), and the words beside each of them say the same
  * thing again.
  */
+/**
+ * How many of a row's units the server's newest first revert walk reaches before
+ * it meets somebody else's buy, for a revert sent by `meId` (velista `0151`).
+ *
+ * The walk is the server's: it takes `BOUGHT` settlements back newest first and
+ * asks nothing about who made them. So the entries holding units are read newest
+ * act first, and the count stops at the first one whose last act is not this
+ * person's buy. Zero means the newest units are somebody else's.
+ *
+ * An entry knows only its last act, so an entry two people bought on counts as
+ * the last one's. That mixed entry is the gap the plan leaves to the owner. A row
+ * whose entries carry no act at all cannot tell, and answers `bought` as before.
+ */
+export function ownBoughtUnits(row: BasketRowModel, meId: string): number {
+  const held = row.entries.filter((entry) => entry.bought > 0);
+  if (held.every((entry) => (entry.act ?? null) === null)) {
+    return row.bought;
+  }
+
+  const instant = (entry: BasketRowEntry): number => {
+    const at = entry.act ? Date.parse(entry.act.at) : Number.NaN;
+    return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
+  };
+  let units = 0;
+  for (const entry of [...held].sort((a, b) => instant(b) - instant(a))) {
+    if (entry.act?.participantId !== meId || entry.act.outcome !== 'BOUGHT') {
+      break;
+    }
+    units += entry.bought;
+  }
+  return units;
+}
+
+/** What a press on the status control does (velista `0151`). */
+type StatusPress = 'settle' | 'revert' | 'open';
+
 export type BasketStatusGlyph =
   | 'wanted'
   | 'partly'
@@ -557,6 +594,76 @@ export class BasketRow {
    */
   private _deafUntil = 0;
 
+  /**
+   * Who stands behind the state the control is drawn from: the entry's last act
+   * under a list heading, the row's everywhere else (velista `0151`).
+   */
+  private readonly _actor = computed(() => {
+    const entry = this.entry();
+    return entry === null
+      ? this.row().touchedBy
+      : (entry.act?.participantId ?? null);
+  });
+
+  /**
+   * What a press on the status control does, from the row as it now stands.
+   *
+   * **A finished row undoes only what this person did** (velista `0151`). One
+   * somebody else bought or closed opens the sheet, which names who did it and
+   * offers the undo on purpose. So does a bought row whose newest units are
+   * somebody else's, because the server takes units back newest first.
+   */
+  private readonly _press = computed<StatusPress>(() => {
+    const state = this.state();
+    if (state !== 'DONE' && state !== 'NOT_AVAILABLE') {
+      return 'settle';
+    }
+    const me = this.meId();
+    if (me === null || this._actor() !== me) {
+      return 'open';
+    }
+    return state === 'DONE' && ownBoughtUnits(this.row(), me) === 0
+      ? 'open'
+      : 'revert';
+  });
+
+  /** The press the control was last drawn for, and until when it is deaf. */
+  private _drawnPress: StatusPress | null = null;
+  private _flipDeafUntil = 0;
+
+  /**
+   * Whether this person's own settle or revert is still on its way back. The
+   * store is not optimistic, so the flip it causes arrives later, and after an
+   * undo it arrives with somebody else's act (or none) standing on the entry.
+   * The next flip clears it and starts no hold.
+   */
+  private _ownPress = false;
+
+  /**
+   * A change somebody else made that turns the control into another act holds
+   * it deaf for the reel's beat (velista `0151`): a finger already on its way
+   * lands on nothing rather than on the act the change just put under it. The
+   * person's own press moves the control too, and holds nothing, also when it
+   * was an undo that leaves somebody else's act standing.
+   */
+  private readonly _flipWatch = effect(() => {
+    const press = this._press();
+    if (this._drawnPress !== null && press !== this._drawnPress) {
+      this._holdIfRemote();
+    }
+    this._drawnPress = press;
+  });
+
+  private _holdIfRemote(): void {
+    if (this._ownPress) {
+      this._ownPress = false;
+      return;
+    }
+    if (this._actor() !== this.meId()) {
+      this._flipDeafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+    }
+  }
+
   protected onReelAutoClosed(): void {
     this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
   }
@@ -790,13 +897,31 @@ export class BasketRow {
    * too, and reverting it takes the close back rather than any units, which is what
    * the page sends: the two directions are one gesture aimed at different things,
    * and which thing is the state's to say.
+   *
+   * Only this person's own finish reverts (velista `0151`). A row somebody else
+   * finished opens the sheet, and a tap inside the hold after a remote change
+   * does nothing.
    */
   protected toggle(): void {
-    if (this.state() === 'DONE' || this.state() === 'NOT_AVAILABLE') {
-      this.revert.emit();
+    const press = this._press();
+    if (this._drawnPress !== null && press !== this._drawnPress) {
+      // The row moved and the screen has not caught up: the finger aimed at
+      // what was drawn, so this tap starts the hold.
+      this._holdIfRemote();
+      this._drawnPress = press;
+    }
+    if (Date.now() < this._flipDeafUntil) {
       return;
     }
-    this.settle.emit();
+    if (press === 'revert') {
+      this._ownPress = true;
+      this.revert.emit();
+    } else if (press === 'open') {
+      this.open.emit();
+    } else {
+      this._ownPress = true;
+      this.settle.emit();
+    }
   }
 
   /**
@@ -827,8 +952,9 @@ export class BasketRow {
   /**
    * The price first on the caption line, or null where there is none.
    *
-   * **The chosen shop's**, when one is in use (velista `0078`, section 5), and the
-   * cheapest at the run's scopes otherwise. A row with no product has no price and
+   * **The chosen shop's**, when one is in use (velista `0078`, section 5), or
+   * none when that shop has no price for it (velista `0153`), and the cheapest at
+   * the run's scopes otherwise. A row with no product has no price and
    * adds nothing to the total (velista `0139`, section 2).
    */
   protected readonly productPrice = computed<string | null>(() => {
@@ -844,8 +970,10 @@ export class BasketRow {
    * The price mark's own sentence, composed, or null when the row carries none.
    *
    * "Not sold here" for a product the shop of the read has no price for (velista
-   * `0139`, section 1), with the cheapest price elsewhere after it when there is
-   * one. One string, so a line break never falls between a price and its shop.
+   * `0139`, section 1), and "No price here" at a shop that prices nothing on this
+   * basket (velista `0153`), each with the cheapest price elsewhere after it when
+   * there is one. That amount is the mark's and never the row's price. One
+   * string, so a line break never falls between a price and its shop.
    */
   protected readonly markCaption = computed<string | null>(() => {
     const mark = this.priceMark();
@@ -862,7 +990,9 @@ export class BasketRow {
     }
 
     const missing = this._translator.t(
-      'basket.row.notSoldHere',
+      mark.kind === 'noPriceHere'
+        ? 'basket.row.noPriceHere'
+        : 'basket.row.notSoldHere',
       undefined,
       locale
     );

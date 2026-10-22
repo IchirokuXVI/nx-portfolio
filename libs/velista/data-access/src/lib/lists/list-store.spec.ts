@@ -144,6 +144,59 @@ describe('ListStore', () => {
       expect(store.listsIn('zone-elsewhere')).toEqual([]);
     });
 
+    it('makes a row for a list it hears about with the counts the event carries (plan 0158)', async () => {
+      // A member whose row was made from the event read "List is empty" over a list
+      // with lines, and `list.myAccessChanged` never corrected it.
+      const { store, realtime } = await build([list('list-1')]);
+      await store.load(ZONE);
+
+      realtime.emit('list.updated', {
+        id: 'list-2',
+        zoneId: ZONE,
+        name: 'Cleaning',
+        createdByUserId: 'u2',
+        autoApproveLines: false,
+        sharedWithZone: true,
+        counts: { lineCount: 4, wantedCount: 3 },
+        myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+      });
+
+      expect(store.listsIn(ZONE).find((row) => row.id === 'list-2')).toEqual({
+        id: 'list-2',
+        zoneId: ZONE,
+        name: 'Cleaning',
+        createdByUserId: 'u2',
+        autoApproveLines: false,
+        sharedWithZone: true,
+        lineCount: 4,
+        wantedCount: 3,
+        // The actor's set, which a broadcast cannot speak for the reader.
+        myPermissions: [],
+      });
+    });
+
+    it('takes the counts and the sharing of a list it holds from the event', async () => {
+      const { store, realtime } = await build([list('list-1')]);
+      await store.load(ZONE);
+      const before = store.listsIn(ZONE)[0];
+
+      realtime.emit('list.updated', {
+        id: 'list-1',
+        zoneId: ZONE,
+        name: before.name,
+        createdByUserId: before.createdByUserId,
+        sharedWithZone: true,
+        counts: { lineCount: 2, wantedCount: 1 },
+      });
+
+      expect(store.listsIn(ZONE)[0]).toMatchObject({
+        sharedWithZone: true,
+        lineCount: 2,
+        wantedCount: 1,
+        myPermissions: before.myPermissions,
+      });
+    });
+
     it('renames in place without losing the counts', async () => {
       const { store, realtime } = await build([list('list-1')]);
       await store.load(ZONE);
@@ -191,7 +244,7 @@ describe('ListStore', () => {
       });
 
       it('takes the list away when the set is empty', async () => {
-        // The existing `gone: 'unshared'` path: the page reaches it from the list no
+        // The existing `gone` path: the page reaches it from the list no
         // longer being in the zone's answer, and the event is the answer.
         const { store, realtime } = await build([
           list('list-1'),

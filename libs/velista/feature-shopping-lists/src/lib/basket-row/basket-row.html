@@ -178,7 +178,10 @@
           @if (markCaption(); as mark) {
             <span
               [class.is-cheaper]="priceMark()?.kind === 'cheaper'"
-              [class.is-unlisted]="priceMark()?.kind === 'unlisted'"
+              [class.is-unlisted]="
+                priceMark()?.kind === 'unlisted' ||
+                priceMark()?.kind === 'noPriceHere'
+              "
               class="caption-mark"
               >{{ mark }}</span
             >

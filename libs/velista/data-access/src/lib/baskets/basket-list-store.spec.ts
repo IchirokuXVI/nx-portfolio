@@ -630,9 +630,10 @@ describe('BasketListStore', () => {
       expect(store.lists().map((list) => list.id)).toEqual(['remote']);
     });
 
-    // Replaced in place rather than moved to the front: the order is by generation
-    // time, and an edit does not regenerate anything.
-    it('replaces one that moved, keeping its place in the order', async () => {
+    // Patched in place rather than moved to the front: the order is by generation
+    // time, and an edit does not regenerate anything. The payload is the header
+    // core emits (velista `0155`), not the basket view `basket.created` carries.
+    it('renames one that moved, keeping its place in the order', async () => {
       const { store, realtime } = harness({
         pages: [
           {
@@ -644,15 +645,72 @@ describe('BasketListStore', () => {
       await store.load();
 
       realtime.emit('basket.updated', {
-        id: 'b',
+        basketId: 'b',
+        kind: 'GENERATED',
         name: 'Renamed',
         status: 'OPEN',
-        generatedAt: '2026-08-21T10:00:00.000Z',
-        lines: [],
       });
 
       expect(store.lists().map((list) => list.id)).toEqual(['a', 'b']);
       expect(store.lists()[1]?.name).toBe('Renamed');
+    });
+
+    // A finish on another phone. The event names no counts, so the counts the last
+    // read gave are kept rather than zeroed.
+    it('patches the status of a summary it holds, keeping its counts', async () => {
+      const { store, realtime } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+
+      realtime.emit('basket.updated', {
+        basketId: 'a',
+        kind: 'GENERATED',
+        name: 'Saturday big shop',
+        status: 'FINISHED',
+      });
+
+      expect(store.lists()[0]).toMatchObject({
+        id: 'a',
+        status: 'FINISHED',
+        lineCount: 12,
+        settledLineCount: 4,
+      });
+    });
+
+    // A header is not a summary, so a basket this store does not hold cannot be
+    // drawn from it. The listing is read again instead.
+    it('reads the listing again for a basket it does not hold', async () => {
+      jest.useFakeTimers();
+      try {
+        const { store, realtime, calls } = harness({
+          pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+          refreshPage: {
+            items: [summary({ id: 'new' }), summary({ id: 'a' })],
+            nextCursor: null,
+          },
+        });
+        await store.load();
+
+        realtime.emit('basket.updated', {
+          basketId: 'new',
+          kind: 'GENERATED',
+          name: null,
+          status: 'OPEN',
+        });
+        expect(store.lists().map((list) => list.id)).toEqual(['a']);
+
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(calls.filter((call) => call.method === 'listMine')).toHaveLength(
+          2
+        );
+        expect(store.lists().map((list) => list.id)).toEqual(['new', 'a']);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('takes one away when it is deleted elsewhere', async () => {
@@ -678,12 +736,17 @@ describe('BasketListStore', () => {
       await store.load();
 
       realtime.emit('basket.updated', {
-        id: 'a',
-        generatedAt: 'not a date',
+        basketId: 'a',
+        kind: 'GENERATED',
+        name: 'Renamed',
       });
 
       expect(store.lists()).toHaveLength(1);
-      expect(store.lists()[0]?.lineCount).toBe(12);
+      expect(store.lists()[0]).toMatchObject({
+        name: 'Saturday big shop',
+        status: 'OPEN',
+        lineCount: 12,
+      });
     });
   });
 

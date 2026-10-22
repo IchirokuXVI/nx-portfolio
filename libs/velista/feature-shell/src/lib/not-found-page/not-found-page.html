@@ -1,0 +1,20 @@
+<main class="content">
+  <div aria-live="polite" class="status" role="status">
+    @switch (face()) {
+      @case ('checking') {
+        <lib-spinner-icon aria-hidden="true" class="mark" />
+        <h1 class="title">{{ 'notFound.checking.title' | rokuT }}</h1>
+        <p class="body">{{ 'notFound.checking.body' | rokuT }}</p>
+      }
+      @case ('updating') {
+        <lib-spinner-icon aria-hidden="true" class="mark" />
+        <h1 class="title">{{ 'notFound.updating.title' | rokuT }}</h1>
+        <p class="body">{{ 'notFound.updating.body' | rokuT }}</p>
+      }
+      @case ('missing') {
+        <h1 class="title">{{ 'notFound.missing.title' | rokuT }}</h1>
+        <p class="body">{{ 'notFound.missing.body' | rokuT }}</p>
+      }
+    }
+  </div>
+</main>

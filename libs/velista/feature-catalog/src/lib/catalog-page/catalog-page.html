@@ -37,6 +37,7 @@
         (keydown.escape)="clearSearch()"
         [placeholder]="placeholderKey() | rokuT: placeholderArgs()"
         [value]="typed()"
+        #searchField
         autocapitalize="none"
         autocomplete="off"
         class="field-input"
@@ -48,6 +49,7 @@
         <button
           (click)="clearSearch()"
           [attr.aria-label]="'catalog.search.clear' | rokuT"
+          [libClearsField]="searchField"
           class="field-clear"
           type="button"
         >

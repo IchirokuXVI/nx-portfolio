@@ -1,10 +1,12 @@
 import { inject } from '@angular/core';
 import {
   Router,
+  UrlSegment,
+  UrlSegmentGroup,
+  UrlTree,
   type CanActivateFn,
   type CanMatchFn,
   type Route,
-  type UrlSegment,
 } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import { ZoneStore } from '@portfolio/velista/data-access';
@@ -51,7 +53,7 @@ export const zoneIdGuard: CanMatchFn = (
   // `segments` is what is left after the parent consumed its own, so the id is the
   // second: `zones` then the id. Read positionally rather than from a param map,
   // because at `canMatch` time the route has not been matched and there are no params.
-  return UUID.test(segments[1]?.path ?? '');
+  return canonicalId(segments[1]?.path);
 };
 
 /**
@@ -82,8 +84,52 @@ export const listIdGuard: CanMatchFn = (
   // Read positionally rather than from a param map, because at `canMatch` time the
   // route has not been matched and there are no params. `zoneIdGuard` runs beside this
   // one and checks the zone half, so each guard states one thing.
-  return UUID.test(segments[3]?.path ?? '');
+  return canonicalId(segments[3]?.path);
 };
+
+/**
+ * Whether a segment is an id, and the lower case URL when it is one typed in upper
+ * case (velista 0156).
+ *
+ * The pattern accepts both cases, and so does the backend, but every store here keys
+ * on the id as typed: an upper case list id read its lines under one key, looked for
+ * itself among the group's lists under another, found nothing, and drew the gone
+ * block over a list that every read answered. One URL per resource is the fix, so the
+ * address bar, the stores and the last list storage all hold the lower case form.
+ *
+ * Every id in the URL is lower cased in one redirect rather than this segment alone,
+ * so a link with two upper case ids lands in one hop. The redirected URL is asked
+ * again and answers `true`, so it cannot loop.
+ */
+function canonicalId(path: string | undefined): boolean | UrlTree {
+  if (path === undefined || !UUID.test(path)) {
+    return false;
+  }
+  if (path === path.toLowerCase()) {
+    return true;
+  }
+
+  const url = inject(Router).currentNavigation()?.extractedUrl;
+  if (url === undefined) {
+    return true;
+  }
+  return new UrlTree(lowerCaseIds(url.root), url.queryParams, url.fragment);
+}
+
+function lowerCaseIds(group: UrlSegmentGroup): UrlSegmentGroup {
+  const children: Record<string, UrlSegmentGroup> = {};
+  for (const [outlet, child] of Object.entries(group.children)) {
+    children[outlet] = lowerCaseIds(child);
+  }
+  return new UrlSegmentGroup(
+    group.segments.map((segment) =>
+      UUID.test(segment.path)
+        ? new UrlSegment(segment.path.toLowerCase(), segment.parameters)
+        : segment
+    ),
+    children
+  );
+}
 
 /**
  * The sheets over the group page, for the people who may actually use them.
@@ -94,29 +140,39 @@ export const listIdGuard: CanMatchFn = (
  * about what is *drawn*: core re-resolves the caller's membership on every request, so
  * a guard passing has never meant a write will be allowed.
  *
- * A zone that is not in the cache sends the caller to the group page rather than being
- * refused. That is the deep link case, and the group page is where the zone is loaded;
- * once it is there, the sheet is one tap away and the guard has an answer. Guessing
- * `true` would open a sheet over a page with no data in it, and guessing `false` would
- * make a shared link to a sheet silently do nothing.
+ * A zone that is not in the cache is loaded here and then tested (velista 0157). That
+ * is the deep link case: a reload of a sheet, or a link to one, used to land on the
+ * bare group page because the guard read only the cache. Only a zone still absent
+ * after the read, or a role that fails the test, sends the caller to the group page,
+ * which draws the not available sentence for a group they may not read.
+ *
+ * The redirect is built before the read, because `inject` works only in the guard's
+ * synchronous part. And the guard always answers: `loadZone` resolves on a failure it
+ * swallowed, and a rejection is caught here too, so no read can hang the navigation.
  */
 function requireRole(
   test: (role: 'OWNER' | 'ADMIN' | 'MEMBER') => boolean
 ): CanActivateFn {
   return (route) => {
     const zoneId = zoneIdFrom(route);
-    const zone = inject(ZoneStore).zoneById(zoneId);
+    const zones = inject(ZoneStore);
+    const refused = groupPageOf(zoneId);
+    const decide = () => {
+      const zone = zones.zoneById(zoneId);
 
-    if (
-      zone !== undefined &&
-      zone.myStatus === 'APPROVED' &&
-      zone.status === 'ACTIVE' &&
-      test(zone.myRole)
-    ) {
-      return true;
+      return zone !== undefined &&
+        zone.myStatus === 'APPROVED' &&
+        zone.status === 'ACTIVE' &&
+        test(zone.myRole)
+        ? true
+        : refused;
+    };
+
+    if (zoneId === '' || zones.zoneById(zoneId) !== undefined) {
+      return decide();
     }
 
-    return groupPageOf(zoneId);
+    return zones.loadZone(zoneId).then(decide, () => refused);
   };
 }
 
@@ -194,5 +250,5 @@ export const basketIdGuard: CanMatchFn = (
 ) => {
   // `shopping-lists` then the id, read positionally: at `canMatch` time the route
   // has not been matched and there are no params to read.
-  return UUID.test(segments[1]?.path ?? '');
+  return canonicalId(segments[1]?.path);
 };

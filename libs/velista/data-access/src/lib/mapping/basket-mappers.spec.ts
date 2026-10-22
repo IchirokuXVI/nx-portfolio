@@ -1,3 +1,8 @@
+import {
+  allSchemas,
+  BASKET_SCHEMA_IDS,
+  validateSchema,
+} from '@portfolio/luna-shopper/contracts';
 import { isOpenBasket } from '@portfolio/velista/models';
 import {
   restrictRowToServedLists,
@@ -701,5 +706,91 @@ describe('toBasketRow: bought outside this shopping list (velista 0142)', () => 
     const basket = toBasket({ ...BASKET, rows: [ELSEWHERE] });
 
     expect(basket?.rows[0].boughtElsewhere).toBe(2);
+  });
+});
+
+/**
+ * Every chain of the profile (backend `0213`, velista `0153`), against the
+ * contract schema: a scope may say it quotes nothing of the basket, and the
+ * read may say its list is short. Both fields are optional on the wire, so a
+ * server from before them reads as one that quotes and listed everything.
+ */
+describe('toBasket: every scope of the profile (velista 0153)', () => {
+  /** A scope as the gateway sends it, before backend `0213`. */
+  const SCOPE = {
+    priceScopeId: 'ps-lidl',
+    supermarketId: 'sm-lidl',
+    supermarketName: { en: 'Lidl', es: 'Lidl' },
+    supermarketLogoUrl: null,
+    locations: [],
+  };
+
+  function scopeOf(raw: unknown) {
+    return toBasket({ ...BASKET, scopes: [raw] })?.scopes.get('ps-lidl');
+  }
+
+  it('reads a scope that quotes nothing, which the contract accepts', () => {
+    const raw = { ...SCOPE, quotesBasket: false };
+
+    expect(validateSchema(BASKET_SCHEMA_IDS.priceScopeView, raw).valid).toBe(
+      true
+    );
+    expect(scopeOf(raw)?.quotesBasket).toBe(false);
+  });
+
+  it('reads a scope that quotes something', () => {
+    const raw = { ...SCOPE, quotesBasket: true };
+
+    expect(validateSchema(BASKET_SCHEMA_IDS.priceScopeView, raw).valid).toBe(
+      true
+    );
+    expect(scopeOf(raw)?.quotesBasket).toBe(true);
+  });
+
+  it('reads a scope without the field as one that quotes, as the contract allows', () => {
+    expect(validateSchema(BASKET_SCHEMA_IDS.priceScopeView, SCOPE).valid).toBe(
+      true
+    );
+    expect(scopeOf(SCOPE)?.quotesBasket).toBe(true);
+    // Only a JSON false says it prices nothing.
+    expect(scopeOf({ ...SCOPE, quotesBasket: 'false' })?.quotesBasket).toBe(
+      true
+    );
+  });
+
+  it('reads scopesIncomplete, and a read without it as a whole list', () => {
+    expect(
+      toBasket({ ...BASKET, scopesIncomplete: true })?.scopesIncomplete
+    ).toBe(true);
+    expect(
+      toBasket({ ...BASKET, scopesIncomplete: false })?.scopesIncomplete
+    ).toBe(false);
+    expect(toBasket(BASKET)?.scopesIncomplete).toBe(false);
+    expect(
+      toBasket({ ...BASKET, scopesIncomplete: 'true' })?.scopesIncomplete
+    ).toBe(false);
+  });
+
+  it('reads the two fields the contract names, neither of them required', () => {
+    const schemaOf = (id: string) =>
+      allSchemas.find((candidate) => candidate.$id === id) as
+        | { properties?: object; required?: readonly string[] }
+        | undefined;
+
+    const scope = schemaOf(BASKET_SCHEMA_IDS.priceScopeView);
+    expect(Object.keys(scope?.properties ?? {})).toContain('quotesBasket');
+    expect(scope?.required ?? []).not.toContain('quotesBasket');
+
+    const result = schemaOf(BASKET_SCHEMA_IDS.result);
+    const view = schemaOf(BASKET_SCHEMA_IDS.view);
+    const named = [
+      ...Object.keys(result?.properties ?? {}),
+      ...Object.keys(view?.properties ?? {}),
+    ];
+    expect(named).toContain('scopesIncomplete');
+    expect([
+      ...(result?.required ?? []),
+      ...(view?.required ?? []),
+    ]).not.toContain('scopesIncomplete');
   });
 });

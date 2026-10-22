@@ -145,7 +145,7 @@ export class LinePage {
     selectAbilities(this._list()?.myPermissions ?? [])
   );
 
-  /** Loading, failed, missing or ready (section 4). */
+  /** Loading, failed, gone, missing or ready (section 4, velista 0156). */
   readonly status = computed(() =>
     linePageStatus(this._lines, this.listId(), this.lineId())
   );
@@ -169,14 +169,15 @@ export class LinePage {
   /** How many cards the rail has reached, counted from the first. */
   private readonly _reached = signal(0);
 
-  /** `WRITE` on a line nobody approved yet, `MANAGE` on any (backend 0036, 4.1). */
+  /**
+   * `WRITE` or `MANAGE` on any line. A writer may change the products of an
+   * approved line, which puts it back to pending (backend plan 0076); the only
+   * field approval keeps from a writer is the quantity, which this page does not
+   * write.
+   */
   private readonly _canEdit = computed(() => {
     const abilities = this._abilities();
-    const line = this._line();
-    return (
-      abilities.canManage ||
-      (abilities.canWrite && line?.approvalStatus !== 'APPROVED')
-    );
+    return abilities.canWrite || abilities.canManage;
   });
 
   /**
@@ -475,6 +476,19 @@ export class LinePage {
   /** Back to whatever was on screen before this line, its list being the usual one. */
   async back(): Promise<void> {
     await this._pages.back(this._listUrl());
+  }
+
+  /** A list that is not readable: its group, replacing this page's entry. */
+  async leaveToGroup(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(
+        this._localeStore.locale(),
+        this._basePath,
+        'zones',
+        this.zoneId()
+      ),
+      { replaceUrl: true }
+    );
   }
 
   /** A line that is gone: its list, replacing this page's entry. */

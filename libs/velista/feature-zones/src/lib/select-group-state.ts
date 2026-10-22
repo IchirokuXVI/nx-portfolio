@@ -5,6 +5,7 @@ import type {
   MyZone,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { zoneErrorKey } from './zone-error-copy';
 
 /**
  * Chooses which of the group page's states to render.
@@ -24,6 +25,15 @@ export function selectGroupState(input: {
   readonly zoneState: 'idle' | 'loading' | 'loaded' | 'failed';
   readonly lists: readonly ShoppingListSummary[];
   readonly listsState: 'idle' | 'loading' | 'loaded' | 'failed';
+  /**
+   * What the last read of **this** zone failed with, or null (velista 0157).
+   *
+   * The container passes `ZoneStore.zoneErrorOf(id)`, not the store's shared `error`:
+   * that one slot is cleared by a read of any other group, so a realtime event that
+   * reloaded group B turned group A's "not available" into a Try again. It is read
+   * only when this zone's own state is `failed`.
+   */
+  readonly zoneError: unknown;
   readonly correlationId: string | null;
   /** Whether this zone's realtime room was refused, so the page is not live. */
   readonly stale: boolean;
@@ -55,9 +65,18 @@ export function selectGroupState(input: {
   if (zone === undefined) {
     // Nothing to draw yet. `failed` here is a genuine dead end: there is no cached
     // header to fall back on, so the error panel is the whole screen.
-    return zoneState === 'failed'
-      ? { kind: 'error', correlationId }
-      : { kind: 'loading', header: null };
+    if (zoneState !== 'failed') {
+      return { kind: 'loading', header: null };
+    }
+
+    // A `not_found` or a `forbidden` on the read is not a fault to retry or report,
+    // and the two read alike so that nobody learns which groups exist (velista 0157).
+    // The copy table already says so for `zone.read`, so the choice is read from it
+    // rather than restated here.
+    return zoneErrorKey(input.zoneError, 'zone.read') ===
+      'zone.error.notAvailable'
+      ? { kind: 'not-available' }
+      : { kind: 'error', correlationId };
   }
 
   const header = toHeader(zone, stale, input.online);
@@ -111,8 +130,15 @@ export function selectGroupState(input: {
  * asking, which is harmless, instead of towards telling somebody a populated group is
  * empty, which is false and faintly insulting. Section 5.8 records the `hasLists`
  * boolean that would replace this with a fact.
+ *
+ * **Staff need no heuristic** (plan 0158, item 3). An `OWNER` or `ADMIN` reads every
+ * list in the group, so for them zero readable lists is zero lists, and an owner told
+ * "nothing shared with you" in their own group was being told something false.
  */
 function emptyReason(zone: MyZone): 'no-lists' | 'no-access' {
+  if (zone.myRole === 'OWNER' || zone.myRole === 'ADMIN') {
+    return 'no-lists';
+  }
   return zone.counts.memberCount > 1 ? 'no-access' : 'no-lists';
 }
 

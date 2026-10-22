@@ -1,0 +1,201 @@
+name: Patch one host
+
+# Patches one cluster host: the OS to a dated Debian snapshot, k3s and the
+# cluster add-ons to the versions pinned in k8s/bootstrap/install.sh, a reboot
+# when one is due, and a health check before and after (k8s plan 0013).
+#
+# Called by host-maintenance.yml, once for staging and once for production. It
+# has no trigger of its own, so a host is only ever patched in that order.
+#
+# Every root action goes through /usr/local/sbin/nx-host-patch, which
+# provision-host.sh installs together with the one sudo rule the deploy account
+# holds. Everything else here runs as that unprivileged account.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment of the job. host-production carries the soak wait timer.
+        type: string
+        required: true
+      concurrency-group:
+        description: The deploy workflow's concurrency group, so a patch never reboots a host mid deploy.
+        type: string
+        required: true
+      snapshot:
+        description: snapshot.debian.org timestamp, e.g. 20261026T030000Z
+        type: string
+        required: true
+      endpoints:
+        description: Space separated public URLs of this host. Each must answer below 500 over valid TLS.
+        type: string
+        required: true
+      soak-check-endpoints:
+        description: Endpoints of the host that was patched first. When set, that host must still be healthy before this one is touched.
+        type: string
+        default: ''
+    secrets:
+      host:
+        required: true
+      soak-check-host:
+        required: false
+      user:
+        required: true
+      key:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # As in release.yml, with one difference: host keys are checked. This job
+  # holds a sudo rule on the far end, so it does not accept whatever answers.
+  SSH_OPTS: '-o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: ${{ inputs.concurrency-group }}
+      cancel-in-progress: false
+    timeout-minutes: 90
+    env:
+      HOST: ${{ secrets.host }}
+      SOAK_HOST: ${{ secrets.soak-check-host }}
+      DEPLOY_USER: ${{ secrets.user }}
+      SNAPSHOT: ${{ inputs.snapshot }}
+    steps:
+      - name: Checkout the bootstrap scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: k8s/bootstrap
+
+      # The host keys come from a repository variable, written once with
+      #   ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com
+      # and refreshed after a host is rebuilt (k8s/README-new-cluster.md).
+      - name: Trust the pinned host keys
+        env:
+          KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error title=SSH_KNOWN_HOSTS is unset::Set the repository variable SSH_KNOWN_HOSTS to the output of: ssh-keyscan -t ed25519 <production host> <staging host>"
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.key }}
+
+      # The gate. Production is patched only while the host that went first,
+      # with the same snapshot, is still healthy after the soak.
+      - name: The host patched first is still healthy
+        if: inputs.soak-check-endpoints != ''
+        run: |
+          ssh $SSH_OPTS "$DEPLOY_USER@$SOAK_HOST" 'bash -s' < k8s/bootstrap/host-health.sh
+          bash k8s/bootstrap/check-endpoints.sh ${{ inputs.soak-check-endpoints }}
+
+      - name: nx-host-patch is installed and current
+        run: |
+          want="$(sed -n 's/^TOOL_VERSION=//p' k8s/bootstrap/host-patch.sh)"
+          have="$(ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch version' || true)"
+          if [ "$have" != "$want" ]; then
+            echo "::error title=nx-host-patch missing or stale::The host has version '${have:-none}', the repository $want. On the host, as the admin account: sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --k3s (after git pull)."
+            exit 1
+          fi
+          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch status' | tee status-before.txt
+
+      # A host that is already broken is not patched. A failure after the patch
+      # then always means the patch.
+      - name: Healthy before
+        run: ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s' < k8s/bootstrap/host-health.sh
+
+      - name: Debian packages to snapshot ${{ inputs.snapshot }}
+        run: ssh $SSH_OPTS "$DEPLOY_USER@$HOST" "sudo -n /usr/local/sbin/nx-host-patch apply '$SNAPSHOT'"
+
+      - name: k3s to the pinned version
+        run: |
+          k3s="$(sed -n 's/^K3S_VERSION="\${K3S_VERSION:-\(.*\)}"$/\1/p' k8s/bootstrap/install.sh)"
+          [ -n "$k3s" ] || { echo "could not read K3S_VERSION from install.sh"; exit 1; }
+          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" "sudo -n /usr/local/sbin/nx-host-patch k3s '$k3s'"
+
+      # install.sh is idempotent, but each run is a helm upgrade of four
+      # releases, so it runs only when a pinned version differs from what the
+      # cluster has. It needs no root: the deploy account reads the admin
+      # kubeconfig, and --k3s is not passed.
+      - name: Cluster add-ons to the pinned versions
+        run: |
+          eval "$(grep -E '^(GATEWAY_API|ENVOY_GATEWAY|CERT_MANAGER|METALLB)_VERSION=' k8s/bootstrap/install.sh)"
+          # The JSON is read here, not on the host, which has no jq.
+          crd="$(ssh $SSH_OPTS "$DEPLOY_USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get crd gateways.gateway.networking.k8s.io -o jsonpath='{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}'" || true)"
+          releases="$(ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm list -A -o json')"
+          have="$(printf 'gateway-api=%s\n' "$crd"; jq -r '.[] | "\(.name)=\(.chart)"' <<< "$releases")"
+          echo "$have"
+          want="gateway-api=$GATEWAY_API_VERSION eg=gateway-helm-$ENVOY_GATEWAY_VERSION cert-manager=cert-manager-$CERT_MANAGER_VERSION metallb=metallb-$METALLB_VERSION"
+          drift=""
+          for pair in $want; do
+            grep -qxF "$pair" <<< "$have" || drift="$drift $pair"
+          done
+          if [ -z "$drift" ]; then
+            echo "add-ons match install.sh"
+            exit 0
+          fi
+          echo "updating:$drift"
+          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s' < k8s/bootstrap/install.sh
+
+      - name: Reboot when one is due
+        run: |
+          status="$(ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch status')"
+          echo "$status"
+          if ! grep -qx 'reboot_required=yes' <<< "$status"; then
+            echo "no reboot needed"
+            exit 0
+          fi
+          before="$(sed -n 's/^boot_id=//p' <<< "$status")"
+          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch reboot'
+          sleep 60
+          # A new boot_id is the proof. An SSH that answers could still be the
+          # old boot if the reboot never happened.
+          for _ in $(seq 1 40); do
+            now="$(ssh $SSH_OPTS -o ConnectTimeout=10 "$DEPLOY_USER@$HOST" 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)"
+            if [ -n "$now" ] && [ "$now" != "$before" ]; then
+              echo "back up, boot_id $now"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::the host did not come back within eleven minutes"
+          exit 1
+
+      - name: Healthy after
+        run: ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s' < k8s/bootstrap/host-health.sh
+
+      - name: Public endpoints answer
+        run: bash k8s/bootstrap/check-endpoints.sh ${{ inputs.endpoints }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ inputs.environment }}: snapshot \`$SNAPSHOT\`"
+            echo
+            echo '```'
+            ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch status' 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnose
+        if: failure()
+        run: |
+          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s' << 'EOF'
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            kubectl get nodes -o wide || true
+            kubectl get pods -A -o wide | grep -v -E 'Running|Completed' || true
+            kubectl get events -A --sort-by=.lastTimestamp | tail -40 || true
+            systemctl --no-pager status k3s | head -20 || true
+          EOF

@@ -13,7 +13,7 @@
 #
 # Usage, from a workstation, against a host that still allows root login:
 #
-#   scp k8s/bootstrap/provision-host.sh root@HOST:/tmp/
+#   scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@HOST:/tmp/
 #   ssh root@HOST "bash /tmp/provision-host.sh \
 #     --admin-key 'ssh-ed25519 AAAAC3... you@laptop' \
 #     --deploy-key 'ssh-ed25519 AAAAC3... github-actions' \
@@ -383,6 +383,60 @@ if [ "$RUN_K3S" = true ]; then
     printf '\nexport KUBECONFIG=/etc/rancher/k3s/k3s.yaml\n' >> "$BASHRC"
     echo "==> added KUBECONFIG to $BASHRC"
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# 6b. Host maintenance (k8s plan 0013).
+#
+# The host-maintenance workflow patches the OS and k3s from CI, staging first
+# and production two days later, both to the same dated snapshot of the Debian
+# archive. CI connects as the deploy account, which holds no sudo, so it gets
+# exactly one root program: nx-host-patch. It validates every argument itself,
+# and the sudoers rule names that one file and nothing else.
+#
+# The file is copied, not linked, and owned by root. A link into the admin
+# account's clone would let whoever can write the clone choose what root runs.
+#
+# Honest about what this adds: the deploy account already reads the k3s admin
+# kubeconfig, and cluster admin can start a privileged pod. The rule does not
+# widen what a stolen CI key can do. It means the routine path needs no such
+# trick, and every root action CI takes is one of five subcommands.
+#
+# needrestart is what tells nx-host-patch which services still run an old
+# library after an upgrade, so it can say whether a reboot is due.
+# ---------------------------------------------------------------------------
+HOST_PATCH_SRC=""
+for candidate in "$(dirname "$0")/host-patch.sh" \
+                 "$(getent passwd "$ADMIN_USER" | cut -d: -f6)/nx-portfolio/k8s/bootstrap/host-patch.sh"; do
+  if [ -f "$candidate" ]; then HOST_PATCH_SRC="$candidate"; break; fi
+done
+
+if [ -n "$HOST_PATCH_SRC" ]; then
+  echo "==> host maintenance: nx-host-patch, needrestart and the deploy sudo rule"
+  if ! command -v needrestart >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    # The lists on a provider image can be weeks old and name versions the
+    # mirror no longer holds.
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq needrestart
+  fi
+  install -m 755 -o root -g root "$HOST_PATCH_SRC" /usr/local/sbin/nx-host-patch
+  echo "    installed /usr/local/sbin/nx-host-patch version $(/usr/local/sbin/nx-host-patch version)"
+
+  TMP_SUDOERS="$(mktemp)"
+  printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/nx-host-patch\n' "$DEPLOY_USER" > "$TMP_SUDOERS"
+  if visudo -c -f "$TMP_SUDOERS" >/dev/null; then
+    install -m 440 -o root -g root "$TMP_SUDOERS" /etc/sudoers.d/80-nx-host-patch
+    echo "    $DEPLOY_USER may run nx-host-patch as root, and nothing else"
+  else
+    echo "Generated sudoers rule for nx-host-patch failed validation, not installed." >&2
+    rm -f "$TMP_SUDOERS"
+    exit 1
+  fi
+  rm -f "$TMP_SUDOERS"
+else
+  echo "==> host-patch.sh not found beside this script or in the clone, so the host" >&2
+  echo "    maintenance workflow cannot patch this host. Copy it up next to this" >&2
+  echo "    script, or pass --k3s so the clone provides it, and re-run." >&2
 fi
 
 # ---------------------------------------------------------------------------

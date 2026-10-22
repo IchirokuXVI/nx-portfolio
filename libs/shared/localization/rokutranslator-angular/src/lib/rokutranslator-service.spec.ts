@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { provideRokuTranslator } from './provide-rokutranslator';
+import { ROKU_TRANSLATOR } from './roku-translator-token';
 import { RokuTranslatorPipe } from './rokutranslator-pipe';
 import {
   LoaderFunction,
@@ -74,6 +75,48 @@ describe('RokuTranslatorService load completion', () => {
     // A resolver running on a later navigation still gets a value rather than an
     // empty completion.
     await expect(firstValueFrom(service.loaded$)).resolves.toBe(true);
+  });
+});
+
+/**
+ * Plan 0006: the app's default reaches the translator, so a browser that speaks none
+ * of the app's languages starts with it rather than with no locale at all.
+ */
+describe('RokuTranslatorService starting locale', () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'languages');
+
+  afterEach(() => {
+    if (original) {
+      Object.defineProperty(navigator, 'languages', original);
+    } else {
+      delete (navigator as { languages?: unknown }).languages;
+    }
+  });
+
+  it('starts a French browser with the default locale and loads its strings', async () => {
+    Object.defineProperty(navigator, 'languages', {
+      value: ['fr-FR', 'fr'],
+      configurable: true,
+    });
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideRokuTranslator({
+          locales: ['en', 'es'],
+          defaultLocale: 'es',
+          defaultNamespace: 'ns-default-locale',
+          loader: (locale) =>
+            Promise.resolve({ greeting: locale === 'es' ? 'Hola' : 'Hello' }),
+        }),
+      ],
+    });
+
+    const service = TestBed.inject(RokuTranslatorService);
+
+    await expect(firstValueFrom(service.loaded$)).resolves.toBe(true);
+    expect(TestBed.inject(ROKU_TRANSLATOR).getLocale()).toBe('es');
+    expect(service.t('greeting')).toBe('Hola');
   });
 });
 

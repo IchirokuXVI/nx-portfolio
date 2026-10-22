@@ -3,9 +3,9 @@ import { type Route } from '@angular/router';
 import {
   localeGuard,
   localizedTitle,
+  rerunOnLocaleSegmentChange,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { NotFoundComponent } from '@portfolio/shared/ui';
 import {
   BasketChangeStore,
   BasketSocket,
@@ -32,6 +32,7 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
+import { NotFoundPage } from './not-found-page/not-found-page';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -661,6 +662,11 @@ export const AppShellRoutes: Route[] = [
     // way, since both enter through `app-providers.ts`. Only the injector changed, and
     // it moved in the direction that has more above it rather than less.
     canActivate: [localeGuard],
+    // The locale is the `:locale` child's param, so a history move from `/en` to
+    // `/es` changes nothing on this route and the default would not re-run the guard
+    // (rokutranslator plan 0006). This re-runs it when the locale segment changes and
+    // for nothing else, so a list or line id change does not.
+    runGuardsAndResolvers: rerunOnLocaleSegmentChange,
     // No page of this app is created until its strings have arrived (plan 0006,
     // section 4). On the parent, so it is decided once for the app rather than
     // repeated by every page ever added, and after the locale guard: Angular runs a
@@ -1836,10 +1842,12 @@ export const AppShellRoutes: Route[] = [
          * So the app claims every path below its mount and the guard settles the
          * locale for all of them. Anything still here afterwards carries a
          * supported canonical locale and simply is not a route, which is this
-         * app's own 404, drawn in a language the visitor can read.
+         * app's own 404, drawn in a language the visitor can read. It asks for a
+         * newer version before it says so (plan 0150), because a link from a newer
+         * release can name a route this build does not have.
          */
         path: '**',
-        component: NotFoundComponent,
+        component: NotFoundPage,
       },
     ],
   },

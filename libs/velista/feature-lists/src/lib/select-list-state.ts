@@ -114,7 +114,7 @@ export interface ListStateInput {
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
-  readonly gone: 'deleted' | 'unshared' | null;
+  readonly gone: boolean;
 }
 
 /** What the rows of a list read of the catalog (velista `0145`, sections 2 and 7). */
@@ -148,8 +148,8 @@ export interface ListStateCatalog {
  * once, and here is the only place that can be true of.
  */
 export function selectListState(input: ListStateInput): ListPageState {
-  if (input.gone !== null) {
-    return { kind: 'gone', reason: input.gone };
+  if (input.gone) {
+    return { kind: 'gone' };
   }
 
   if (input.errorKey !== null) {
@@ -303,7 +303,7 @@ function toRow(
     product:
       input.catalog === undefined
         ? undefined
-        : rowProduct(line, input.catalog, canChooseProduct(line, abilities)),
+        : rowProduct(line, input.catalog, canChooseProduct(abilities)),
     // One product is the only case with one format and one brand to state. It is
     // what tells two lines of the same name apart.
     detail:
@@ -419,13 +419,12 @@ function costOf(
 
 /**
  * Whether the reader may choose the product of a line from its row (section 5):
- * the rule the products page has, `MANAGE`, or `WRITE` on a line nobody approved.
+ * `WRITE` or `MANAGE`, whatever the line's approval. A writer's change to the
+ * product set of an approved line puts it back to pending rather than being
+ * refused (backend plan 0076); only an approved line's quantity is out of reach.
  */
-function canChooseProduct(line: Line, abilities: ListAbilitiesVm): boolean {
-  return (
-    abilities.canManage ||
-    (abilities.canWrite && line.approvalStatus !== 'APPROVED')
-  );
+function canChooseProduct(abilities: ListAbilitiesVm): boolean {
+  return abilities.canWrite || abilities.canManage;
 }
 
 function nonEmpty(value: string): string | null {

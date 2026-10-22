@@ -428,13 +428,12 @@ export class BasketViewStore {
   });
 
   /**
-   * Whether every row quotes the chosen shop's price, or the cheapest anywhere
-   * (`0078`; `0102`).
+   * Whether the chosen shop prices any row of this basket (`0078`; `0102`).
    *
    * Not the same question as {@link shop}, which is what the sheet's radio says: a
    * read at the shop still out, and a shop that prices nothing on this basket, both
-   * answer false here and leave the rows exactly as they were. What the page hands
-   * each row, so one basket asks the question once.
+   * answer false here. It decides the marks, and since velista `0153` never which
+   * price a row draws: that is {@link readAtShop}.
    */
   readonly pricedAtShop = computed(() =>
     basketPricedAtShop(this._basket.rows(), this.state(), {
@@ -446,6 +445,9 @@ export class BasketViewStore {
   /**
    * Whether the products describe the chosen shop at all, priced or not, which is
    * what the shelf marks and the option offered instead turn on (`0102`).
+   *
+   * Also which price a row draws, the total adds and a settle names (velista
+   * `0153`): at a shop, its own price or none. What the page hands each row.
    */
   readonly readAtShop = computed(() =>
     basketReadAtShop(this.state(), { shop: this.shopAt() })
@@ -456,8 +458,8 @@ export class BasketViewStore {
    *
    * Over {@link visibleRows} and never the whole basket, so it follows the kept
    * lists, the usual switch and the search as the rows under it do. It is handed
-   * {@link pricedAtShop} and {@link readAtShop}, which are what the page hands
-   * each row, so the number and the rows read the same price of the same product.
+   * {@link readAtShop}, which is what the page hands each row, so the number and
+   * the rows read the same price of the same product.
    *
    * A `computed` and nothing subscribed, for {@link sections}'s reason: a settle,
    * a realtime write and a read at another shop all land on signals this reads.
@@ -465,7 +467,6 @@ export class BasketViewStore {
   readonly total = computed<BasketTotal>(() =>
     basketTotal(this.visibleRows(), {
       products: this._basket.products(),
-      pricedAtShop: this.pricedAtShop(),
       readAtShop: this.readAtShop(),
     })
   );
@@ -506,7 +507,7 @@ export class BasketViewStore {
     readonly priceScopeId?: string;
     readonly supermarketLocationId?: string;
   } {
-    return basketSettleShop(product, this.shop(), this.pricedAtShop());
+    return basketSettleShop(product, this.shop(), this.readAtShop());
   }
 
   /** Search for this, or for nothing when it is empty. */
@@ -745,6 +746,23 @@ export class BasketViewStore {
       // The read at the remembered shop, which is what prices the rows there.
       void this._basket.readAtShop(location);
     }
+  }
+
+  /**
+   * The filter sheet's choices as they stand, for `PageReturn`. The shop is not in
+   * it: `BasketStore` holds that, and {@link restore} reads it at the remembered one.
+   */
+  snapshot(): BasketViewState {
+    return this._state();
+  }
+
+  /**
+   * Come back to what {@link snapshot} kept, after {@link restore} for the same
+   * basket: what somebody chose a moment ago beats what the device remembers.
+   */
+  resume(kept: BasketViewState): void {
+    this._state.set(kept);
+    this._askAgainForFailedTree();
   }
 
   /**

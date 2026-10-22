@@ -117,6 +117,7 @@
     },
     "error": {
       "notAvailable": "This group is not available to you. It may have been deleted, or you may have been removed",
+      "loadFailed": "This group could not be loaded",
       "roleChanged": "Your role in this group changed",
       "alreadyClaimed": "Somebody else has already taken this group on",
       "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",
@@ -161,6 +162,20 @@
       "title": "velista could not update itself",
       "body": "Close velista completely and open it again. If that does not work, open it in your browser once.",
       "reload": "Try again"
+    }
+  },
+  "notFound": {
+    "checking": {
+      "title": "Looking for a newer velista",
+      "body": "This page may be new. If it is, velista updates itself and opens it. It takes a few seconds."
+    },
+    "updating": {
+      "title": "velista is updating",
+      "body": "The new version is ready. velista opens again on this page."
+    },
+    "missing": {
+      "title": "This page does not exist",
+      "body": "The link may be old or typed wrong."
     }
   },
   "auth": {
@@ -728,6 +743,7 @@
       "fewer": "One fewer",
       "startListening": "Say what you need",
       "stopListening": "Stop listening",
+      "clear": "Clear what you typed",
       "discard": "Throw this recording away",
       "listening": "Listening",
       "heard": "I heard",
@@ -787,6 +803,7 @@
     "empty": {
       "title": "Nothing on this list yet",
       "body": "Write the first thing and everyone here sees it",
+      "bodyPrivate": "Write the first thing. You have not shared this list with anybody yet",
       "short": "List is empty"
     },
     "readOnly": {
@@ -889,7 +906,11 @@
       },
       "sharedWithZone": {
         "label": "Everybody in this group can use this list",
-        "hint": "People who join later get it too. Turning this off does not take it away from anybody who already has it"
+        "hint": "People who join later get it too. Turning this off does not take it away from anybody who already has it",
+        "takeBack_one": "Also take it from the {{count}} person who has it",
+        "takeBack_other": "Also take it from the {{count}} people who have it",
+        "keepers_one": "Nothing changed. {{names}} is a list admin now, so only a group admin can take it away",
+        "keepers_other": "Nothing changed. {{names}} are list admins now, so only a group admin can take it away"
       },
       "delete": "Delete this list",
       "accessFor": "What {{name}} can do with this list",
@@ -913,7 +934,7 @@
     },
     "gone": {
       "byOthers": "This line was deleted by another user",
-      "unavailable": "This line was deleted and is no longer available",
+      "unavailable": "That line is no longer in this list",
       "close": "Close"
     },
     "error": {
@@ -1127,6 +1148,14 @@
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
       "retry": "Try again"
+    },
+    "dropped": {
+      "quantity": {
+        "lost": "Your change to {{name}} ({{delta}}) was not saved while you were offline.",
+        "unsure": "Your change to {{name}} ({{delta}}) may not have been saved while you were offline. Check the number before you change it again."
+      },
+      "resend": "Send it again",
+      "dismiss": "Dismiss"
     }
   },
   "account": {
@@ -1197,7 +1226,11 @@
       "tooManyResets": "Too many requests. You can ask for another in {{wait}}",
       "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
       "gone": "That account no longer exists",
-      "failed": "That did not go through. Try again"
+      "failed": "That did not go through. Try again",
+      "nameLength": "A name needs 2 to 40 characters",
+      "nameCharacters": "A name can only use letters, numbers, spaces and . _ ' -",
+      "nameLetter": "A name needs at least one letter",
+      "nameReserved": "The app uses “former member” for people who left, so a name cannot start with it"
     },
     "app": {
       "section": "The app",
@@ -1492,6 +1525,16 @@
       "title": "You are no longer on this list",
       "body": "Whoever shared it took it back."
     },
+    "goHome": "Go home",
+    "needsSignIn": {
+      "title": "Sign in to open this list",
+      "body": "Only the people on this list can open it. If you are one of them, sign in.",
+      "action": "Sign in"
+    },
+    "notYours": {
+      "title": "This list is not yours",
+      "body": "Only the people on it can open it. Ask the person who sent it to share it with you."
+    },
     "ended": {
       "title": "Your time on this list has ended",
       "bodyAccount": "A link lasts 12 hours. Ask {{name}} for a new one, or to add you so you stay.",
@@ -1598,7 +1641,10 @@
           "headingHint": "where you bought, newest first",
           "today": "Today",
           "yesterday": "Yesterday"
-        }
+        },
+        "noPrices": "No prices here yet",
+        "incomplete": "The shops could not be listed.",
+        "retry": "Try again"
       },
       "lists": {
         "legend": "Lists",
@@ -1723,8 +1769,8 @@
       "body_one": "Nobody new will be able to join. The {{count}} person already shopping keeps working until their time ends.",
       "body_other": "Nobody new will be able to join. The {{count}} people already shopping keep working until their time ends.",
       "bodyNone": "Nobody new will be able to join.",
-      "cascade_one": "Also remove the {{count}} guest who joined with it",
-      "cascade_other": "Also remove the {{count}} guests who joined with it",
+      "cascade_one": "Also remove the {{count}} person who joined with it",
+      "cascade_other": "Also remove the {{count}} people who joined with it",
       "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
       "confirm": "Revoke the link",
       "cancel": "Keep it"
@@ -1762,7 +1808,16 @@
       "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.",
       "checking": "Checking the link",
       "joining": "Joining",
-      "failed": "That did not work. Try again."
+      "failed": "That did not work. Try again.",
+      "unreachable": "We could not check the link",
+      "unreachableBody": "Check that you are online, then try again.",
+      "retry": "Try again",
+      "incomplete": "This link is not complete",
+      "incompleteBody": "Part of it may have been cut off. Ask whoever sent it to send it again.",
+      "openApp": "Open Velista",
+      "removed": "You were taken off this list",
+      "removedBody": "Ask the person who shared it to add you again.",
+      "home": "Go home"
     },
     "history": {
       "open": "Show line history",
@@ -1830,7 +1885,8 @@
       "listsAndMore_other": "{{names}} and {{count}} more lists",
       "otherLists_one": "Another list",
       "otherLists_other": "{{count}} other lists",
-      "notSoldHere": "Not sold here"
+      "notSoldHere": "Not sold here",
+      "noPriceHere": "No price here"
     },
     "skip": {
       "action": "Not today",
@@ -2086,7 +2142,8 @@
       "another": "Pick another one",
       "keep": "Keep {{name}}",
       "continue": "Continue as {{name}}",
-      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too."
+      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too.",
+      "continuePlain": "Continue"
     },
     "place": {
       "title": "Where do you shop?",

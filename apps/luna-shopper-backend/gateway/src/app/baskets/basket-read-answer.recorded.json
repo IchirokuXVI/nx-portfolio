@@ -415,7 +415,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         },
         {
           "priceScopeId": "scope-carrefour",
@@ -433,9 +434,11 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
-      ]
+      ],
+      "scopesIncomplete": false
     },
     "asked": [
       "basket.searchScope",
@@ -444,8 +447,7 @@
       "basket.get",
       "item.getMany",
       "supermarket.list",
-      "supermarketLocation.list",
-      "supermarketLocation.list"
+      "supermarketLocation.search"
     ]
   },
   ":id: owner, at a shop": {
@@ -917,7 +919,8 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         },
         {
           "priceScopeId": "scope-carrefour",
@@ -935,7 +938,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         },
         {
           "priceScopeId": "scope-shop",
@@ -953,9 +957,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
-      ]
+      ],
+      "scopesIncomplete": false
     },
     "asked": [
       "basket.searchScope",
@@ -967,8 +973,7 @@
       "section.itemsAtLocation",
       "item.getMany",
       "supermarket.list",
-      "supermarketLocation.list",
-      "supermarketLocation.list"
+      "supermarketLocation.search"
     ]
   },
   ":id: member, no shop": {
@@ -1220,7 +1225,8 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
       "asked": [
@@ -1249,6 +1255,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1305,9 +1312,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1334,6 +1343,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1354,8 +1364,7 @@
         "section.itemsAtLocation",
         "item.getMany",
         "supermarket.list",
-        "supermarketLocation.list",
-        "supermarketLocation.list"
+        "supermarketLocation.search"
       ]
     }
   },
@@ -1378,8 +1387,7 @@
         "basket.get",
         "item.getMany",
         "supermarket.list",
-        "supermarketLocation.list",
-        "supermarketLocation.list"
+        "supermarketLocation.search"
       ]
     }
   },
@@ -1474,9 +1482,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1503,6 +1513,7 @@
       "answer.products[2].bestOffer": null,
       "answer.products[2].offers": "(absent)",
       "answer.scopes": [],
+      "answer.scopesIncomplete": true,
       "asked": [
         "basket.searchScope",
         "basket.priceChoices",
@@ -1527,8 +1538,7 @@
         "section.itemsAtLocation",
         "item.getMany",
         "supermarket.list",
-        "supermarketLocation.list",
-        "supermarketLocation.list"
+        "supermarketLocation.search"
       ]
     }
   },
@@ -1575,7 +1585,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         },
         {
           "priceScopeId": "scope-carrefour",
@@ -1593,7 +1604,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ]
     }
@@ -1701,64 +1713,7 @@
           "sectionIds": []
         }
       ],
-      "answer.scopes": [
-        {
-          "priceScopeId": "scope-mercadona",
-          "supermarketId": "mercadona",
-          "supermarketName": {
-            "en": "Mercadona",
-            "es": "Mercadona"
-          },
-          "locations": [
-            {
-              "supermarketLocationId": "loc-mercadona-1",
-              "label": null,
-              "address": "loc-mercadona-1 street",
-              "city": "Córdoba",
-              "postalCode": "14008",
-              "sections": []
-            },
-            {
-              "supermarketLocationId": "loc-read",
-              "label": null,
-              "address": "Avenida de Manolete",
-              "city": "Córdoba",
-              "postalCode": "14005",
-              "sections": []
-            }
-          ]
-        },
-        {
-          "priceScopeId": "scope-shop",
-          "supermarketId": "mercadona",
-          "supermarketName": {
-            "en": "Mercadona",
-            "es": "Mercadona"
-          },
-          "locations": [
-            {
-              "supermarketLocationId": "loc-read",
-              "label": null,
-              "address": "Avenida de Manolete",
-              "city": "Córdoba",
-              "postalCode": "14005",
-              "sections": []
-            }
-          ]
-        }
-      ],
-      "asked": [
-        "basket.searchScope",
-        "basket.priceChoices",
-        "supermarketLocation.shopAvailability",
-        "item.getMany",
-        "basket.get",
-        "supermarketLocation.shopAvailability",
-        "section.itemsAtLocation",
-        "item.getMany",
-        "supermarket.list",
-        "supermarketLocation.list"
-      ]
+      "answer.scopes[1].quotesBasket": false
     }
   },
   ":id: guest, no shop, catalog: the products, for the rows fails": {
@@ -1812,35 +1767,7 @@
           "atShop": null
         }
       ],
-      "answer.scopes": [
-        {
-          "priceScopeId": "scope-mercadona",
-          "supermarketId": "mercadona",
-          "supermarketName": {
-            "en": "Mercadona",
-            "es": "Mercadona"
-          },
-          "locations": [
-            {
-              "supermarketLocationId": "loc-mercadona-1",
-              "label": null,
-              "address": "loc-mercadona-1 street",
-              "city": "Córdoba",
-              "postalCode": "14008",
-              "sections": []
-            }
-          ]
-        }
-      ],
-      "asked": [
-        "basket.searchScope",
-        "basket.priceChoices",
-        "item.getMany",
-        "basket.get",
-        "item.getMany",
-        "supermarket.list",
-        "supermarketLocation.list"
-      ]
+      "answer.scopes[1].quotesBasket": false
     }
   },
   ":id: owner, at a shop, catalog: the chains fails": {
@@ -1863,37 +1790,21 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
-      "asked": [
-        "basket.searchScope",
-        "basket.priceChoices",
-        "supermarketLocation.shopAvailability",
-        "item.getMany",
-        "basket.get",
-        "supermarketLocation.shopAvailability",
-        "section.itemsAtLocation",
-        "item.getMany",
-        "supermarket.list"
-      ]
+      "answer.scopesIncomplete": true
     }
   },
   ":id: guest, no shop, catalog: the chains fails": {
     "differsFrom": ":id: guest, no shop",
     "at": {
       "answer.scopes": [],
-      "asked": [
-        "basket.searchScope",
-        "basket.priceChoices",
-        "item.getMany",
-        "basket.get",
-        "item.getMany",
-        "supermarket.list"
-      ]
+      "answer.scopesIncomplete": true
     }
   },
-  ":id: owner, at a shop, catalog: the shops of a chain fails": {
+  ":id: owner, at a shop, catalog: the shops of the profile fails": {
     "differsFrom": ":id: owner, at a shop",
     "at": {
       "answer.scopes": [
@@ -1913,15 +1824,18 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
-      ]
+      ],
+      "answer.scopesIncomplete": true
     }
   },
-  ":id: guest, no shop, catalog: the shops of a chain fails": {
+  ":id: guest, no shop, catalog: the shops of the profile fails": {
     "differsFrom": ":id: guest, no shop",
     "at": {
-      "answer.scopes": []
+      "answer.scopes": [],
+      "answer.scopesIncomplete": true
     }
   },
   "live: owner, no shop": {
@@ -2006,9 +1920,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "supermarketLocation.shopAvailability",
         "basket.live.priceChoices",
@@ -2033,8 +1949,7 @@
         "section.itemsAtLocation",
         "item.getMany",
         "supermarket.list",
-        "supermarketLocation.list",
-        "supermarketLocation.list"
+        "supermarketLocation.search"
       ]
     }
   },
@@ -2106,9 +2021,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
+      "answer.scopesIncomplete": true,
       "asked": [
         "supermarketLocation.shopAvailability",
         "basket.live.priceChoices",
@@ -2137,8 +2054,7 @@
         "section.itemsAtLocation",
         "item.getMany",
         "supermarket.list",
-        "supermarketLocation.list",
-        "supermarketLocation.list"
+        "supermarketLocation.search"
       ]
     }
   },
@@ -2181,7 +2097,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         },
         {
           "priceScopeId": "scope-carrefour",
@@ -2199,7 +2116,8 @@
               "postalCode": "14008",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ]
     }
@@ -2284,64 +2202,7 @@
           "sectionIds": []
         }
       ],
-      "answer.scopes": [
-        {
-          "priceScopeId": "scope-mercadona",
-          "supermarketId": "mercadona",
-          "supermarketName": {
-            "en": "Mercadona",
-            "es": "Mercadona"
-          },
-          "locations": [
-            {
-              "supermarketLocationId": "loc-mercadona-1",
-              "label": null,
-              "address": "loc-mercadona-1 street",
-              "city": "Córdoba",
-              "postalCode": "14008",
-              "sections": []
-            },
-            {
-              "supermarketLocationId": "loc-read",
-              "label": null,
-              "address": "Avenida de Manolete",
-              "city": "Córdoba",
-              "postalCode": "14005",
-              "sections": []
-            }
-          ]
-        },
-        {
-          "priceScopeId": "scope-shop",
-          "supermarketId": "mercadona",
-          "supermarketName": {
-            "en": "Mercadona",
-            "es": "Mercadona"
-          },
-          "locations": [
-            {
-              "supermarketLocationId": "loc-read",
-              "label": null,
-              "address": "Avenida de Manolete",
-              "city": "Córdoba",
-              "postalCode": "14005",
-              "sections": []
-            }
-          ]
-        }
-      ],
-      "asked": [
-        "supermarketLocation.shopAvailability",
-        "basket.live.priceChoices",
-        "basket.searchScope",
-        "item.getMany",
-        "basket.live",
-        "supermarketLocation.shopAvailability",
-        "section.itemsAtLocation",
-        "item.getMany",
-        "supermarket.list",
-        "supermarketLocation.list"
-      ]
+      "answer.scopes[1].quotesBasket": false
     }
   },
   "live: owner, at a shop, catalog: the chains fails": {
@@ -2364,23 +2225,14 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
       ],
-      "asked": [
-        "supermarketLocation.shopAvailability",
-        "basket.live.priceChoices",
-        "basket.searchScope",
-        "item.getMany",
-        "basket.live",
-        "supermarketLocation.shopAvailability",
-        "section.itemsAtLocation",
-        "item.getMany",
-        "supermarket.list"
-      ]
+      "answer.scopesIncomplete": true
     }
   },
-  "live: owner, at a shop, catalog: the shops of a chain fails": {
+  "live: owner, at a shop, catalog: the shops of the profile fails": {
     "differsFrom": "live: owner, at a shop",
     "at": {
       "answer.scopes": [
@@ -2400,9 +2252,11 @@
               "postalCode": "14005",
               "sections": []
             }
-          ]
+          ],
+          "quotesBasket": true
         }
-      ]
+      ],
+      "answer.scopesIncomplete": true
     }
   }
 }

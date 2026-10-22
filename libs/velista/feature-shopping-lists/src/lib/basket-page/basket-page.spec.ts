@@ -52,9 +52,13 @@ import type {
   CategoryNode,
   ErrorCode,
 } from '@portfolio/velista/models';
-import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
+import {
+  DEFAULT_BASKET_VIEW_STATE,
+  SUGGEST_DEBOUNCE_MS,
+} from '@portfolio/velista/models';
 import {
   NavChrome,
+  PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -193,6 +197,8 @@ const PAGE_TREE: readonly CategoryNode[] = [
 interface Options {
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
+  /** What `PageReturn` hands back, which makes this arrival a return to the basket. */
+  readonly returned?: unknown;
   readonly live?: boolean;
   readonly revoked?: boolean;
   /** Why the reader lost the basket, for the two endings of velista `0094`. */
@@ -203,6 +209,8 @@ interface Options {
   readonly me?: BasketParticipant | null;
   /** Their account name, which is the one name the basket itself never carries. */
   readonly username?: string | null;
+  /** Whether the reader is signed in. Most readers here are. */
+  readonly signedIn?: boolean;
   /** The rows on the basket. Empty draws the empty state. */
   readonly lines?: readonly BasketRow[];
   /** Whether the trip is over (plan 0057). A finished basket draws no controls. */
@@ -445,9 +453,16 @@ const navChrome = { setComposing: jest.fn() };
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
+  /** What the page kept for a return to it, and under which key. */
+  returns: { keep: jest.Mock; recall: jest.Mock };
 }> {
   TestBed.resetTestingModule();
   navChrome.setComposing.mockClear();
+
+  const returns = {
+    keep: jest.fn(),
+    recall: jest.fn(() => options.returned ?? null),
+  };
 
   const me = options.me === undefined ? participant(owner()) : options.me;
   // The device's shop (velista `0102`), read at once by this double.
@@ -534,6 +549,7 @@ async function render(options: Options = {}): Promise<{
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
       { provide: NavChrome, useValue: navChrome },
+      { provide: PageReturn, useValue: returns },
       {
         provide: Router,
         useValue: {
@@ -585,7 +601,10 @@ async function render(options: Options = {}): Promise<{
       },
       {
         provide: SessionStore,
-        useValue: { username: signal(options.username ?? null) },
+        useValue: {
+          username: signal(options.username ?? null),
+          isAuthenticated: signal(options.signedIn ?? true),
+        },
       },
       {
         provide: BasketStore,
@@ -762,7 +781,7 @@ async function render(options: Options = {}): Promise<{
   await Promise.resolve();
   fixture.detectChanges();
 
-  return { fixture, store };
+  return { fixture, store, returns };
 }
 
 function faces(fixture: ComponentFixture<BasketPage>): HTMLElement[] {
@@ -1937,6 +1956,64 @@ describe('searching the basket', () => {
       );
     });
 
+    describe('coming back from another page', () => {
+      const RETURNED = {
+        view: { ...DEFAULT_BASKET_VIEW_STATE, order: 'alpha' },
+        words: 'milk',
+        scrollTop: 0,
+      };
+
+      it('comes back to the words and the order it was left on', async () => {
+        const { fixture, returns } = await render({
+          lines: threeLines,
+          served,
+          search: true,
+          returned: RETURNED,
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(returns.recall).toHaveBeenCalledWith('basket:basket-saturday');
+        expect(field(fixture).value).toBe('milk');
+        expect(TestBed.inject(BasketViewStore).query()).toBe('milk');
+        expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
+        // The open search entry stays: the field holds the words it stands for.
+        expect(TestBed.inject(Router).navigateByUrl).not.toHaveBeenCalled();
+      });
+
+      it('leaves the words out on an entry whose search was closed', async () => {
+        const { fixture } = await render({
+          lines: threeLines,
+          served,
+          returned: RETURNED,
+        });
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(field(fixture).value).toBe('');
+        expect(rows(fixture)).toHaveLength(3);
+        expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
+      });
+
+      it('keeps the words and the view as it is left', async () => {
+        const { fixture, returns } = await render({
+          lines: threeLines,
+          served,
+        });
+        TestBed.inject(BasketViewStore).setOrder('alpha');
+        typeInto(fixture, 'milk');
+        await at(fixture, '/shopping-lists/basket-saturday?search=1');
+
+        fixture.destroy();
+
+        expect(returns.keep).toHaveBeenCalledWith('basket:basket-saturday', {
+          view: expect.objectContaining({ order: 'alpha' }),
+          words: 'milk',
+          scrollTop: 0,
+        });
+      });
+    });
+
     it('empties the field on Escape', async () => {
       const { fixture } = await render({ lines: threeLines, served });
       typeInto(fixture, 'milk');
@@ -2717,6 +2794,125 @@ describe('a visit that ends', () => {
       expect(title(fixture)).toBe('basket.revoked.title');
       expect(body(fixture)).toBe('basket.revoked.body');
     });
+
+    it('offers one way on, home', async () => {
+      // F6.8: the ended page had no control at all (velista 0154).
+      const fixture = await ended('REMOVED', participant(registered()));
+
+      const actions = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.notice button'
+        ),
+      ];
+      expect(actions.map((b) => b.textContent?.trim())).toEqual([
+        'basket.goHome',
+      ]);
+      (actions[0] as HTMLButtonElement).click();
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+        '/en/home'
+      );
+    });
+
+    it('draws no visit notice and no second banner over it', async () => {
+      // F6.7: "you are on this list until" stayed above "no longer on this
+      // list", and the socket's latch drew the sentence a second time.
+      const me = visitor(guest('p-9', 1), 240);
+      const rendered = await render({
+        me,
+        participants: [namedOwner(), me],
+        accessEnded: 'REMOVED',
+        revoked: true,
+      });
+      rendered.store.state.set('revoked');
+      rendered.fixture.detectChanges();
+
+      expect(query(rendered.fixture, 'lib-visit-notice')).toBeNull();
+      expect(query(rendered.fixture, '.stale')).toBeNull();
+      expect(title(rendered.fixture)).toBe('basket.revoked.title');
+    });
+
+    it('draws no visit notice when only the socket has said so', async () => {
+      // The removal's event latches `revoked` while the read is still `ready`,
+      // and the page draws "no longer on this list" from that alone.
+      const me = visitor(guest('p-9', 1), 240);
+      const { fixture, store } = await render({
+        me,
+        participants: [namedOwner(), me],
+      });
+      expect(query(fixture, 'lib-visit-notice')).not.toBeNull();
+
+      store.revoked.set(true);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-visit-notice')).toBeNull();
+    });
+  });
+
+  it('draws no visit notice on a finished basket', async () => {
+    const me = visitor(guest('p-9', 1), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+      finished: true,
+    });
+
+    expect(query(fixture, 'lib-visit-notice')).toBeNull();
+  });
+});
+
+/**
+ * A basket URL opened by somebody who is not on it (velista `0154`, target 6).
+ *
+ * F5.4: both readers were told "You are no longer on this list" with no way on.
+ */
+describe('a basket the reader cannot open', () => {
+  const titleOf = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, '.notice .notice-title')?.textContent?.trim() ?? null;
+
+  const opened = async (
+    state: 'needsSignIn' | 'notYours',
+    signedIn: boolean
+  ) => {
+    const rendered = await render({ signedIn });
+    rendered.store.state.set(state);
+    rendered.fixture.detectChanges();
+    return rendered.fixture;
+  };
+
+  const press = (fixture: ComponentFixture<BasketPage>) => {
+    const action = query(fixture, '.notice button') as HTMLButtonElement;
+    action.click();
+    return action.textContent?.trim();
+  };
+
+  it('asks a signed out reader to sign in, and to come back here', async () => {
+    const fixture = await opened('needsSignIn', false);
+
+    expect(titleOf(fixture)).toBe('basket.needsSignIn.title');
+    expect(press(fixture)).toBe('basket.needsSignIn.action');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/en/auth/login'],
+      { queryParams: { returnUrl: '/en/shopping-lists/basket-saturday' } }
+    );
+  });
+
+  it('tells a signed in stranger it is not theirs, and goes home', async () => {
+    const fixture = await opened('notYours', true);
+
+    expect(titleOf(fixture)).toBe('basket.notYours.title');
+    expect(press(fixture)).toBe('basket.goHome');
+    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+      '/en/home'
+    );
+  });
+
+  it('draws no "not updating" banner over it', async () => {
+    // A reader with no place on the basket has no socket either.
+    const rendered = await render({ signedIn: false, live: false });
+    rendered.store.state.set('needsSignIn');
+    rendered.fixture.detectChanges();
+
+    expect(query(rendered.fixture, '.stale')).toBeNull();
   });
 });
 
@@ -4543,17 +4739,26 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
       expect(words).toContain('"amount":"€3.00"');
     });
 
-    it('is none for a chosen shop that prices nothing here, whose rows quote the cheapest anywhere', async () => {
-      const words = await popover({
+    /**
+     * Velista `0153`: a chosen shop that prices nothing here adds no price, so
+     * there is no number to name it beside. The cheapest price at another chain
+     * is not borrowed under its chip, and the small row says there is no price.
+     */
+    it('draws no number at a chosen shop that prices nothing here, and the small row instead', async () => {
+      const { fixture } = await render({
         lines: lines(),
         products: priced(),
         readAtShop: MERCADONA,
       });
 
-      expect(words).toContain(
-        'basket.total.withPrice:{"count":1,"products":1}'
-      );
-      expect(words).not.toContain('Mercadona');
+      expect(query(fixture, NUMBER)).toBeNull();
+      expect(query(fixture, NOTE)).not.toBeNull();
+      expect(
+        (
+          fixture.debugElement.query(By.directive(NoPricesNote))
+            .componentInstance as NoPricesNote
+        ).shopChosen()
+      ).toBe(true);
     });
   });
 
@@ -4805,6 +5010,114 @@ describe('the first buy asks where you are', () => {
     expect(store.navigate).not.toHaveBeenCalledWith(
       ['sheet', 'shop'],
       expect.anything()
+    );
+  });
+});
+
+/**
+ * A tap never undoes another person's buy, and a refused tap says why (velista
+ * `0151`).
+ */
+describe("the row's tap and somebody else's buy", () => {
+  function row(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  async function settleWrites(
+    fixture: ComponentFixture<BasketPage>
+  ): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+
+  const me = participant(owner('p-me'));
+
+  /** Three bought: one by `first` at ten, two by `second` five minutes on. */
+  const shared = (first: string, second: string) =>
+    line('Milk', {
+      left: 0,
+      bought: 3,
+      state: 'DONE',
+      touchedBy: second,
+      entries: [
+        entry('l-a', 'row-Milk', 0, {
+          bought: 1,
+          asked: 1,
+          state: 'DONE',
+          act: {
+            participantId: first,
+            at: '2026-10-16T10:00:00Z',
+            outcome: 'BOUGHT',
+          },
+        }),
+        entry('l-b', 'zl-b', 0, {
+          bought: 2,
+          asked: 2,
+          state: 'DONE',
+          act: {
+            participantId: second,
+            at: '2026-10-16T10:05:00Z',
+            outcome: 'BOUGHT',
+          },
+        }),
+      ],
+    });
+
+  it('takes back only the units this person bought', async () => {
+    const { fixture, store } = await render({
+      lines: [shared('p-other', 'p-me')],
+      me,
+    });
+
+    row(fixture).revert.emit();
+    await settleWrites(fixture);
+
+    expect(store.revert.mock.calls[0][1]).toEqual({
+      target: 'UNITS',
+      units: 2,
+      from: 3,
+    });
+  });
+
+  it('opens the sheet when the newest units are somebody else', async () => {
+    const { fixture, store } = await render({
+      lines: [shared('p-me', 'p-other')],
+      me,
+    });
+
+    row(fixture).revert.emit();
+    await settleWrites(fixture);
+
+    expect(store.revert).not.toHaveBeenCalled();
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'settle'],
+      expect.anything()
+    );
+  });
+
+  it('says so on the row when a tick lands on a finished trip', async () => {
+    const { fixture, store } = await render({
+      lines: [line('Milk', { left: 5 })],
+    });
+    store.settle.mockImplementation(() => {
+      store.error.set(
+        new GatewayError({
+          code: 'basket_finished' as ErrorCode,
+          status: 409,
+          correlationId: 'ref-1',
+        })
+      );
+      return Promise.resolve(null);
+    });
+
+    row(fixture).settle.emit();
+    await settleWrites(fixture);
+
+    expect(row(fixture).notice()?.key).toBe('basket.error.basketFinished');
+    expect(query(fixture, '.said')?.textContent).toContain(
+      'basket.error.basketFinished'
     );
   });
 });

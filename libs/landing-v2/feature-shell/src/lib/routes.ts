@@ -8,6 +8,7 @@ import {
 import {
   localeGuard,
   localizedTitle,
+  rerunOnLocaleSegmentChange,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
@@ -33,6 +34,9 @@ export const LandingV2Routes: Route[] = [
   {
     path: '',
     canActivate: [localeGuard],
+    // Re-run the guard when the locale segment changes, so a browser back after the
+    // language switch applies the locale of the URL (rokutranslator plan 0006).
+    runGuardsAndResolvers: rerunOnLocaleSegmentChange,
     // This app's own title, from this app's own translator (plan 0005 D10). The
     // shell used to set it through a `titleNs` in its route data; with a translator
     // per app the shell has none to look it up in.

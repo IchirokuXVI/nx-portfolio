@@ -248,6 +248,44 @@ export class AppUpdates {
   }
 
   /**
+   * Whether a version newer than this one is ready, asked by a page no route matched
+   * (plan 0150).
+   *
+   * The route may be one this build does not know yet, a link mailed by a newer
+   * release, so the 404 asks before it draws. A version already downloaded and waiting
+   * for a navigation answers at once: `checkForUpdate` answers about what is newer than
+   * that one and would say `false` with the right bundle in the cache.
+   *
+   * `false` without asking when this tab already reloaded once for `url`. The reloaded
+   * document is then the newest there is, and the page is a real 404.
+   */
+  newerVersionForUnknownPage(url: string): Promise<boolean> {
+    if (this._browser.readSessionStorage(StorageKeys.notFoundUpdate) === url) {
+      return Promise.resolve(false);
+    }
+
+    if (this._reloadAtNextNavigation) {
+      return Promise.resolve(true);
+    }
+
+    return this._check();
+  }
+
+  /**
+   * Reload onto the newer version, on the URL no route matched (plan 0150).
+   *
+   * Straight through `BrowserFacade` and not `ReloadBlocker`: a 404 holds no form.
+   * And not through `_reloadOnce`, whose spent attempt means the server refuses this
+   * build and draws the dead end screen. The URL is recorded first, so the document
+   * after the reload asks no more for it.
+   */
+  reloadForUnknownPage(url: string): void {
+    this._browser.writeSessionStorage(StorageKeys.notFoundUpdate, url);
+    this._reloadAtNextNavigation = false;
+    this._browser.reload();
+  }
+
+  /**
    * The check in flight, started if there is none.
    *
    * Shared rather than started per caller: the interceptor calls `checkNow` once per
