@@ -1,3 +1,5 @@
+> **PR:** [#799](https://github.com/IchirokuXVI/nx-portfolio/pull/799)
+
 # 0164: a shopping list row shows its product
 
 > Asked for by the owner on 2026-10-20: the rows of the shopping list draw the picture of
