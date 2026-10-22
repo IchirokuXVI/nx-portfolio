@@ -329,6 +329,21 @@ describe('ChangeSheet', () => {
       ]);
     });
 
+    it('names each radio by the whole card: name, brand, price and caption', async () => {
+      const { fixture } = await render({ lineId: 'zl-1' });
+
+      // The testing translator answers keys, so the size is dropped and the
+      // captions and "no price" read as their keys.
+      expect(
+        radios(fixture).map((radio) => radio.getAttribute('aria-label'))
+      ).toEqual([
+        'Hacendado milk, Hacendado, €0.92, basket.change.chosenNow',
+        'Hacendado milk six pack, €5.34, basket.change.cheaper',
+        'Pascual milk, €1.15',
+        'Puleva milk, catalog.row.noPrice',
+      ]);
+    });
+
     it('draws each choice as the compact card: picture, detail, and the radio at the right', async () => {
       const { fixture } = await render({ lineId: 'zl-1' });
 

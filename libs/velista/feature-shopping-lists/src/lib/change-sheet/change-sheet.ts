@@ -89,9 +89,10 @@ const CAPTION_KEYS = {
  * The product chosen now, the other products of the lines and the members of
  * their groups, each once and with no heading between them, then what the shop
  * does not sell (`productChoices`). Each is the compact product card with its
- * radio at the right edge (velista `0163`), and the whole card is its label. They are read by `ChangeChoices`. Below them,
- * "Look for another one in the catalog" opens the catalog page in its mode that
- * chooses, and the product chosen there comes back chosen in this list.
+ * radio at the right edge (velista `0163`), and the whole card is its label.
+ * They are read by `ChangeChoices`. Below them, "Look for another one in the
+ * catalog" opens the catalog page in its mode that chooses, and the product
+ * chosen there comes back chosen in this list.
  *
  * ## What "Use this product" does
  *
@@ -289,9 +290,20 @@ export class ChangeSheet {
             chainChosen: true,
           }
         );
+        const captionText = caption === null ? null : translate(caption);
         return {
           ...view,
-          caption: caption === null ? null : translate(caption),
+          caption: captionText,
+          // The radio is named by the whole card, as the row was read before
+          // the card: the brand and size, the price and what the list says.
+          label: [
+            view.name,
+            view.detail,
+            view.price ?? translate('catalog.row.noPrice'),
+            captionText,
+          ]
+            .filter((part): part is string => part !== null && part !== '')
+            .join(', '),
         };
       })
       .filter((row): row is ChoiceRow => row !== null);

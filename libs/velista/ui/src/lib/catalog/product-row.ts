@@ -51,8 +51,8 @@ export interface ProductRowView {
   /** The price, formatted, or null for a card with none. */
   readonly price: string | null;
   /**
-   * Under the price: the price per litre or kilo when it differs from the price,
-   * or null.
+   * The line under the price: the price per litre or kilo when it differs from
+   * the price, or the chain that has the price (the line detail sheet), or null.
    */
   readonly unitPrice: string | null;
   /** Under a stale price, how long ago it was seen ("18 days ago"), or null. */

@@ -474,6 +474,9 @@ export class LineDetailSheet {
   readonly detail = computed(() => {
     const line = this._line();
     const claimedBy = this._claimedByUserId();
+    // Read so the size words of the choices are drawn again once the words
+    // arrive: on a cold load onto this sheet's URL they come after the line.
+    this._translator.loaded();
 
     return selectLineDetail({
       line,

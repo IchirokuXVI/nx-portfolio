@@ -422,6 +422,70 @@ describe('selectLineDetail', () => {
       expect(detail?.choices[0]).toMatchObject({ price: null, chain: null });
     });
 
+    it("take the record's own priced offer over the price near the reader", () => {
+      const own = offer(0.92, 'scope-mercadona');
+      const priced: CatalogItem = {
+        ...item('item-milk-a', 'Whole milk', 'Hacendado'),
+        offer: own,
+        chainPrices: [
+          {
+            chain: {
+              id: 'chain-mercadona',
+              name: { en: 'Mercadona', es: 'Mercadona' },
+            },
+            offer: own,
+          },
+        ],
+      };
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        itemNameOf: (itemId) =>
+          itemId === 'item-milk-a'
+            ? priced
+            : (CATALOG.find((row) => row.id === itemId) ?? null),
+        pricesOf: () => [
+          {
+            supermarketId: 'chain-lidl',
+            chain: { en: 'Lidl', es: 'Lidl' },
+            logoUrl: null,
+            kind: 'priced',
+            offer: offer(0.5, 'scope-lidl'),
+            cheapest: true,
+          },
+        ],
+      });
+
+      expect(detail?.choices[0]).toMatchObject({
+        price: '€0.92',
+        chain: 'Mercadona',
+      });
+    });
+
+    it('name no chain for an offer whose scope no chain price carries', () => {
+      const priced: CatalogItem = {
+        ...item('item-milk-a', 'Whole milk', 'Hacendado'),
+        offer: offer(0.92, 'scope-unknown'),
+        chainPrices: [
+          {
+            chain: {
+              id: 'chain-mercadona',
+              name: { en: 'Mercadona', es: 'Mercadona' },
+            },
+            offer: offer(0.95, 'scope-mercadona'),
+          },
+        ],
+      };
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-milk-b'] }),
+        itemNameOf: (itemId) =>
+          itemId === 'item-milk-a'
+            ? priced
+            : (CATALOG.find((row) => row.id === itemId) ?? null),
+      });
+
+      expect(detail?.choices[0]).toMatchObject({ price: '€0.92', chain: null });
+    });
+
     it('keep an unnamed product unnamed, with no detail', () => {
       const detail = select({
         line: line({ itemIds: ['item-milk-a', 'item-gone'] }),
