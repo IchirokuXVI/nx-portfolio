@@ -32,7 +32,7 @@
     "class-validator": "^0.15.1",
     "handlebars": "^4.7.10",
     "ioredis": "^5.11.1",
-    "joi": "^17.13.3",
+    "joi": "^17.13.8",
     "nats": "^2.29.3",
     "nestjs-pino": "^4.6.1",
     "nodemailer": "^9.0.5",
