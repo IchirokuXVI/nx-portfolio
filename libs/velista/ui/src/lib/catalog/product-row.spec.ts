@@ -319,6 +319,33 @@ describe('ProductRow', () => {
     );
   });
 
+  it('opens the photo large on a press on it, and not the product', async () => {
+    const fixture = await render(
+      productRowView(
+        { ...OIL, imageUrl: 'https://img.test/oil.png' },
+        options()
+      )
+    );
+    const opened: string[] = [];
+    fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+    // A button in a button is no control at all, so the photo is beside it.
+    expect(host(fixture).querySelector('.open lib-product-picture')).toBeNull();
+    const zoom = host(fixture).querySelector<HTMLElement>(
+      '.row > lib-product-picture button.zoom'
+    );
+    expect(zoom).not.toBeNull();
+
+    zoom?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(opened).toEqual([]);
+    expect(host(fixture).querySelector('dialog img')?.getAttribute('alt')).toBe(
+      OIL.name.en
+    );
+  });
+
   it('says which product was pressed', async () => {
     const fixture = await render(productRowView(OIL, options()));
     const opened: string[] = [];

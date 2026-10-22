@@ -2,14 +2,13 @@ import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
   input,
   output,
-  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { HoldingRow } from '@portfolio/velista/models';
 import { PlusIcon, ProductIcon } from '../icons/icons';
+import { ProductPicture } from '../list/product-picture';
 import { QuantityStepper } from '../list/quantity-stepper';
 
 /** One product row, with every string already chosen in the reader's language. */
@@ -91,6 +90,12 @@ export interface ProductRowLineStep {
  *
  * A press adds one, and the plus stays a plus.
  *
+ * ## The photo is a third control, before the product button
+ *
+ * A press on the photo opens it large ({@link ProductPicture}), for the same
+ * reason: it cannot be a button inside the product button. A row with no photo
+ * draws the carton inside the product button, where it has always been.
+ *
  * ## The lines that hold the product are under it, one stepper each
  *
  * A list can hold one product on several lines: once under the product's name and
@@ -111,25 +116,17 @@ export interface ProductRowLineStep {
     NgTemplateOutlet,
     PlusIcon,
     ProductIcon,
+    ProductPicture,
     QuantityStepper,
     RokuTranslatorPipe,
   ],
   template: `
     <ng-template #content>
-      <span aria-hidden="true" class="thumb">
-        @if (image(); as src) {
-          <img
-            (error)="broken.set(src)"
-            [src]="src"
-            alt=""
-            class="image"
-            decoding="async"
-            loading="lazy"
-          />
-        } @else {
+      @if (row().imageUrl === null) {
+        <span aria-hidden="true" class="thumb">
           <lib-product-icon class="glyph" />
-        }
-      </span>
+        </span>
+      }
 
       <span class="what">
         <span class="name">{{ row().name }}</span>
@@ -164,6 +161,20 @@ export interface ProductRowLineStep {
       [class.is-chosen]="choice()?.checked === true"
       class="row"
     >
+      <!--
+        A photo is a button of its own, which opens it large, so it stands before
+        the control that opens or chooses the product and never inside it. With no
+        photo the carton stays inside that control, and a press on it opens the
+        product as before.
+      -->
+      @if (row().imageUrl; as src) {
+        <lib-product-picture
+          [imageUrl]="src"
+          [zoom]="row().name"
+          class="thumb"
+        />
+      }
+
       @if (choice(); as picking) {
         <!--
           The catalog that chooses (velista 0140, section 3): the whole card is the
@@ -308,14 +319,6 @@ export class ProductRow {
 
   /** A press on the stepper of one line that holds the product. */
   readonly lineStepped = output<ProductRowLineStep>();
-
-  /** A picture that failed to load, so the carton takes its place. */
-  protected readonly broken = signal<string | null>(null);
-
-  protected readonly image = computed(() => {
-    const src = this.row().imageUrl;
-    return src !== null && src !== this.broken() ? src : null;
-  });
 }
 
 /**

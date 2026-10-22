@@ -1,0 +1,91 @@
+// A product's photo drawn large: the photo on the raised surface, its name under
+// it, on the dimmed screen of a sheet, with the cross in the corner of the screen.
+
+// No box of its own: the dialog stands in the top layer and takes no room in the
+// row that holds it.
+:host {
+  display: contents;
+}
+
+// The dialog is the whole screen and draws the scrim itself. `::backdrop` would
+// read the scrim token only in browsers where it inherits from the dialog.
+.viewer {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: 100%;
+  max-block-size: none;
+  margin: 0;
+  padding: var(--app-space-6);
+  border: none;
+  background: var(--app-scrim);
+  color: var(--app-text-primary);
+  cursor: zoom-out;
+
+  &[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &::backdrop {
+    background: transparent;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  max-inline-size: var(--app-photo-viewer-size);
+  margin: 0;
+  padding: var(--app-space-5);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+}
+
+// Photos of products are mostly a carton on white, so the photo is drawn whole on
+// the raised surface and never cropped.
+.photo {
+  display: block;
+  inline-size: 100%;
+  max-block-size: var(--app-photo-viewer-max-height);
+  object-fit: contain;
+  border-radius: var(--app-radius-md);
+}
+
+.name {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.close {
+  position: absolute;
+  inset-block-start: max(var(--app-space-4), env(safe-area-inset-top, 0px));
+  inset-inline-end: var(--app-space-4);
+  display: grid;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.close-glyph {
+  font-size: var(--app-icon-md);
+}

@@ -433,6 +433,55 @@ describe('LineRow', () => {
       ).not.toBeNull();
     });
 
+    it('opens the photo large on a press on it, and not the line', async () => {
+      const fixture = await render(
+        vm({ product: shown({ imageUrl: 'https://img.example/1.jpg' }) })
+      );
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      const zoom = query(fixture, 'lib-product-picture button.zoom');
+      expect(zoom?.getAttribute('aria-label')).toBe('photo.open');
+      tap(zoom as HTMLElement);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(opened).toEqual([]);
+      const photo = query(fixture, 'dialog img');
+      expect(photo?.getAttribute('alt')).toBe('Leche semidesnatada');
+
+      (query(fixture, 'dialog button.close') as HTMLElement).click();
+      fixture.detectChanges();
+
+      expect(opened).toEqual([]);
+      expect(query(fixture, 'dialog')).toBeNull();
+    });
+
+    it('names the photo for the line when the catalog lost the product', async () => {
+      const fixture = await render(
+        vm({
+          product: shown({ name: null, imageUrl: 'https://img.example/1.jpg' }),
+        })
+      );
+
+      (query(fixture, 'button.zoom') as HTMLElement).click();
+      fixture.detectChanges();
+
+      expect(query(fixture, 'dialog img')?.getAttribute('alt')).toBe(
+        'Sourdough loaf'
+      );
+    });
+
+    it('draws a photo that opens nothing in reorder mode', async () => {
+      const fixture = await render(
+        vm({ product: shown({ imageUrl: 'https://img.example/1.jpg' }) }),
+        { reordering: true }
+      );
+
+      expect(query(fixture, 'lib-product-picture img')).not.toBeNull();
+      expect(query(fixture, 'button.zoom')).toBeNull();
+    });
+
     it('draws bones for the picture and line 2 while the product loads, and keeps the name', async () => {
       const fixture = await render(
         vm({ content: 'Leche', named: true, product: { kind: 'loading' } })
