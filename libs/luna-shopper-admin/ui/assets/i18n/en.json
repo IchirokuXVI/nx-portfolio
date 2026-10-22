@@ -267,12 +267,12 @@
       },
       "confirm": {
         "showPhotos": {
-          "heading": "Show {{name}}'s photos?",
+          "heading": "Show this chain's photos?",
           "body": "Products with no photo of our own show the photo {{name}} gives. Nothing is copied. You can hide them again at any time.",
           "confirm": "Show photos"
         },
         "hidePhotos": {
-          "heading": "Hide {{name}}'s photos?",
+          "heading": "Hide this chain's photos?",
           "body": "Every product stops showing the photos of {{name}} at once. The saved links stay, so showing them again needs no harvest.",
           "confirm": "Hide photos"
         },
