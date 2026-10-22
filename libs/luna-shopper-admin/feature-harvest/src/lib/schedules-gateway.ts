@@ -14,6 +14,7 @@ import {
   type ResourceQuery,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { firstValueFrom } from 'rxjs';
 import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
 
@@ -169,12 +170,20 @@ export class SchedulesGateway implements ResourceGateway<Schedule> {
     });
   }
 
-  /** A lookup that fails costs a name, and not the read. */
+  /**
+   * Name the chains, and wait for the words: a row carries its cadence as a
+   * sentence, and a sentence made before the catalogue arrived is its key.
+   * A lookup that fails costs a name, and not the read.
+   */
   private async _resolve(ids: readonly string[]): Promise<void> {
+    const words = firstValueFrom(this._translator.loaded$).catch(
+      () => undefined
+    );
     try {
       await this._names.resolve(ids);
     } catch {
       // `known` then answers `null`, and the chain is drawn as its ID.
     }
+    await words;
   }
 }

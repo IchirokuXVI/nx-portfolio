@@ -124,8 +124,9 @@ export const SCHEDULES = defineResource<Schedule>({
 
   list: {
     columns: ['presetName', 'supermarketId', 'cadence', 'nextRunAt'],
-    // What runs and when. The state beside the name says whether it will.
-    compact: ['presetName', 'cadence'],
+    // The title is the preset. The chain and when it runs are the card, and
+    // the state beside the name says whether it will.
+    compact: ['supermarketId', 'cadence'],
     brief: {
       sentence: (row) =>
         fieldMessage('harvest.schedules.brief', {

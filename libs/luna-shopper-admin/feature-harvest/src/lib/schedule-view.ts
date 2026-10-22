@@ -644,9 +644,17 @@ const ID = {
       color: var(--admin-accent-on-wash);
     }
 
+    .days button {
+      white-space: nowrap;
+    }
+
     @media (max-width: 47.99rem) {
       .days button {
+        flex-basis: 0;
+        min-inline-size: 0;
         min-block-size: 2.75rem;
+        padding: 0;
+        font-size: 0.8125rem;
       }
     }
 
@@ -657,17 +665,25 @@ const ID = {
       max-inline-size: 36rem;
     }
 
+    /* A box, and not a field: the size of a field from the global rule of
+       controls does not apply to it. */
     .tick input {
       flex: none;
       inline-size: 1.25rem;
       block-size: 1.25rem;
+      min-block-size: 0;
+      padding: 0;
       margin-block-start: 0.125rem;
       accent-color: var(--admin-accent);
     }
 
-    /* The consent ends the form with the line every section ends with. */
+    /* The consent is a box of its own, after the sections and in their
+       shape, so that it reads as the last step before Save. */
     .consent {
-      border-block-end: 1px solid var(--admin-border);
+      overflow: hidden;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
     }
 
     .fact {
