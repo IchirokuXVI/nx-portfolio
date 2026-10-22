@@ -1227,7 +1227,10 @@ describe('the record of a product', () => {
     ).toEqual([
       ['catalog.items.section.name', ['name', 'brand', 'ean', 'sku']],
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
-      ['catalog.items.section.sold', ['defaultUnit', 'unitSize', 'imageUrl']],
+      [
+        'catalog.items.section.sold',
+        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+      ],
     ]);
   });
 
