@@ -36,15 +36,14 @@
           role="row"
         >
           <!--
-            The photograph's place. Photographs do not ship until backend 0126 to
-            0129 fill `imageUrl`, so every card draws the state with none: the
-            product glyph, or a crate for a group.
+            The product's photo, or the product glyph when it has none or the photo
+            does not load (velista 0161). A group draws a crate.
           -->
           <span aria-hidden="true" class="sug-thumb">
             @if (card.group) {
               <lib-basket-icon />
             } @else {
-              <lib-product-icon />
+              <lib-product-picture [imageUrl]="card.imageUrl" />
             }
           </span>
 

@@ -33,6 +33,7 @@ import {
   PlusIcon,
   ProductIcon,
 } from '../icons/icons';
+import { ProductPicture } from './product-picture';
 import { QuantityStepper } from './quantity-stepper';
 import {
   suggestionCardView,
@@ -168,6 +169,7 @@ const POPOVER_POSITIONS: ConnectedPosition[] = [
     InfoIcon,
     PlusIcon,
     ProductIcon,
+    ProductPicture,
     QuantityStepper,
     SuggestionNoMatch,
     CdkConnectedOverlay,
