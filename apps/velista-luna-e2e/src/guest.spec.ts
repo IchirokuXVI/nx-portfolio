@@ -169,7 +169,7 @@ test.describe('the owner and a guest', () => {
       const revoke = sheet(page, 'Revoke the link?');
       await revoke
         .getByRole('checkbox', {
-          name: /Also remove the \d+ guests? who joined with it/,
+          name: /Also remove the \d+ (?:person|people) who joined with it/,
         })
         .check();
       // The read of the rows that the cascade's event asks for, refused. Watched
