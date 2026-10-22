@@ -1,0 +1,98 @@
+name: Host maintenance
+
+# Weekly OS, k3s and add-on patching for both clusters (k8s plan 0013).
+#
+#   Monday 03:30 UTC   staging is patched to one dated Debian snapshot, rebooted
+#                      if due, and checked from the inside and the outside.
+#   + 2 days           the host-production environment's wait timer runs out.
+#                      Staging must still be healthy, and then production is
+#                      patched to the SAME snapshot.
+#
+# A failure anywhere stops the run, so production is never touched after a
+# staging that broke. GitHub mails a failed scheduled run to whoever last
+# changed the schedule below.
+#
+# Times: the production backup CronJobs run from 02:17 to 03:07 in the hosts'
+# local time, which is Central European (00:17 to 01:07 UTC in summer), so a
+# patch always lands after a fresh dump. 03:30 UTC is 05:30 in Spain in summer
+# and 04:30 in winter, the quietest hour of both products.
+#
+# One time setup, in the repository settings:
+#   - environment host-staging, no rules
+#   - environment host-production, wait timer 2880 minutes
+#   - variable SSH_KNOWN_HOSTS: ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com
+#   - on each host, once: provision-host.sh --k3s, which installs nx-host-patch
+
+on:
+  schedule:
+    - cron: '30 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: snapshot.debian.org timestamp (blank for now), e.g. 20261026T030000Z
+        type: string
+        default: ''
+      production:
+        description: Carry the snapshot to production after the soak
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      snapshot: ${{ steps.snapshot.outputs.snapshot }}
+    steps:
+      # The hour, not the minute: snapshot.debian.org resolves a timestamp to
+      # the newest import at or before it, and a round number is easier to read
+      # in a summary and to type into a manual run.
+      - name: Pick the snapshot
+        id: snapshot
+        env:
+          GIVEN: ${{ inputs.snapshot }}
+        run: |
+          snap="${GIVEN:-$(date -u +%Y%m%dT%H0000Z)}"
+          [[ "$snap" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || { echo "::error::bad snapshot: $snap"; exit 1; }
+          echo "snapshot=$snap" >> "$GITHUB_OUTPUT"
+          echo "### Debian snapshot \`$snap\`" >> "$GITHUB_STEP_SUMMARY"
+
+  staging:
+    needs: plan
+    uses: ./.github/workflows/host-patch.yml
+    with:
+      environment: host-staging
+      concurrency-group: staging-deploy
+      snapshot: ${{ needs.plan.outputs.snapshot }}
+      endpoints: >-
+        https://staging.ichirokuxvi.com https://mfe.staging.ichirokuxvi.com
+        https://staging.velista.app https://admin.staging.velista.app
+        https://api.staging.velista.app https://rt.staging.velista.app
+    secrets:
+      host: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+      user: ${{ secrets.SSH_DEPLOY_USER }}
+      key: ${{ secrets.SSH_DEPLOY_KEY }}
+
+  production:
+    needs: [plan, staging]
+    if: github.event_name == 'schedule' || inputs.production
+    uses: ./.github/workflows/host-patch.yml
+    with:
+      environment: host-production
+      concurrency-group: production-release
+      snapshot: ${{ needs.plan.outputs.snapshot }}
+      endpoints: >-
+        https://ichirokuxvi.com https://mfe.ichirokuxvi.com
+        https://velista.app https://admin.velista.app
+        https://api.velista.app https://rt.velista.app
+      soak-check-endpoints: >-
+        https://staging.ichirokuxvi.com https://mfe.staging.ichirokuxvi.com
+        https://staging.velista.app https://admin.staging.velista.app
+        https://api.staging.velista.app https://rt.staging.velista.app
+    secrets:
+      host: ${{ secrets.SSH_DEPLOY_HOST }}
+      soak-check-host: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+      user: ${{ secrets.SSH_DEPLOY_USER }}
+      key: ${{ secrets.SSH_DEPLOY_KEY }}

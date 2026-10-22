@@ -61,10 +61,12 @@ will ever see.
 ## 2. Accounts, keys and the cluster
 
 Copy the script up and run it as root. It creates the accounts, installs the
-keys, then hands off to `install.sh` for the cluster.
+keys, then hands off to `install.sh` for the cluster. `host-patch.sh` goes up
+beside it: provision-host.sh installs it as `nx-host-patch`, the one program the
+weekly maintenance workflow may run as root (section 10b).
 
 ```powershell
-scp k8s/bootstrap/provision-host.sh root@<IP>:/tmp/
+scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@<IP>:/tmp/
 
 $admin  = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_admin.pub  -Raw).Trim()
 $deploy = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_deploy.pub -Raw).Trim()
@@ -79,8 +81,10 @@ resulting `authorized_keys` without explaining why.
 What it creates, and what it deliberately does not:
 
 - **`ichiroku`**, in the `sudo` group, for humans. Override with `--admin-user`.
-- **`deploy`**, unprivileged, for CI. It needs no sudo, because k3s writes its
-  kubeconfig world readable and helm and kubectl are the whole deploy.
+- **`deploy`**, unprivileged, for CI. It needs no sudo to deploy, because k3s
+  writes its kubeconfig world readable and helm and kubectl are the whole
+  deploy. Its one sudo rule names `/usr/local/sbin/nx-host-patch` and nothing
+  else, for the weekly OS and k3s patching (section 10b).
 - **No per app accounts.** Every app runs in a container inside k3s, so the host
   needs no service users of its own.
 
@@ -270,6 +274,16 @@ cause of `Load key: error in libcrypto` in the deploy job.
 `SSH_DEPLOY_USER` is shared by both workflows, so both machines must trust the
 same CI key, or that secret needs splitting first.
 
+One repository **variable**, not a secret, because a host key is public:
+
+| Variable          | Value                                                            |
+| ----------------- | ---------------------------------------------------------------- |
+| `SSH_KNOWN_HOSTS` | `ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com` |
+
+A new machine has a new host key, so a rebuilt host needs this variable
+refreshed. Until it is, the host-maintenance workflow refuses to connect to the
+host, which is the point of pinning the key.
+
 ## 8. Deploy
 
 **Staging** deploys on every push to `main`: affected projects only, tagged
@@ -313,6 +327,39 @@ nothing in them, so rebuilding production on a new machine means taking a dump
 from the old one and restoring it with `k8s/helm/restore-database.sh` **before**
 DNS points at the new box. Staging holds nothing worth keeping and is disposable
 by design, which is also where a restore is rehearsed.
+
+## 10b. Keeping it patched (k8s plan 0013)
+
+Nobody logs in to update a host. `.github/workflows/host-maintenance.yml` runs
+every Monday at 03:30 UTC:
+
+1. Staging: a health check, then `nx-host-patch apply <snapshot>` (every Debian
+   package to one dated state of snapshot.debian.org), k3s and the cluster
+   add-ons to the versions pinned in `install.sh`, a reboot when a new kernel
+   or an old library needs one, and the health check again from the inside and
+   the outside.
+2. The `host-production` environment waits two days.
+3. Staging must still be healthy. Then production gets the same snapshot and
+   the same steps.
+
+A failure stops the run, so production is never patched after a staging that
+broke, and GitHub mails the failure. Versions move only through git: Renovate
+proposes a new k3s or cert-manager, and the next Monday carries the merged
+version to staging and then to production.
+
+What this needs, once per repository: the environments `host-staging` and
+`host-production` (wait timer 2880 minutes), the `SSH_KNOWN_HOSTS` variable
+(section 7), and the Renovate app. Once per host, which a new host gets from
+section 2 already: `nx-host-patch` and its sudo rule, and
+`/etc/rancher/k3s/config.yaml`. A host provisioned before plan 0013 gets both
+from one run, as the admin account:
+
+```sh
+git -C ~/nx-portfolio pull
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --k3s
+```
+
+To see what a host has, as the deploy account: `sudo nx-host-patch status`.
 
 ## 11. When it goes wrong
 
@@ -387,8 +434,8 @@ ssh-keygen -t ed25519 -C "github-actions-nx-portfolio" -f $env:USERPROFILE\.ssh\
 $admin  = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_admin.pub  -Raw).Trim()
 $deploy = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_deploy.pub -Raw).Trim()
 
-# 2. accounts, keys, cluster
-scp k8s/bootstrap/provision-host.sh root@<IP>:/tmp/
+# 2. accounts, keys, cluster, and nx-host-patch for the weekly maintenance
+scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@<IP>:/tmp/
 ssh root@<IP> "bash /tmp/provision-host.sh --admin-key '$admin' --deploy-key '$deploy' --k3s"
 
 # 3. prove both logins, THEN close the door (it asks you to type 'lock root')
@@ -406,5 +453,6 @@ bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --env <env>
 
 # 6. production only: the backup Secret
 # 7. GitHub secrets: SSH_DEPLOY_USER, SSH_DEPLOY_KEY, the host
+#    GitHub variable: SSH_KNOWN_HOSTS, refreshed with the new host key
 # 8. push to main (staging) or publish a Release (production)
 ```

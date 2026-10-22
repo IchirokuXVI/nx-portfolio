@@ -1,0 +1,58 @@
+name: Image scan
+
+# Weekly: scan the images staging runs for known vulnerabilities and file the
+# findings under Security > Code scanning (k8s plan 0013).
+#
+# It reports and never blocks. A finding that has a fixed version is closed by
+# the next Renovate digest or version update, and a finding without one cannot
+# be closed by anything here. Only fixable HIGH and CRITICAL findings are
+# reported, so the list stays one somebody reads.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ghcr.io/ichirokuxvi/nx-portfolio/shell:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/odontogram:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/damoclessword:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/landingv2:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/velista:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-admin:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-harvester:staging
+          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-assistant:staging
+    steps:
+      - name: Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.image }}
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
+      # One category per image, or each upload replaces the one before it.
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
+          category: ${{ matrix.image }}
