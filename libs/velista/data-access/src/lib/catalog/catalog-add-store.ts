@@ -34,6 +34,8 @@ export interface CatalogAddProduct {
   readonly name: string;
   /** What the sheet of the visit says under the name. */
   readonly detail: string | null;
+  /** The photo of the row, which the sheet of the visit draws, or null. */
+  readonly imageUrl: string | null;
 }
 
 /** Where a read is: not asked for, on its way, answered, or not answered. */
@@ -419,7 +421,12 @@ export class CatalogAddStore {
       this._visit.update((visit) =>
         visitAfterAdd(
           visit,
-          { listId, itemId: product.itemId, detail: product.detail },
+          {
+            listId,
+            itemId: product.itemId,
+            detail: product.detail,
+            imageUrl: product.imageUrl,
+          },
           stateOf(result.line),
           result.merged
         )

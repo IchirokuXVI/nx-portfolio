@@ -371,47 +371,15 @@
 
 // Which product was bought. A radio group rather than a select, because there are two
 // or three of them and a native select on a phone is a full screen wheel for a
-// question that fits on one line.
+// question that fits on one line. Each is the compact product card (velista 0163),
+// ruled off by the hairline each card draws, the list starting on one.
 .choices {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-2);
+  border-block-start: 1px solid var(--app-border-subtle);
 }
 
-.choice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-hair);
-  width: 100%;
-  min-height: var(--app-touch-target);
-  padding: var(--app-space-3);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-md);
-  background: transparent;
-  color: var(--app-text-primary);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-
-  @include form.focus-ring;
-}
-
-.choice.chosen {
-  border-color: var(--app-action-quiet-border);
-  background: var(--app-action-quiet-bg);
-}
-
-.choice-name {
-  font-size: var(--app-text-sm);
-}
-
-.choice-brand {
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
-}
-
-// Where it was bought (velista 0114). The same outlined box as a product choice, so
-// the step reads as three questions of one kind, with a chevron because it opens a
+// Where it was bought (velista 0114). An outlined box, with a chevron because it opens a
 // picker rather than choosing in place. Clearing sits beside it, a touch target of its
 // own, so a stray tap on the row never throws the choice away.
 .shop-choice {

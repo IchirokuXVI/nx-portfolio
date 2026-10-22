@@ -51,8 +51,8 @@ export interface ProductRowView {
   /** The price, formatted, or null for a card with none. */
   readonly price: string | null;
   /**
-   * Under the price: the price per litre or kilo when it differs from the price,
-   * or null.
+   * The line under the price: the price per litre or kilo when it differs from
+   * the price, or the chain that has the price (the line detail sheet), or null.
    */
   readonly unitPrice: string | null;
   /** Under a stale price, how long ago it was seen ("18 days ago"), or null. */
@@ -280,7 +280,7 @@ export type ProductRowExpanded = 'shops' | 'members';
         }
       </span>
 
-      @if (row().price; as price) {
+      @if (priceShown() && row().price; as price) {
         <span [class.is-stale]="row().stale" class="price">
           @if (group() !== null) {
             <span class="unit">{{ 'list.add.card.from' | rokuT }}</span>
@@ -295,7 +295,7 @@ export type ProductRowExpanded = 'shops' | 'members';
             </span>
           }
         </span>
-      } @else if (group() === null) {
+      } @else if (group() === null && priceShown()) {
         <span class="no-price">{{ 'catalog.row.noPrice' | rokuT }}</span>
       }
 
@@ -309,6 +309,7 @@ export type ProductRowExpanded = 'shops' | 'members';
       [class.compact]="compact()"
       [class.has-control]="slot() === 'add' || slot() === 'stepper'"
       [class.is-chosen]="choice()?.checked === true"
+      [class.price-in-detail]="!priceShown()"
       class="row"
     >
       <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
@@ -629,6 +630,13 @@ export class ProductRow {
    * that chooses ignore it.
    */
   readonly openable = input(true);
+
+  /**
+   * Whether the price column is drawn. False leaves it empty, also with no price,
+   * where the detail already carries the price (the sheet of what a visit added,
+   * velista `0163`), and lets the detail wrap so the price in it is never cut.
+   */
+  readonly priceShown = input(true);
 
   /** A product group in place of a product (the search), or null. */
   readonly group = input<ProductRowGroup | null>(null);
