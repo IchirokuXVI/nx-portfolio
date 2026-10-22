@@ -2274,17 +2274,6 @@ describe('a turn that may only touch one list (plan 0044)', () => {
 
 // ---------------------------------------------------------------------------
 
-/**
- * Taking a line off a list, and settling one (plan 0043).
- *
- * The two things somebody says out loud with their hands full that the catalog
- * could not express, and one of them is a deletion. Everything here runs against
- * {@link FakeModelProvider} and nothing reaches a provider (rule A4).
- *
- * What most of these assert is a `DELETE` that **did not happen**. That is the
- * shape of the plan: the tool exists so that "take the olive oil off" works, and
- * every guard around it exists so that nothing else does.
- */
 describe('what the evaluation of plan 0224 found (plan 0225)', () => {
   /** The first tool result the model read in request `round`. */
   function toolResult(
@@ -2487,6 +2476,19 @@ describe('what the evaluation of plan 0224 found (plan 0225)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+
+/**
+ * Taking a line off a list, and settling one (plan 0043).
+ *
+ * The two things somebody says out loud with their hands full that the catalog
+ * could not express, and one of them is a deletion. Everything here runs against
+ * {@link FakeModelProvider} and nothing reaches a provider (rule A4).
+ *
+ * What most of these assert is a `DELETE` that **did not happen**. That is the
+ * shape of the plan: the tool exists so that "take the olive oil off" works, and
+ * every guard around it exists so that nothing else does.
+ */
 describe('the assistant removes a line, and settles one (plan 0043)', () => {
   /** A list with things on it, which is what a turn about a line needs. */
   function withLines(...contents: string[]): RecordingApi {
