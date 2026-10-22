@@ -278,7 +278,7 @@
         },
         "hideAllPhotos": {
           "heading": "Hide the photos of every chain?",
-          "body": "Every product stops showing chain photos at once, {{name}}'s and those of every other chain. Each chain must then be shown again one by one.",
+          "body": "Hide the photos of every chain? Every product stops showing chain photos at once, for {{name}} and for every other chain. Each chain must then be shown again one by one.",
           "confirm": "Hide every chain's photos"
         }
       },

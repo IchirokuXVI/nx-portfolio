@@ -112,12 +112,14 @@ export function categoryMemoryRules(
  *
  * A write of `imageUrl` is a write of our own photo, as catalog reads it
  * (admin plan 0065, target 6). The photo a shopper sees is then worked out
- * again from ours and the chain links of the seed, so the two never drift
- * apart the way a plain spread of the input would leave them.
+ * again from ours and the chain links of the seed, each shown when its chain
+ * is on in the chain table, so the two never drift apart the way a plain
+ * spread of the input would leave them.
  */
 export function itemMemoryRules(
   categories: () => ResourceSource<Category>,
-  prices: () => ResourceSource<PriceRow>
+  prices: () => ResourceSource<PriceRow>,
+  chains: () => ResourceSource<Wire.CatalogSupermarketView>
 ): ResourceMemoryRules<ItemRow> {
   return {
     matches(row, param, value, tables) {
@@ -167,7 +169,10 @@ export function itemMemoryRules(
       return {
         ...rest,
         ...('imageUrl' in input
-          ? itemPhotos(ownPhotoOf(input), seededLinks(current.id))
+          ? itemPhotos(
+              ownPhotoOf(input),
+              seededLinks(current.id, tables.table(chains()))
+            )
           : {}),
         ...('categoryIds' in input
           ? {

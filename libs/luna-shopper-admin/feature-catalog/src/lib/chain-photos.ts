@@ -6,7 +6,6 @@ import {
   RESOURCE_GATEWAYS,
   ResourceMemoryGateways,
   toGatewayError,
-  type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
 import type {
@@ -15,9 +14,14 @@ import type {
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom, type Observable } from 'rxjs';
-import { itemSource } from './catalog-sources';
-import { SUPERMARKETS_PATH, type Supermarket } from './supermarkets';
-import { SUPERMARKET_SEED } from './supermarkets-seed';
+import { seededLinks } from './catalog-seed';
+import {
+  itemSource,
+  SUPERMARKETS_PATH,
+  supermarketSource,
+} from './catalog-sources';
+import { itemPhotos } from './item-photos';
+import type { Supermarket } from './supermarkets';
 
 /**
  * Where the photos of every chain are hidden in one write (backend plan 0198,
@@ -131,14 +135,9 @@ export function toPhotosHidden(answer: unknown): PhotosHidden {
   };
 }
 
-/** The chains, as the descriptor seeds them. */
-function supermarketSource(): ResourceSource<Supermarket> {
-  return { path: SUPERMARKETS_PATH, seed: SUPERMARKET_SEED };
-}
-
 /**
- * One chain's switch in memory. The memory tables hold no saved links, so
- * turning a chain on adds no photo to a product. Turning it off takes its
+ * One chain's switch in memory. Its saved links (the seed's) follow the
+ * switch, so turning it on shows them again and turning it off takes its
  * photos out of every product, as catalog does.
  */
 async function setInMemory(
@@ -150,9 +149,7 @@ async function setInMemory(
   await memory
     .for(supermarketSource())
     .update(chainId, { linkedImagesEnabled: enabled });
-  if (!enabled) {
-    await dropChainImages(memory, (supermarketId) => supermarketId === chainId);
-  }
+  refreshChainImages(memory, (supermarketId) => supermarketId === chainId);
 }
 
 /** The stop in memory: every chain off, and every chain photo gone. */
@@ -170,44 +167,46 @@ async function hideAllInMemory(
   }
   return {
     supermarkets: on.length,
-    items: await dropChainImages(memory, () => true),
+    items: refreshChainImages(memory, () => true),
   };
 }
 
 /**
- * Take the chain photos that `drop` names out of every product, and work out
- * again the photo each product shows. Answers how many products changed.
+ * Work out again the photos of every product that a link or a photo of a
+ * chain `touched` names, from our photo and its links as the chain table now
+ * switches them. Answers how many products changed.
+ *
+ * Straight into the table, and not through the item gateway: its update rule
+ * reads `imageUrl` as a write of our photo, and the photo shown here may be a
+ * chain's.
  */
-async function dropChainImages(
+function refreshChainImages(
   memory: ResourceMemoryGateways,
-  drop: (supermarketId: string | null) => boolean
-): Promise<number> {
-  const items = memory.for(itemSource());
-  const changes = memory
-    .tables()
-    .table(itemSource())
-    .flatMap((item) => {
-      const images = item.images ?? [];
-      const kept = images.filter(
-        (image) => image.source !== 'CHAIN' || !drop(image.supermarketId)
+  touched: (supermarketId: string | null) => boolean
+): number {
+  const chains = memory.tables().table(supermarketSource());
+  const rows = memory.tables().table(itemSource()) as Wire.CatalogItemView[];
+  let changed = 0;
+  // In place, so that a table that is iterating its rows finds each one
+  // where it was.
+  for (const [index, item] of rows.entries()) {
+    const links = seededLinks(item.id, chains);
+    const affected =
+      links.some((link) => touched(link.supermarketId)) ||
+      (item.images ?? []).some(
+        (image) => image.source === 'CHAIN' && touched(image.supermarketId)
       );
-      const first = kept[0];
-      return kept.length === images.length
-        ? []
-        : [
-            {
-              id: item.id,
-              images: kept,
-              imageUrl: first?.url ?? null,
-              imageSource: first?.source ?? null,
-              imageSupermarketId: first?.supermarketId ?? null,
-            },
-          ];
-    });
-  for (const { id, ...change } of changes) {
-    await items.update(id, change);
+    if (!affected) {
+      continue;
+    }
+    const photos = itemPhotos(item.ownImageUrl ?? null, links);
+    if (JSON.stringify(photos.images) === JSON.stringify(item.images ?? [])) {
+      continue;
+    }
+    rows[index] = { ...item, ...photos };
+    changed += 1;
   }
-  return changes.length;
+  return changed;
 }
 
 /**

@@ -43,6 +43,7 @@ import {
   toPhotosHidden,
 } from './chain-photos';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
+import { ItemLinkedImages } from './item-linked-images';
 import {
   SUPERMARKETS,
   SUPERMARKETS_PATH,
@@ -262,13 +263,64 @@ describe('ChainPhotos in memory', () => {
       chainImageItem('it_merc', 'sm_mercadona'),
       chainImageItem('it_carr', 'sm_carrefour')
     );
-    await photos.set('sm_mercadona', true);
-    await photos.set('sm_carrefour', true);
+    // Mercadona is on in the seed. Carrefour is switched on in the table,
+    // since a switch works out the photos again from saved links, and the two
+    // pushed here have none.
+    const all = chains() as Supermarket[];
+    const carrefour = all.findIndex((chain) => chain.id === 'sm_carrefour');
+    all[carrefour] = { ...all[carrefour], linkedImagesEnabled: true };
 
-    expect(await photos.hideAll()).toEqual({ supermarkets: 2, items: 2 });
+    // The two pushed here, and the seeded milk, which shows Mercadona's.
+    expect(await photos.hideAll()).toEqual({ supermarkets: 2, items: 3 });
     expect(chains().some((chain) => chain.linkedImagesEnabled)).toBe(false);
     // A stop that changes nothing says so.
     expect(await photos.hideAll()).toEqual({ supermarkets: 0, items: 0 });
+  });
+
+  it('hides and shows the seeded Mercadona photo, and never makes it ours', async () => {
+    const photos = TestBed.inject(ChainPhotos);
+    const merc = 'https://prod-mercadona.imgix.net/images/seed-10381.jpg';
+    const own = 'https://images.test/milk.jpg';
+    const milk = () => items().find((item) => item.id === 'it_milk_1l');
+    const milkLink = async () =>
+      (await TestBed.inject(ItemLinkedImages).read('it_milk_1l')).get(
+        'entry-bound-milk'
+      );
+
+    // Mercadona is on in the seed, and the milk has no photo of ours.
+    expect(milk()).toMatchObject({ imageUrl: merc, ownImageUrl: null });
+    expect((await milkLink())?.enabled).toBe(true);
+
+    await photos.set('sm_mercadona', false);
+    expect(milk()).toMatchObject({
+      imageUrl: null,
+      imageSource: null,
+      ownImageUrl: null,
+      images: [],
+    });
+    expect((await milkLink())?.enabled).toBe(false);
+
+    await photos.set('sm_mercadona', true);
+    expect(milk()).toMatchObject({ imageUrl: merc, ownImageUrl: null });
+
+    // With a photo of ours, hiding the chain falls back to it.
+    await (TestBed.inject(RESOURCE_GATEWAYS) as ResourceMemoryGateways)
+      .for(itemSource())
+      .update('it_milk_1l', { imageUrl: own });
+    expect(milk()?.images.map((image) => image.url)).toEqual([own, merc]);
+
+    await photos.set('sm_mercadona', false);
+    expect(milk()).toMatchObject({
+      imageUrl: own,
+      imageSource: 'OWNER',
+      ownImageUrl: own,
+    });
+    expect(milk()?.images).toHaveLength(1);
+
+    // The stop counts the one chain and the one product it changes.
+    await photos.set('sm_mercadona', true);
+    expect(await photos.hideAll()).toEqual({ supermarkets: 1, items: 1 });
+    expect(milk()).toMatchObject({ imageUrl: own, ownImageUrl: own });
   });
 
   it('refuses a chain that does not exist', async () => {
@@ -392,13 +444,14 @@ describe('the photos of a chain on its page', () => {
         )
         .map((row) => row.querySelector('.row-heading')?.textContent);
 
-    expect(shown()).toEqual([]);
-
-    await TestBed.inject(ChainPhotos).set('sm_mercadona', true);
-    await settle(fixture);
-    await settle(fixture);
-
+    // Mercadona's photos are on in the seed, as in production.
     expect(shown()).toEqual(['Mercadona']);
+
+    await TestBed.inject(ChainPhotos).set('sm_carrefour', true);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(shown()).toEqual(['Mercadona', 'Carrefour']);
   });
 
   it('reads the switch in a section of its own', async () => {
@@ -411,7 +464,7 @@ describe('the photos of a chain on its page', () => {
   });
 
   it('shows the photos after the question, then offers to hide them', async () => {
-    const fixture = await boot('/chains/sm_mercadona/details');
+    const fixture = await boot('/chains/sm_carrefour/details');
     const items = TestBed.inject(ResourceChanges);
 
     expect(names(page(fixture).plainActions())).toEqual(['show-photos']);

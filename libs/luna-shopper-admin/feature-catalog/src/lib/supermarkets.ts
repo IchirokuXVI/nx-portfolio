@@ -10,6 +10,7 @@ import {
   type RowState,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { SUPERMARKETS_PATH } from './catalog-sources';
 import { chainPhotoActions, ChainPhotos } from './chain-photos';
 import { ChainCounts } from './chains/chain-context';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
@@ -17,8 +18,9 @@ import { SUPERMARKET_SEED } from './supermarkets-seed';
 /** A chain, as the gateway describes it. */
 export type Supermarket = Wire.CatalogSupermarketView;
 
-/** Where the back office reads and writes chains (backend plan 0073). */
-export const SUPERMARKETS_PATH = '/v1/admin/catalog/supermarkets';
+// Held beside the other catalog paths, so that the photo switch reads it
+// without importing this descriptor back.
+export { SUPERMARKETS_PATH };
 
 /** What the info button of a chain's page says (admin plan 0042, target 10). */
 const CHAIN_INFO: InfoContent = {
