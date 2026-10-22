@@ -104,10 +104,14 @@ test.describe('velista landing page', () => {
     page,
   }) => {
     // Plan 0007 criterion 2: an anonymous visitor asking for the dashboard is sent
-    // back to the front door, and the locale segment survives the redirect.
+    // back to the front door, and the locale segment survives the redirect. Plan
+    // 0154: the redirect names the page that was asked for, so that signing in
+    // can return there.
     await page.goto('/velista/es/home');
 
-    await expect(page).toHaveURL(/\/velista\/es\/?$/);
+    await expect(page).toHaveURL(
+      /\/velista\/es\/?\?returnUrl=%2Fvelista%2Fes%2Fhome$/
+    );
   });
 
   test('the content column is centred on a wide viewport', async ({ page }) => {
