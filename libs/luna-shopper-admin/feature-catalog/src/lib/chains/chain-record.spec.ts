@@ -848,7 +848,7 @@ describe('the Price scopes tab of a chain', () => {
 });
 
 describe('the Details tab of a chain', () => {
-  it('draws the chain in two sections, reading, under the one header', async () => {
+  it('draws the chain in three sections, reading, under the one header', async () => {
     const fixture = await boot('/chains/sm_mercadona/details');
     const layout = view(fixture).layout();
 
@@ -864,6 +864,7 @@ describe('the Details tab of a chain', () => {
         ['name', 'websiteUrl', 'logoUrl', 'externalBrandKey'],
       ],
       ['catalog.supermarkets.section.prices', ['defaultPriceScopeId']],
+      ['catalog.supermarkets.section.photos', ['linkedImagesEnabled']],
     ]);
     // The count of the first tab is drawn there and nowhere else, and the
     // Record block of a chain holds the ID alone.

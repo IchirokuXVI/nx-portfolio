@@ -1,4 +1,5 @@
 import { inject, Injector } from '@angular/core';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
@@ -9,6 +10,7 @@ import {
   type RowState,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { chainPhotoActions, ChainPhotos } from './chain-photos';
 import { ChainCounts } from './chains/chain-context';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
@@ -144,6 +146,19 @@ export const SUPERMARKETS = defineResource<Supermarket>({
       // 2), and never typed.
       editable: false,
     },
+    {
+      kind: 'boolean',
+      name: 'linkedImagesEnabled',
+      label: 'catalog.supermarkets.linkedImagesEnabled',
+      help: 'catalog.supermarkets.linkedImagesEnabledHelp',
+      // No mode types into it, so the help is under the value that is read.
+      helpWhenRead: true,
+      // Changed by the named actions and by nothing else (admin plan 0066):
+      // `UpdateSupermarketDto` has no such property, and a switch that waited
+      // on Save would hide a chain's photos only when somebody saved.
+      editable: false,
+      setBy: 'catalog.supermarkets.photosSetBy',
+    },
   ],
 
   list: {
@@ -172,6 +187,10 @@ export const SUPERMARKETS = defineResource<Supermarket>({
       {
         title: 'catalog.supermarkets.section.prices',
         fields: ['defaultPriceScopeId'],
+      },
+      {
+        title: 'catalog.supermarkets.section.photos',
+        fields: ['linkedImagesEnabled'],
       },
     ],
     children: [
@@ -202,6 +221,12 @@ export const SUPERMARKETS = defineResource<Supermarket>({
    * the one chain that is open, so a row of the column never says it. The
    * page is found when a row is asked about and not when this is built: the
    * page builds its states while it is itself being built.
+   *
+   * **Whether a chain's photos are shown is said on every row** (admin plan
+   * 0066, target 5). The flag is a field of the chain, so it costs no read.
+   * The chains are only ever drawn as a column, which has no columns, so the
+   * column "Photos" the plan names is this state. A chain whose photos are
+   * hidden says nothing.
    */
   rowStates: () => {
     const counts = inject(ChainCounts);
@@ -218,6 +243,12 @@ export const SUPERMARKETS = defineResource<Supermarket>({
         states.push({ label: 'catalog.chains.source.fetched', tone: 'good' });
       } else if (source === 'off') {
         states.push({ label: 'catalog.chains.source.off', tone: 'neutral' });
+      }
+      if (row.linkedImagesEnabled === true) {
+        states.push({
+          label: 'catalog.supermarkets.photosShown',
+          tone: 'good',
+        });
       }
       if (row.defaultPriceScopeId === null) {
         states.push({
@@ -250,7 +281,14 @@ export const SUPERMARKETS = defineResource<Supermarket>({
     },
   ],
 
-  actions: { create: true, edit: true, delete: true },
+  actions: {
+    create: true,
+    edit: true,
+    delete: true,
+    // Whether shoppers see the photos the chain gives (admin plan 0066).
+    named: () =>
+      chainPhotoActions(inject(ChainPhotos), inject(RokuTranslatorService)),
+  },
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<Supermarket>({

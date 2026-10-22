@@ -253,7 +253,41 @@
       "noDefaultScope": "No default scope",
       "section": {
         "name": "Chain",
-        "prices": "Prices"
+        "prices": "Prices",
+        "photos": "Photos"
+      },
+      "linkedImagesEnabled": "Photos shown",
+      "linkedImagesEnabledHelp": "Shoppers see this chain's product photos when we have none of our own. The photos stay on the chain's site. Turning this off hides them at once.",
+      "photosSetBy": "Changed from the More menu",
+      "photosShown": "Photos shown",
+      "action": {
+        "showPhotos": "Show this chain's photos",
+        "hidePhotos": "Hide this chain's photos",
+        "hideAllPhotos": "Hide every chain's photos"
+      },
+      "confirm": {
+        "showPhotos": {
+          "heading": "Show {{name}}'s photos?",
+          "body": "Products with no photo of our own show the photo {{name}} gives. Nothing is copied. You can hide them again at any time.",
+          "confirm": "Show photos"
+        },
+        "hidePhotos": {
+          "heading": "Hide {{name}}'s photos?",
+          "body": "Every product stops showing the photos of {{name}} at once. The saved links stay, so showing them again needs no harvest.",
+          "confirm": "Hide photos"
+        },
+        "hideAllPhotos": {
+          "heading": "Hide the photos of every chain?",
+          "body": "Every product stops showing chain photos at once, {{name}}'s and those of every other chain. Each chain must then be shown again one by one.",
+          "confirm": "Hide every chain's photos"
+        }
+      },
+      "photosHidden": {
+        "line": "Photos hidden for {{chains}} and {{products}}.",
+        "chains_one": "{{n}} chain",
+        "chains_other": "{{n}} chains",
+        "products_one": "{{n}} product",
+        "products_other": "{{n}} products"
       }
     },
     "locations": {
