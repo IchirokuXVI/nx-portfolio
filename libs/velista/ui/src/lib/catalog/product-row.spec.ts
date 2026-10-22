@@ -9,6 +9,8 @@ import type {
   HoldingRow,
   ProductOffer,
 } from '@portfolio/velista/models';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   ProductRow,
   type ProductRowAdd,
@@ -1248,5 +1250,19 @@ describe('ProductRow, the one card', () => {
     expect(
       el(alone).querySelector('[role="row"], [role="gridcell"]')
     ).toBeNull();
+  });
+});
+
+describe('ProductRow, its layers', () => {
+  const scss = readFileSync(join(__dirname, 'product-row.scss'), 'utf8');
+
+  it('keeps the z-index of its parts inside the card', () => {
+    // The picture and the plus sit over the press area with `z-index: 1`. Without a
+    // stacking context on the host, that 1 met the sticky band of the catalog page at
+    // the same level and the card was drawn over the search (velista 0162).
+    expect(scss).toMatch(/z-index:\s*1;/);
+
+    const host = /:host\s*\{([^}]*)\}/.exec(scss)?.[1] ?? '';
+    expect(host).toMatch(/isolation:\s*isolate;/);
   });
 });
