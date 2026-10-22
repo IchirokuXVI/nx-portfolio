@@ -44,6 +44,9 @@ const PINNED: Readonly<
   },
   'postal-codes': { danger: [], plain: ['discover-again'] },
   'price-scopes': { danger: [], plain: ['makeDefault'] },
+  // On and off take each other back, and on asks for the consent again
+  // (admin plan 0067). A deleted schedule is gone.
+  schedules: { danger: ['delete-schedule'], plain: ['turn-on', 'turn-off'] },
   // Stopping the fetch of a chain destroys nothing: each of the two is taken
   // back by the other, with one press (admin plan 0059).
   sources: { danger: [], plain: ['stop-fetching', 'allow-fetching'] },

@@ -2,7 +2,13 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type { FieldMessage } from '@portfolio/luna-shopper-admin/models';
-import { describedByOf, errorIdsOf, FieldRow, helpIdOf } from './field-row';
+import {
+  describedByOf,
+  errorIdsOf,
+  FieldRow,
+  helpIdOf,
+  labelIdOf,
+} from './field-row';
 
 /** One field, label first (admin plan 0052, section 3.1). */
 
@@ -12,6 +18,7 @@ import { describedByOf, errorIdsOf, FieldRow, helpIdOf } from './field-row';
     <lib-field-row
       [changed]="changed()"
       [controlId]="controlId()"
+      [group]="group()"
       [help]="help()"
       [label]="'City'"
       [loading]="loading()"
@@ -24,6 +31,7 @@ import { describedByOf, errorIdsOf, FieldRow, helpIdOf } from './field-row';
 })
 class Host {
   readonly controlId = signal<string | null>(null);
+  readonly group = signal(false);
   readonly required = signal(false);
   readonly changed = signal(false);
   readonly help = signal<string | null>(null);
@@ -65,6 +73,18 @@ describe('FieldRow while the page reads', () => {
 
 describe('FieldRow while the page changes', () => {
   const editing = (row: Host) => row.controlId.set('field-city');
+
+  it('names a group by an id on its label, and ties no label to one control', () => {
+    const { host } = render((row) => {
+      row.controlId.set('field-days');
+      row.group.set(true);
+    });
+
+    expect(host.querySelector('label')).toBeNull();
+    expect(host.querySelector(`#${labelIdOf('field-days')}`)?.textContent).toBe(
+      'City'
+    );
+  });
 
   it('ties the label to its control', () => {
     const { host } = render(editing);

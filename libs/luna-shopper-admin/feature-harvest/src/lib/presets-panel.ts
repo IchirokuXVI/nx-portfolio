@@ -8,17 +8,23 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
   toGatewayError,
   type GatewayError,
   type HarvestRunPresetInput,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   harvestRunPath,
+  scheduleCadence,
   spawnBlockReason,
   type HarvestRun,
+  type HarvestSchedule,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
@@ -46,6 +52,25 @@ interface RowRefusal {
   readonly key: string;
   readonly detail: string;
 }
+
+/** One schedule of a preset, as the line under the preset says it. */
+export interface PresetScheduleLine {
+  readonly id: string;
+  /** "Mon, Wed, Fri at 06:00". */
+  readonly cadence: string;
+  /** Where the schedule's page is, or `null` where the app did not mount it. */
+  readonly link: readonly string[] | null;
+  readonly enabled: boolean;
+}
+
+/** A delete the harvester refused because schedules name the preset. */
+interface ScheduledRefusal {
+  readonly count: number;
+  readonly when: string;
+}
+
+/** How many schedules of a chain the panel reads. A chain has a handful. */
+const SCHEDULES_READ = 100;
 
 /** Where the chain the panel was last on is kept, in this browser. */
 export const PRESETS_CHAIN_KEY = 'luna-shopper-admin.harvest.presets-chain';
@@ -199,6 +224,40 @@ function rememberChain(supermarketId: string): void {
                   <span>{{ part.key | rokuT: part.args ?? {} }}</span>
                 }
               </span>
+              <!-- When it runs by itself (admin plan 0067, target 9): each
+                   schedule as a link to its page, then the way to add one. -->
+              <span
+                [attr.aria-label]="
+                  'harvest.schedules.panel.label' | rokuT: { name: preset.name }
+                "
+                class="cadence"
+                role="group"
+                data-schedules
+              >
+                @for (line of schedulesOf(preset.id); track line.id) {
+                  @if (line.link; as link) {
+                    <a [routerLink]="link" data-schedule
+                      >{{ line.cadence }}
+                      @if (!line.enabled) {
+                        <span class="off">{{
+                          'harvest.schedules.state.off' | rokuT
+                        }}</span>
+                      }
+                    </a>
+                  } @else {
+                    <span data-schedule>{{ line.cadence }}</span>
+                  }
+                }
+                @if (newScheduleLink(); as link) {
+                  <a
+                    [queryParams]="{ presetId: preset.id }"
+                    [routerLink]="link"
+                    class="add-schedule"
+                    data-add-schedule
+                    >{{ 'harvest.schedules.panel.add' | rokuT }}</a
+                  >
+                }
+              </span>
             </div>
             <span class="last">
               @if (preset.lastRun; as last) {
@@ -239,7 +298,7 @@ function rememberChain(supermarketId: string): void {
                   {{ 'harvest.presets.edit' | rokuT }}
                 </button>
                 <button
-                  (click)="pendingDelete.set(preset)"
+                  (click)="askDelete(preset)"
                   [disabled]="busyId() !== null"
                   class="danger"
                   type="button"
@@ -303,7 +362,14 @@ function rememberChain(supermarketId: string): void {
         confirmKey="harvest.presets.delete.confirm"
         headingKey="harvest.presets.delete.heading"
       >
-        @if (deleteFailure(); as failure) {
+        @if (deleteScheduled(); as scheduled) {
+          <p class="field-error" role="alert" data-delete-scheduled>
+            {{
+              'harvest.schedules.panel.deleteRefused'
+                | rokuT: { count: scheduled.count, when: scheduled.when }
+            }}
+          </p>
+        } @else if (deleteFailure(); as failure) {
           <p class="field-error" role="alert">
             {{ 'harvest.presets.delete.failed' | rokuT }}
             {{ failure }}
@@ -445,6 +511,37 @@ function rememberChain(supermarketId: string): void {
       color: var(--admin-ink-muted);
     }
 
+    /* When the preset runs by itself: links in one wrapping line, in the
+       accent, after the line that says what it does. */
+    .cadence {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 var(--admin-space-3);
+      font-size: 0.8125rem;
+    }
+
+    .cadence a {
+      color: var(--admin-accent);
+    }
+
+    /* A schedule that is off still names its days, and says it is off. */
+    .cadence .off {
+      padding-inline-start: var(--admin-space-1);
+      color: var(--admin-ink-muted);
+    }
+
+    .add-schedule {
+      font-weight: 500;
+    }
+
+    @media (max-width: 47.99rem) {
+      .cadence a {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: 2.75rem;
+      }
+    }
+
     /* One line of words, each part closed by a comma but the last. */
     .summary > span:not(:last-child)::after {
       content: ', ';
@@ -524,6 +621,46 @@ function rememberChain(supermarketId: string): void {
 })
 export class PresetsPanel {
   private readonly _service = inject(HARVEST_SERVICE);
+  private readonly _registry = inject(ResourceRegistry);
+  private readonly _translator = inject(RokuTranslatorService);
+
+  /** The schedules of the chain, read beside its presets. */
+  private readonly _schedules = signal<readonly HarvestSchedule[]>([]);
+
+  /** Where a new schedule is added, or `null` where the app did not mount it. */
+  readonly newScheduleLink = computed(() => {
+    const path = this._registry.pathOf('schedules');
+    return path === null ? null : [...path, 'new'];
+  });
+
+  /** The schedules of each preset, as the line under it says them. */
+  private readonly _lines = computed(() => {
+    // Read so that the words follow the language.
+    const locale = this._translator.locale();
+    this._translator.loaded();
+    const lines = new Map<string, PresetScheduleLine[]>();
+    for (const schedule of this._schedules()) {
+      const cadence = scheduleCadence(schedule, locale);
+      lines.set(schedule.presetId, [
+        ...(lines.get(schedule.presetId) ?? []),
+        {
+          id: schedule.id,
+          cadence: this._translator.t(
+            cadence.key,
+            undefined,
+            undefined,
+            cadence.args
+          ),
+          link: this._registry.rowPath('schedules', schedule.id),
+          enabled: schedule.enabled,
+        },
+      ]);
+    }
+    return lines;
+  });
+
+  /** A delete refused because schedules name the preset, named. */
+  readonly deleteScheduled = signal<ScheduledRefusal | null>(null);
 
   /** A preset was started, and this is the run. */
   readonly started = output<HarvestRun>();
@@ -607,10 +744,35 @@ export class PresetsPanel {
     const generation = ++this._generation;
     this.presets.set([]);
     this.nextCursor.set(null);
+    this._schedules.set([]);
     if (chain === '') {
       return;
     }
-    await this._read(chain, undefined, generation);
+    await Promise.all([
+      this._read(chain, undefined, generation),
+      this._readSchedules(chain, generation),
+    ]);
+  }
+
+  /**
+   * The schedules of the chain, for the line under each preset. A read that
+   * fails costs the line and nothing else: the presets still list.
+   */
+  private async _readSchedules(
+    chain: string,
+    generation: number
+  ): Promise<void> {
+    try {
+      const page = await this._service.listSchedules({
+        supermarketId: chain,
+        limit: SCHEDULES_READ,
+      });
+      if (generation === this._generation) {
+        this._schedules.set(page.items);
+      }
+    } catch {
+      // No line under the presets. The schedules have their own list.
+    }
   }
 
   async loadMore(): Promise<void> {
@@ -671,6 +833,11 @@ export class PresetsPanel {
       );
     }
     return parts;
+  }
+
+  /** The schedules of one preset, in the order the harvester lists them. */
+  schedulesOf(presetId: string): readonly PresetScheduleLine[] {
+    return this._lines().get(presetId) ?? [];
   }
 
   refusalOf(id: string): RowRefusal | null {
@@ -787,10 +954,18 @@ export class PresetsPanel {
     }
   }
 
+  /** Ask about a delete, with nothing left from the question before. */
+  askDelete(preset: Preset): void {
+    this.deleteFailure.set(null);
+    this.deleteScheduled.set(null);
+    this.pendingDelete.set(preset);
+  }
+
   /** Runs started from it keep their record, which the dialog says. */
   async confirmDelete(preset: Preset): Promise<void> {
     this.deletingId.set(preset.id);
     this.deleteFailure.set(null);
+    this.deleteScheduled.set(null);
     try {
       await this._service.deletePreset(preset.id);
       this.presets.update((rows) => rows.filter((row) => row.id !== preset.id));
@@ -801,7 +976,18 @@ export class PresetsPanel {
     } catch (error) {
       // The dialog stays open with the failure in it, because a dialog that
       // closes on a refusal reads as a delete that worked.
-      this.deleteFailure.set(toGatewayError(error).detail);
+      const failure = toGatewayError(error);
+      this.deleteFailure.set(failure.detail);
+      // A preset a schedule names is refused with 409, and the harvester
+      // names the schedules by ID. The panel holds them, so it names them by
+      // when they run (admin plan 0067, target 9).
+      const named = this.schedulesOf(preset.id);
+      if (failure.status === 409 && named.length > 0) {
+        this.deleteScheduled.set({
+          count: named.length,
+          when: named.map((line) => line.cadence).join('; '),
+        });
+      }
     } finally {
       this.deletingId.set(null);
     }

@@ -70,6 +70,22 @@ export {
   type RunProgress,
 } from './lib/harvest/harvest-run';
 export {
+  DEFAULT_SCHEDULE_TIMEZONE,
+  ISO_DAYS,
+  dayName,
+  daysFromDraft,
+  daysToDraft,
+  estimateMinutes,
+  nextRunWords,
+  nextScheduleSlot,
+  scheduleBlockKey,
+  scheduleCadence,
+  scheduleOutcomeKey,
+  scheduleState,
+  sortedDays,
+  type HarvestSchedule,
+} from './lib/harvest/harvest-schedule';
+export {
   harvestSwitches,
   harvesterDeployed,
 } from './lib/harvest/harvest-switches';

@@ -11,10 +11,16 @@ import {
   MERCADONA_WEEKLY_PRESET,
   RESOURCE_GATEWAYS,
   ServerReachability,
+  MERCADONA_SUNDAY_SCHEDULE,
+  MERCADONA_WEEKDAYS_SCHEDULE,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  provideSections,
+  ResourceReferences,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import { PRESETS_CHAIN_KEY, PresetsPanel } from './presets-panel';
+import { SCHEDULES } from './schedules';
 import { RunRequestForm } from './run-request-form';
 
 /**
@@ -105,6 +111,7 @@ async function render(options: RenderOptions = {}): Promise<{
       return memory.updatePreset(id, patch);
     },
     deletePreset: (id: string) => memory.deletePreset(id),
+    listSchedules: (query: never) => memory.listSchedules(query),
     startPreset: (id: string) => {
       recorded.started.push(id);
       return memory.startPreset(id);
@@ -116,6 +123,14 @@ async function render(options: RenderOptions = {}): Promise<{
     imports: [PresetsPanel, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
+      // Where a schedule is, for the links under each preset.
+      provideSections({
+        key: 'harvest',
+        label: '',
+        segment: 'harvest',
+        held: [SCHEDULES],
+        heldUnder: 'setup',
+      }),
       provideRouter([{ path: '**', component: PresetsPanel }]),
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: service },
@@ -430,8 +445,11 @@ describe('the presets panel, editing', () => {
 
 describe('the presets panel, deleting', () => {
   it('confirms, then removes the row', async () => {
-    const { fixture } = await render();
+    const { fixture, recorded } = await render();
     const page = fixture.componentInstance;
+    // A preset a schedule names cannot be deleted, so the two seeded ones go.
+    await recorded.memory.deleteSchedule(MERCADONA_WEEKDAYS_SCHEDULE);
+    await recorded.memory.deleteSchedule(MERCADONA_SUNDAY_SCHEDULE);
 
     page.pendingDelete.set(page.presets()[0]);
     fixture.detectChanges();
@@ -443,5 +461,85 @@ describe('the presets panel, deleting', () => {
     expect(page.presets()).toEqual([]);
     expect(page.pendingDelete()).toBeNull();
     expect(text(fixture)).toContain('harvest.presets.empty');
+  });
+});
+
+/**
+ * When a preset runs by itself (admin plan 0067, target 9): one line under
+ * each preset, with each schedule as a link to its page and the way to add
+ * one with the preset chosen.
+ */
+describe('the presets panel, schedules', () => {
+  it('draws the schedules of each preset under it, each a link to its page', async () => {
+    const { fixture } = await render();
+    const page = fixture.componentInstance;
+
+    const lines = page.schedulesOf(MERCADONA_WEEKLY_PRESET);
+    expect(lines.map((line) => [line.id, line.enabled])).toEqual(
+      expect.arrayContaining([
+        [MERCADONA_WEEKDAYS_SCHEDULE, true],
+        [MERCADONA_SUNDAY_SCHEDULE, false],
+      ])
+    );
+    expect(lines[0].cadence).toBe('harvest.schedules.cadence.days');
+
+    const links = [
+      ...fixture.nativeElement.querySelectorAll('[data-schedule]'),
+    ].map((link: HTMLAnchorElement) => link.getAttribute('href'));
+    expect(links).toEqual(
+      expect.arrayContaining([
+        `/harvest/setup/schedules/${MERCADONA_WEEKDAYS_SCHEDULE}`,
+        `/harvest/setup/schedules/${MERCADONA_SUNDAY_SCHEDULE}`,
+      ])
+    );
+    // The one that is off says so.
+    expect(text(fixture)).toContain('harvest.schedules.state.off');
+  });
+
+  it('adds a schedule with the preset chosen', async () => {
+    const { fixture } = await render();
+
+    const add = fixture.nativeElement.querySelector(
+      '[data-add-schedule]'
+    ) as HTMLAnchorElement;
+
+    expect(add.getAttribute('href')).toBe(
+      `/harvest/setup/schedules/new?presetId=${MERCADONA_WEEKLY_PRESET}`
+    );
+  });
+
+  it('says in the dialog that a schedule names the preset it refused to delete', async () => {
+    const { fixture } = await render();
+    const page = fixture.componentInstance;
+    const preset = page.presets()[0];
+
+    page.askDelete(preset);
+    await page.confirmDelete(preset);
+    fixture.detectChanges();
+
+    expect(page.pendingDelete()).toBe(preset);
+    expect(page.deleteScheduled()).toEqual({
+      count: 2,
+      when: 'harvest.schedules.cadence.days; harvest.schedules.cadence.days',
+    });
+    expect(
+      fixture.nativeElement.querySelector('[data-delete-scheduled]')
+        ?.textContent
+    ).toContain('harvest.schedules.panel.deleteRefused');
+  });
+
+  it('still lists the presets when the schedules cannot be read', async () => {
+    const { fixture, recorded } = await render({ choose: false });
+    jest
+      .spyOn(recorded.memory, 'listSchedules')
+      .mockRejectedValue(new Error('down'));
+
+    fixture.componentInstance.chooseChain(MERCADONA);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.presets()).toHaveLength(1);
+    expect(
+      fixture.componentInstance.schedulesOf(MERCADONA_WEEKLY_PRESET)
+    ).toEqual([]);
   });
 });
