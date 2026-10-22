@@ -494,7 +494,8 @@
         "owner": "Ours",
         "chain": "A chain",
         "none": "No photo"
-      }
+      },
+      "shownSetBy": "Follows our photo, or a chain's photo when that chain is on"
     },
     "products": {
       "deleteBody": "Every price it holds is deleted with it. This cannot be taken back.",

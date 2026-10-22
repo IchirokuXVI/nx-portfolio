@@ -39,6 +39,12 @@ export const PRODUCT_SOURCES_TAB = 'sources';
  */
 export type Item = Wire.CatalogItemView & {
   readonly categoryIds: readonly string[];
+  /**
+   * No column: the "Shoppers see" fact, read off `images`. A field has to be
+   * named by a property, and `images` is a wire key whose value is an array,
+   * which an address prefill or a server field error would land on.
+   */
+  readonly shownPhoto?: string | null;
 } & ScopePriced;
 
 /** A product row with the ids its categories carry, in their order. */
@@ -232,9 +238,10 @@ export const ITEMS = defineResource<Item>({
       // What a shopper sees, and where it comes from. Never editable, so no
       // draft holds it and no save sends it.
       kind: 'text',
-      name: 'images',
+      name: 'shownPhoto',
       label: 'catalog.items.shown',
       editable: false,
+      setBy: 'catalog.items.shownSetBy',
       format: 'image',
       read: (row) => shownImage(row)?.url ?? null,
       caption: (row) => {
@@ -336,7 +343,7 @@ export const ITEMS = defineResource<Item>({
       },
       {
         title: 'catalog.items.section.sold',
-        fields: ['defaultUnit', 'unitSize', 'imageUrl', 'images'],
+        fields: ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
       },
     ],
     children: [

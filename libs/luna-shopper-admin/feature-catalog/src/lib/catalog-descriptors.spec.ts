@@ -1229,7 +1229,7 @@ describe('the record of a product', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'imageUrl', 'images'],
+        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
       ],
     ]);
   });

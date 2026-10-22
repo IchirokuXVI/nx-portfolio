@@ -309,7 +309,7 @@ describe('a product, on the record page', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'imageUrl', 'images'],
+        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
       ],
     ]);
     // The brand is the text the product holds, and no picker.
@@ -607,7 +607,7 @@ describe('the photo of a product', () => {
     expect(view(fixture).valueOf(itemField('imageUrl'))).toEqual({
       kind: 'none',
     });
-    expect(view(fixture).valueOf(itemField('images'))).toEqual({
+    expect(view(fixture).valueOf(itemField('shownPhoto'))).toEqual({
       kind: 'image',
       src: wire.imageUrl,
       caption: {
@@ -622,7 +622,11 @@ describe('the photo of a product', () => {
     await settle(fixture);
     // The form opens our photo empty, and holds no draft of the fact.
     expect(store.draft()['imageUrl']).toBe('');
-    expect('images' in store.draft()).toBe(false);
+    expect('shownPhoto' in store.draft()).toBe(false);
+    // The fact is locked for its own reason, not "Set by the system".
+    expect(view(fixture).lockReason(itemField('shownPhoto'))).toBe(
+      'catalog.items.shownSetBy'
+    );
 
     store.set('unitSize', '2');
     await view(fixture).save();
@@ -662,7 +666,7 @@ describe('the photo of a product', () => {
       'OWNER',
       'CHAIN',
     ]);
-    expect(view(fixture).valueOf(itemField('images'))).toEqual({
+    expect(view(fixture).valueOf(itemField('shownPhoto'))).toEqual({
       kind: 'image',
       src: ours,
       caption: { kind: 'word', key: 'catalog.items.shownFrom.owner' },
@@ -671,7 +675,7 @@ describe('the photo of a product', () => {
 
   it('says "Ours" for a product with its own photo, and "No photo" for one with none', async () => {
     const oil = await boot('/products/it_olive_oil_1l/details');
-    expect(view(oil).valueOf(itemField('images'))).toMatchObject({
+    expect(view(oil).valueOf(itemField('shownPhoto'))).toMatchObject({
       caption: { kind: 'word', key: 'catalog.items.shownFrom.owner' },
     });
     expect(view(oil).valueOf(itemField('imageUrl'))).toMatchObject({
@@ -679,7 +683,7 @@ describe('the photo of a product', () => {
     });
 
     const soap = await boot('/products/it_dish_soap/details');
-    expect(view(soap).valueOf(itemField('images'))).toEqual({
+    expect(view(soap).valueOf(itemField('shownPhoto'))).toEqual({
       kind: 'word',
       key: 'catalog.items.shownFrom.none',
     });
