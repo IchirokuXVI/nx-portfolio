@@ -303,6 +303,23 @@ function turnRequest(
   };
 }
 
+/**
+ * A turn that answers a question the assistant asked in the turn before.
+ *
+ * What a confirmed write needs since plan 0225 section 3: `confirmed: true`
+ * counts only when the conversation already holds an assistant message, because
+ * a confirmation is an answer and there has to have been a question.
+ */
+function afterAQuestion(
+  message: string,
+  question = '¿Te parece bien?'
+): AssistantTurnRequest {
+  return turnRequest(message, [
+    { role: AssistantRole.USER, content: 'una petición' },
+    { role: AssistantRole.ASSISTANT, content: question },
+  ]);
+}
+
 /** A turn narrowed to one list, which is what the list page's microphone sends. */
 function scopedRequest(
   message: string,
@@ -1089,7 +1106,7 @@ describe('AssistantService', () => {
         api
       );
 
-      await service.turn(turnRequest('sí, cámbialo'));
+      await service.turn(afterAQuestion('sí, cámbialo'));
 
       // One request, because plan 0018 built the cascade server side: there is
       // nothing to orchestrate and nothing that can half succeed.
@@ -1116,7 +1133,7 @@ describe('AssistantService', () => {
         api
       );
 
-      await service.turn(turnRequest('sí, en todos los grupos'));
+      await service.turn(afterAQuestion('sí, en todos los grupos'));
 
       expect(api.of('setUsername')[0].detail).toMatchObject({
         propagation: UsernamePropagation.ALL_ZONES,
@@ -2268,6 +2285,208 @@ describe('a turn that may only touch one list (plan 0044)', () => {
  * shape of the plan: the tool exists so that "take the olive oil off" works, and
  * every guard around it exists so that nothing else does.
  */
+describe('what the evaluation of plan 0224 found (plan 0225)', () => {
+  /** The first tool result the model read in request `round`. */
+  function toolResult(
+    provider: FakeModelProvider,
+    round: number
+  ): Record<string, unknown> {
+    const results = provider.requests[round]?.turns.at(-1)?.toolResults;
+    return (results?.[0]?.result ?? {}) as Record<string, unknown>;
+  }
+
+  /** The one `assistant.turn` record a turn logged. */
+  async function recordOf(
+    run: () => Promise<unknown>
+  ): Promise<Record<string, unknown> | undefined> {
+    const logged: string[] = [];
+    const spy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message: unknown) => {
+        logged.push(String(message));
+      });
+    try {
+      await run();
+    } finally {
+      spy.mockRestore();
+    }
+    return logged
+      .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+      .find((entry) => entry['event'] === 'assistant.turn');
+  }
+
+  describe('1 the count that was read as a quantity', () => {
+    it('names the size of the list and what matched, and says when nothing did', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-milk', 'list-flat', 'leche', 2),
+        line('line-bread', 'list-flat', 'pan', 1),
+      ]);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', { item: 'huevos' }),
+        FakeModelProvider.says('No hay huevos en Piso.'),
+      ]);
+
+      await build(provider, api).turn(turnRequest('¿cuántos huevos hay?'));
+
+      const [result] = toolResult(provider, 1)['lists'] as Record<
+        string,
+        unknown
+      >[];
+      // "total: 2" beside an empty array was read as two eggs. The two is still
+      // there, under a name that says what it counts, and the zero sits beside
+      // the empty array it describes.
+      expect(result).not.toHaveProperty('total');
+      expect(result['linesOnList']).toBe(2);
+      expect(result['found']).toBe(0);
+      expect(result['matches']).toEqual([]);
+      expect(result['message']).toBe(
+        'Nothing on this list matches "huevos". Say so; do not use linesOnList as a count of anything.'
+      );
+    });
+
+    it('says a list with nothing on it is empty, and carries no message when something matched', async () => {
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa')];
+      api.listsByZone.set('zone-home', [
+        list('list-flat', 'zone-home', 'Piso'),
+        list('list-weekly', 'zone-home', 'Semanal'),
+      ]);
+      api.linesByList.set('list-flat', []);
+      api.linesByList.set('list-weekly', [
+        line('line-rice', 'list-weekly', 'arroz', 1),
+      ]);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.says('Piso está vacía y en Semanal hay arroz.'),
+      ]);
+
+      await build(provider, api).turn(turnRequest('¿qué hay en mis listas?'));
+
+      const lists = toolResult(provider, 1)['lists'] as Record<
+        string,
+        unknown
+      >[];
+      expect(lists.map((entry) => entry['message'])).toEqual([
+        'This list is empty.',
+        undefined,
+      ]);
+      expect(lists[1]).toMatchObject({ linesOnList: 1, found: 1 });
+    });
+  });
+
+  describe('2 plain text', () => {
+    it('strips the markdown that slips through and counts it in the record', async () => {
+      const api = new RecordingApi();
+      let response: { reply: string } | undefined;
+
+      const record = await recordOf(async () => {
+        response = await build(
+          new FakeModelProvider([
+            FakeModelProvider.says('En **Piso** tienes:\n- leche\n- pan'),
+          ]),
+          api
+        ).turn(turnRequest('¿qué hay en Piso?'));
+      });
+
+      expect(response?.reply).toBe('En Piso tienes:\nleche, pan.');
+      // What the person read, in the record as in the response.
+      expect(record?.['replied']).toBe(response?.reply);
+      expect(record?.['strippedMarkdown']).toBe(3);
+    });
+
+    it('records zero when the reply was already plain', async () => {
+      const record = await recordOf(() =>
+        build(
+          new FakeModelProvider([FakeModelProvider.says('Hola.')]),
+          new RecordingApi()
+        ).turn(turnRequest('hola'))
+      );
+
+      expect(record?.['strippedMarkdown']).toBe(0);
+    });
+  });
+
+  describe('3 a confirmation needs a question before it', () => {
+    it('does not rename anybody on the first message of a conversation', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('rename_me', {
+          username: 'dan',
+          scope: 'account_only',
+          confirmed: true,
+        }),
+        FakeModelProvider.says('¿Te cambio el nombre a dan?'),
+      ]);
+
+      const record = await recordOf(() =>
+        build(provider, api).turn(
+          turnRequest('cámbiame el nombre a Dan pero deja los grupos')
+        )
+      );
+
+      expect(api.of('setUsername')).toHaveLength(0);
+      const result = toolResult(provider, 1);
+      expect(result['needsConfirmation']).toBe(true);
+      expect(result['message']).toContain(
+        'You have not asked yet in this conversation, so this does not count as confirmed. Ask first.'
+      );
+      // A write the model tried without the question is the number to watch
+      // (plan 0043, section 6).
+      const call = (record?.['tools'] as { name: string; refused?: true }[])[0];
+      expect(call).toMatchObject({ name: 'rename_me', refused: true });
+    });
+
+    it('does not remove a line on the first message of a conversation', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-0', 'list-flat', 'leche', 1),
+      ]);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', { item: 'leche' }),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0'],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('¿Quito la leche de Piso?'),
+      ]);
+
+      const record = await recordOf(() =>
+        build(provider, api).turn(turnRequest('quita la leche, sí, confirmo'))
+      );
+
+      expect(api.of('deleteLine')).toHaveLength(0);
+      const result = toolResult(provider, 2);
+      expect(result).toMatchObject({
+        needsConfirmation: true,
+        wouldRemove: ['leche'],
+      });
+      expect(result['message']).toContain('Ask first.');
+      const call = (
+        record?.['tools'] as { name: string; refused?: true }[]
+      ).find((tool) => tool.name === 'remove_lines');
+      expect(call?.refused).toBe(true);
+    });
+
+    it('asks without the extra line when confirmed was not sent', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('rename_me', { username: 'dan' }),
+        FakeModelProvider.says('¿Te cambio el nombre a dan?'),
+      ]);
+
+      const record = await recordOf(() =>
+        build(provider, api).turn(turnRequest('quiero llamarme dan'))
+      );
+
+      // Asking first is the expected path, not a refusal.
+      expect(toolResult(provider, 1)['message']).not.toContain('Ask first.');
+      const call = (record?.['tools'] as { refused?: true }[])[0];
+      expect(call?.refused).toBeUndefined();
+    });
+  });
+});
+
 describe('the assistant removes a line, and settles one (plan 0043)', () => {
   /** A list with things on it, which is what a turn about a line needs. */
   function withLines(...contents: string[]): RecordingApi {
@@ -2323,7 +2542,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       ]);
       const service = build(provider, api);
 
-      await service.turn(turnRequest('quita el aceite, sí'));
+      await service.turn(afterAQuestion('quita el aceite, sí'));
 
       expect(api.of('deleteLine').map((call) => call.detail['lineId'])).toEqual(
         ['line-0']
@@ -2443,7 +2662,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       ]);
       const service = build(provider, api);
 
-      await service.turn(turnRequest('quita el aceite y el arroz, sí'));
+      await service.turn(afterAQuestion('quita el aceite y el arroz, sí'));
 
       const result = lastToolResult(provider);
       expect(result['ok']).toBe(false);
@@ -2630,7 +2849,9 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
         api
       );
 
-      const response = await service.turn(turnRequest('quita el aceite, sí'));
+      const response = await service.turn(
+        afterAQuestion('quita el aceite, sí')
+      );
 
       // What plan 0043 section 5 wanted, and what plan 0046 made structural: the
       // only thing a link can be is a list, so the deleted line cannot be linked
@@ -2662,7 +2883,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
         api
       );
 
-      await service.turn(turnRequest('quita los dos, sí'));
+      await service.turn(afterAQuestion('quita los dos, sí'));
 
       const record = logged
         .map((entry) => JSON.parse(entry) as Record<string, unknown>)

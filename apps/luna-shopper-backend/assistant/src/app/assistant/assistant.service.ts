@@ -34,6 +34,7 @@ import {
 import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
 import { GatewayApiClient } from './gateway-api.client';
 import { ChoiceCollector, ListLinkCollector } from './link-and-choices';
+import { plainText } from './plain-text';
 import { buildSystemPrompt, namesZones } from './prompt';
 import {
   findTool,
@@ -333,6 +334,12 @@ export class AssistantService {
         ...transcript.map((entry) => entry.content),
         request.message,
       ],
+      // The roles `transcript` drops, reduced to the one fact a confirming tool
+      // needs: whether the assistant has asked anything yet (plan 0225,
+      // section 3).
+      priorAssistantTurns: transcript.filter(
+        (entry) => entry.role === AssistantRole.ASSISTANT
+      ).length,
       recordListResolution: (branch) => {
         listResolution = branch;
       },
@@ -444,11 +451,15 @@ export class AssistantService {
         // Out of rounds with no answer is a real, if rare, outcome. Saying
         // nothing would be worse than saying so, and there is no useful sentence
         // to invent here that would not be a guess about what happened.
-        const text =
+        //
+        // The text is made plain before the record and the response, so both
+        // carry what the person reads (plan 0225, section 2).
+        const { text, stripped } = plainText(
           reply.text ||
-          (reply.toolCalls.length > 0
-            ? 'Sorry, I got stuck on that one. Could you say it a different way?'
-            : '');
+            (reply.toolCalls.length > 0
+              ? 'Sorry, I got stuck on that one. Could you say it a different way?'
+              : '')
+        );
 
         this.record({
           userId: request.userId,
@@ -462,6 +473,7 @@ export class AssistantService {
           gatewayMs: contextReadyAtMs - startedAtMs,
           totalMs: Date.now() - startedAtMs,
           outcome: calledTools.length === 0 ? 'talked' : 'acted',
+          strippedMarkdown: stripped,
         });
 
         return {
@@ -743,6 +755,12 @@ export class AssistantService {
     gatewayMs: number;
     totalMs: number;
     outcome: 'talked' | 'acted' | 'unheard' | 'timedout';
+    /**
+     * How many markdown markers `plainText` took out of the reply (plan 0225,
+     * section 2). Absent on the turns whose reply is one of this service's own
+     * sentences, which are plain by construction, and logged as zero there.
+     */
+    strippedMarkdown?: number;
   }): void {
     this.logger.log(
       JSON.stringify({
@@ -756,6 +774,9 @@ export class AssistantService {
         // list, which is the question the accessibility work turns on.
         listResolution: entry.listResolution ?? null,
         outcome: entry.outcome,
+        // How often the prompt's plain text rule still loses, so the rule can be
+        // judged from the logs rather than from a hunch.
+        strippedMarkdown: entry.strippedMarkdown ?? 0,
         tokens: entry.usage,
         latencyMs: {
           total: entry.totalMs,

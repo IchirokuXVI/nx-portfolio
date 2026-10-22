@@ -71,6 +71,15 @@ export interface ToolRuntime {
   choices: ChoiceCollector;
   /** The conversation so far as plain text, for branch 2 of list resolution. */
   transcript: string[];
+  /**
+   * How many entries of the capped transcript the assistant wrote (plan 0225,
+   * section 3).
+   *
+   * `transcript` has no roles, and this is the one fact about them a tool needs:
+   * a confirmation answers a question, and with no earlier assistant message
+   * there was no question to answer, whatever the model put in `confirmed`.
+   */
+  priorAssistantTurns: number;
   /** Recorded when a write resolved a list, for section 10's turn record. */
   recordListResolution(branch: ListResolutionBranch): void;
   /**
@@ -405,7 +414,7 @@ const queryLists: AssistantTool = {
   declaration: {
     name: 'query_lists',
     description:
-      "Look at what is actually on this person's lists: whether something is on one, how much of it, what is still pending, which list has it. Call it before answering any question about the contents of a list. Never answer such a question from memory.",
+      "Look at what is actually on this person's lists: whether something is on one, how much of it, what is still pending, which list has it. Call it before answering any question about the contents of a list. Never answer such a question from memory. The result names how many lines matched; when it says nothing matched, say that nothing is on the list.",
     parameters: {
       type: 'object',
       properties: {
@@ -446,7 +455,7 @@ const queryLists: AssistantTool = {
   scopedDeclaration: {
     name: 'query_lists',
     description:
-      'Look at what is actually on the list this person is looking at: whether something is on it, how much of it, what is still pending. Call it before answering any question about the contents of the list. Never answer such a question from memory.',
+      'Look at what is actually on the list this person is looking at: whether something is on it, how much of it, what is still pending. Call it before answering any question about the contents of the list. Never answer such a question from memory. The result names how many lines matched; when it says nothing matched, say that nothing is on the list.',
     parameters: {
       type: 'object',
       properties: {
@@ -502,7 +511,14 @@ const queryLists: AssistantTool = {
         lists.push({
           list: list.listName,
           zone: list.zoneName,
-          total: lines.length,
+          // Named for what it counts (plan 0225, section 1). This used to be
+          // `total`, and beside an empty `matches` a "total: 2" was read as two
+          // eggs by every Haiku and Gemini run of the evaluation. The name says
+          // it is the size of the list, whatever `item` asked for.
+          linesOnList: lines.length,
+          // What `matches` holds, so a zero sits next to an empty array rather
+          // than a two.
+          found: matching.length,
           // Reported as found, never derived from a count the model can guess at.
           // Every fact about a line in the reply has to come from this array.
           matches: matching.map((line) => ({
@@ -517,6 +533,15 @@ const queryLists: AssistantTool = {
             quantity: line.quantity,
             approval: line.approvalStatus,
           })),
+          // The sentence to say, because a number and an empty array still left
+          // the model to compose it, and composing it is where it went wrong.
+          ...(matching.length === 0
+            ? {
+                message: item
+                  ? `Nothing on this list matches "${item}". Say so; do not use linesOnList as a count of anything.`
+                  : 'This list is empty.',
+              }
+            : {}),
         });
       }
 
@@ -587,14 +612,17 @@ const renameMe: AssistantTool = {
     // The one line ceremony section 6.3 describes. It is a single reversible
     // call, so this is a sentence and not the multi step gate the destructive
     // operations would need if they were here, which they are not.
-    if (args['confirmed'] !== true) {
+    const confirmation = readConfirmation(args, runtime);
+    if (confirmation !== 'confirmed') {
       return {
         ok: false,
         needsConfirmation: true,
         wouldChange: describeScope(propagation),
         username,
-        message:
-          'Nothing has changed yet. Tell them exactly what will change and ask them to confirm, then call this again with confirmed true.',
+        message: withUnasked(
+          confirmation,
+          'Nothing has changed yet. Tell them exactly what will change and ask them to confirm, then call this again with confirmed true.'
+        ),
       };
     }
 
@@ -719,7 +747,8 @@ const removeLines: AssistantTool = {
     // ends the turn and the answer arrives in the next one with nothing kept in
     // between. On a voice turn it is read back, which is the case this matters
     // most in.
-    if (args['confirmed'] !== true) {
+    const confirmation = readConfirmation(args, runtime);
+    if (confirmation !== 'confirmed') {
       runtime.link.list(list);
       return {
         ok: false,
@@ -729,8 +758,10 @@ const removeLines: AssistantTool = {
         // By their text, and not "those two items": a confirmation of a pronoun
         // is not a confirmation.
         wouldRemove: resolved.map((known) => known.line.content),
-        message:
-          'Nothing has been removed yet. Name these to them exactly, ask them to confirm, then call this again with the same ids and confirmed true.',
+        message: withUnasked(
+          confirmation,
+          'Nothing has been removed yet. Name these to them exactly, ask them to confirm, then call this again with the same ids and confirmed true.'
+        ),
       };
     }
 
@@ -1203,6 +1234,44 @@ function blocked(
 ): unknown {
   runtime.noteForRecord({ refused: true });
   return { ok: false, blocked: true, ...extra, message };
+}
+
+/**
+ * Whether a call that asks for consent may count as having it (plan 0225,
+ * section 3).
+ *
+ * `unasked` is `confirmed: true` on a conversation in which the assistant has
+ * not said anything yet. The evaluation saw one Haiku run send exactly that on
+ * the first message, and a name changed with no question. A confirmation is an
+ * answer, so with no earlier assistant message it is not one, whatever the
+ * model decided the flag means. The cost is one extra turn for somebody who
+ * says "yes, I confirm" in the same breath as the request.
+ *
+ * The `unasked` case is recorded as refused, because a write the model tried
+ * without the question is the number plan 0043 section 6 says to watch.
+ */
+function readConfirmation(
+  args: Record<string, unknown>,
+  runtime: ToolRuntime
+): 'confirmed' | 'unconfirmed' | 'unasked' {
+  if (args['confirmed'] !== true) {
+    return 'unconfirmed';
+  }
+  if (runtime.priorAssistantTurns === 0) {
+    runtime.noteForRecord({ refused: true });
+    return 'unasked';
+  }
+  return 'confirmed';
+}
+
+/** The ask message, with the reason the flag did not count when that was it. */
+function withUnasked(
+  confirmation: 'unconfirmed' | 'unasked',
+  message: string
+): string {
+  return confirmation === 'unasked'
+    ? `${message} You have not asked yet in this conversation, so this does not count as confirmed. Ask first.`
+    : message;
 }
 
 /** The ids of a call, in the order given, without the repeats. */
