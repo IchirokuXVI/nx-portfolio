@@ -410,7 +410,11 @@
         "sharedEan": "{{count}} rows of this chain share this barcode",
         "matchSharedEan": "A barcode other products share",
         "matchNone": "Not matched",
-        "more": "Show more"
+        "more": "Show more",
+        "photo": "Photo",
+        "photoShown": "Shown",
+        "photoSaved": "Saved, chain off",
+        "photosFailed": "The chain photos could not be read. The rows are still here."
       },
       "one": "product",
       "many": "Products",
@@ -427,7 +431,7 @@
       "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
       "productGroupId": "Product group",
       "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
-      "imageUrl": "Picture",
+      "imageUrl": "Our photo",
       "section": {
         "name": "Name and codes",
         "where": "Where it belongs",
@@ -483,6 +487,13 @@
         "title": "the product list",
         "tick": "Tick products to set their group or categories together.",
         "scope": "Choose a scope in Prices at to see what each product costs there."
+      },
+      "imageUrlHelp": "Shoppers see this photo first. With no photo here, they see a chain's photo, if that chain's photos are on.",
+      "shown": "Shoppers see",
+      "shownFrom": {
+        "owner": "Ours",
+        "chain": "A chain",
+        "none": "No photo"
       }
     },
     "products": {

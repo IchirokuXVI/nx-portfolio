@@ -101,6 +101,49 @@ describe('FieldValue', () => {
     );
   });
 
+  it('sends no referrer for a picture', () => {
+    const { host } = render({ kind: 'image', src: 'https://cdn/x.png' });
+
+    expect(host.querySelector('img')?.getAttribute('referrerpolicy')).toBe(
+      'no-referrer'
+    );
+  });
+
+  /** Admin plan 0065: "Shoppers see" of a product. */
+  it('draws where a picture comes from in place of its address', () => {
+    const { host } = render({
+      kind: 'image',
+      src: 'https://cdn/x.png',
+      caption: { kind: 'word', key: 'catalog.items.shownFrom.owner' },
+    });
+
+    expect(host.querySelector('img')).not.toBeNull();
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.querySelector('[data-caption]')?.textContent?.trim()).toBe(
+      'catalog.items.shownFrom.owner'
+    );
+  });
+
+  it('names the record a picture comes from, as a link when the page knows one', () => {
+    const value: RecordValue = {
+      kind: 'image',
+      src: 'https://cdn/x.png',
+      caption: { kind: 'reference', resource: 'supermarkets', id: 'sm_1' },
+    };
+
+    expect(
+      render(value).host.querySelector('[data-caption] [data-resolving]')
+    ).not.toBeNull();
+
+    const { host } = render(value, {
+      names: { sm_1: 'Mercadona' },
+      links: { sm_1: ['/chains', 'sm_1'] },
+    });
+    const link = host.querySelector('[data-caption] a');
+    expect(link?.textContent?.trim()).toBe('Mercadona');
+    expect(link?.getAttribute('href')).toBe('/chains/sm_1');
+  });
+
   it('keeps the grey square and the link when the picture does not load', () => {
     const { fixture, host } = render({
       kind: 'image',

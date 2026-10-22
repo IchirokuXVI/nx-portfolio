@@ -29,11 +29,14 @@ import {
 import type {
   ResourceGateway,
   ResourceRow,
+  Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS_PATH } from '../catalog-sources';
 import { CHAIN_RESOURCES, chainsRoutes } from '../chains/chains-routes';
+import { ItemLinkedImages, toItemSourcePhotos } from '../item-linked-images';
 import { toItemSourceEntryRow } from '../item-source-entries';
+import { ITEMS } from '../items';
 import {
   PRODUCT_RESOURCES,
   PRODUCTS_SEGMENT,
@@ -128,6 +131,51 @@ function readingProducts(
     },
   };
 }
+
+/**
+ * The memory gateways, with every change of a product written down as it
+ * was sent, before the memory applies it.
+ */
+function recordingProducts(sent: ResourceRow[]): {
+  gateways: ResourceGatewaysI;
+  memory: ResourceMemoryGateways;
+} {
+  const memory = new ResourceMemoryGateways();
+  return {
+    memory,
+    gateways: {
+      for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+        const inner = memory.for(source);
+        if (source.path !== ITEMS_PATH) {
+          return inner;
+        }
+        return {
+          list: (query) => inner.list(query),
+          read: (id) => inner.read(id),
+          create: (input) => inner.create(input),
+          update: (id, input) => {
+            sent.push(input);
+            return inner.update(id, input);
+          },
+          remove: (id) => inner.remove(id),
+        } satisfies ResourceGateway<T>;
+      },
+    },
+  };
+}
+
+/** A field of `ITEMS`, by name. */
+const itemField = (name: string) => {
+  const field = ITEMS.fields.find((each) => each.name === name);
+  if (field === undefined) {
+    throw new Error(`ITEMS has no field ${name}.`);
+  }
+  return field;
+};
+
+/** The product row the memory holds, as the gateway answers it. */
+const heldProduct = (memory: ResourceMemoryGateways, id: string) =>
+  memory.for<Wire.CatalogItemView>({ path: ITEMS_PATH }).read(id);
 
 async function boot(url: string, providers: Provider[] = []) {
   TestBed.resetTestingModule();
@@ -259,7 +307,10 @@ describe('a product, on the record page', () => {
     ).toEqual([
       ['catalog.items.section.name', ['name', 'brand', 'ean', 'sku']],
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
-      ['catalog.items.section.sold', ['defaultUnit', 'unitSize', 'imageUrl']],
+      [
+        'catalog.items.section.sold',
+        ['defaultUnit', 'unitSize', 'imageUrl', 'images'],
+      ],
     ]);
     // The brand is the text the product holds, and no picker.
     expect(text(fixture)).toContain('Hacendado');
@@ -530,5 +581,197 @@ describe('the Sources tab of a product', () => {
       // One row is its own barcode, not a shared one.
       sharedBy: 0,
     });
+  });
+});
+
+/**
+ * The photo field edits our photo, and what a shopper sees is a fact beside
+ * it (admin plan 0065). The whole milk has no photo of its own and shows
+ * Mercadona's; the olive oil has ours.
+ */
+describe('the photo of a product', () => {
+  it('opens our photo empty when a shopper sees a chain photo, and saves another field without it', async () => {
+    const sent: ResourceRow[] = [];
+    const { gateways, memory } = recordingProducts(sent);
+    const fixture = await boot('/products/it_milk_1l/details', [
+      { provide: RESOURCE_GATEWAYS, useValue: gateways },
+    ]);
+    const store = page(fixture).store();
+
+    // The view answers the chain photo as `imageUrl`, and ours is null.
+    const wire = await heldProduct(memory, 'it_milk_1l');
+    expect(wire.imageUrl).toContain('mercadona');
+    expect(wire.ownImageUrl).toBeNull();
+
+    // Reading: our photo is none, and "Shoppers see" names the chain.
+    expect(view(fixture).valueOf(itemField('imageUrl'))).toEqual({
+      kind: 'none',
+    });
+    expect(view(fixture).valueOf(itemField('images'))).toEqual({
+      kind: 'image',
+      src: wire.imageUrl,
+      caption: {
+        kind: 'reference',
+        resource: 'supermarkets',
+        id: 'sm_mercadona',
+      },
+    });
+
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
+    // The form opens our photo empty, and holds no draft of the fact.
+    expect(store.draft()['imageUrl']).toBe('');
+    expect('images' in store.draft()).toBe(false);
+
+    store.set('unitSize', '2');
+    await view(fixture).save();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(store.mode()).toBe('read');
+    expect(sent).toEqual([{ unitSize: 2 }]);
+    const saved = await heldProduct(memory, 'it_milk_1l');
+    expect(saved.ownImageUrl).toBeNull();
+    expect(saved.imageSource).toBe('CHAIN');
+  });
+
+  it('sends our photo as imageUrl, and then a shopper sees ours', async () => {
+    const sent: ResourceRow[] = [];
+    const { gateways, memory } = recordingProducts(sent);
+    const fixture = await boot('/products/it_milk_1l/details', [
+      { provide: RESOURCE_GATEWAYS, useValue: gateways },
+    ]);
+    const store = page(fixture).store();
+    const ours = 'https://images.example.org/products/milk.jpg';
+
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
+    store.set('imageUrl', ours);
+    await view(fixture).save();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(sent).toEqual([{ imageUrl: ours }]);
+    const saved = await heldProduct(memory, 'it_milk_1l');
+    expect(saved.ownImageUrl).toBe(ours);
+    expect(saved.imageUrl).toBe(ours);
+    // Ours comes first, and the chain photo is still behind it.
+    expect(saved.images.map((image) => image.source)).toEqual([
+      'OWNER',
+      'CHAIN',
+    ]);
+    expect(view(fixture).valueOf(itemField('images'))).toEqual({
+      kind: 'image',
+      src: ours,
+      caption: { kind: 'word', key: 'catalog.items.shownFrom.owner' },
+    });
+  });
+
+  it('says "Ours" for a product with its own photo, and "No photo" for one with none', async () => {
+    const oil = await boot('/products/it_olive_oil_1l/details');
+    expect(view(oil).valueOf(itemField('images'))).toMatchObject({
+      caption: { kind: 'word', key: 'catalog.items.shownFrom.owner' },
+    });
+    expect(view(oil).valueOf(itemField('imageUrl'))).toMatchObject({
+      kind: 'image',
+    });
+
+    const soap = await boot('/products/it_dish_soap/details');
+    expect(view(soap).valueOf(itemField('images'))).toEqual({
+      kind: 'word',
+      key: 'catalog.items.shownFrom.none',
+    });
+  });
+
+  it('draws every picture with no referrer', async () => {
+    const fixture = await boot('/products/it_olive_oil_1l/details');
+    const pictures = [
+      ...fixture.nativeElement.querySelectorAll('lib-record-view img'),
+    ] as HTMLImageElement[];
+
+    // Our photo, and the same photo as what a shopper sees.
+    expect(pictures).toHaveLength(2);
+    for (const picture of pictures) {
+      expect(picture.getAttribute('referrerpolicy')).toBe('no-referrer');
+    }
+  });
+});
+
+describe('the photos on the Sources tab', () => {
+  it('shows the saved photo of each row that has one, and whether it is shown', async () => {
+    const fixture = await boot('/products/it_milk_1l/sources');
+    const host = fixture.nativeElement as HTMLElement;
+
+    const shown = host.querySelector('[data-photo="entry-bound-milk"]');
+    expect(shown?.textContent).toContain('catalog.items.sources.photoShown');
+    expect(shown?.querySelector('img')?.getAttribute('referrerpolicy')).toBe(
+      'no-referrer'
+    );
+    expect(
+      host.querySelector('[data-photo="entry-bound-milk-deza"]')?.textContent
+    ).toContain('catalog.items.sources.photoSaved');
+    // The candidate row has no link, and draws nothing new.
+    expect(
+      host.querySelector('[data-photo="entry-bound-milk-promo"]')
+    ).toBeNull();
+    expect(host.querySelectorAll('[data-photo]')).toHaveLength(2);
+  });
+
+  it('draws the grey square for a photo that does not load', async () => {
+    const fixture = await boot('/products/it_milk_1l/sources');
+    const host = fixture.nativeElement as HTMLElement;
+
+    host
+      .querySelector('[data-photo="entry-bound-milk"] img')
+      ?.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+
+    const row = host.querySelector('[data-photo="entry-bound-milk"]');
+    expect(row?.querySelector('img')).toBeNull();
+    expect(row?.querySelector('.thumb')).not.toBeNull();
+  });
+
+  it('draws no photo column for a product with no saved photo', async () => {
+    const fixture = await boot('/products/it_olive_oil_1l/sources');
+
+    expect(text(fixture)).not.toContain('catalog.items.sources.photo');
+  });
+
+  it('keeps the rows when the photos cannot be read', async () => {
+    const fixture = await boot('/products/it_milk_1l/sources', [
+      {
+        provide: ItemLinkedImages,
+        useValue: {
+          read: async () => {
+            throw unavailable();
+          },
+        },
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-photos-failed]')).not.toBeNull();
+    expect(text(fixture)).toContain('Leche entera Hacendado');
+    expect(host.querySelector('[data-photo]')).toBeNull();
+  });
+
+  it('maps the links from the wire, by source row', () => {
+    expect(toItemSourcePhotos(null).size).toBe(0);
+    expect(toItemSourcePhotos({ images: 'no' }).size).toBe(0);
+    const photos = toItemSourcePhotos({
+      images: [
+        { sourceEntryId: 'e1', url: 'https://a.example/1.jpg', enabled: true },
+        { sourceEntryId: 'e2', url: 'https://a.example/2.jpg', enabled: 'yes' },
+        { sourceEntryId: 'e3', url: '' },
+        { url: 'https://a.example/4.jpg', enabled: true },
+      ],
+    });
+    expect([...photos]).toEqual([
+      ['e1', { url: 'https://a.example/1.jpg', enabled: true }],
+      // Only a JSON true is on.
+      ['e2', { url: 'https://a.example/2.jpg', enabled: false }],
+    ]);
   });
 });
