@@ -2362,6 +2362,52 @@ describe('what the evaluation of plan 0224 found (plan 0225)', () => {
       ]);
       expect(lists[1]).toMatchObject({ linesOnList: 1, found: 1 });
     });
+
+    // pendingOnly also drops a line at zero, so an empty result there is a
+    // list that is all bought, not an empty list or a missing product.
+    it('says nothing is still to buy, not that the list is empty, when every line is at zero', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-milk', 'list-flat', 'leche', 0),
+      ]);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', { pendingOnly: true }),
+        FakeModelProvider.says('No queda nada por comprar en Piso.'),
+      ]);
+
+      await build(provider, api).turn(turnRequest('¿qué falta por comprar?'));
+
+      const [result] = toolResult(provider, 1)['lists'] as Record<
+        string,
+        unknown
+      >[];
+      expect(result).toMatchObject({ linesOnList: 1, found: 0 });
+      expect(result['message']).toBe('Nothing on this list is still to buy.');
+    });
+
+    it('says nothing still to buy matches, not that nothing matches, when the product is at zero', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-milk', 'list-flat', 'leche', 0),
+      ]);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {
+          item: 'leche',
+          pendingOnly: true,
+        }),
+        FakeModelProvider.says('La leche ya está comprada.'),
+      ]);
+
+      await build(provider, api).turn(turnRequest('¿queda leche por comprar?'));
+
+      const [result] = toolResult(provider, 1)['lists'] as Record<
+        string,
+        unknown
+      >[];
+      expect(result['message']).toBe(
+        'Nothing still to buy on this list matches "leche". Say so; do not use linesOnList as a count of anything.'
+      );
+    });
   });
 
   describe('2 plain text', () => {

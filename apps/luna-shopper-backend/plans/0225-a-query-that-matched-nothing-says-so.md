@@ -135,6 +135,12 @@ command's output.
 next to an empty array rather than a two. The `message` says the sentence to say. The top
 level keeps `{ ok: true, item, pendingOnly, lists }`.
 
+The `message` also branches on `pendingOnly`: "Nothing on this list is still to buy." for
+a list with lines and nothing pending, and "Nothing still to buy on this list matches
+"x"." when an item was named. The filter with `pendingOnly` also drops lines at zero, so
+without the branch a list that is all bought was called empty and milk at zero was called
+absent.
+
 One sentence is added to the description of `query_lists`, both declarations, after
 "Never answer such a question from memory.": "The result names how many lines matched;
 when it says nothing matched, say that nothing is on the list."

@@ -536,11 +536,7 @@ const queryLists: AssistantTool = {
           // The sentence to say, because a number and an empty array still left
           // the model to compose it, and composing it is where it went wrong.
           ...(matching.length === 0
-            ? {
-                message: item
-                  ? `Nothing on this list matches "${item}". Say so; do not use linesOnList as a count of anything.`
-                  : 'This list is empty.',
-              }
+            ? { message: nothingMatched(item, pendingOnly, lines.length) }
             : {}),
         });
       }
@@ -1262,6 +1258,29 @@ function readConfirmation(
     return 'unasked';
   }
   return 'confirmed';
+}
+
+/**
+ * The sentence for a list whose `matches` came back empty. `pendingOnly` also
+ * drops lines at zero, so with it an empty result is neither an empty list nor
+ * a product missing from it: the lines may all be bought (plan 0225, section 1).
+ */
+function nothingMatched(
+  item: string | undefined,
+  pendingOnly: boolean,
+  linesOnList: number
+): string {
+  if (item) {
+    const said = pendingOnly
+      ? `Nothing still to buy on this list matches "${item}".`
+      : `Nothing on this list matches "${item}".`;
+    return `${said} Say so; do not use linesOnList as a count of anything.`;
+  }
+  // With no item and no pendingOnly nothing is filtered out, so an empty
+  // result there is always an empty list.
+  return pendingOnly && linesOnList > 0
+    ? 'Nothing on this list is still to buy.'
+    : 'This list is empty.';
 }
 
 /** The ask message, with the reason the flag did not count when that was it. */
