@@ -83,6 +83,15 @@ async function bootstrap() {
         'settles UNAVAILABLE (plan 0224, section 3).'
     );
   }
+  // A slot or deployment that switched to claude keeps the ASSISTANT_MODEL it
+  // had, and a Gemini name sent to the Messages API fails every turn.
+  if (config.provider === 'claude' && config.model.startsWith('gemini')) {
+    logger.warn(
+      `ASSISTANT_PROVIDER is claude and the model is ${config.model}, a Gemini ` +
+        'model: every turn will fail. Blank ASSISTANT_MODEL to use the Claude ' +
+        'default (plan 0224, section 5).'
+    );
+  }
 }
 
 bootstrap();

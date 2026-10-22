@@ -1550,7 +1550,8 @@ ANTHROPIC_BASE_URL=
 # Empty means the defaults: low and adaptive.
 ASSISTANT_CLAUDE_EFFORT=
 ASSISTANT_CLAUDE_THINKING=
-# Empty means the default model of the provider that answers.
+# Empty means the default model of the provider that answers. An existing slot
+# keeps its ASSISTANT_MODEL, so blank it when you flip the provider.
 ASSISTANT_MODEL=
 # Voice input (plan 0041). An empty transcription model means the model that
 # answers the turn also transcribes it, which is the default everywhere.
