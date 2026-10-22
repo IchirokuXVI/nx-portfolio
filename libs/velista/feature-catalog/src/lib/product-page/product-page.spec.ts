@@ -950,6 +950,7 @@ describe('ProductPage', () => {
           itemId: 'item-oil',
           name: 'Extra virgin olive oil',
           detail: expect.stringContaining('Hacendado'),
+          imageUrl: null,
         },
         'list-party'
       );
@@ -1050,6 +1051,7 @@ describe('ProductPage', () => {
           listId: 'list-weekly',
           itemId: 'item-oil',
           detail: expect.stringContaining('Hacendado'),
+          imageUrl: null,
         },
         'line-frying',
         1

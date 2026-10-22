@@ -3,6 +3,7 @@ import {
   ESTIMATE_ROUGH_TO,
   inLocale,
   lineName,
+  lineProductPrices,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -10,9 +11,16 @@ import {
   type Line,
   type LineDetailVm,
   type LineIndicator,
+  type LineItemChipVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type ProductOffer,
 } from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
+import {
+  productBrandSizeText,
+  type SizeTranslate,
+} from '@portfolio/velista/ui';
 
 /**
  * Re-exported so the two screens in this library keep importing it from here.
@@ -69,6 +77,8 @@ export interface LineDetailInput {
   readonly nameOf: (userId: string) => string | null;
   readonly callerUserId: string | null;
   readonly locale: string;
+  /** The translator, for the size on the detail line of a choice (velista `0163`). */
+  readonly translate: SizeTranslate;
   /** Whether this caller may record a purchase at all. `WRITE` (backend plan 0131). */
   readonly canSettle: boolean;
   readonly indicators: readonly LineIndicator[];
@@ -88,15 +98,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     (settlement) => settlement.outcome === 'BOUGHT'
   );
 
-  const chips = line.itemIds.map((itemId) => {
-    const item = input.itemNameOf(itemId);
-    return {
-      itemId,
-      name: item === null ? null : inLocale(item.name, input.locale),
-      brand: item?.brand ?? null,
-      removable: !input.busy,
-    };
-  });
+  const chips = line.itemIds.map((itemId) => chipOf(itemId, input));
 
   return {
     lineId: line.id,
@@ -120,6 +122,52 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     indicators: input.indicators,
     claimedBy: input.claimedBy,
     busy: input.busy,
+  };
+}
+
+/**
+ * One product of the line, as the "Which one did you get?" card draws it (velista
+ * `0163`, section 2): the name, `brand · size`, the photo, and the best known price
+ * with the chain that has it.
+ *
+ * The price is the catalog's own offer for the product. Only a product whose record
+ * has none falls back to its prices near the reader, the read the line page uses.
+ */
+function chipOf(itemId: string, input: LineDetailInput): LineItemChipVm {
+  const item = input.itemNameOf(itemId);
+  const own = item?.offer ?? null;
+  const priced = own?.price == null ? null : own;
+  const named =
+    priced === null
+      ? undefined
+      : item?.chainPrices.find(
+          (price) => price.offer.priceScopeId === priced.priceScopeId
+        );
+  let offer: ProductOffer | null = priced;
+  let chain: string | null =
+    named === undefined ? null : inLocale(named.chain.name, input.locale);
+  if (offer === null && input.pricesOf !== undefined) {
+    const [read] = lineProductPrices([itemId], input.pricesOf, null);
+    if (read?.kind === 'priced' && read.offer !== null) {
+      offer = read.offer;
+      chain = read.chain === null ? null : inLocale(read.chain, input.locale);
+    }
+  }
+  return {
+    itemId,
+    name: item === null ? null : inLocale(item.name, input.locale),
+    brand: item?.brand ?? null,
+    removable: !input.busy,
+    imageUrl: item?.imageUrl ?? null,
+    detail:
+      item === null
+        ? null
+        : productBrandSizeText(item, input.locale, input.translate),
+    price:
+      offer === null || offer.price === null
+        ? null
+        : formatMoney(offer.price, offer.currency, input.locale),
+    chain: chain === '' ? null : chain,
   };
 }
 

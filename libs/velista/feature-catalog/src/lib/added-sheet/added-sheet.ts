@@ -97,6 +97,7 @@ export class AddedSheet {
         itemId: entry.itemId,
         name: entry.name,
         detail: entry.detail,
+        imageUrl: entry.imageUrl,
         quantity: entry.quantity,
         floor: visitFloor(entry),
         pending: entry.pending,
@@ -119,7 +120,12 @@ export class AddedSheet {
 
   protected step(step: VisitAddedStep): void {
     void this._adds.step(
-      { listId: step.listId, itemId: step.itemId, detail: step.detail },
+      {
+        listId: step.listId,
+        itemId: step.itemId,
+        detail: step.detail,
+        imageUrl: step.imageUrl,
+      },
       step.lineId,
       step.by
     );

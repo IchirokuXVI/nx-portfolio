@@ -16,6 +16,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
+  RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BoughtShopMemory,
@@ -52,10 +53,12 @@ import {
   ChevronRightIcon,
   CloseIcon,
   CommentIcon,
+  ProductRow,
   QuantityReel,
   QuantityStepper,
   SheetShell,
   SpinnerIcon,
+  type ProductRowView,
 } from '@portfolio/velista/ui';
 import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import {
@@ -139,6 +142,7 @@ type Step = 'summary' | 'howMany' | 'shop';
     CommentIcon,
     LineGoneNotice,
     BoughtShopPane,
+    ProductRow,
   ],
   templateUrl: './line-detail-sheet.html',
   styleUrl: './line-detail-sheet.scss',
@@ -154,6 +158,7 @@ export class LineDetailSheet {
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _localeStore = inject(RokuLocaleStore);
+  private readonly _translator = inject(RokuTranslatorService);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _injector = inject(Injector);
@@ -482,6 +487,8 @@ export class LineDetailSheet {
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
       locale: this._localeStore.locale(),
+      translate: (key, args) =>
+        this._translator.t(key, undefined, this._localeStore.locale(), args),
       canSettle: this._canSettle(),
       // The row's own indicators, from the row's own function, rather than the `[]`
       // this passed since 0043 (section 5). A row showing "bought" that opened a sheet
@@ -521,6 +528,49 @@ export class LineDetailSheet {
     this._clearError();
     this.step.set('howMany');
   }
+
+  /**
+   * The products of "Which one did you get?" as the compact card draws them
+   * (velista `0163`, section 2): the photo, the name, `brand · size`, and the best
+   * known price with the chain that has it on the line under it.
+   */
+  readonly choiceCards = computed((): readonly ProductRowView[] => {
+    const choices = this.detail()?.choices ?? [];
+    const locale = this._localeStore.locale();
+    // Read so the cards are drawn again once the words arrive.
+    this._translator.loaded();
+    const t = (key: string): string =>
+      this._translator.t(key, undefined, locale);
+    return choices.map((choice) => {
+      // A product with no name is drawn as **unnamed**, never as "No products
+      // yet" (velista `0047`, section 1.2): it is one of the products this line
+      // carries, offered as a choice.
+      const name = choice.name ?? t('list.detail.unnamedProduct');
+      return {
+        id: choice.itemId,
+        name,
+        detail: choice.detail,
+        caption: null,
+        imageUrl: choice.imageUrl,
+        price: choice.price,
+        // The line under the price names the chain that has it, as the mock
+        // draws it, rather than a price per litre or kilo.
+        unitPrice: choice.price === null ? null : choice.chain,
+        seen: null,
+        stale: false,
+        chains: null,
+        label: [
+          name,
+          choice.detail,
+          choice.price ?? t('catalog.row.noPrice'),
+          choice.price === null ? null : choice.chain,
+        ]
+          .filter((part): part is string => part !== null && part !== '')
+          .join(', '),
+        summary: null,
+      };
+    });
+  });
 
   /** Which of the line's products was bought, when it carries more than one. */
   chooseItem(itemId: string): void {

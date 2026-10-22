@@ -18,6 +18,11 @@ export interface VisitAddition {
   readonly name: string;
   /** The product's detail as the row drew it, for the sheet. */
   readonly detail: string | null;
+  /**
+   * The photo of the row the plus was pressed on, for the sheet (velista `0163`),
+   * or null, which draws the glyph.
+   */
+  readonly imageUrl: string | null;
   /** How many the line holds now. */
   readonly quantity: number;
   /** How many it held before this visit. Zero when the visit made the line. */
@@ -44,6 +49,8 @@ export interface VisitProduct {
   readonly listId: string;
   readonly itemId: string;
   readonly detail: string | null;
+  /** The product's photo, or null. */
+  readonly imageUrl: string | null;
 }
 
 /** The entry for a line, or null when the visit did not raise it. */

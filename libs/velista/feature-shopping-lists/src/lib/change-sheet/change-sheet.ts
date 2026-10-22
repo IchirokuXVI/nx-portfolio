@@ -21,7 +21,6 @@ import {
 import {
   APP_BASE_PATH,
   basketRowProduct,
-  catalogName,
   productChoices,
   type BasketRow,
   type BasketRowEntry,
@@ -29,7 +28,6 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppHistory,
-  formatMoney,
   productPickPath,
   rowKeyOf,
   SheetNavigation,
@@ -37,10 +35,13 @@ import {
 import {
   CheckField,
   ChevronRightIcon,
-  productSizeText,
-  RadioRow,
+  ProductRow,
+  ProductRowSkeleton,
+  productRowView,
   SearchIcon,
   SheetShell,
+  type ProductRowSource,
+  type ProductRowView,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import { settleSheetPath } from '../basket-paths';
@@ -52,7 +53,7 @@ import {
   changePriceScopes,
 } from './change-targets';
 
-/** The rows drawn while the products are read, of the height of a real row. */
+/** The cards drawn while the products are read, of the height of a real card. */
 const SKELETON_ROWS = [0, 1, 2, 3];
 
 /** What the sheet keeps across a visit to the catalog that chooses. */
@@ -60,14 +61,20 @@ interface ChangeSheetState {
   readonly keep: boolean;
 }
 
-/** One radio row, as it is drawn. */
-interface ChoiceRow {
-  readonly itemId: string;
-  readonly name: string;
-  /** The words under the name, or null. */
-  readonly caption: 'chosenNow' | 'cheaper' | 'notSold' | null;
-  readonly price: string | null;
-}
+/**
+ * One choice, as the compact card draws it (velista `0163`, section 1): the photo,
+ * the product's name alone, `brand · size` under it, the words under those
+ * ("Chosen now", "cheaper option", "Not sold here"), and the price with its price
+ * per litre or kilo. The radio sits in the card's control slot.
+ */
+type ChoiceRow = ProductRowView;
+
+/** The words under a choice, by what the list says about it. */
+const CAPTION_KEYS = {
+  chosenNow: 'basket.change.chosenNow',
+  notSold: 'basket.change.notSold',
+  cheaper: 'basket.change.cheaper',
+} as const;
 
 /**
  * Take another product for one list of a row, or for every list the reader may
@@ -81,7 +88,8 @@ interface ChoiceRow {
  *
  * The product chosen now, the other products of the lines and the members of
  * their groups, each once and with no heading between them, then what the shop
- * does not sell (`productChoices`). They are read by `ChangeChoices`. Below them,
+ * does not sell (`productChoices`). Each is the compact product card with its
+ * radio at the right edge (velista `0163`), and the whole card is its label. They are read by `ChangeChoices`. Below them,
  * "Look for another one in the catalog" opens the catalog page in its mode that
  * chooses, and the product chosen there comes back chosen in this list.
  *
@@ -97,7 +105,8 @@ interface ChoiceRow {
   imports: [
     CheckField,
     ChevronRightIcon,
-    RadioRow,
+    ProductRow,
+    ProductRowSkeleton,
     RokuTranslatorPipe,
     SearchIcon,
     SheetShell,
@@ -253,26 +262,36 @@ export class ChangeSheet {
     const locale = this._locale();
     // Read so the rows are drawn again once the words arrive.
     this._translator.loaded();
+    const translate = (key: string, args?: Record<string, unknown>): string =>
+      this._translator.t(key, undefined, locale, args);
     return this._list()
       .map((choice): ChoiceRow | null => {
-        const name = this._nameOf(choice.itemId, locale);
-        if (name === null) {
+        const source = this._sourceOf(choice.itemId);
+        if (source === null) {
           return null;
         }
+        const caption = choice.chosenNow
+          ? CAPTION_KEYS.chosenNow
+          : choice.notSold
+            ? CAPTION_KEYS.notSold
+            : choice.cheaper
+              ? CAPTION_KEYS.cheaper
+              : null;
+        // The price the list priced it at, which is not always the catalog's
+        // own offer: it is kept to the scopes of the basket.
+        const view = productRowView(
+          { ...source, offer: choice.offer },
+          {
+            locale,
+            translate,
+            // The sheet names no chain: the basket is priced where it is read.
+            chainOf: () => null,
+            chainChosen: true,
+          }
+        );
         return {
-          itemId: choice.itemId,
-          name,
-          caption: choice.chosenNow
-            ? 'chosenNow'
-            : choice.notSold
-              ? 'notSold'
-              : choice.cheaper
-                ? 'cheaper'
-                : null,
-          price:
-            choice.offer?.price == null
-              ? null
-              : formatMoney(choice.offer.price, choice.offer.currency, locale),
+          ...view,
+          caption: caption === null ? null : translate(caption),
         };
       })
       .filter((row): row is ChoiceRow => row !== null);
@@ -459,29 +478,35 @@ export class ChangeSheet {
     );
   }
 
-  /** The product's name as the cards print it: name, brand, size. */
-  private _nameOf(itemId: string, locale: string): string | null {
-    const row = this.row();
+  /**
+   * What the card of one choice is drawn from: the catalog's record, whose name
+   * the card prints alone and whose brand and size go on the detail line through
+   * `productRowView`, the text function every product card uses.
+   */
+  private _sourceOf(itemId: string): ProductRowSource | null {
     const item = this._choices.itemOf(itemId);
     if (item !== null) {
-      const size = productSizeText(item.size, item.unit, locale, (key, args) =>
-        this._translator.t(key, undefined, locale, args)
-      );
-      return [
-        catalogName(item.name, locale),
-        item.brand?.trim() ?? '',
-        size ?? '',
-      ]
-        .filter((part) => part !== '')
-        .join(' ');
+      return item;
     }
     // The product the row draws, named as the row names it, should the catalog
     // no longer hold it.
+    const row = this.row();
     const product =
       row === null || row.productId !== itemId
         ? null
         : basketRowProduct(row, this._store.products());
-    return product === null ? null : catalogName(product.name, locale);
+    return product === null
+      ? null
+      : {
+          id: itemId,
+          name: product.name,
+          brand: product.brand,
+          imageUrl: product.imageUrl,
+          size: null,
+          unit: 'UNIT',
+          offer: null,
+          unitBasis: null,
+        };
   }
 }
 

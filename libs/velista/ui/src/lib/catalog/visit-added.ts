@@ -5,7 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { QuantityStepper } from '../list/quantity-stepper';
+import { ProductRow, type ProductRowView } from './product-row';
 
 /** One line the visit added to, as its row draws it. */
 export interface VisitAddedRow {
@@ -14,6 +14,8 @@ export interface VisitAddedRow {
   /** What the line says. */
   readonly name: string;
   readonly detail: string | null;
+  /** The photo of the product that was added, or null, which draws the glyph. */
+  readonly imageUrl: string | null;
   /** How many the list holds now. */
   readonly quantity: number;
   /** The lowest count the stepper shows. A minus pressed there takes it back. */
@@ -37,14 +39,17 @@ export interface VisitAddedStep {
   readonly lineId: string;
   /** The product's detail, which the record keeps for the line. */
   readonly detail: string | null;
+  /** The product's photo, which the record keeps for the line. */
+  readonly imageUrl: string | null;
   readonly by: 1 | -1;
 }
 
 /**
  * What this visit to the catalog added (velista `0134`, section 4.4).
  *
- * One row for each line the visit added to: its name, the detail with the price,
- * and a stepper.
+ * One row for each line the visit added to, drawn as the compact product card
+ * (velista `0163`): the photo, its name, the detail with the price, and a stepper
+ * in the control slot. The card opens nothing here; the stepper is its control.
  * **The minus at the floor takes the product back**, so the stepper's lowest value
  * is one under the floor and the container reads a step down from the floor as
  * the undo. One quiet button takes back everything on a list, and a link opens
@@ -55,7 +60,7 @@ export interface VisitAddedStep {
  */
 @Component({
   selector: 'lib-visit-added',
-  imports: [QuantityStepper, RokuTranslatorPipe],
+  imports: [ProductRow, RokuTranslatorPipe],
   template: `
     @for (section of sections(); track section.listId) {
       <section [attr.data-list]="section.listId" class="section">
@@ -67,35 +72,28 @@ export interface VisitAddedStep {
             <li
               [attr.data-item]="row.itemId"
               [attr.data-line]="row.lineId"
-              class="row"
+              class="added-row"
             >
-              <span class="what">
-                <span class="name">{{ row.name }}</span>
-                @if (row.detail; as detail) {
-                  <span class="detail">{{ detail }}</span>
-                }
-                @if (row.pending) {
-                  <span class="pending">{{
-                    'catalog.added.pending' | rokuT
-                  }}</span>
-                }
-              </span>
-              <lib-quantity-stepper
+              <lib-product-row
                 (stepped)="
                   stepped.emit({
                     listId: section.listId,
                     itemId: row.itemId,
                     lineId: row.lineId,
                     detail: row.detail,
+                    imageUrl: row.imageUrl,
                     by: $event,
                   })
                 "
-                [accent]="true"
                 [compact]="true"
-                [controlled]="true"
-                [label]="'catalog.added.stepper' | rokuT: { name: row.name }"
-                [min]="row.floor - 1"
-                [value]="row.quantity"
+                [opens]="false"
+                [priceShown]="false"
+                [row]="viewOf(row, 'catalog.added.pending' | rokuT)"
+                [stepper]="{
+                  value: row.quantity,
+                  label: 'catalog.added.stepper' | rokuT: { name: row.name },
+                  min: row.floor - 1,
+                }"
               />
             </li>
           }
@@ -130,4 +128,25 @@ export class VisitAdded {
   readonly allTakenBack = output<string>();
   /** Open this list. */
   readonly listOpened = output<string>();
+
+  /**
+   * One row as the card draws it: the line's words, the detail with the price,
+   * and "Waiting for approval" as the line under the detail when it waits.
+   */
+  protected viewOf(row: VisitAddedRow, pendingWords: string): ProductRowView {
+    return {
+      id: row.itemId,
+      name: row.name,
+      detail: row.detail,
+      caption: row.pending ? pendingWords : null,
+      imageUrl: row.imageUrl,
+      price: null,
+      unitPrice: null,
+      seen: null,
+      stale: false,
+      chains: null,
+      label: row.name,
+      summary: row.detail,
+    };
+  }
 }

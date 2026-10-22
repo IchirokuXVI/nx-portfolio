@@ -1025,6 +1025,33 @@ describe('ProductRow, the one card', () => {
         'Chosen now'
       );
     });
+
+    it('draws words with nothing to open, beside its stepper', async () => {
+      const fixture = await card({
+        compact: true,
+        opens: false,
+        stepper: { value: 1, label: 'How many of oil' },
+      });
+
+      expect(el(fixture).querySelector('button.open')).toBeNull();
+      expect(el(fixture).querySelector('.open.static .name')?.textContent).toBe(
+        'Extra virgin olive oil'
+      );
+      expect(
+        el(fixture).querySelectorAll('lib-quantity-stepper button')
+      ).toHaveLength(2);
+    });
+
+    it('leaves the price column empty where the detail carries the price', async () => {
+      const priced = await card({ compact: true, priceShown: false });
+      expect(el(priced).querySelector('.price')).toBeNull();
+
+      const unpriced = await card(
+        { compact: true, priceShown: false },
+        { ...productRowView(OIL, options()), price: null }
+      );
+      expect(el(unpriced).querySelector('.no-price')).toBeNull();
+    });
   });
 
   describe('every shop’s price (the search)', () => {

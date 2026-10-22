@@ -66,7 +66,13 @@ function item(
   };
 }
 
-const MILK = item('item-milk', 'Hacendado milk', offer(0.92, 0.92));
+const MILK: CatalogItem = {
+  ...item('item-milk', 'Hacendado milk', offer(0.92, 0.92)),
+  brand: 'Hacendado',
+  size: 1,
+  unit: 'LITER',
+  imageUrl: 'https://img.test/milk.png',
+};
 const SIX = item('item-six', 'Hacendado milk six pack', offer(5.34, 0.89));
 const PASCUAL = item('item-pascual', 'Pascual milk', offer(1.15, 1.15));
 const PULEVA = item('item-puleva', 'Puleva milk', null);
@@ -323,12 +329,62 @@ describe('ChangeSheet', () => {
       ]);
     });
 
+    it('draws each choice as the compact card: picture, detail, and the radio at the right', async () => {
+      const { fixture } = await render({ lineId: 'zl-1' });
+
+      const first = host(fixture).querySelector('lib-product-row.choice');
+      expect(first?.querySelector('.row')?.classList.contains('compact')).toBe(
+        true
+      );
+      expect(first?.querySelector('img')?.getAttribute('src')).toBe(
+        'https://img.test/milk.png'
+      );
+      // The name alone, with the brand on the detail line. The testing translator
+      // answers keys, which `productSizeText` drops, so the size is not drawn here.
+      expect(first?.querySelector('.name')?.textContent?.trim()).toBe(
+        'Hacendado milk'
+      );
+      expect(first?.querySelector('.detail')?.textContent).toBe('Hacendado');
+      // The whole card is the label, and the radio is its last part: the right edge.
+      const label = first?.querySelector('label.open');
+      expect(label?.lastElementChild?.matches('input[type="radio"]')).toBe(
+        true
+      );
+      expect(label?.querySelector('.price .amount')?.textContent).toBe('€0.92');
+      // A product with no photo draws the glyph.
+      expect(
+        host(fixture)
+          .querySelectorAll('lib-product-row.choice')[1]
+          ?.querySelector('img')
+      ).toBeNull();
+    });
+
+    it('chooses a product by a press anywhere on its card', async () => {
+      const { fixture } = await render({ lineId: 'zl-1' });
+
+      host(fixture)
+        .querySelectorAll<HTMLElement>('lib-product-row.choice .name')[2]
+        ?.click();
+      fixture.detectChanges();
+
+      expect(radios(fixture).map((radio) => radio.checked)).toEqual([
+        false,
+        false,
+        true,
+        false,
+      ]);
+      expect(radios(fixture).map((radio) => radio.name)).toEqual(
+        Array(4).fill('basket-change-product')
+      );
+      expect(useButton(fixture).disabled).toBe(false);
+    });
+
     it('marks what the shop does not sell, last, and still lets it be chosen', async () => {
       const { fixture } = await render({ lineId: 'zl-1', atShop: true });
 
       expect(names(fixture).at(-1)).toBe('Puleva milk');
       expect(
-        host(fixture).querySelector('.choice:last-child .not-sold')?.textContent
+        host(fixture).querySelector('.choice:last-child .caption')?.textContent
       ).toContain('basket.change.notSold');
       expect(radios(fixture).at(-1)?.disabled).toBe(false);
     });

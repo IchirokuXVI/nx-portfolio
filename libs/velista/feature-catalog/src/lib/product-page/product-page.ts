@@ -435,6 +435,7 @@ export class ProductPage {
       itemId: row.id,
       name: row.name,
       detail: row.summary,
+      imageUrl: row.imageUrl,
     });
   }
 
@@ -446,7 +447,12 @@ export class ProductPage {
     }
     this.addFailed.set(false);
     void this._adds.step(
-      { listId: target.listId, itemId: row.id, detail: row.summary },
+      {
+        listId: target.listId,
+        itemId: row.id,
+        detail: row.summary,
+        imageUrl: row.imageUrl,
+      },
       step.lineId,
       step.by
     );
@@ -456,7 +462,12 @@ export class ProductPage {
   protected addToList(listId: string): void {
     this.addFailed.set(false);
     void this._adds.add(
-      { itemId: this.itemId(), name: this.name(), detail: this.detail() },
+      {
+        itemId: this.itemId(),
+        name: this.name(),
+        detail: this.detail(),
+        imageUrl: this.imageUrl(),
+      },
       listId
     );
   }
@@ -465,7 +476,12 @@ export class ProductPage {
   protected stepListLine(step: ListsTableStep): void {
     this.addFailed.set(false);
     void this._adds.step(
-      { listId: step.listId, itemId: this.itemId(), detail: this.detail() },
+      {
+        listId: step.listId,
+        itemId: this.itemId(),
+        detail: this.detail(),
+        imageUrl: this.imageUrl(),
+      },
       step.lineId,
       step.by
     );

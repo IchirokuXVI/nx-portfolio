@@ -277,7 +277,7 @@ export type ProductRowExpanded = 'shops' | 'members';
         }
       </span>
 
-      @if (row().price; as price) {
+      @if (priceShown() && row().price; as price) {
         <span [class.is-stale]="row().stale" class="price">
           @if (group() !== null) {
             <span class="unit">{{ 'list.add.card.from' | rokuT }}</span>
@@ -292,7 +292,7 @@ export type ProductRowExpanded = 'shops' | 'members';
             </span>
           }
         </span>
-      } @else if (group() === null) {
+      } @else if (group() === null && priceShown()) {
         <span class="no-price">{{ 'catalog.row.noPrice' | rokuT }}</span>
       }
 
@@ -380,6 +380,14 @@ export type ProductRowExpanded = 'shops' | 'members';
           >
             <ng-container [ngTemplateOutlet]="content" />
           </button>
+        } @else if (!opens()) {
+          <!--
+            A card with nothing to open (the sheet of what a visit added): its
+            words are text, and the stepper is its one control.
+          -->
+          <div class="open static">
+            <ng-container [ngTemplateOutlet]="content" />
+          </div>
         } @else if (link(); as href) {
           <a [attr.aria-label]="row().label" [routerLink]="href" class="open">
             <ng-container [ngTemplateOutlet]="content" />
@@ -609,6 +617,19 @@ export class ProductRow {
    * null for one that reports the press through {@link opened}.
    */
   readonly link = input<string | null>(null);
+
+  /**
+   * Whether a press on the card opens the product. False draws its words as text,
+   * for a card whose one control is its stepper (the sheet of what a visit added,
+   * velista `0163`).
+   */
+  readonly opens = input(true);
+
+  /**
+   * Whether the price column is drawn. False leaves it empty, also with no price,
+   * where the detail already carries the price (the sheet of what a visit added).
+   */
+  readonly priceShown = input(true);
 
   /** A product group in place of a product (the search), or null. */
   readonly group = input<ProductRowGroup | null>(null);
