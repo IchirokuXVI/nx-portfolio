@@ -1,3 +1,5 @@
+> **PR:** [#806](https://github.com/IchirokuXVI/nx-portfolio/pull/806)
+
 # 0162: one product card
 
 > Asked for by the owner on 2026-10-20: "check which places could be re-designed to show a
