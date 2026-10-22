@@ -3733,6 +3733,26 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     ]);
   });
 
+  it('marks each entry busy while a write to its row is in flight, as the row’s own stepper is', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      rows: () => readonly { rowKey: string; productId: string | null }[];
+      busyRows: WritableSignal<ReadonlySet<string>>;
+    };
+    const busyOf = () =>
+      page
+        .holdingsOf()(MILK)
+        .map((held) => (held as { busy?: boolean }).busy);
+
+    expect(busyOf()).toEqual([false, false]);
+
+    const row = store.rows().find((one) => one.productId === 'item-milk');
+    store.busyRows.set(new Set([row?.rowKey ?? '']));
+
+    expect(busyOf()).toEqual([true, true]);
+  });
+
   it('sends the settle sheet’s demand write for the stepped entry', async () => {
     const { fixture } = await render({ lines: [milk()], served: SERVED });
     const page = fixture.componentInstance as unknown as CardSurface;

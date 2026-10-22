@@ -2245,12 +2245,15 @@ export class BasketPage {
    * The words are the line's own, and the list above them is named only where
    * this reader was served that list. How many is the
    * entry's `left`, and the stepper moves only where the server says that entry's
-   * demand may change. A group is held by nothing here: a basket row names products,
+   * demand may change. While a write to its row is in flight the stepper is
+   * disabled, as the row's own is, because the demand write is not optimistic and
+   * a second press would resend the same step. A group is held by nothing here: a basket row names products,
    * not the group a line followed.
    */
   protected readonly holdingsOf = computed(() => {
     const rows = this._store.rows();
     const lists = this._store.lists();
+    const busy = this.busyRows();
     return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
       if (suggestion.kind !== 'item') {
         return [];
@@ -2268,6 +2271,7 @@ export class BasketPage {
                 : (lists.get(entry.listId)?.name ?? null),
             quantity: entry.left,
             editable: entry.demandEditable,
+            busy: busy.has(row.rowKey),
           }))
         );
     };

@@ -52,24 +52,16 @@
   }
 }
 
-.picture {
-  display: grid;
-  place-items: center;
+// The shared picture (velista 0162, section 3), drawn as this tile has always
+// drawn it: the card's width, the mock's height, no hairline, on the sunken fill.
+lib-product-picture.picture {
+  --app-line-picture-glyph: var(--app-icon-lg);
+  --app-line-picture-radius: var(--app-radius-md);
+
+  inline-size: auto;
   block-size: var(--app-line-product-card-image);
-  overflow: hidden;
-  border-radius: var(--app-radius-md);
+  border: none;
   background: var(--app-surface-sunken);
-}
-
-.image {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: contain;
-}
-
-.glyph {
-  font-size: var(--app-icon-lg);
-  color: var(--app-text-muted);
 }
 
 // Two lines at most, and room for two on every card, so the prices line up along
