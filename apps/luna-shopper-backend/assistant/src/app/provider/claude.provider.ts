@@ -187,14 +187,20 @@ export function toClaudeRequest(
       : {}),
   }));
 
+  const messages = request.turns
+    .map(toClaudeMessage)
+    .filter((message): message is Record<string, unknown> => !!message);
+  // The API requires the first message to be the user's. The transcript is cut
+  // to its newest entries, so the cut can land on an assistant reply, which
+  // without its question says nothing the model needs.
+  const firstUser = messages.findIndex((message) => message['role'] === 'user');
+
   return {
     model: options.model,
     max_tokens: CLAUDE_MAX_TOKENS,
     system: [{ type: 'text', text: request.system }],
     ...(tools.length > 0 ? { tools } : {}),
-    messages: request.turns
-      .map(toClaudeMessage)
-      .filter((message): message is Record<string, unknown> => !!message),
+    messages: firstUser === -1 ? [] : messages.slice(firstUser),
     thinking:
       options.thinking === 'off' ? { type: 'disabled' } : { type: 'adaptive' },
     output_config: { effort: options.effort },

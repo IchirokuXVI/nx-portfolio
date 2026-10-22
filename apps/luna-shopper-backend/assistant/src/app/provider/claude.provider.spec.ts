@@ -206,11 +206,17 @@ describe('toClaudeRequest', () => {
 
   it("sends a model turn from the client's transcript as a text block", () => {
     const body = toClaudeRequest(
-      request({ turns: [{ role: ModelTurnRole.MODEL, text: 'Hecho.' }] }),
+      request({
+        turns: [
+          { role: ModelTurnRole.USER, text: 'apunta pan' },
+          { role: ModelTurnRole.MODEL, text: 'Hecho.' },
+        ],
+      }),
       OPTIONS
     );
 
     expect(body['messages']).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'apunta pan' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'Hecho.' }] },
     ]);
   });
@@ -219,6 +225,7 @@ describe('toClaudeRequest', () => {
     const body = toClaudeRequest(
       request({
         turns: [
+          { role: ModelTurnRole.USER, text: 'renombra' },
           {
             role: ModelTurnRole.MODEL,
             toolCalls: [{ id: 'toolu_9', name: 'rename_me', args: { a: 1 } }],
@@ -229,6 +236,7 @@ describe('toClaudeRequest', () => {
     );
 
     expect(body['messages']).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'renombra' }] },
       {
         role: 'assistant',
         content: [
@@ -278,6 +286,25 @@ describe('toClaudeRequest', () => {
     expect(body['messages']).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'a' }] },
       { role: 'user', content: [{ type: 'text', text: 'b' }] },
+    ]);
+  });
+  it('drops the assistant turns a transcript cut left before the first question', () => {
+    const body = toClaudeRequest(
+      request({
+        turns: [
+          { role: ModelTurnRole.MODEL, text: 'Apuntado.' },
+          { role: ModelTurnRole.USER, text: 'y leche' },
+          { role: ModelTurnRole.MODEL, text: 'Hecho.' },
+          { role: ModelTurnRole.USER, text: 'gracias' },
+        ],
+      }),
+      OPTIONS
+    );
+
+    expect(body['messages']).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'y leche' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Hecho.' }] },
+      { role: 'user', content: [{ type: 'text', text: 'gracias' }] },
     ]);
   });
 });
