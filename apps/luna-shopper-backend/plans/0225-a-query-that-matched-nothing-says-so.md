@@ -1,3 +1,5 @@
+> **PR:** [#804](https://github.com/IchirokuXVI/nx-portfolio/pull/804)
+
 # 0225: a query that matched nothing says so
 
 > The evaluation of 2026-10-22 (plan `0224`, section 10) ran the assistant's prompt and
