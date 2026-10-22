@@ -78,6 +78,8 @@ export interface SuggestionCardView {
   readonly suggestion: CatalogSuggestion;
   readonly group: boolean;
   readonly name: string;
+  /** The item's photo, drawn in the thumbnail, or null for none and for a group. */
+  readonly imageUrl: string | null;
   /**
    * "Also called: algodón" on a group that matched through one of its other
    * words and not its name, or null (velista `0108`, target 4). Always null on
@@ -152,6 +154,7 @@ function itemView(
     suggestion,
     group: false,
     name,
+    imageUrl: item.imageUrl,
     alsoCalled: null,
     pack,
     price,
@@ -208,6 +211,7 @@ function groupView(
     suggestion,
     group: true,
     name,
+    imageUrl: null,
     alsoCalled:
       synonym === null
         ? null

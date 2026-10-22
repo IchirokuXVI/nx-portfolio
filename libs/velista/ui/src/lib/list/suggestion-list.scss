@@ -167,26 +167,26 @@
   background: var(--app-surface-sunken);
 }
 
-// The photograph's place. Photographs do not ship until backend 0126 to 0129, so this
-// always draws the glyph on a sunken tile, which is the card's state with no picture.
+// The thumbnail's box. An item's picture fills it and draws its own surface and
+// hairline (`lib-product-picture`, sized by the two properties it reads); a group's
+// crate is drawn on the box itself.
 .sug-thumb {
+  --app-line-picture-size: var(--app-suggestion-thumb);
+  --app-line-picture-radius: var(--app-radius-sm);
+
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   width: var(--app-suggestion-thumb);
   height: var(--app-suggestion-thumb);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface-sunken);
-  color: var(--app-text-muted);
-  font-size: var(--app-icon-md, var(--app-text-lg));
 }
 
 .sug.group .sug-thumb {
-  border-color: var(--app-action-quiet-border);
-  background: transparent;
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-sm);
   color: var(--app-action-quiet-fg);
+  font-size: var(--app-icon-md, var(--app-text-lg));
 }
 
 // The line height the canvas was measured with. The app's body copy is 1.5, which

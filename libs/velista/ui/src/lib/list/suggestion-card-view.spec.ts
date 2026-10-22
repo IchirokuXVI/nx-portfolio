@@ -98,6 +98,13 @@ describe('suggestionCardView, an item', () => {
     expect(card.productId).toBe('item-1');
   });
 
+  it('carries the photo of the product, and none when it has none', () => {
+    expect(itemCard({ imageUrl: 'https://img.test/milk.jpg' }).imageUrl).toBe(
+      'https://img.test/milk.jpg'
+    );
+    expect(itemCard().imageUrl).toBeNull();
+  });
+
   it('says nothing about price, and draws no foot, for a product with none', () => {
     // `Edge`: no dash and no reserved blank. The card falls back to the height of
     // its own photograph.

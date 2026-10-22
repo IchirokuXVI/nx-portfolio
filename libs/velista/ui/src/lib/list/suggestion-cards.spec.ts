@@ -464,6 +464,56 @@ describe('SuggestionList, the cards', () => {
     });
   });
 
+  describe('the thumbnail (0161)', () => {
+    function thumb(fixture: ComponentFixture<SuggestionList>): HTMLElement {
+      const found = root(fixture).querySelector<HTMLElement>('.sug-thumb');
+      if (found === null) {
+        throw new Error('no thumbnail');
+      }
+      return found;
+    }
+
+    it('draws the photo of an item that has one', async () => {
+      const { fixture } = await render([
+        item('a', { imageUrl: 'https://img.test/a.jpg' }),
+      ]);
+
+      const image = thumb(fixture).querySelector('lib-product-picture img');
+      expect(image?.getAttribute('src')).toBe('https://img.test/a.jpg');
+      expect(thumb(fixture).querySelector('lib-product-icon')).toBeNull();
+      expect(thumb(fixture).getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('draws the product glyph for an item with no photo', async () => {
+      const { fixture } = await render([item('a')]);
+
+      expect(thumb(fixture).querySelector('img')).toBeNull();
+      expect(
+        thumb(fixture).querySelector('lib-product-picture lib-product-icon')
+      ).not.toBeNull();
+    });
+
+    it('draws the glyph in place of a photo that does not load', async () => {
+      const { fixture } = await render([
+        item('a', { imageUrl: 'https://img.test/gone.jpg' }),
+      ]);
+
+      thumb(fixture).querySelector('img')?.dispatchEvent(new Event('error'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(thumb(fixture).querySelector('img')).toBeNull();
+      expect(thumb(fixture).querySelector('lib-product-icon')).not.toBeNull();
+    });
+
+    it('draws the crate for a group', async () => {
+      const { fixture } = await render([group(6, 5)]);
+
+      expect(thumb(fixture).querySelector('lib-basket-icon')).not.toBeNull();
+      expect(thumb(fixture).querySelector('lib-product-picture')).toBeNull();
+    });
+  });
+
   describe('the lines already holding it (section 4)', () => {
     const holdings: SuggestionHolding[] = [
       {
