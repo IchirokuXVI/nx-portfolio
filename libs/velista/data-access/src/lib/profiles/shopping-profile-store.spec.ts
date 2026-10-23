@@ -815,5 +815,78 @@ describe('ShoppingProfileStore', () => {
       expect(count(service, 'describeScope')).toBe(coverage);
       expect(store.state()).toBe('loaded');
     });
+
+    it('reads neither the chains nor the coverage even where a load would read both', async () => {
+      // The chains failed on the first load, so a `load` would ask for them again, and
+      // the profile holds a postal code, so a `load` would ask for its coverage too.
+      const service = fakeService({
+        profiles: [
+          profile({
+            postalCodes: [
+              {
+                id: 'pc-14001',
+                postalCode: '14001',
+                label: null,
+                position: 0,
+                source: 'TYPED',
+              },
+            ],
+          }),
+        ],
+      });
+      const listSupermarkets = service.listSupermarkets;
+      service.listSupermarkets = async () => {
+        service.calls.push({ method: 'listSupermarkets' });
+        throw new Error('no chains this time');
+      };
+      const { store, realtime } = setUp(service);
+      await store.load();
+      service.listSupermarkets = listSupermarkets;
+      const chains = count(service, 'listSupermarkets');
+      const coverage = count(service, 'describeScope');
+      expect(coverage).toBe(1);
+
+      await reconnect(realtime);
+
+      expect(count(service, 'listProfiles')).toBe(2);
+      expect(count(service, 'listSupermarkets')).toBe(chains);
+      expect(count(service, 'describeScope')).toBe(coverage);
+    });
+
+    it('keeps what was typed in a field whose write is still out, and the held value under it', async () => {
+      const service = fakeService();
+      const { store, realtime } = setUp(service);
+      await store.load();
+
+      let refuse: (error: unknown) => void = () => undefined;
+      service.updateProfile = () =>
+        new Promise<ShoppingProfile>((_resolve, reject) => (refuse = reject));
+      service.listProfiles = async () => {
+        service.calls.push({ method: 'listProfiles' });
+        return [profile({ name: 'Theirs', minSavingCents: 300 })];
+      };
+
+      const pending = store.save('p1', 'name', { name: 'Mine' }, (current) => ({
+        ...current,
+        name: 'Mine',
+      }));
+
+      await reconnect(realtime);
+
+      expect(count(service, 'listProfiles')).toBe(2);
+      expect(store.selected()?.name).toBe('Mine');
+      // A field nothing claims takes the server's value, so the read did land.
+      expect(store.selected()?.minSavingCents).toBe(300);
+
+      // The field the write claims was laid over the way an event is: the held value
+      // stays under the overlay, so a write that then fails snaps the control back to
+      // what it showed before the edit, as it does after a live `profiles.changed`.
+      refuse(
+        new GatewayError({ code: 'internal', status: 500, correlationId: 'c' })
+      );
+      expect(await pending).toBe('failed');
+      expect(store.selected()?.name).toBeNull();
+      expect(store.selected()?.minSavingCents).toBe(300);
+    });
   });
 });

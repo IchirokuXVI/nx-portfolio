@@ -653,14 +653,6 @@ export class ShoppingProfileStore {
   }
 
   /**
-   * Apply the whole list an event carried, field by field against what is in flight.
-   *
-   * Plan 0004 section 7.2, case 3, applied literally: a field with a pending overlay
-   * keeps the local value until that overlay's own request resolves, and every other
-   * field takes the server's. A profile the event does not mention is gone, which is
-   * how a delete on another device reaches this one.
-   */
-  /**
    * Read the profiles again without a skeleton, after a reconnect (velista `0169`).
    *
    * Laid over what is held the way a `profiles.changed` event is, so a control whose
@@ -675,6 +667,14 @@ export class ShoppingProfileStore {
     }
   }
 
+  /**
+   * Apply the whole list an event carried, field by field against what is in flight.
+   *
+   * Plan 0004 section 7.2, case 3, applied literally: a field with a pending overlay
+   * keeps the local value until that overlay's own request resolves, and every other
+   * field takes the server's. A profile the event does not mention is gone, which is
+   * how a delete on another device reaches this one.
+   */
   private _applyRemote(incoming: readonly ShoppingProfile[]): void {
     const local = new Map(this._raw().map((profile) => [profile.id, profile]));
 
