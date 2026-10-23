@@ -13,6 +13,11 @@
   // This page has no page header, so it clears the status bar itself (the top inset
   // belongs to the top most element). The glow still paints under the bar.
   padding-block-start: var(--app-safe-top);
+  // It has no tab bar either, so it clears the system navigation bar itself, and on
+  // the page rather than on the ways in: the version line is the last thing here,
+  // under them, and an inset on any child but the last leaves the last one under the
+  // system bar.
+  padding-block-end: var(--app-safe-bottom);
   position: relative;
   // Most of the glow is outside the page, so the corner is a quarter circle rather
   // than a ball stuck to the edge. On `.page` and not on the host: the sheet outlet

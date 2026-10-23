@@ -374,7 +374,8 @@ E2E_LINK_VISIT_TTL_SECONDS=20 … npx nx e2e velista-luna-e2e --skip-nx-cache --
 - **A `REMOVED` row has no button**, so `getByRole('button')` finds nothing in it by
   design. Find it by its text.
 - **A URL that matches no route renders the 404 outside `AppLayout`.** Scope an assertion
-  about a screen inside `lib-app-layout`.
+  about a screen inside `lib-app-layout`. (2026-10-23: the 404 now renders inside
+  `AppLayout`, behind its startup gate.)
 - **A settle pane closes on Escape, not Cancel**, and picking a shop dismisses the picker
   back onto the filter sheet, as today.
 - **The share link's origin is compiled in.** Open `new URL(link).pathname` against the
