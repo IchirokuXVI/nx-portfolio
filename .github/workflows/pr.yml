@@ -74,6 +74,15 @@ jobs:
       - name: Every release task states when it can run
         run: node k8s/release-tasks/check-tasks.mjs
 
+      # Every deployable app ships with exactly one deploy unit, and every unit in
+      # k8s/units is complete (k8s plan 0014). Plain node that reads project.json
+      # as text, so it needs no Nx and `nx affected` never sees it.
+      - name: The deploy unit check's own tests
+        run: node --test tools/deploy/units.test.mjs tools/release/release-notes.test.mjs
+
+      - name: Every deployable app belongs to one deploy unit
+        run: node tools/deploy/units.mjs check
+
       # `manifest-check` joins lint and test here (k8s plan 0009). It is the one
       # target in this job that is not free: it depends on `prune`, so an affected
       # Luna Shopper service is built and its lockfile pruned before the check
