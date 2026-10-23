@@ -32,7 +32,6 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
-import { NotFoundPage } from './not-found-page/not-found-page';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -693,7 +692,9 @@ export const AppShellRoutes: Route[] = [
       defaultLocale: APP_DEFAULT_LOCALE,
     },
     // **Every route with a non empty path comes before the `''` front door**, and a
-    // spec fails the moment that stops being true (plan 0008, section 4.1.1).
+    // spec fails the moment that stops being true (plan 0008, section 4.1.1). The one
+    // route after it is the `**` catch-all, which has to be last for the opposite
+    // reason: it matches everything, the empty remainder included.
     //
     // Giving the front door children turned it from a terminal route into a prefix.
     // Its path is `''`, so it consumes no segments and then offers `zones/new` to
@@ -1801,7 +1802,8 @@ export const AppShellRoutes: Route[] = [
             // route. As a redirect it is checkable, and the signed in user still reaches
             // their groups in one navigation.
             //
-            // Last, and the only empty path here. See the note on `children` above.
+            // Last but for the catch-all, and the only empty path here. See the note on
+            // `children` above.
             path: '',
             canActivate: [anonymousOnlyGuard],
             // **The one route that draws before the backend has answered** (plan 0071
@@ -1828,26 +1830,55 @@ export const AppShellRoutes: Route[] = [
               ),
             children: [...entrySheetRoutes('landing')],
           },
+          {
+            /**
+             * This app's own 404, drawn in a language the visitor can read. It asks
+             * for a newer version before it says so (plan 0150), because a link from
+             * a newer release can name a route this build does not have.
+             *
+             * **Here, under `AppLayout`, and after the front door.** By the time a URL
+             * reaches this table the guard has settled its first segment, so an
+             * unknown path is `/:locale/<anything>` and belongs to this branch. It
+             * used to fall out of it to the catch-all below, beside the layout rather
+             * than in it, and there no `--app-*` token resolves: the page drew with no
+             * theme, no fonts, no spacing and under the status bar. Inside the layout
+             * it is a page like any other, with no bar, like the front door.
+             *
+             * After `''` because a `**` matches the empty remainder too: declared
+             * earlier it would take `/en` from the front door. The front door is a
+             * prefix that consumes nothing, so a path its sheets do not claim falls
+             * through it to here.
+             *
+             * Lazy like every other page, so the initial payload does not carry it.
+             */
+            path: '**',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('./not-found-page/not-found-page').then(
+                (m) => m.NotFoundPage
+              ),
+          },
         ],
       },
       {
         /**
          * **Load bearing, and not merely a 404.** The guard above only runs when
          * this parent route matches, and a parent with `children` matches only if
-         * one of them matches the remainder. With `:locale` as the only child, any
-         * URL without a locale segment failed to match the whole branch, Angular
-         * fell through to the shell's routes, and this app's guard, the one whose
-         * job is to *insert* the missing locale, never ran at all.
+         * one of them matches the remainder. `:locale` needs a segment, so without
+         * this a URL with none at all failed to match the whole branch, Angular fell
+         * through to the shell's routes, and this app's guard, the one whose job is
+         * to *insert* the missing locale, never ran at all.
          *
          * So the app claims every path below its mount and the guard settles the
-         * locale for all of them. Anything still here afterwards carries a
-         * supported canonical locale and simply is not a route, which is this
-         * app's own 404, drawn in a language the visitor can read. It asks for a
-         * newer version before it says so (plan 0150), because a link from a newer
-         * release can name a route this build does not have.
+         * locale for all of them. The guard always redirects a URL that arrives
+         * here, so this page is never drawn in practice: every unknown path that
+         * carries a locale is matched by the catch-all inside `:locale` above, which
+         * draws the same page inside the layout. A component is still required of a
+         * route with no children, and this is the honest one.
          */
         path: '**',
-        component: NotFoundPage,
+        loadComponent: () =>
+          import('./not-found-page/not-found-page').then((m) => m.NotFoundPage),
       },
     ],
   },
