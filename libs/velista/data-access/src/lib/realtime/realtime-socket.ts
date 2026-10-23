@@ -116,6 +116,7 @@ export class RealtimeSocket implements RealtimeClientI {
   private readonly _events = new Subject<RealtimeEvent>();
   private readonly _connected = signal(false);
   private readonly _degraded = signal(false);
+  private readonly _reconnects = signal(0);
   private readonly _refused = signal<ReadonlySet<string>>(new Set());
   private readonly _dropped = signal<ReadonlyMap<string, number>>(new Map());
 
@@ -137,6 +138,9 @@ export class RealtimeSocket implements RealtimeClientI {
   private _connecting = false;
   private _failures = 0;
 
+  /** Whether this session has connected once, which makes the next `connect` a reconnect. */
+  private _connectedOnce = false;
+
   private _retryTimer: ReturnType<typeof setTimeout> | null = null;
   private _healthyTimer: ReturnType<typeof setTimeout> | null = null;
   private _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -147,6 +151,7 @@ export class RealtimeSocket implements RealtimeClientI {
   readonly events: Observable<RealtimeEvent> = this._events.asObservable();
   readonly connected: Signal<boolean> = this._connected.asReadonly();
   readonly degraded: Signal<boolean> = this._degraded.asReadonly();
+  readonly reconnects: Signal<number> = this._reconnects.asReadonly();
   readonly refusedZones: Signal<ReadonlySet<string>> =
     this._refused.asReadonly();
   readonly droppedEvents: Signal<ReadonlyMap<string, number>> =
@@ -362,6 +367,10 @@ export class RealtimeSocket implements RealtimeClientI {
 
   private _onConnected(): void {
     this._connected.set(true);
+    if (this._connectedOnce) {
+      this._reconnects.update((count) => count + 1);
+    }
+    this._connectedOnce = true;
 
     // R6 and R8 together. Rooms are per connection and server side, so a new socket is
     // in none of them however confident the refcounts are; and a refusal is core's
@@ -435,6 +444,8 @@ export class RealtimeSocket implements RealtimeClientI {
     this._failures = 0;
     this._connected.set(false);
     this._degraded.set(false);
+    this._connectedOnce = false;
+    this._reconnects.set(0);
     this._registry.clear();
     this._publishRefused();
   }

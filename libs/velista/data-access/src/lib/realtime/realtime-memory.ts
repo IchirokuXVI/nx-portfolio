@@ -32,6 +32,7 @@ export class RealtimeMemory implements RealtimeClientI {
   private readonly _events = new Subject<RealtimeEvent>();
   private readonly _connected = signal(true);
   private readonly _degraded = signal(false);
+  private readonly _reconnects = signal(0);
   private readonly _refused = signal<ReadonlySet<string>>(new Set());
   private readonly _dropped = signal<ReadonlyMap<string, number>>(new Map());
 
@@ -40,6 +41,7 @@ export class RealtimeMemory implements RealtimeClientI {
   readonly events: Observable<RealtimeEvent> = this._events.asObservable();
   readonly connected: Signal<boolean> = this._connected.asReadonly();
   readonly degraded: Signal<boolean> = this._degraded.asReadonly();
+  readonly reconnects: Signal<number> = this._reconnects.asReadonly();
   readonly refusedZones: Signal<ReadonlySet<string>> =
     this._refused.asReadonly();
   readonly droppedEvents: Signal<ReadonlyMap<string, number>> =
@@ -139,6 +141,11 @@ export class RealtimeMemory implements RealtimeClientI {
 
   setDegraded(degraded: boolean): void {
     this._degraded.set(degraded);
+  }
+
+  /** Set the reconnect count, as if the connection had come back that many times. */
+  setReconnects(count: number): void {
+    this._reconnects.set(count);
   }
 
   retry(): void {

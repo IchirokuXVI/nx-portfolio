@@ -54,6 +54,21 @@ export interface RealtimeClientI {
   readonly degraded: Signal<boolean>;
 
   /**
+   * How many times this session's connection came back after its first `connect`.
+   *
+   * Zero until the first `connect` of a session, one more on every later `connect` of
+   * the same session, and zero again when the session ends. A counter rather than a
+   * boolean for the reason `AppResumed.resumes` and `BasketSocket.reconnects` are
+   * counters: an edge cannot be read from a boolean, and a drop and a return that both
+   * land between two reads leave `connected` true with nothing for an effect to see.
+   *
+   * Rooms are rejoined on a reconnect, not replayed. Every event the server broadcast
+   * while the socket was down is gone, so a consumer that mirrors server state reads it
+   * again when this moves.
+   */
+  readonly reconnects: Signal<number>;
+
+  /**
    * Join a zone room, refcounted. The returned function leaves it.
    *
    * Two containers can want the same zone, so the room is joined on the transition to

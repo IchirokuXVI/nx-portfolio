@@ -457,6 +457,39 @@ describe('RealtimeSocket', () => {
     });
   });
 
+  describe('reconnects, the edge plan 0169 reads', () => {
+    it('is 0 after the first connect, 1 after the second, and 0 after sign out', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        expect(client.reconnects()).toBe(0);
+
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(0);
+
+        socket().driveDisconnect();
+        jest.runOnlyPendingTimers();
+        await settle();
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(1);
+
+        authenticated.set(false);
+        TestBed.tick();
+        expect(client.reconnects()).toBe(0);
+
+        // A new session starts from zero, so its first connect is not a reconnect.
+        authenticated.set(true);
+        TestBed.tick();
+        await settle();
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   /**
    * Plan 0017. The intents ride on the subscriptions, so the ordering between the two
    * is the whole of what can go wrong here.
