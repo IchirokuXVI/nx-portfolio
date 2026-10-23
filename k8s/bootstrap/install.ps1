@@ -54,6 +54,22 @@ function Invoke-Checked {
   if ($LASTEXITCODE -ne 0) { throw "command failed with exit code $LASTEXITCODE" }
 }
 
+# Runs a kubectl read and returns its output and exit code. Windows PowerShell
+# 5.1 turns native stderr into a terminating error under 'Stop', so the read runs
+# under 'Continue' and the caller decides what a failure means.
+function Invoke-KubectlRead {
+  param([string[]]$Arguments)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & kubectl @Arguments 2>$null
+    [pscustomobject]@{ Output = @($output); ExitCode = $LASTEXITCODE }
+  }
+  finally {
+    $ErrorActionPreference = $previous
+  }
+}
+
 Write-Host "==> cluster: $(kubectl config current-context)"
 Write-Host "==> implementation: $Implementation, issuer: $Issuer, pool address: $(if ($Ip) { $Ip } else { 'unchanged' })"
 
@@ -146,9 +162,14 @@ spec:
   mergeGateways: true
 '@
 
-$classParams = kubectl get gatewayclass eg -o 'jsonpath={.spec.parametersRef.name}' 2>$null
-$classes = kubectl get gateways --all-namespaces -o 'jsonpath={range .items[*]}{.spec.gatewayClassName}{"\n"}{end}' 2>$null
-$mergeClass = ($classParams -eq 'merged') -or -not (@($classes) -contains 'eg')
+$classParams = (Invoke-KubectlRead @('get', 'gatewayclass', 'eg', '-o', 'jsonpath={.spec.parametersRef.name}')).Output
+# custom-columns, because PowerShell 5.1 strips the quotes of a jsonpath "\n".
+# A failed query is a stop, never "no Gateway": that would merge a live class.
+$gateways = Invoke-KubectlRead @('get', 'gateways', '--all-namespaces', '-o', 'custom-columns=CLASS:.spec.gatewayClassName', '--no-headers')
+if ($gateways.ExitCode -ne 0) {
+  throw "kubectl could not list the Gateways (exit code $($gateways.ExitCode)), so it is unknown whether the GatewayClass eg may be merged. Fix cluster access and run again."
+}
+$mergeClass = ($classParams -contains 'merged') -or -not ($gateways.Output -contains 'eg')
 
 $gatewayClassYaml = @'
 apiVersion: gateway.networking.k8s.io/v1
@@ -177,21 +198,43 @@ Invoke-KubectlApply -Name 'gatewayclass' -Yaml $gatewayClassYaml
 
 # ---------------------------------------------------------------------------
 # The MetalLB pool, when -Ip names the address (k8s plan 0015 D5). Only the
-# Envoy data plane may take it. A pool that the old one release chart rendered
-# is Helm's and is left alone.
+# Envoy data plane may take it. A pool is a Helm release's only while
+# `helm status` finds that release; one whose release is gone is taken over.
 # ---------------------------------------------------------------------------
 if ($Ip) {
-  kubectl get crd ipaddresspools.metallb.io *> $null
-  if ($LASTEXITCODE -ne 0) {
+  if ((Invoke-KubectlRead @('get', 'crd', 'ipaddresspools.metallb.io')).ExitCode -ne 0) {
     throw '-Ip applies a MetalLB pool, and MetalLB is not installed here. install.sh installs it.'
   }
-  $poolOwner = kubectl -n metallb-system get ipaddresspool main-pool -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-name}' 2>$null
-  if ($poolOwner) {
-    Write-Host "==> IPAddressPool main-pool belongs to the Helm release '$poolOwner'; left as it is"
+  $poolRelease = "$((Invoke-KubectlRead @('-n', 'metallb-system', 'get', 'ipaddresspool', 'main-pool', '-o', 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-name}')).Output)"
+  $poolReleaseNs = "$((Invoke-KubectlRead @('-n', 'metallb-system', 'get', 'ipaddresspool', 'main-pool', '-o', 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-namespace}')).Output)"
+  if (-not $poolReleaseNs) { $poolReleaseNs = 'default' }
+  $poolOwned = $false
+  if ($poolRelease) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      helm status $poolRelease -n $poolReleaseNs *> $null
+      $poolOwned = ($LASTEXITCODE -eq 0)
+    }
+    finally {
+      $ErrorActionPreference = $previous
+    }
+  }
+  if ($poolOwned) {
+    Write-Host "==> IPAddressPool main-pool belongs to the Helm release '$poolRelease'; left as it is"
   }
   else {
+    if ($poolRelease) {
+      Write-Host "==> the Helm release '$poolRelease' of IPAddressPool main-pool is gone; taking the pool over"
+      foreach ($obj in @('ipaddresspool/main-pool', 'l2advertisement/main-advertisement')) {
+        if ((Invoke-KubectlRead @('-n', 'metallb-system', 'get', $obj)).ExitCode -eq 0) {
+          Invoke-Checked { kubectl -n metallb-system annotate $obj meta.helm.sh/release-name- meta.helm.sh/release-namespace- | Out-Null }
+          Invoke-Checked { kubectl -n metallb-system label $obj app.kubernetes.io/managed-by- | Out-Null }
+        }
+      }
+    }
     Write-Host "==> applying IPAddressPool main-pool ($Ip) and L2Advertisement main-advertisement"
-    Invoke-KubectlApply -Name 'metallb-pool' -Yaml @"
+    $poolYaml = @"
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -213,6 +256,18 @@ spec:
   ipAddressPools:
     - main-pool
 "@
+    # MetalLB's validating webhook can refuse for a few seconds after its install.
+    for ($attempt = 1; ; $attempt++) {
+      try {
+        Invoke-KubectlApply -Name 'metallb-pool' -Yaml $poolYaml
+        break
+      }
+      catch {
+        if ($attempt -ge 6) { throw "the MetalLB pool could not be applied after $attempt attempts: $_" }
+        Write-Host "==> retrying the pool in 5s (attempt $attempt of 6 failed)"
+        Start-Sleep -Seconds 5
+      }
+    }
   }
 }
 
