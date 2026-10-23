@@ -30,6 +30,7 @@ import {
   type PresenceUser,
 } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
   appPath,
   BrowserFacade,
   PageNavigation,
@@ -111,6 +112,7 @@ export class GroupPage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _share = inject(SHARE_TARGET);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
+  private readonly _runtime = inject(APP_RUNTIME);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
 
@@ -540,14 +542,20 @@ export class GroupPage {
    * is the same rule the shopping trip's link has always followed.
    */
   shareCode(code: string): void {
-    // The app's own origin first, as the basket link does: inside a native shell the
-    // document's origin is the WebView's, which nobody else can open (velista `0166`).
-    const url = shareUrl(
-      this._standaloneOrigin || this._browser.location?.origin || '',
-      this._basePath,
-      'join',
-      code
-    );
+    // Inside a native shell the document's origin is the WebView's, which nobody else
+    // can open, so the app's own origin is named, and it has no mount (velista `0166`).
+    // Everywhere else the document's origin and mount: the standalone origin is the
+    // production host on staging and absent on a slot, and under the portfolio mount it
+    // would build `velista.app/velista/join`, which is not a page.
+    const url =
+      this._runtime === 'native' && this._standaloneOrigin
+        ? shareUrl(this._standaloneOrigin, '', 'join', code)
+        : shareUrl(
+            this._browser.location?.origin ?? '',
+            this._basePath,
+            'join',
+            code
+          );
 
     // The no share case copies synchronously, before anything is awaited, because
     // the clipboard needs the same gesture the share sheet does.

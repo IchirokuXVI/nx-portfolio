@@ -248,14 +248,19 @@ export class ShareSheet {
    * Built from the standalone origin rather than from wherever this tab happens
    * to be: velista is reachable at `ichirokuxvi.com/velista` and at
    * `velista.app`, and the link that goes into a group chat should be the app's
-   * own address rather than the portfolio's.
+   * own address rather than the portfolio's. The standalone origin has no mount, so
+   * the base path goes with the document's origin only: the portfolio's `/velista`
+   * on `velista.app` is not a page.
    */
   protected readonly url = computed(() => {
     const secret = this.link()?.secret;
-    return secret === undefined
-      ? ''
+    if (secret === undefined) {
+      return '';
+    }
+    return this._standaloneOrigin
+      ? basketShareUrl(this._standaloneOrigin, '', secret)
       : basketShareUrl(
-          this._standaloneOrigin || this._browser.window?.location.origin || '',
+          this._browser.window?.location.origin ?? '',
           this._basePath,
           secret
         );

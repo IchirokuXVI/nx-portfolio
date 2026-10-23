@@ -217,4 +217,24 @@ describe('PageHeader and a native back press', () => {
     expect(TestBed.inject(BackStack).handle()).toBe(false);
     expect(fixture.componentInstance.backs).toBe(0);
   });
+
+  it('keeps its place below a newer handler when the label is repainted', async () => {
+    const fixture = await render();
+    const stack = TestBed.inject(BackStack);
+    let sheetPresses = 0;
+    // A sheet opened over the page after the header registered.
+    stack.register(() => {
+      sheetPresses += 1;
+      return true;
+    });
+
+    // The translated label arrives, or the locale switches: a new string, still drawn.
+    fixture.componentInstance.backLabel.set('Volver al grupo');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(stack.handle()).toBe(true);
+    expect(sheetPresses).toBe(1);
+    expect(fixture.componentInstance.backs).toBe(0);
+  });
 });

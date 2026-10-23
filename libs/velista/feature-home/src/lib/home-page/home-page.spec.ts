@@ -38,9 +38,11 @@ import {
   type MyZone,
 } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   TourAnchors,
+  type AppRuntime,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
 import { ShoppingListCard, ZoneCard } from '@portfolio/velista/ui';
@@ -70,6 +72,8 @@ interface Options {
   identity?: FakeIdentity;
   /** `APP_STANDALONE_ORIGIN`, which the app layer supplies. Empty when unset. */
   standaloneOrigin?: string;
+  /** `APP_RUNTIME`, `web` unless a test is about the native shell. */
+  runtime?: AppRuntime;
   zones?: readonly MyZone[];
   fails?: boolean;
   storage?: Map<string, string>;
@@ -167,6 +171,7 @@ async function render(
         provide: APP_STANDALONE_ORIGIN,
         useValue: options.standaloneOrigin ?? '',
       },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
     ],
   }).compileComponents();
 
@@ -1212,12 +1217,13 @@ describe('HomePage', () => {
       expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
     });
 
-    it('names the app’s own origin over the document’s, as the basket link does', async () => {
-      // Velista `0166`: inside a native shell the document is the WebView's local
-      // origin, which nobody the invite is sent to can open.
+    it('names the app’s own origin, with no mount, inside a native shell', async () => {
+      // Velista `0166`: there the document is the WebView's local origin, which
+      // nobody the invite is sent to can open.
       const sent: { url?: string } = {};
       const fixture = await render({
         zones: [invited],
+        runtime: 'native',
         standaloneOrigin: 'https://velista.app',
         browser: fakeWindow('https://localhost', sent, []),
       });
@@ -1227,19 +1233,64 @@ describe('HomePage', () => {
       expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
     });
 
-    it('copies nothing when the person closes the share sheet', async () => {
-      const copied: string[] = [];
+    it('keeps the document’s origin and mount on the web, whatever the standalone origin', async () => {
+      // `velista.app/velista/join` is not a page, and on staging the standalone
+      // origin is the production host.
+      const sent: { url?: string } = {};
+      const fixture = await render({
+        zones: [invited],
+        basePath: '/velista',
+        standaloneOrigin: 'https://velista.app',
+        browser: fakeWindow('https://ichirokuxvi.com', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://ichirokuxvi.com/velista/join/HK7M2QPD');
+    });
+
+    /** Fails the fake share sheet with a `DOMException` of this name. */
+    function refusingWindow(name: string, copied: string[]) {
       const browser = fakeWindow('https://velista.app', {}, copied);
       (
         browser.window as unknown as { navigator: { share: unknown } }
-      ).navigator.share = () =>
-        Promise.reject(new DOMException('closed', 'AbortError'));
-      const fixture = await render({ zones: [invited], browser });
+      ).navigator.share = () => Promise.reject(new DOMException('no', name));
+      return browser;
+    }
+
+    /**
+     * Lets the share's rejection and the `then` after it run. `whenStable` does not:
+     * zoneless, it waits for Angular's own pending work, not a plain promise chain.
+     */
+    const flushMicrotasks = async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    };
+
+    it('copies nothing when the person closes the share sheet', async () => {
+      const copied: string[] = [];
+      const fixture = await render({
+        zones: [invited],
+        browser: refusingWindow('AbortError', copied),
+      });
 
       fixture.componentInstance.shareCode('HK7M2QPD');
-      await fixture.whenStable();
+      await flushMicrotasks();
 
       expect(copied).toEqual([]);
+    });
+
+    it('copies the link when the browser refuses the share sheet', async () => {
+      // The control for the test above: the same flush is long enough for a copy.
+      const copied: string[] = [];
+      const fixture = await render({
+        zones: [invited],
+        browser: refusingWindow('NotAllowedError', copied),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+      await flushMicrotasks();
+
+      expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
     });
   });
 });

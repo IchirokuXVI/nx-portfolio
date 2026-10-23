@@ -1,4 +1,4 @@
-import { effect, inject, Injectable, untracked } from '@angular/core';
+import { computed, effect, inject, Injectable, untracked } from '@angular/core';
 
 /**
  * Something on screen that can answer a back press. True means it did, and nothing
@@ -71,15 +71,20 @@ export class BackStack {
  */
 export function handleBackWhile(active: () => boolean, act: () => void): void {
   const stack = inject(BackStack);
+  // Through a computed, so the effect reruns only when the boolean flips. Read directly,
+  // it would track every input of the predicate (a page header's whole label string), and
+  // a repaint of that label would release and register again, moving the header above a
+  // sheet opened after it.
+  const isActive = computed(active);
 
   effect((onCleanup) => {
-    if (!active()) {
+    if (!isActive()) {
       return;
     }
 
     onCleanup(
       stack.register(() => {
-        if (!untracked(active)) {
+        if (!untracked(isActive)) {
           return false;
         }
         untracked(act);
