@@ -436,7 +436,7 @@ base64url, and `--check` asserts each `*_DB_URL` actually parses, since a cluste
 provisioned before the fix still holds the bad string. To repair an existing one,
 rotate that database's password rather than editing the URL: `ALTER ROLE` inside
 the instance, write the new value to its `*-db-secret`, then re-run
-`provision-release.sh --env <env>`, which rebuilds the URL from it.
+`provision-release.sh --unit velista --env <env>`, which rebuilds the URL from it.
 
 **`--check` reports every `configmap/luna-shopper-backend-config` key missing on
 a cluster nothing has been deployed to yet.** Fixed. That ConfigMap belongs to
