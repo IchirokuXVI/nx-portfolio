@@ -22,7 +22,7 @@
 #   3  take the MetalLB pool over (install.sh --pool-only --ip)
 #   4  namespaces, copied Secrets and ledger, `helm install portfolio`, no routes
 #   5  dump, move the volumes, `helm install velista`, no routes  backend out for minutes
-#   6  delete the old Gateway and routes, enable both Gateways     edge out for seconds
+#   6  enable both Gateways, then delete the old Gateway and routes
 #   7  after an hour, and every Certificate Ready: delete nx-portfolio and
 #      ClusterIssuer letsencrypt-prod
 #
@@ -36,6 +36,7 @@
 #   SPLIT_HELM_ARGS_PORTFOLIO, SPLIT_HELM_ARGS_VELISTA
 #                       extra helm arguments for one unit, split on spaces
 #   SPLIT_VALUES_ENV    the values file suffix for --env local (default local)
+#   SPLIT_SWAP_ORDER    new-first (default) or old-first, the order of step 6
 #   CLEANUP_AFTER       seconds between step 6 and step 7 (default 3600)
 #   DUMP_TIMEOUT        seconds to wait for one dump (default 900)
 
@@ -266,6 +267,8 @@ backup_cronjobs() {
 }
 pool_address() {
   local address
+  # A cluster with no MetalLB (Docker Desktop) has no pool to take over.
+  [ -n "$(get_or_empty get crd ipaddresspools.metallb.io -o name)" ] || return 0
   address="$(get_or_empty -n metallb-system get ipaddresspool main-pool \
     -o jsonpath='{.spec.addresses[0]}')"
   printf '%s' "${address%/32}"
@@ -292,7 +295,13 @@ plan() {
   echo "step 2, the Helm storage of $OLD_RELEASE to delete:"
   helm_storage | sed 's/^/  /'
   echo
-  echo "step 3, the pool: address '$(pool_address)', owner '$(get_or_empty -n metallb-system get ipaddresspool main-pool -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')'"
+  local address
+  address="$(pool_address)"
+  if [ -z "$address" ]; then
+    echo "step 3, no MetalLB pool on this cluster; nothing to take over"
+  else
+    echo "step 3, the pool: address '$address', owner '$(get_or_empty -n metallb-system get ipaddresspool main-pool -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')'"
+  fi
   echo
   echo "step 4, copied into $P_NS:"
   for secret in $(printf '%s\n' "$P_RENDER" | tls_secrets); do
@@ -624,15 +633,23 @@ fi
 
 if [ "$STEP_DONE" -lt 6 ]; then
   begin 6
-  echo "    the edge is down from here until both Gateways are Programmed"
-  edge_down="$(date +%s)"
-  kubectl -n "$OLD_NS" delete gateway --all --wait=true
-  kubectl -n "$OLD_NS" delete httproute --all
-  helm_unit portfolio true 10m
-  helm_unit velista true 20m
+  # New Gateways first: a class left with no Gateway has its merged data plane
+  # torn down and rebuilt, which cost 12 to 17 seconds in the rehearsal.
+  swap_started="$(date +%s)"
+  if [ "${SPLIT_SWAP_ORDER:-new-first}" = new-first ]; then
+    helm_unit portfolio true 10m
+    helm_unit velista true 20m
+    kubectl -n "$OLD_NS" delete gateway --all --wait=true
+    kubectl -n "$OLD_NS" delete httproute --all
+  else
+    kubectl -n "$OLD_NS" delete gateway --all --wait=true
+    kubectl -n "$OLD_NS" delete httproute --all
+    helm_unit portfolio true 10m
+    helm_unit velista true 20m
+  fi
   wait_programmed "$P_NS" "$P_RELEASE"
   wait_programmed "$V_NS" "$V_RELEASE"
-  echo "    the edge was down for $(($(date +%s) - edge_down))s"
+  echo "    both Gateways Programmed $(($(date +%s) - swap_started))s after the swap began"
   marker_set step6At "$(date +%s)"
   finish
 fi
