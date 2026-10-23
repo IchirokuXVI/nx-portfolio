@@ -112,8 +112,9 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 `k8s/release-tasks/check-tasks.mjs` and its test, `k8s/release-tasks/tasks/*/task.env`,
 `k8s/helm/deploy-release.sh`, `k8s/helm/deploy-homelab.sh`, `k8s/helm/restore-database.sh`,
 `k8s/catalog-import/*.sh`, `k8s/catalog-reset/*.sh`, `k8s/catalog-seed/*.sh`,
-`tools/deploy/units.mjs` (the render check of `0014` D4), `k8s/README.md`,
-`k8s/README-new-cluster.md`, `k8s/README-homelab.md`, `k8s/helm/luna-shopper-backend-secrets.md`.
+`tools/deploy/units.mjs` (the render check of `0014` D4), `renovate.json` (D14),
+`k8s/README.md`, `k8s/README-new-cluster.md`, `k8s/README-homelab.md`,
+`k8s/helm/luna-shopper-backend-secrets.md`.
 
 ### Constraints
 
@@ -432,6 +433,16 @@ the adopting install of `0016` D5 fail. Expected differences, and no others:
   (D6). `ReferenceGrant`: new (D6).
 - `IPAddressPool`, `L2Advertisement`: gone (D5).
 - `GATEWAY_INTERNAL_URL`: same string, now from `.Release.Namespace` (D2).
+
+### D14. Renovate follows the values files
+
+`renovate.json` watches the plain `image: name:tag` lines of the Helm values with the file
+pattern `^k8s/helm/values[^/]*\.yaml$` (plan 0013 D1). After D1 those lines live in
+`k8s/helm/<unit>/values*.yaml`, and the old pattern matches nothing, so Postgres, NATS and
+Redis would silently stop receiving updates. The pattern becomes
+`^k8s/helm/[^/]+/values[^/]*\.yaml$`, and the builder confirms with a Renovate dry run (or
+the next Dependency Dashboard refresh) that the three images are still listed. The rule for
+the build image matches every workflow file by name pattern and needs no change in `0016`.
 
 ## 4. Who edits what
 
