@@ -359,6 +359,30 @@ seconds in steps 1 and 6, and the backend for the few minutes of step 5, all ins
 quarter of an hour. `--env homelab` exists for the owner's home release and is run by
 hand.
 
+> **As built.** Three changes to D5, all in `split-release.sh` and the runbook
+> section "Existing clusters: the cutover":
+>
+> - **Production runs the cutover only when allowed.** The preflight runs it by itself
+>   on staging. On production it runs only when the variable `ALLOW_CUTOVER` of
+>   `<unit>-production` is `true`. Otherwise a deploy to a cluster that is not cut over
+>   stops before any change, with one summary line that names the two ways forward:
+>   set the variable inside a maintenance window and re-run, or run
+>   `split-release.sh --env production` by hand. The orchestrator decided this because
+>   the production maintenance window was closed.
+> - **Step 6 enables the new Gateways first and deletes the old one after.** With the
+>   old Gateway deleted first, the class has no Gateway for a moment, Envoy Gateway
+>   tears the merged data plane down and builds it again, and the rehearsal measured 12
+>   to 17 seconds with no answer. In the other order the duplicate HTTPS listeners wait
+>   as Conflicted until the old Gateway goes, and the rehearsal measured no gap.
+>   `SPLIT_SWAP_ORDER=old-first` restores the order written above.
+> - **Step 3 uses `install.sh --pool-only --ip`**, which applies the pool and nothing
+>   else, after stripping the pool's Helm annotations. A cluster with no MetalLB skips
+>   the step. `--env local` takes no dump, because Docker Desktop has no object storage.
+>
+> The pipelines also pass no `secrets: inherit` (D2): an environment that lacked
+> `SSH_DEPLOY_HOST` would otherwise fall back to the repository secret of that name,
+> which is production's.
+
 ### D6. The base image is tagged per environment and version
 
 `docker/local-http-server` builds with the tag `staging` in the staging pipelines and with

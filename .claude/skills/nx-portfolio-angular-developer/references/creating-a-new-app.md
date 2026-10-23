@@ -163,9 +163,10 @@ Mirror an existing app's `project.json`:
   `nx-portfolio/my-app`, `forwardEnv: ['BUILDER_TAG']`, dev/prod configurations);
 - `serve` / `serve-static` on your dev port, `serve` having
   `dependsOn: ['shell:serve']` (so serving the remote boots the shell too);
-- one entry in `k8s/helm/values.yaml` under `apps` (`name`, `image`,
-  `hostPrefix`, `path`). The environment comes from the values file passed
-  beside it, so there is no second staging entry.
+- the tag `deploy:<unit>` and one entry in `k8s/helm/<unit>/values.yaml` under
+  `apps` (`name`, `image`, `hostPrefix`, `path`). The environment comes from the
+  values file passed beside it, so there is no second staging entry. Its e2e
+  project goes in the `TRIGGERS` of one gate under `k8s/e2e`.
 
 CI picks up affected micro-frontends automatically. Remote URLs are static module
 federation, embedded at build time — not runtime.

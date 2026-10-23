@@ -61,7 +61,7 @@ export function adminsPath(tab?: AdminsTab): readonly string[] {
  * ask on: `-it`. The image holds the operator commands as `admin-cli.js`
  * beside `main.js` (`apps/luna-shopper-backend/auth/src/admin-cli.ts`), the
  * deployment is `luna-shopper-backend-auth`, and the namespace is the chart's
- * (`k8s/helm/values.yaml`).
+ * (`k8s/helm/velista/values.yaml`).
  *
  * It used to name `npx nx run luna-shopper-backend-auth:admin:create`. That
  * target cannot read a password: Nx gives a run-commands target no terminal,

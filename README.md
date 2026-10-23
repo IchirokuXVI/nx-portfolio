@@ -9,7 +9,7 @@ A personal portfolio built as an **Angular module-federation micro-frontend syst
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
 - **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`).
-- **`k8s/helm`** — the Helm chart deployed by CI. It describes **one** environment; which one comes from the cluster you point it at and the values file you pass beside `values.yaml`.
+- **`k8s/helm`** — one Helm chart per deploy unit (`portfolio`, `velista`) over the library chart `common`, deployed by CI. Each describes **one** environment; which one comes from the cluster you point it at and the values file you pass beside `values.yaml`.
 - **`k8s/bootstrap`** — the once-per-cluster install (Gateway API CRDs, Envoy Gateway, cert-manager, a ClusterIssuer) plus the host and release provisioning scripts. Deliberately outside the chart.
 
 For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
@@ -63,151 +63,101 @@ the developer's own, on the ports `project.json` already names. See [`tools/dev/
 
 ## Deployment / CI/CD
 
-Four GitHub Actions workflows, one per boundary:
+The apps deploy in **units** ([k8s plan 0014](./k8s/plans/0014-a-deploy-unit-is-a-tag-a-chart-and-two-environments.md)):
+`portfolio` (the shell and its three remotes) and `velista` (velista, the back
+office and the seven Luna services). Each unit has its own pipelines, namespace,
+Helm release and GitHub environments ([k8s plan 0016](./k8s/plans/0016-each-unit-deploys-from-its-own-job.md)).
 
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | **`pr-title.yml`** | any PR opened, edited, reopened or synchronized | validates the PR title against `tools/release/rules.mjs` (see [`CONTRIBUTING.md`](./CONTRIBUTING.md)). It has no branch filter, so a stacked PR is checked too. |
-| **`pr.yml`** | PR into `main` or `dev` | `verify`: lint, unit-test and `manifest-check` the affected projects (against the PR's target branch). `verify-infra`: when a Luna Shopper project is affected, brings up a stack and runs the backend integration suites plus the `luna-shopper-backend-e2e` suite. Fast pre-merge feedback. |
-| **`docker-ci.yml`** | push to `main`, or manual dispatch | lint + unit-test affected, build + push affected staging images, e2e them (frontend, Luna backend, and velista against that backend), deploy staging. |
-| **`release.yml`** | GitHub Release published | lint + test all projects, build + push all production images, deploy production. |
+| **`pr.yml`** | PR into `main` or `dev` | `verify`: lint, unit-test and `manifest-check` the affected projects (against the PR's target branch), and the unit registry check. `verify-infra`: when a Luna Shopper project is affected, brings up a stack and runs the backend integration suites plus the `luna-shopper-backend-e2e` suite. |
+| **`staging-portfolio.yml`**, **`staging-velista.yml`** | push to `main`, or manual dispatch | call `stage-unit.yml` for their unit: lint + unit-test affected, build + push the unit's affected images under `staging`, run the unit's e2e gates against them, deploy the unit to staging. |
+| **`release-portfolio.yml`**, **`release-velista.yml`** | GitHub Release published | call `release-unit.yml` for their unit: test what changed since the unit's previous release, build + push every image of the unit under the version, deploy the unit to production. |
+| **`host-maintenance.yml`** | Monday 03:30 UTC | patches the staging host, waits two days, patches production (k8s plan 0013). |
+| **`image-scan.yml`** | Monday 06:00 UTC | scans every deployable image, listed by `tools/deploy/units.mjs images`. |
 
 **Testing model.** Tests run at every stage rather than once. The PR runs unit tests
 for quick feedback before merge; the merge to `main` re-runs the unit tests on the
 actual merged commit **and** e2e-tests the built staging images; a release re-tests on
 the release commit. Because each stage tests the exact code it is about to deploy, no
-merge queue is needed (a merge queue would serialize and slow every merge; here two
-PRs can merge back-to-back and each resulting push to `main` is tested on its own).
+merge queue is needed.
 
-> Requiring the `pr.yml` check on `main` and `dev` is still recommended so obviously
-> broken code never merges, but it is no longer a correctness requirement, since the
-> merge and release workflows test the code they deploy regardless.
-
-### Staging pipeline (`docker-ci.yml`)
+### Staging pipeline (`stage-unit.yml`)
 
 ```
 push to main  (or workflow_dispatch, where build_all=true ignores affected)
   │
-  setup         Resolve the "affected" base = SHA of the last successful run of this
-  │             workflow, then list the affected projects (nx show projects --json)
+  setup         base = SHA of the last successful run of this unit's caller workflow;
+  │             images = nx show projects --affected --with-target build:docker
+  │                      --projects tag:deploy:<unit>; gates = units.mjs gates <unit>
+  │             Nothing of the unit affected: the pipeline stops here.
   │
-  ├─ lint-test  nx run-many -t lint test, inside BUILD_IMAGE (a digest pinned node:24-slim)
+  ├─ lint-test  nx run-many -t lint test over everything affected, inside BUILD_IMAGE
   │
-  └─ build      Log in to GHCR + set up Docker Buildx + expose the gha buildx cache
-     │          ├─ Build affected static-docker apps        (nx run-many -t build)
-     │          ├─ Build the bundles inside BUILD_IMAGE      (nx run-many -t build prune, with
-     │          │                                            MFE_BASE_URL / MFE_REMOTE_URLS /
-     │          │                                            LUNA_GATEWAY_URL / LUNA_REALTIME_URL /
-     │          │                                            VELISTA_APP_VERSION set as env)
-     │          ├─ Every bundle can resolve what it requires (assert-runtime-manifest.mjs over
-     │          │                                            the affected Luna service bundles)
-     │          └─ Build & push staging images              (nx run-many -t build:docker,
-     │                                                       DOCKER_IMAGE_TAG=staging,
-     │                                                       --exclude-task-dependencies)
+  └─ build      the base image under `staging`, the bundles inside BUILD_IMAGE with the
+     │          unit's BUILD_ENV_STAGING, the runtime manifest check for Luna bundles,
+     │          then build:docker with DOCKER_IMAGE_TAG=staging and BUILDER_TAG=staging
      │
-     ├─ e2e-frontend      shell + remotes     (k8s/e2e/portfolio-frontend/compose.yml)
-     ├─ e2e-luna          the backend images  (k8s/e2e/luna-shopper-backend/compose*.yml)
-     └─ e2e-velista-luna  velista-luna-e2e    (both stacks, the frontend images pointed
-                                               at the backend hosts)
+     └─ gate (one job per gate of GATES whose TRIGGERS are affected)
+          portfolio-frontend    shell + remotes behind a proxy, `/velista` reaches velista
+          luna-shopper-backend  luna-shopper-backend-e2e against the service images
+          velista-luna          velista on its origin and under /velista, + the Luna stack
   │
-  deploy        after every job above, to SSH_DEPLOY_HOST_STAGING:
-       rsync k8s/ → provision-release.sh --check --env staging
-                  → helm upgrade --atomic --timeout 10m (values.yaml + values.staging.yaml)
-                  → kubectl rollout restart + a separate rollout status loop
+  deploy        environment <unit>-staging, concurrency deploy-<unit>-staging,
+                .github/actions/deploy-unit: rsync k8s/ → ~/deploy/<unit>/k8s/,
+                the cutover check, provision-release.sh --check --unit <unit>,
+                release tasks, helm upgrade --atomic --timeout 10m,
+                kubectl rollout restart + a separate rollout status loop
 ```
 
-`lint-test`, `build` and the three e2e gates all gate the deploy: it runs only if
-none of them failed. A gate that skips because nothing relevant is affected does not
-block it. There is no build stage inside an app's Dockerfile. `nx build` runs once
-for the whole workspace in the pinned `BUILD_IMAGE`, `build:docker` sets `"context": "dist"`, and the finished
-bundle is copied in. That is why the shell's `MFE_BASE_URL` is an env var on the
-build container rather than a Docker build arg.
+A gate is a directory under `k8s/e2e` with `gate.sh` and `gate.env`; the
+[`k8s/README.md`](./k8s/README.md) section "Pipelines and gates" describes both. A red
+gate of one unit never blocks the other unit's deploy. There is no build stage inside
+an app's Dockerfile: `nx build` runs once in the pinned `BUILD_IMAGE`,
+`build:docker` sets `"context": "dist"`, and the finished bundle is copied in.
 
-Both deploy workflows use a `concurrency` group (`staging-deploy` / `production-release`)
-with `cancel-in-progress: false`, so runs never overlap: a second staging deploy (two
-PRs merged in quick succession) or a second release (two releases published close
-together) waits for the first to finish instead of racing the build/push and the
-`helm upgrade`. Note GitHub keeps only one run *pending* per group, so if a third run
-is queued while one is pending, the older pending run is superseded.
+The deploy job holds the group `deploy-<unit>-<env>` with `cancel-in-progress: false`,
+so two runs of one unit queue and the other unit is never touched. Deploys and the
+weekly host patch exclude each other through `flock` on `/run/lock/nx-deploy.lock` on
+the host, not through a GitHub group.
 
 ### How "affected" is computed
 
-Nx doesn't diff against the previous commit — it diffs against the **last successful run of this same workflow**. That SHA is fetched with the GitHub CLI:
+Nx doesn't diff against the previous commit — it diffs against the **last successful run of the same caller workflow**, so each unit keeps its own history. That SHA is fetched with the GitHub CLI:
 
 ```sh
 gh run list --branch "$branch" --workflow "$workflow" --json headSha,conclusion \
   --jq '[.[] | select(.conclusion=="success")][0].headSha'
 ```
 
-That SHA becomes `--base` (with `--head=${{ github.sha }}`) for the `nx show projects --affected` queries in the `setup` job, so unrelated apps are never rebuilt. With no earlier successful run, or on a manual dispatch with `build_all`, the queries drop `--affected` and list everything. The job exposes these outputs:
-
-| Output         | Derived from                                           | Used for                                                  |
-| -------------- | ------------------------------------------------------ | --------------------------------------------------------- |
-| `docker_apps`  | apps tagged `type:static-docker`                       | plain Dockerfile apps built with `nx build`               |
-| `testable`     | projects with a `test` target                          | `lint-test`, inside `BUILD_IMAGE`                         |
-| `apps_tobuild` | apps with a `build:docker` target                      | bundles built, then images built + pushed by the executor |
-| `deployments`  | `apps_tobuild`, lowercased                             | the deployments that `deploy` restarts                    |
-| `luna`         | the `luna-shopper-backend-*` entries of `apps_tobuild` | the runtime manifest check and the `e2e-luna` gate        |
-| `e2e`          | projects with an `e2e` target, except `odontogram-e2e`, `luna-shopper-backend-e2e` and `velista-luna-e2e` | the `e2e-frontend` gate |
-| `velista_luna` | `true` when `velista-luna-e2e` is affected             | the `e2e-velista-luna` gate                               |
+That SHA becomes `--base` for the `nx show projects --affected` queries in the `setup` job. With no earlier successful run, or on a manual dispatch with `build_all`, the queries drop `--affected` and list everything of the unit.
 
 ### Images & registry
 
-- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. Production pins the immutable version; rollback is `deploy-release.sh <older-version>`.
+- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. The base image `local-http-server` is tagged `staging` or `<unit>-v<version>` and never `latest` by a deploy. Production pins the immutable version; rollback is `deploy-release.sh <unit> <older-version>`.
 - The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
-- Nothing compiles on the runner. Lint, unit tests and every `nx build` run inside `BUILD_IMAGE`, a digest pinned `node:24-slim` named at the top of `docker-ci.yml` and `release.yml`. CI no longer builds or uses the `docker/builder` image, which is kept only for the local full stack ([`k8s/README.md`](./k8s/README.md)).
+- Nothing compiles on the runner. Lint, unit tests and every `nx build` run inside `BUILD_IMAGE`, a digest pinned `node:24-slim` named at the top of `stage-unit.yml` and `release-unit.yml`.
 
-### Deploy step (SSH → Helm)
+### GitHub environments
 
-After the images are pushed and none of the three e2e gates fails, the workflow ships the chart and
-upgrades the release on the cluster host over SSH. CI connects as `SSH_DEPLOY_USER`, an
-**unprivileged** account: the chart lands in that user's home, not `/root`, and nothing
-in the deploy path uses sudo, because k3s writes its kubeconfig world readable.
+Each unit deploys with the values of its environment, `<unit>-staging` or
+`<unit>-production`. Host maintenance uses `host-staging` and `host-production`.
+Each holds the secrets `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` and
+the variable `SSH_KNOWN_HOSTS`; `host-production` also holds `SSH_SOAK_CHECK_HOST`.
+`k8s/bootstrap/github-environments.sh` writes them
+([`k8s/README-new-cluster.md`](./k8s/README-new-cluster.md), section 7). A pipeline
+whose environment lacks a value stops before any SSH and names it. `ALLOW_CUTOVER` on
+a production environment lets its deploy run the cutover of k8s plan 0016 D5.
 
-```sh
-rsync -avz --delete ./k8s/ $SSH_DEPLOY_USER@$SSH_DEPLOY_HOST_STAGING:~/k8s/
-
-# 1. Preflight. Renders the chart and asserts every secretKeyRef / configMapKeyRef
-#    it references actually exists. A deploy that cannot work is rejected in
-#    seconds instead of diagnosed from a crashloop.
-bash ~/k8s/bootstrap/provision-release.sh --check --env staging
-
-# 2. Upgrade, and wait. --atomic implies --wait and rolls back on failure, and it
-#    covers the pre-upgrade migration Jobs for free.
-helm upgrade --install nx-portfolio $HOME/k8s/helm   --namespace nx-portfolio --create-namespace   --values $HOME/k8s/helm/values.yaml   --values $HOME/k8s/helm/values.staging.yaml   --atomic --timeout 10m
-
-# 3. Roll the deployments whose mutable `staging` tag was just overwritten, then
-#    observe them in a separate `rollout status` loop.
-kubectl -n nx-portfolio rollout restart deploy/<changed>
-kubectl -n nx-portfolio rollout status  deploy/<changed>
-```
-
-**Deploys wait and are verified** (k8s plan 0003). `helm upgrade` without `--wait`
-returns as soon as the API server accepts the manifests, and `kubectl rollout restart`
-is asynchronous, so an earlier version of both paths reported success while pods
-crashlooped. Production uses `deploy-release.sh <version>` with `--wait` rather than
-`--atomic`; the reasoning is in the script.
-
-Staging is disposable by design. If `SSH_DEPLOY_HOST_STAGING`, `SSH_DEPLOY_USER` or
-`SSH_DEPLOY_KEY` is unset, the run stays green, publishes the images and says plainly
-that it did not deploy.
-
-### Required GitHub secrets
-
-| Secret            | Purpose                                                 |
-| ----------------- | ------------------------------------------------------- |
-| `SSH_DEPLOY_KEY`  | Private key loaded into `ssh-agent` for the deploy host |
-| `SSH_DEPLOY_USER` | Unprivileged SSH user on the cluster host (`deploy`)     |
-| `SSH_DEPLOY_HOST` | Production cluster host address                         |
-| `SSH_DEPLOY_HOST_STAGING` | Staging cluster host address (`docker-ci.yml`)  |
-
-`GITHUB_TOKEN` (provided automatically) is used for GHCR login and `gh run list`; the workflow needs `packages: write`.
+`GITHUB_TOKEN` (provided automatically) is used for GHCR login and `gh run list`.
 
 ### Adding a new deployable app
 
-1. Give it a `build:docker` target with `development`/`production` configurations and an `imageName` (mirror an existing Angular app's `project.json`), **or** — for a plain Dockerfile wrapper — a `build` target using `@portfolio/docker:build` plus the `type:static-docker` / `type:dynamic-docker` tag so CI picks it up.
-2. Add **one** entry to `k8s/helm/values.yaml` under `apps` (`name`, `image`, `hostPrefix`, `path`). No environment field and no second staging entry: the host is `hostPrefix` under the values file's `baseDomain`, unless that environment's `hostOverrides` names the entry.
+1. Give it a `build:docker` target with `development`/`production` configurations and an `imageName` (mirror an existing Angular app's `project.json`), **or** — for a plain Dockerfile wrapper — a `build` target using `@portfolio/docker:build` plus the `type:static-docker` / `type:dynamic-docker` tag.
+2. Tag it `deploy:<unit>` and add **one** entry to `k8s/helm/<unit>/values.yaml` under `apps` (`name`, `image`, `hostPrefix`, `path`). No environment field and no second staging entry.
+3. Name its e2e project in the `TRIGGERS` of one gate. `node tools/deploy/units.mjs check` fails until both are done.
 
 ---
 ## Kubernetes / Helm
@@ -220,22 +170,23 @@ that it did not deploy.
 ### Two environments, two clusters, one chart
 
 Production and staging are **separate k3s clusters on separate VPSs**, not two halves
-of one release (k8s plan 0002). The chart in `k8s/helm` describes exactly one
+of one release (k8s plan 0002). Each unit chart (`k8s/helm/portfolio`,
+`k8s/helm/velista`, over the library `k8s/helm/common`) describes exactly one
 environment; which one is decided by the cluster you point it at and the values file
 you pass beside `values.yaml`:
 
 | | Production | Staging |
 | --- | --- | --- |
 | Values file | `values.production.yaml` | `values.staging.yaml` |
-| `baseDomain` | `ichirokuxvi.com` | `staging.ichirokuxvi.com` |
-| MetalLB `ipAddress` | `152.53.49.229` | `152.53.50.209` |
+| `baseDomain` | `ichirokuxvi.com`, `velista.app` | `staging.ichirokuxvi.com`, `staging.velista.app` |
+| MetalLB pool | `install.sh --ip 152.53.49.229` | `install.sh --ip 152.53.50.209` |
 | Image tag | the immutable release version | the mutable `staging` tag |
-| Deployed by | `release.yml` | `docker-ci.yml` |
+| Deployed by | `release-<unit>.yml` | `staging-<unit>.yml` |
 
 There is no `env` field, no `-staging` resource name and no `staging.enabled` switch.
 Resource names are identical in both clusters, which is what makes them comparable.
-Everything lives in the **`nx-portfolio`** namespace, except the routing data plane
-and cert-manager, which live in their own.
+The portfolio lives in the namespace **`portfolio`** and velista in
+**`luna-shopper`**; the routing data plane and cert-manager live in their own.
 
 ### Routing is the Gateway API
 
@@ -328,19 +279,20 @@ Run from the cluster host (or anywhere with `KUBECONFIG` pointed at the k3s conf
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # Preview rendered manifests without applying
-helm template nx-portfolio ./k8s/helm -n nx-portfolio \
-  --values ./k8s/helm/values.yaml --values ./k8s/helm/values.production.yaml
+helm dependency build --skip-refresh ./k8s/helm/velista
+helm template velista ./k8s/helm/velista -n luna-shopper \
+  --values ./k8s/helm/velista/values.yaml --values ./k8s/helm/velista/values.production.yaml
 
 # Assert every Secret/ConfigMap key the render references exists
-bash ./k8s/bootstrap/provision-release.sh --check --env production
+bash ./k8s/bootstrap/provision-release.sh --check --unit velista --env production
 
-# Deploy a production release (pins --set imageTag=<version>, then verifies)
-./k8s/helm/deploy-release.sh 1.1.3
+# Deploy a production release of one unit (pins --set imageTag=<version>, then verifies)
+./k8s/helm/deploy-release.sh velista 1.1.3
 
 # Roll back: re-run with an older version whose images still exist
-./k8s/helm/deploy-release.sh 1.1.2
+./k8s/helm/deploy-release.sh velista 1.1.2
 
 # Inspect
-kubectl -n nx-portfolio get pods,svc,httproute,gateway
-kubectl -n nx-portfolio describe gateway nx-portfolio
+kubectl -n luna-shopper get pods,svc,httproute,gateway
+kubectl get gateway -A
 ```
