@@ -68,12 +68,11 @@ services:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/damoclessword:${E2E_IMAGE_TAG:-staging}
   landingv2:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/landingv2:${E2E_IMAGE_TAG:-staging}
-  # velista is a remote like the others, but it is served from an origin of its own
-  # rather than from the micro-frontend host (velista plan 0013), so it needs a
-  # server block and a certificate under its own name. It is not optional here: the
-  # shell initialises every remote container while it boots, so a velista that does
-  # not answer takes the whole shell down and every suite fails on an empty
-  # `<ng-shell-root>`, whichever app it was testing.
+  # velista is not a remote (velista plan 0165), and the shell no longer loads it.
+  # It stays a service because the proxy reaches it twice: on its own origin, which
+  # needs a server block and a certificate under its own name and is where
+  # velista-e2e runs, and under the portfolio host's /velista path, which the
+  # e2e-frontend job checks with curl.
   velista:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/velista:${E2E_IMAGE_TAG:-staging}
 

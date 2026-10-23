@@ -1202,9 +1202,9 @@ REDIS_URL=redis://localhost:${REDIS_PORT}
 LOG_LEVEL=debug
 # Every front end slot's two origins, not this slot's: the front end numbering is
 # independent of this one, and several front end slots may call one backend at the
-# same time. Each slot contributes the portfolio shell, which mounts velista as a
-# remote, and velista's own origin, which is a first class way to run it (plan
-# 0013) and was missing from this list even on slot 0.
+# same time. Each slot contributes the portfolio shell and velista's own origin.
+# The shell origin stays because in the clusters the app under the portfolio's
+# /velista path calls the API from the portfolio origin (velista plan 0165).
 CORS_ORIGINS=$(frontend_origins)
 # Telemetry deliberately does NOT live here; see the note in each service's .env.
 EOF

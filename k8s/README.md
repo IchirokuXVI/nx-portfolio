@@ -1,8 +1,9 @@
 # Kubernetes / Helm
 
 The Helm chart in [`helm/`](./helm) deploys the whole system as one release: the
-`shell` host, the `odontogram`, `damoclesSword`, `landingV2` and `velista` remotes,
-the `luna-shopper-admin` back office, and the Luna Shopper backend behind velista.
+`shell` host, the `odontogram`, `damoclesSword` and `landingV2` remotes, the
+standalone `velista` app, the `luna-shopper-admin` back office, and the Luna Shopper
+backend behind velista.
 The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
@@ -115,8 +116,8 @@ kubectl get pods -n nx-portfolio
 **The local overlays deploy four apps, not six.** `values.localhost.yaml`,
 `values.localhost-mfe.yaml` and `values.local.yaml` each replace the whole `apps`
 list with `shell`, `odontogram`, `damoclesSword` and `landingV2`. `velista` and
-`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so the shell's
-`/velista` mount has no remote to load in a local deployment.
+`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so a local
+deployment has no velista and no `/velista` route on the portfolio host.
 
 There is no build stage inside an app image (k8s plan 0007). `nx build` runs on the
 host, and `build:docker` sets `"context": "dist"`, so the image only copies the
