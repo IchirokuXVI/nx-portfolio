@@ -98,9 +98,9 @@
   "landingV2.detail.velista.sections.overview.deep.p3": "Está en producción con usuarios reales y sigue en una fase temprana de desarrollo, así que cambia a medida que aprendo lo que esos usuarios necesitan. Funciona en su propio dominio y se instala en el móvil como una app nativa, y la misma build está montada también dentro de este portfolio.",
 
   "landingV2.detail.velista.sections.stack.title": "Stack",
-  "landingV2.detail.velista.sections.stack.highlight.p1": "El frontend es Angular 21, standalone y zoneless, e instalable como PWA. La misma build funciona en su propio origen y como micro-frontend dentro de este sitio.",
+  "landingV2.detail.velista.sections.stack.highlight.p1": "El frontend es Angular 21, standalone y zoneless, e instalable como PWA. La misma build funciona en su propio origen, y el gateway de este sitio también la sirve bajo /velista.",
   "landingV2.detail.velista.sections.stack.highlight.p2": "El backend son siete servicios NestJS que se comunican por NATS, con cuatro bases de datos PostgreSQL y Redis. Todo se despliega como imágenes Docker en clústeres Kubernetes de staging y producción.",
-  "landingV2.detail.velista.sections.stack.deep.p1": "El frontend es Angular 21, standalone y zoneless, e instalable como PWA. La misma app funciona en su propio origen y como micro-frontend dentro de este sitio.",
+  "landingV2.detail.velista.sections.stack.deep.p1": "El frontend es Angular 21, standalone y zoneless, e instalable como PWA. La misma app funciona en su propio origen, y el gateway de este sitio también la sirve bajo /velista.",
   "landingV2.detail.velista.sections.stack.deep.p2": "El backend son siete servicios NestJS: un gateway, un servicio de tiempo real, auth, core, catalog, un harvester y un asistente. Se comunican por NATS, guardan sus datos en cuatro bases de datos PostgreSQL mediante TypeORM y comparten Redis. Las actualizaciones en vivo llegan al navegador por Socket.IO.",
   "landingV2.detail.velista.sections.stack.deep.p3": "Un back office aparte, también en Angular, gestiona el catálogo, el harvester y las personas que los operan. Todo se despliega como imágenes Docker en clústeres Kubernetes de staging y producción con Helm y GitHub Actions, probado con Jest y con suites de Playwright que compran contra un backend real.",
 

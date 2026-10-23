@@ -1,19 +1,20 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { writeAppLocale } from '@portfolio/localization/rokutranslator-angular';
+import { appRootRoute } from './app-root-route';
 import { appRoutes } from './app.routes';
 
 /**
  * The app on its **own origin**, which is the mode plan 0013 added and the one nothing
  * exercised before it.
  *
- * `entry.routes.spec.ts` is the same worked examples one mount to the left. Both exist
- * because the mount is the only difference between them and the whole risk is that it
+ * The second block below is the same worked examples under the portfolio's `/velista`
+ * path (plan 0165). Both exist because the mount is the only difference between them and the whole risk is that it
  * stops being the only difference: `app-root-route.spec.ts` proves the factory states
  * the mount in both the places that read it, and this file proves the router then does
  * the right thing with it.
  *
- * There is no wrapping route here. The standalone build mounts at nothing, so the
+ * jsdom gives the document no `<base>`, so `appRoutes` mounts at nothing here, and the
  * locale is the first segment and `/` is a legitimate entry point, which is what makes
  * the manifest's `start_url: "/"` correct: the guard inserts the device's language
  * rather than freezing the language of whoever installed the app.
@@ -88,5 +89,56 @@ describe('velista on its own origin', () => {
     await router.navigateByUrl(from);
 
     expect(router.url).toBe(to);
+  });
+});
+
+/**
+ * The portfolio's gateway serves the same document under `/velista`, and the router
+ * sees the whole path because `APP_BASE_HREF` stays `/` (plan 0165 D3). The route
+ * table is `appRootRoute('/velista')` at the root, with no wrapping route: these are
+ * the worked examples from plan 0005 D6 against that table.
+ */
+describe('velista under the portfolio path', () => {
+  function mountUnderPortfolio() {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([appRootRoute('/velista')])],
+    });
+
+    return TestBed.inject(Router);
+  }
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    writeAppLocale('velista', 'es');
+  });
+
+  it.each([
+    ['/velista/es', '/velista/es'],
+    ['/velista/en', '/velista/en'],
+    ['/velista/en-US', '/velista/en'],
+    ['/velista/zz', '/velista/es'],
+    ['/velista', '/velista/es'],
+  ])('%s becomes %s', async (from, to) => {
+    const router = mountUnderPortfolio();
+
+    await router.navigateByUrl(from);
+
+    expect(router.url).toBe(to);
+  });
+
+  it('deep links into a page below the mount', async () => {
+    const router = mountUnderPortfolio();
+
+    await router.navigateByUrl('/velista/en/auth/login');
+
+    expect(router.url).toBe('/velista/en/auth/login');
+  });
+
+  it('settles the locale before the app 404', async () => {
+    const router = mountUnderPortfolio();
+
+    await router.navigateByUrl('/velista/qwfp');
+
+    expect(router.url).toBe('/velista/es/qwfp');
   });
 });

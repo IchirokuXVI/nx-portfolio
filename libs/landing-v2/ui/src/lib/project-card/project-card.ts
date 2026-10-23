@@ -36,6 +36,11 @@ export class ProjectCard {
    * app yet (e.g. POS). */
   readonly appLink = computed(() => this.project().appLink ?? null);
 
+  /** The live app is outside the shell's router, so "View project" is an `href`. */
+  readonly appLinkIsExternal = computed(
+    () => this.project().appLinkIsExternal ?? false
+  );
+
   /** "More details" target: the in-portfolio detail page. Absent for
    * projects with no detail page yet (e.g. POS). */
   readonly detailLink = computed(() => this.project().detailLink ?? null);

@@ -4,8 +4,8 @@ import { appRoutes } from './app.routes';
  * The shell's table is almost entirely ordering, and the ordering is load bearing in
  * a way nothing else enforces (plan 0003).
  *
- * At the site root `/en` means landingV2 in English and `/velista` means velista with
- * no locale yet, and both are a single segment directly under `/`. The shell resolves
+ * At the site root `/en` means landingV2 in English and `/odontogram` means odontogram
+ * with no locale yet, and both are a single segment directly under `/`. The shell resolves
  * that by trying app mounts first and falling through to the empty path app, which
  * works only while the entries are in that order. `isLocaleSegment` cannot be used to
  * tell the two apart and must not be reached for: a two letter app mount would be

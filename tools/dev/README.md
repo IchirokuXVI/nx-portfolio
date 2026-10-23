@@ -64,7 +64,7 @@ tools/dev/ng-slot.sh --up --apps shell,velista
 tools/dev/ng-slot.sh --restart       # bounce apps, keeping the rest serving
 tools/dev/ng-slot.sh --down          # stop, and give the slot back
 tools/dev/ng-slot.sh --down --keep-slot   # stop, and keep the number
-tools/dev/ng-slot.sh --e2e-env       # this slot's E2E_BASE_URL, as an export
+tools/dev/ng-slot.sh --e2e-env       # this slot's two e2e URLs, as exports
 ```
 
 There is no PowerShell twin. Git Bash is the supported shell on Windows, and this
@@ -130,11 +130,11 @@ that apart from a forgotten one.
 ## Running an e2e suite against a slot
 
 Every front end e2e suite reads **`E2E_BASE_URL`**, an origin, except
-`velista-luna-e2e`, which reads its own `VELISTA_BASE_URL`. Set it and the suite
-drives that server and starts none of its own; leave it unset and the suite falls
-back to slot 0, which on any other slot is the developer's server rather than
-yours. `--e2e-env` derives it from this worktree's slot, so the port is never
-typed by hand:
+`velista-e2e` and `velista-luna-e2e`, which read **`VELISTA_BASE_URL`**. Set the
+variable and the suite drives that server and starts none of its own; leave it
+unset and the suite falls back to slot 0, which on any other slot is the
+developer's server rather than yours. `--e2e-env` derives both from this
+worktree's slot, so the port is never typed by hand:
 
 ```sh
 eval "$(tools/dev/ng-slot.sh --e2e-env)"
@@ -142,17 +142,17 @@ npx nx e2e velista-e2e
 npx nx e2e damoclesSword-e2e
 ```
 
-**One origin covers all five suites** (shell-e2e, odontogram-e2e,
-damoclesSword-e2e, landing-v2-e2e and velista-e2e). Each one drives its app
-_through the shell_ (the shell owns the outlet, so a remote on its own port renders
-blank), and each config appends the route it needs: `/damoclesSword/en`, `/en` for
-landingV2, and for shell-e2e, odontogram-e2e and velista-e2e the paths the specs
-carry themselves. So the shell's
-origin is the whole answer, and `--e2e-env` prints only that.
+**The shell's origin covers four suites** (shell-e2e, odontogram-e2e,
+damoclesSword-e2e and landing-v2-e2e). Each one drives its app _through the shell_
+(the shell owns the outlet, so a remote on its own port renders blank), and each
+config appends the route it needs: `/damoclesSword/en`, `/en` for landingV2, and
+for shell-e2e and odontogram-e2e the paths the specs carry themselves.
 
-velista is the one app that can also be driven standalone on its own origin, since
-it renders there for real. Point `E2E_BASE_URL` at `NG_VELISTA_URL` from
-`tools/dev/.env.ng-slot` when that is what you mean.
+**velista is not a remote** (velista plan 0165), so its suites drive it on its own
+origin. `VELISTA_BASE_URL` is the slot's velista port, the same value as
+`NG_VELISTA_URL` in `tools/dev/.env.ng-slot`. Under a slot's shell, `/velista` is
+the landing's not found page: the portfolio path exists only in the clusters,
+where the Gateway serves the velista image there.
 
 **`BASE_URL` is the other variable and it is not a substitute.** The Playwright
 configs take it as the whole base URL, route suffix included, for a target they
@@ -285,7 +285,7 @@ So the script does not ask Nx to orchestrate the remotes:
   leaves the remotes to the tasks started beside it;
 - the shell also gets `MFE_REMOTE_URLS`, so the bundle it builds looks for those
   remotes on this slot's ports instead of the defaults baked into the graph;
-- the remotes get `--excludeTaskDependencies`, because three of them declare
+- the remotes get `--excludeTaskDependencies`, because two of them declare
   `dependsOn: ['shell:serve']`. That rule exists to stop somebody opening a remote
   on its own port and seeing a blank page, and here the shell is already being
   started beside them on this slot's port, so honouring it would put a second one
@@ -302,7 +302,7 @@ All git ignored, all per worktree:
 
 | file                     | what it carries                                                                                                                                           |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tools/dev/.env.ng-slot` | the slot descriptor, read back by `--up`, `--down`, and every other worktree's `--list`; also `E2E_BASE_URL` and the two `*_URL` forms `--e2e-env` prints |
+| `tools/dev/.env.ng-slot` | the slot descriptor, read back by `--up`, `--down`, and every other worktree's `--list`; also `E2E_BASE_URL` and `VELISTA_BASE_URL`, which `--e2e-env` prints |
 | `apps/shell/.env`        | `MFE_REMOTE_URLS` for this slot                                                                                                                           |
 | `apps/velista/.env`      | `LUNA_GATEWAY_URL` / `LUNA_REALTIME_URL` for the backend slot                                                                                             |
 | `apps/luna-shopper-admin/.env` | `LUNA_GATEWAY_URL` for the same backend slot                                                                                                        |
@@ -319,9 +319,10 @@ being clear why, because it looks like it should work. Nx's `.env` loading is pe
 there is no file this script could write that a `velista-e2e` task would read.
 Writing `apps/velista-e2e/.env` would in fact work, but a git ignored file is not
 hashed either, so the suite would silently answer to a value Nx's cache key cannot
-see. So the descriptor carries `E2E_BASE_URL` and `--e2e-env` prints it as an
-export: one value, crossing into the caller's environment where it is visible,
-rather than a fifth generated file that changes behaviour invisibly.
+see. So the descriptor carries `E2E_BASE_URL` and `VELISTA_BASE_URL`, and
+`--e2e-env` prints them as exports: two values, crossing into the caller's
+environment where they are visible, rather than a fifth generated file that
+changes behaviour invisibly.
 
 ### velista and luna-shopper-admin read the backend from the environment
 

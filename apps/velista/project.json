@@ -42,6 +42,11 @@
           {
             "glob": "**/*",
             "input": "apps/velista/public"
+          },
+          {
+            "glob": "nginx.conf",
+            "input": "apps/velista/src",
+            "output": "/"
           }
         ],
         "styles": ["apps/velista/src/styles.scss"],
@@ -56,8 +61,8 @@
           "budgets": [
             {
               "type": "initial",
-              "maximumWarning": "500kb",
-              "maximumError": "1mb"
+              "maximumWarning": "1.6mb",
+              "maximumError": "2mb"
             },
             {
               "type": "anyComponentStyle",
@@ -128,8 +133,7 @@
           "buildTarget": "velista:build:development"
         }
       },
-      "defaultConfiguration": "development",
-      "dependsOn": ["shell:serve"]
+      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",

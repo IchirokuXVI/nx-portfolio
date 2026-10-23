@@ -27,8 +27,7 @@ import { appProviders } from './app-providers';
  * Every other spec in this workspace configures providers through
  * `TestBed.configureTestingModule`, which puts them in the **testing environment
  * injector**. That injector carries the `root` scope, so a `providedIn: 'root'`
- * service can see them. Production does not look like that: the shell owns the root
- * injector, and `appRootRoute` hands `appProviders` to a **route**, which the
+ * service can see them. Production does not look like that: `appRootRoute` hands `appProviders` to a **route**, which the
  * router turns into a child `EnvironmentInjector` scoped `environment` and nothing
  * else. A root scoped service is created in the root injector and resolves its own
  * dependencies from there, so it cannot see anything the route provided.
@@ -120,8 +119,8 @@ describe('appProviders, resolved the way the router resolves them', () => {
     // `APP_INITIALIZER` is read once by `ApplicationInitStatus` at bootstrap, from the
     // root injector. Nothing ever asks a route injector for it, so `ConnectionRecovery`
     // was never constructed. `ENVIRONMENT_INITIALIZER` runs when the injector it is
-    // declared on is created, which is the one primitive that works in both the
-    // mounted-remote and the standalone case.
+    // declared on is created, which is the one primitive that works on a route
+    // injector.
     const injector = routeInjector();
 
     expect(injector.get(APP_INITIALIZER, null)).toBeNull();

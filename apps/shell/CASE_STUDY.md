@@ -8,11 +8,12 @@
 > design and are left as written. What the code does now:
 >
 > - **Overview, Why this stack, Module federation topology:** the shell owns no `:locale`
->   route. `apps/shell/src/app/app.routes.ts` mounts `odontogram`, `damoclesSword` and
->   `velista` at the top level and `landingV2` at the empty path, below every other mount.
+>   route. `apps/shell/src/app/app.routes.ts` mounts `odontogram` and `damoclesSword` at
+>   the top level and `landingV2` at the empty path, below every other mount.
 >   Every URL is `/{mount}/{locale}/{rest}`. There is no `landing` remote.
-> - **Overview:** `velista` is a fourth remote, and it is also a standalone app on its own
->   origin (`apps/velista/src/app/app-root-route.ts`).
+> - **Overview:** `velista` is not a remote since velista plan 0165. It is a standalone
+>   app on its own origin, and in the clusters the Gateway also serves it under the
+>   portfolio's `/velista` path. The answers below that list it as a remote predate that.
 > - **Overview:** there are two k3s clusters, staging and production, one VPS each
 >   (k8s plan 0002). Routing is the Gateway API with Envoy Gateway, not a reverse proxy.
 > - **Locale-first routing:** each app installs `localeGuard` on its own parent route and
@@ -113,7 +114,7 @@ deliberate: the point is to demonstrate what I can do.
 **Q: The shell is the only host. How does it declare and lazy-load remotes (the `damoclesSword/Routes` alias trick)?**
 A: _(Compiled from the code rather than a spoken answer.)_ The shell is the only app
 whose `module-federation.config.ts` lists `remotes: ['odontogram', 'damoclesSword',
-'landingV2', 'velista']`. Each remote exposes a single entry, `./Routes`, pointing
+'landingV2']`. Each remote exposes a single entry, `./Routes`, pointing
 at its `entry.routes.ts`. A TypeScript path alias in `tsconfig.base.json` (for example
 `odontogram/Routes`) lets the shell import that exposed module as if it were local:
 

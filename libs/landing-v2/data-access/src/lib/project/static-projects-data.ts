@@ -27,6 +27,11 @@ export interface StaticProject {
    */
   appSlug?: string;
   /**
+   * The app at `appSlug` is served by the gateway, not by the shell, so the link
+   * loads a new document (velista, plan 0165 D9).
+   */
+  appLinkIsExternal?: true;
+  /**
    * Project screenshot, lazily imported. Omitted projects (Portfolio,
    * Damocle'Sword — no screenshot captured yet) render the generic
    * placeholder (0003) instead; no code change needed once an image ships.
@@ -47,6 +52,7 @@ export const PROJECTS: readonly StaticProject[] = [
     visual: { columnSpan: 2, featured: true },
     detailSlug: 'velista',
     appSlug: 'velista',
+    appLinkIsExternal: true,
     image: () =>
       import('../../assets/velista_screenshot.png').then((m) => m.default),
   },

@@ -1,9 +1,7 @@
-import { withModuleFederation } from '@nx/module-federation/angular';
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
 import { DEFAULT_APP_VERSION } from './app-version';
-import mfeConfig from './module-federation.config';
 
 /**
  * Where the Luna Shopper backend is when nobody says otherwise: the ports its
@@ -22,17 +20,13 @@ export const DEV_LUNA_REALTIME_URL = 'http://localhost:3001';
 export const DEV_VELISTA_APP_URL = 'http://localhost:4205';
 
 /**
- * DTS Plugin is disabled in Nx Workspaces as Nx already provides Typing support for Module
- * Federation. The DTS Plugin can be enabled by setting dts: true.
- * Learn more about the DTS Plugin here: https://module-federation.io/configure/dts.html
- *
- * The asset rules mirror the other remotes' (see `apps/damoclesSword/webpack.config.ts`).
- * Angular's builder does not configure them, so every app that imports an asset from
- * TypeScript adds them itself:
+ * Angular's builder does not configure asset imports from TypeScript, so the three
+ * rules below add them:
  *
  * - a plain import (`import url from './x.svg'`) becomes a URL through
- *   `asset/resource`, which is what carries module federation's public path and so
- *   is the one asset route that is reliably scoped to *this* remote's origin;
+ *   `asset/resource`. The URL is relative, so it resolves against the document's
+ *   `<base>`, which is what keeps it right under the portfolio's `/velista` path
+ *   (plan 0165 D2);
  * - the `?raw` suffix becomes the file's text through `asset/source`, which is how
  *   an icon component inlines an SVG so `currentColor` can reach it.
  *
@@ -50,12 +44,8 @@ export const DEV_VELISTA_APP_URL = 'http://localhost:4205';
  * exist in a browser, so `environment.ts` throws at startup without the
  * substitution. `velista-env-substitution.spec.ts` asserts the two files agree.
  */
-export default composePlugins(async (config) => {
-  const federatedModules = await withModuleFederation(mfeConfig, {
-    dts: false,
-  });
-
-  return merge(federatedModules(config), {
+export default composePlugins((config) => {
+  return merge(config, {
     plugins: [
       new DefinePlugin({
         'process.env.LUNA_GATEWAY_URL': JSON.stringify(

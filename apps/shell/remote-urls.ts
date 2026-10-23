@@ -10,9 +10,8 @@
  *
  * `webpack.config.ts` read `MFE_REMOTE_URLS` and `webpack.prod.config.ts` did not: the
  * production config derived every remote from `MFE_BASE_URL` alone, hardcoding
- * `${base}/<name>` for all four. That was fine while every remote lived on one
- * micro-frontend host, and stopped being fine when velista moved to its own origin
- * (plan 0013, section 5.3), which is a URL no base can produce.
+ * `${base}/<name>` for each. That breaks for a remote on an origin of its own, which
+ * is a URL no base can produce.
  *
  * Both configs now go through the same two functions, so a remote that leaves the
  * shared host is a CI environment variable rather than a second hardcoded hostname.
@@ -26,12 +25,11 @@ export const REMOTE_NAMES = [
   'odontogram',
   'damoclesSword',
   'landingV2',
-  'velista',
 ] as const;
 
 /**
  * Parse `MFE_REMOTE_URLS` — a comma separated list of `name=url` pairs, e.g.
- * `"velista=https://velista.app,landingV2=http://localhost:8081"` — into a
+ * `"odontogram=https://odontogram.example,landingV2=http://localhost:8081"` — into a
  * `{ name: url }` map. Returns undefined when unset or empty, so a caller can tell
  * "no override" from "override to nothing".
  *
@@ -56,9 +54,8 @@ export function parseRemoteUrls(
 }
 
 /**
- * Every remote loaded from one micro-frontend host, `${base}/<name>`. This is what
- * production and staging looked like before any remote had an origin of its own, and
- * it is still how the other three are addressed.
+ * Every remote loaded from one micro-frontend host, `${base}/<name>`, which is how
+ * production and staging address all three.
  */
 export function remotesFromBase(base: string): [string, string][] {
   return REMOTE_NAMES.map((name) => [name, `${base}/${name}`]);
@@ -70,7 +67,7 @@ export function remotesFromBase(base: string): [string, string][] {
  * The precedence is `MFE_REMOTE_URLS` first, then the base, which is the order the
  * dev config has always used: a name absent from the map keeps the tuple it already
  * had. That is what lets CI move one remote to its own host without restating the
- * other three.
+ * others.
  */
 export function withRemoteUrlOverrides<T extends string | [string, string]>(
   remotes: T[],

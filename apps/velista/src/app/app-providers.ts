@@ -112,11 +112,10 @@ const brand: AppBrand = {
 /**
  * Everything the app layer supplies to its libraries.
  *
- * Attached in **one** place, the route. The shell never runs this remote's
- * `bootstrapApplication`, it only loads the exposed `./Routes`, so providers that
- * lived solely in `appConfig` would be missing in the mode the app runs in under the
- * portfolio. `appRootRoute` therefore spreads these onto the route it builds, which is
- * what both `entry.routes.ts` and `app.routes.ts` mount (plan 0013).
+ * Attached in **one** place, the route. `appRootRoute` spreads these onto the route
+ * it builds, which is what `app.routes.ts` mounts at either address (plan 0013, plan
+ * 0165). The placement dates from when the portfolio shell loaded that route without
+ * running this app's `bootstrapApplication`.
  *
  * `appConfig` does **not** attach them again (velista `0155`). It used to, for the
  * standalone bootstrap, and that gave velista's own origin two environment injectors
@@ -124,8 +123,8 @@ const brand: AppBrand = {
  * built a `RealtimeSocket` joined to the same user room, so every frame arrived twice.
  *
  * **This injector is a child of the root one, and that is the whole reason rule D5
- * exists** (plan 0004, section 9; plan 0005). Under the shell the root injector belongs
- * to the portfolio, and everything here sits one level below it. A `providedIn: 'root'`
+ * exists** (plan 0004, section 9; plan 0005). Everything here sits one level below
+ * the root injector. A `providedIn: 'root'`
  * service is created up there and resolves its own dependencies from up there, so it
  * cannot see anything on this list. That is why the app's services are named here
  * rather than providing themselves, and why nothing on this list may be assumed to
@@ -134,7 +133,7 @@ const brand: AppBrand = {
 export const appProviders: (Provider | EnvironmentProviders)[] = [
   { provide: APP_BRAND, useValue: brand },
   // The mount itself is **not** here. It is the one value the two run modes disagree
-  // about — `/velista` under the shell, `''` on velista's own origin — and a list
+  // about (`/velista` under the portfolio path, `''` on velista's own origin), and a list
   // shared by both cannot hold it. `appRootRoute(mount)` binds `APP_BASE_PATH`
   // alongside this list, from the argument it was given (plan 0013 D2).
   //
@@ -153,7 +152,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // `gateway-interceptor.ts` sends it on every request, which is what lets a
   // deployment recognise a client too old to serve.
   //
-  // Bound in both run modes on purpose. Under the shell there is no service worker
+  // Bound in both run modes on purpose. Under the portfolio path there is no service worker
   // and so no way for this app to update itself, but the requests still go to the
   // same gateway and are still worth identifying.
   { provide: APP_VERSION, useValue: environment.version },
@@ -370,7 +369,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   //
   // An **environment** initializer for the same reason `ConnectionRecovery` is one:
   // `APP_INITIALIZER` is read once from the root injector at bootstrap, and nothing
-  // asks a route injector for it, so under the shell it would never run at all.
+  // asks a route injector for it, so it would never run at all.
   provideEnvironmentInitializer(() => void inject(InstallStore)),
 
   // Start counting history entries, which is what every back control in the app asks
