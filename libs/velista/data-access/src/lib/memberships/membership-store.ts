@@ -8,6 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import type { Membership, MembershipStatus } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import type { RealtimeClientI } from '../realtime/realtime-client';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -114,6 +115,17 @@ export class MembershipStore {
           this._forgetEverything();
         }
       });
+    });
+
+    // A join, a kick or a role change broadcast while the socket was down never
+    // arrived (velista `0169`). Every zone the store holds rows for is read again
+    // under the statuses it was last asked for. `load` keeps the rows on screen while
+    // it runs, and its failure is already recorded on the zone, so the rethrow meant
+    // for a page that awaits it is dropped here.
+    onEdge(this._realtime.reconnects, () => {
+      for (const zoneId of this._byZone().keys()) {
+        this.load(zoneId, this._statuses.get(zoneId)).catch(() => undefined);
+      }
     });
   }
 

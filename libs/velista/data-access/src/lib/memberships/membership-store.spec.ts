@@ -176,4 +176,50 @@ describe('MembershipStore', () => {
       expect(store.membersIn(ZONE)[0].role).toBe('ADMIN');
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    const reads = (service: ReturnType<typeof setup>['service']) =>
+      service.calls.filter((call) => call.method === 'listMembers');
+
+    it('reads nothing at construction', () => {
+      const { service } = setup();
+      TestBed.tick();
+
+      expect(reads(service)).toEqual([]);
+    });
+
+    it('reads nothing when no zone is loaded', async () => {
+      const { realtime, service } = setup();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+
+      expect(reads(service)).toEqual([]);
+    });
+
+    it('reads every loaded zone again under its last statuses, keeping the rows', async () => {
+      const { store, realtime, service } = setup();
+      await store.load(ZONE, ['APPROVED', 'PENDING']);
+      TestBed.tick();
+      const before = reads(service).length;
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      // The rows stay drawn while the read runs.
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b']);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(reads(service).slice(before)).toEqual([
+        {
+          method: 'listMembers',
+          zoneId: ZONE,
+          statuses: ['APPROVED', 'PENDING'],
+        },
+      ]);
+      expect(store.stateOf(ZONE)).toBe('loaded');
+    });
+  });
 });
