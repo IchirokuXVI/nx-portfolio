@@ -1,37 +1,42 @@
 #!/usr/bin/env bash
 #
-# Make a cluster ready for the chart (k8s/plans/0006).
+# Make a cluster ready for one deploy unit's chart (k8s plans 0006 and 0015).
 #
-# `install.sh` turns a machine into a cluster; this turns a cluster into one the
-# chart can be deployed to: the namespace, and the six Secrets the templates read
-# through `secretKeyRef`. Both halves of the same job, which is why they sit
-# together.
+# `install.sh` turns a machine into a cluster; this turns a cluster into one a
+# unit can be deployed to: the unit's namespace, and the Secrets its templates
+# read through `secretKeyRef`, which k8s/units/<unit>/unit.env lists in SECRETS.
+# Run it one time per unit. A unit with no Secret (the portfolio) gets its
+# namespace and nothing else.
 #
 # Usage:
-#   ./k8s/bootstrap/provision-release.sh --env staging          # provision
-#   ./k8s/bootstrap/provision-release.sh --check --env staging  # verify only
-#   ./k8s/bootstrap/provision-release.sh --env production --rotate
+#   ./k8s/bootstrap/provision-release.sh --unit velista --env staging          # provision
+#   ./k8s/bootstrap/provision-release.sh --check --unit velista --env staging  # verify only
+#   ./k8s/bootstrap/provision-release.sh --unit velista --env production --rotate
 #
 # Idempotent. Re-running it changes nothing, because it keeps every value that
 # already exists; see --rotate below for the one exception and why it is opt in.
 #
 # Options:
+#   --unit <unit>               the deploy unit (a directory of k8s/units)
 #   --env <production|staging>  which values file --check renders against
 #   --check                     verify, create nothing (see section 3 of the plan)
+#   --render-only               with --check: the render half only, no cluster
 #   --rotate                    regenerate secrets that already exist (dangerous)
 #   --out <path>                where to write the operator's plaintext copy
-#   --namespace <name>          default: nx-portfolio
 
 set -euo pipefail
 
 ENVIRONMENT=""
 CHECK_ONLY=false
+RENDER_ONLY=false
 ROTATE=false
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+UNIT_NAME=""
 OUT_PATH=""
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CHART_DIR="$REPO_ROOT/k8s/helm"
+K8S_DIR="$REPO_ROOT/k8s"
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
 
 # ---------------------------------------------------------------------------
 # The kubeconfig, for the CI deploy user's sake.
@@ -52,15 +57,30 @@ fi
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --env)       ENVIRONMENT="$2"; shift 2 ;;
-    --check)     CHECK_ONLY=true;  shift ;;
-    --rotate)    ROTATE=true;      shift ;;
-    --out)       OUT_PATH="$2";    shift 2 ;;
-    --namespace) NAMESPACE="$2";   shift 2 ;;
-    -h|--help)   sed -n '2,24p' "$0"; exit 0 ;;
+    --unit)        UNIT_NAME="$2";      shift 2 ;;
+    --env)         ENVIRONMENT="$2";    shift 2 ;;
+    --check)       CHECK_ONLY=true;     shift ;;
+    --render-only) RENDER_ONLY=true;    shift ;;
+    --rotate)      ROTATE=true;         shift ;;
+    --out)         OUT_PATH="$2";       shift 2 ;;
+    -h|--help)     sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
+
+if [ "$RENDER_ONLY" = true ] && [ "$CHECK_ONLY" = false ]; then
+  echo "--render-only goes with --check." >&2
+  exit 1
+fi
+
+if [ -z "$UNIT_NAME" ]; then
+  echo "--unit is required: one of $(unit_names "$K8S_DIR" | paste -sd, -)." >&2
+  exit 1
+fi
+load_unit "$K8S_DIR" "$UNIT_NAME"
+CHART_DIR="$CHART_PATH"
+UNIT_SECRETS="$SECRETS"
+LABEL="$UNIT_NAME"
 
 if [ -z "$ENVIRONMENT" ]; then
   echo "--env is required (production or staging)." >&2
@@ -250,16 +270,73 @@ db_url_is_parseable() {
   return 0
 }
 
+# The render half of the unit registry check (k8s plan 0015 D8). units.mjs
+# checks unit.env against the repository with Node alone; these two need a render.
+#
+#   * The hostnames of the rendered Gateway are HOSTS_<ENV> of unit.env, which
+#     host maintenance and the endpoint checks read without rendering anything.
+#   * A namespace the render names that is not this unit's own is the NAMESPACE
+#     of another unit. The portfolio's route to velista and velista's grant to
+#     the portfolio each spell the other's namespace, so renaming one unit's
+#     namespace fails here until the other unit's values follow.
+check_unit_render() {
+  local rendered="$1" problems=0 field want have foreign other_namespaces ns
+  field="HOSTS_$(printf '%s' "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')"
+  want="$(printf '%s\n' ${!field} | sort -u)"
+  have="$(printf '%s\n' "$rendered" | awk '
+    /^---/ { gateway = 0 }
+    /^kind:[[:space:]]+Gateway[[:space:]]*$/ { gateway = 1 }
+    gateway && /^[[:space:]]+hostname:/ { print $2 }
+  ' | sort -u)"
+  if [ -z "$have" ]; then
+    echo "  skipped the Gateway hostnames: this render has no Gateway"
+  elif [ "$have" = "$want" ]; then
+    echo "  ok      Gateway hostnames equal $field of unit.env"
+  else
+    echo "  WRONG   Gateway hostnames differ from $field in k8s/units/$UNIT_NAME/unit.env"
+    echo "          rendered: $(printf '%s' "$have" | tr '\n' ' ')"
+    echo "          unit.env: $(printf '%s' "$want" | tr '\n' ' ')"
+    problems=$((problems + 1))
+  fi
+
+  other_namespaces=""
+  for other in $(unit_names "$K8S_DIR"); do
+    [ "$other" = "$UNIT_NAME" ] && continue
+    other_namespaces="$other_namespaces $(unit_field "$K8S_DIR" "$other" NAMESPACE)"
+  done
+  foreign="$(printf '%s\n' "$rendered" \
+    | sed -n 's/^[[:space:]]*\(- \)\{0,1\}\(fromNamespace\|namespace\):[[:space:]]*//p' \
+    | tr -d "\"'" | sort -u | grep -vxF "$NAMESPACE" || true)"
+  for ns in $foreign; do
+    case " $other_namespaces " in
+      *" $ns "*) echo "  ok      the render names $ns, the namespace of another unit" ;;
+      *)
+        echo "  WRONG   the render names the namespace $ns, and no unit in k8s/units has it."
+        echo "          A value that names another unit's namespace must equal its unit.env."
+        problems=$((problems + 1))
+        ;;
+    esac
+  done
+
+  [ "$problems" -eq 0 ]
+}
+
 run_check() {
   local failures=0
   local chart_failures=0
+  local registry_failures=0
 
-  echo "Rendering the chart for $ENVIRONMENT..."
+  # The library chart is packaged from the committed Chart.lock, offline.
+  helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
+
+  echo "Rendering $CHART_DIR as release $RELEASE_NAME in $NAMESPACE for $ENVIRONMENT..."
   local rendered
-  rendered="$(helm template nx-portfolio "$CHART_DIR" \
+  rendered="$(helm template "$RELEASE_NAME" "$CHART_DIR" \
     --namespace "$NAMESPACE" \
     --values "$CHART_DIR/values.yaml" \
     --values "$VALUES_FILE")"
+
+  check_unit_render "$rendered" || registry_failures=1
 
   # Every `secretKeyRef` / `configMapKeyRef` in the render, as "kind name key".
   # awk over the YAML rather than a parser: the two are always name-then-key on
@@ -273,7 +350,9 @@ run_check() {
     { if (kind != "" && $0 !~ /^[[:space:]]*(name|key):/) { kind = ""; name = "" } }
   ' | sort -u)"
 
-  if [ -z "$refs" ]; then
+  # A unit that provisions Secrets and renders no reference to any of them has
+  # lost its workloads, which cannot be right. The portfolio provisions none.
+  if [ -z "$refs" ] && [ -n "$UNIT_SECRETS" ]; then
     echo "The render references no Secret or ConfigMap keys at all, which cannot" >&2
     echo "be right. Is lunaShopperBackend.enabled true in $VALUES_FILE?" >&2
     return 1
@@ -316,7 +395,7 @@ run_check() {
   chart_keys="$(printf '%s\n' "$defined" | awk '$1 == "key" { print $2, $3, $4 }' | sort -u)"
 
   echo
-  echo "Checking $(printf '%s\n' "$refs" | wc -l | tr -d ' ') referenced keys."
+  echo "Checking $(printf '%s' "$refs" | grep -c . || true) referenced keys."
   echo "What this script provisions is checked against the cluster. What the chart"
   echo "creates is checked against the render, and marked (chart)."
   echo
@@ -338,6 +417,10 @@ run_check() {
     fi
 
     # 2. A prerequisite. It has to be in the cluster already.
+    if [ "$RENDER_ONLY" = true ]; then
+      echo "  skipped $kind/$name $key (--render-only asks no cluster)"
+      continue
+    fi
     if ! kubectl -n "$NAMESPACE" get "$kind" "$name" >/dev/null 2>&1; then
       echo "  MISSING $kind/$name (needed for key $key)"
       failures=$((failures + 1))
@@ -394,6 +477,10 @@ run_check() {
   fi
 
   echo
+  if [ "$registry_failures" -gt 0 ]; then
+    echo "The render disagrees with k8s/units (the lines marked WRONG). Make the values" >&2
+    echo "file and unit.env say the same before this deploys." >&2
+  fi
   if [ "$failures" -gt 0 ]; then
     echo "$failures reference(s) cannot be satisfied. The deploy would fail." >&2
     if [ "$chart_failures" -gt 0 ]; then
@@ -405,6 +492,7 @@ run_check() {
     fi
     return 1
   fi
+  [ "$registry_failures" -eq 0 ] || return 1
   echo "Every key the chart references can be satisfied. The deploy can proceed."
   return 0
 }
@@ -420,8 +508,33 @@ fi
 # A path check rather than reading a git ignore file, which is fragile. A
 # worktree is exactly the kind of place a hurried operator would put this file.
 # ---------------------------------------------------------------------------
+echo "Provisioning $UNIT_NAME for $ENVIRONMENT in namespace $NAMESPACE"
+echo
+
+# 1. The namespace. Created rather than applied from a manifest, so the unit's
+#    NAMESPACE is the one place that names it.
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+if [ -n "$UNIT_NAME" ]; then
+  if [ -z "$UNIT_SECRETS" ]; then
+    echo "k8s/units/$UNIT_NAME/unit.env lists no Secret, so the namespace is all it needs."
+    exit 0
+  fi
+  # The provisioning below writes the Luna Secrets. A unit that lists another
+  # Secret needs code here first, not a silent skip.
+  for secret in $UNIT_SECRETS; do
+    case " $APP_SECRET $AUTH_DB_SECRET $CORE_DB_SECRET $CATALOG_DB_SECRET $HARVESTER_DB_SECRET $BACKUP_SECRET " in
+      *" $secret "*) ;;
+      *)
+        echo "k8s/units/$UNIT_NAME/unit.env lists the Secret $secret, and this script does not know how to write it." >&2
+        exit 1
+        ;;
+    esac
+  done
+fi
+
 if [ -z "$OUT_PATH" ]; then
-  OUT_PATH="$HOME/luna-shopper-${ENVIRONMENT}-secrets.txt"
+  OUT_PATH="$HOME/${LABEL}-${ENVIRONMENT}-secrets.txt"
 fi
 OUT_DIR="$(cd "$(dirname "$OUT_PATH")" 2>/dev/null && pwd || true)"
 if [ -z "$OUT_DIR" ]; then
@@ -435,12 +548,6 @@ case "$OUT_DIR/" in
     exit 1
     ;;
 esac
-
-echo "Provisioning $ENVIRONMENT in namespace $NAMESPACE"
-echo
-
-# 1. The namespace, from the committed manifest rather than a bare `create`.
-kubectl apply -f "$REPO_ROOT/k8s/namespace.yaml"
 
 # ---------------------------------------------------------------------------
 # Keep what already exists, unless --rotate.
@@ -744,4 +851,4 @@ fi
 
 echo
 echo "Now verify what you just created actually satisfies the chart:"
-echo "  $0 --check --env $ENVIRONMENT"
+echo "  $0 --check${UNIT_NAME:+ --unit $UNIT_NAME} --env $ENVIRONMENT"

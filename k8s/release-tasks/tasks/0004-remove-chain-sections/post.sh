@@ -26,7 +26,7 @@
 # catalog database pod, and where the four tables do not exist.
 #
 # Environment overrides:
-#   NAMESPACE     kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE     kubernetes namespace (default: luna-shopper)
 #   CATALOG_PSQL  command that runs psql against catalog, reading SQL on stdin
 #
 # The override is for a rehearsal against a local stack. Run it only on a
@@ -37,7 +37,7 @@
 set -euo pipefail
 shopt -s inherit_errexit
 
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+NAMESPACE="${NAMESPACE:-luna-shopper}"
 
 # In the order they are deleted.
 TABLES='supermarket_item_sections location_sections section_categories supermarket_sections'

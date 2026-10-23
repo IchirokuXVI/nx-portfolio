@@ -162,25 +162,24 @@ gate (velista plan 0080).
 | ----------------- | --------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
 | **Unit + schema** | `pr.yml`, job `verify`                  | n/a                     | the fast, infra-free layer                                                    |
 | **Tier 1**        | `pr.yml`, job `verify-infra`            | `node dist/.../main.js` | application correctness; fast enough to block a merge on                      |
-| **Tier 2**        | `docker-ci.yml`, job `e2e-luna`         | the just built images   | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
-| **Browser gate**  | `docker-ci.yml`, job `e2e-velista-luna` | the just built images   | velista in a real browser against a real, seeded backend                      |
+| **Tier 2**        | gate `luna-shopper-backend`             | the just built images   | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
+| **Browser gate**  | gate `velista-luna`                     | the just built images   | velista in a real browser against a real, seeded backend                      |
 
 `verify-infra` brings the compose stack up with `stack.sh up` (which also runs the
 migrations), runs the affected projects' `test-integration` targets followed by
 `assert-integration-ran.js`, starts the six services with `run-services.sh start`,
 and runs `luna-shopper-backend-e2e` against them with `E2E_SEED=1`.
 
-`docker-ci.yml` has three e2e gates, and each one blocks the deploy when it fails:
+The velista unit's pipeline (`stage-unit.yml`, k8s plan 0016) has two gates, each a
+directory under `k8s/e2e`, and each one blocks the velista deploy when it fails:
 
-- `e2e-frontend` runs the affected micro frontend e2e suites against the staging
-  frontend images (`k8s/e2e/portfolio-frontend/compose.yml`). It tests no Luna
-  service.
-- `e2e-luna` is tier 2. It pulls the Luna images at the `staging` tag and runs
-  `stack.sh e2e-images`, the same suite as tier 1 against those images.
-- `e2e-velista-luna` stands both stacks up on one runner: the Luna images through
-  `stack.sh e2e-up`, then the frontend images behind the reverse proxy with
-  `compose.luna.yml`. It then runs `nx e2e velista-luna-e2e`. It runs only when
-  that suite is affected.
+- `luna-shopper-backend` is tier 2. It pulls the Luna images at the `staging` tag
+  and runs `stack.sh e2e-images`, the same suite as tier 1 against those images.
+- `velista-luna` serves the velista image on its own origin and under `/velista`,
+  runs `velista-e2e`, and, when `velista-luna-e2e` is affected, stands the Luna
+  images up through `stack.sh e2e-up` with `compose.luna.yml` and runs that suite.
+
+The portfolio's gate `portfolio-frontend` tests no Luna service.
 
 What holds across these jobs:
 
@@ -192,9 +191,9 @@ What holds across these jobs:
   micro frontends pays nothing beyond `npm ci`. `nx affected` further narrows which services'
   integration suites run; e2e is all or nothing, because it exercises the whole
   system.
-- The three gates run _before_ the `helm upgrade` and the `kubectl rollout
+- The gates run _before_ the `helm upgrade` and the `kubectl rollout
   restart`, so a red suite stops the deploy and a broken image never reaches
-  staging. It costs the stack boot and the suite, not a rebuild: `docker-ci.yml`
+  staging. It costs the stack boot and the suite, not a rebuild: the pipeline
   already built those images on the way to staging.
 - Tier 1, tier 2 and the browser gate set `LUNA_REQUIRE_STACK=1`, so a suite that
   would skip fails instead, and `COMPOSE_PROJECT_NAME` per run, so a retried or overlapping run can never

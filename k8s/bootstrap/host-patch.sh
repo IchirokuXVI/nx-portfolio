@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-TOOL_VERSION=1
+TOOL_VERSION=2
 
 # sudo resets the environment, so nothing here may depend on the caller's PATH.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -54,6 +54,20 @@ usage() {
 # inside dpkg would fail on the dpkg lock anyway, but with a worse message.
 exec 9>/run/nx-host-patch.lock
 flock -n 9 || die "another nx-host-patch run holds the lock"
+
+# The deploy lock (k8s plan 0016 D2), shared with every deploy of every unit.
+# Opened read only and without O_CREAT, as k8s/bootstrap/host-lock.sh explains.
+DEPLOY_LOCK=/run/lock/nx-deploy.lock
+DEPLOY_LOCK_WAIT=900
+
+hold_deploy_lock() {
+  [ -e "$DEPLOY_LOCK" ] || install -m 0644 -o root -g root /dev/null "$DEPLOY_LOCK"
+  exec 8< "$DEPLOY_LOCK"
+  if ! flock -n 8; then
+    echo "==> a deploy holds $DEPLOY_LOCK; waiting up to ${DEPLOY_LOCK_WAIT}s"
+    flock -w "$DEPLOY_LOCK_WAIT" 8 || die "a deploy held $DEPLOY_LOCK for ${DEPLOY_LOCK_WAIT}s"
+  fi
+}
 
 # ---------------------------------------------------------------------------
 # Reboot detection.
@@ -175,6 +189,7 @@ EOF
     -o Acquire::http::Timeout=60
   )
 
+  hold_deploy_lock
   echo "==> snapshot $snap ($codename)"
   # A run that died inside dpkg leaves it half configured, and every apt call
   # after that refuses to start until this runs.
@@ -247,6 +262,7 @@ cmd_k3s() {
     "https://raw.githubusercontent.com/k3s-io/k3s/${want}/install.sh" \
     || die "could not download the k3s installer for $want"
 
+  hold_deploy_lock
   echo "==> k3s $have -> $want"
   # No INSTALL_K3S_EXEC: the flags come from config.yaml (see above).
   INSTALL_K3S_VERSION="$want" sh "$installer"
@@ -264,9 +280,15 @@ cmd_k3s() {
 }
 
 cmd_reboot() {
+  # Waits for a running deploy to finish first. The reboot itself runs from a
+  # transient unit that takes the deploy lock again and keeps it, so no deploy
+  # can start in the 15 seconds before the machine goes down.
+  hold_deploy_lock
+  exec 8<&-
   # Through systemd-run, so the SSH session that asked gets its answer before
   # the network goes away.
-  systemd-run --quiet --on-active=15 --unit=nx-host-patch-reboot /bin/systemctl reboot
+  systemd-run --quiet --unit=nx-host-patch-reboot /bin/sh -c \
+    "exec 8< $DEPLOY_LOCK; flock -w $DEPLOY_LOCK_WAIT 8; sleep 15; exec /bin/systemctl reboot"
   echo "rebooting in 15 seconds (boot_id $(cat /proc/sys/kernel/random/boot_id))"
 }
 

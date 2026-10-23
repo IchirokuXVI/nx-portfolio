@@ -8,8 +8,15 @@
 # Rolling back is the same operation with an older version whose images still
 # exist in the registry:
 #
-#   ./deploy-release.sh 1.1.3     # deploy release 1.1.3
-#   ./deploy-release.sh 1.0.0     # roll back to 1.0.0
+#   ./deploy-release.sh velista 1.1.3     # deploy release 1.1.3 of the velista unit
+#   ./deploy-release.sh velista 1.0.0     # roll it back to 1.0.0
+#
+# The unit (k8s plan 0015 D10) names a directory of k8s/units, whose unit.env
+# gives the chart, the namespace and the release.
+#
+# Every helm and kubectl call runs under the host lock (k8s plan 0016 D2), so a
+# deploy and a host patch never overlap. A caller that holds it already, such
+# as the deploy-unit action, passes through.
 #
 # The `/root/helm-live/prod-tag.yaml` file this used to write is gone (plan 0002,
 # section 2.3). It existed only because a staging deploy and a production deploy
@@ -20,24 +27,35 @@
 # was deployed when.
 #
 # Environment overrides:
-#   RELEASE_NAME    helm release name        (default: nx-portfolio)
-#   NAMESPACE       kubernetes namespace     (default: nx-portfolio)
-#   TIMEOUT         helm/rollout wait        (default: 10m, 20m on a first install)
+#   TIMEOUT        helm/rollout wait        (default: 10m, 20m on a first install)
 #   KUBECONFIG      kubeconfig path          (default: /etc/rancher/k3s/k3s.yaml)
 
 set -euo pipefail
 
-VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-  echo "Usage: $0 <release-version>" >&2
-  echo "Example: $0 1.1.3" >&2
+HELM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+K8S_DIR="$(dirname "$HELM_DIR")"
+
+if [ $# -ne 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
+  echo "Usage: $0 <unit> <release-version>" >&2
+  echo "Example: $0 velista 1.1.3" >&2
   exit 1
 fi
+UNIT_NAME="$1"
+VERSION="$2"
 
-CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
+load_unit "$K8S_DIR" "$UNIT_NAME"
+CHART_DIR="$CHART_PATH"
+TASKS_UNIT=(--unit "$UNIT_NAME")
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+# shellcheck source=../bootstrap/host-lock.sh
+. "$K8S_DIR/bootstrap/host-lock.sh"
+host_lock
+
+# The library chart is packaged from the committed Chart.lock, offline.
+helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
 
 # ---------------------------------------------------------------------------
 # What state is the release in before anything touches it?
@@ -81,23 +99,45 @@ if [ "$RELEASE_STATUS" != none ] \
 fi
 
 if [ "$RELEASE_STATUS" != none ] && [ "$EVER_DEPLOYED" = false ]; then
-  # Cleared automatically, because there is provably nothing to lose. No
-  # revision has ever served traffic and there is no earlier one to roll back
-  # to, so removing the record and installing fresh is the only way forward as
-  # well as the safe one.
-  #
-  # It does not take the databases with it either. The only persistent storage
-  # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
-  # nats), and Kubernetes deliberately leaves those PVCs behind when the
-  # StatefulSet goes away. There are no standalone PVCs in the chart, so
-  # `helm uninstall` cannot delete a volume.
-  echo "Release '${RELEASE_NAME}' exists in state '${RELEASE_STATUS}' but no revision of"
-  echo "it has ever been live, so an earlier first install never finished. Removing"
-  echo "the record and installing fresh, which is what lets the install path (and"
-  echo "its post-install migrations) run at all. The postgres and nats volumes are"
-  echo "not helm's to delete and stay where they are."
-  helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
-  RELEASE_STATUS=none
+  # A release that adopted live objects (the cutover of plan 0016 writes the
+  # ConfigMap deploy-cutover) has a failed first revision and still serves, and
+  # an uninstall would delete what it adopted. A StatefulSet in the namespace is
+  # the same warning from the data's side. Both skip the uninstall (k8s plan
+  # 0015 D10).
+  adopted=""
+  if kubectl -n "$NAMESPACE" get configmap deploy-cutover >/dev/null 2>&1; then
+    adopted="the namespace holds the ConfigMap deploy-cutover, so this release adopted live objects"
+  elif [ -n "$(kubectl -n "$NAMESPACE" get statefulsets -o name 2>/dev/null || true)" ]; then
+    adopted="the namespace holds a StatefulSet, so a database may live under this release"
+  fi
+  if [ -n "$adopted" ]; then
+    # Helm 3 upgrades a release whose only revision is failed, so the deploy
+    # goes on with an upgrade instead of an uninstall.
+    echo "Release '${RELEASE_NAME}' has no deployed revision, and ${adopted}."
+    echo "Uninstalling it could delete live data, so the uninstall is skipped and the"
+    echo "failed release is upgraded in place. If the upgrade fails too, read"
+    echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}"
+    echo "  kubectl -n ${NAMESPACE} get pods,statefulsets"
+    echo "and fix the failed revision with a helm upgrade, never an uninstall."
+  else
+    # Cleared automatically, because there is provably nothing to lose. No
+    # revision has ever served traffic and there is no earlier one to roll back
+    # to, so removing the record and installing fresh is the only way forward as
+    # well as the safe one.
+    #
+    # It does not take the databases with it either. The only persistent storage
+    # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
+    # nats), and Kubernetes deliberately leaves those PVCs behind when the
+    # StatefulSet goes away. There are no standalone PVCs in the chart, so
+    # `helm uninstall` cannot delete a volume.
+    echo "Release '${RELEASE_NAME}' exists in state '${RELEASE_STATUS}' but no revision of"
+    echo "it has ever been live, so an earlier first install never finished. Removing"
+    echo "the record and installing fresh, which is what lets the install path (and"
+    echo "its post-install migrations) run at all. The postgres and nats volumes are"
+    echo "not helm's to delete and stay where they are."
+    helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
+    RELEASE_STATUS=none
+  fi
 elif [ "$RELEASE_STATUS" = pending-upgrade ] || [ "$RELEASE_STATUS" = pending-rollback ]; then
   # NOT cleared automatically. Here a revision did deploy and its pods may be
   # serving production right now. Choosing between rolling back and letting the
@@ -133,7 +173,7 @@ fi
 # the deploy here, with nothing upgraded. The version goes with it, because a
 # task runs in production only in the one release its task.env names (k8s plan
 # 0011).
-bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" \
+bash "$K8S_DIR/release-tasks/run-release-tasks.sh" "${TASKS_UNIT[@]}" \
   --env production --phase pre --release "$VERSION"
 
 echo "Upgrading helm release '${RELEASE_NAME}' in namespace '${NAMESPACE}' to ${VERSION}"
@@ -173,13 +213,32 @@ helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
 # A statement a script makes about the world should be one it verified, or it
 # trains the reader to disbelieve the output. This used to print "Production is
 # now serving release X" immediately after a command it had not checked.
-echo "Waiting for every deployment to report ready..."
-kubectl rollout status deployment -n "$NAMESPACE" --timeout=5m
+# Only this release's Deployments: a namespace may hold another release's,
+# and its rollout is not this deploy's to wait on.
+echo "Waiting for every deployment of release ${RELEASE_NAME} to report ready..."
+if ! manifest="$(helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE")"; then
+  echo "ERROR: could not read the manifest of release ${RELEASE_NAME}, so its rollout is unverified." >&2
+  exit 1
+fi
+deployments="$(printf '%s\n' "$manifest" | awk '
+  /^---/ { deployment = 0; meta = 0 }
+  /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
+  /^metadata:/ { meta = 1; next }
+  /^[^[:space:]]/ { meta = 0 }
+  deployment && meta && /^  name:/ { print $2; deployment = 0 }
+')"
+if [ -z "$deployments" ]; then
+  echo "ERROR: the manifest of release ${RELEASE_NAME} names no Deployment, so its rollout is unverified." >&2
+  exit 1
+fi
+for deployment in $deployments; do
+  kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout=5m
+done
 
 # The post phase finishes each task the pre phase started, against the new pods.
-bash "$CHART_DIR/../release-tasks/run-release-tasks.sh" \
+bash "$K8S_DIR/release-tasks/run-release-tasks.sh" "${TASKS_UNIT[@]}" \
   --env production --phase post --release "$VERSION"
 
-echo "Production is now serving release ${VERSION}"
+echo "Production is now serving release ${VERSION} of the unit $UNIT_NAME"
 echo "Helm revision history (use 'helm rollback ${RELEASE_NAME} <rev>' as an alternative):"
 helm history "$RELEASE_NAME" --namespace "$NAMESPACE" --max 10

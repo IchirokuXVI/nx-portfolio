@@ -1,0 +1,52 @@
+# The stack of the velista-luna gate (k8s plan 0016 D3): velista's own image
+# behind a proxy that serves its own origin and the /velista path of a portfolio
+# shaped host. The portfolio images are not started: the portfolio host here
+# answers only /velista, which is the part of it that velista's nginx owns.
+#
+# compose.luna.yml adds the two backend hosts for velista-luna-e2e. gate.sh
+# starts one or both:
+#
+#   echo "127.0.0.1 staging.velista.app staging.ichirokuxvi.com api.staging.velista.app rt.staging.velista.app" | sudo tee -a /etc/hosts
+#   bash k8s/e2e/velista-luna/gate.sh velista-e2e,velista-luna-e2e
+#
+# Override E2E_IMAGE_PREFIX / E2E_IMAGE_TAG to point at other images.
+name: velista-luna-e2e
+
+services:
+  certs:
+    image: alpine:latest
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache openssl >/dev/null
+        for domain in staging.velista.app staging.ichirokuxvi.com; do
+          if [ ! -f "/certs/$$domain.crt" ]; then
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+              -keyout "/certs/$$domain.key" -out "/certs/$$domain.crt" \
+              -subj "/CN=$$domain"
+          fi
+        done
+    volumes:
+      - certs:/certs
+
+  reverse-proxy:
+    image: nginx:latest
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+      velista:
+        condition: service_started
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - certs:/etc/nginx/certs:ro
+
+  velista:
+    image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/velista:${E2E_IMAGE_TAG:-staging}
+
+volumes:
+  certs:

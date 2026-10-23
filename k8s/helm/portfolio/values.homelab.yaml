@@ -1,0 +1,59 @@
+# The portfolio unit served from the home machine, for a window without a VPS.
+#
+#   ./k8s/helm/deploy-homelab.sh portfolio 0.1.1
+#
+# Do not run `helm upgrade` against this file by hand. The version being served
+# is an argument, exactly as on the VPS. See k8s/README-homelab.md.
+#
+# This is the real production domain running the SAME published images the VPS
+# ran, not a localhost file. Two prerequisites cannot live here: ports 80 and 443
+# have to reach this machine, and the ichirokuxvi.com records have to point at
+# its public address (docker/ddns keeps them there as it changes).
+#
+# The velista unit has a homelab file of its own (k8s/helm/velista).
+
+baseDomain: ichirokuxvi.com
+
+# Production, because that is what this is serving.
+environment: production
+
+# The floor. deploy-homelab.sh overrides it with the release version on every
+# deploy. No `apps` list here: the published ghcr.io images of values.yaml are
+# what runs, so this window is not an untested build of anything.
+imageTag: latest
+
+# IfNotPresent, where both clusters use Always. Release tags are immutable, and
+# a pod restarting during a network blip or a ghcr.io incident still starts from
+# the image on disk. Do not force push a different image to a released tag: this
+# deploy will not pick it up.
+appImagePullPolicy: IfNotPresent
+
+# The VPS authenticated to ghcr.io at the node level; this machine does not.
+# Create the Secret once, in this unit's namespace, with a token that carries only
+# read:packages:
+#
+#   kubectl -n portfolio create secret docker-registry ghcr-pull \
+#     --docker-server=ghcr.io \
+#     --docker-username=IchirokuXVI \
+#     --docker-password=<token with read:packages>
+imagePullSecrets:
+  - ghcr-pull
+
+# The same objects production uses, with the issuer the home line can solve.
+gateway:
+  enabled: true
+  className: eg
+  tls:
+    enabled: true
+    # DNS-01 through Cloudflare, because a home line usually cannot complete an
+    # HTTP-01 challenge (ISPs block inbound port 80, and CGNAT cannot work at
+    # all). Create it once with k8s/bootstrap/cluster-issuer-dns01.sh.
+    issuer:
+      kind: ClusterIssuer
+      name: letsencrypt-dns01
+      create: false
+    redirectHttp: true
+
+# The portfolio path of velista is not served at home (plan 0015 D7): the velista
+# homelab file drops its ReferenceGrant, so a route here would have no backend.
+externalRoutes: []

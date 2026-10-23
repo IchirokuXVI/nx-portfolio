@@ -4,7 +4,7 @@
   "projectType": "application",
   "prefix": "app",
   "sourceRoot": "apps/luna-shopper-admin/src",
-  "tags": [],
+  "tags": ["deploy:velista"],
   "targets": {
     "build": {
       "executor": "@nx/angular:webpack-browser",

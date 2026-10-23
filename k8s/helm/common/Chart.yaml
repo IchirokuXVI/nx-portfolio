@@ -1,0 +1,5 @@
+apiVersion: v2
+name: common
+description: The templates every deploy unit chart shares (k8s plan 0015). Renders nothing alone.
+type: library
+version: 0.1.0

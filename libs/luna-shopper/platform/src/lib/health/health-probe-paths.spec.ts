@@ -34,7 +34,7 @@ describe('health probe paths', () => {
   const chart = readFileSync(
     resolve(
       workspaceRoot(),
-      'k8s/helm/templates/luna-shopper-backend/deployment.yaml.tpl'
+      'k8s/helm/velista/templates/luna-shopper-backend/deployment.yaml.tpl'
     ),
     'utf8'
   );

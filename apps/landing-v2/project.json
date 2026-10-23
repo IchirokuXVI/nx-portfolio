@@ -4,7 +4,7 @@
   "projectType": "application",
   "prefix": "app",
   "sourceRoot": "apps/landing-v2/src",
-  "tags": [],
+  "tags": ["deploy:portfolio"],
   "targets": {
     "build": {
       "executor": "@nx/angular:webpack-browser",

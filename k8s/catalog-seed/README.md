@@ -107,11 +107,11 @@ the same `postgres:16-alpine`, so there is no version skew to work around.
 
 ```sh
 # staging first, always
-kubectl exec -i -n nx-portfolio luna-shopper-backend-catalog-db-0 \
+kubectl exec -i -n luna-shopper luna-shopper-backend-catalog-db-0 \
   -- psql -U luna_catalog -d luna_catalog < catalog-seed.sql
 
 # check it landed
-kubectl exec -n nx-portfolio luna-shopper-backend-catalog-db-0 \
+kubectl exec -n luna-shopper luna-shopper-backend-catalog-db-0 \
   -- psql -U luna_catalog -d luna_catalog \
   -c 'select count(*) from items' -c 'select count(*) from supermarket_items'
 ```

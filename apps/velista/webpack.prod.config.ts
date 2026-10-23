@@ -7,7 +7,7 @@ import { DEFAULT_APP_VERSION } from './app-version';
  * The production hosts, and the single place they are written down (plan 0014).
  *
  * `velista-api-hosts.spec.ts` asserts these against the routed Luna services in
- * `k8s/helm/values.yaml`, because the reason the realtime host was wrong for so
+ * `k8s/helm/velista/values.yaml`, because the reason the realtime host was wrong for so
  * long is that two files had to agree and nothing checked that they did.
  *
  * They are on `velista.app`, not on the portfolio's domain: the backend serves this

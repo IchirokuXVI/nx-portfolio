@@ -1,0 +1,9 @@
+apiVersion: v2
+name: velista
+description: The velista deploy unit, velista, the back office and the Luna backend (k8s plans 0014 and 0015).
+type: application
+version: 0.1.0
+dependencies:
+  - name: common
+    version: 0.1.0
+    repository: file://../common
