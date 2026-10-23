@@ -77,7 +77,8 @@ function run(command, args, options) {
   const quoted = windows
     ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
     : args;
-  const result = spawnSync(command, quoted, {
+  const program = windows && /\s/.test(command) ? `"${command}"` : command;
+  const result = spawnSync(program, quoted, {
     stdio: 'inherit',
     shell: windows,
     ...options,
@@ -193,7 +194,8 @@ const gradleArgs = [
 if (process.env.VELISTA_ANDROID_KEYSTORE_PROPERTIES) {
   gradleArgs.push(`-PvelistaKeystoreProperties=${keystoreProperties}`);
 }
-run(windows ? 'gradlew.bat' : './gradlew', gradleArgs, {
+// By full path: cmd.exe does not always look in the working directory.
+run(join(androidRoot, windows ? 'gradlew.bat' : 'gradlew'), gradleArgs, {
   cwd: androidRoot,
   env,
 });
