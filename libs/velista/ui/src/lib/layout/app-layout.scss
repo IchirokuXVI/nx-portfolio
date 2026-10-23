@@ -132,14 +132,20 @@
   line-height: var(--app-leading-body);
 }
 
-// **The bar is the only element on a screen that may carry the bottom inset**
-// (plan 0097, section 5). While it is up, `--app-safe-bottom` is zero for everything
-// below this element, so a screen that draws its own dock keeps its padding and loses
-// its inset rather than clearing the home indicator twice over. The bar reads
-// `--app-nav-safe-bottom`, which is the same `env()` under a name nothing redefines.
+// **The bar is the only element in the page column that may carry the bottom inset**
+// (plan 0097, section 5). While its room is reserved, `--app-safe-bottom` is zero for
+// everything below this element, so a screen that draws its own dock keeps its padding
+// and loses its inset rather than clearing the home indicator twice over. The bar
+// reads `--app-nav-safe-bottom`, which is the same `env()` under a name nothing
+// redefines.
 //
 // One declaration rather than an edit to every dock in the app, and that is the point:
 // a dock added later is covered by it without knowing this rule exists.
+//
+// The rule holds for what ends at the top of the bar, and only for that. **A fixed
+// surface that covers the bar carries the inset itself**: a sheet is fixed to the foot
+// of the screen while the bar's room stays reserved under it, so `SheetShell` puts the
+// token back from `--app-nav-safe-bottom` on its own host.
 //
 // On a screen with no bar the swap is off, and the inset is the page's own to apply,
 // once: nothing in this frame pads the foot of the page slot (velista 0106).

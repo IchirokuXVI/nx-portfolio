@@ -442,10 +442,12 @@ $app-content-max: 480px;
   // Between `--app-icon-md` and `--app-icon-lg`, and a knob of its own because it is
   // the one glyph in the app that carries a tab rather than sitting beside a word.
   --app-nav-icon: 24px;
-  // **The bar is the only element in the app that may carry the bottom inset**
-  // (section 5). While it is up, `--app-safe-bottom` is zero for everything inside
-  // the page, so a screen that draws its own dock keeps its padding and loses its
-  // inset. This is the value the bar itself reads, and it is never redefined.
+  // **The bar is the only element in the page column that may carry the bottom
+  // inset** (section 5). While it is up, `--app-safe-bottom` is zero for everything
+  // inside the page, so a screen that draws its own dock keeps its padding and loses
+  // its inset. This is the value the bar itself reads, and it is never redefined.
+  // **A fixed surface that covers the bar carries the inset itself**, from this
+  // value: `SheetShell` sets `--app-safe-bottom` back to it on its own host.
   --app-nav-safe-bottom: env(safe-area-inset-bottom, 0px);
   --app-nav-pad-block-end: max(var(--app-space-6), var(--app-nav-safe-bottom));
   // How tall the bar is, written once so the bar's own height and the room the app
