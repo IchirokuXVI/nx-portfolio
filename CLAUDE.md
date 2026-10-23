@@ -14,7 +14,8 @@ This repository is an Nx monorepo. It holds four things:
 The main parts:
 
 - `shell` is the host application. It owns the router and mounts the remotes at runtime.
-- `odontogram`, `damoclesSword`, `landingV2` and `velista` are remote micro-frontend apps. Each one exposes its routes through `./Routes` (module federation).
+- `odontogram`, `damoclesSword` and `landingV2` are remote micro-frontend apps. Each one exposes its routes through `./Routes` (module federation).
+- `velista` is a standalone Angular app in the monorepo, not a remote. It is served on its own origin. In the clusters, the Gateway also serves it under the `/velista` path of the portfolio (plan 0165).
 - `apps/luna-shopper-backend/*` is the backend of velista. It has seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS. It uses four Postgres instances and Redis. See "Luna Shopper backend" below.
 - `apps/docker/*` holds Nx "app" projects that are not Angular (builder, local-http-server). Each one only wraps a Dockerfile. Each has the tag `type:static-docker` or `type:dynamic-docker`, and CI drives it (see "Docker & CI/CD").
 - `tools/docker` is a custom Nx plugin (`@portfolio/docker`). It provides the `build` and `push` executors that the `build:docker` target of each app uses. It also provides an `application` generator that adds a Dockerfile to a new app.
@@ -31,12 +32,15 @@ Run all tasks through Nx (`npx nx ...`). The top-level `package.json` has no scr
 # last build rather than watched; serve a remote itself to get watch on it.
 npx nx serve shell
 
-# Serve a single remote in watch mode. damoclesSword, landingV2 and velista
-# carry `dependsOn: ['shell:serve']`, so each boots the shell too. odontogram
-# does not, so start `nx serve shell` beside it.
+# Serve a single remote in watch mode. damoclesSword and landingV2 carry
+# `dependsOn: ['shell:serve']`, so each boots the shell too. odontogram does
+# not, so start `nx serve shell` beside it.
 npx nx serve damoclesSword
 npx nx serve odontogram
 npx nx serve landingV2
+
+# Serve velista alone on 4205. It is not a remote and boots no shell.
+npx nx serve velista
 
 # Production build (all apps default to the `production` build configuration)
 npx nx build shell
@@ -163,7 +167,7 @@ The slot scripts are Bash only. Git Bash is the supported shell on Windows. Git 
 
 ### Module federation topology
 
-`shell` is the only app whose `serve-static` / `serve` acts as host. Its `module-federation.config.ts` declares `remotes: ['odontogram', 'damoclesSword', 'landingV2', 'velista']`. The `module-federation.config.ts` of each remote exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases such as `damoclesSword/Routes` are in `tsconfig.base.json`. With them, the shell lazy-loads the routes of a remote like a local module:
+`shell` is the only app whose `serve-static` / `serve` acts as host. Its `module-federation.config.ts` declares `remotes: ['odontogram', 'damoclesSword', 'landingV2']`. The `module-federation.config.ts` of each remote exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases such as `damoclesSword/Routes` are in `tsconfig.base.json`. With them, the shell lazy-loads the routes of a remote like a local module:
 
 ```ts
 loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
@@ -173,11 +177,11 @@ loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
 
 This is intentional. It stops users and tests from reaching a remote through its own port. There the global styles of the shell are absent, and the page renders differently from production. The shell supplies the outlet, the locale and the theme context as it lazy-loads the remote. **Always develop and test remotes through the shell.** `npx nx serve <remote>` starts the shell through `dependsOn` for each remote except `odontogram`. Use the shell URL, such as `/<remote>/<locale>`, and not the port of the remote. The e2e projects thus point at the shell and not at the port of a remote.
 
-**velista is the exception, and the only one.** It is a standalone app that is _also_ exposed as a remote (`apps/velista/plans/0013-own-origin-and-the-installable-app.md`). It is served from its own origin, and it is installable there as a PWA. `http://localhost:4205` renders the real app and not a blank page. `AppRoot` (`apps/velista/src/app/app-root.ts`) has a `<router-outlet>`, and no `RemoteEntry` exists. The blank page rule exists because a remote on its own port lacks the global styles of the shell. velista draws its own chrome and owns its own token scope inside `AppLayout`. It thus borrows nothing from the shell, and its own port is not a degraded view. The rule holds for the other three remotes.
+**velista is not a remote** since plan 0165 (`apps/velista/plans/0165-velista-leaves-the-shell.md`). It is served on its own port, and `http://localhost:4205` renders the real app. In development, `http://localhost:4200/velista` is the not found page of the landing. The `/velista` path of the portfolio exists only in the clusters, where the Gateway serves the velista image there.
 
-Both modes of velista come from **one** route factory, `appRootRoute(mount)` (`apps/velista/src/app/app-root-route.ts`). `remote-entry/entry.routes.ts` calls it with `'/velista'`, and `app.routes.ts` calls it with `''`. Put each difference between the mounted mode and the standalone mode in that factory as an argument. Never write it as a literal in both files. `app-root-route.spec.ts` asserts that the mount reaches both `data.mountPath` and `APP_BASE_PATH`.
+The two addresses of velista come from **one** route factory, `appRootRoute(mount)` (`apps/velista/src/app/app-root-route.ts`). The mount is read at runtime from the `<base>` element of the document: `'/velista'` under the portfolio, `''` on the own origin. Put each difference between the two addresses in that factory as an argument. Never write it as a literal in two places. `app-root-route.spec.ts` asserts that the mount reaches both `data.mountPath` and `APP_BASE_PATH`.
 
-The service worker is the other half of that split. `provideServiceWorker` is in `app.config.ts` only, never in `appProviders`. `appProviders` is spread into both modes. A registration there makes the page of the portfolio register the worker of velista on the origin of the portfolio.
+The service worker registers on the own origin only. `provideServiceWorker` is in `app.config.ts` only, never in `appProviders`, and it is off when the document mount is not empty.
 
 ### App-owned locale routing
 
@@ -225,7 +229,7 @@ A pop is only safe onto an entry that **this document pushed**. Below the entry 
 - A library that ships assets exports a `TranslationSource` descriptor next to them. The **app** (`apps/<app>/src/app/translation-providers.ts`) lists the descriptors and calls `composeTranslationLoader`. Composition belongs to the app. The app is also the only place that `app-providers.ts` can import from with no relative path across a library boundary.
 - `libs/shared/localization/rokutranslator-angular` wraps it for Angular (service, pipe, `provideRokuTranslator`).
 - In the module federation configuration, `@portfolio/localization/rokutranslator` is forced to `singleton: true` across the shell and all remotes. **This removes duplicate code. It is not a correctness rule.** The module exports a stateless class. To share it thus means one copy of i18next, not one locale.
-- The rule is in **one** file, `module-federation.shared.ts` at the workspace root, and all five configuration files import it. A `shared` callback governs only its own build. A declaration in the host alone thus does nothing for the remotes.
+- The rule is in **one** file, `module-federation.shared.ts` at the workspace root, and all four configuration files import it. A `shared` callback governs only its own build. A declaration in the host alone thus does nothing for the remotes.
 - Do not add `strictVersion`. Staging deploys only the affected remotes, and a version bump thus leaves a mixed fleet. Strict enforcement turns that ordinary window into a blank page.
 - Read that file before you edit the list. A name that matches no import is silently never applied. `rokutranslator-angular` cannot be added the same way, because Nx passes it under its project name, which nothing imports.
 
@@ -255,10 +259,10 @@ Import through the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.
 - The `build` executor of `tools/docker` (`tools/docker/src/executors/build/build.ts`) calls `docker buildx build`. **It is project-agnostic.** It knows nothing about micro-frontends or this repository. The only build args that it injects itself are `NX_APP` (the project name) and `TARGET_REGISTRY` (the resolved registry). `push` runs after `build` with `pushToRegistry: true`.
 - Its own operational configuration comes from options and from generic `DOCKER_*` environment fallbacks. These are `DOCKER_REGISTRY`, `DOCKER_USERNAME` / `DOCKER_PASSWORD` / `DOCKER_SKIP_LOGIN`, and `DOCKER_IMAGE_TAG` (comma-separated, overrides `versionTags`). The cache options are `cache` / `cacheMode` / `cacheScope`. Their environment names are `DOCKER_BUILD_CACHE` / `_MODE` / `_SCOPE`, and the backends are `local` / `gha` / `registry`.
 - Project-specific values reach the Dockerfile as ordinary build args. One source is the `buildArgs` of a target (`BUILDER_TAG` for each configuration, which selects the base image tag). The other is the **`forwardEnv`** option, a list of environment variable names. The executor forwards each one that is set as a build arg. Today each app forwards exactly `BUILDER_TAG`. The executor never refers to those names itself.
-- **`MFE_BASE_URL` and `MFE_REMOTE_URLS` are not build args** (k8s plan 0007). The Dockerfile of an app has no build stage. `nx build` runs one time for the whole workspace outside Docker. `build:docker` sets `"context": "dist"`, and the finished bundle is copied in. `webpack.prod.config.ts` thus reads those two from the environment of that `nx build`. Both workflows set them with `docker run -e` on the builder container. To add them to `forwardEnv` does nothing.
+- **`MFE_BASE_URL` is not a build arg** (k8s plan 0007). The Dockerfile of an app has no build stage. `nx build` runs one time for the whole workspace outside Docker. `build:docker` sets `"context": "dist"`, and the finished bundle is copied in. `webpack.prod.config.ts` thus reads it from the environment of that `nx build`. Both workflows set it with `docker run -e` on the builder container. To add it to `forwardEnv` does nothing.
 - **Two environments run on two separate k3s clusters, one VPS each** (k8s plan 0002). Production has `ichirokuxvi.com`, `mfe.`, `velista.app`, `api.velista.app` and `rt.velista.app`. Staging has the same five names one label down: `staging.ichirokuxvi.com`, `mfe.staging.`, `staging.velista.app`, `api.staging.velista.app`, `rt.staging.velista.app`.
 - The chart describes **one** environment. Two things decide which one: the cluster that you point it at, and the values file that you pass beside `values.yaml`. That file is `values.production.yaml` or `values.staging.yaml`. No `env` field, no `-staging` resource name and no `staging.enabled` switch exist. Resource names are identical in both clusters.
-- Hosts come from `baseDomain` plus a `hostPrefix` for each entry. The environment file can override the host of an entry by name in `hostOverrides`. That puts velista and its two backend services on the domain of velista. An explicit `host` on an entry wins over both, and the local values files use that. `ichirokuxvi.com/velista` still works: the shell mounts the remote at that path and loads it from the new origin.
+- Hosts come from `baseDomain` plus a `hostPrefix` for each entry. The environment file can override the host of an entry by name in `hostOverrides`. That puts velista and its two backend services on the domain of velista. An explicit `host` on an entry wins over both, and the local values files use that. The velista entry carries a `mounts` list, and the Gateway serves the velista image under `/velista` on the portfolio host with the prefix stripped (plan 0165).
 - The **shell embeds its micro-frontend base URL at build time**. `apps/shell/webpack.prod.config.ts` reads `MFE_BASE_URL`, and the default is the production host. The shell image is thus environment-specific. Each other app image is environment-agnostic. Remote URLs are static module federation, not runtime. Do not assume that the shell can switch environments at runtime.
 - `.github/workflows/docker-ci.yml` (**staging, on push to `main`**) does these steps in order:
   1. It computes the affected projects against the last successful run, then builds and tests them.
