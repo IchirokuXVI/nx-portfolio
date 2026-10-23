@@ -25,7 +25,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
     // The router keeps every URL whole, mount included, instead of reading
-    // `/velista/` from the `<base>` that `index.html` sets under the portfolio.
+    // `/velista/` from the `<base>` that nginx writes under the portfolio.
     // `appRootRoute` consumes the mount itself (plan 0165 D3).
     { provide: APP_BASE_HREF, useValue: '/' },
 

@@ -4,20 +4,6 @@
     <meta charset="utf-8" />
     <title>velista</title>
     <base href="/" />
-    <script>
-      // Under the portfolio the gateway serves this document at /velista and strips
-      // that prefix before it reaches nginx. The browser must keep it, or every
-      // relative URL below resolves to the portfolio's root and loads the shell's
-      // files. The one false positive is velista.app/velista/..., a URL nobody is
-      // given, and the locale guard rewrites that first segment anyway (plan 0165 D2).
-      // The manifest link is parsed after this script, so it goes at DOMContentLoaded.
-      if (/^\/velista(\/|$)/.test(location.pathname)) {
-        document.querySelector('base').setAttribute('href', '/velista/');
-        document.addEventListener('DOMContentLoaded', () =>
-          document.querySelector('link[rel="manifest"]')?.remove()
-        );
-      }
-    </script>
     <!--
       `interactive-widget=resizes-content` is what keeps a bottom sheet's primary
       button above the on-screen keyboard (plan 0008, section 7). Without it Chrome on
@@ -33,9 +19,10 @@
     <!--
       What makes this an app you can keep on a home screen (plan 0013, part C).
 
-      Under the portfolio's `/velista` path the script above removes the manifest
-      link: its `scope` and `start_url` would resolve to the portfolio's root, and an
-      install from there would be a shortcut to the portfolio (plan 0165 D2).
+      Under the portfolio's `/velista` prefix velista's nginx rewrites the base and
+      drops this link: its `scope` and `start_url` would resolve to the portfolio's
+      root, and an install from there would be a shortcut to the portfolio (plan 0165
+      D2).
 
       `theme_color` in the manifest and this `theme-color` are the same `#0a0c14`,
       which is `--app-ink-950` and the ink the mark is drawn in. The manifest takes one

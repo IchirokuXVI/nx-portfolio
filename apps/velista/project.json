@@ -19,6 +19,11 @@
           {
             "glob": "**/*",
             "input": "apps/velista/public"
+          },
+          {
+            "glob": "nginx.conf",
+            "input": "apps/velista/src",
+            "output": "/"
           }
         ],
         "styles": ["apps/velista/src/styles.scss"],
