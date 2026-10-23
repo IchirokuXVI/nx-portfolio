@@ -20,8 +20,9 @@
 //   - two TAG_PREFIX values are equal, or one starts with the other
 //   - a CHART directory has no Chart.yaml, once any unit's chart has one
 //
-// The last rule waits for plan 0015, which creates k8s/helm/<unit>. While no unit
-// chart exists it is skipped; the first Chart.yaml turns it on for every unit.
+// The last rule is on since plan 0015 created k8s/helm/<unit>; it stays quiet
+// only in a workspace where no unit chart exists at all. The rendered Gateway
+// hostnames need a render, so `provision-release.sh --check` asserts those.
 // Plan 0016 adds the rule that every e2e project is named by exactly one gate.
 //
 // The two apps/docker projects (the builder and the nginx base image) are not
