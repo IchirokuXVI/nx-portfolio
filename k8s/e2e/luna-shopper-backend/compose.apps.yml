@@ -67,12 +67,14 @@ services:
       # Neither values file sets it, so the clusters keep the written numbers.
       THROTTLE_MULTIPLIER: ${THROTTLE_MULTIPLIER:-20}
       # The front end origins this stack answers. The default is the two
-      # luna-slot.sh already allows: the portfolio shell, which mounts velista as
-      # a remote, and velista's own origin, which is where a confirmation link
-      # lands (MAIL_VERIFY_BASE_URL below). The browser gate (velista plan 0080)
-      # drives the staging velista image from `https://staging.velista.app`
-      # instead, so the list comes from the environment; it is one variable on
-      # every service because every service reads it.
+      # luna-slot.sh already allows: the portfolio shell, kept because in the
+      # clusters the app under the portfolio's /velista path calls the API from
+      # the portfolio origin (velista plan 0165), and velista's own origin, which
+      # is where a confirmation link lands (MAIL_VERIFY_BASE_URL below). The
+      # browser gate (velista plan 0080) drives the staging velista image from
+      # `https://staging.velista.app` instead, so the list comes from the
+      # environment; it is one variable on every service because every service
+      # reads it.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       # The operator trust root (plan 0071, section 3). Required, so this file
