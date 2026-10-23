@@ -320,13 +320,21 @@ chart renders the MetalLB pool that section 4 applied, and names a
 `letsencrypt-prod` ClusterIssuer that `install.sh` no longer creates. Until 0016
 switches the workflows to the unit charts, deploy each unit by hand: production
 with the two commands above, staging with these, for `portfolio` in `portfolio`
-and for `velista` in `luna-shopper`:
+and for `velista` in `luna-shopper`. The release tasks run around the upgrade in
+the order the pipeline runs them, so the ledger is written and the first pipeline
+deploy later sees an existing release. 20m is the budget `deploy-release.sh` gives
+a first install on one small node:
 
 ```sh
-chart=~/nx-portfolio/k8s/helm/<unit>
+k8s=~/nx-portfolio/k8s
+chart=$k8s/helm/<unit>
+bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase check
+bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase pre
 helm dependency build --skip-refresh "$chart"
 helm upgrade --install <unit> "$chart" --namespace <namespace> \
-  --values "$chart/values.yaml" --values "$chart/values.staging.yaml" --wait
+  --values "$chart/values.yaml" --values "$chart/values.staging.yaml" \
+  --wait --timeout 20m
+bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase post
 ```
 
 ## 9. Verify

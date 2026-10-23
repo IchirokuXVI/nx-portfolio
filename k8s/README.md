@@ -36,7 +36,7 @@ helm/
 ```
 
 The rule: **a unit renders only into `.Release.Namespace`, and it owns its
-Gateway, its Issuer and its certificates.** No values key names a namespace;
+Gateway, its Issuer and its certificates.** No values key names the unit's own namespace;
 `helm --namespace` decides, and every script passes the `NAMESPACE` of the unit's
 `unit.env`. Each Gateway is named after its chart and has one HTTP and one HTTPS
 listener per host. `install.sh` turns on Envoy Gateway's merged gateways, so the
