@@ -16,6 +16,8 @@
 //   - a window is more than 14 days after the commit that last changed that
 //     task.env. 14 days is how long the bucket keeps a dump, which is how long
 //     a task stays reversible. Without a cap, somebody writes 2099
+//   - UNIT is absent, or names no directory of k8s/units with a unit.env. The
+//     runner of that unit's release runs the task (k8s plan 0015 D9)
 //   - check.sh is absent, or neither pre.sh nor post.sh exists
 //   - ENVIRONMENTS is still set. The two windows replaced it
 //   - two task directories share a number
@@ -46,6 +48,19 @@ const ASSIGNMENT =
 // What `deploy-release.sh` receives: the release tag without its `v`.
 const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const DAY = 24 * 60 * 60 * 1000;
+const UNITS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'units');
+
+/** The deploy units of the repository: each directory of k8s/units with a unit.env. */
+export function unitNames(unitsDir = UNITS_DIR) {
+  if (!existsSync(unitsDir)) return [];
+  return readdirSync(unitsDir, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(join(unitsDir, entry.name, 'unit.env'))
+    )
+    .map((entry) => entry.name);
+}
 
 /**
  * The assignments of a task.env, and the lines that are neither a comment nor
@@ -109,9 +124,12 @@ export function lastChangedInGit(file) {
  * Every problem in a tasks directory, as sentences. An empty list is a pass.
  *
  * `lastChanged` answers when a task.env last changed. The tests pass their own,
- * so a fixture needs no repository.
+ * so a fixture needs no repository. `units` is the list a UNIT must be in.
  */
-export function checkTasks(tasksDir, { lastChanged = lastChangedInGit } = {}) {
+export function checkTasks(
+  tasksDir,
+  { lastChanged = lastChangedInGit, units = unitNames() } = {}
+) {
   const problems = [];
   if (!existsSync(tasksDir)) {
     return [`${tasksDir} does not exist, so there is nothing to check`];
@@ -164,6 +182,15 @@ export function checkTasks(tasksDir, { lastChanged = lastChangedInGit } = {}) {
     for (const lineNumber of unreadable) {
       say(
         `task.env line ${lineNumber} is neither a comment nor NAME="value", so it cannot be checked`
+      );
+    }
+    if (fields.UNIT === undefined || fields.UNIT === '') {
+      say(
+        'UNIT is absent. Name the deploy unit whose release runs the task, a directory of k8s/units'
+      );
+    } else if (!units.includes(fields.UNIT)) {
+      say(
+        `UNIT is "${fields.UNIT}", and k8s/units/${fields.UNIT}/unit.env does not exist`
       );
     }
     if ('ENVIRONMENTS' in fields) {
