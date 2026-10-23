@@ -42,17 +42,9 @@ env:
   DOCKER_BUILD_CACHE_MODE: min
   # Where the shell loads its remotes from in production. Baked into the bundle by
   # the `nx build`, not by a docker build arg, since the compilation no longer
-  # happens inside the image.
+  # happens inside the image. Every remote is on that host since velista stopped
+  # being one (velista plan 0165), so the build sets no MFE_REMOTE_URLS.
   PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
-  # ...and the remotes that are not on that host. velista is served from its own
-  # origin (plan 0013), which no base URL can produce, so it names itself here and
-  # overrides the base derived tuple. Per remote overrides win over the base, so
-  # the other three are unaffected and stay unlisted.
-  # That origin is velista.app now, a domain of its own rather than a label under
-  # the portfolio's. `ichirokuxvi.com/velista` keeps working unchanged: the shell
-  # still mounts the remote at that path, it just fetches remoteEntry.mjs from
-  # here. The chart has to agree (k8s/helm/values.production.yaml, hostOverrides).
-  PROD_MFE_REMOTE_URLS: velista=https://velista.app
   # Which backend the production velista image talks to (velista plan 0014), and
   # the back office with it: luna-shopper-admin reads the same `LUNA_GATEWAY_URL` on
   # its own build (its plan 0001, section 7), since it talks to the same gateway on
@@ -240,7 +232,6 @@ jobs:
             -v "$PWD":/w -w /w \
             -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
             -e MFE_BASE_URL="$PROD_MFE_BASE_URL" \
-            -e MFE_REMOTE_URLS="$PROD_MFE_REMOTE_URLS" \
             -e LUNA_GATEWAY_URL="$PROD_LUNA_GATEWAY_URL" \
             -e LUNA_REALTIME_URL="$PROD_LUNA_REALTIME_URL" \
             -e VELISTA_APP_VERSION="${{ needs.setup.outputs.version }}" \
