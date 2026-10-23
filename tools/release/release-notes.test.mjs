@@ -7,7 +7,9 @@
 //   node --test tools/release/
 
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   compareEnd,
   isRollup,
@@ -15,7 +17,14 @@ import {
   pullRequestNumber,
   render,
 } from './release-notes.mjs';
-import { parseTitle, sectionFor, sectionOrder } from './rules.mjs';
+import {
+  parseTitle,
+  SCOPES,
+  sectionFor,
+  sectionOrder,
+  UNITS,
+  WORKSPACE_SCOPES,
+} from './rules.mjs';
 
 describe('parseTitle', () => {
   it('reads type, scope and summary', () => {
@@ -308,5 +317,38 @@ describe('compareEnd', () => {
     assert.equal(compareEnd({ to: 'HEAD', version: 'v1.0.0' }), 'v1.0.0');
     assert.equal(compareEnd({ to: 'v0.9.0', version: null }), 'v0.9.0');
     assert.equal(compareEnd({ to: 'HEAD', version: null }), null);
+  });
+});
+
+describe('deploy units', () => {
+  it('places every scope in exactly one unit or in the workspace', () => {
+    for (const scope of SCOPES) {
+      const homes = [
+        ...Object.entries(UNITS)
+          .filter(([, scopes]) => scopes.includes(scope))
+          .map(([unit]) => unit),
+        ...(WORKSPACE_SCOPES.includes(scope) ? ['workspace'] : []),
+      ];
+      assert.equal(
+        homes.length,
+        1,
+        `${scope} belongs to ${homes.length ? homes.join(' and ') : 'nothing'}`
+      );
+    }
+  });
+
+  it('names no scope that SCOPES lacks', () => {
+    for (const scope of [...Object.values(UNITS).flat(), ...WORKSPACE_SCOPES]) {
+      assert.ok(SCOPES.includes(scope), `${scope} is not in SCOPES`);
+    }
+  });
+
+  it('has one key per directory under k8s/units', () => {
+    const unitsDir = fileURLToPath(new URL('../../k8s/units', import.meta.url));
+    const directories = readdirSync(unitsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    assert.deepEqual(Object.keys(UNITS).sort(), directories);
   });
 });
