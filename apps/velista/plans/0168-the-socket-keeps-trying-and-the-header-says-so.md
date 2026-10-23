@@ -293,3 +293,124 @@ to `'off'` so a server render draws no mark.
 - 45 s for the stale rule and 2 s for the mark.
 - The mark's place at the right end before the actions, and its reuse of `OfflineIcon` and
   the `attention` colour, rather than a new glyph.
+
+## What the build decided
+
+Built on `feat/velista-0168-socket-keeps-trying` from `dev` at `38d66379`. Every numbered
+target is in. The traces are under `dist/velista-0168-traces/` (git ignores `dist/`), taken
+on `Medium_Phone_API_37.0` with the staging APK built with `VELISTA_NATIVE_DEBUG=1`, signed
+in on the home page. Trace times are UTC; `*.steps.log` times are local (UTC+2).
+
+### Decisions the plan left open
+
+1. **The hidden edge rides the resume effect.** The effect that read `AppResumed.resumes`
+   now also reads `BrowserFacade.visible`, so one effect sees both edges and no second
+   listener exists. A resume is the false to true edge of `visible`, or a move of
+   `resumes` while visible (the back/forward cache restore, which has no visibility edge).
+   Acting on the visibility edge directly also covers a wake that `AppResumed` collapses
+   into the previous resume (its one second window), which would otherwise leave the
+   paused socket waiting for the next wake. When both land, the second call is harmless:
+   the stale rule has consumed the hidden time and `_start` returns while an attempt is
+   in flight.
+2. **"The hidden pause" reports `down` on the hidden edge,** whenever a session exists,
+   even over a socket that is still up. A resume that finds the socket connected (a short
+   absence) reports `up` again at once, so the mark never shows after a desktop tab switch
+   of a few seconds that the socket survived. `_start` also reports `down` when it returns
+   because the page is hidden, which covers an app that starts hidden.
+3. **A repeated `down` keeps its clock.** `LiveConnection.report` ignores a report equal to
+   the current phase. Without it the retry loop, which reports `down` on every attempt,
+   would keep pushing the mark back for as long as the retries went on.
+4. **The backoff exponent is clamped at 16.** With no upper bound on attempts,
+   `2 ** (failures - 1)` grows without end; the clamp is far above the cap, so the
+   ceilings stay 1, 2, 4, 8, 16, 30, 30 seconds.
+5. **A reconcile that bails on a moved generation runs again if an ask arrived
+   meanwhile.** The stale rule drops a socket whose asks may still be out (an ack waits up
+   to five seconds). The new socket's `connect` then finds `_reconciling` true, sets
+   `_reconcileAgain` and returns, and the old pass returned on the generation check
+   without looking at the flag, so the new socket would have joined no room until a
+   screen changed. The `finally` of `_reconcile` now starts a new pass when the flag is
+   set. The spec "drops the held socket and opens a new one after 46 s hidden" asserts the
+   room is rejoined.
+6. **The mark is a touch target square** (`min-inline-size` and `block-size`
+   `--app-touch-target`, glyph at `--app-icon-md`), the box of a header action. The home
+   mark it replaces had `padding: 0 space-2`; the square keeps the glyph where an action's
+   glyph sits, alone or beside actions, under the end margin of `.actions`.
+7. **The copy is the plan's:** "Reconnecting live updates" and "Reconectando las
+   actualizaciones en directo". Both are short and say what is happening.
+8. **Files touched beyond the scope list, all specs or dead styles of files in scope.**
+   `home-page.spec.ts` lost the three specs of the removed home mark (one spec now asserts
+   home draws no mark of its own) and `home-page.scss` lost the dead `.offline-mark` rule.
+   `list-page.spec.ts` gained the assertion target 8 asks for: the list header is
+   presentational and only sees `live`, so the rule "a refusal and not a plain disconnect"
+   can only be tested on the page. `page-header.spec.ts` imports the testing translator,
+   because the header now uses the `rokuT` pipe.
+9. **Left as they are:** the key `connection.notLive` has no reader now, and the doc of
+   `ListHeaderVm.live` in `libs/velista/models/src/lib/list-view.ts` still says "or the
+   connection dropped". Both are outside the scope list.
+
+### Evidence
+
+- Specs: `realtime-socket.spec.ts` 36 (the R3 describe is renamed "R3, retry without end
+  and never while hidden (replaces the degraded latch, plan 0168)"), `live-connection.spec.ts`
+  7, `page-header.spec.ts` 18. Projects: `velista/data-access` 1644, `velista/platform`
+  356, `velista/ui` 1235, `velista/feature-home` 162, `velista/feature-lists` 548.
+- A mutation check: with the stale rule at 450 s and the hidden check removed, three specs
+  of the socket fail.
+
+Every run shows no attempt while hidden after the first close, an attempt at the wake,
+and `mark:false` within a second or two of the handshake. Decisive lines:
+
+```
+sleep90.trace.log      14:25:52.643 STATE {"vis":"hidden",...,"mark":false}
+                       14:25:56.454 WS CLOSED 12225.17
+                       14:25:57.655 STATE {"vis":"hidden",...,"mark":true}
+                       (nothing for 84 s)
+                       14:27:21.196 WS CREATED 12225.37            the wake
+                       14:27:21.399 WS HANDSHAKE 12225.37 status 101
+                       14:27:22.802 STATE {"vis":"visible",...,"mark":false}
+doze.trace.log         14:28:17.287 WS CLOSED 12225.37
+                       14:29:42.104 WS CREATED 12225.40            the wake, nothing before it
+                       14:29:42.371 WS HANDSHAKE 12225.40 status 101
+                       14:29:43.734 STATE {"vis":"visible",...,"mark":false}
+airplane.trace.log     14:30:40.146 WS CLOSED 12225.40
+                       14:31:56.253 WS CREATED 12225.48            the wake, fails
+                       14:31:56.678 WS CREATED 12225.49            fails
+                       14:31:56.758 WS CREATED 12225.50            fails
+                       14:31:57.589 WS CREATED 12225.52
+                       14:31:57.802 WS HANDSHAKE 12225.52 status 101
+                       14:31:58.848 STATE {"vis":"visible",...,"mark":false}
+wake-before-network-2  14:35:26.254 WS CLOSED 12225.75
+  .trace.log           14:36:41.267 WS CREATED 12225.82            the wake, network still off
+                       14:36:41.609, 41.850, 45.023 WS CREATED      retries under the backoff
+                       16:36:51.808 STEP airplane off               (steps log, local time)
+                       14:36:52.841 WS CREATED 12225.91            fails, radio not up yet
+                       14:36:53.284 WS CREATED 12225.92
+                       14:36:53.561 WS HANDSHAKE 12225.92 status 101
+                       16:36:54.958 STATE {"vis":"visible","online":true,"mark":false}
+```
+
+`wake-before-network.trace.log` is a first run of the fourth scenario, read through the
+five second poll of the monitor only. It shows the same shape: wake attempts at
+14:34:15.920, 16.930, 17.334, 18.470 and 22.021, airplane off at 14:34:26.5, handshake at
+14:34:28.490. The rerun reads the state every second after the network returns.
+
+`mark-measured.log`: the mark, read while the page was hidden (it is laid out, so it can be
+measured with no paint): `{"label":"Reconnecting live updates","role":"img","w":44,"h":44,
+"color":"rgb(109, 40, 217)","next":"assistant is-accent"}`, header height 88 before, during
+and after. A screenshot of the mark on a visible page was not possible on the emulator: the
+WebSocket cannot be blocked over DevTools (`Network.setBlockedURLs` does not cover it), and
+airplane mode raises the blocking connection screen instead.
+
+**`visibilitychange` was seen on every screen off and every wake.** In all five runs the
+poll of the monitor reads `"vis":"hidden"` within three seconds of the screen going off,
+and the first `WS CREATED` after the close comes at the wake with no retry timer pending,
+which only the visible edge can cause. No native `appStateChange` listener is needed on
+this emulator.
+
+**Seen, not pursued.** `airplane.trace.log` 14:32:30.725: the socket opened at 14:31:57
+closed by itself 33 s later, 8 s after a pong, followed at once by `POST /v1/auth/refresh`
+and a reconnect (handshake 14:32:33.633); the mark showed for that gap (STATE at
+14:32:33.916). Section 3.3 of the report saw the same close 33 s after a reconnect. It
+looks like the server dropping the socket when the access token expires, which this plan
+does not touch. `ConnectionRecovery` still probes `/health/ready` every ten seconds while
+hidden (14:31:06 to 14:31:26), as section 3 expects.
