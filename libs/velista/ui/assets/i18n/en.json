@@ -134,7 +134,6 @@
     }
   },
   "connection": {
-    "notLive": "Live updates are off",
     "reconnecting": "Reconnecting live updates",
     "lost": {
       "title": "You have lost connection",
