@@ -1,3 +1,5 @@
+> **PR:** [#817](https://github.com/IchirokuXVI/nx-portfolio/pull/817)
+
 # 0169: the screen catches up after a reconnect
 
 > Asked for by the owner on 2026-10-23, with plan `0168`: "make the user reconnect to the
