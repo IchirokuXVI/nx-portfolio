@@ -10,5 +10,5 @@
       "dependsOn": []
     }
   },
-  "// e2e": "The @nx/playwright plugin infers a dependsOn shell:serve from the webServer.command in playwright.config.ts. That makes Nx start the shell AND Playwright start it again, racing on port 4200. Overriding dependsOn to [] lets Playwright's webServer own the single instance (it waits on `url` and reuses an existing serve). Mirrors apps/landing-v2-e2e/project.json."
+  "// e2e": "The @nx/playwright plugin infers a dependsOn velista:serve from the webServer.command in playwright.config.ts. That makes Nx start velista AND Playwright start it again, racing on port 4205. Overriding dependsOn to [] lets Playwright's webServer own the single instance (it waits on `url` and reuses an existing serve). Mirrors apps/landing-v2-e2e/project.json."
 }

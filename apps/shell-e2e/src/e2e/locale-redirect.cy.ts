@@ -10,13 +10,13 @@
  *
  * Running it for every app is still deliberate, and still proves two things at once:
  * that the locale is settled, and that no app's own path is mistaken for one. The
- * shell resolves `/en` (landingV2 in English) from `/velista` (velista with no locale
+ * shell resolves `/en` (landingV2 in English) from `/odontogram` (odontogram with no locale
  * yet) by trying app mounts first and falling through to the empty path app, so an
  * app whose mount were treated as a locale would lose its mount segment here.
  */
 
 /** Apps mounted at their own path, and the app at the site root (`''`). */
-const APP_MOUNTS = ['odontogram', 'damoclesSword', 'velista', ''];
+const APP_MOUNTS = ['odontogram', 'damoclesSword', ''];
 
 /** Same shape the locale routing accepts. */
 const LOCALE_SEGMENT = /^[a-z]{2}(-[a-z]{2})?$/i;
