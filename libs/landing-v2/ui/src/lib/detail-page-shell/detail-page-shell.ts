@@ -33,6 +33,8 @@ export class DetailPageShell {
   heroImage = input<string | Promise<string> | undefined>(undefined);
   repoLink = input<string | undefined>(undefined);
   appLink = input<string | undefined>(undefined);
+  /** `appLink` leaves the shell's router, so it renders as a plain `href`. */
+  appLinkIsExternal = input<boolean | undefined>(false);
 
   /** Normalizes `heroImage` to always be a promise, so the template can rely
    * on a single `| async` binding (mirrors project-card's `imagePromise`). */

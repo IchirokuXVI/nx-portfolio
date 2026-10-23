@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { ProjectCard } from './project-card';
@@ -166,6 +167,23 @@ describe('ProjectCard', () => {
     );
     expect(views.length).toBe(1);
     expect(views[0]?.getAttribute('href')).toBe('/en/odontogram');
+  });
+
+  it('renders an external appLink as a plain href, outside the router', async () => {
+    await renderWith(
+      makeProject({
+        detailLink: '/en/projects/velista',
+        appLink: '/velista/en',
+        appLinkIsExternal: true,
+      })
+    );
+
+    const view = fixture.debugElement
+      .queryAll(By.css('.project-card__actions a.project-card__view'))
+      .find((el) => el.nativeElement.getAttribute('href') === '/velista/en');
+
+    expect(view).toBeDefined();
+    expect(view?.injector.get(RouterLink, null)).toBeNull();
   });
 
   it('disables the app links and shows the unavailable tooltip when there is no appLink (e.g. Point Of Sale)', async () => {

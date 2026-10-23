@@ -75,16 +75,9 @@ env:
   # the `nx build` below (ignored by the other, environment-agnostic apps). These
   # reach webpack as ordinary environment variables now, not as docker build args,
   # because the compilation no longer happens inside the image.
+  # Every remote is on that host since velista stopped being one (velista plan
+  # 0165), so the build sets no MFE_REMOTE_URLS.
   STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
-  # ...and the remotes that are not on that host. velista is served from its own
-  # origin (plan 0013), which no base URL can produce, so it names itself here and
-  # overrides the base derived tuple. Per remote overrides win over the base, so
-  # the other three are unaffected and stay unlisted.
-  # That origin is staging.velista.app now, velista's own domain rather than a
-  # label under the portfolio's. `staging.ichirokuxvi.com/velista` is unaffected:
-  # the shell still mounts the remote there and only the fetch moves. The chart
-  # has to agree (k8s/helm/values.staging.yaml, hostOverrides).
-  STAGING_MFE_REMOTE_URLS: velista=https://staging.velista.app
   # Which backend the staging velista image talks to (velista plan 0014). On
   # velista's domain too, since these two exist only to serve it.
   #
@@ -349,7 +342,6 @@ jobs:
             -v "$PWD":/w -w /w \
             -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
             -e MFE_BASE_URL="$STAGING_MFE_BASE_URL" \
-            -e MFE_REMOTE_URLS="$STAGING_MFE_REMOTE_URLS" \
             -e LUNA_GATEWAY_URL="$STAGING_LUNA_GATEWAY_URL" \
             -e LUNA_REALTIME_URL="$STAGING_LUNA_REALTIME_URL" \
             -e VELISTA_APP_VERSION="staging" \
@@ -448,13 +440,10 @@ jobs:
           E2E_IMAGE_TAG: staging
         run: |
           # The staging shell bakes https://mfe.staging.ichirokuxvi.com, so make the
-          # staging hostnames resolve to the local reverse proxy. velista is on the
-          # list because it is served from an origin of its own (velista plan 0013)
-          # and the shell initialises every remote container while it boots: leave
-          # this host pointing at the real internet and the shell dies on an
-          # unreachable remoteEntry, taking every suite with it. It is on velista's
-          # own domain now, which is why the entry does not read `*.ichirokuxvi.com`
-          # like the two beside it.
+          # staging hostnames resolve to the local reverse proxy. velista's own host
+          # is on the list because velista-e2e runs against it (velista plan 0165).
+          # It is on velista's own domain, which is why the entry does not read
+          # `*.ichirokuxvi.com` like the two beside it.
           echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app" | sudo tee -a /etc/hosts
 
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -479,8 +468,7 @@ jobs:
           for entry in \
             https://mfe.staging.ichirokuxvi.com/odontogram/remoteEntry.mjs \
             https://mfe.staging.ichirokuxvi.com/damoclesSword/remoteEntry.mjs \
-            https://mfe.staging.ichirokuxvi.com/landingV2/remoteEntry.mjs \
-            https://staging.velista.app/remoteEntry.mjs; do
+            https://mfe.staging.ichirokuxvi.com/landingV2/remoteEntry.mjs; do
             if curl -kfsS -o /dev/null "$entry"; then
               echo "  ok  $entry"
             else
@@ -492,9 +480,58 @@ jobs:
             exit 1
           fi
 
+          # The portfolio's /velista path is the velista image with the prefix kept
+          # (velista plan 0165, D2 and D7). Its document must be velista's, with the
+          # base its nginx rewrote to /velista/ and no manifest link, and a script it
+          # names must load from under /velista/: a relative URL that resolved to the
+          # portfolio's root would fetch the shell's files.
+          velista_page=https://staging.ichirokuxvi.com/velista/en
+          if ! body=$(curl -kfsS "$velista_page"); then
+            echo "::error::$velista_page did not answer 200"; exit 1
+          fi
+          if ! grep -q 'app-velista-root' <<< "$body"; then
+            echo "::error::$velista_page is not velista's document (no app-velista-root)"; exit 1
+          fi
+          if ! grep -q '<base href="/velista/"' <<< "$body"; then
+            echo "::error::$velista_page does not carry the base /velista/ (the sub_filter in apps/velista/src/nginx.conf matched nothing)"; exit 1
+          fi
+          if grep -q 'rel="manifest"' <<< "$body"; then
+            echo "::error::$velista_page still links the web app manifest"; exit 1
+          fi
+          first_src=$(grep -o 'src="[^"]*"' <<< "$body" | head -n 1 | sed -e 's/^src="//' -e 's/"$//')
+          case "$first_src" in
+            '')
+              echo "::error::$velista_page names no script"; exit 1 ;;
+            /*|*://*)
+              echo "::error::$velista_page names $first_src, which does not resolve under /velista/"; exit 1 ;;
+          esac
+          script_url="https://staging.ichirokuxvi.com/velista/$first_src"
+          if ! content_type=$(curl -kfsS -o /dev/null -w '%{content_type}' "$script_url"); then
+            echo "::error::$script_url did not answer 200"; exit 1
+          fi
+          if ! grep -qi 'javascript' <<< "$content_type"; then
+            echo "::error::$script_url answered $content_type, not JavaScript"; exit 1
+          fi
+          echo "  ok  $velista_page ($script_url, $content_type)"
+
+          # The own origin passes through the same nginx with neither change.
+          own_page=https://staging.velista.app/
+          if ! own_body=$(curl -kfsS "$own_page"); then
+            echo "::error::$own_page did not answer 200"; exit 1
+          fi
+          if ! grep -q '<base href="/"' <<< "$own_body"; then
+            echo "::error::$own_page does not carry the base /"; exit 1
+          fi
+          if ! grep -q 'rel="manifest"' <<< "$own_body"; then
+            echo "::error::$own_page does not link the web app manifest"; exit 1
+          fi
+          echo "  ok  $own_page (base /, manifest linked)"
+
       - name: Run affected e2e against the staging stack
         env:
           E2E_BASE_URL: https://staging.ichirokuxvi.com
+          # velista-e2e runs against velista's own origin (velista plan 0165).
+          VELISTA_BASE_URL: https://staging.velista.app
         run: |
           rc=0
           IFS=',' read -ra PROJECTS <<< "${{ needs.setup.outputs.e2e }}"

@@ -22,6 +22,10 @@ ARG NX_APP
 FROM ${TARGET_REGISTRY}nx-portfolio/local-http-server:${BUILDER_TAG}
 ARG NX_APP
 COPY . /var/www/html/
+# velista's own nginx config travels in the bundle as a build asset, because the
+# bundle is the whole context. Moving it, not copying it, keeps it from being served
+# (plan 0165 D2).
+RUN mv /var/www/html/nginx.conf /etc/nginx/nginx.conf
 
 # Run nginx in the foreground to keep the container running
 CMD ["nginx", "-g", "daemon off;"]

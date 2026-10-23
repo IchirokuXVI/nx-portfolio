@@ -1,3 +1,4 @@
+import { APP_BASE_HREF } from '@angular/common';
 import {
   ApplicationConfig,
   isDevMode,
@@ -6,17 +7,16 @@ import {
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { appRoutes } from './app.routes';
+import { documentMount } from './document-mount';
 
 /**
- * The standalone half of the pair. This runs when velista is served from its own
- * origin (plan 0013), which since that plan is production rather than a preview: the
- * app draws its own chrome and owns its own token scope, so it borrows nothing from
- * the portfolio shell. Under the shell this configuration never runs at all.
+ * velista's bootstrap configuration, for both addresses it is served at: its own
+ * origin and the portfolio's `/velista` path (plan 0165).
  *
  * **`appProviders` is not here** (velista `0155`). `appRootRoute` carries it in both
  * run modes, and this file holds only what a route cannot provide: the router itself,
  * the service worker and the browser's error listeners. It used to spread the list
- * here as well, which gave the standalone build two environment injectors holding
+ * here as well, which gave the own origin build two environment injectors holding
  * the same services. Each ran its own initializers and each built its own
  * `RealtimeSocket`, so every frame of the user room arrived twice.
  */
@@ -24,15 +24,17 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
+    // The router keeps every URL whole, mount included, instead of reading
+    // `/velista/` from the `<base>` that nginx writes under the portfolio.
+    // `appRootRoute` consumes the mount itself (plan 0165 D3).
+    { provide: APP_BASE_HREF, useValue: '/' },
 
     /**
      * The service worker, registered **here and nowhere else** (plan 0013 D4).
      *
-     * `appProviders` is spread into both run modes, so registering there would make
-     * the *portfolio's* page register velista's worker on the *portfolio's* origin,
-     * where `ngsw-worker.js` does not exist: a 404 on every shell page load, and a
-     * worker scoped to the wrong origin if it ever did resolve. This file is the only
-     * one the mounted build never reaches, which makes it the only correct home.
+     * It is off under the portfolio's `/velista` path (plan 0165 D4): `ngsw.json`
+     * lists its files from the root of the build, so a worker registered there would
+     * resolve them against the portfolio's root and fail its first manifest check.
      *
      * `enabled` follows the build, because `serviceWorker: true` is set on the
      * production configuration alone (`project.json`). A development build emits no
@@ -45,7 +47,7 @@ export const appConfig: ApplicationConfig = {
      * ends up with a worker.
      */
     provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode(),
+      enabled: !isDevMode() && documentMount() === '',
       registrationStrategy: 'registerWhenStable:30000',
     }),
   ],

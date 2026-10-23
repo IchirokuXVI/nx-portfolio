@@ -1,11 +1,10 @@
 import { Route } from '@angular/router';
 import { appRootRoute } from './app-root-route';
+import { documentMount } from './document-mount';
 
 /**
- * The standalone build's route table, served from velista's own origin (plan 0013).
- *
- * The mount is empty, so the app starts at `/` and the locale is the first segment:
- * `/en/home`, not `/velista/en/home`. That is the same rule landingV2 already runs
- * under, and `localeGuard` needs nothing else to settle it.
+ * velista's route table. The mount comes from the document (plan 0165 D3): `''` on
+ * the own origin, where the locale is the first segment (`/en/home`), and
+ * `'/velista'` under the portfolio's gateway (`/velista/en/home`).
  */
-export const appRoutes: Route[] = [appRootRoute('')];
+export const appRoutes: Route[] = [appRootRoute(documentMount())];
