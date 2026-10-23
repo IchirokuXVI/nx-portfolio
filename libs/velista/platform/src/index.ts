@@ -23,6 +23,7 @@ export * from './lib/live-basket-badge';
 export * from './lib/money';
 export * from './lib/nav-chrome';
 export * from './lib/notification-tone';
+export * from './lib/on-edge';
 export * from './lib/page-navigation';
 export * from './lib/page-return';
 export * from './lib/platform-providers';
