@@ -857,6 +857,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   const moreSettlements = new Map<string, readonly LineSettlement[]>(
     Object.entries(options.moreSettlements ?? {})
   );
+  const holdLog: string[] = [];
   const moreItemSettlements = new Map<string, readonly LineSettlement[]>(
     Object.entries(options.moreItemSettlements ?? {})
   );
@@ -925,8 +926,22 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     refresh: async () => {
       loads.update((count) => count + 1);
     },
-    /** The list page holds its list live (velista `0169`); nothing to record here. */
-    hold: (_listId: string) => () => undefined,
+    /**
+     * The lists a page holds live (velista `0169`), as `hold:<id>` and `release:<id>`
+     * in call order, so a spec can assert that a page holds what it shows and lets go
+     * of it when it leaves. A release counts once, as in the real store.
+     */
+    holdLog,
+    hold: (listId: string) => {
+      holdLog.push(`hold:${listId}`);
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          holdLog.push(`release:${listId}`);
+        }
+      };
+    },
 
     addLine: async (
       listId: string,

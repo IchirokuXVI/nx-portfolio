@@ -179,5 +179,23 @@ describe('MemberNames', () => {
       expect(reads(service)).toEqual([ZONE]);
       expect(names.nameOf(ZONE, 'u-a')).toBe('A');
     });
+
+    it('keeps the names and the zone asked when the read fails', async () => {
+      const { names, realtime, service } = setup();
+      names.prime(ZONE, [member('a', { username: 'Held' })]);
+      service.listMembers = async (zoneId) => {
+        service.calls.push({ method: 'listMembers', zoneId });
+        throw new Error('offline again');
+      };
+      TestBed.tick();
+
+      await reconnect(realtime);
+      await expect(names.refresh()).resolves.toBeUndefined();
+
+      expect(names.nameOf(ZONE, 'u-a')).toBe('Held');
+      // Still asked: an ensure afterwards reads nothing.
+      await names.ensure(ZONE);
+      expect(reads(service)).toEqual([ZONE, ZONE]);
+    });
   });
 });

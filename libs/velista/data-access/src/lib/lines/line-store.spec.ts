@@ -1307,5 +1307,37 @@ describe('LineStore', () => {
       expect(read).not.toHaveBeenCalled();
       expect(store.stateOf(LIST)).toBe('idle');
     });
+
+    it('does not let a second call of one release drop another holder', async () => {
+      const { store, realtime, read } = await twoLists();
+      const first = store.hold(LIST);
+      store.hold(LIST);
+      first();
+      first();
+
+      await reconnect(realtime);
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([LIST]);
+      expect(store.stateOf(LIST)).toBe('loaded');
+    });
+
+    it('neither reads again nor marks stale a list whose read did not load', async () => {
+      const { store, lines, realtime } = await build([line('a')]);
+      const HELD = 'list-held-failed';
+      const LOOSE = 'list-loose-failed';
+      lines.failNextRead(new Error('offline'));
+      await store.load(HELD);
+      lines.failNextRead(new Error('offline'));
+      await store.load(LOOSE);
+      store.hold(HELD);
+      TestBed.tick();
+      const read = jest.spyOn(lines, 'listLines');
+
+      await reconnect(realtime);
+
+      expect(read).not.toHaveBeenCalled();
+      expect(store.stateOf(HELD)).toBe('failed');
+      expect(store.stateOf(LOOSE)).toBe('failed');
+    });
   });
 });

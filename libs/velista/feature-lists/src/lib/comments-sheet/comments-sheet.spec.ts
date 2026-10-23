@@ -158,6 +158,8 @@ interface RenderOptions {
   /** What `addVoiceComment` does. Throwing is how a failed send is driven. */
   addVoice?: CommentServiceI['addVoiceComment'];
   audioUrl?: CommentServiceI['commentAudioUrl'];
+  /** How many comment reads answer before every later one rejects. */
+  readsAnswered?: number;
 }
 
 async function render(
@@ -186,6 +188,12 @@ async function render(
   const comments: CommentServiceI = {
     listComments: async (lineId) => {
       commentReads.push(lineId);
+      if (
+        options.readsAnswered !== undefined &&
+        commentReads.length > options.readsAnswered
+      ) {
+        throw new Error('offline again');
+      }
       return { items: [...page], nextCursor: null };
     },
     addComment: async (lineId, body) => ({
@@ -357,6 +365,22 @@ describe('CommentsSheet', () => {
       expect(commentReads).toEqual([LINE_ID, LINE_ID]);
       expect(recorded).toHaveBeenCalledWith(LINE_ID, expect.any(Array));
       // Still the conversation, not a skeleton or an error.
+      expect(bodies(fixture)).toHaveLength(3);
+    });
+
+    it('keeps the conversation and shows no error when the read again fails', async () => {
+      const { fixture, commentReads } = await render({ readsAnswered: 1 });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(commentReads).toEqual([LINE_ID, LINE_ID]);
+      expect(fixture.componentInstance.errorKey()).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.error')
+      ).toBeNull();
       expect(bodies(fixture)).toHaveLength(3);
     });
   });

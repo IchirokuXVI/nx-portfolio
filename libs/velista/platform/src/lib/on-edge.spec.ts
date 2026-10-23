@@ -1,4 +1,9 @@
-import { Injector, runInInjectionContext, signal } from '@angular/core';
+import {
+  Injector,
+  runInInjectionContext,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { onEdge } from './on-edge';
 
@@ -50,16 +55,28 @@ describe('onEdge', () => {
   });
 
   it('does not track what the act reads', () => {
+    // Counted through the counter's own reads: the effect reads it once per run, so a
+    // signal that `act` read and that became a dependency would show up as a run.
+    // Comparing `act` calls cannot tell, because a rerun with the same counter value
+    // would not call `act` anyway.
     const counter = signal(0);
+    let runs = 0;
+    const read = (() => {
+      runs += 1;
+      return counter();
+    }) as Signal<number>;
     const other = signal(0);
     const act = jest.fn(() => other());
-    runInInjectionContext(TestBed.inject(Injector), () => onEdge(counter, act));
+    runInInjectionContext(TestBed.inject(Injector), () => onEdge(read, act));
     TestBed.tick();
 
     counter.set(1);
     TestBed.tick();
+    expect(act).toHaveBeenCalledTimes(1);
+    const after = runs;
+
     other.set(5);
     TestBed.tick();
-    expect(act).toHaveBeenCalledTimes(1);
+    expect(runs).toBe(after);
   });
 });
