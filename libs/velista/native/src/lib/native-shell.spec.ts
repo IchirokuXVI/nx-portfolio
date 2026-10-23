@@ -1,10 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import {
-  AppBack,
-  type AppBackOutcome,
-  provideFakeBrowserFacade,
-} from '@portfolio/velista/platform';
+import { AppBack, type AppBackOutcome } from '@portfolio/velista/platform';
 import { NATIVE_PLUGINS } from './native-plugins';
 import {
   DEFAULT_NATIVE_APP_ID,
@@ -51,23 +47,16 @@ describe('NativeShell', () => {
   let doubles: NativePluginDoubles;
   let outcome: AppBackOutcome;
   let navigateByUrl: jest.Mock;
-  let session: Map<string, string>;
 
   function setUp(): NativeShell {
     doubles = new NativePluginDoubles();
     outcome = 'floor';
     navigateByUrl = jest.fn(() => Promise.resolve(true));
-    session = new Map();
     TestBed.configureTestingModule({
       providers: [
         { provide: NATIVE_PLUGINS, useValue: doubles.loader },
         { provide: AppBack, useValue: { request: () => outcome } },
         { provide: Router, useValue: { navigateByUrl } },
-        provideFakeBrowserFacade(new Map(), {
-          readSessionStorage: (key: string) => session.get(key) ?? null,
-          writeSessionStorage: (key: string, value: string) =>
-            void session.set(key, value),
-        }),
       ],
     });
     return TestBed.inject(NativeShell);
@@ -101,7 +90,7 @@ describe('NativeShell', () => {
   });
 
   describe('links that open the app', () => {
-    it('pushes a link that arrives while the app runs', async () => {
+    it('pushes a link that opens the app', async () => {
       const shell = setUp();
       await shell.start();
 
@@ -109,32 +98,7 @@ describe('NativeShell', () => {
         url: 'https://staging.velista.app/join/ABCDEF',
       });
 
-      expect(navigateByUrl).toHaveBeenCalledWith('/join/ABCDEF', {
-        replaceUrl: false,
-      });
-    });
-
-    it('follows the launch link of a cold start once, replacing the entry', async () => {
-      const shell = setUp();
-      doubles.launchUrl = 'https://velista.app/s/secret?x=1';
-
-      await shell.start();
-
-      expect(navigateByUrl).toHaveBeenCalledTimes(1);
-      expect(navigateByUrl).toHaveBeenCalledWith('/s/secret?x=1', {
-        replaceUrl: true,
-      });
-    });
-
-    it('does not follow the launch link again after a reload', async () => {
-      const shell = setUp();
-      doubles.launchUrl = 'https://velista.app/s/secret';
-      // What the first document of this WebView session left behind.
-      session.set('native-launch-url-followed:velista', '1');
-
-      await shell.start();
-
-      expect(navigateByUrl).not.toHaveBeenCalled();
+      expect(navigateByUrl).toHaveBeenCalledWith('/join/ABCDEF');
     });
 
     it('starts at the root when the app was opened from its icon', async () => {

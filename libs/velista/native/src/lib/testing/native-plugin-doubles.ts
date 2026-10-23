@@ -12,7 +12,6 @@ import type {
 export class NativePluginDoubles {
   readonly listeners = new Map<string, (event?: unknown) => void>();
   minimized = 0;
-  launchUrl: string | undefined = undefined;
   appId = 'app.velista.staging';
   shared: unknown[] = [];
   shareError: unknown = null;
@@ -26,8 +25,6 @@ export class NativePluginDoubles {
   readonly plugins: NativePlugins = {
     app: {
       getInfo: async () => ({ id: this.appId }),
-      getLaunchUrl: async () =>
-        this.launchUrl === undefined ? undefined : { url: this.launchUrl },
       minimizeApp: async () => {
         this.minimized++;
       },

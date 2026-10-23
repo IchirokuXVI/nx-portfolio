@@ -11,7 +11,6 @@ export interface NativeListenerHandle {
  */
 export interface NativeAppPlugin {
   getInfo(): Promise<{ readonly id: string }>;
-  getLaunchUrl(): Promise<{ readonly url: string } | undefined>;
   minimizeApp(): Promise<void>;
   addListener(
     eventName: 'backButton',
