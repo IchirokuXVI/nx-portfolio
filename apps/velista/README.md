@@ -81,3 +81,14 @@ it always installs.
 checkout and pass the path. The App Links statement in
 `public/.well-known/assetlinks.json` names the release key's SHA-256; a build signed
 with another key opens its links in the browser.
+
+### Watch the socket on a device
+
+`apps/velista/scripts/android-reconnect/` holds the probes plan `0168` was verified
+with. Build the APK with `VELISTA_NATIVE_DEBUG=1` so the WebView accepts DevTools, run
+`scenario.sh <name> devtools` once per app start, then attach `ws-monitor.mjs` and drive
+a scenario with `scenario.sh` (screen off and on, airplane mode, forced Doze). The
+monitor prints every socket opened and closed, every frame and a poll of the header
+mark. The header of `scenario.sh` lists the steps and the scenarios, and
+`docs/reports/2026-10-23-velista-socket-reconnect-on-android.md` explains how to read a
+trace.
