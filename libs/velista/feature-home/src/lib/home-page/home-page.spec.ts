@@ -293,40 +293,19 @@ describe('HomePage', () => {
       );
     });
 
-    describe('the offline mark', () => {
-      it('is absent while the connection is up', async () => {
-        const fixture = await render();
+    it('draws no connection mark of its own, because the page header draws it on every page (plan 0168)', async () => {
+      // Home used to be the one page with an offline mark, bound to `connected`, so it
+      // flashed on every cold start. The mark now lives in `PageHeader`, two seconds
+      // late, and its specs are there.
+      const fixture = await render();
 
-        expect(query(fixture, '.offline-mark')).toBeNull();
-      });
+      (TestBed.inject(REALTIME_CLIENT) as RealtimeMemory).setConnected(false);
+      fixture.detectChanges();
 
-      it('is drawn first, and named, when the connection is down', async () => {
-        // Plan 0035, section 5.3. Home is the one page that says so in its header
-        // since velista `0130`; the list and the group keep their own stale notices.
-        const fixture = await render();
-
-        (TestBed.inject(REALTIME_CLIENT) as RealtimeMemory).setConnected(false);
-        fixture.detectChanges();
-
-        const mark = query(fixture, '.offline-mark');
-        expect(mark?.getAttribute('aria-label')).toBe('connection.notLive');
-        expect(mark?.getAttribute('role')).toBe('img');
-        expect(mark?.nextElementSibling).toBe(query(fixture, '.assistant'));
-      });
-
-      it('is not a control', async () => {
-        // It reports a state and there is nowhere for it to lead.
-        const fixture = await render();
-
-        (TestBed.inject(REALTIME_CLIENT) as RealtimeMemory).setConnected(false);
-        fixture.detectChanges();
-
-        expect(query(fixture, '.offline-mark')?.tagName).toBe('SPAN');
-        expect(query(fixture, '.offline-mark button')).toBeNull();
-        expect(
-          queryAll(fixture, 'lib-page-header button[libPageHeaderAction]')
-        ).toHaveLength(2);
-      });
+      expect(query(fixture, '.offline-mark')).toBeNull();
+      expect(
+        queryAll(fixture, 'lib-page-header button[libPageHeaderAction]')
+      ).toHaveLength(2);
     });
   });
 

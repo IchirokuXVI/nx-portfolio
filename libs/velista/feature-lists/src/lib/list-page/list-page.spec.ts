@@ -1324,6 +1324,17 @@ describe('ListPage', () => {
       expect(realtime.rooms).not.toContain(`list:${LIST_ID}`);
     });
 
+    it('holds its list live in the line store, and lets go on the way out (velista 0169)', async () => {
+      const { fixture, lines } = await render();
+
+      // Held, so a reconnect reads the lines again at once rather than marking stale.
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`]);
+
+      fixture.destroy();
+
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`, `release:${LIST_ID}`]);
+    });
+
     it('names the other people shopping it, in the header', async () => {
       const { fixture } = await render({
         presence: { viewers: { [LIST_ID]: ['u2'] } },
@@ -1699,6 +1710,19 @@ describe('ListPage: searching and viewing one category', () => {
     await fixture.whenStable();
 
     expect(itemNames.refreshed).toEqual([['milk', 'carrot'], ['bread']]);
+  });
+
+  it('draws the not live band for a refused zone room and not for a plain disconnect (plan 0168, D7)', async () => {
+    const { fixture, realtime } = await render();
+
+    realtime.setConnected(false);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(true);
+
+    realtime.refuse.add(ZONE_ID);
+    realtime.subscribeZone(ZONE_ID);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(false);
   });
 
   it('reads every product again once the socket comes back (velista 0145)', async () => {

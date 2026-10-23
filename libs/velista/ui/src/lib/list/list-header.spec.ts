@@ -74,11 +74,11 @@ describe('ListHeader', () => {
       expect(host(fixture).querySelector('.stale')).toBeNull();
     });
 
-    it('names the state, with its glyph, when the list is not live', async () => {
-      // It stays beside the app bar's offline mark rather than being replaced by it
-      // (plan 0035, section 5.3): this one is about **this list**, and it is true when
-      // the zone room was refused while the socket is perfectly fine. The mark is about
-      // the connection and this is about the screen.
+    it('names the state, with its glyph, when the zone room was refused', async () => {
+      // `live` is false only for a refusal since plan 0168 (D7): this band is about
+      // **this list**, and it is true when the zone room was refused while the socket
+      // is perfectly fine. A plain disconnect is the page header's mark, on every
+      // page, and the list page keeps `live` true for it (`list-page.spec.ts`).
       const fixture = await render(header({ live: false }));
 
       const notice = host(fixture).querySelector('.stale');

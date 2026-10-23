@@ -335,4 +335,52 @@ describe('ListStore', () => {
       ]);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', async () => {
+      const { lists } = await build([list('list-1')]);
+      TestBed.tick();
+
+      expect(lists.calls).toEqual([]);
+    });
+
+    it('reads nothing when no zone is loaded', async () => {
+      const { lists, realtime } = await build([list('list-1')]);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(lists.calls).toEqual([]);
+    });
+
+    it('reads every loaded zone again, keeping its rows while it runs', async () => {
+      const { store, lists, realtime } = await build([list('list-1')]);
+      await store.load(ZONE);
+      await store.load('zone-2');
+      TestBed.tick();
+      lists.calls.length = 0;
+      lists.setServed([list('list-1'), list('list-2')]);
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      // No skeleton: the rows stay while the read is in flight.
+      expect(store.stateOf(ZONE)).toBe('loaded');
+      expect(store.listsIn(ZONE).map((row) => row.id)).toEqual(['list-1']);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(lists.calls).toEqual([ZONE, 'zone-2']);
+      expect(store.listsIn(ZONE).map((row) => row.id)).toEqual([
+        'list-1',
+        'list-2',
+      ]);
+    });
+  });
 });

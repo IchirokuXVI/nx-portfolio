@@ -9,6 +9,7 @@ import type {
   SharedBasketSummary,
   ShoppingListsLoad,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -94,6 +95,14 @@ export class SharedListStore {
     inject(DestroyRef).onDestroy(() => {
       subscription.unsubscribe();
       this._cancelRefresh();
+    });
+
+    // A share or an unshare broadcast while the socket was down never arrived
+    // (velista `0169`). Only once the tab has asked for the listing.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._asked) {
+        this._scheduleRefresh();
+      }
     });
   }
 

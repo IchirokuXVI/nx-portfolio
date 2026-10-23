@@ -1,6 +1,29 @@
-import { fakeLineStore, GatewayError } from '@portfolio/velista/data-access';
+import {
+  createEnvironmentInjector,
+  EnvironmentInjector,
+  runInInjectionContext,
+  signal,
+} from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import {
+  fakeLineStore,
+  fakeListStore,
+  fakeMemberNames,
+  fakeZoneStore,
+  GatewayError,
+  LINE_SERVICE,
+  LineStore,
+  Mutations,
+  provideFakeListStore,
+  provideFakeMemberNames,
+  provideFakeZoneStore,
+  REALTIME_CLIENT,
+  RealtimeMemory,
+  type LineServiceI,
+} from '@portfolio/velista/data-access';
 import type { Line } from '@portfolio/velista/models';
-import { linePageStatus } from './line-context';
+import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { linePageStatus, loadLineContext } from './line-context';
 
 /**
  * Where a page about one line stands (velista 0156). The line page and the history
@@ -72,5 +95,80 @@ describe('linePageStatus', () => {
         }),
       })
     ).toBe('failed');
+  });
+});
+
+/**
+ * The line page and the history page are live through the zone room, like the list
+ * page, so a reconnect has to read their list again (velista 0169). The real
+ * `LineStore` decides that, from whether the list is held.
+ */
+describe('loadLineContext', () => {
+  function setUp() {
+    TestBed.resetTestingModule();
+    const reads: string[] = [];
+    const service = {
+      listLines: async (listId: string) => {
+        reads.push(listId);
+        return { items: [line('ln-1')], nextCursor: null };
+      },
+    } as unknown as LineServiceI;
+    const realtime = new RealtimeMemory();
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideVelistaTesting({ basePath: '/velista' }),
+        Mutations,
+        LineStore,
+        { provide: LINE_SERVICE, useValue: service },
+        { provide: REALTIME_CLIENT, useValue: realtime },
+        provideFakeZoneStore(fakeZoneStore()),
+        provideFakeListStore(fakeListStore()),
+        provideFakeMemberNames(fakeMemberNames()),
+      ],
+    });
+
+    const injector = createEnvironmentInjector(
+      [],
+      TestBed.inject(EnvironmentInjector)
+    );
+    runInInjectionContext(injector, () =>
+      loadLineContext(signal('zone-1'), signal(LIST_ID))
+    );
+
+    return { reads, realtime, injector, store: TestBed.inject(LineStore) };
+  }
+
+  async function settle(): Promise<void> {
+    for (let turn = 0; turn < 5; turn += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  it('reads its list again after a reconnect', async () => {
+    const { reads, realtime } = setUp();
+    TestBed.tick();
+    await settle();
+    expect(reads).toEqual([LIST_ID]);
+
+    realtime.setReconnects(1);
+    TestBed.tick();
+    await settle();
+
+    expect(reads).toEqual([LIST_ID, LIST_ID]);
+  });
+
+  it('lets go of the list when the page goes, so a reconnect only marks it stale', async () => {
+    const { reads, realtime, injector, store } = setUp();
+    TestBed.tick();
+    await settle();
+
+    injector.destroy();
+    realtime.setReconnects(1);
+    TestBed.tick();
+    await settle();
+
+    expect(reads).toEqual([LIST_ID]);
+    expect(store.stateOf(LIST_ID)).toBe('idle');
   });
 });

@@ -16,7 +16,11 @@ import {
   type ShoppingListsLoad,
   type WritableBasketStatus,
 } from '@portfolio/velista/models';
-import { AppResumed, LiveBasketBadge } from '@portfolio/velista/platform';
+import {
+  AppResumed,
+  LiveBasketBadge,
+  onEdge,
+} from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -229,6 +233,14 @@ export class BasketListStore {
           this._scheduleRefresh();
         }
       });
+    });
+
+    // And when the socket comes back (velista `0169`): a header broadcast while it
+    // was down never arrived. The resume effect above stays as it is.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._asked) {
+        this._scheduleRefresh();
+      }
     });
 
     const subscription = this._realtime.events.subscribe((event) => {

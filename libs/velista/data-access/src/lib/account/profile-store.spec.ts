@@ -670,4 +670,68 @@ describe('ProfileStore', () => {
       expect(store.can('shopMap.record')).toBe(true);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    const reads = (service: ReturnType<typeof fakeAccount>) =>
+      service.calls.filter((call) => call.method === 'getProfile').length;
+
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', () => {
+      const service = fakeAccount();
+      setUp(service);
+      TestBed.tick();
+
+      expect(reads(service)).toBe(0);
+    });
+
+    it('reads nothing when no profile is held', async () => {
+      const service = fakeAccount();
+      const { realtime } = setUp(service);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(reads(service)).toBe(0);
+    });
+
+    it('reads the held profile again, keeping it on screen', async () => {
+      const service = fakeAccount();
+      const { store, realtime } = setUp(service);
+      await store.load();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      expect(store.state()).toBe('loaded');
+      expect(store.profile()).not.toBeNull();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(reads(service)).toBe(2);
+    });
+
+    it('keeps the held profile and stays loaded when the read again fails', async () => {
+      const service = fakeAccount();
+      const { store, realtime } = setUp(service);
+      await store.load();
+      const held = store.profile();
+      service.getProfile = async () => {
+        service.calls.push({ method: 'getProfile' });
+        throw new Error('offline again');
+      };
+
+      await reconnect(realtime);
+
+      expect(reads(service)).toBe(2);
+      expect(store.state()).toBe('loaded');
+      expect(store.error()).toBeNull();
+      expect(store.profile()).toBe(held);
+    });
+  });
 });

@@ -17,8 +17,10 @@ import {
   LineStore,
   ListStore,
   MemberNames,
+  REALTIME_CLIENT,
   SessionStore,
   type CommentServiceI,
+  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -33,6 +35,7 @@ import {
   AudioRecorder,
   lineIdOf,
   listIdOf,
+  onEdge,
   RECORDING_LIMITS,
   SheetNavigation,
   zoneIdOf,
@@ -158,6 +161,7 @@ export class CommentsSheet {
   private readonly _lines = inject(LineStore);
   private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -301,6 +305,10 @@ export class CommentsSheet {
     void this._names.ensure(this.zoneId());
     void this._load();
 
+    // A comment posted while the socket was down never arrived (velista `0169`), so
+    // the open line's comments are read again, the way the sheet reads them on open.
+    onEdge(this._realtime.reconnects, () => void this._reread());
+
     // The conversation opens at its end, and stays there while new comments arrive,
     // unless the reader has scrolled up to read something older. `afterRenderEffect`
     // rather than `effect`, because the rows have to exist before they can be measured,
@@ -433,6 +441,24 @@ export class CommentsSheet {
       this.errorKey.set(listErrorKey(error, 'comments'));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /**
+   * The same read as {@link _load}, without its error line (velista `0169`).
+   *
+   * A reread after a reconnect that fails leaves the comments on screen alone: they
+   * are still the best thing to draw, and an error over a readable conversation would
+   * make it worse.
+   */
+  private async _reread(): Promise<void> {
+    try {
+      const page = await this._comments.listComments(this.lineId(), {
+        limit: 50,
+      });
+      this._lines.recordComments(this.lineId(), page.items);
+    } catch {
+      // Deliberately quiet. See above.
     }
   }
 }

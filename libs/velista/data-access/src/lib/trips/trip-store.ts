@@ -13,6 +13,7 @@ import {
   type Trip,
   type TripRow,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
 import {
   REALTIME_CLIENT,
@@ -107,6 +108,11 @@ export class TripStore {
       subscription.unsubscribe();
       this.leave();
     });
+
+    // A trip event broadcast while the socket was down never arrived (velista
+    // `0169`). `refetch` reads nothing while no list is open, and rereads the rows
+    // that were opened.
+    onEdge(this._realtime.reconnects, () => this.refetch());
   }
 
   /** One trip's rows in list order, or undefined until they arrive. */

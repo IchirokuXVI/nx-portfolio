@@ -1,5 +1,6 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import type { Membership, ZoneRole } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -76,6 +77,10 @@ export class MemberNames {
       this._apply(event)
     );
     this._destroyRef.onDestroy(() => subscription.unsubscribe());
+
+    // A rename or a role change broadcast while the socket was down never arrived
+    // (velista `0169`), so every zone already asked for is read again.
+    onEdge(this._realtime.reconnects, () => void this.refresh());
   }
 
   /**
@@ -144,24 +149,44 @@ export class MemberNames {
     this._asked.add(zoneId);
 
     try {
-      const page = await this._members.listMembers(zoneId, { limit: 100 });
-      this._absorb(zoneId, page.items);
-
-      // Paged only when a group is genuinely large. The loop is bounded by the cursor
-      // rather than by a count, and every page is folded into the same map.
-      let cursor = page.nextCursor;
-      while (cursor !== null) {
-        const next = await this._members.listMembers(zoneId, {
-          cursor,
-          limit: 100,
-        });
-        this._absorb(zoneId, next.items);
-        cursor = next.nextCursor;
-      }
+      await this._readAll(zoneId);
     } catch {
       // Deliberately quiet. Nobody is shown an error panel because a name could not be
       // resolved: the sheet is still readable, and the fallback word is the design.
       this._asked.delete(zoneId);
+    }
+  }
+
+  /**
+   * Read every zone already asked for again, and absorb the rows (velista `0169`).
+   *
+   * Through the same paging {@link ensure} uses. A zone that was never asked for is
+   * not read. A failure keeps the names already held, which are still the best thing
+   * to draw, and keeps the zone asked, since its cache is not empty.
+   */
+  async refresh(): Promise<void> {
+    await Promise.all(
+      [...this._asked].map((zoneId) =>
+        this._readAll(zoneId).catch(() => undefined)
+      )
+    );
+  }
+
+  /** Every page of one zone's members, folded into the cache as each one lands. */
+  private async _readAll(zoneId: string): Promise<void> {
+    const page = await this._members.listMembers(zoneId, { limit: 100 });
+    this._absorb(zoneId, page.items);
+
+    // Paged only when a group is genuinely large. The loop is bounded by the cursor
+    // rather than by a count, and every page is folded into the same map.
+    let cursor = page.nextCursor;
+    while (cursor !== null) {
+      const next = await this._members.listMembers(zoneId, {
+        cursor,
+        limit: 100,
+      });
+      this._absorb(zoneId, next.items);
+      cursor = next.nextCursor;
     }
   }
 

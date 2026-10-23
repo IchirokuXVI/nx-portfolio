@@ -12,6 +12,7 @@ import type {
   UsernameScope,
   UserProfile,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { TokenStore } from '../auth/token-store';
 import { Mutations } from '../mutations';
 import {
@@ -144,6 +145,15 @@ export class ProfileStore {
     });
 
     this._destroyRef.onDestroy(() => subscription.unsubscribe());
+
+    // A rename broadcast while the socket was down never arrived (velista `0169`).
+    // Only a profile already held is read again, and quietly: a store that holds none
+    // has nothing a reconnect could correct.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._profile() !== null) {
+        void this._reread();
+      }
+    });
   }
 
   /**
@@ -236,6 +246,34 @@ export class ProfileStore {
     } catch (error) {
       this._error.set(error);
       this._state.set('failed');
+    }
+  }
+
+  /**
+   * Read the held profile again after a reconnect, with no failure state (velista
+   * `0169`).
+   *
+   * Not {@link load}: a failed `load` sets `failed` and an error even while a profile
+   * is held, which turns the account page's email row into its failure line and hides
+   * home's unverified email banner. The profile on screen is still the best thing to
+   * draw, so a failure here is swallowed and the store stays `loaded`. A read that is
+   * already running answers the same question, and an answer that lands after a sign
+   * out is dropped.
+   */
+  private async _reread(): Promise<void> {
+    if (this._loading !== null) {
+      return;
+    }
+    const session = this._session;
+    try {
+      const profile = await this._account.getProfile();
+      if (session === this._session && this._profile() !== null) {
+        this._profile.set(profile);
+        this._state.set('loaded');
+        this._error.set(null);
+      }
+    } catch {
+      // Deliberately quiet. See above.
     }
   }
 

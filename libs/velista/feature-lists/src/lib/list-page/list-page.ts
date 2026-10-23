@@ -573,18 +573,21 @@ export class ListPage {
       // The product each row shows, its picture and its price (velista `0145`).
       // `ItemNames` is a signal, so a row gains its product the moment it resolves.
       catalog: this._catalogFacts(),
-      // Not live means the room was refused or the connection dropped. What is on
-      // screen is correct and will not update itself, which is worth saying: looking
-      // live while being stale is worse than looking broken.
+      // Not live means the zone room was refused. What is on screen is correct and
+      // will not update itself, which is worth saying: looking live while being stale
+      // is worse than looking broken.
+      //
+      // A plain disconnect is not this band's to say (plan 0168, D7). The page header
+      // draws one mark on every page for that, and a second sentence for the same fact
+      // would push the list down. A refused room is about this list only, which the
+      // header mark cannot say.
       //
       // Keyed on the **zone**, not the list. Nothing subscribes per list, and it does
       // not need to: list and line events are broadcast to the zone room as well
       // (`jetstream.consumer.ts:181-187`), so the zone subscription is what makes this
       // screen live and a refused zone is what makes it stale. Asking about a list room
       // nobody joins could only ever answer no.
-      live:
-        this._realtime.connected() &&
-        !this._realtime.refusedZones().has(zoneId),
+      live: !this._realtime.refusedZones().has(zoneId),
       errorKey: this._errorKey(),
       correlationId: this._correlationId(),
       gone: this._gone(),
@@ -1458,12 +1461,18 @@ export class ListPage {
     // correction: shopping from a list **is** being in that group, and the zone
     // subscription every group already holds for its live counts cannot say so,
     // because it is held for every group at once from the moment the app loads.
+    //
+    // The list is held in `LineStore` for the same span as its room, so a reconnect
+    // reads its lines again at once rather than marking them stale (velista `0169`).
     effect((onCleanup) => {
-      const leaveList = this._realtime.viewList(this.listId());
+      const listId = this.listId();
+      const leaveList = this._realtime.viewList(listId);
       const leaveZone = this._realtime.enterZone(this.zoneId());
+      const release = this._lines.hold(listId);
       onCleanup(() => {
         leaveList();
         leaveZone();
+        release();
       });
     });
 
