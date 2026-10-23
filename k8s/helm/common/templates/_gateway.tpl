@@ -26,13 +26,21 @@ no listener is hostless, and no two units may serve one host.
 cert-manager watches the Gateway and issues the Secret `<host>-tls` that each
 HTTPS listener names, from the issuer in the annotation.
 
-Call with a dict: (dict "root" $ "hosts" <newline separated hosts>)
+Call with a dict: (dict "root" $ "hosts" <newline separated hosts>). Blank
+entries and surrounding whitespace are ignored.
 */}}
 {{- define "common.gateway" -}}
 {{- $root := .root }}
 {{- $gw := $root.Values.gateway }}
 {{- if $gw.enabled }}
-{{- $hosts := splitList "\n" .hosts | compact | uniq | sortAlpha }}
+{{- /* Trim every entry: a CRLF checkout of this file leaves a "\r" on each host. */}}
+{{- $hosts := list }}
+{{- range splitList "\n" .hosts }}
+{{- with trim . }}
+{{- $hosts = append $hosts . }}
+{{- end }}
+{{- end }}
+{{- $hosts = $hosts | uniq | sortAlpha }}
 {{- $issuer := $gw.tls.issuer }}
 {{- $name := include "common.gatewayName" $root }}
 ---

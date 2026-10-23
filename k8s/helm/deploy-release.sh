@@ -102,7 +102,8 @@ if [ "$RELEASE_STATUS" != none ] && [ "$EVER_DEPLOYED" = false ]; then
   # A release that adopted live objects (the cutover of plan 0016 writes the
   # ConfigMap deploy-cutover) has a failed first revision and still serves, and
   # an uninstall would delete what it adopted. A StatefulSet in the namespace is
-  # the same warning from the data's side. Both refuse (k8s plan 0015 D10).
+  # the same warning from the data's side. Both skip the uninstall (k8s plan
+  # 0015 D10).
   adopted=""
   if kubectl -n "$NAMESPACE" get configmap deploy-cutover >/dev/null 2>&1; then
     adopted="the namespace holds the ConfigMap deploy-cutover, so this release adopted live objects"
@@ -110,31 +111,33 @@ if [ "$RELEASE_STATUS" != none ] && [ "$EVER_DEPLOYED" = false ]; then
     adopted="the namespace holds a StatefulSet, so a database may live under this release"
   fi
   if [ -n "$adopted" ]; then
-    echo "Release '${RELEASE_NAME}' has no deployed revision, and ${adopted}." >&2
-    echo "Uninstalling it could delete live data, so this script stops. Read" >&2
-    echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
-    echo "  kubectl -n ${NAMESPACE} get pods,statefulsets" >&2
-    echo "and fix the failed revision with a helm upgrade, never an uninstall." >&2
-    exit 1
+    # Helm 3 upgrades a release whose only revision is failed, so the deploy
+    # goes on with an upgrade instead of an uninstall.
+    echo "Release '${RELEASE_NAME}' has no deployed revision, and ${adopted}."
+    echo "Uninstalling it could delete live data, so the uninstall is skipped and the"
+    echo "failed release is upgraded in place. If the upgrade fails too, read"
+    echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}"
+    echo "  kubectl -n ${NAMESPACE} get pods,statefulsets"
+    echo "and fix the failed revision with a helm upgrade, never an uninstall."
+  else
+    # Cleared automatically, because there is provably nothing to lose. No
+    # revision has ever served traffic and there is no earlier one to roll back
+    # to, so removing the record and installing fresh is the only way forward as
+    # well as the safe one.
+    #
+    # It does not take the databases with it either. The only persistent storage
+    # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
+    # nats), and Kubernetes deliberately leaves those PVCs behind when the
+    # StatefulSet goes away. There are no standalone PVCs in the chart, so
+    # `helm uninstall` cannot delete a volume.
+    echo "Release '${RELEASE_NAME}' exists in state '${RELEASE_STATUS}' but no revision of"
+    echo "it has ever been live, so an earlier first install never finished. Removing"
+    echo "the record and installing fresh, which is what lets the install path (and"
+    echo "its post-install migrations) run at all. The postgres and nats volumes are"
+    echo "not helm's to delete and stay where they are."
+    helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
+    RELEASE_STATUS=none
   fi
-
-  # Cleared automatically, because there is provably nothing to lose. No
-  # revision has ever served traffic and there is no earlier one to roll back
-  # to, so removing the record and installing fresh is the only way forward as
-  # well as the safe one.
-  #
-  # It does not take the databases with it either. The only persistent storage
-  # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
-  # nats), and Kubernetes deliberately leaves those PVCs behind when the
-  # StatefulSet goes away. There are no standalone PVCs in the chart, so
-  # `helm uninstall` cannot delete a volume.
-  echo "Release '${RELEASE_NAME}' exists in state '${RELEASE_STATUS}' but no revision of"
-  echo "it has ever been live, so an earlier first install never finished. Removing"
-  echo "the record and installing fresh, which is what lets the install path (and"
-  echo "its post-install migrations) run at all. The postgres and nats volumes are"
-  echo "not helm's to delete and stay where they are."
-  helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
-  RELEASE_STATUS=none
 elif [ "$RELEASE_STATUS" = pending-upgrade ] || [ "$RELEASE_STATUS" = pending-rollback ]; then
   # NOT cleared automatically. Here a revision did deploy and its pods may be
   # serving production right now. Choosing between rolling back and letting the
@@ -213,13 +216,22 @@ helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
 # Only this release's Deployments: a namespace may hold another release's,
 # and its rollout is not this deploy's to wait on.
 echo "Waiting for every deployment of release ${RELEASE_NAME} to report ready..."
-for deployment in $(helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE" | awk '
+if ! manifest="$(helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE")"; then
+  echo "ERROR: could not read the manifest of release ${RELEASE_NAME}, so its rollout is unverified." >&2
+  exit 1
+fi
+deployments="$(printf '%s\n' "$manifest" | awk '
   /^---/ { deployment = 0; meta = 0 }
   /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
   /^metadata:/ { meta = 1; next }
   /^[^[:space:]]/ { meta = 0 }
   deployment && meta && /^  name:/ { print $2; deployment = 0 }
-'); do
+')"
+if [ -z "$deployments" ]; then
+  echo "ERROR: the manifest of release ${RELEASE_NAME} names no Deployment, so its rollout is unverified." >&2
+  exit 1
+fi
+for deployment in $deployments; do
   kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout=5m
 done
 

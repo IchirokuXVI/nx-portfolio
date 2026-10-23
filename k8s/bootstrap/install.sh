@@ -340,17 +340,30 @@ else
 fi
 
 if [ -n "$POOL_IP" ]; then
-  # A pool that the old one release chart rendered is Helm's, and the next
-  # deploy of that chart would write its own spec back. The cutover of plan 0016
-  # takes it over; until then it is left alone.
-  pool_owner="$(kubectl -n metallb-system get ipaddresspool main-pool \
+  # A pool is a Helm release's only while `helm status` finds that release. The
+  # cutover of plan 0016 deletes the release's storage and leaves the Helm
+  # annotations on the live objects, so a pool whose release is gone is taken over.
+  pool_release="$(kubectl -n metallb-system get ipaddresspool main-pool \
     -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
-  if [ -n "$pool_owner" ]; then
-    echo "==> IPAddressPool main-pool belongs to the Helm release '$pool_owner'; left as it is"
+  pool_release_ns="$(kubectl -n metallb-system get ipaddresspool main-pool \
+    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || true)"
+  if [ -n "$pool_release" ] \
+    && helm status "$pool_release" -n "${pool_release_ns:-default}" >/dev/null 2>&1; then
+    echo "==> IPAddressPool main-pool belongs to the Helm release '$pool_release'; left as it is"
     echo "    (k8s plan 0016 takes it over when it splits that release)"
   else
+    if [ -n "$pool_release" ]; then
+      echo "==> the Helm release '$pool_release' of IPAddressPool main-pool is gone; taking the pool over"
+      for obj in ipaddresspool/main-pool l2advertisement/main-advertisement; do
+        if kubectl -n metallb-system get "$obj" >/dev/null 2>&1; then
+          kubectl -n metallb-system annotate "$obj" \
+            meta.helm.sh/release-name- meta.helm.sh/release-namespace- >/dev/null
+          kubectl -n metallb-system label "$obj" app.kubernetes.io/managed-by- >/dev/null
+        fi
+      done
+    fi
     echo "==> applying IPAddressPool main-pool ($POOL_IP) and L2Advertisement main-advertisement"
-    kubectl apply -f - <<YAML
+    pool_manifest="$(cat <<YAML
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -374,6 +387,18 @@ spec:
   ipAddressPools:
     - main-pool
 YAML
+)"
+    # MetalLB's validating webhook can refuse for a few seconds after its install.
+    attempt=1
+    until printf '%s\n' "$pool_manifest" | kubectl apply -f -; do
+      if [ "$attempt" -ge 6 ]; then
+        echo "ERROR: the MetalLB pool could not be applied after $attempt attempts." >&2
+        exit 1
+      fi
+      echo "==> retrying the pool in 5s (attempt $attempt of 6 failed)"
+      attempt=$((attempt + 1))
+      sleep 5
+    done
   fi
 elif [ "$INSTALL_METALLB" = true ] \
   && ! kubectl -n metallb-system get ipaddresspool main-pool >/dev/null 2>&1; then
@@ -445,10 +470,17 @@ YAML
 merge_class=false
 if [ "$(kubectl get gatewayclass eg -o jsonpath='{.spec.parametersRef.name}' 2>/dev/null || true)" = merged ]; then
   merge_class=true
-elif ! kubectl get gateways --all-namespaces \
-  -o jsonpath='{range .items[*]}{.spec.gatewayClassName}{"\n"}{end}' 2>/dev/null \
-  | grep -x eg > /dev/null; then
-  merge_class=true
+else
+  # A failed query is a stop, never "no Gateway": that would merge a live class.
+  if ! gateway_classes="$(kubectl get gateways --all-namespaces \
+    -o custom-columns=CLASS:.spec.gatewayClassName --no-headers)"; then
+    echo "ERROR: kubectl could not list the Gateways, so it is unknown whether the" >&2
+    echo "       GatewayClass eg may be merged. Fix cluster access and run again." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$gateway_classes" | grep -x eg > /dev/null; then
+    merge_class=true
+  fi
 fi
 
 if [ "$merge_class" = true ]; then

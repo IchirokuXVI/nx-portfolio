@@ -38,6 +38,7 @@ usage() {
 }
 
 case "${1:-}" in
+  -h | --help) usage; exit 0 ;;
   '' | -*) usage >&2; exit 1 ;;
 esac
 # shellcheck source=../units/unit-env.sh
@@ -100,16 +101,35 @@ show_current() {
 # registry, so this asks the registry rather than listing git tags, which would
 # happily offer a version that was never published.
 # ---------------------------------------------------------------------------
+# The first image the unit's chart renders, as a registry package path such as
+# nx-portfolio/velista.
+first_image_package() {
+  local image
+  helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
+  image="$(helm template "$RELEASE_NAME" "$CHART_DIR" \
+    --values "$CHART_DIR/values.yaml" --values "$CHART_DIR/values.homelab.yaml" \
+    | awk '/^[[:space:]]+image:/ { print $2; exit }')"
+  image="${image%:*}"
+  printf '%s' "${image#*/*/}"
+}
+
 list_versions() {
+  local package encoded
+  package="$(first_image_package)"
+  if [ -z "$package" ]; then
+    echo "The chart of the unit ${UNIT_NAME} renders no image to list versions of." >&2
+    return 1
+  fi
+  encoded="${package//\//%2F}"
   if ! command -v gh >/dev/null 2>&1; then
     echo "The GitHub CLI (gh) is not installed, so the published versions cannot" >&2
     echo "be listed here. Read them from:" >&2
-    echo "  https://github.com/${REGISTRY_REPO}/pkgs/container/nx-portfolio%2Fshell" >&2
+    echo "  https://github.com/${REGISTRY_REPO}/pkgs/container/${encoded}" >&2
     return 1
   fi
-  echo "Versions published for the shell image (every image of a release carries them):"
+  echo "Versions published for the ${package} image (every image of a release carries them):"
   gh api --paginate \
-    "/users/${REGISTRY_REPO%%/*}/packages/container/nx-portfolio%2Fshell/versions" \
+    "users/${REGISTRY_REPO%%/*}/packages/container/${encoded}/versions" \
     --jq '.[].metadata.container.tags[]?' 2>/dev/null \
     | grep -v '^latest$' | sort -Vr | head -20 | sed 's/^/  /'
 }
