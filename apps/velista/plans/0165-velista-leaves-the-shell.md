@@ -178,45 +178,41 @@ the document.
 HTTPRoute and would delete D2, D3 and D4 from the app. If he prefers the redirect, say so
 and the rest of this plan still holds.
 
-### D2. The document carries its base, and the gateway strips the prefix
+### D2. velista's own nginx serves the portfolio path, and the document arrives with its base
 
-The HTTPRoute for the portfolio path rewrites `/velista/en/home` to `/en/home` before the
-velista pod sees it, which is what `path: /velista` already renders in
-`httproute.yaml.tpl`. The pod's nginx then serves `index.html` for the route and the real
-file for an asset, with no change to the image.
+The HTTPRoute for the portfolio mount matches `/velista` and forwards the request with the
+prefix kept (`keepPrefix: true` on the mount, D6). The pod's nginx owns the prefix. A
+`location ^~ /velista/` rewrites the request to the file it names, so `/velista/main.<hash>.js`
+becomes `/main.<hash>.js`, and the usual fallback serves `index.html` for a route. The document
+must then say where it is, so nginx rewrites two tags on the way out with `sub_filter`, and
+only for a request that carried the prefix: `<base href="/" />` becomes `<base href="/velista/" />`,
+and the manifest link is removed. A request on the own origin passes through with neither
+change. `$request_uri` decides, because it is the URI as the request arrived, before the
+rewrite.
 
-The browser must not strip the prefix. `index.html` ships with `<base href="/" />`, and
-every asset URL in it is relative (`main.js`, `styles.css`, `manifest.webmanifest`), as are
-webpack's lazy chunks and `asset/resource` URLs once `withModuleFederation` and its
-`publicPath: 'auto'` are gone (Angular's webpack builder leaves `publicPath` empty when
-`deployUrl` is not set). A relative URL resolves against the document base, so the base is
-the one thing that has to say `/velista/` under the portfolio.
+Why the server and not a script in the document. A script that changes the `<base>` element
+runs after the browser's preload scanner has read the markup. The scanner requests
+`main.<hash>.js` against the original base, which under the portfolio is the shell's root, and
+every cold load costs two 404 requests to the shell before the real loads start. A document
+that arrives with the right base has no race, and the manifest link is gone before anything
+can fetch it.
 
-One inline script directly after the `<base>` element does that, before any stylesheet or
-script element is parsed:
+Why the manifest link goes. `manifest.webmanifest` says `scope: "/"` and `start_url: "/"`,
+which resolve against the manifest URL. Under the portfolio that is the portfolio's root, and
+a browser that offered to install "velista" from that page would install a shortcut to the
+portfolio.
 
-```html
-<base href="/" />
-<script>
-  // Under the portfolio the gateway serves this document at /velista and strips that
-  // prefix before it reaches nginx. The browser must keep it, or every relative URL
-  // below resolves to the portfolio's root and loads the shell's files.
-  if (/^\/velista(\/|$)/.test(location.pathname)) {
-    document.querySelector('base').setAttribute('href', '/velista/');
-    document.querySelector('link[rel="manifest"]').remove();
-  }
-</script>
-```
+The config is `apps/velista/src/nginx.conf`, a copy of the shared `nginx-static-app.conf` plus
+the location and the two filters. It travels in the bundle as a build asset, because the
+docker context is `dist/apps/velista` and nothing else, and the Dockerfile moves it into place.
+A change to the shared file is mirrored here by hand; the file says so at the top.
+`velista-index-markup.spec.ts` asserts that the two literals the filters match appear in the
+built `index.html` exactly once each, so a change in how Angular writes the tags fails a test
+and not a deploy.
 
-The path test is environment agnostic, which is why it is a path and not a hostname: the
-staging host, the production host and the compose gate all pass. Its one false positive is
-`velista.app/velista/...`, a URL nobody is given, and the locale guard already rewrites
-that first segment on the own origin. Record the false positive in the comment.
-
-The manifest link is removed because `manifest.webmanifest` says `scope: "/"` and
-`start_url: "/"`, which resolve against the manifest URL. Under the portfolio that is the
-portfolio's root, and a browser that offered to install "velista" from that page would
-install a shortcut to the portfolio.
+One consequence is deliberate: `velista.app/velista/en` also works, as a mounted copy with no
+worker, because the rewrite keys on the path and not on the host. Nobody is given that URL and
+nothing depends on it.
 
 ### D3. The app keeps `APP_BASE_HREF` at `/` and reads its mount from the document
 
@@ -261,15 +257,20 @@ An entry may carry an optional `mounts` list. Each mount is `{ name, hostPrefix,
 and renders one more HTTPRoute, named `<entry name>-<mount name>`, on the host that
 `charts.host` composes for the mount (so `hostPrefix: ''` is the portfolio root in both
 clusters, and `hostOverrides` applies by the mount's `name` if an environment ever needs
-it). The route uses the same `PathPrefix` match, the same `URLRewrite` and the same
-`backendRefs` as the entry's own route. The velista entry in `values.yaml` gets:
+it). The route uses the same `PathPrefix` match and the same `backendRefs` as the
+entry's own route, and the same `URLRewrite` unless the mount keeps its prefix. The velista entry in `values.yaml` gets:
 
 ```yaml
 mounts:
   - name: portfolio
     hostPrefix: ''
     path: /velista
+    keepPrefix: true
 ```
+
+A mount may set `keepPrefix: true`, and the route then emits no `URLRewrite` filter. The
+velista mount does, because its pod owns the prefix (D2). Other mounts strip by default, like
+the entry routes.
 
 Gateway API ranks a longer path prefix above `/`, so the shell's route on the same host
 never sees `/velista`. The portfolio host already has its HTTPS listener and certificate.
@@ -284,13 +285,14 @@ entry and gains `<domain>/velista` for free.
 ### D7. The compose gate proves the portfolio path with a request, not a browser
 
 `k8s/e2e/portfolio-frontend/nginx.conf` gains, in the `staging.ichirokuxvi.com` server
-block, a `location /velista/` that proxies to `http://velista:80/` and a `location = /velista`
-that proxies to `http://velista:80/`, which is the same prefix strip the HTTPRoute performs.
+block, a `location /velista/` and a `location = /velista`. The two locations proxy to
+`http://velista:80` with the path kept, which is what the HTTPRoute does.
 The `e2e-frontend` job replaces its `https://staging.velista.app/remoteEntry.mjs` check with
 two curls: `https://staging.ichirokuxvi.com/velista/en` must answer 200 with a body that
 contains `app-velista-root`, and the first `src="..."` of that body, resolved under
-`/velista/`, must answer 200 with a JavaScript content type. That is the whole contract of
-D2 tested from outside the image. The `remoteEntry.mjs` loop keeps the other three remotes.
+`/velista/`, must answer 200 with a JavaScript content type. The curls also assert the
+rewritten base and the absent manifest link under the portfolio, and the untouched pair on
+the own origin. That is the whole contract of D2 tested from outside the image. The `remoteEntry.mjs` loop keeps the other three remotes.
 
 ### D8. velista-e2e runs against velista's own origin
 
@@ -365,8 +367,11 @@ returns, package A writes the `> **PR:**` header above the title of this file an
 | `apps/velista/src/app/app.routes.ts` | `[appRootRoute(documentMount())]` |
 | `apps/velista/src/app/app.config.ts` | `APP_BASE_HREF`, the service worker condition (D3, D4), comments |
 | `apps/velista/src/app/app-root-route.ts` | the comment stops saying the shell lazy loads the route; the factory and its spec keep both mounts |
-| `apps/velista/src/index.html` | the inline script (D2), the comment that says the shell's document ships the viewport attribute goes |
-| `apps/velista/project.json` | remove `serve.dependsOn` |
+| `apps/velista/src/index.html` | the comment on the manifest link (D2), the comment that says the shell's document ships the viewport attribute goes |
+| `apps/velista/src/nginx.conf` | new: the shared static config plus the `/velista` location and the two filters (D2) |
+| `apps/velista/src/Dockerfile` | installs `nginx.conf` from the bundle (D2) |
+| `apps/velista/src/app/velista-index-markup.spec.ts` | new: the filtered literals against the built `index.html` (D2) |
+| `apps/velista/project.json` | remove `serve.dependsOn`; `nginx.conf` as a build asset (D2) |
 | `apps/velista/src/app/*.spec.ts` that name the remote | update text or expectations only as the build requires |
 | `apps/shell/module-federation.config.ts` | drop `'velista'` |
 | `apps/shell/remote-urls.ts` | drop velista from `REMOTE_NAMES` and the two comments |
@@ -464,3 +469,27 @@ Each is built as stated, and each is one edit to reverse.
 4. No service worker and no install prompt under the portfolio path (D4, D2).
 5. The compose gate proves the path with two requests, not a browser test (D7).
 6. The rollout window of about a minute during the staging deploy of this change (D11).
+
+## 8. Decisions taken during the build
+
+Recorded after the fact so the plan says what was built.
+
+1. `appRootRoute(mount)` consumes the mount as its route path (`path: 'velista'` under the
+   portfolio, `''` on the own origin). The shell used to wrap the route in `path: 'velista'`;
+   at the root of a table with `APP_BASE_HREF` at `/`, the factory has to do it itself.
+2. The initial bundle budget of velista is 1.6 MB warning and 2 MB error, up from 500 kB and
+   1 MB. The `import('./bootstrap')` boundary made every eager module count as async; the same
+   bytes loaded before first paint then as now.
+3. The landing flag is `appLinkIsExternal`, set on velista alone. The card's "View project"
+   link and the detail page's live link render `<a [href]>` when it is set.
+4. `velista-e2e` reads `VELISTA_BASE_URL` only. `BASE_URL` and `E2E_BASE_URL` are not read,
+   because in CI the latter is the shell.
+5. D2 was first built as an inline script and rebuilt server side after a browser check
+   showed the preload scanner racing it (section D2 explains).
+6. The `sub_filter` literals are `<base href="/">` and
+   `<link href="manifest.webmanifest" rel="manifest">`, with no self closing slash. Angular
+   writes both tags that way into the built `index.html`, while prettier keeps the slash in
+   the source, so the source and the filters cannot share one spelling.
+   `velista-index-markup.spec.ts` holds the filters to the build and the source to the
+   prettier spelling; its build half is skipped where no `dist` exists, which includes the PR
+   workflow, so the staging gate's curls (D7) are the check that runs on every deploy.
