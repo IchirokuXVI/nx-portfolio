@@ -18,6 +18,7 @@ import {
   type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
 import {
   listWritesPage,
@@ -264,10 +265,58 @@ export class LineStore {
    */
   private readonly _mine = new Set<string>();
 
+  /**
+   * The lists a screen is showing live, with how many holders each (velista `0169`).
+   *
+   * A plain `Map` like `_mine`: nothing renders from it, and the reconnect edge is
+   * the only reader.
+   */
+  private readonly _held = new Map<string, number>();
+
+  /**
+   * Loaded lists that a reconnect did not read again, so the rows they hold may have
+   * missed an event (velista `0169`, decision D4).
+   *
+   * A signal, because {@link stateOf} answers `idle` for a stale list and a page
+   * reads that inside a computed.
+   */
+  private readonly _stale = signal<ReadonlySet<string>>(new Set());
+
   constructor() {
     this._realtime.events
       .pipe(takeUntilDestroyed(this._destroyRef))
       .subscribe((event) => this._apply(event));
+
+    // Rooms come back on a reconnect and the events sent while the socket was down
+    // do not (velista `0169`). This map holds every list visited this session, so
+    // reading all of them again would be a request per list ever opened: the lists
+    // a screen holds are read now, quietly, and the rest are marked stale and read
+    // when they are next asked for (decision D4).
+    onEdge(this._realtime.reconnects, () => this._caughtUp());
+  }
+
+  /**
+   * Say that a screen shows this list live, until the returned release is called
+   * (velista `0169`).
+   *
+   * A reconnect reads a held list again at once, and only marks the others stale.
+   * Counted, so two holders of one list need two releases.
+   */
+  hold(listId: string): () => void {
+    this._held.set(listId, (this._held.get(listId) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      const count = (this._held.get(listId) ?? 0) - 1;
+      if (count > 0) {
+        this._held.set(listId, count);
+      } else {
+        this._held.delete(listId);
+      }
+    };
   }
 
   /** One list's lines, in `position` order with rejected ones last. */
@@ -275,7 +324,17 @@ export class LineStore {
     return this._byList().get(listId) ?? [];
   }
 
+  /**
+   * How that list's read is going.
+   *
+   * A stale list answers `idle` while its rows stay (velista `0169`): the pages whose
+   * rule is to load only what is not held then ask for it again, and a stale read is
+   * never taken as proof that a line is gone.
+   */
   stateOf(listId: string): LineLoadState {
+    if (this._stale().has(listId)) {
+      return 'idle';
+    }
     return this._state().get(listId) ?? 'idle';
   }
 
@@ -380,6 +439,8 @@ export class LineStore {
    * reordering available on the first frame for every list this product is for.
    */
   async load(listId: string): Promise<void> {
+    // A stale list is read like any other; the read is what clears the mark.
+    this._unstale(listId);
     this._setState(listId, 'loading');
     this._setError(listId, null);
 
@@ -419,6 +480,7 @@ export class LineStore {
    * perfectly ordinary action (section 5.7).
    */
   async refresh(listId: string): Promise<void> {
+    this._unstale(listId);
     try {
       const page = await this._lines.listLines(listId, {
         limit: LINES_PAGE_SIZE,
@@ -1147,6 +1209,7 @@ export class LineStore {
   /** Drop one list's cache, so the next visit is a cold load rather than stale rows. */
   forget(listId: string): void {
     const lineIds = (this._byList().get(listId) ?? []).map((line) => line.id);
+    this._unstale(listId);
 
     this._byList.update((current) => {
       const next = new Map(current);
@@ -1661,6 +1724,33 @@ export class LineStore {
 
   private _setLines(listId: string, lines: readonly Line[]): void {
     this._byList.update((current) => new Map(current).set(listId, lines));
+  }
+
+  /** The reconnect edge: read the held lists, mark the other loaded ones stale. */
+  private _caughtUp(): void {
+    const stale = new Set(this._stale());
+    for (const [listId, state] of this._state()) {
+      if (state !== 'loaded') {
+        continue;
+      }
+      if (this._held.has(listId)) {
+        void this.refresh(listId);
+      } else {
+        stale.add(listId);
+      }
+    }
+    this._stale.set(stale);
+  }
+
+  private _unstale(listId: string): void {
+    if (!this._stale().has(listId)) {
+      return;
+    }
+    this._stale.update((current) => {
+      const next = new Set(current);
+      next.delete(listId);
+      return next;
+    });
   }
 
   private _setState(listId: string, state: LineLoadState): void {

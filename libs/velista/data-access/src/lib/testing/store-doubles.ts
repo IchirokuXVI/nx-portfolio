@@ -925,6 +925,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     refresh: async () => {
       loads.update((count) => count + 1);
     },
+    /** The list page holds its list live (velista `0169`); nothing to record here. */
+    hold: (_listId: string) => () => undefined,
 
     addLine: async (
       listId: string,

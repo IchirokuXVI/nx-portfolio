@@ -1226,4 +1226,86 @@ describe('LineStore', () => {
       expect(store.claims().size).toBe(0);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    const OTHER = 'list-other';
+
+    /** Load two lists, hold the first, and count the reads from here on. */
+    async function twoLists() {
+      const built = await build([line('a')]);
+      await built.store.load(LIST);
+      await built.store.load(OTHER);
+      TestBed.tick();
+      const read = jest.spyOn(built.lines, 'listLines');
+      return { ...built, read };
+    }
+
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', async () => {
+      const { lines } = await build([line('a')]);
+      TestBed.tick();
+
+      expect(lines.calls).toEqual([]);
+    });
+
+    it('reads nothing when no list is loaded', async () => {
+      const { lines, realtime } = await build([line('a')]);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(lines.calls).toEqual([]);
+    });
+
+    it('reads again only the lists a screen holds, keeping their rows', async () => {
+      const { store, realtime, read } = await twoLists();
+      store.hold(LIST);
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      // No skeleton: the held list stays loaded while its read runs.
+      expect(store.stateOf(LIST)).toBe('loaded');
+      expect(store.linesIn(LIST)).toHaveLength(1);
+      await Promise.resolve();
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([LIST]);
+    });
+
+    it('marks the other lists stale, and serves them from the server on the next load', async () => {
+      const { store, realtime, read } = await twoLists();
+      store.hold(LIST);
+
+      await reconnect(realtime);
+
+      // Stale reads as not read, so a page that loads only what is not held asks.
+      expect(store.stateOf(OTHER)).toBe('idle');
+      // The rows stay until the read replaces them.
+      expect(store.linesIn(OTHER)).toHaveLength(1);
+      read.mockClear();
+
+      await store.load(OTHER);
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([OTHER]);
+      expect(store.stateOf(OTHER)).toBe('loaded');
+    });
+
+    it('stops reading a list once its last holder releases it', async () => {
+      const { store, realtime, read } = await twoLists();
+      const first = store.hold(LIST);
+      const second = store.hold(LIST);
+      first();
+      second();
+
+      await reconnect(realtime);
+
+      expect(read).not.toHaveBeenCalled();
+      expect(store.stateOf(LIST)).toBe('idle');
+    });
+  });
 });

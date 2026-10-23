@@ -1458,12 +1458,18 @@ export class ListPage {
     // correction: shopping from a list **is** being in that group, and the zone
     // subscription every group already holds for its live counts cannot say so,
     // because it is held for every group at once from the moment the app loads.
+    //
+    // The list is held in `LineStore` for the same span as its room, so a reconnect
+    // reads its lines again at once rather than marking them stale (velista `0169`).
     effect((onCleanup) => {
-      const leaveList = this._realtime.viewList(this.listId());
+      const listId = this.listId();
+      const leaveList = this._realtime.viewList(listId);
       const leaveZone = this._realtime.enterZone(this.zoneId());
+      const release = this._lines.hold(listId);
       onCleanup(() => {
         leaveList();
         leaveZone();
+        release();
       });
     });
 
