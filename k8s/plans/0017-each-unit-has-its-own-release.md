@@ -57,8 +57,8 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 - `release-notes.mjs --unit <u>` writes the notes of one unit and defaults `--from` to the
   previous tag with that unit's prefix.
 - Both production environments carry a tag rule for their prefix.
-- `redeploy.yml` (`workflow_dispatch`: unit, environment, version) deploys an already built
-  version, which is the rollback.
+- `redeploy.yml` (`workflow_dispatch` on the tag to deploy, with unit and environment)
+  deploys an already built version from that tag's own chart, which is the rollback.
 - `CONTRIBUTING.md` describes the procedure per unit.
 
 ### Scope
@@ -105,11 +105,13 @@ whose notes are written, whose tasks run) reads the prefix.
 
 ### D1. Tag prefixes, and the bare tag is refused
 
-`release-<unit>.yml` runs when `github.event.release.tag_name` starts with the unit's
-`TAG_PREFIX` and derives the version from the rest. On any other tag the first job writes
-one summary line ("this tag is not a release of <unit>; the prefixes are `portfolio-v` and
-`velista-v`") and exits green, so that the Actions list shows the refusal and not a failure.
-The transitional bare `v` branch of `0016` D4 is removed.
+`release-<unit>.yml` has two jobs. `release` carries `if:
+startsWith(github.event.release.tag_name, '<prefix>')` on the calling job itself and calls
+`release-unit.yml` with the version that follows the prefix, so that a run for another
+unit's tag starts no reusable workflow and enters no concurrency group. `refuse` runs in the
+other case and writes one summary line ("this tag is not a release of <unit>; the prefixes
+are `portfolio-v` and `velista-v`") and exits green, so that the Actions list shows the
+refusal and not a failure. The transitional bare `v` branch of `0016` D4 is removed.
 
 ### D2. Both streams continue from `0.14.2`
 
@@ -141,8 +143,8 @@ task's `UNIT` has a `TAG_PREFIX`. The existing four tasks name velista versions 
 `release-unit.yml` sets the unit's `BUILD_ENV_PRODUCTION` variables from `unit.env`, and
 velista's include `VELISTA_APP_URL=https://velista.app` and
 `VELISTA_APP_VERSION=<version>`. The admin app receives the same number. The portfolio has
-`MFE_BASE_URL` only. `DOCKER_IMAGE_TAG=<version>,latest` and `BUILDER_TAG=<version>` per
-`0016` D6.
+`MFE_BASE_URL` only. `DOCKER_IMAGE_TAG=<version>,latest` and `BUILDER_TAG=<unit>-v<version>`
+per `0016` D6.
 
 ### D6. `nx release` is not adopted
 
@@ -164,14 +166,18 @@ velista unit splits and three streams exist, the trade changes; the owner decide
 
 ### D7. A manual redeploy per unit
 
-`redeploy.yml` (`workflow_dispatch` with inputs `unit`, `environment`, `version`) calls the
-composite action `deploy-unit` of `0016` with the given version and no build. On production
-it is the rollback: `deploy-release.sh <unit> <version>` with an older version puts the older
-images back and the release tasks' ledger sees a version it has already finished. On
-staging it redeploys the `staging` tag. The job names the environment `<unit>-<environment>`
-so that the same host and key apply and the production tag rule allows it (the rule matches
-the ref, which for a dispatch is `main`; the owner adds `main` to the allowed branches of
-both production environments).
+`redeploy.yml` (`workflow_dispatch` with inputs `unit` and `environment`) is dispatched
+**on the tag to deploy** (`gh workflow run redeploy.yml --ref velista-v0.14.2 -f
+unit=velista -f environment=production`). It checks out `github.ref`, so the chart it
+applies is the chart of that version and never a newer `main` whose values or templates
+may not match the older images. It derives the version from the tag, refuses a ref that
+does not start with the unit's prefix, holds `deploy-<unit>-<environment>`, and calls the
+composite action `deploy-unit` of `0016` with no build. On production it is the rollback:
+`deploy-release.sh <unit> <version>` with an older version puts the older images back and
+the release tasks' ledger sees a version it has already finished. The job names the
+environment `<unit>-<environment>`, so the same host and key apply and the production tag
+rule is satisfied by the tag ref itself. Production stays tag only. On staging the same
+workflow dispatched on `main` redeploys the `staging` tag.
 
 ## 4. Who edits what
 
@@ -196,7 +202,7 @@ per deploy unit (plan 0017)`. The scope list is the file list.
    origin portfolio-v0.14.2 velista-v0.14.2` (two tags in one push, under the limit of
    three that creates no events).
 2. Tag rules `portfolio-v*` on `portfolio-production` and `velista-v*` on
-   `velista-production`, plus the branch `main` for `redeploy.yml`.
+   `velista-production`. No branch is allowed on either.
 3. Publish the next Release of each unit with its prefix.
 
 ## 7. `CLAUDE.md` and `CONTRIBUTING.md`

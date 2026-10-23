@@ -95,9 +95,11 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 `.github/actions/deploy-unit/action.yml`, deletion of `docker-ci.yml` and `release.yml`,
 `k8s/e2e/portfolio-frontend/**`, `k8s/e2e/luna-shopper-backend/gate.*`,
 `k8s/e2e/velista-luna/**` (new), `k8s/bootstrap/split-release.sh` (new),
-`k8s/bootstrap/install.sh` (the adoption of the pool), deletion of `k8s/helm/Chart.yaml`,
-`k8s/helm/templates/`, `k8s/helm/values*.yaml`, `k8s/helm/.helmignore`,
-`k8s/helm/deploy-release.sh`, `nx.json` (`sharedGlobals`), `apps/docker/local-http-server/project.json`,
+`k8s/bootstrap/install.sh` (`--merge-only`, the takeover of the live pool),
+`k8s/bootstrap/host-patch.sh` and `k8s/bootstrap/provision-host.sh` (the host lock),
+`k8s/helm/deploy-release.sh` (the lock), deletion of `k8s/helm/Chart.yaml`,
+`k8s/helm/templates/`, `k8s/helm/values*.yaml` and `k8s/helm/.helmignore`,
+`apps/docker/local-http-server/project.json`,
 `tools/deploy/units.mjs` (an `endpoints` command), `CLAUDE.md`, `k8s/README.md`,
 `k8s/README-new-cluster.md`, `CONTRIBUTING.md`.
 
@@ -106,7 +108,9 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 - Build one time per pipeline run, outside Docker, as plan 0007 states. The build of a unit
   covers that unit's affected images and the base image.
 - Deploys wait and the workflow observes (plan 0003). Staging keeps `--atomic`, production
-  keeps `--wait` with no `--atomic`, for the reasons `deploy-release.sh` records.
+  keeps `--wait` with no `--atomic`, for the reasons `deploy-release.sh` records. The
+  installs of the cutover (D5) use neither, because a failed install under `--atomic` is an
+  uninstall, and an uninstall of a release that adopted live objects deletes them.
 - A deploy never runs with a host key check off. The known hosts come from the
   environment's `SSH_KNOWN_HOSTS` variable, as host patching does.
 - The cutover script is idempotent, has a `--plan` mode that only prints, refuses to run
@@ -160,8 +164,9 @@ third unit is then two caller files, two environments and no pipeline edit.
    own history); the affected lists come from `nx show projects --affected --with-target
    build:docker --projects tag:deploy:<unit> --json`, plus the testable and e2e projects
    that intersect the unit's gates (D3). Outputs `images`, `deployments`, `gates`.
-2. `lint-test`: affected lint and test. Both unit pipelines run it on a shared library
-   change, which is accepted; the PR workflow already proved it once.
+2. `lint-test`: `nx affected -t lint test` over the whole graph from this unit's base, so a
+   shared library change tests the library in both pipelines. That is accepted, and the PR
+   workflow proved it once already.
 3. `build`: the base image (D6), the bundles with the unit's environment (`MFE_BASE_URL` for
    the portfolio; `LUNA_GATEWAY_URL`, `LUNA_REALTIME_URL`, `VELISTA_APP_URL`,
    `VELISTA_APP_VERSION` for velista; the `BUILD_ENV_STAGING` variables of `unit.env`,
@@ -169,13 +174,17 @@ third unit is then two caller files, two environments and no pipeline edit.
    Luna, and
    `build:docker` with `DOCKER_IMAGE_TAG=staging`.
 4. `gate`: a matrix over the unit's gates (D3), each one job.
-5. `deploy`: `environment: <unit>-staging`, needs `gate` and `lint-test`, runs the composite
+5. `deploy`: `environment: <unit>-staging`, `concurrency: { group: deploy-<unit>-staging,
+   cancel-in-progress: false }` (D2), needs `gate` and `lint-test`, runs the composite
    action with `mode: staging`.
 
 `release-unit.yml` (`workflow_call`, inputs `unit`, `version`) has `setup` (every project of
-the unit, no `--affected`), `test` (the whole workspace, as today), `build` (the unit's
-images and the base image with `DOCKER_IMAGE_TAG=<version>,latest` and `BUILDER_TAG=<version>`),
-and `deploy` with `environment: <unit>-production` and `mode: production`.
+the unit, no `--affected`), `test` (`nx affected -t lint test` from the previous tag of this
+unit to the released tag, so that what this release ships new is tested, shared libraries
+included, while a red test in the other unit's own code cannot block it), `build` (the
+unit's images and the base image with `DOCKER_IMAGE_TAG=<version>,latest` and
+`BUILDER_TAG=<unit>-v<version>`, D6), and `deploy` with `environment: <unit>-production`,
+`concurrency: deploy-<unit>-production` and `mode: production`.
 
 `.github/actions/deploy-unit/action.yml` holds the steps both deploys share: the `units.mjs
 check` and `check-tasks.mjs` runs, the environment gate with the readable summary, the SSH
@@ -199,12 +208,11 @@ jobs:
     uses: ./.github/workflows/stage-unit.yml
     with: { unit: <unit>, build_all: ${{ inputs.build_all || false }} }
     secrets: inherit
-    concurrency: { group: staging-deploy, cancel-in-progress: false }
 ```
 
-`release-<unit>.yml` listens to `release: published`, keeps the condition of `0017` D1 (for
-this plan: a tag that starts with `<unit>-v` or, until `0017`, a bare `v`), derives the
-version, and calls `release-unit.yml` with `concurrency: production-release`.
+`release-<unit>.yml` listens to `release: published`, keeps the condition of `0017` D1 on
+the calling job (for this plan: a tag that starts with `<unit>-v` or, until `0017`, a bare
+`v`), derives the version, and calls `release-unit.yml`.
 
 The environments are `portfolio-staging`, `portfolio-production`, `velista-staging`,
 `velista-production`. Each holds the secrets `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER`,
@@ -215,11 +223,21 @@ else. The repository secrets `SSH_DEPLOY_HOST`, `SSH_DEPLOY_HOST_STAGING` and th
 user and key are deleted after the cutover, once `host-maintenance.yml` reads from the
 `host-*` environments too (section 6).
 
-The concurrency groups stay `staging-deploy` and `production-release`, named per host lock
-and not per unit, because host patching (`host-patch.yml`) can hold one group and must
-exclude every deploy to that host. Two units thus deploy one after the other to the same
-host, which is harmless. When a unit gets its own host (backlog `0002`), its callers take a
-group of their own and `host-maintenance.yml` gains a job for that host.
+Concurrency is per unit and sits on the `deploy` job of the reusable pipelines:
+`deploy-<unit>-staging` and `deploy-<unit>-production`, `cancel-in-progress: false`. A group
+on the calling job would queue the builds and gates of one unit behind the other unit's
+deploy, and GitHub keeps one pending run per group, so a third run would cancel the other
+unit's pending deploy. Per unit groups make two runs of one unit queue (the newer pending
+one replaces the older, which is right for a newer commit) and never touch the other unit.
+
+Exclusion against host patching moves to where the two actually meet, the host. The
+composite action runs its helm and kubectl steps under `flock` on `/run/lock/nx-deploy.lock`
+with a wait of fifteen minutes, and `nx-host-patch` holds the same lock from its first
+package operation until it reboots or exits. `provision-host.sh` creates the lock file with
+a mode that both the `deploy` account and root can open. `host-patch.yml` drops its
+`concurrency-group` input and `host-maintenance.yml` stops naming the deploy groups. A
+deploy that arrives during a reboot fails at SSH and says so, and the next push retries it.
+When a unit gets its own host (backlog `0002`) nothing here changes.
 
 ### D3. A gate is a directory
 
@@ -234,13 +252,24 @@ the run's tag). The `gate` job of `stage-unit.yml` is one matrix entry per gate 
 Three gates exist after this plan:
 
 - `portfolio-frontend` (portfolio): today's compose stack minus the dead `landing` service.
-  It keeps the `/velista` proxy and pulls `velista:staging` from the registry, because the
-  portfolio host's contract includes the portfolio path (plan 0165 D7) and the route is the
-  portfolio's (`0015` D6). The three remote entry checks and the velista curls stay.
+  It keeps the `/velista` proxy to a `velista:staging` container pulled from the registry,
+  because the portfolio host's contract includes the portfolio path and the route is the
+  portfolio's (`0015` D6). It asserts only that `/velista/en` reaches that container (a 200
+  whose body names `app-velista-root`). The image behind it is the other unit's and may be
+  mid change, so the checks of the rewritten base and the absent manifest, which test
+  velista's own nginx, move to the `velista-luna` gate. The three remote entry checks stay.
 - `luna-shopper-backend` (velista): today's `e2e-luna`, wrapped.
 - `velista-luna` (velista, new directory): velista's own image behind a proxy that serves
-  `staging.velista.app` only, plus the Luna stack. `compose.luna.yml` and `nginx.luna.conf`
-  move here from `portfolio-frontend`. The portfolio stack is not started.
+  `staging.velista.app` and a `/velista` location on a portfolio shaped host, plus the Luna
+  stack. `compose.luna.yml` and `nginx.luna.conf` move here from `portfolio-frontend`. The
+  base rewrite and manifest checks of plan 0165 D7 run here, against the image this run
+  built. The portfolio stack is not started. `k8s/units/velista/unit.env` gains
+  `velista-luna` in `GATES`.
+
+From this plan on, `units.mjs check` asserts that every e2e project is named by exactly one
+gate's `TRIGGERS`: `shell-e2e`, `odontogram-e2e`, `damoclesSword-e2e` and `landingV2-e2e` by
+`portfolio-frontend`; `velista-e2e` and `velista-luna-e2e` by `velista-luna`;
+`luna-shopper-backend-e2e` by `luna-shopper-backend`.
 
 ### D4. Production deploys per unit, with one version for all units until `0017`
 
@@ -250,53 +279,81 @@ behaviour split in two runs. `0017` replaces the bare tag with one prefix per un
 
 ### D5. The cutover: one release becomes two
 
-`k8s/bootstrap/split-release.sh --env <staging|production> [--plan]` runs on the host as
-the deploy account. The composite action runs it in the preflight when `helm status
-nx-portfolio` succeeds, and it is a no op afterwards. Steps, each idempotent:
+`k8s/bootstrap/split-release.sh --env <staging|production|homelab> [--plan]` runs on the
+host as the deploy account. The composite action runs it in the preflight, before the
+release tasks' `check` and `pre` phases (`0015` D9), when `helm status nx-portfolio`
+succeeds or a cutover ConfigMap says a run stopped part way. It is a no op afterwards. It is
+a re-ownership and nothing else: both units come up at the image tags their live pods run,
+read from the `shell` and `luna-shopper-backend-gateway` Deployments, and the pipeline's own
+upgrade follows as on any other run. It records the step it reached in ConfigMap
+`deploy-cutover` of each namespace, which is also the adoption marker that `deploy-release.sh`
+reads (`0015` D10). Steps, each idempotent:
 
-1. **Merge the data plane.** Apply the `EnvoyProxy merged` and the GatewayClass
-   `parametersRef` (`install.sh --merge-only`). Envoy Gateway replaces the per Gateway fleet
-   with the merged one and MetalLB moves the address to the new Service. A few seconds.
-2. **Adopt the pool.** Annotate `IPAddressPool main-pool` and `L2Advertisement
-   main-advertisement` with `helm.sh/resource-policy: keep`, then `install.sh --ip <addr>`
-   applies them unchanged.
-3. **Prepare the portfolio namespace.** Create `portfolio`, copy the TLS Secrets
+1. **Merge the data plane.** `install.sh --merge-only` applies the `EnvoyProxy merged` and
+   the GatewayClass `parametersRef`. Envoy Gateway replaces the per Gateway fleet with the
+   merged one. The script waits until the merged Service holds the address and deletes the
+   old `envoy-nx-portfolio-portfolio-*` Service and Deployment if the controller leaves them
+   behind, because with a one address pool the new Service stays `Pending` while the old
+   one holds it. This is the first interruption, seconds long, and the rehearsal (section 5)
+   measures it.
+2. **Make Helm forget the old release.** Delete its storage Secrets:
+   `kubectl -n nx-portfolio delete secret -l owner=helm,name=nx-portfolio`. Every object
+   stays exactly as it is. `helm uninstall` is not used, not even with a keep annotation:
+   Helm decides what to keep from the manifest it stored, not from the live objects, so an
+   annotation added with `kubectl` is ignored and the uninstall deletes everything, pool
+   and Gateway included.
+3. **Take the pool over.** Read the address from the live `IPAddressPool main-pool`, then
+   `install.sh --ip <addr>` applies the spec of `0015` D5 (`serviceAllocation.namespaces:
+   [envoy-gateway-system]`) over the existing objects.
+4. **Prepare the portfolio namespace.** Create `portfolio`, copy the TLS Secrets
    `ichirokuxvi-com-tls` and `mfe-ichirokuxvi-com-tls` (staging: their `staging` names)
-   into it with the cert-manager annotations stripped, and `helm install portfolio` with
-   `gateway.enabled=false`. The four portfolio pods come up with no route. No traffic moves.
-4. **Keep everything.** Annotate every object of release `nx-portfolio` with
-   `helm.sh/resource-policy: keep`, then `helm uninstall nx-portfolio`. Nothing is deleted.
-5. **Relabel velista's objects** (every Luna object, the velista and admin Deployments,
-   Services and routes, the PriorityClass, the `*-tls` Secrets of velista's hosts, the
-   `https-redirect` route) with `meta.helm.sh/release-name: velista`,
-   `meta.helm.sh/release-namespace: nx-portfolio` and the `managed-by` label. StatefulSets
-   and PVCs are untouched; the databases do not restart.
-6. **The swap.** Delete `Gateway portfolio` and the old HTTPRoutes of the portfolio apps
-   (the interruption starts), then `helm upgrade portfolio` with `gateway.enabled=true` and
-   `helm install velista` in one go. Each new Gateway programs its listeners from the
-   existing Secrets. The interruption ends when both Gateways report `Programmed`, which is
-   seconds to a minute. The ACME challenge for the re-issued portfolio certificates then
-   runs through the new Issuer and replaces the copied Secrets in the background.
-7. **Clean up.** Delete the orphaned portfolio Deployments, Services and routes in
-   `nx-portfolio`; when every Certificate in both namespaces is Ready under its Issuer,
-   delete `ClusterIssuer letsencrypt-prod`. Record the result in the step summary.
+   into it with the cert-manager annotations stripped, and `helm install portfolio --set
+   imageTag=<live tag> --set gateway.enabled=false`, with no `--atomic`. The four portfolio
+   pods come up with no route. No traffic moves.
+5. **Mark velista's objects as Helm's.** Every object that the velista chart renders (the
+   Luna Deployments, Services, ConfigMap, StatefulSets, CronJobs and PodDisruptionBudgets,
+   the velista and admin Deployments and Services, the HTTPRoutes of velista, admin, gateway
+   and realtime, the BackendTrafficPolicy, the PriorityClass) gets
+   `meta.helm.sh/release-name: velista`, `meta.helm.sh/release-namespace: nx-portfolio` and
+   the label `app.kubernetes.io/managed-by: Helm`. This is metadata only: no pod restarts,
+   and the StatefulSets' pods and PVCs are not touched. The `*-tls` Secrets are not in the
+   list, because cert-manager writes them and no chart manifests them.
+6. **The swap.** Delete `Gateway portfolio`, the old HTTPRoutes of the four portfolio apps
+   and the old `https-redirect` route (the interruption starts), then `helm upgrade
+   portfolio --set gateway.enabled=true --set imageTag=<live tag>` and `helm install
+   velista --set imageTag=<live tag>`, both without `--atomic`. Each new Gateway programs
+   its listeners from the existing Secrets, and the velista migration hooks run against a
+   schema they already wrote. The interruption ends when both Gateways report `Programmed`
+   and both releases are `deployed`, which is seconds to a minute. The ACME challenge for
+   the re-issued portfolio certificates then runs through the new Issuer and replaces the
+   copied Secrets in the background.
+7. **Clean up.** Delete the orphaned portfolio Deployments and Services in `nx-portfolio`.
+   When every Certificate in both namespaces is Ready under its Issuer, delete
+   `ClusterIssuer letsencrypt-prod` and its account Secret. Record the result in the step
+   summary.
 
-`--plan` prints the object lists of steps 4, 5 and 7 and the two Gateway specs, and exits.
-A failure in steps 1 to 5 leaves the old release serving; the script says which step failed
-and that a rerun continues from it. A failure in step 6 is the one that needs a person, and
-the diagnosis step prints both Gateways and the Envoy status.
+`--plan` prints the object lists of steps 2, 5 and 7, the two live tags and the two Gateway
+specs, and exits. A failure in steps 1 to 5 leaves the old objects serving, Helm or no Helm;
+the script says which step failed and that a rerun continues from it. A failure in step 6 is
+the one that needs a person, and the diagnosis step prints both Gateways, both releases and
+the Envoy status. A failed `helm install velista` is left as it is for that person; nothing
+uninstalls it (`0015` D10).
 
 Staging goes first, through the first `staging-*` run after the merge. Production follows
 at the first `release-*` run or by the owner's hand, with the same script. The owner may
-want an hour of the day with little traffic for production; it is a one minute window.
+want an hour of the day with little traffic for production; it is two short interruptions
+inside a few minutes. `--env homelab` exists for the owner's home release and is run by
+hand.
 
 ### D6. The base image is tagged per environment and version
 
-`docker/local-http-server` builds with the tag `staging` in the staging pipelines and
-`<version>` in a release, and every frontend build of that run gets `BUILDER_TAG` set to the
-same value. The `latest` tag of the base is no longer pushed by a deploy. A staging push can
-thus no longer change what the next production release builds on. Both staging pipelines
-may push `local-http-server:staging` from the same commit, which is the same bytes.
+`docker/local-http-server` builds with the tag `staging` in the staging pipelines and with
+the full release tag (`velista-v0.15.0`) in a release, and every frontend build of that run
+gets `BUILDER_TAG` set to the same value. The full tag and not the bare number, because two
+units at the same number would otherwise overwrite one `0.15.0` base from two commits. The
+`latest` tag of the base is no longer pushed by a deploy. A staging push can thus no longer
+change what the next production release builds on. Both staging pipelines may push
+`local-http-server:staging` from the same commit, which is the same bytes.
 
 ### D7. Lists come from the registry
 
@@ -309,7 +366,7 @@ either file.
 ### D8. The old chart and workflows are deleted in the same PR
 
 `k8s/helm/Chart.yaml`, `templates/`, `values*.yaml`, `.helmignore`, `docker-ci.yml` and
-`release.yml` go. `nx.json` `sharedGlobals` names the six new workflow files. Every
+`release.yml` go. `nx.json` keeps no workflow file in `sharedGlobals` (`0014` D6). Every
 reference in the READMEs and `CLAUDE.md` moves to the new names.
 
 ### D9. The PR workflow stays whole
@@ -327,6 +384,11 @@ before the merge. The scope list is the file list.
 ## 5. Acceptance
 
 - The four caller workflows and the two reusable ones parse (`actionlint` locally).
+- The cutover is rehearsed before the merge on Docker Desktop Kubernetes: the old chart is
+  installed from the base commit (a `git worktree` at `dev`) with the local values, Luna on
+  against Secrets from `provision-release.sh`, then `split-release.sh --env local` runs
+  every step except the address move of step 3, and the builder records the length of the
+  interruptions of steps 1 and 6 in the PR.
 - On staging, after the merge: the `staging-portfolio` run shows the cutover steps in its
   summary; `helm list -A` shows `portfolio` and `velista` and no `nx-portfolio`; `kubectl
   get gateway -A` shows two Gateways, both `Programmed`; `kubectl get certificate -A` shows
@@ -338,6 +400,11 @@ before the merge. The scope list is the file list.
   runs the `portfolio-frontend` gate and deploys; the velista pipeline stops after `setup`.
 - A commit that fails the `velista-luna` gate blocks the velista deploy and not the
   portfolio deploy.
+- The first `staging-velista` run after the cutover records no release task as `skipped`,
+  and `kubectl get cm release-tasks -n nx-portfolio -o yaml` shows the ledger it had before.
+- During a dispatched `host-maintenance` run against staging, a staging deploy of either
+  unit waits on the host lock and completes after the patch, or fails at SSH during the
+  reboot with that reason in its summary.
 - `host-maintenance.yml` with the registry endpoints passes a dispatch run against staging.
 - `node tools/deploy/units.mjs check` passes with the gate directories.
 
@@ -352,10 +419,11 @@ Before the merge:
 2. Optionally a required reviewer on the two production environments. `0017` adds the tag
    rules.
 
-After the cutover on both clusters: delete the repository secrets `SSH_DEPLOY_HOST`,
-`SSH_DEPLOY_HOST_STAGING`, and move `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` into the
-`host-staging` and `host-production` environments that `host-maintenance.yml` already uses
-(the builder changes that workflow to read them from there in this PR).
+After the cutover on both clusters: move `SSH_DEPLOY_HOST_STAGING` and `SSH_DEPLOY_HOST`
+(each as `SSH_DEPLOY_HOST` of its environment), `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` into
+the `host-staging` and `host-production` environments that `host-maintenance.yml` already
+uses, then delete the four repository secrets. The builder changes that workflow to read all
+four from the environments in this PR, so that host maintenance keeps its hosts.
 
 ## 7. `CLAUDE.md`
 
@@ -368,6 +436,8 @@ Rewrite the two workflow bullets of `Docker & CI/CD`:
 >   `k8s/e2e` each), and deploys through the composite action `deploy-unit` into the unit's
 >   namespace and release, with the host and key of the GitHub environment
 >   `<unit>-staging` or `<unit>-production`. A red gate of one unit never blocks another.
+>   Deploys and host patching exclude each other through `flock` on the host, not through a
+>   GitHub concurrency group.
 > - **The cutover from one release to two happened through `split-release.sh`** (k8s plan
 >   0016). It is idempotent and still runs in the preflight; on a cluster that is already
 >   split it does nothing.
@@ -377,8 +447,10 @@ a new unit, the two callers and the two environments.
 
 ## 8. Decisions left for the owner
 
-1. **D2, one concurrency group per host** (recommended, keeps host patching exclusive) or
-   one per unit, with host patching taught to wait on `gh run list` instead.
+1. **D2, exclusion against host patching through a lock on the host** (recommended) or
+   through one concurrency group per host on the deploy jobs, which host patching can hold
+   as today, at the cost of GitHub cancelling one unit's pending deploy whenever the other
+   unit queues two.
 2. **D5, who runs the production cutover**: the first release after the merge, or the owner
    by hand in a quiet hour.
 3. **D6**, whether production should also keep pushing `local-http-server:latest` for the

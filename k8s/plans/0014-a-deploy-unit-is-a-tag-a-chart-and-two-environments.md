@@ -174,8 +174,9 @@ NAMESPACE=nx-portfolio
 RELEASE_NAME=velista
 CHART=k8s/helm/velista
 TAG_PREFIX=velista-v
-# Gate directories under k8s/e2e, in the order they run. Plan 0016 defines a gate.
-GATES="luna-shopper-backend velista-luna"
+# Gate directories under k8s/e2e, in the order they run. Plan 0016 defines a gate and adds
+# the second velista gate, velista-luna, to this list when it creates the directory.
+GATES="luna-shopper-backend"
 # The Secrets that provision-release.sh writes for this unit, and that --check asserts.
 SECRETS="luna-shopper-backend-secrets luna-shopper-backend-auth-db-secret luna-shopper-backend-core-db-secret luna-shopper-backend-catalog-db-secret luna-shopper-backend-harvester-db-secret luna-shopper-backend-backup-secret"
 RELEASE_TASKS=true
@@ -259,10 +260,13 @@ Alternatives the owner can pick instead, each one line in `unit.env` plus the cu
   project; a required key of `unit.env` is missing or empty where it must not be
   (`SECRETS` may be empty, `HOSTS_*` may not); a `GATES` entry names no directory under
   `k8s/e2e`; the `TAG_PREFIX` of two units collide or one is a prefix of another; from
-  `0015` on, the `CHART` directory exists and its rendered Gateway hostnames equal `HOSTS_*`.
+  `0015` on, the `CHART` directory exists; from `0016` on, every e2e project is named by
+  exactly one gate.
 
 It reads `project.json` files directly (a glob over `apps/**/project.json`), so it needs no
-Nx daemon and finishes in well under a second. `pr.yml` runs `node --test
+Nx daemon, no Helm and no network, and finishes in well under a second. The assertion that
+the rendered Gateway hostnames equal `HOSTS_*` needs a render, so it lives in
+`provision-release.sh --check` (`0015` D8) and not here. `pr.yml` runs `node --test
 tools/deploy/units.test.mjs` and `node tools/deploy/units.mjs check` beside the
 `check-tasks` steps. The deploy workflows of `0016` run the check too, before any SSH.
 
@@ -285,12 +289,13 @@ has no reader until `0017` gives `release-notes.mjs` a `--unit` flag. A PR title
 workspace scope lands in the notes of every unit. That is the honest answer for a shared
 library change that ships twice.
 
-### D6. `nx.json` names the real workflow files
+### D6. `nx.json` drops the dead workflow input
 
 `nx.json:18` lists `{workspaceRoot}/.github/workflows/ci.yml` in `sharedGlobals`, a file
-that does not exist. Replace it with the files that `0016` will create and that exist today
-(`docker-ci.yml`, `release.yml`, `pr.yml`), so that a workflow change invalidates the cache
-as the input intends. `0016` updates the list when it renames them.
+that does not exist. Remove the entry. Do not replace it with the real workflow files: a
+workspace root input marks every project affected when the file changes, so each workflow
+edit, Renovate's action bumps included, would rebuild and redeploy both units for a YAML
+change. The dead entry has done nothing for months and nothing missed it.
 
 ## 4. How a unit splits or a new one appears
 
@@ -320,7 +325,8 @@ Two rules for a split:
 One builder, one PR, title `feat(ci): a deploy unit is a tag, a registry and a check (plan
 0014)`. Files: `k8s/units/portfolio/unit.env`, `k8s/units/velista/unit.env`,
 `tools/deploy/units.mjs`, `tools/deploy/units.test.mjs`, `tools/release/rules.mjs`,
-`tools/release/release-notes.test.mjs`, `apps/*/project.json` (thirteen `tags` edits),
+`tools/release/release-notes.test.mjs`, `apps/**/project.json` (thirteen `tags` edits, the
+Luna services sit at `apps/luna-shopper-backend/<svc>/project.json`),
 `nx.json`, `.github/workflows/pr.yml`, `CLAUDE.md`, `k8s/README.md`.
 
 ## 6. Acceptance

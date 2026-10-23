@@ -18,8 +18,8 @@
 ### Objective
 
 Run the velista unit (velista, the back office, the seven Luna services and their data) on a
-k3s cluster of its own, with the portfolio unit untouched on the old server, and with no
-change to a chart template, a pipeline or an application.
+k3s cluster of its own, with the portfolio unit untouched on the old server, with no change
+to a pipeline or an application, and with one template change at most (D2).
 
 ### Context
 
@@ -51,11 +51,11 @@ portfolio host still answers `/velista`, as a redirect or as a proxy to the new 
 ### Scope
 
 `k8s/README-new-cluster.md` (a unit flag on the steps), the four GitHub environment values
-of velista, `k8s/helm/portfolio/values.*.yaml` (the external route becomes a redirect or an
-external backend), `k8s/helm/velista/values.*.yaml` (no ReferenceGrant, the namespace
-`velista`, a new `ipAddress` in `install.sh --ip`), `.github/workflows/host-maintenance.yml`
-and the staging and production callers of velista (a concurrency group per host),
-`k8s/units/velista/unit.env` (`NAMESPACE=velista`).
+of velista, `k8s/helm/portfolio/values.*.yaml` and one template of the library chart (the
+external route becomes a redirect or an external backend, D2), `k8s/helm/velista/values.*.yaml`
+(no ReferenceGrant), `k8s/units/velista/unit.env` (`NAMESPACE=velista`), the new address
+in the `install.sh --ip` call of the new host, `.github/workflows/host-maintenance.yml` (a
+job for the new host), `k8s/bootstrap/provision-release.sh` (`--from-file`).
 
 ### Constraints
 
@@ -82,12 +82,14 @@ four velista URLs answer from the new address. A restored list is readable in th
 ### D1. The namespace becomes `velista`
 
 A restore into a fresh cluster is the one moment where the namespace of the velista unit
-changes at no cost (`0014` D3). `unit.env` says `NAMESPACE=velista`, and the release task
-ledger starts empty there, which `run-release-tasks.sh` treats as a first install.
+changes at no cost (`0014` D3). `unit.env` says `NAMESPACE=velista`. The `release-tasks`
+ConfigMap is copied with the data, because an empty ledger would rerun every task whose
+window is still open, and `0015` D9 treats a present ledger as a release that already ran.
 
 ### D2. What `ichirokuxvi.com/velista` does afterwards
 
-Two options, both one values change in the portfolio chart:
+Two options, each a `redirect` or `externalBackend` field on an `externalRoutes` entry,
+which is the one template change this plan needs in the library chart:
 
 - **Redirect.** The external route becomes a `RequestRedirect` filter to
   `https://velista.app` with the path kept. The nginx `sub_filter` block of
@@ -95,8 +97,10 @@ Two options, both one values change in the portfolio chart:
   go. This is what `apps/velista/plans/0013` D5 planned and plan 0165 D1 postponed. Sessions
   are per origin already, so a user loses nothing but the address.
 - **Proxy.** Envoy Gateway's `Backend` resource with an FQDN endpoint lets the route send
-  `/velista` to `velista.app` over TLS. The address survives, at the cost of a second TLS hop
-  and a backend that can be slow for reasons the portfolio cannot see.
+  `/velista` to `velista.app` over TLS. It needs the Backend API switched on in the Envoy
+  Gateway install (`extensionApis.enableBackend`, an `install.sh` change). The address
+  survives, at the cost of a second TLS hop and a backend that can be slow for reasons the
+  portfolio cannot see.
 
 The recommendation is the redirect.
 
@@ -108,20 +112,30 @@ them, with the soak between the two velista hosts as between the two portfolio h
 
 ### D4. Let's Encrypt and App Links
 
-The new Issuer registers a new ACME account and issues four new certificates; the old
-Secrets stay on the old cluster until the velista release there is uninstalled. The Android
-app verifies `https://velista.app/.well-known/assetlinks.json` against the live site, so
-the file must be served from the new cluster before the DNS of `velista.app` moves.
+HTTP-01 cannot issue on the new cluster before DNS points there, and each host would have
+a TLS outage after its DNS move while the challenge runs. So step 2 copies the four `*-tls`
+Secrets from the old cluster, as the cutover of `0016` D5 does for the portfolio: the new
+Gateway serves valid certificates from the first request, and the new Issuer re-issues them
+in the background once DNS has moved. The Android app verifies
+`https://velista.app/.well-known/assetlinks.json` against the live site over valid TLS,
+which the copied Secret provides on the day of the move.
 
 ## 2. The order
 
 1. Provision the machine (`provision-host.sh`, `install.sh --ip`), one unit.
-2. `provision-release.sh --unit velista --env production --from-file <the copied secrets>`.
-3. Restore the four databases from the last backup (`restore-database.sh`), install
-   `velista` from the current release tag, verify on the new address with a hosts file.
+2. `provision-release.sh --unit velista --env production --from-file <the copied secrets>`,
+   then copy the four `*-tls` Secrets and the `release-tasks` ConfigMap from the old
+   cluster (D1, D4).
+3. Install `velista` from the current release tag with `harvestEnabled` and
+   `schedulerEnabled` off (a second scheduler would double what the chains see and write
+   rows that the delta restore then overwrites), restore the four databases from the last
+   backup with the procedure of `0005` and `0012` (`restore-database.sh` restores into a
+   scratch database, and the rename step of `0012` follows), verify on the new address with
+   a hosts file.
 4. Point the velista GitHub environments at the new host. A redeploy proves the pipeline.
 5. The window: stop the API on the old cluster, take a final dump, restore the delta, move
-   the DNS records in the order of the constraints, watch the certificates issue.
+   the DNS records in the order of the constraints, turn the harvest switches back on,
+   watch the certificates re-issue.
 6. Switch the portfolio's external route to the redirect (D2), remove the grant, drop the
    portfolio origin from `corsOrigins`.
 7. Uninstall `velista` on the old cluster after a week, keep the backups.

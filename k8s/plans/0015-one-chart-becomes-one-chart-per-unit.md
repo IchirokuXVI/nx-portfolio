@@ -189,9 +189,10 @@ k8s/helm/
   Chart.yaml, values*.yaml, templates/   the OLD chart, untouched until 0016
 ```
 
-`Chart.lock` of each unit chart is committed. `charts/` is ignored; `helm dependency
-update` (which packages `file://../common` offline) runs in the deploy preflight and in
-`--check`. The old chart's `.helmignore` lists `common/`, `portfolio/` and `velista/` so
+`Chart.lock` of each unit chart is committed. `charts/` is ignored. `helm dependency build
+--skip-refresh` (which packages `file://../common` offline against the committed lock and
+rewrites nothing) runs in the deploy preflight and in `--check`. `helm dependency update`
+is run by hand when `common` changes, and its lock diff is committed with the change. The old chart's `.helmignore` lists `common/`, `portfolio/` and `velista/` so
 its package stays what it was.
 
 Chart names are `portfolio` and `velista`, version `0.1.0`, `appVersion` removed. Nothing
@@ -276,9 +277,10 @@ branch becomes a no op with a message, and `--issuer selfsigned` stays. The
 `letsencrypt-prod` object on the two existing clusters is deleted by the cutover (`0016`
 D5) after each unit's Certificates are Ready under their own Issuer.
 
-Each unit thus registers its own ACME account. Let's Encrypt limits are per domain and per
-exact name set, not per account, so two accounts cost nothing. Never issue one certificate
-that covers hosts of both units.
+Each unit thus registers its own ACME account. The Let's Encrypt limits that matter here
+are per registered domain and per exact name set, and the per account order limits are far
+above this volume, so two accounts cost nothing. Never issue one certificate that covers
+hosts of both units.
 
 ### D5. MetalLB leaves the chart
 
@@ -287,7 +289,11 @@ that covers hosts of both units.
 [envoy-gateway-system]` (the only namespace that holds a LoadBalancer Service now). The
 `metallb.*` and `ipAddress` keys are removed from the unit charts. `README-new-cluster.md`
 step 4 moves the address from the values file to the `install.sh` call. The objects that
-the old release owns are adopted by the cutover (`0016` D5).
+the old release owns are taken over by the cutover (`0016` D5).
+
+The fresh install path of `install.sh` and `install.ps1` also creates the merged
+`EnvoyProxy` of D3 and the `parametersRef`. The `--merge-only` entry point that switches an
+existing cluster, and the takeover of the live pool, belong to `0016`.
 
 ### D6. The portfolio path of velista is a portfolio route with a velista grant
 
@@ -331,6 +337,12 @@ other unit's release.
 The `hostOverrides` by mount name and the `keepPrefix` branch of the app route template go
 with `mounts`. `charts.host` and the entry level `host` and `hostOverrides` stay.
 
+The two namespace literals (`backend.namespace` in the portfolio values, `fromNamespace` in
+the velista values) are the one place where a unit names the other's namespace.
+`provision-release.sh --check` (D8) asserts that each equals the `NAMESPACE` of the other
+unit's `unit.env`, so a rename (`0014` D3, backlog `0002` D1) fails the preflight until both
+values follow.
+
 ### D7. Values per unit
 
 Portfolio `values.yaml`: `baseDomain`, `environment`, `imageTag`, `appImagePullPolicy`,
@@ -344,8 +356,11 @@ Velista `values.yaml`: `baseDomain: velista.app` with `hostPrefix` `''`, `admin`
 staging.velista.app`). `apps` (velista, luna-shopper-admin), `referenceGrants`, and the
 whole `lunaShopperBackend` block with its `enabled` switch kept (a web only render is still
 useful locally). `corsOrigins` keeps the portfolio origin, because the portfolio path
-still serves velista from that origin. The homelab file puts velista's hosts under the
-owner's one domain as today and turns the ReferenceGrant off.
+still serves velista from that origin. The homelab file names velista's hosts under the
+owner's one domain through `hostOverrides` (`velista.ichirokuxvi.com`, `admin.`, `api.`,
+`rt.`), because the velista root entry with `hostPrefix: ''` would otherwise claim the
+portfolio's root host and the merged data plane rejects the duplicate listener. It turns
+the ReferenceGrant off.
 
 `imageTag` stays one value per chart, and is now per unit, which is what `0017` needs.
 
@@ -357,11 +372,12 @@ apply -f -` (and `k8s/namespace.yaml` is deleted), provisions exactly the Secret
 `SECRETS` (the velista list is today's six, with the backup Secret still printed and not
 created; the portfolio list is empty, so the script creates the namespace and stops), and
 writes the plaintext copy to `~/<unit>-<env>-secrets.txt`. `--check` runs `helm
-dependency update` and `helm template <RELEASE_NAME> <CHART> --namespace <NAMESPACE>
--f values.yaml -f values.<env>.yaml`, then the existing assertions. The "no keys at all"
-guard applies only when `SECRETS` is non empty. `--check` also fails when the rendered
-Gateway hostnames differ from `HOSTS_<ENV>` of `unit.env`, which is the render half of
-`0014` D4.
+dependency build --skip-refresh` and `helm template <RELEASE_NAME> <CHART> --namespace
+<NAMESPACE> -f values.yaml -f values.<env>.yaml`, then the existing assertions. The "no
+keys at all" guard applies only when `SECRETS` is non empty. `--check` also fails when the
+rendered Gateway hostnames differ from `HOSTS_<ENV>` of `unit.env`, and when a cross unit
+namespace literal (D6) differs from the other unit's `NAMESPACE`. These two are the render
+half of the registry check; `units.mjs check` (`0014` D4) stays Node only.
 
 ### D9. Release tasks take a unit
 
@@ -371,12 +387,22 @@ line in the summary when `RELEASE_TASKS` is false. Each `task.env` gains `UNIT=v
 and `check-tasks.mjs` requires the key and asserts the directory exists. The ledger stays
 ConfigMap `release-tasks` in the unit's namespace, which for velista is where it is today.
 
+A release counts as a first install only when `helm status <RELEASE_NAME>` fails **and**
+the ledger ConfigMap is absent. Before the cutover of `0016` D5 the release `velista` does
+not exist while the ledger does, and the rule as it stands today (`run-release-tasks.sh:338-352`)
+would record every due task as `skipped`, which is final.
+
 ### D10. Every host script takes the unit
 
 `deploy-release.sh <unit> <version>` and `deploy-homelab.sh <unit>` source `unit.env`,
-run `helm dependency update` on the chart, and pass `--namespace`. `deploy-release.sh`
-waits on the Deployments of its own release (`helm get manifest | kubectl rollout status
--f -` over the Deployment documents), not on every Deployment in the namespace.
+run `helm dependency build --skip-refresh` on the chart, and pass `--namespace`.
+`deploy-release.sh` waits on the Deployments of its own release (`helm get manifest |
+kubectl rollout status -f -` over the Deployment documents), not on every Deployment in the
+namespace. Its recovery path (`:76-100`), which uninstalls a release whose only revision is
+`failed` on the assumption that it never served traffic, refuses when the namespace holds a
+StatefulSet or the release carries the adoption annotation that `0016` D5 writes: a release
+that adopted live objects is never one that never served. `deploy-homelab.sh` reads the
+live tag from the first Deployment of the unit's own chart, not from `shell`.
 `restore-database.sh`, `catalog-import`, `catalog-reset` and `catalog-seed` default
 `NAMESPACE` from the velista `unit.env`.
 
@@ -393,7 +419,9 @@ flag.
 
 The builder writes a throwaway script (kept under `tmp/`, not committed) that renders the
 old chart and both new charts for staging and production, normalises namespace and release
-labels, sorts documents by kind and name, and diffs. Expected differences, and no others:
+labels, sorts documents by kind and name, and diffs. Selectors, `volumeClaimTemplates` and
+the other immutable fields are compared without normalisation, because a change there makes
+the adopting install of `0016` D5 fail. Expected differences, and no others:
 
 - Gateway: two objects instead of one, `<host>-http` listeners instead of `http`, the
   annotation kind (D3, D4).
