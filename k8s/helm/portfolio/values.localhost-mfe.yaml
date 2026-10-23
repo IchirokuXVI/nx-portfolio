@@ -1,0 +1,71 @@
+# Local override for Docker Desktop Kubernetes, the "mfe-path" variant.
+#
+# Alternative to values.localhost.yaml (the default "port" variant). Here every app
+# is served through the gateway on a single `localhost` host, and the remotes sit
+# under an /mfe/<remote> path prefix instead of on their own ports. That prefix
+# stands in for production's dedicated `mfe.` subdomain: it keeps the remote bundles
+# from shadowing the shell's own routes, so a locale-less deep link like /odontogram
+# still reaches the shell (which redirects to /en/odontogram) instead of hitting the
+# remote's blank entry page.
+#
+#   ./k8s/bootstrap/install.ps1 -Issuer selfsigned      # once per cluster
+#   # shell built with MFE_BASE_URL=http://localhost/mfe
+#   helm dependency build --skip-refresh k8s/helm/portfolio
+#   helm upgrade --install portfolio k8s/helm/portfolio \
+#     --namespace portfolio --create-namespace \
+#     --values k8s/helm/portfolio/values.yaml \
+#     --values k8s/helm/portfolio/values.localhost-mfe.yaml
+#   # then open http://localhost
+#
+# The Service to reach is the merged data plane Envoy Gateway provisions for
+# every Gateway of the class. It is NOT declared by this chart, it lives in
+# `envoy-gateway-system`, and its name carries a hash, so look it up:
+# `kubectl get svc -n envoy-gateway-system`. It is a LoadBalancer, which Docker
+# Desktop publishes on localhost:80/443 directly. If port 80 is taken, fall back
+# to `kubectl port-forward -n envoy-gateway-system svc/<that name> 8080:80` and
+# rebuild the shell with MFE_BASE_URL=http://localhost:8080/mfe to match.
+#
+# See values.local.yaml for the local hostnames setup (portfolio.localhost /
+# mfe.localhost), which mirrors production most literally but needs hosts entries.
+
+# Use the locally built dev images without reaching for a registry.
+imageTag: dev
+appImagePullPolicy: IfNotPresent
+
+# Route through the gateway, with self signed certificates: the hosts have no
+# public DNS, so ACME would only fail and burn rate limits. Same objects as
+# production, only the issuer differs.
+#
+# Requires the cluster bootstrap once:
+#   ./k8s/bootstrap/install.ps1 -Issuer selfsigned
+gateway:
+  enabled: true
+  className: eg
+  tls:
+    enabled: true
+    issuer:
+      kind: ClusterIssuer
+      name: selfsigned
+      create: false
+    # Everything here is plain HTTP; redirecting would just break it.
+    redirectHttp: false
+
+externalRoutes: []
+
+apps:
+  - name: shell
+    image: nx-portfolio/shell
+    host: localhost
+    path: /
+  - name: odontogram
+    image: nx-portfolio/odontogram
+    host: localhost
+    path: /mfe/odontogram
+  - name: damoclessword
+    image: nx-portfolio/damoclessword
+    host: localhost
+    path: /mfe/damoclesSword
+  - name: landingv2
+    image: nx-portfolio/landingv2
+    host: localhost
+    path: /mfe/landingV2

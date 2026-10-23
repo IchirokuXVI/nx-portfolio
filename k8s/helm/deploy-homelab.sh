@@ -2,14 +2,16 @@
 #
 # Deploy, or roll between, release versions on the home machine.
 #
-#   ./k8s/helm/deploy-homelab.sh 0.1.1     # serve release 0.1.1
-#   ./k8s/helm/deploy-homelab.sh 0.1.0     # roll back to 0.1.0
-#   ./k8s/helm/deploy-homelab.sh --current # what is being served right now
-#   ./k8s/helm/deploy-homelab.sh --list    # versions published to the registry
+#   ./k8s/helm/deploy-homelab.sh velista 0.1.1     # serve release 0.1.1 of velista
+#   ./k8s/helm/deploy-homelab.sh velista 0.1.0     # roll it back to 0.1.0
+#   ./k8s/helm/deploy-homelab.sh velista --current # what is being served right now
+#   ./k8s/helm/deploy-homelab.sh velista --list    # versions published to the registry
 #
 # The home twin of deploy-release.sh. Same idea, same immutable version tags, the
 # same published images: only the values file and the kubeconfig differ, because
-# this cluster is Docker Desktop rather than a k3s VPS.
+# this cluster is Docker Desktop rather than a k3s VPS. Each deploy unit is its
+# own release (k8s plan 0015 D10): deploy `portfolio` and `velista` one by one,
+# and each takes its namespace and release from k8s/units/<unit>/unit.env.
 #
 # The two are kept as separate files rather than one with a flag because the VPS
 # script runs unattended from CI over SSH and this one is typed by a person at a
@@ -17,17 +19,14 @@
 # losing them.
 #
 # Environment overrides:
-#   RELEASE_NAME    helm release name     (default: nx-portfolio)
-#   NAMESPACE       kubernetes namespace  (default: nx-portfolio)
 #   TIMEOUT         helm/rollout wait     (default: 10m)
 #   KUBECONFIG      kubeconfig path       (default: the usual ~/.kube/config)
 #   REGISTRY_REPO   owner/repo for --list (default: IchirokuXVI/nx-portfolio)
 
 set -euo pipefail
 
-CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+HELM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+K8S_DIR="$(dirname "$HELM_DIR")"
 TIMEOUT="${TIMEOUT:-10m}"
 REGISTRY_REPO="${REGISTRY_REPO:-IchirokuXVI/nx-portfolio}"
 
@@ -35,8 +34,19 @@ REGISTRY_REPO="${REGISTRY_REPO:-IchirokuXVI/nx-portfolio}"
 # does. That path is the k3s VPS's kubeconfig; here the target is whatever context
 # kubectl is already pointed at, which on this machine is Docker Desktop.
 usage() {
-  sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
+
+case "${1:-}" in
+  -h | --help) usage; exit 0 ;;
+  '' | -*) usage >&2; exit 1 ;;
+esac
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
+load_unit "$K8S_DIR" "$1"
+UNIT_NAME="$1"
+CHART_DIR="$CHART_PATH"
+shift
 
 # ---------------------------------------------------------------------------
 # What is deployed right now.
@@ -44,10 +54,23 @@ usage() {
 # Read from the live Deployment rather than from `helm get values`, because the
 # question being asked is "what image are the pods running", and those two can
 # disagree: a failed upgrade leaves the release recording a version that no pod
-# ever ran.
+# ever ran. The Deployment is the first one this unit's release renders.
 # ---------------------------------------------------------------------------
+first_deployment() {
+  helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE" 2>/dev/null | awk '
+    /^---/ { deployment = 0; meta = 0 }
+    /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
+    /^metadata:/ { meta = 1; next }
+    /^[^[:space:]]/ { meta = 0 }
+    deployment && meta && /^  name:/ { print $2; exit }
+  ' || true
+}
+
 current_version() {
-  kubectl -n "$NAMESPACE" get deployment shell \
+  local deployment
+  deployment="$(first_deployment)"
+  [ -n "$deployment" ] || return 0
+  kubectl -n "$NAMESPACE" get deployment "$deployment" \
     -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null \
     | sed 's/.*://' || true
 }
@@ -56,7 +79,7 @@ show_current() {
   local v
   v="$(current_version)"
   if [ -z "$v" ]; then
-    echo "Nothing is deployed in namespace '${NAMESPACE}' (no 'shell' deployment)."
+    echo "Nothing of the release '${RELEASE_NAME}' is deployed in namespace '${NAMESPACE}'."
     return 0
   fi
   echo "Currently serving: ${v}"
@@ -78,16 +101,35 @@ show_current() {
 # registry, so this asks the registry rather than listing git tags, which would
 # happily offer a version that was never published.
 # ---------------------------------------------------------------------------
+# The first image the unit's chart renders, as a registry package path such as
+# nx-portfolio/velista.
+first_image_package() {
+  local image
+  helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
+  image="$(helm template "$RELEASE_NAME" "$CHART_DIR" \
+    --values "$CHART_DIR/values.yaml" --values "$CHART_DIR/values.homelab.yaml" \
+    | awk '/^[[:space:]]+image:/ { print $2; exit }')"
+  image="${image%:*}"
+  printf '%s' "${image#*/*/}"
+}
+
 list_versions() {
+  local package encoded
+  package="$(first_image_package)"
+  if [ -z "$package" ]; then
+    echo "The chart of the unit ${UNIT_NAME} renders no image to list versions of." >&2
+    return 1
+  fi
+  encoded="${package//\//%2F}"
   if ! command -v gh >/dev/null 2>&1; then
     echo "The GitHub CLI (gh) is not installed, so the published versions cannot" >&2
     echo "be listed here. Read them from:" >&2
-    echo "  https://github.com/${REGISTRY_REPO}/pkgs/container/nx-portfolio%2Fshell" >&2
+    echo "  https://github.com/${REGISTRY_REPO}/pkgs/container/${encoded}" >&2
     return 1
   fi
-  echo "Versions published for the shell image (the whole release moves together):"
+  echo "Versions published for the ${package} image (every image of a release carries them):"
   gh api --paginate \
-    "/users/${REGISTRY_REPO%%/*}/packages/container/nx-portfolio%2Fshell/versions" \
+    "users/${REGISTRY_REPO%%/*}/packages/container/${encoded}/versions" \
     --jq '.[].metadata.container.tags[]?' 2>/dev/null \
     | grep -v '^latest$' | sort -Vr | head -20 | sed 's/^/  /'
 }
@@ -155,7 +197,7 @@ fi
 # which describes a process that is no longer running.
 #
 # This earns a check of its own because the report below cannot see it.
-# current_version() reads the shell Deployment, and a release stranded on its
+# current_version() reads the release's first Deployment, and a release stranded on its
 # pre-install hook never created one, so the script says "Nothing deployed yet"
 # and Helm immediately says an operation is in progress. Those two read as a
 # contradiction, and they send you looking for a concurrent deploy that does not
@@ -244,6 +286,7 @@ fi
 #
 # Not --atomic, matching production: an automatic rollback of the whole release
 # would roll pods back alongside migrations that do not roll back with them.
+helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
 helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
   --create-namespace \
@@ -253,17 +296,25 @@ helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
   --wait --timeout "$TIMEOUT"
 
 echo
-echo "Waiting for every deployment to report ready..."
-kubectl rollout status deployment -n "$NAMESPACE" --timeout=5m
+echo "Waiting for every deployment of release ${RELEASE_NAME} to report ready..."
+helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE" | awk '
+  /^---/ { deployment = 0; meta = 0 }
+  /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
+  /^metadata:/ { meta = 1; next }
+  /^[^[:space:]]/ { meta = 0 }
+  deployment && meta && /^  name:/ { print $2; deployment = 0 }
+' | while read -r deployment; do
+  kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout=5m
+done
 
 # Verified before it is claimed, rather than asserted straight after a command
 # whose result was never read.
 ACTUAL="$(current_version)"
 if [ "$ACTUAL" != "$VERSION" ]; then
-  echo "The rollout finished but the shell deployment reports '${ACTUAL}', not '${VERSION}'." >&2
+  echo "The rollout finished but deployment '$(first_deployment)' reports '${ACTUAL}', not '${VERSION}'." >&2
   exit 1
 fi
 
 echo
-echo "Now serving release ${VERSION} at https://ichirokuxvi.com"
-echo "Roll back with: $0 ${PREVIOUS:-<older-version>}"
+echo "Now serving release ${VERSION} of the unit ${UNIT_NAME}"
+echo "Roll back with: $0 ${UNIT_NAME} ${PREVIOUS:-<older-version>}"

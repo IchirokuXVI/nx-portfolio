@@ -94,6 +94,46 @@ export const SCOPES = [
   'release',
 ];
 
+/**
+ * The scopes of each deploy unit (k8s plan 0014, D5). The keys equal the
+ * directories under `k8s/units`. Every scope above sits in exactly one unit or
+ * in WORKSPACE_SCOPES, and a title with a workspace scope belongs to the notes
+ * of every unit, because a shared change ships with each of them.
+ */
+export const UNITS = {
+  portfolio: ['shell', 'odontogram', 'damoclesSword', 'landingV2'],
+  velista: [
+    'velista',
+    'luna',
+    'luna-shopper',
+    'gateway',
+    'realtime',
+    'auth',
+    'core',
+    'catalog',
+    'harvester',
+    'assistant',
+    'contracts',
+    'admin',
+    'luna-shopper-admin',
+    'android',
+  ],
+};
+
+/** The scopes that belong to no deploy unit. */
+export const WORKSPACE_SCOPES = [
+  'shared',
+  'i18n',
+  'k8s',
+  'helm',
+  'docker',
+  'ci',
+  'tools',
+  'e2e',
+  'deps',
+  'release',
+];
+
 const HEADER =
   /^(?<type>[a-z]+)(?:\((?<scope>[^()]*)\))?(?<breaking>!)?: (?<summary>.+)$/;
 const SCOPE_NAME = /^[a-zA-Z][a-zA-Z0-9-]*$/;

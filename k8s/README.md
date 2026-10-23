@@ -1,21 +1,99 @@
 # Kubernetes / Helm
 
-The Helm chart in [`helm/`](./helm) deploys the whole system as one release: the
-`shell` host, the `odontogram`, `damoclesSword` and `landingV2` remotes, the
-standalone `velista` app, the `luna-shopper-admin` back office, and the Luna Shopper
-backend behind velista.
-The same chart runs in three shapes:
+Each deploy unit has its own Helm chart: [`helm/portfolio`](./helm/portfolio)
+deploys the `shell` host and the `odontogram`, `damoclesSword` and `landingV2`
+remotes, and [`helm/velista`](./helm/velista) deploys the standalone `velista` app,
+the `luna-shopper-admin` back office and the Luna Shopper backend behind velista.
+Both depend on the library chart [`helm/common`](./helm/common). The old one
+release chart (`helm/Chart.yaml`, `helm/templates/`, `helm/values*.yaml`) still
+deploys both clusters until plan 0016 switches the workflows.
+Each unit chart runs in these shapes:
 
-| Environment | Driven by | Notes |
-| --- | --- | --- |
-| **Production** | `helm/values.yaml` + `helm/values.production.yaml` | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing through the Gateway API. Deployed by `release.yml`. |
-| **Staging** | `helm/values.yaml` + `helm/values.staging.yaml` | Its **own** VPS and its own cluster (plan 0002), not a second half of the production release. Same chart, same resource names, different `baseDomain`. Deployed by `docker-ci.yml`. |
-| **Local** | `helm/values.yaml` + a `values.localhost*.yaml` overlay | Docker Desktop Kubernetes, locally built `:dev` images, no registry, no admin. |
+| Environment    | Driven by                                                         | Notes                                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Production** | `helm/<unit>/values.yaml` + `helm/<unit>/values.production.yaml`  | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing through the Gateway API.                                                      |
+| **Staging**    | `helm/<unit>/values.yaml` + `helm/<unit>/values.staging.yaml`     | Its **own** VPS and its own cluster (plan 0002), not a second half of the production release. Same chart, same resource names, different `baseDomain`. |
+| **Local**      | `helm/portfolio/values.yaml` + a `values.localhost*.yaml` overlay | Docker Desktop Kubernetes, locally built `:dev` images, no registry, no admin.                                                                         |
 
 Routing is the Kubernetes **Gateway API**, served by **Envoy Gateway**, with
-**cert-manager** issuing the certificates. The chart declares only `Gateway` and
-`HTTPRoute` objects; the data plane is provisioned by the implementation. See
+**cert-manager** issuing the certificates. The charts declare only `Gateway`,
+`HTTPRoute`, `Issuer` and `ReferenceGrant` objects; the data plane is provisioned by
+the implementation. See
 [`plans/0001-gateway-api-migration.md`](./plans/0001-gateway-api-migration.md).
+
+### Two charts, one library
+
+[Plan 0015](./plans/0015-one-chart-becomes-one-chart-per-unit.md) split the chart:
+
+```
+helm/
+  common/      library chart: a static app (Deployment, Service, HTTPRoute), the
+               Gateway of a host set, the unit's Issuer, the HTTPS redirect
+  portfolio/   the portfolio unit: its four apps and the /velista route
+  velista/     the velista unit: velista, the back office, luna-shopper-backend/,
+               the ReferenceGrant and the PriorityClass
+  Chart.yaml, templates/, values*.yaml    the old chart, until plan 0016
+```
+
+The rule: **a unit renders only into `.Release.Namespace`, and it owns its
+Gateway, its Issuer and its certificates.** No values key names the unit's own namespace;
+`helm --namespace` decides, and every script passes the `NAMESPACE` of the unit's
+`unit.env`. Each Gateway is named after its chart and has one HTTP and one HTTPS
+listener per host. `install.sh` turns on Envoy Gateway's merged gateways, so the
+Gateways of both units share one data plane and one LoadBalancer Service, and no
+two units may serve the same host. The MetalLB pool is the cluster's, applied by
+`install.sh --ip`, never by a chart.
+
+The one place where the units meet is the portfolio path of velista:
+`externalRoutes` in the portfolio values renders HTTPRoute `velista-portfolio` with
+a backend in the `luna-shopper` namespace, and `referenceGrants` in the velista
+values allows it. `provision-release.sh --check` fails when either namespace
+literal differs from the other unit's `unit.env`.
+
+Each unit chart commits its `Chart.lock`, and `charts/` is git ignored. Before a
+render or an install, build the library dependency offline:
+
+```sh
+helm dependency build --skip-refresh k8s/helm/<unit>
+```
+
+After a change to `helm/common`, run `helm dependency update k8s/helm/<unit>` for
+both units and commit the lock files with the change.
+
+### Deploy units
+
+The apps deploy in **units** ([plan 0014](./plans/0014-a-deploy-unit-is-a-tag-a-chart-and-two-environments.md)).
+A unit is a set of apps that ship together into one namespace, under one Helm
+release and one version stream. Two units exist:
+
+| Unit        | Apps                                                         | Namespace      | Release     | Tag prefix    |
+| ----------- | ------------------------------------------------------------ | -------------- | ----------- | ------------- |
+| `portfolio` | shell, odontogram, damoclesSword, landingV2                  | `portfolio`    | `portfolio` | `portfolio-v` |
+| `velista`   | velista, luna-shopper-admin, the seven Luna Shopper services | `luna-shopper` | `velista`   | `velista-v`   |
+
+A unit is declared in two places:
+
+- The tag `deploy:<unit>` on a `project.json` names the unit of an app. Nx can
+  query it: `npx nx show projects --projects tag:deploy:velista --with-target build:docker`.
+- [`units/<unit>/unit.env`](./units) names the namespace, the release, the chart,
+  the e2e gates, the Secrets, the hosts and the build variables of each
+  environment. It is shell sourceable, so a script on a host reads it with no Nx.
+
+`node tools/deploy/units.mjs check` keeps the two equal, and `pr.yml` runs it. It
+fails when an app with a `build:docker` target has no `deploy:` tag or has two,
+and when a `unit.env` is incomplete. `node tools/deploy/units.mjs list` prints
+every unit as JSON, and `projects <unit>` prints the apps of one unit.
+
+Each unit has its chart since plan 0015. The workflows still deploy the one
+release `nx-portfolio` of the old chart into the namespace `nx-portfolio`. Plan
+0016 moves each unit to its own deploy job and release, and plan 0017 to its own
+version stream.
+
+To move an app to another unit, change its tag. To split a unit or add one,
+follow section 4 of plan 0014: retag the apps, add `units/<new>/unit.env` and a
+chart, create the two GitHub environments, and add the scopes of the moved apps
+to `UNITS` in `tools/release/rules.mjs`. The stateful member of a split keeps the
+namespace, so data never moves for a split.
 
 This document is about running the stack **locally end to end** (build every image
 from scratch, deploy, and run e2e against the real containers). For the production
@@ -63,14 +141,15 @@ keeps the implementation swappable: the chart names it only through
 
 ```sh
 # Linux / the VPS
-./k8s/bootstrap/install.sh --issuer letsencrypt --email you@example.com
+./k8s/bootstrap/install.sh --ip <the machine's public address>
 ```
 
-It installs, at pinned versions: the Gateway API CRDs (standard channel), Envoy
-Gateway, its `eg` GatewayClass, cert-manager with its Gateway integration enabled,
-and a `ClusterIssuer` (`selfsigned` or `letsencrypt-prod`). It is idempotent, and it
-prints the GatewayClass name at the end because that value is what
-`gateway.className` must match.
+It installs, at pinned versions: the Gateway API CRDs (standard channel), MetalLB
+and its pool on the VPS, Envoy Gateway with the EnvoyProxy `merged` and its `eg`
+GatewayClass, cert-manager with its Gateway integration enabled, and locally the
+`selfsigned` ClusterIssuer. A public cluster gets no ClusterIssuer: each unit chart
+renders its own ACME `Issuer`. It is idempotent, and it prints the GatewayClass name
+at the end because that value is what `gateway.className` must match.
 
 **Only the gateway-routed modes need this.** `values.localhost.yaml` (port mode, the
 default) sets `gateway.enabled: false` and stays the zero setup path.
@@ -97,14 +176,16 @@ export MFE_REMOTE_URLS="odontogram=http://localhost:8082,damoclesSword=http://lo
 npx nx run-many -t build:docker --configuration=development \
   --projects shell,odontogram,damoclesSword,landingV2
 
-# 3. Deploy.
-helm upgrade --install nx-portfolio helm \
-  --namespace nx-portfolio --create-namespace \
-  --values helm/values.yaml --values helm/values.localhost.yaml
+# 3. Deploy the portfolio unit.
+helm dependency build --skip-refresh k8s/helm/portfolio
+helm upgrade --install portfolio k8s/helm/portfolio \
+  --namespace portfolio --create-namespace \
+  --values k8s/helm/portfolio/values.yaml \
+  --values k8s/helm/portfolio/values.localhost.yaml
 
 # 4. Open the shell.
 #    -> http://localhost
-kubectl get pods -n nx-portfolio
+kubectl get pods -n portfolio
 ```
 
 > Prefer the remote ports to line up with the dev-serve ports (shell 4200,
@@ -113,10 +194,9 @@ kubectl get pods -n nx-portfolio
 > default string remotes already resolve to each remote's dev-serve port.
 > `MFE_REMOTE_URLS` is only needed when the ports differ, as they do above.
 
-**The local overlays deploy four apps, not six.** `values.localhost.yaml`,
-`values.localhost-mfe.yaml` and `values.local.yaml` each replace the whole `apps`
-list with `shell`, `odontogram`, `damoclesSword` and `landingV2`. `velista` and
-`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so a local
+**The local overlays deploy the portfolio unit only.** `values.localhost.yaml`,
+`values.localhost-mfe.yaml` and `values.local.yaml` of `helm/portfolio` replace the
+`apps` list with locally built images and empty `externalRoutes`, so a local
 deployment has no velista and no `/velista` route on the portfolio host.
 
 There is no build stage inside an app image (k8s plan 0007). `nx build` runs on the
@@ -134,7 +214,7 @@ restart to use the new image:
 
 ```sh
 npx nx run odontogram:build:docker --configuration=development
-kubectl rollout restart deployment/odontogram -n nx-portfolio
+kubectl rollout restart deployment/odontogram -n portfolio
 ```
 
 ---
@@ -144,11 +224,11 @@ kubectl rollout restart deployment/odontogram -n nx-portfolio
 The shell bakes its remote URLs at build time, so **each mode needs the shell built a
 particular way**. Pick one overlay:
 
-| Overlay | Topology | Reach it at | Build the shell with |
-| --- | --- | --- | --- |
-| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8082–8084). **No bootstrap needed.** | `http://localhost` | `MFE_REMOTE_URLS=odontogram=http://localhost:8082,…` |
-| `values.localhost-mfe.yaml` | one `localhost` host, remotes under `/mfe/<remote>`, through the gateway | `http://localhost` | `MFE_BASE_URL=http://localhost/mfe` |
-| `values.local.yaml` | `portfolio.localhost` / `mfe.localhost` hostnames (closest to production) | `http://portfolio.localhost` | `MFE_BASE_URL=http://mfe.localhost` |
+| Overlay                               | Topology                                                                                   | Reach it at                  | Build the shell with                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------- | ---------------------------------------------------- |
+| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8082–8084). **No bootstrap needed.** | `http://localhost`           | `MFE_REMOTE_URLS=odontogram=http://localhost:8082,…` |
+| `values.localhost-mfe.yaml`           | one `localhost` host, remotes under `/mfe/<remote>`, through the gateway                   | `http://localhost`           | `MFE_BASE_URL=http://localhost/mfe`                  |
+| `values.local.yaml`                   | `portfolio.localhost` / `mfe.localhost` hostnames (closest to production)                  | `http://portfolio.localhost` | `MFE_BASE_URL=http://mfe.localhost`                  |
 
 The two gateway modes need [the bootstrap](#cluster-bootstrap-once-per-cluster) run
 once, with `-Issuer selfsigned`. They no longer set a storage class for
@@ -256,27 +336,25 @@ release version instead of `staging`).
 - **Port already in use (80 and 8082–8084 in port mode, or 80/443 for the other overlays).** Something
   else (a running `nx serve`, IIS, another service) holds the port. Stop it, or use a
   different overlay.
-- **The Service to reach is not in `nx-portfolio`.** Envoy Gateway provisions a data
-  plane Deployment and Service *for* the Gateway, named
-  `envoy-nx-portfolio-portfolio-<hash>`, in the **`envoy-gateway-system`** namespace.
-  Neither object is declared by this chart, and the name carries a hash, so look it up
-  rather than memorise it: `kubectl get svc -n envoy-gateway-system`.
+- **The Service to reach is not in the unit's namespace.** With merged gateways,
+  Envoy Gateway provisions one data plane Deployment and Service for every Gateway
+  of the class, named `envoy-eg-<hash>`, in the **`envoy-gateway-system`**
+  namespace. No chart declares either object, and the name carries a hash, so look
+  it up rather than memorise it:
+  `kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gatewayclass=eg`.
 - **LoadBalancer stuck `<pending>` / not reachable.** Docker Desktop publishes
   LoadBalancer services on `localhost` even while `EXTERNAL-IP` shows `<pending>`; just
-  use `localhost`. The MetalLB pool is disabled locally (`metallb.enabled: false`)
-  because its public IP isn't routable on Docker Desktop. On the **public** cluster the
-  same symptom is a real bug with a different cause: the pool must list
-  `envoy-gateway-system` in `metallb.serviceNamespaces`, or the data plane Service
-  never gets the address while `kubectl get svc -n nx-portfolio` looks perfectly
-  healthy.
-- **`Gateway ... PROGRAMMED False` locally.** Expected on Docker Desktop: the only
-  failing condition is "No addresses have been assigned", because no MetalLB pool is
-  active. Traffic still flows. Check the listeners instead, which do report
-  `Programmed=True` and an `Attached Routes` count:
-  `kubectl describe gateway portfolio -n nx-portfolio`.
+  use `localhost`. No MetalLB runs locally. On the **public** cluster the same
+  symptom is a real bug with a different cause: the pool that `install.sh --ip`
+  applies must allow `envoy-gateway-system`, or the data plane Service never gets
+  the address while every pod looks perfectly healthy.
+- **`Gateway ... PROGRAMMED False` locally.** Expected on Docker Desktop when no
+  address is assigned. Traffic still flows. Check the listeners instead, which do
+  report `Programmed=True` and an `Attached Routes` count:
+  `kubectl describe gateway portfolio -n portfolio`.
 - **A route isn't serving.** Unlike Ingress, a route that fails to attach says so:
-  `kubectl get httproute -n nx-portfolio -o wide` and
-  `kubectl describe gateway portfolio -n nx-portfolio`.
+  `kubectl get httproute -n portfolio -o wide` and
+  `kubectl describe gateway portfolio -n portfolio`.
 - **Gateway API CRDs won't install.** They need Kubernetes 1.31+ (see Dependencies).
   On an older API server the CRDs fail to compile their CEL validation rules.
 - **`kubectl port-forward` resets connections under load.** The unbundled `dev` remotes
@@ -285,7 +363,7 @@ release version instead of `staging`).
 - **Certificate warnings in the browser locally.** Expected. The local overlays issue
   from the `selfsigned` ClusterIssuer, since the hosts have no public DNS and ACME
   would only fail and burn rate limits. Check issuance with
-  `kubectl get certificate -n nx-portfolio`; `READY: True` is what matters.
+  `kubectl get certificate -n portfolio`; `READY: True` is what matters.
 
 ---
 
@@ -293,14 +371,15 @@ release version instead of `staging`).
 
 ```sh
 # Preview rendered manifests for a given mode
-helm template nx-portfolio helm -n nx-portfolio \
-  --values helm/values.yaml --values helm/values.localhost.yaml
+helm template portfolio k8s/helm/portfolio -n portfolio \
+  --values k8s/helm/portfolio/values.yaml \
+  --values k8s/helm/portfolio/values.localhost.yaml
 
 # Inspect
-kubectl -n nx-portfolio get pods,svc
-kubectl -n nx-portfolio get gateway,httproute,certificate
+kubectl -n portfolio get pods,svc
+kubectl -n portfolio get gateway,httproute,certificate
 kubectl -n envoy-gateway-system get svc        # the provisioned data plane
 
 # Tear down (the chart only; the bootstrap stays)
-helm uninstall nx-portfolio -n nx-portfolio
+helm uninstall portfolio -n portfolio
 ```

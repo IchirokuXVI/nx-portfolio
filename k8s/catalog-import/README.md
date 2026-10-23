@@ -205,7 +205,7 @@ To stop it, a person sets the ledger key by hand. The task then never runs in
 this cluster again:
 
 ```sh
-kubectl -n nx-portfolio patch configmap release-tasks --type merge \
+kubectl -n luna-shopper patch configmap release-tasks --type merge \
   -p '{"data":{"0003-restore-the-first-catalog":"expired 2026-10-20T10:00:00Z by-hand"}}'
 ```
 
@@ -227,9 +227,9 @@ pair, so no deploy changes it. A person does these steps:
    one.
 
    ```sh
-   kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- \
+   kubectl -n luna-shopper exec luna-shopper-backend-catalog-db-0 -- \
      psql -U luna_catalog -d postgres -c "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database"
-   kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
+   kubectl -n luna-shopper exec luna-shopper-backend-harvester-db-0 -- \
      psql -U luna_harvester -d postgres -c "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database"
    ```
 
@@ -238,7 +238,7 @@ pair, so no deploy changes it. A person does these steps:
      the instance that was swapped. For the catalog:
 
      ```sh
-     kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d postgres \
+     kubectl -n luna-shopper exec luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d postgres \
        -c 'ALTER DATABASE luna_catalog RENAME TO luna_catalog_restore' \
        -c 'ALTER DATABASE luna_catalog_before_first_catalog RENAME TO luna_catalog'
      ```
@@ -247,7 +247,7 @@ pair, so no deploy changes it. A person does these steps:
      already holds the comment and has every source off. For the harvester:
 
      ```sh
-     kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d postgres \
+     kubectl -n luna-shopper exec luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d postgres \
        -c 'ALTER DATABASE luna_harvester RENAME TO luna_harvester_before_first_catalog' \
        -c 'ALTER DATABASE luna_harvester_restore RENAME TO luna_harvester'
      ```
@@ -255,7 +255,7 @@ pair, so no deploy changes it. A person does these steps:
 3. Scale both services to the counts that the script printed.
 
    ```sh
-   kubectl -n nx-portfolio scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=1
+   kubectl -n luna-shopper scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=1
    ```
 
 4. Run the script again with `--apply`. After "go forward" it finds the
@@ -267,11 +267,11 @@ pair, so no deploy changes it. A person does these steps:
 Within a week, by rename. Stop the two services first.
 
 ```sh
-kubectl -n nx-portfolio scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=0
-kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d postgres \
+kubectl -n luna-shopper scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=0
+kubectl -n luna-shopper exec luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d postgres \
   -c 'ALTER DATABASE luna_catalog RENAME TO luna_catalog_first_catalog_failed' \
   -c 'ALTER DATABASE luna_catalog_before_first_catalog RENAME TO luna_catalog'
-kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d postgres \
+kubectl -n luna-shopper exec luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d postgres \
   -c 'ALTER DATABASE luna_harvester RENAME TO luna_harvester_first_catalog_failed' \
   -c 'ALTER DATABASE luna_harvester_before_first_catalog RENAME TO luna_harvester'
 ```
@@ -289,9 +289,9 @@ Once the new catalog is a week old and nobody wants the old one back, type
 these by hand. Nothing in the repository runs them.
 
 ```sh
-kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- \
+kubectl -n luna-shopper exec luna-shopper-backend-catalog-db-0 -- \
   psql -U luna_catalog -d postgres -c 'DROP DATABASE luna_catalog_before_first_catalog'
-kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
+kubectl -n luna-shopper exec luna-shopper-backend-harvester-db-0 -- \
   psql -U luna_harvester -d postgres -c 'DROP DATABASE luna_harvester_before_first_catalog'
 ```
 

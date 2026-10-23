@@ -564,7 +564,9 @@ if [ "$LOCK_ROOT" = false ]; then
   echo "     root login. The keys are not needed again, and it asks you to"
   echo "     confirm before it touches sshd."
 fi
-echo "  3. Set ipAddress in k8s/helm/values.<env>.yaml and move the five DNS records"
-echo "  4. As $ADMIN_USER, in an interactive shell (it prompts for two secrets):"
-echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env> --out ~/luna-<env>-secrets.txt"
+echo "  3. As $ADMIN_USER: bash ~/nx-portfolio/k8s/bootstrap/install.sh --ip <public address>"
+echo "     then move the six DNS records"
+echo "  4. As $ADMIN_USER, in an interactive shell (it prompts for the velista secrets):"
+echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit portfolio --env <env>"
+echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env>"
 echo "  5. Set SSH_DEPLOY_USER=$DEPLOY_USER and the host secret in the GitHub repository"
