@@ -43,17 +43,6 @@ export interface RealtimeClientI {
   readonly connected: Signal<boolean>;
 
   /**
-   * Whether the client has given up reconnecting.
-   *
-   * Distinct from being offline. An auth rejection disconnects the socket with **no
-   * error event** (`realtime.gateway.ts:85`), so the client cannot tell it apart from
-   * a dropped network and would otherwise reconnect forever against a token the
-   * server will never accept. Realtime being unavailable must not raise `0003`'s
-   * blocking connection screen, which is for a lost network.
-   */
-  readonly degraded: Signal<boolean>;
-
-  /**
    * How many times this session's connection came back after its first `connect`.
    *
    * Zero until the first `connect` of a session, one more on every later `connect` of
@@ -178,12 +167,12 @@ export interface RealtimeClientI {
   readonly droppedEvents: Signal<ReadonlyMap<string, number>>;
 
   /**
-   * Clear {@link degraded} and try to connect again.
+   * Try to connect now, with the backoff reset.
    *
-   * The way out of a latched degraded state. Without it, `degraded` is a state a user
-   * enters and cannot leave, which is a user permanently and invisibly stale. The
-   * transport also re-arms itself on an identity change and on the window regaining
-   * the network; this is the same door with a handle on it.
+   * The client never gives up by itself (plan 0168, D1), so this is never the only way
+   * back. It only skips the wait. The transport already does the same on an identity
+   * change, on the window regaining the network and on the page coming back; this is
+   * the same door with a handle on it.
    */
   retry(): void;
 }

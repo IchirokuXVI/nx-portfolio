@@ -1701,6 +1701,19 @@ describe('ListPage: searching and viewing one category', () => {
     expect(itemNames.refreshed).toEqual([['milk', 'carrot'], ['bread']]);
   });
 
+  it('draws the not live band for a refused zone room and not for a plain disconnect (plan 0168, D7)', async () => {
+    const { fixture, realtime } = await render();
+
+    realtime.setConnected(false);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(true);
+
+    realtime.refuse.add(ZONE_ID);
+    realtime.subscribeZone(ZONE_ID);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(false);
+  });
+
   it('reads every product again once the socket comes back (velista 0145)', async () => {
     const { fixture, realtime, itemNames } = await render({
       lines: LINES,
