@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { provideRouter, RouterLink } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DetailPageShell } from './detail-page-shell';
 
@@ -64,6 +65,19 @@ describe('DetailPageShell', () => {
 
     expect(repoLink?.getAttribute('href')).toBe('https://github.com/x/y');
     expect(appLinkEl?.getAttribute('href')).toBe('/en/odontogram');
+  });
+
+  it('renders an external appLink as a plain href, outside the router', () => {
+    fixture.componentRef.setInput('appLink', '/velista/en');
+    fixture.componentRef.setInput('appLinkIsExternal', true);
+    fixture.detectChanges();
+
+    const link = fixture.debugElement.query(
+      By.css('.detail-page__link--primary')
+    );
+
+    expect(link.nativeElement.getAttribute('href')).toBe('/velista/en');
+    expect(link.injector.get(RouterLink, null)).toBeNull();
   });
 
   it('does not render a hero media block when no heroImage is given', () => {

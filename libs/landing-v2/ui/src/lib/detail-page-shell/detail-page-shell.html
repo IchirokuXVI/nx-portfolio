@@ -18,7 +18,15 @@
               {{ 'landingV2.detail.view_repo' | rokuT }}
             </a>
           }
-          @if (appLink()) {
+          @if (appLink() && appLinkIsExternal()) {
+            <a
+              [href]="appLink()"
+              class="detail-page__link detail-page__link--primary"
+            >
+              {{ 'landingV2.detail.visit_live' | rokuT }}
+              <lib-arrow-icon class="detail-page__link-icon" />
+            </a>
+          } @else if (appLink()) {
             <a
               [routerLink]="[appLink()]"
               class="detail-page__link detail-page__link--primary"

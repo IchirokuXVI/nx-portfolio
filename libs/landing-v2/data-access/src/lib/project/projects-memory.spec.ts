@@ -72,7 +72,7 @@ describe('ProjectMemory', () => {
     ).toEqual(['Velista']);
   });
 
-  it('links Velista to its detail page and to its mount in the shell', async () => {
+  it('links Velista to its detail page and to /velista as a document navigation', async () => {
     const [velistaEn] = await firstValueFrom(service.getList('en'));
     const velistaEs = await firstValueFrom(
       service.getByDetailSlug('velista', 'es')
@@ -81,6 +81,8 @@ describe('ProjectMemory', () => {
     expect(velistaEn.detailLink).toBe('/en/projects/velista');
     expect(velistaEn.appLink).toBe('/velista/en');
     expect(velistaEs.appLink).toBe('/velista/es');
+    // The shell has no `/velista` route (plan 0165 D9), so the link leaves it.
+    expect(velistaEn.appLinkIsExternal).toBe(true);
     expect(velistaEs.tagline).toBe(
       'Una app de listas de la compra compartidas, en producción'
     );

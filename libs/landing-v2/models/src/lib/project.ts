@@ -17,6 +17,11 @@ export interface Project {
   /** Route to the live app, e.g. '/odontogram/en'. */
   appLink?: string;
   /**
+   * The live app is not a route of the shell, so `appLink` is a full document
+   * navigation (`href`) rather than a `routerLink`. velista (plan 0165 D9).
+   */
+  appLinkIsExternal?: boolean;
+  /**
    * The live app is this very site (the portfolio itself). When true the card
    * disables "View project" — you are already here.
    */
