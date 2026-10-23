@@ -6,6 +6,8 @@ import {
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
+import { provideNativeShell } from '@portfolio/velista/native';
+import { detectNativeShell } from '@portfolio/velista/platform';
 import { appRoutes } from './app.routes';
 import { documentMount } from './document-mount';
 
@@ -24,6 +26,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
+    provideNativeShell(),
     // The router keeps every URL whole, mount included, instead of reading
     // `/velista/` from the `<base>` that nginx writes under the portfolio.
     // `appRootRoute` consumes the mount itself (plan 0165 D3).
@@ -47,7 +50,7 @@ export const appConfig: ApplicationConfig = {
      * ends up with a worker.
      */
     provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode() && documentMount() === '',
+      enabled: !isDevMode() && documentMount() === '' && !detectNativeShell(),
       registrationStrategy: 'registerWhenStable:30000',
     }),
   ],

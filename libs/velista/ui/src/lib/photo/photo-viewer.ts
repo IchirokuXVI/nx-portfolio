@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { CloseIcon } from '../icons/icons';
 
 /**
@@ -74,6 +75,12 @@ export class PhotoViewer {
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   constructor() {
+    // A native back press closes the viewer, as Escape does (velista `0166`).
+    handleBackWhile(
+      () => true,
+      () => this.close()
+    );
+
     afterNextRender(() => {
       const dialog = this._dialog().nativeElement;
       // jsdom has no `showModal`. The attribute alone draws it, as a spec needs.

@@ -104,3 +104,12 @@ apps/luna-shopper-backend/*/tools/out/
 # Where a curation run keeps its state, its decisions and its rehearsal dump
 # when the operator names no --run-dir (libs/luna-shopper/tools/curation/cli).
 .curation-runs/
+
+# velista's Android project (plan 0167). Its own .gitignore covers all but the signing
+# properties, which hold the keystore passwords; the rest is repeated here so the rule
+# survives a regenerated project.
+apps/velista/android/keystore.properties
+apps/velista/android/local.properties
+apps/velista/android/app/src/main/assets/public/
+apps/velista/android/**/build/
+apps/velista/android/.gradle/

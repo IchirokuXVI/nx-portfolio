@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { BackStack } from '@portfolio/velista/platform';
 import { SheetShell } from './sheet-shell';
 
 /**
@@ -211,6 +212,24 @@ describe('SheetShell', () => {
   });
 
   describe('dismissal', () => {
+    it('asks to close on a native back press, which goes through BackStack', async () => {
+      // Velista `0166`: the hardware button has no target, so the sheet answers it
+      // from the stack, ahead of the page header registered before it.
+      const fixture = await render();
+
+      expect(TestBed.inject(BackStack).handle()).toBe(true);
+      expect(fixture.componentInstance.dismissals()).toBe(1);
+    });
+
+    it('takes a native back press while it may not close, and stays', async () => {
+      const fixture = await render();
+      fixture.componentInstance.dismissible.set(false);
+      fixture.detectChanges();
+
+      expect(TestBed.inject(BackStack).handle()).toBe(true);
+      expect(fixture.componentInstance.dismissals()).toBe(0);
+    });
+
     it('asks to close when the scrim is tapped', async () => {
       const fixture = await render();
 

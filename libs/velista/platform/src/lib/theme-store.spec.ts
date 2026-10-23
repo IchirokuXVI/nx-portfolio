@@ -1,6 +1,7 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { type AppBrand } from '@portfolio/velista/models';
+import { SYSTEM_BARS, THEME_GROUND_COLORS } from './system-bars';
 import { provideVelistaTesting } from './testing/velista-testing';
 import { THEME_STORAGE_KEY, ThemeStore } from './theme-store';
 
@@ -134,6 +135,70 @@ describe('ThemeStore', () => {
 
       expect(store.theme()).toBe('night');
       expect(() => store.setPreference('day')).not.toThrow();
+    });
+  });
+
+  /**
+   * Velista `0166`, target 8. The status bar follows the theme, through the meta tag
+   * the browser paints it from. Asserted on the real `<head>`, because the write goes
+   * through Angular's `Meta` and that is the part worth proving.
+   */
+  describe('the status bar', () => {
+    const themeColor = () =>
+      document.head
+        .querySelector('meta[name="theme-color"]')
+        ?.getAttribute('content');
+
+    afterEach(() => {
+      document.head
+        .querySelectorAll('meta[name="theme-color"]')
+        .forEach((meta) => meta.remove());
+    });
+
+    it('takes the ground colour of the theme the app starts in', () => {
+      stubPrefersLight(true);
+      createStore();
+      TestBed.tick();
+
+      expect(themeColor()).toBe(THEME_GROUND_COLORS.day);
+    });
+
+    it('changes with the theme', () => {
+      const store = createStore();
+      TestBed.tick();
+      expect(themeColor()).toBe(THEME_GROUND_COLORS.night);
+
+      store.setPreference('day');
+      TestBed.tick();
+
+      expect(themeColor()).toBe(THEME_GROUND_COLORS.day);
+    });
+
+    it('goes through SYSTEM_BARS, which a native shell replaces', () => {
+      const apply = jest.fn();
+      TestBed.configureTestingModule({
+        providers: [
+          provideVelistaTesting(),
+          { provide: SYSTEM_BARS, useValue: { apply } },
+        ],
+      });
+      const store = TestBed.inject(ThemeStore);
+      TestBed.tick();
+
+      store.setPreference('day');
+      TestBed.tick();
+
+      expect(apply.mock.calls).toEqual([['night'], ['day']]);
+    });
+
+    it('leaves the portfolio document alone when mounted under it', () => {
+      TestBed.configureTestingModule({
+        providers: [provideVelistaTesting({ basePath: '/velista' })],
+      });
+      TestBed.inject(ThemeStore).setPreference('day');
+      TestBed.tick();
+
+      expect(themeColor()).toBeUndefined();
     });
   });
 });

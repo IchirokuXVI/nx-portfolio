@@ -25,13 +25,16 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  APP_STANDALONE_ORIGIN,
   type GroupState,
   type PresenceUser,
 } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
   appPath,
   BrowserFacade,
   PageNavigation,
+  SHARE_TARGET,
   shareUrl,
   sheetSegments,
   zoneIdOf,
@@ -107,6 +110,9 @@ export class GroupPage {
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _share = inject(SHARE_TARGET);
+  private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
+  private readonly _runtime = inject(APP_RUNTIME);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
 
@@ -256,9 +262,9 @@ export class GroupPage {
    * Whether the invite card offers sharing.
    *
    * The Web Share API is a phone's, and a button that opens nothing is worse than one
-   * that is absent. Read through `BrowserFacade` rather than off `navigator`.
+   * that is absent. Asked of `SHARE_TARGET`, so a native shell answers with its own.
    */
-  readonly canShare = this._browser.window?.navigator.share !== undefined;
+  readonly canShare = this._share.canShare();
 
   /**
    * Whether the lists may be asked for yet.
@@ -526,7 +532,8 @@ export class GroupPage {
    *
    * The URL is absolute and is built here rather than by the card, because it is a
    * fact about where this app is deployed and not about how an invite looks. Falls
-   * back to copying when the share sheet is unavailable or dismissed.
+   * back to copying when the share sheet is unavailable or refuses, and leaves a
+   * dismissal alone.
    *
    * **`shareUrl` and not `appPath`, because the link carries no locale.** `appPath`
    * is where to send *this* session and therefore states this session's language;
@@ -535,21 +542,32 @@ export class GroupPage {
    * is the same rule the shopping trip's link has always followed.
    */
   shareCode(code: string): void {
-    const url = shareUrl(
-      this._browser.location?.origin ?? '',
-      this._basePath,
-      'join',
-      code
-    );
+    // Inside a native shell the document's origin is the WebView's, which nobody else
+    // can open, so the app's own origin is named, and it has no mount (velista `0166`).
+    // Everywhere else the document's origin and mount: the standalone origin is the
+    // production host on staging and absent on a slot, and under the portfolio mount it
+    // would build `velista.app/velista/join`, which is not a page.
+    const url =
+      this._runtime === 'native' && this._standaloneOrigin
+        ? shareUrl(this._standaloneOrigin, '', 'join', code)
+        : shareUrl(
+            this._browser.location?.origin ?? '',
+            this._basePath,
+            'join',
+            code
+          );
 
-    const share = this._browser.window?.navigator.share;
-    if (share === undefined) {
+    // The no share case copies synchronously, before anything is awaited, because
+    // the clipboard needs the same gesture the share sheet does.
+    if (!this.canShare) {
       this.copyCode(url);
       return;
     }
 
-    void share
-      .call(this._browser.window?.navigator, { url })
-      .catch(() => undefined);
+    void this._share.share({ url }).then((outcome) => {
+      if (outcome === 'unavailable') {
+        this.copyCode(url);
+      }
+    });
   }
 }

@@ -7,8 +7,11 @@ import {
 import { RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  APP_RUNTIME,
+  APP_STORE_URL,
   AppUpdates,
   BackendReadiness,
+  BrowserFacade,
   ConnectionState,
   ImpersonationState,
   LiveBasketBadge,
@@ -91,6 +94,29 @@ export class AppLayout {
   private readonly _badge = inject(LiveBasketBadge);
   private readonly _tour = inject(TourStore);
   private readonly _impersonation = inject(ImpersonationState);
+  private readonly _browser = inject(BrowserFacade);
+
+  /**
+   * The store listing to send a refused native build to, or null (velista `0166`, D3).
+   *
+   * Only inside a native shell, where a reload loads the same bundle and is refused
+   * again. Null on the web and wherever no listing is configured, and then the dead
+   * end face keeps its Try again.
+   */
+  private readonly _storeUrl =
+    inject(APP_RUNTIME) === 'native' ? inject(APP_STORE_URL) : null;
+
+  /** Whether the dead end face's one action opens the store instead of reloading. */
+  readonly updateFromStore = this._storeUrl !== null;
+
+  /**
+   * The dead end face's body. The web one sends the person to their browser, which
+   * inside the native app opens a different install with its own session (plan 0167).
+   */
+  readonly failedBodyKey =
+    inject(APP_RUNTIME) === 'native'
+      ? 'update.failed.bodyNative'
+      : 'update.failed.body';
 
   /**
    * The support session this tab holds, or null (velista `0133`). Always null in an
@@ -228,7 +254,8 @@ export class AppLayout {
   }
 
   /**
-   * The Try again button on the dead end face.
+   * The Try again button on the dead end face, or Get the newer version inside a
+   * native shell that has a store listing.
    *
    * Straight through, blocking nothing and counting nothing (plan 0072 D7 and D4).
    * The reason `reloadNow` above goes through `ReloadBlocker` does not apply here:
@@ -236,6 +263,11 @@ export class AppLayout {
    * requests is refused.
    */
   reloadForUpdate(): void {
+    if (this._storeUrl !== null) {
+      this._browser.openExternal(this._storeUrl);
+      return;
+    }
+
     this._updates.reloadByHand();
   }
 

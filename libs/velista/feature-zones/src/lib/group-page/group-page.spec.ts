@@ -22,14 +22,17 @@ import {
   type FakeZoneStore,
   type ZoneLoadState,
 } from '@portfolio/velista/data-access';
-import type {
-  ErrorCode,
-  MyZone,
-  ShoppingListSummary,
+import {
+  APP_STANDALONE_ORIGIN,
+  type ErrorCode,
+  type MyZone,
+  type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  type AppRuntime,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
 import { GroupSummary, ListRow } from '@portfolio/velista/ui';
@@ -75,6 +78,10 @@ function list(id: string, name: string): ShoppingListSummary {
 
 interface Options {
   readonly zone?: MyZone;
+  /** `APP_STANDALONE_ORIGIN`, which the app layer supplies. Empty when unset. */
+  readonly standaloneOrigin?: string;
+  /** `APP_RUNTIME`, `web` unless a test is about the native shell. */
+  readonly runtime?: AppRuntime;
   /** A cold deep link, where nothing put this group in the cache first. */
   readonly noZoneCached?: boolean;
   readonly lists?: readonly ShoppingListSummary[];
@@ -177,6 +184,11 @@ async function render(options: Options = {}): Promise<{
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: routeWith(ZONE_ID) },
+      {
+        provide: APP_STANDALONE_ORIGIN,
+        useValue: options.standaloneOrigin ?? '',
+      },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
     ],
   }).compileComponents();
 
@@ -920,6 +932,78 @@ describe('GroupPage', () => {
       });
 
       fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(copied).toEqual(['https://ichirokuxvi.com/velista/join/HK7M2QPD']);
+    });
+
+    it('names the app’s own origin, with no mount, inside a native shell', async () => {
+      // Velista `0166`: there the document is the WebView's local origin, which
+      // nobody the invite is sent to can open.
+      const sent: { url?: string } = {};
+      const { fixture } = await render({
+        basePath: '',
+        runtime: 'native',
+        standaloneOrigin: 'https://velista.app',
+        browser: fakeWindow('https://localhost', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
+    });
+
+    it('keeps the document’s origin and mount on the web, whatever the standalone origin', async () => {
+      // `velista.app/velista/join` is not a page, and on staging the standalone
+      // origin is the production host.
+      const sent: { url?: string } = {};
+      const { fixture } = await render({
+        standaloneOrigin: 'https://velista.app',
+        browser: fakeWindow('https://ichirokuxvi.com', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://ichirokuxvi.com/velista/join/HK7M2QPD');
+    });
+
+    /** Fails the fake share sheet with a `DOMException` of this name. */
+    function refusingWindow(name: string, copied: string[]) {
+      const browser = fakeWindow('https://ichirokuxvi.com', {}, copied);
+      (
+        browser.window as unknown as { navigator: { share: unknown } }
+      ).navigator.share = () => Promise.reject(new DOMException('no', name));
+      return browser;
+    }
+
+    /**
+     * Lets the share's rejection and the `then` after it run. `whenStable` does not:
+     * zoneless, it waits for Angular's own pending work, not a plain promise chain.
+     */
+    const flushMicrotasks = async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    };
+
+    it('copies nothing when the person closes the share sheet', async () => {
+      const copied: string[] = [];
+      const { fixture } = await render({
+        browser: refusingWindow('AbortError', copied),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+      await flushMicrotasks();
+
+      expect(copied).toEqual([]);
+    });
+
+    it('copies the link when the browser refuses the share sheet', async () => {
+      // The control for the test above: the same flush is long enough for a copy.
+      const copied: string[] = [];
+      const { fixture } = await render({
+        browser: refusingWindow('NotAllowedError', copied),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+      await flushMicrotasks();
 
       expect(copied).toEqual(['https://ichirokuxvi.com/velista/join/HK7M2QPD']);
     });

@@ -16,7 +16,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { ThemeStore } from '@portfolio/velista/platform';
+import { handleBackWhile, ThemeStore } from '@portfolio/velista/platform';
 import { CommentIcon, FlagIcon, TrashIcon } from '@portfolio/velista/ui';
 import {
   heldSquare,
@@ -96,6 +96,12 @@ export class HoldMenu {
   protected readonly place = signal<{ left: number; top: number } | null>(null);
 
   constructor() {
+    // A native back press dismisses the menu, as Escape does (velista `0166`).
+    handleBackWhile(
+      () => true,
+      () => this.dismiss()
+    );
+
     afterNextRender(() => {
       this._position();
       this._panel()

@@ -4,6 +4,8 @@ import { provideRouter, Router, type Routes } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { type AppBrand } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
+  APP_STORE_URL,
   BackendReadiness,
   ConnectionState,
   ImpersonationState,
@@ -331,6 +333,60 @@ describe('AppLayout', () => {
       button?.click();
 
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * Velista `0166`, D3. Inside a native shell a reload loads the same bundle, so
+     * the dead end comes at once and its one action is the store listing.
+     */
+    describe('inside a native shell', () => {
+      async function refusedNative(storeUrl: string | null) {
+        const reload = jest.fn();
+        const openExternal = jest.fn();
+        const fixture = await createFixture({}, [], [
+          provideFakeBrowserFacade(new Map(), { reload, openExternal }),
+          { provide: APP_RUNTIME, useValue: 'native' },
+          { provide: APP_STORE_URL, useValue: storeUrl },
+        ] as Provider[]);
+
+        TestBed.inject(BackendReadiness).reportTooOld();
+        TestBed.tick();
+        fixture.detectChanges();
+
+        const button = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-update-screen button'
+        ) as HTMLButtonElement | null;
+        const host: HTMLElement = fixture.nativeElement;
+        return { button, reload, openExternal, host };
+      }
+
+      it('offers the newer version from the store, and opens it', async () => {
+        const store = 'https://play.google.com/store/apps/details?id=app.test';
+        const { button, reload, openExternal } = await refusedNative(store);
+
+        expect(button?.textContent?.trim()).toBe('update.failed.store');
+        button?.click();
+
+        expect(openExternal).toHaveBeenCalledWith(store);
+        expect(reload).not.toHaveBeenCalled();
+      });
+
+      // The web body sends the person to their browser, which inside the app is a
+      // different install with its own session (plan 0167).
+      it('tells the person to install the newer version, not to open a browser', async () => {
+        const { host } = await refusedNative(null);
+
+        expect(host.textContent).toContain('update.failed.bodyNative');
+      });
+
+      it('keeps Try again where no listing is configured', async () => {
+        const { button, reload } = await refusedNative(null);
+
+        expect(button?.textContent?.trim()).toBe('update.failed.reload');
+        button?.click();
+
+        expect(reload).toHaveBeenCalledTimes(1);
+      });
     });
   });
 

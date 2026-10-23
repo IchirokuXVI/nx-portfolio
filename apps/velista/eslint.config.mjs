@@ -14,6 +14,14 @@ export default [
     ignores: ['**/plans/mocks/**'],
   },
   {
+    // The Capacitor project (plan 0167). Flat ESLint does not read .gitignore, so
+    // without this it would lint the copy of the built bundle that `cap sync` writes
+    // under android/app/src/main/assets/public, and Gradle's copies of it under build/.
+    // Anchored with `**/` like the mocks above, because a bare `android/**` matched
+    // nothing when Nx ran the lint.
+    ignores: ['**/android/**'],
+  },
+  {
     files: ['**/*.ts'],
     rules: {
       '@angular-eslint/directive-selector': [
