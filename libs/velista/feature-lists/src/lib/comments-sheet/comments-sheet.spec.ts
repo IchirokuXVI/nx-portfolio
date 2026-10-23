@@ -16,6 +16,7 @@ import {
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakeSessionStore,
+  RealtimeMemory,
   type CommentServiceI,
   type FakeLineStore,
 } from '@portfolio/velista/data-access';
@@ -166,6 +167,8 @@ async function render(
   fixture: ComponentFixture<CommentsSheet>;
   lines: FakeLineStore;
   voiceSends: { blob: Blob; durationSeconds: number }[];
+  /** The line ids the comments were read for, in order. */
+  commentReads: string[];
 }> {
   const options: RenderOptions = Array.isArray(pageOrOptions)
     ? { page: pageOrOptions, permissions: permissionsArg }
@@ -178,9 +181,13 @@ async function render(
 
   const lines = fakeLineStore({ lines: [line()] });
   const voiceSends: { blob: Blob; durationSeconds: number }[] = [];
+  const commentReads: string[] = [];
 
   const comments: CommentServiceI = {
-    listComments: async () => ({ items: [...page], nextCursor: null }),
+    listComments: async (lineId) => {
+      commentReads.push(lineId);
+      return { items: [...page], nextCursor: null };
+    },
     addComment: async (lineId, body) => ({
       id: 'c-new',
       lineId,
@@ -241,7 +248,7 @@ async function render(
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, voiceSends };
+  return { fixture, lines, voiceSends, commentReads };
 }
 
 /** The shape `route-params.ts` reads: a real `paramMap` observable plus a snapshot. */
@@ -329,6 +336,29 @@ describe('CommentsSheet', () => {
     fixture.detectChanges();
 
     expect(bodies(fixture).at(-1)).toBe('got them');
+  });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads the comments once on open, and not again at construction', async () => {
+      const { commentReads } = await render();
+      TestBed.tick();
+
+      expect(commentReads).toEqual([LINE_ID]);
+    });
+
+    it('reads the open line comments again and records them', async () => {
+      const { fixture, lines, commentReads } = await render();
+      const recorded = jest.spyOn(lines, 'recordComments');
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+      await fixture.whenStable();
+
+      expect(commentReads).toEqual([LINE_ID, LINE_ID]);
+      expect(recorded).toHaveBeenCalledWith(LINE_ID, expect.any(Array));
+      // Still the conversation, not a skeleton or an error.
+      expect(bodies(fixture)).toHaveLength(3);
+    });
   });
 
   /**
