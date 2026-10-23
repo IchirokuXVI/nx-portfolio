@@ -85,8 +85,8 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 - A gate is a directory under `k8s/e2e` with `gate.sh` and `gate.env`. The velista unit no
   longer needs the portfolio stack to test itself.
 - `k8s/bootstrap/split-release.sh --env <e>` has run on staging and on production. `helm
-  list -A` shows `portfolio` in `portfolio` and `velista` in `nx-portfolio`, and no
-  `nx-portfolio` release. The old chart files are deleted.
+  list -A` shows `portfolio` in `portfolio` and `velista` in `luna-shopper`, and the
+  namespace `nx-portfolio` is gone. The old chart files are deleted.
 - `image-scan.yml` and `host-maintenance.yml` read their lists from the registry.
 
 ### Scope
@@ -282,10 +282,12 @@ behaviour split in two runs. `0017` replaces the bare tag with one prefix per un
 `k8s/bootstrap/split-release.sh --env <staging|production|homelab> [--plan]` runs on the
 host as the deploy account. The composite action runs it in the preflight, before the
 release tasks' `check` and `pre` phases (`0015` D9), when `helm status nx-portfolio`
-succeeds or a cutover ConfigMap says a run stopped part way. It is a no op afterwards. It is
-a re-ownership and nothing else: both units come up at the image tags their live pods run,
-read from the `shell` and `luna-shopper-backend-gateway` Deployments, and the pipeline's own
-upgrade follows as on any other run. It records the step it reached in ConfigMap
+succeeds or a cutover ConfigMap says a run stopped part way. It is a no op afterwards. It
+changes owners and places, not versions: both units come up at the image tags their live
+pods run, read from the `shell` and `luna-shopper-backend-gateway` Deployments. The
+portfolio is a fresh install into `portfolio`, velista is a move of its Secrets, its ledger
+and its volumes into `luna-shopper` (`0014` D3), and the pipeline's own upgrade follows as
+on any other run. It records the step it reached in ConfigMap
 `deploy-cutover` of each namespace, which is also the adoption marker that `deploy-release.sh`
 reads (`0015` D10). Steps, each idempotent:
 
@@ -305,44 +307,55 @@ reads (`0015` D10). Steps, each idempotent:
 3. **Take the pool over.** Read the address from the live `IPAddressPool main-pool`, then
    `install.sh --ip <addr>` applies the spec of `0015` D5 (`serviceAllocation.namespaces:
    [envoy-gateway-system]`) over the existing objects.
-4. **Prepare the portfolio namespace.** Create `portfolio`, copy the TLS Secrets
-   `ichirokuxvi-com-tls` and `mfe-ichirokuxvi-com-tls` (staging: their `staging` names)
-   into it with the cert-manager annotations stripped, and `helm install portfolio --set
-   imageTag=<live tag> --set gateway.enabled=false`, with no `--atomic`. The four portfolio
-   pods come up with no route. No traffic moves.
-5. **Mark velista's objects as Helm's.** Every object that the velista chart renders (the
-   Luna Deployments, Services, ConfigMap, StatefulSets, CronJobs and PodDisruptionBudgets,
-   the velista and admin Deployments and Services, the HTTPRoutes of velista, admin, gateway
-   and realtime, the BackendTrafficPolicy, the PriorityClass) gets
-   `meta.helm.sh/release-name: velista`, `meta.helm.sh/release-namespace: nx-portfolio` and
-   the label `app.kubernetes.io/managed-by: Helm`. This is metadata only: no pod restarts,
-   and the StatefulSets' pods and PVCs are not touched. The `*-tls` Secrets are not in the
-   list, because cert-manager writes them and no chart manifests them.
-6. **The swap.** Delete `Gateway portfolio`, the old HTTPRoutes of the four portfolio apps
-   and the old `https-redirect` route (the interruption starts), then `helm upgrade
-   portfolio --set gateway.enabled=true --set imageTag=<live tag>` and `helm install
-   velista --set imageTag=<live tag>`, both without `--atomic`. Each new Gateway programs
-   its listeners from the existing Secrets, and the velista migration hooks run against a
-   schema they already wrote. The interruption ends when both Gateways report `Programmed`
-   and both releases are `deployed`, which is seconds to a minute. The ACME challenge for
-   the re-issued portfolio certificates then runs through the new Issuer and replaces the
-   copied Secrets in the background.
-7. **Clean up.** Delete the orphaned portfolio Deployments and Services in `nx-portfolio`.
-   When every Certificate in both namespaces is Ready under its Issuer, delete
-   `ClusterIssuer letsencrypt-prod` and its account Secret. Record the result in the step
-   summary.
+4. **Prepare both namespaces.** Create `portfolio` and `luna-shopper`. Copy into each the
+   TLS Secrets of its hosts with the cert-manager annotations stripped. Copy into
+   `luna-shopper`, verbatim, the six Luna Secrets, the backup Secret and the `release-tasks`
+   ConfigMap: never regenerated, because a new `HARVESTER_ACTOR_ID` orphans every row the
+   harvester wrote and new JWT keys sign every user out. Then `helm install portfolio -n
+   portfolio --set imageTag=<live tag> --set gateway.enabled=false`, with no `--atomic`. The
+   four portfolio pods come up with no route. No traffic moves.
+5. **Move velista's data.** Take a fresh dump of the four databases through the backup
+   CronJobs, as a release task does, and wait for it. Patch the five PersistentVolumes
+   (four Postgres, NATS) to `persistentVolumeReclaimPolicy: Retain`. Delete the Luna
+   StatefulSets and Deployments in `nx-portfolio` (the backend interruption starts), delete
+   their PersistentVolumeClaims, clear each PersistentVolume's `claimRef` and point it at
+   the same claim name in `luna-shopper`, and create those claims there with `volumeName`
+   set. No byte is copied: a `local-path` volume is a directory on the node, and only its
+   claim changes. Then `helm install velista -n luna-shopper --set imageTag=<live tag>
+   --set gateway.enabled=false`, no `--atomic`: the StatefulSets adopt the claims by name,
+   the migration hooks run against a schema they already wrote, and the backend interruption
+   ends when the services are Ready, a few minutes after it began. The PriorityClass
+   `luna-stateful`, cluster scoped, gets the Helm annotations of the new release before the
+   install so that the chart adopts it rather than failing on ownership.
+6. **The swap.** Delete `Gateway portfolio` and every HTTPRoute in `nx-portfolio` (the edge
+   interruption starts), then `helm upgrade portfolio --set gateway.enabled=true` and `helm
+   upgrade velista --set gateway.enabled=true`, both without `--atomic`. Each new Gateway
+   programs its listeners from the copied Secrets. The interruption ends when both Gateways
+   report `Programmed` and both releases are `deployed`, which is seconds to a minute. The
+   ACME challenges for the re-issued certificates then run through the new Issuers and
+   replace the copied Secrets in the background.
+7. **Clean up.** When every Certificate in both namespaces is Ready under its Issuer and
+   both releases have served for an hour, delete the namespace `nx-portfolio` with
+   everything still in it (the old pods, Services and the old release's leftovers), and
+   delete `ClusterIssuer letsencrypt-prod` and its account Secret. The retained
+   PersistentVolumes are bound to `luna-shopper` by then and survive. Record the result in
+   the step summary.
 
 `--plan` prints the object lists of steps 2, 5 and 7, the two live tags and the two Gateway
-specs, and exits. A failure in steps 1 to 5 leaves the old objects serving, Helm or no Helm;
-the script says which step failed and that a rerun continues from it. A failure in step 6 is
+specs, and exits. A failure in steps 1 to 4 leaves the old objects serving, Helm or no Helm;
+the script says which step failed and that a rerun continues from it. A failure inside
+step 5 leaves the data on retained volumes and in the dump of its first action, and the
+script prints the PersistentVolume names and the exact command that rebinds each one, so
+that a person can finish the step or put the claims back in `nx-portfolio`. A failure in step 6 is
 the one that needs a person, and the diagnosis step prints both Gateways, both releases and
 the Envoy status. A failed `helm install velista` is left as it is for that person; nothing
 uninstalls it (`0015` D10).
 
 Staging goes first, through the first `staging-*` run after the merge. Production follows
 at the first `release-*` run or by the owner's hand, with the same script. The owner may
-want an hour of the day with little traffic for production; it is two short interruptions
-inside a few minutes. `--env homelab` exists for the owner's home release and is run by
+want an hour of the day with little traffic for production: the edge is interrupted for
+seconds in steps 1 and 6, and the backend for the few minutes of step 5, all inside a
+quarter of an hour. `--env homelab` exists for the owner's home release and is run by
 hand.
 
 ### D6. The base image is tagged per environment and version
@@ -387,10 +400,12 @@ before the merge. The scope list is the file list.
 - The cutover is rehearsed before the merge on Docker Desktop Kubernetes: the old chart is
   installed from the base commit (a `git worktree` at `dev`) with the local values, Luna on
   against Secrets from `provision-release.sh`, then `split-release.sh --env local` runs
-  every step except the address move of step 3, and the builder records the length of the
+  every step except the address move of step 3, the volume rebinding of step 5 included
+  (Docker Desktop's hostpath volumes rebind the same way), and the builder records the length of the
   interruptions of steps 1 and 6 in the PR.
 - On staging, after the merge: the `staging-portfolio` run shows the cutover steps in its
-  summary; `helm list -A` shows `portfolio` and `velista` and no `nx-portfolio`; `kubectl
+  summary; `helm list -A` shows `portfolio` and `velista`, and `kubectl get ns` shows no
+  `nx-portfolio`; `kubectl
   get gateway -A` shows two Gateways, both `Programmed`; `kubectl get certificate -A` shows
   six Ready; `kubectl get svc -n envoy-gateway-system` shows one LoadBalancer with the
   address; the six URLs answer over TLS; `staging.ichirokuxvi.com/velista/en` answers from
@@ -401,7 +416,8 @@ before the merge. The scope list is the file list.
 - A commit that fails the `velista-luna` gate blocks the velista deploy and not the
   portfolio deploy.
 - The first `staging-velista` run after the cutover records no release task as `skipped`,
-  and `kubectl get cm release-tasks -n nx-portfolio -o yaml` shows the ledger it had before.
+  and `kubectl get cm release-tasks -n luna-shopper -o yaml` shows the ledger copied from
+  the old namespace.
 - During a dispatched `host-maintenance` run against staging, a staging deploy of either
   unit waits on the host lock and completes after the patch, or fails at SSH during the
   reboot with that reason in its summary.

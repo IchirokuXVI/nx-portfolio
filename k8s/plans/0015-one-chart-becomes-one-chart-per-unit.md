@@ -309,7 +309,7 @@ externalRoutes:
     keepPrefix: true
     backend:
       service: velista
-      namespace: nx-portfolio   # the velista unit's NAMESPACE; staging and production agree
+      namespace: luna-shopper   # the velista unit's NAMESPACE; staging and production agree
       port: 80
 ```
 
@@ -384,8 +384,9 @@ half of the registry check; `units.mjs check` (`0014` D4) stays Node only.
 `run-release-tasks.sh --unit <u>` sources `unit.env` for `NAMESPACE` and `RELEASE_NAME`,
 runs `helm status <RELEASE_NAME>` for first install detection, and exits 0 at once with a
 line in the summary when `RELEASE_TASKS` is false. Each `task.env` gains `UNIT=velista`,
-and `check-tasks.mjs` requires the key and asserts the directory exists. The ledger stays
-ConfigMap `release-tasks` in the unit's namespace, which for velista is where it is today.
+and `check-tasks.mjs` requires the key and asserts the directory exists. The ledger is
+ConfigMap `release-tasks` in the unit's namespace; the cutover of `0016` D5 copies it into
+`luna-shopper` together with the data.
 
 A release counts as a first install only when `helm status <RELEASE_NAME>` fails **and**
 the ledger ConfigMap is absent. Before the cutover of `0016` D5 the release `velista` does
@@ -448,8 +449,8 @@ One builder, one PR, title `refactor(helm): one chart per deploy unit over a lib
   `install.sh --issuer selfsigned` with merged gateways: `helm install portfolio
   k8s/helm/portfolio -n portfolio --create-namespace -f values.yaml -f values.local.yaml`
   answers on its hosts; `provision-release.sh --unit velista --env staging` against that
-  cluster writes the Secrets into `nx-portfolio`, and `helm install velista
-  k8s/helm/velista -n nx-portfolio -f values.yaml -f values.staging.yaml --set
+  cluster writes the Secrets into `luna-shopper`, and `helm install velista
+  k8s/helm/velista -n luna-shopper -f values.yaml -f values.staging.yaml --set
   gateway.tls.issuer.kind=ClusterIssuer --set gateway.tls.issuer.name=selfsigned --set
   gateway.tls.issuer.create=false` brings every Luna pod to Ready. One Envoy Service exists
   in `envoy-gateway-system`.

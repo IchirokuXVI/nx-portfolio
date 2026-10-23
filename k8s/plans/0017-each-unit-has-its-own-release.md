@@ -193,7 +193,7 @@ per deploy unit (plan 0017)`. The scope list is the file list.
 - A Release `velista-v0.15.0` runs `release-velista.yml` through deploy and
   `release-portfolio.yml` to its one summary line. `helm history portfolio` is unchanged.
 - `redeploy.yml` with `velista`, `production`, `0.14.2` after that release puts `0.14.2`
-  back, observed through `kubectl get deployment -n nx-portfolio -o
+  back, observed through `kubectl get deployment -n luna-shopper -o
   jsonpath='{.items[*].spec.template.spec.containers[*].image}'`.
 
 ## 6. The owner's part

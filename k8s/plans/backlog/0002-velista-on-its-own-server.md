@@ -25,7 +25,7 @@ to a pipeline or an application, and with one template change at most (D2).
 
 After `0014` to `0017`:
 
-- The velista unit is release `velista` in namespace `nx-portfolio` on the shared server,
+- The velista unit is release `velista` in namespace `luna-shopper` on the shared server,
   with its own Gateway, Issuer, certificates and Secrets. Its hosts are `velista.app`,
   `admin.`, `api.` and `rt.` (one label down in staging). Its deploy reads the host and key
   from the environments `velista-staging` and `velista-production`.
@@ -53,8 +53,7 @@ portfolio host still answers `/velista`, as a redirect or as a proxy to the new 
 `k8s/README-new-cluster.md` (a unit flag on the steps), the four GitHub environment values
 of velista, `k8s/helm/portfolio/values.*.yaml` and one template of the library chart (the
 external route becomes a redirect or an external backend, D2), `k8s/helm/velista/values.*.yaml`
-(no ReferenceGrant), `k8s/units/velista/unit.env` (`NAMESPACE=velista`), the new address
-in the `install.sh --ip` call of the new host, `.github/workflows/host-maintenance.yml` (a
+(no ReferenceGrant), the new address in the `install.sh --ip` call of the new host, `.github/workflows/host-maintenance.yml` (a
 job for the new host), `k8s/bootstrap/provision-release.sh` (`--from-file`).
 
 ### Constraints
@@ -79,12 +78,12 @@ four velista URLs answer from the new address. A restored list is readable in th
 
 ## 1. Decisions to take when this is picked up
 
-### D1. The namespace becomes `velista`
+### D1. The namespace stays `luna-shopper`
 
-A restore into a fresh cluster is the one moment where the namespace of the velista unit
-changes at no cost (`0014` D3). `unit.env` says `NAMESPACE=velista`. The `release-tasks`
-ConfigMap is copied with the data, because an empty ledger would rerun every task whose
-window is still open, and `0015` D9 treats a present ledger as a release that already ran.
+The unit keeps the namespace it got in `0016`, named after the databases it holds, so
+nothing in `unit.env` changes. The `release-tasks` ConfigMap is copied with the data,
+because an empty ledger would rerun every task whose window is still open, and `0015` D9
+treats a present ledger as a release that already ran.
 
 ### D2. What `ichirokuxvi.com/velista` does afterwards
 

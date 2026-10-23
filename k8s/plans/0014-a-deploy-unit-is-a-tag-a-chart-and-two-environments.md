@@ -137,7 +137,7 @@ Two units exist today:
 | Unit | Apps | Namespace | Release | Tag prefix | GitHub environments |
 | --- | --- | --- | --- | --- | --- |
 | `portfolio` | shell, odontogram, damoclesSword, landingV2 | `portfolio` | `portfolio` | `portfolio-v` | `portfolio-staging`, `portfolio-production` |
-| `velista` | velista, luna-shopper-admin, luna-shopper-backend-{gateway, realtime, auth, core, catalog, harvester, assistant} | `nx-portfolio` (section 3 D3) | `velista` | `velista-v` | `velista-staging`, `velista-production` |
+| `velista` | velista, luna-shopper-admin, luna-shopper-backend-{gateway, realtime, auth, core, catalog, harvester, assistant} | `luna-shopper` (section 3 D3) | `velista` | `velista-v` | `velista-staging`, `velista-production` |
 
 The owner's words fix the grouping: the three velista apps stay together for now, and the
 shell keeps shipping its remotes. The design must make the next split (admin alone, backend
@@ -170,7 +170,7 @@ The **registry** `k8s/units/<unit>/unit.env` says what the unit is made of besid
 
 ```sh
 UNIT=velista
-NAMESPACE=nx-portfolio
+NAMESPACE=luna-shopper
 RELEASE_NAME=velista
 CHART=k8s/helm/velista
 TAG_PREFIX=velista-v
@@ -221,32 +221,28 @@ Not a unit: `docker/local-http-server` (the nginx base image of every frontend) 
 own tag. Plan `0016` D6 fixes their tag. The e2e projects are not units either. A gate
 belongs to a unit through `GATES`.
 
-### D3. Namespaces: the stateless unit moves, the stateful one stays
+### D3. Namespaces: `portfolio` and `luna-shopper`, and `nx-portfolio` disappears
 
-The portfolio unit gets the namespace `portfolio`. The velista unit keeps `nx-portfolio`
-for now.
+The portfolio unit gets the namespace `portfolio`. The velista unit gets `luna-shopper`.
+The owner chose the name on 2026-10-23: the namespace holds the databases of luna-shopper,
+so it is named after them, and if velista or the back office later deploy apart (section
+4), the backend keeps this namespace and nothing is renamed a second time. The old
+namespace `nx-portfolio` is deleted at the end of the cutover.
 
-The reason is data. The velista unit owns four Postgres StatefulSets, NATS, their PVCs,
-their Secrets and the release task ledger, all in `nx-portfolio`. A Kubernetes namespace
-cannot be renamed, so moving the unit means moving the volumes (PV rebinding or dump and
-restore), copying the Secrets verbatim, and a window. The portfolio unit owns four stateless
-nginx pods and two certificates. Moving it is a fresh install. Plan `0016` D5 is the cutover
-for both.
+The cost is one stateful move, and it is paid inside the cutover of `0016` D5. The velista
+unit owns four Postgres StatefulSets, NATS, their volumes, its Secrets and the release task
+ledger, all in `nx-portfolio`. A Kubernetes namespace cannot be renamed, so the Secrets and
+the ledger are copied verbatim (a regenerated `HARVESTER_ACTOR_ID` orphans every catalog
+row the harvester wrote, and regenerated JWT keys sign every user out), the volumes are
+kept and rebound to new claims in `luna-shopper` without a copy, and the backend is down
+for the few minutes between the old StatefulSets stopping and the new ones being Ready. A
+fresh dump is taken first, and the move is rehearsed on Docker Desktop and on staging
+before production. The portfolio unit owns four stateless pods and two certificates, so its
+move is a fresh install.
 
-The name `nx-portfolio` for the velista namespace is the honest cost of this choice. It is
-a values key of the unit and nothing else reads it, so it can change later without a
-redesign. The natural moment is the move to its own server (backlog `0002`), where a restore
-into a fresh cluster is the move anyway and the namespace is `velista` from the start.
-
-Alternatives the owner can pick instead, each one line in `unit.env` plus the cutover work:
-
-- **B.** velista moves to `velista` now and the portfolio keeps `nx-portfolio`. Cost: a
-  stateful move in staging and production (dump through the existing backup CronJobs,
-  restore with `restore-database.sh`, or PV rebinding on `local-path`), the Secrets copied
-  with `kubectl get secret -o yaml` and never regenerated (a regenerated
-  `HARVESTER_ACTOR_ID` orphans every catalog row the harvester wrote, and regenerated JWT
-  keys sign every user out), and a downtime of the API for the length of the restore.
-- **C.** Both move and `nx-portfolio` disappears. Cost of B plus nothing.
+The alternative, velista staying in `nx-portfolio` with no data move, was the first draft
+of this plan. The owner rejected it because the name would describe the wrong product and
+confuse every later reader of `kubectl get ns`.
 
 ### D4. One check, in the pull request workflow
 
@@ -314,8 +310,9 @@ built now.
 Two rules for a split:
 
 - **The stateful member keeps the namespace.** When admin or the velista web leaves the
-  velista unit, the backend keeps `nx-portfolio` (or whatever the velista namespace is by
-  then) and the stateless app gets a fresh namespace. Data never moves for a split.
+  velista unit, the backend keeps `luna-shopper`, which is named after the data it holds
+  for exactly this reason, and the stateless app gets a fresh namespace. Data never moves
+  for a split.
 - **Cross unit traffic goes through a public hostname or an explicit grant, never through a
   namespace local Service name.** Today the one cross unit edge is the portfolio path of
   velista (plan `0015` D6). A new edge is a new decision in the plan that creates it.
@@ -356,8 +353,8 @@ with: "A `deploy:<unit>` tag, and one entry in the `apps` of that unit's chart v
 
 ## 8. Decisions left for the owner
 
-1. **D3, the namespace of the velista unit.** `nx-portfolio` for now (recommended), or a
-   stateful move to `velista` now (B or C).
+1. **D3 is decided.** The owner chose `luna-shopper` on 2026-10-23. What remains is the
+   hour for the production move (`0016` D5).
 2. **D2, the unit names.** `portfolio` and `velista`, or other words.
 3. **Whether `android` stays a velista scope.** It is retired; it is listed so old titles
    parse into velista's notes.
