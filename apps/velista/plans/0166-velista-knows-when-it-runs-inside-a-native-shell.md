@@ -1,3 +1,5 @@
+> **PR:** [#810](https://github.com/IchirokuXVI/nx-portfolio/pull/810)
+
 # 0166: velista knows when it runs inside a native shell
 
 > Asked for by the owner on 2026-10-23: "start implementing capacitor for an android/iOS build.

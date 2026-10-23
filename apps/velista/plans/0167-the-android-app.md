@@ -1,3 +1,5 @@
+> **PR:** [#810](https://github.com/IchirokuXVI/nx-portfolio/pull/810)
+
 # 0167: the Android app
 
 > Asked for by the owner on 2026-10-23, with plan `0166`: "start implementing capacitor for an
