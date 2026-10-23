@@ -17,6 +17,40 @@ Routing is the Kubernetes **Gateway API**, served by **Envoy Gateway**, with
 `HTTPRoute` objects; the data plane is provisioned by the implementation. See
 [`plans/0001-gateway-api-migration.md`](./plans/0001-gateway-api-migration.md).
 
+### Deploy units
+
+The apps deploy in **units** ([plan 0014](./plans/0014-a-deploy-unit-is-a-tag-a-chart-and-two-environments.md)).
+A unit is a set of apps that ship together into one namespace, under one Helm
+release and one version stream. Two units exist:
+
+| Unit | Apps | Namespace | Release | Tag prefix |
+| --- | --- | --- | --- | --- |
+| `portfolio` | shell, odontogram, damoclesSword, landingV2 | `portfolio` | `portfolio` | `portfolio-v` |
+| `velista` | velista, luna-shopper-admin, the seven Luna Shopper services | `luna-shopper` | `velista` | `velista-v` |
+
+A unit is declared in two places:
+
+- The tag `deploy:<unit>` on a `project.json` names the unit of an app. Nx can
+  query it: `npx nx show projects --projects tag:deploy:velista --with-target build:docker`.
+- [`units/<unit>/unit.env`](./units) names the namespace, the release, the chart,
+  the e2e gates, the Secrets, the hosts and the build variables of each
+  environment. It is shell sourceable, so a script on a host reads it with no Nx.
+
+`node tools/deploy/units.mjs check` keeps the two equal, and `pr.yml` runs it. It
+fails when an app with a `build:docker` target has no `deploy:` tag or has two,
+and when a `unit.env` is incomplete. `node tools/deploy/units.mjs list` prints
+every unit as JSON, and `projects <unit>` prints the apps of one unit.
+
+Today the namespaces, the releases and the chart in the table are declared but
+not deployed. The whole system still deploys as the one release `nx-portfolio`.
+Plans 0015 to 0017 move each unit to its own chart, deploy job and release.
+
+To move an app to another unit, change its tag. To split a unit or add one,
+follow section 4 of plan 0014: retag the apps, add `units/<new>/unit.env` and a
+chart, create the two GitHub environments, and add the scopes of the moved apps
+to `UNITS` in `tools/release/rules.mjs`. The stateful member of a split keeps the
+namespace, so data never moves for a split.
+
 This document is about running the stack **locally end to end** (build every image
 from scratch, deploy, and run e2e against the real containers). For the production
 CI/CD pipeline and the chart internals see the [root README](../README.md).
