@@ -1,0 +1,119 @@
+# ---------------------------------------------------------------------------
+# The portfolio deploy unit (k8s plans 0014 and 0015): the shell and its three
+# remotes. One environment per values file (plan 0002), one release per unit:
+#
+#   helm upgrade --install portfolio k8s/helm/portfolio --namespace portfolio \
+#     --values k8s/helm/portfolio/values.yaml \
+#     --values k8s/helm/portfolio/values.production.yaml
+#
+# The namespace and the release name come from k8s/units/portfolio/unit.env.
+# Every object is rendered into `--namespace`, so no key here names one.
+# ---------------------------------------------------------------------------
+
+# The domain this unit serves. Every host is derived from it. Empty here, so a
+# deploy with no environment values file fails rather than picks one.
+baseDomain: ''
+
+# Which environment this is. Nothing in this chart reads it today; it is kept so
+# both unit charts state the same top level keys.
+environment: ''
+
+# Names that do not sit under `baseDomain`, keyed by entry name. Empty in both
+# clusters. See the `charts.host` helper for the precedence.
+hostOverrides: {}
+
+# A cluster deploy pulls the freshly pushed images (Always). A local deploy uses
+# the images built into the Docker Desktop store and overrides this.
+appImagePullPolicy: Always
+
+# Registry credentials as Secret names in this namespace. Empty in both
+# clusters, which authenticate at the node level; see values.homelab.yaml.
+imagePullSecrets: []
+
+# The tag every app of this unit runs. Production pins the release version
+# (deploy-release.sh passes --set imageTag); staging tracks the mutable
+# `staging` tag that CI overwrites on every push to main.
+imageTag: latest
+
+# ---------------------------------------------------------------------------
+# Routing (plans 0001 and 0015). The chart declares the routes as core Gateway
+# API objects, and the implementation owns the data plane. The cluster
+# prerequisites (Gateway API CRDs, Envoy Gateway with merged gateways,
+# cert-manager, MetalLB and its pool) are installed once per cluster by
+# k8s/bootstrap/install.sh, not by this chart.
+# ---------------------------------------------------------------------------
+gateway:
+  # Off in the local "port" mode (values.localhost.yaml), which exposes each app
+  # on its own LoadBalancer port and needs no bootstrap.
+  enabled: true
+
+  # `kubectl get gatewayclass` names it; install.sh prints it at the end.
+  className: eg
+
+  tls:
+    enabled: true
+    # The unit's own ACME account (plan 0015 D4): a namespaced Issuer that this
+    # chart renders when `create` is true, solving HTTP-01 through this unit's
+    # Gateway. A local file points at an existing ClusterIssuer instead.
+    issuer:
+      kind: Issuer
+      name: letsencrypt
+      create: true
+      acme:
+        server: https://acme-v02.api.letsencrypt.org/directory
+        # Required when `create` is true. The environment files set it.
+        email: ''
+    # Plain HTTP answers with a redirect to HTTPS. On in a cluster, off locally
+    # where everything is plain HTTP.
+    redirectHttp: true
+
+  # Implementation specific annotations on the Gateway. Empty by design.
+  extraAnnotations: {}
+
+# Each app is one Deployment and Service, routed by one HTTPRoute.
+#
+# `hostPrefix` is a label under `baseDomain`, so this list is the same in both
+# clusters. An empty prefix is the domain root, where the shell lives. A local
+# values file sets an explicit `host` instead.
+#
+# Image names are the tag-less repo path; the tag is `imageTag` above.
+apps:
+  - name: shell
+    image: ghcr.io/ichirokuxvi/nx-portfolio/shell
+    hostPrefix: ''
+    path: /
+  - name: odontogram
+    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
+    hostPrefix: mfe
+    path: /odontogram
+  - name: damoclessword
+    image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword
+    hostPrefix: mfe
+    path: /damoclesSword
+  - name: landingv2
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
+    hostPrefix: mfe
+    path: /landingV2
+
+# Routes on this unit's hosts to a Service of another unit (plan 0015 D6).
+#
+# `/velista` on the portfolio host serves the velista pod (velista plan 0165).
+# The route is the portfolio's decision about its own host. The velista chart
+# holds the ReferenceGrant that lets it reach the Service across namespaces.
+#
+# `keepPrefix: true` forwards the path as it arrived: velista's own nginx maps
+# `/velista/...` onto the bundle and rewrites the document's `<base>` under the
+# prefix (plan 0165 D2). A longer path prefix outranks the shell's `/`.
+#
+# `backend.namespace` is the NAMESPACE of k8s/units/velista/unit.env, the one
+# place this unit names the other's namespace. `provision-release.sh --check`
+# fails when the two differ.
+externalRoutes:
+  - name: velista
+    hostPrefix: ''
+    path: /velista
+    keepPrefix: true
+    backend:
+      service: velista
+      namespace: luna-shopper
+      port: 80

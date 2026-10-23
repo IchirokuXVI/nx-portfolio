@@ -1,0 +1,96 @@
+# The velista unit served from the home machine, for a window without a VPS.
+#
+#   ./k8s/helm/deploy-homelab.sh velista 0.1.1
+#
+# Do not run `helm upgrade` against this file by hand. The version being served
+# is an argument, exactly as on the VPS. See k8s/README-homelab.md.
+#
+# The same published images the VPS ran, on the owner's one domain. Ports 80
+# and 443 have to reach this machine, and the ichirokuxvi.com records have to
+# point at its public address (docker/ddns keeps them there).
+
+baseDomain: ichirokuxvi.com
+
+# Production, because that is what this is serving. Telemetry only.
+environment: production
+
+# velista's four hosts under the one domain the home line serves (plan 0015 D7).
+# Without these the velista entry, whose prefix is empty, would claim the
+# portfolio's root host, and the merged data plane refuses a listener that two
+# Gateways declare.
+hostOverrides:
+  velista: velista.ichirokuxvi.com
+  luna-shopper-admin: admin.ichirokuxvi.com
+  luna-shopper-backend-gateway: api.ichirokuxvi.com
+  luna-shopper-backend-realtime: rt.ichirokuxvi.com
+
+# The floor. deploy-homelab.sh overrides it with the release version on every
+# deploy.
+imageTag: latest
+
+# IfNotPresent, where both clusters use Always. Release tags are immutable, and
+# a pod restarting during a network blip or a ghcr.io incident still starts from
+# the image on disk.
+appImagePullPolicy: IfNotPresent
+
+# The VPS authenticated to ghcr.io at the node level; this machine does not.
+# Create the Secret once, in this unit's namespace, with a token that carries only
+# read:packages:
+#
+#   kubectl -n luna-shopper create secret docker-registry ghcr-pull \
+#     --docker-server=ghcr.io \
+#     --docker-username=IchirokuXVI \
+#     --docker-password=<token with read:packages>
+imagePullSecrets:
+  - ghcr-pull
+
+# The same objects production uses, with the issuer the home line can solve:
+# DNS-01 through Cloudflare, created once with k8s/bootstrap/cluster-issuer-dns01.sh.
+gateway:
+  enabled: true
+  className: eg
+  tls:
+    enabled: true
+    issuer:
+      kind: ClusterIssuer
+      name: letsencrypt-dns01
+      create: false
+    redirectHttp: true
+
+# The portfolio path of velista is not served at home, so nothing needs the grant.
+referenceGrants: []
+
+# ---------------------------------------------------------------------------
+# Luna Shopper backend.
+#
+# On, because velista is useless without it. It needs the six Secrets first,
+# once:
+#
+#   ./k8s/bootstrap/provision-release.sh --unit velista --env production
+#
+# The script generates its own passwords and JWT keypair, so the credentials here
+# are this machine's own and share nothing with a VPS.
+# ---------------------------------------------------------------------------
+lunaShopperBackend:
+  enabled: true
+
+  # Same reasoning as appImagePullPolicy above.
+  imagePullPolicy: IfNotPresent
+
+  config:
+    logLevel: info
+    corsOrigins: https://ichirokuxvi.com,https://velista.ichirokuxvi.com
+    authJwtKid: prod-1
+    googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
+    appBaseUrl: https://velista.ichirokuxvi.com/{locale}
+    mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
+    # velista's own origin on this machine, and the routes the app really has.
+    # No locale segment: the locale guard inserts the reader's own.
+    mailVerifyBaseUrl: https://velista.ichirokuxvi.com/auth/verify
+    mailResetBaseUrl: https://velista.ichirokuxvi.com/auth/reset-password
+
+  # Off: the nightly dump needs S3 credentials this machine has no reason to
+  # hold for a few days. Take a manual dump before moving off it; see section 10
+  # of k8s/README-homelab.md.
+  backups:
+    enabled: false
