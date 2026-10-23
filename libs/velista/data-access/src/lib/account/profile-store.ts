@@ -12,6 +12,7 @@ import type {
   UsernameScope,
   UserProfile,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { TokenStore } from '../auth/token-store';
 import { Mutations } from '../mutations';
 import {
@@ -144,6 +145,15 @@ export class ProfileStore {
     });
 
     this._destroyRef.onDestroy(() => subscription.unsubscribe());
+
+    // A rename broadcast while the socket was down never arrived (velista `0169`).
+    // Only a profile already held is read again: `load` keeps it on screen while the
+    // read runs, and a store that holds none has nothing a reconnect could correct.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._profile() !== null) {
+        void this.load();
+      }
+    });
   }
 
   /**

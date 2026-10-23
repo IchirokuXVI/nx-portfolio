@@ -764,4 +764,56 @@ describe('ShoppingProfileStore', () => {
       expect(store.chains()).toEqual([]);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    const count = (
+      service: ReturnType<typeof fakeService>,
+      method: string
+    ): number => service.calls.filter((call) => call.method === method).length;
+
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', () => {
+      const service = fakeService();
+      setUp(service);
+      TestBed.tick();
+
+      expect(service.calls).toEqual([]);
+    });
+
+    it('reads nothing before the profiles were loaded', async () => {
+      const service = fakeService();
+      const { realtime } = setUp(service);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(service.calls).toEqual([]);
+    });
+
+    it('reads the profiles again, and not the chains or the coverage', async () => {
+      const service = fakeService();
+      const { store, realtime } = setUp(service);
+      await store.load();
+      TestBed.tick();
+      const chains = count(service, 'listSupermarkets');
+      const coverage = count(service, 'describeScope');
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      expect(store.state()).toBe('loaded');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(count(service, 'listProfiles')).toBe(2);
+      expect(count(service, 'listSupermarkets')).toBe(chains);
+      expect(count(service, 'describeScope')).toBe(coverage);
+      expect(store.state()).toBe('loaded');
+    });
+  });
 });

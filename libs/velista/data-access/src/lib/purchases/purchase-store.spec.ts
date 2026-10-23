@@ -338,4 +338,45 @@ describe('PurchaseStore (velista 0095)', () => {
       expect(fake.heads).toHaveLength(1);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads nothing at construction', async () => {
+      jest.useFakeTimers();
+      const { fake } = await build();
+      TestBed.tick();
+      jest.advanceTimersByTime(PURCHASES_REFETCH_QUIET_MS);
+
+      expect(fake.heads).toHaveLength(0);
+    });
+
+    it('reads nothing before the first page landed', async () => {
+      jest.useFakeTimers();
+      const { fake, realtime } = await build();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(PURCHASES_REFETCH_QUIET_MS);
+
+      expect(fake.heads).toHaveLength(0);
+    });
+
+    it('reads the first page again, quietly', async () => {
+      jest.useFakeTimers();
+      const session = entry('s-1');
+      const { store, fake, realtime } = await loaded({
+        items: [session],
+        nextCursor: null,
+      });
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(PURCHASES_REFETCH_QUIET_MS);
+
+      expect(fake.heads).toHaveLength(2);
+      expect(fake.heads[1].cursor).toBeUndefined();
+      expect(store.state()).toBe('loaded');
+    });
+  });
 });

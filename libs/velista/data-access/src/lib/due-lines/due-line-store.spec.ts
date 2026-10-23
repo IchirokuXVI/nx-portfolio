@@ -207,4 +207,35 @@ describe('DueLineStore (velista 0089)', () => {
     expect(store.lines()).toEqual([]);
     expect(store.listId()).toBeNull();
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads nothing at construction, nor with no list open', async () => {
+      jest.useFakeTimers();
+      const { fake, realtime } = await build();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(TRIPS_REFETCH_QUIET_MS);
+
+      expect(fake.reads).toHaveLength(0);
+    });
+
+    it('reads the open list again, keeping its lines while it runs', async () => {
+      jest.useFakeTimers();
+      const { store, fake, realtime } = await build();
+      store.open(LIST);
+      fake.reads[0].answer.resolve([due('l-1')]);
+      await flush();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(TRIPS_REFETCH_QUIET_MS);
+
+      expect(fake.reads).toHaveLength(2);
+      expect(fake.reads[1].listId).toBe(LIST);
+      expect(store.lines().map((line) => line.lineId)).toEqual(['l-1']);
+    });
+  });
 });

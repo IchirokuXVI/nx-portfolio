@@ -14,6 +14,7 @@ import type {
   Supermarket,
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { Mutations, overlayKey, type Overlay } from '../mutations';
 import {
   REALTIME_CLIENT,
@@ -191,6 +192,15 @@ export class ShoppingProfileStore {
     });
 
     inject(DestroyRef).onDestroy(() => subscription.unsubscribe());
+
+    // A `profiles.changed` broadcast while the socket was down never arrived
+    // (velista `0169`). Only the profiles are read again: the chains and the
+    // coverage are not fed by the socket, so a reconnect cannot have made them stale.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._state() === 'loaded') {
+        void this._refreshProfiles();
+      }
+    });
   }
 
   /** How the last write to one control of one profile went. */
@@ -650,6 +660,21 @@ export class ShoppingProfileStore {
    * field takes the server's. A profile the event does not mention is gone, which is
    * how a delete on another device reaches this one.
    */
+  /**
+   * Read the profiles again without a skeleton, after a reconnect (velista `0169`).
+   *
+   * Laid over what is held the way a `profiles.changed` event is, so a control whose
+   * write is still in flight keeps the value the person typed. A failure is
+   * swallowed: the profiles on screen are still the best thing to draw.
+   */
+  private async _refreshProfiles(): Promise<void> {
+    try {
+      this._applyRemote(await this._service.listProfiles());
+    } catch {
+      // Deliberately quiet. See above.
+    }
+  }
+
   private _applyRemote(incoming: readonly ShoppingProfile[]): void {
     const local = new Map(this._raw().map((profile) => [profile.id, profile]));
 
