@@ -57,8 +57,10 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 - `release-notes.mjs --unit <u>` writes the notes of one unit and defaults `--from` to the
   previous tag with that unit's prefix.
 - Both production environments carry a tag rule for their prefix.
-- `redeploy.yml` (`workflow_dispatch` on the tag to deploy, with unit and environment)
-  deploys an already built version from that tag's own chart, which is the rollback.
+- `redeploy.yml` (`workflow_dispatch` on the default branch, with unit, environment and
+  version) deploys an already built version with the chart of the unit's newest release,
+  which is the rollback. It refuses a version from before the unit's first release under
+  plan 0016.
 - `CONTRIBUTING.md` describes the procedure per unit.
 
 ### Scope
@@ -85,8 +87,8 @@ Every statement below was read on the branch of PR #810 at `e5320be3`.
 ### Progress evidence
 
 A `velista-v*` Release on staging's commit deploys velista only, with notes that contain no
-portfolio scope. A `redeploy.yml` run of the previous velista version on production puts the
-previous images back and `helm history velista` shows the two revisions.
+portfolio scope. After two velista releases, a `redeploy.yml` run of the older one on
+production puts its images back and `helm history velista` shows the new revision.
 
 ## 1. Purpose
 
@@ -143,8 +145,12 @@ task's `UNIT` has a `TAG_PREFIX`. The existing four tasks name velista versions 
 `release-unit.yml` sets the unit's `BUILD_ENV_PRODUCTION` variables from `unit.env`, and
 velista's include `VELISTA_APP_URL=https://velista.app` and
 `VELISTA_APP_VERSION=<version>`. The admin app receives the same number. The portfolio has
-`MFE_BASE_URL` only. `DOCKER_IMAGE_TAG=<version>,latest` and `BUILDER_TAG=<unit>-v<version>`
-per `0016` D6.
+`MFE_BASE_URL` only. The build has two invocations, as `0016` D1 states. The base image
+`local-http-server` builds first, alone, with `DOCKER_IMAGE_TAG=<unit>-v<version>`. The
+unit's images build after it with `DOCKER_IMAGE_TAG=<version>,latest` and
+`BUILDER_TAG=<unit>-v<version>`. One `run-many` cannot do both, because `DOCKER_IMAGE_TAG`
+sets the tags of every project it builds, and the base must carry the prefixed tag and no
+`latest` (`0016` D6).
 
 ### D6. `nx release` is not adopted
 
@@ -166,18 +172,41 @@ velista unit splits and three streams exist, the trade changes; the owner decide
 
 ### D7. A manual redeploy per unit
 
-`redeploy.yml` (`workflow_dispatch` with inputs `unit` and `environment`) is dispatched
-**on the tag to deploy** (`gh workflow run redeploy.yml --ref velista-v0.14.2 -f
-unit=velista -f environment=production`). It checks out `github.ref`, so the chart it
-applies is the chart of that version and never a newer `main` whose values or templates
-may not match the older images. It derives the version from the tag, refuses a ref that
-does not start with the unit's prefix, holds `deploy-<unit>-<environment>`, and calls the
-composite action `deploy-unit` of `0016` with no build. On production it is the rollback:
-`deploy-release.sh <unit> <version>` with an older version puts the older images back and
-the release tasks' ledger sees a version it has already finished. The job names the
-environment `<unit>-<environment>`, so the same host and key apply and the production tag
-rule is satisfied by the tag ref itself. Production stays tag only. On staging the same
-workflow dispatched on `main` redeploys the `staging` tag.
+`redeploy.yml` (`workflow_dispatch` with inputs `unit`, `environment` and `version`) runs
+**from the default branch** (`gh workflow run redeploy.yml --ref main -f unit=velista -f
+environment=production -f version=0.15.0`). A dispatch needs the workflow file at the ref
+it runs on, and only the default branch is sure to have it.
+
+On production it checks out the unit's **newest** tag `<unit>-v*`, not `main` and not the
+tag of the version to deploy. That tag carries the chart that production runs now, the
+composite action `deploy-unit` of `0016` and the two argument `deploy-release.sh`. `main`
+may hold chart changes that no release has shipped yet. The tag of an older version may
+hold none of those three things. It then holds `deploy-<unit>-production` and calls
+`deploy-unit` with no build, which runs `deploy-release.sh <unit> <version>`. That puts the
+older images back under the current chart, and the release tasks' ledger sees a version it
+has already finished.
+
+It refuses a version older than the unit's **first release after `0016` landed**, the
+oldest tag `<unit>-v*` whose commit contains `.github/actions/deploy-unit/action.yml`. The
+seeded `velista-v0.14.2` and `portfolio-v0.14.2` (D2) point at the commit of `v0.14.2` and
+fall below that line: their images were built for the combined chart and were never deployed
+by a unit chart. The refusal writes one summary line that names the line and the way back
+below it.
+
+Below the line, a rollback takes the path from before the split:
+
+- **On a cluster not yet cut over** (`0016` D5), `deploy-release.sh <older-version>` from a
+  checkout of `v0.14.2` or older against the release `nx-portfolio`, or `helm rollback
+  nx-portfolio`.
+- **On a cluster already cut over**, `helm rollback <unit> 1`. Revision 1 of each unit
+  release is the cutover install, which runs the images that were live before the split
+  under the unit chart. Nothing older than that revision is reachable.
+
+A dispatch from `main` cannot pass the tag rule of `<unit>-production` (section 6). On
+production the job thus names the environment `<unit>-production-redeploy`, which holds the
+same secrets and variable, allows the branch `main` only, and has a required reviewer.
+Releases stay tag only. On staging the job names `<unit>-staging`, checks out `main` and
+redeploys the `staging` tag; `version` is ignored there.
 
 ## 4. Who edits what
 
@@ -192,9 +221,14 @@ per deploy unit (plan 0017)`. The scope list is the file list.
   prints notes with no portfolio scope, and the portfolio command the reverse.
 - A Release `velista-v0.15.0` runs `release-velista.yml` through deploy and
   `release-portfolio.yml` to its one summary line. `helm history portfolio` is unchanged.
-- `redeploy.yml` with `velista`, `production`, `0.14.2` after that release puts `0.14.2`
-  back, observed through `kubectl get deployment -n luna-shopper -o
-  jsonpath='{.items[*].spec.template.spec.containers[*].image}'`.
+- After a second velista release (`velista-v0.15.1` or the next number), `redeploy.yml`
+  dispatched on `main` with `velista`, `production`, `0.15.0` puts `0.15.0` back, observed
+  through `kubectl get deployment -n luna-shopper -o
+  jsonpath='{.items[*].spec.template.spec.containers[*].image}'`. The run's log shows the
+  checkout of the newest `velista-v*` tag, and `helm history portfolio` is unchanged.
+- `redeploy.yml` with `velista`, `production`, `0.14.2` is refused before any SSH, with a
+  summary line that names `velista-v0.15.0` as the oldest version it deploys and `helm
+  rollback velista 1` as the way back below it.
 
 ## 6. The owner's part
 
@@ -203,7 +237,10 @@ per deploy unit (plan 0017)`. The scope list is the file list.
    three that creates no events).
 2. Tag rules `portfolio-v*` on `portfolio-production` and `velista-v*` on
    `velista-production`. No branch is allowed on either.
-3. Publish the next Release of each unit with its prefix.
+3. The environments `portfolio-production-redeploy` and `velista-production-redeploy` (D7),
+   with the values of the matching production environment, the branch rule `main` only and
+   a required reviewer.
+4. Publish the next Release of each unit with its prefix.
 
 ## 7. `CLAUDE.md` and `CONTRIBUTING.md`
 
@@ -213,8 +250,11 @@ per deploy unit (plan 0017)`. The scope list is the file list.
 >   `velista-v0.15.0`). `release-<unit>.yml` builds that unit's images at the tag, pins its
 >   chart to the version, and deploys it. The notes come from `node
 >   tools/release/release-notes.mjs --unit <unit> --version <unit>-vX.Y.Z --out notes.md`.
->   A bare `vX.Y.Z` deploys nothing. To roll back, run `redeploy.yml` with the older
->   version.
+>   A bare `vX.Y.Z` deploys nothing. To roll back, dispatch `redeploy.yml` on `main` with
+>   the unit, the environment and the older version. It deploys that version's images with
+>   the chart of the unit's newest release, and it refuses a version from before the
+>   unit's first release under k8s plan 0016. Below that line the way back is `helm
+>   rollback <unit> 1`.
 
 `CONTRIBUTING.md`: the release section becomes the per unit procedure with both commands,
 and states that velista's numbers never decrease because clients compare them.

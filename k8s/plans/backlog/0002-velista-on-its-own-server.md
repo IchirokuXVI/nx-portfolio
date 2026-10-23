@@ -38,7 +38,10 @@ After `0014` to `0017`:
   nothing in twelve steps, with `provision-host.sh`, `install.sh` and `provision-release.sh
   --unit --env`.
 - Host patching (`0013`) patches one staging host and one production host, with a two day
-  soak between them, and holds the deploy concurrency group of each host.
+  soak between them. A patch and a deploy exclude each other through `flock` on
+  `/run/lock/nx-deploy.lock` on the host (`0016` D2), which `provision-host.sh` creates. No
+  GitHub concurrency group is shared between them. The pipelines hold only per unit groups
+  (`stage-<unit>`, `release-<unit>`, `deploy-<unit>-<env>`).
 
 ### Target state
 
@@ -105,9 +108,14 @@ The recommendation is the redirect.
 
 ### D3. Concurrency per host
 
-The velista callers take the groups `staging-deploy-velista` and `production-release-velista`,
-and `host-maintenance.yml` gains a `staging-velista` and a `production-velista` job that hold
-them, with the soak between the two velista hosts as between the two portfolio hosts.
+Nothing in the pipelines changes. The velista groups of `0016` D2 already name the unit and
+not a host, and the lock that keeps a patch out of a deploy lives on each host. The new host
+gets its own lock file from `provision-host.sh` in step 1, so a velista deploy and a patch
+of the velista host exclude each other there, and neither waits for the old host.
+
+`host-maintenance.yml` gains a `staging-velista` and a `production-velista` job, which call
+`host-patch.yml` with the new host and take the lock on it like the existing jobs. The soak
+between the two velista hosts is the same as between the two portfolio hosts.
 
 ### D4. Let's Encrypt and App Links
 

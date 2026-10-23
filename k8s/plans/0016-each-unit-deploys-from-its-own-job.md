@@ -327,9 +327,10 @@ reads (`0015` D10). Steps, each idempotent:
    ends when the services are Ready, a few minutes after it began. The PriorityClass
    `luna-stateful`, cluster scoped, gets the Helm annotations of the new release before the
    install so that the chart adopts it rather than failing on ownership.
-6. **The swap.** Delete `Gateway portfolio` and every HTTPRoute in `nx-portfolio` (the edge
-   interruption starts), then `helm upgrade portfolio --set gateway.enabled=true` and `helm
-   upgrade velista --set gateway.enabled=true`, both without `--atomic`. Each new Gateway
+6. **The swap.** Delete `Gateway portfolio` and every HTTPRoute in `nx-portfolio`, the old
+   `velista-portfolio` route among them (the edge interruption starts; the portfolio chart
+   renders that route again in `portfolio`, `0015` D6), then `helm upgrade portfolio --set
+   gateway.enabled=true` and `helm upgrade velista --set gateway.enabled=true`, both without `--atomic`. Each new Gateway
    programs its listeners from the copied Secrets. The interruption ends when both Gateways
    report `Programmed` and both releases are `deployed`, which is seconds to a minute. The
    ACME challenges for the re-issued certificates then run through the new Issuers and
