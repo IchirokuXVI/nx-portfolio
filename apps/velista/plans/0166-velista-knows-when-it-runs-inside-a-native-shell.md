@@ -299,3 +299,26 @@ All exported from `@portfolio/velista/platform` (the barrel is `libs/velista/pla
 - **The dead end body copy** still says "open it in your browser once", which is wrong inside the app. The plan allowed one new string, so it was not changed.
 - **No feature in `feature-install`, `feature-account` or `not-found-page` changed.** Both install surfaces read `InstallStore.state` with mount `''` and already have copy for `installed`. The not found page draws `missing` at once because `newerVersionForUnknownPage` resolves false.
 - The production build reports a budget warning on `libs/velista/ui/src/lib/layout/app-layout.scss` (13.81 kB against 12 kB). This change does not touch that file.
+
+### Review fixes (commit `edb8f629`)
+
+1. **The invite link names the standalone origin only in the native shell.** `shareCode` on the
+   home and group pages builds `APP_STANDALONE_ORIGIN` with an empty mount when `APP_RUNTIME`
+   is `native`, and the document's origin with `APP_BASE_PATH` everywhere else, as before this
+   plan. The first build preferred the standalone origin always, which gave
+   `https://velista.app/velista/join/CODE` under the portfolio (not a page) and the production
+   host on staging. Specs: the mounted web case keeps `https://ichirokuxvi.com/velista`, the
+   native case gives `https://velista.app/join` with no mount.
+2. **The basket share link drops the mount with the standalone origin.** `ShareSheet` keeps its
+   plan 0094 preference for `APP_STANDALONE_ORIGIN`, but builds it with `''`; the document's
+   origin still carries `APP_BASE_PATH`. A spec covers the portfolio mount.
+3. **`handleBackWhile` tracks a computed boolean.** It read the predicate inside the effect, so
+   it tracked the predicate's inputs, and a page header re registered above an open sheet each
+   time its `backLabel` string changed (the translation arriving, a locale switch). Now
+   `computed(active)` sits between them and the effect reruns only when the boolean flips. The
+   page header spec changes the label under a newer handler and asserts the newer one still
+   wins; it fails on the first build's helper.
+4. **The dismissed share spec now proves something.** It awaited `fixture.whenStable()`, which
+   does not flush a plain promise chain zoneless, so it passed whatever the page did. It
+   flushes five microtasks, as `app-updates.spec.ts` does, and a `NotAllowedError` spec with
+   the same flush asserts the copy, on the home page and on the group page.

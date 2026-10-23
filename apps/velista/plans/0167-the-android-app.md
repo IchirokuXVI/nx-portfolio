@@ -480,7 +480,7 @@ npx nx run velista:android:staging
 npx nx run velista:android:production
 ```
 
-### Findings for the owner, not fixed here (outside this plan's scope)
+### Findings for the owner from the first build (all four fixed in the second round below)
 
 1. **The landing page and the join page draw under the status bar.** Neither carries
    `--app-safe-top`; the page header, the auth screens and the support strip do. A one line
@@ -494,3 +494,58 @@ npx nx run velista:android:production
    release APK quiet.
 4. **API 26 shows a blank page.** Setting `android.minWebViewVersion` to the bundle's real
    floor would make Capacitor show its own message instead.
+
+### Second round
+
+1. **Landing and join clear the status bar** (`31718811`). Neither has a page header, so the
+   top most element of each (`.page` in `landing-page.scss` and `join-link-page.scss`) pads
+   with `--app-safe-top`. On the emulator both read `padding-top: 24px`, with the app bar and
+   the wordmark at 24 px (`round2/01-landing-cold-start.png`, `06-join-link-page.png`).
+2. **The auth screens answer a hardware back** (`31718811`). `AuthScreen`, the frame of sign
+   in, register, forgot password, reset password and upgrade, registers its chevron with
+   `handleBackWhile(() => true, ...)` and emits the same `back` output, so each page's own
+   fallback decides. `auth-screen.spec.ts` covers the press and the release on destroy. The
+   outcome screens have no back control and register nothing.
+3. **`loggingBehavior: 'debug'` and `minWebViewVersion: 94`** (`31718811`), decision 22 above.
+   With `debug`, a whole session logged one Capacitor line ("Starting BridgeActivity"); the
+   first build's cold start logged 91.
+4. **The README** already named `VELISTA_JAVA_HOME` with the JDK 21 reason and
+   `VELISTA_ANDROID_KEYSTORE_PROPERTIES` with the key kept outside the repository; unchanged.
+5. **Plan 0165 is merged in** (`dd9a28e0`, from `origin/feat/velista-0165-leaves-the-shell` at
+   `65c1a1e4`). One conflict, `app.config.ts`: `provideNativeShell()` stays beside 0165's
+   `APP_BASE_HREF`, and the worker is enabled when
+   `!isDevMode() && documentMount() === '' && !detectNativeShell()`. `index.html` and
+   `project.json` merged on their own and hold both sides (0165's base and manifest link with
+   our `viewport-fit=cover`; 0165's nginx asset, budgets and no `serve.dependsOn` with our
+   `namedInputs`, `cap:sync` and `android`).
+6. **nginx, decision 9, now in velista's own file** (`a955f795`). velista's image installs
+   `apps/velista/src/nginx.conf` over the shared config, so the manifest type and the immutable
+   location for hashed names were copied there; the shared file keeps them for the other apps.
+   Probed in `nginx:latest` with the built bundle (`round2/nginx-probe.txt`): the manifest is
+   `application/manifest+json` with `no-cache`; `main.*.js`, `styles.*.css` and
+   `/velista/main.*.js` are `public, max-age=31536000, immutable`; `index.html` and
+   `ngsw-worker.js` stay `no-cache`; `assetlinks.json` is `application/json`.
+7. **Versions.** Both APKs were built with `VELISTA_APP_VERSION=0.14.2` (the latest release tag,
+   above production's gateway floor of 0.5.2) and `VELISTA_ANDROID_VERSION_CODE=1`.
+   `dist/apps/velista-android/velista-staging-0.14.2.apk` is 5,600,786 bytes and
+   `velista-production-0.14.2.apk` 5,600,738 bytes; `aapt` reads `versionName 0.14.2`,
+   `versionCode 1`, and `apksigner` the release certificate `0896620d…c0b192` on both
+   (`round2/apk-facts.txt`).
+8. **Recheck on API 37** with the staging APK. Checks that read the page ran on an inspectable
+   build of the same commit; the release APK was then installed over it and walked again
+   without DevTools.
+
+   | Check                                | Result                                                                                                  | Evidence                                                  |
+   | ------------------------------------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+   | Cold start, landing below the bar    | Pass, release TotalTime 609 ms                                                                          | `07-release-landing-cold-start.png`, `01-landing-cold-start.png` |
+   | Back on sign in after a reload       | Pass, navigation type `reload`, the press lands on `/en` and the activity stays resumed                 | `02-sign-in-after-reload.png`, `03-back-after-reload-landing.png` |
+   | A sheet still closes on back         | Pass, the first press hides the keyboard, the second closes the join sheet                              | `04-join-sheet-open.png`, `05-back-closed-sheet.png`      |
+   | No JS error                          | Pass, no exception or console error across a reload, no `E` line from chromium or Capacitor             | `cdp-errors-on-reload.txt`, `logcat-release-session.txt`  |
+
+   All paths are under `evidence/round2/`; `cdp-checks.txt` there holds the DevTools readings.
+9. **Not fixed, for the owner.** The bundle copies `nginx.conf` into `dist/apps/velista`, so
+   `cap sync` packs it into the APK's assets beside `index.html`; it holds no secret. On the landing and join pages the version line at the foot sits
+   under the gesture handle, the bottom inset twin of item 1.
+10. **The gateway's OpenAPI spec fails locally on Windows** in `nx affected` (the committed
+    `openapi.json` checks out with CRLF); regenerated, the document is identical and the spec
+    passes. Nothing in this branch touches the backend.
