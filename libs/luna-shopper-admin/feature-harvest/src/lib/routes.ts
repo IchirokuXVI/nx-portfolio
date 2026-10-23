@@ -25,6 +25,7 @@ import { PlacesQueuePage } from './places-queue-page';
 import { HarvestReviewPage } from './review-page';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
+import { SCHEDULES } from './schedules';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
 import { SOURCES } from './sources';
@@ -68,6 +69,8 @@ export interface HarvestRouteParts {
  * /harvest/setup                        goes to the chain sources
  * /harvest/setup/sources                part: chain sources
  * /harvest/setup/sources/new, /{id}       the record page of a source
+ * /harvest/setup/schedules              part: the schedules of the presets
+ * /harvest/setup/schedules/new, /{id}     the page of a schedule
  * /harvest/setup/brands                 part: registered brands
  * /harvest/setup/brands/new, /{id}        the record page of a brand
  * /harvest/setup/brands/{id}/edit         goes to /{id}?edit=1
@@ -129,6 +132,9 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
         // The generic list of the sources, inside the part that says what the
         // harvester says around it (admin plan 0059).
         { ...resourceTabRoute(SOURCES), component: SourcesTab },
+        // The schedules of the presets (admin plan 0067), beside the chain
+        // sources: a schedule is set up once and then left, like a source.
+        resourceTabRoute(SCHEDULES),
         ...parts.setup.map(resourceTabRoute),
       ],
     },
@@ -142,6 +148,8 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
         // (admin plan 0059). A source never had a form at `{id}/edit`, so it
         // gets no redirect from there.
         resourceFormBranch(SOURCES),
+        // A schedule has a page of its own, at `new` and at its ID.
+        resourceFormBranch(SCHEDULES),
         ...parts.setup.map(setupFormBranch),
       ],
     },

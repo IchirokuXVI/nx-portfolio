@@ -227,12 +227,12 @@
               [emptyFor]="catalogEmptyFor()"
               [freeText]="true"
               [holdingsOf]="holdingsOf()"
+              [listName]="header()?.listName ?? null"
               [loading]="suggesting()"
               [productLink]="productLink()"
               [query]="suggestedFor()"
               [suggestions]="suggestions()"
               panelId="list-results-catalog"
-              placement="page"
             />
           </div>
         }

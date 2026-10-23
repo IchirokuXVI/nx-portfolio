@@ -7,6 +7,7 @@ import {
 import type {
   FieldCheck,
   FieldDescriptor,
+  ImageCaption,
   ResourceRow,
 } from './resource-field';
 import {
@@ -48,7 +49,12 @@ type BareValue =
       /** A translation key for the words of the link, in place of `text`. */
       readonly label?: string;
     }
-  | { readonly kind: 'image'; readonly src: string }
+  | {
+      readonly kind: 'image';
+      readonly src: string;
+      /** Where it comes from, drawn in place of the address. */
+      readonly caption?: ImageCaption;
+    }
   | {
       readonly kind: 'lines';
       /** One for each locale of the field. `null` is a language with no words. */
@@ -126,8 +132,13 @@ function bareValue<T extends ResourceRow>(
     }
 
     case 'text': {
+      const caption =
+        field.format === 'image' ? field.caption?.(row) : undefined;
       if (typeof value !== 'string' || value === '') {
-        return fromCell(toCell(field, row, options));
+        // With no picture, a word that says so is the value: "No photo".
+        return caption?.kind === 'word'
+          ? { kind: 'word', key: caption.key }
+          : fromCell(toCell(field, row, options));
       }
       switch (field.format) {
         case 'url':
@@ -140,7 +151,9 @@ function bareValue<T extends ResourceRow>(
                 label: field.linkLabel,
               };
         case 'image':
-          return { kind: 'image', src: value };
+          return caption === undefined
+            ? { kind: 'image', src: value }
+            : { kind: 'image', src: value, caption };
         case 'code':
           return { kind: 'text', text: value, mono: true };
         default:

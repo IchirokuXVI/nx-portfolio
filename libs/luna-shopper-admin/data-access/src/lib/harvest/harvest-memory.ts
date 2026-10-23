@@ -1,5 +1,10 @@
 import { Injectable } from '@angular/core';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import {
+  DEFAULT_SCHEDULE_TIMEZONE,
+  nextScheduleSlot,
+  sortedDays,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import type { BulkOperationError } from '../bulk-operation-error';
 import {
@@ -18,6 +23,7 @@ import {
   HARVEST_RUN_PRESET_SEED,
   HARVEST_RUN_PRICE_SEED,
   HARVEST_RUN_SEED,
+  HARVEST_SCHEDULE_SEED,
   ITEM_SOURCE_ENTRY_SEED,
   PLACE_CHAIN_SEED,
   PLACE_FOOTPRINT_SEED,
@@ -26,6 +32,7 @@ import {
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
   SUPERMARKET_SOURCE_SEED,
+  type StoredSchedule,
 } from './harvest-seed';
 import type {
   AcceptSourceEntryInput,
@@ -41,6 +48,7 @@ import type {
   PostalCodeQuery,
   RunPriceQuery,
   RunQuery,
+  ScheduleQuery,
   ShopQuery,
   SourceEntryAcceptResult,
 } from './harvest-service';
@@ -104,6 +112,10 @@ export class HarvestMemory implements HarvestServiceI {
     clone(POSTAL_CODE_DISCOVERY_SEED);
   private readonly _presets: StoredPreset[] = HARVEST_RUN_PRESET_SEED.map(
     (preset) => ({ ...preset, input: copyInput(preset.input) })
+  );
+
+  private readonly _schedules: StoredSchedule[] = HARVEST_SCHEDULE_SEED.map(
+    (schedule) => ({ ...schedule, daysOfWeek: [...schedule.daysOfWeek] })
   );
 
   private _nextId = 1;
@@ -180,7 +192,10 @@ export class HarvestMemory implements HarvestServiceI {
         (query.status === undefined || run.status === query.status) &&
         (query.reverted === undefined ||
           query.reverted === (run.revertedAt !== null)) &&
-        (query.presetId === undefined || run.presetId === query.presetId)
+        (query.presetId === undefined || run.presetId === query.presetId) &&
+        (query.scheduleId === undefined ||
+          run.scheduleId === query.scheduleId) &&
+        (query.trigger === undefined || run.trigger === query.trigger)
     );
 
     return page(matching, query);
@@ -254,8 +269,25 @@ export class HarvestMemory implements HarvestServiceI {
     return this._presetView(preset);
   }
 
+  /**
+   * Refused while a schedule names it, as the harvester refuses it (backend
+   * plan 0206, section 2.1): a 409 that names the schedules.
+   */
   async deletePreset(id: string): Promise<void> {
     const preset = this._preset(id);
+    const named = this._schedules.filter(
+      (schedule) => schedule.presetId === id
+    );
+    if (named.length > 0) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+        detail:
+          `The preset is named by ${named.length} schedule(s): ` +
+          `${named.map((schedule) => schedule.id).join(', ')}. Delete them first.`,
+      });
+    }
     this._presets.splice(this._presets.indexOf(preset), 1);
   }
 
@@ -1329,6 +1361,103 @@ export class HarvestMemory implements HarvestServiceI {
   }
 
   /**
+   * The schedules, ordered by the next slot with the ones that are off last,
+   * as the harvester orders them (backend plan 0206, section 4).
+   */
+  async listSchedules(
+    query: ScheduleQuery
+  ): Promise<Wire.HarvestHarvestSchedulePage> {
+    const now = new Date();
+    const views = this._schedules
+      .filter(
+        (schedule) =>
+          (query.supermarketId === undefined ||
+            query.supermarketId === '' ||
+            schedule.supermarketId === query.supermarketId) &&
+          (query.presetId === undefined ||
+            query.presetId === '' ||
+            schedule.presetId === query.presetId)
+      )
+      .map((schedule) => this._scheduleView(schedule, now))
+      .sort(byNextRun);
+    return page(views, query);
+  }
+
+  async readSchedule(id: string): Promise<Wire.HarvestHarvestScheduleView> {
+    return this._scheduleView(this._schedule(id), new Date());
+  }
+
+  /**
+   * Add a schedule. The consent is checked first and is the harvester's own
+   * refusal: `validation_failed` naming the field, for anything but `true`.
+   */
+  async createSchedule(
+    input: Wire.CreateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    refuseWithoutConsent(input.acknowledgedAutomaticFetch);
+    const preset = this._preset(input.presetId);
+    const rule = checkedRule(
+      input.timeOfDay,
+      input.daysOfWeek,
+      input.timezone ?? DEFAULT_SCHEDULE_TIMEZONE
+    );
+    const now = new Date().toISOString();
+    const schedule: StoredSchedule = {
+      id: mintScheduleId(this._nextId++),
+      presetId: preset.id,
+      supermarketId: preset.supermarketId,
+      ...rule,
+      enabled: true,
+      lastSlotAt: null,
+      lastOutcome: null,
+      lastOutcomeAt: null,
+      lastOutcomeNote: null,
+      lastRunId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this._schedules.push(schedule);
+    return this._scheduleView(schedule, new Date());
+  }
+
+  async updateSchedule(
+    id: string,
+    patch: Wire.UpdateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    const schedule = this._schedule(id);
+    const rule = checkedRule(
+      patch.timeOfDay ?? schedule.timeOfDay,
+      patch.daysOfWeek ?? schedule.daysOfWeek,
+      patch.timezone ?? schedule.timezone
+    );
+    schedule.timeOfDay = rule.timeOfDay;
+    schedule.daysOfWeek = rule.daysOfWeek;
+    schedule.timezone = rule.timezone;
+    schedule.updatedAt = new Date().toISOString();
+    return this._scheduleView(schedule, new Date());
+  }
+
+  /** Turning on asks for the same consent as a create. Off asks nothing. */
+  async setScheduleEnabled(
+    id: string,
+    input: Wire.SetHarvestScheduleEnabledDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    const schedule = this._schedule(id);
+    if (input.enabled) {
+      refuseWithoutConsent(input.acknowledgedAutomaticFetch);
+    }
+    schedule.enabled = input.enabled;
+    schedule.updatedAt = new Date().toISOString();
+    return this._scheduleView(schedule, new Date());
+  }
+
+  async deleteSchedule(id: string): Promise<{ id: string }> {
+    const schedule = this._schedule(id);
+    this._schedules.splice(this._schedules.indexOf(schedule), 1);
+    return { id };
+  }
+
+  /**
    * A running run, one poll further along.
    *
    * Enough movement that the progress bar visibly changes between reads, and a
@@ -1467,6 +1596,116 @@ export class HarvestMemory implements HarvestServiceI {
     };
   }
 
+  private _schedule(id: string): StoredSchedule {
+    const schedule = this._schedules.find((candidate) => candidate.id === id);
+    if (schedule === undefined) {
+      throw notFound();
+    }
+    return schedule;
+  }
+
+  /**
+   * A schedule as the harvester answers it, worked out now.
+   *
+   * **It never starts a run.** `nextRunAt` moves with the clock and no slot is
+   * ever spent: the memory back end has no timer (admin plan 0067, target 11).
+   *
+   * Both switches of a cluster read as on here, because nothing in memory
+   * stands for them. So the block is read from the sources alone, in the
+   * harvester's order: a row that is off or gone, then one that keeps failing.
+   */
+  private _scheduleView(
+    schedule: StoredSchedule,
+    now: Date
+  ): Wire.HarvestHarvestScheduleView {
+    const preset = this._presets.find(
+      (candidate) => candidate.id === schedule.presetId
+    );
+    const source = this._sources.find(
+      (candidate) => candidate.supermarketId === schedule.supermarketId
+    );
+    const last =
+      schedule.lastRunId === null
+        ? undefined
+        : this._runs.find((run) => run.id === schedule.lastRunId);
+    const next = schedule.enabled ? nextScheduleSlot(schedule, now) : null;
+
+    return {
+      id: schedule.id,
+      presetId: schedule.presetId,
+      presetName: preset?.name ?? '',
+      supermarketId: schedule.supermarketId,
+      timeOfDay: schedule.timeOfDay,
+      daysOfWeek: [...schedule.daysOfWeek],
+      timezone: schedule.timezone,
+      enabled: schedule.enabled,
+      nextRunAt: next?.toISOString() ?? null,
+      blockedBy:
+        source === undefined || !source.enabled
+          ? 'SOURCE_DISABLED'
+          : source.consecutiveFailures >= 3
+            ? 'SOURCE_FAILING'
+            : null,
+      lastSlotAt: schedule.lastSlotAt,
+      lastOutcome: schedule.lastOutcome,
+      lastOutcomeAt: schedule.lastOutcomeAt,
+      lastOutcomeNote: schedule.lastOutcomeNote,
+      lastRun:
+        last === undefined
+          ? null
+          : { id: last.id, status: last.status, requestedAt: last.requestedAt },
+      estimate: this._estimate(schedule.presetId, source),
+      createdAt: schedule.createdAt,
+      updatedAt: schedule.updatedAt,
+    };
+  }
+
+  /**
+   * About how long a run of a preset takes (backend plan 0206, section 8):
+   * the median of its newest five completed runs that still stand, else the
+   * default of the adapter.
+   */
+  private _estimate(
+    presetId: string,
+    source: Wire.HarvestSupermarketSourceView | undefined
+  ): Wire.HarvestRunEstimate {
+    const durations = this._runs
+      .filter(
+        (run) =>
+          run.presetId === presetId &&
+          run.status === 'COMPLETED' &&
+          run.revertedAt === null &&
+          run.startedAt !== null &&
+          run.finishedAt !== null
+      )
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+      .slice(0, 5)
+      .map(
+        (run) =>
+          (Date.parse(run.finishedAt ?? '') - Date.parse(run.startedAt ?? '')) /
+          1000
+      )
+      .sort((a, b) => a - b);
+
+    if (durations.length > 0) {
+      const middle = Math.floor(durations.length / 2);
+      const median =
+        durations.length % 2 === 1
+          ? durations[middle]
+          : (durations[middle - 1] + durations[middle]) / 2;
+      return {
+        seconds: Math.round(median),
+        basis: 'PRESET',
+        samples: durations.length,
+      };
+    }
+    return {
+      seconds: DEFAULT_RUN_SECONDS[source?.adapterKey ?? ''] ?? 1800,
+      basis: 'DEFAULT',
+      samples: 0,
+    };
+  }
+
   private _preset(id: string): StoredPreset {
     const preset = this._presets.find((candidate) => candidate.id === id);
     if (preset === undefined) {
@@ -1513,9 +1752,13 @@ export class HarvestMemory implements HarvestServiceI {
     const latest = this._runs
       .filter((run) => run.presetId === preset.id)
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))[0];
+    const source = this._sources.find(
+      (candidate) => candidate.supermarketId === preset.supermarketId
+    );
     return {
       ...preset,
       input: copyInput(preset.input),
+      estimate: this._estimate(preset.id, source),
       lastRun:
         latest === undefined
           ? null
@@ -1594,6 +1837,73 @@ function copyInput<T>(input: T): T {
 
 function mintPresetId(index: number): string {
   return `66666666-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
+function mintScheduleId(index: number): string {
+  return `77777777-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
+/** The seconds a run takes before any has completed (backend plan 0206, section 8). */
+const DEFAULT_RUN_SECONDS: Readonly<Record<string, number>> = {
+  'lidl-api': 60,
+  'mercadona-api': 1200,
+  'deza-web': 1500,
+  'eljamon-web': 9600,
+};
+
+/** On, by next slot, then off. */
+function byNextRun(
+  a: Wire.HarvestHarvestScheduleView,
+  b: Wire.HarvestHarvestScheduleView
+): number {
+  if (a.nextRunAt === null || b.nextRunAt === null) {
+    return a.nextRunAt === b.nextRunAt ? 0 : a.nextRunAt === null ? 1 : -1;
+  }
+  return a.nextRunAt.localeCompare(b.nextRunAt);
+}
+
+/** A refusal about one field, in the shape the gateway answers it. */
+function fieldRefusal(field: string, message: string): GatewayError {
+  return new GatewayError({
+    code: 'validation_failed',
+    status: 400,
+    correlationId: '',
+    fieldErrors: { [field]: [message] },
+  });
+}
+
+/** The consent, which only the JSON `true` gives (backend plan 0206, section 4.1). */
+function refuseWithoutConsent(value: unknown): void {
+  if (value !== true) {
+    throw fieldRefusal(
+      'acknowledgedAutomaticFetch',
+      'acknowledgedAutomaticFetch must be true.'
+    );
+  }
+}
+
+/** The rule of a schedule, checked as the harvester checks it (section 4.2). */
+function checkedRule(
+  timeOfDay: string,
+  daysOfWeek: readonly number[],
+  timezone: string
+): { timeOfDay: string; daysOfWeek: number[]; timezone: string } {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(timeOfDay)) {
+    throw fieldRefusal('timeOfDay', 'timeOfDay must be HH:mm.');
+  }
+  const days = sortedDays(daysOfWeek);
+  if (days.length === 0 || days.length !== daysOfWeek.length) {
+    throw fieldRefusal(
+      'daysOfWeek',
+      'daysOfWeek must hold one to seven different days from 1 to 7.'
+    );
+  }
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: timezone });
+  } catch {
+    throw fieldRefusal('timezone', 'timezone must be an IANA name.');
+  }
+  return { timeOfDay, daysOfWeek: days, timezone };
 }
 
 function mintRunId(index: number): string {

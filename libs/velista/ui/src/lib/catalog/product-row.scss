@@ -1,67 +1,102 @@
 @use '../styles/choice' as choice;
 
-// One catalog product (velista 0100, section 3), drawn as the mock draws it: a
-// picture, the name over `brand · size`, and the price at the trailing edge.
+// The one product card (velista 0162), drawn as option A of
+// `apps/velista/plans/mocks/product-card/Card.dc.html`: a row on the page's ground
+// with a hairline under it, not a box. The host draws the hairline, so a list can
+// take it off its last card.
+//
+// Its own stacking context. The picture, the plus, the steppers and the held block
+// carry `z-index: 1` to sit over the open control's press area; without this, that 1
+// competed with the sticky band a page keeps over its results, and a card scrolling
+// under the catalog's search band was drawn on top of it.
 :host {
   display: block;
+  isolation: isolate;
+  border-block-end: 1px solid var(--app-border-subtle);
 }
 
-// In the catalog that chooses (velista 0140, section 3), the radio at the
-// trailing edge, and the chosen card's edge in the accent colour. The radio says
-// it too, so the edge is never the only sign.
-.pick {
-  @include choice.radio-dot;
-}
-
-// In the catalog that chooses the products of a line (velista 0146), a box the
-// size of the radio, ticked in the same accent.
-.pick-many {
-  @include choice.card-check-box;
-}
-
-.row.is-chosen {
-  border-color: var(--app-action-quiet-fg);
-}
-
-.row:has(.pick:focus-visible) {
-  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-  outline-offset: var(--app-focus-ring-offset);
-}
-
-label.open .pick:focus-visible {
-  outline: none;
-}
-
-// The card. The product button fills it, and the plus sits after that button as
-// its sibling (velista 0134, section 4.1).
+// Four columns: the picture, the text, the price and the control slot. The control
+// that opens the product spans the text and the price (and the slot, when the
+// radio, the tick or the verb pill sits inside it), and everything under the first
+// line starts at the text's column.
 .row {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  inline-size: 100%;
-  padding: var(--app-space-4);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
-  background: var(--app-surface-raised);
-  color: var(--app-text-primary);
+  --product-row-thumb: var(--app-product-thumb-size);
 
-  // The plus is a full touch target with its ring inside, so the card gives up
-  // some of its own padding at that end. The lines that hold the product take a
-  // row of their own under the product, so the card wraps.
-  &.has-add {
-    flex-wrap: wrap;
-    padding-inline-end: var(--app-space-3);
-  }
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: var(--product-row-thumb) minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--app-space-4);
+  inline-size: 100%;
+  padding: var(--app-space-4) var(--app-product-row-inset, var(--app-space-5));
+  color: var(--app-text-primary);
 }
 
-// A basis of zero, not `auto`: a card that wraps breaks its lines on the width
-// each item asks for, before anything shrinks. A long name thus asked for the
-// whole line and sent the plus to the next one.
+// For a list inside a sheet (velista 0163): the touch target's picture and no
+// padding at the sides, because the sheet has its own.
+.row.compact {
+  --product-row-thumb: var(--app-touch-target);
+  --app-line-picture-glyph: var(--app-icon-md);
+
+  padding: var(--app-space-3) 0;
+}
+
+// Each cell only groups the card's parts for the grid of the search; it draws
+// nothing, so its parts are laid out by the card's own grid.
+.cell {
+  display: contents;
+}
+
+// A double tap must not zoom the page out from under a card.
+button,
+a,
+label {
+  touch-action: manipulation;
+}
+
+// ---- the picture
+
+.thumb {
+  --app-line-picture-size: var(--product-row-thumb);
+
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+// A picture with no photo is not a control, so a press on it reaches the card's
+// own press area under it and opens the product.
+lib-product-picture.thumb:not(.has-photo),
+.crate {
+  pointer-events: none;
+}
+
+// A group's crate, on the fill a picture with no photo has.
+.crate {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  inline-size: var(--product-row-thumb);
+  block-size: var(--product-row-thumb);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-line-picture-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-muted);
+  font-size: var(--app-icon-md);
+}
+
+// ---- the control that opens the product
+
+// Its press area is stretched over the whole card (the ::before), so a press
+// anywhere on the card opens the product. The other controls sit above it.
 .open {
+  position: static;
   display: flex;
-  flex: 1 1 0;
-  align-items: center;
+  grid-column: 2 / -1;
+  grid-row: 1;
+  align-items: flex-start;
   gap: var(--app-space-4);
   min-inline-size: 0;
   padding: 0;
@@ -71,7 +106,14 @@ label.open .pick:focus-visible {
   color: inherit;
   font: inherit;
   text-align: start;
+  text-decoration: none;
   cursor: pointer;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
@@ -79,10 +121,244 @@ label.open .pick:focus-visible {
   }
 }
 
+.row.has-control .open {
+  grid-column: 2 / 3;
+}
+
+// A card on a page that cannot open the product: its words, nothing to press.
+.open.is-inert {
+  cursor: auto;
+
+  &::before {
+    content: none;
+  }
+}
+
+.open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-inline-size: 0;
+}
+
+.name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+// The word after a group's name: a plain label, not a control.
+.group-word {
+  margin-inline-start: var(--app-space-2);
+  padding: 0 var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.detail,
+.also {
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The detail carries the price where the price column is empty (the sheet of
+// what a visit added), so it wraps rather than cutting the price off.
+.row.price-in-detail .detail {
+  white-space: normal;
+}
+
+.caption {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+}
+
+// ---- the chain line
+
+.chains {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  margin-block-start: var(--app-space-2);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+}
+
+// A chain's initial in the app's own colours. The wire carries no chain colour, and
+// a brand palette kept in the client would be a second catalog nobody curates.
+.mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: var(--app-chain-mark);
+  block-size: var(--app-chain-mark);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-chain-mark-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+}
+
+// Only the cheapest chain is named, and it gives way by ellipsis rather than by
+// pushing its neighbours.
+.lead {
+  min-inline-size: 0;
+  margin-inline: var(--app-space-hair);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  flex: none;
+  color: var(--app-text-muted);
+  font-weight: 600;
+}
+
+// Under the text when the chain line is a button (the search), and a group's reveal.
+.foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+}
+
+.chains-press,
+.reveal {
+  position: relative;
+  margin-block-start: var(--app-space-2);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  padding: var(--app-space-hair) var(--app-space-2);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  // Only under a pointer that hovers: a tap leaves a touch screen's hover on.
+  @media (hover: hover) {
+    &:hover {
+      background: var(--app-action-quiet-bg);
+    }
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  // The line stays small and its target grows to the touch target.
+  &::after {
+    content: '';
+    position: absolute;
+    inset-block: calc((var(--app-touch-target) - 100%) / -2);
+    inset-inline: 0;
+  }
+}
+
+.reveal {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+}
+
+.foot-glyph {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+.foot-glyph.flipped {
+  transform: rotate(180deg);
+}
+
+// ---- the price
+
+.price {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-block-start: 1px;
+  text-align: end;
+}
+
+.amount {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.unit {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.clock {
+  font-size: var(--app-text-xs);
+  vertical-align: -1px;
+}
+
+// Old, by the server's own judgement: muted, with its age and the clock under it.
+.price.is-stale .amount {
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+
+.no-price {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+  white-space: nowrap;
+}
+
+// ---- the control slot
+
+.control {
+  position: relative;
+  z-index: 1;
+  grid-column: 3;
+  grid-row: 1;
+}
+
 // The plus: 44 square to press, and a ring of 36 to see.
 .add {
   display: grid;
-  flex: none;
   place-items: center;
   inline-size: var(--app-touch-target);
   block-size: var(--app-touch-target);
@@ -106,29 +382,209 @@ label.open .pick:focus-visible {
   place-items: center;
   inline-size: var(--app-add-dot-size);
   block-size: var(--app-add-dot-size);
-  border: 1px solid var(--app-border-strong);
+  border: var(--app-add-dot-ring) solid var(--app-border-strong);
   border-radius: var(--app-radius-full);
-  color: var(--app-text-secondary);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
   font-size: var(--app-text-lg);
 }
 
-// The lines of the chosen list that hold this product (velista 0134, section 4.1).
-// A hairline and no fill: they belong to the card, and a tinted box inside a card
-// would read as a second card.
+// In a mode that chooses (velista 0140, 0146), the radio or the tick at the
+// trailing edge, level with the middle of the picture. The radio says the card is
+// chosen, so the card draws no other sign of it.
+.pick {
+  @include choice.radio-dot;
+
+  position: relative;
+  z-index: 1;
+  margin-block-start: calc(
+    (var(--product-row-thumb) - var(--app-choice-radio-size)) / 2
+  );
+  margin-inline-start: var(--app-space-2);
+}
+
+.pick-many {
+  @include choice.card-check-box;
+}
+
+.row:has(.pick:focus-visible) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: calc(var(--app-focus-ring-offset) * -1);
+}
+
+label.open .pick:focus-visible {
+  outline: none;
+}
+
+// What pressing the card does, when it does more than open the product.
+.verb {
+  flex: none;
+  align-self: center;
+  padding: var(--app-space-2) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.stepper {
+  align-self: center;
+}
+
+// ---- what opens under the card
+
+.shops,
+.inside,
 .held {
+  position: relative;
+  z-index: 1;
+  grid-column: 2 / -1;
+  min-inline-size: 0;
+}
+
+// Every chain's price, once the chain line is opened.
+.shops {
   display: flex;
-  flex: 1 0 100%;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  margin: var(--app-space-3) 0 0;
+  padding: var(--app-space-3) 0 0;
+  border-block-start: 1px solid var(--app-border-subtle);
+  list-style: none;
+}
+
+.shop {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-2) 0;
+}
+
+.shop-name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-note {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+}
+
+.shop-price {
+  flex: none;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+// The cheapest carries the number at the top of the card, so it is drawn at full
+// strength. Weight does that work, and no amber is spent on it: amber means act.
+.shop.best .shop-name,
+.shop.best .shop-price {
+  color: var(--app-text-primary);
+}
+
+.shop.best .shop-price {
+  font-weight: 650;
+}
+
+// What a group is, and its cheapest products.
+.inside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-3);
+  padding-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.inside-help {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  line-height: 1.4;
+}
+
+.inside-rows {
+  display: flex;
   flex-direction: column;
   gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inside-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+}
+
+.inside-what {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
   min-inline-size: 0;
+  overflow: hidden;
+}
+
+// The name gives way. The brand and the price never do: two packets of the same
+// milk differ by exactly those two.
+.inside-name {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inside-brand {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+
+  &::before {
+    content: '·';
+    margin-inline: var(--app-space-2);
+  }
+}
+
+.inside-price {
+  flex: none;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.inside-more {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+}
+
+// The lines that hold this product (velista 0134, section 4.1). A hairline and no
+// fill: they belong to the card, and a tinted box inside it would read as a second
+// card.
+.held {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-4);
   padding-block-start: var(--app-space-3);
   border-block-start: 1px solid var(--app-border-subtle);
 }
 
 .held-title {
+  color: var(--app-text-muted);
   font-size: var(--app-text-xs);
-  font-weight: 600;
-  color: var(--app-text-secondary);
 }
 
 .held-lines {
@@ -153,115 +609,26 @@ label.open .pick:focus-visible {
   min-inline-size: 0;
 }
 
+.held-list {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .held-name {
   font-size: var(--app-text-sm);
   overflow-wrap: anywhere;
 }
 
 .held-pending {
+  color: var(--app-text-muted);
   font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
 }
 
-// Square, and the carton sits in the middle when there is no picture. The ground
-// is the page's own, so a white product photo reads as a photo and not a hole.
-.thumb {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  inline-size: var(--app-product-thumb-size);
-  block-size: var(--app-product-thumb-size);
-  overflow: hidden;
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-sunken);
-}
+// ---- the skeleton: the same box, with bones where the text goes
 
-.image {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: contain;
-}
-
-.glyph {
-  font-size: var(--app-icon-md);
-  color: var(--app-text-muted);
-}
-
-.what {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.name {
-  font-size: var(--app-text-base);
-  line-height: var(--app-leading-heading);
-  overflow-wrap: anywhere;
-}
-
-.detail {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-}
-
-.price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--app-space-2);
-  flex: none;
-  text-align: end;
-}
-
-.amount {
-  font-size: var(--app-text-base);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.caption {
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-// Old, by the server's own judgement. Muted and nothing else: no badge (section 3).
-.price.is-stale .amount {
-  font-weight: 500;
-  color: var(--app-text-muted);
-}
-
-.no-price {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: flex-end;
-  font-size: var(--app-text-sm);
-  color: var(--app-text-muted);
-}
-
-// What pressing the row does, when it does more than open the product.
-.verb {
-  flex: none;
-  padding: var(--app-space-2) var(--app-space-4);
-  border-radius: var(--app-radius-full);
-  background: var(--app-action-bg);
-  color: var(--app-action-fg);
-  font-size: var(--app-text-sm);
-  font-weight: 600;
-}
-
-.open:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-// The skeleton: the same box, with bones where the text goes.
 .skeleton {
   cursor: default;
 }
@@ -273,7 +640,15 @@ label.open .pick:focus-visible {
 }
 
 .thumb.bone {
-  border-radius: var(--app-radius-md);
+  grid-row: 1;
+  inline-size: var(--product-row-thumb);
+  block-size: var(--product-row-thumb);
+  border-radius: var(--app-line-picture-radius);
+}
+
+.skeleton .what {
+  gap: var(--app-space-3);
+  padding-block-start: var(--app-space-2);
 }
 
 .line-long {
@@ -287,9 +662,9 @@ label.open .pick:focus-visible {
 }
 
 .line-price {
-  flex: none;
   inline-size: var(--app-space-10);
   block-size: var(--app-space-4);
+  margin-block-start: var(--app-space-2);
 }
 
 @media (prefers-reduced-motion: no-preference) {

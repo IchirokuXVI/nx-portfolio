@@ -1057,6 +1057,7 @@ describe('CatalogPage', () => {
           listId: 'list-weekly',
           itemId: 'item-oil',
           detail: expect.stringContaining('Hacendado'),
+          imageUrl: null,
         },
         'line-frying',
         1

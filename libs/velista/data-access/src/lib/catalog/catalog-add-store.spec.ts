@@ -16,12 +16,22 @@ import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { CatalogAddStore } from './catalog-add-store';
 
-const MILK = { itemId: 'milk', name: 'Leche', detail: '1 L' };
-const BREAD = { itemId: 'bread', name: 'Pan', detail: null };
+const MILK = {
+  itemId: 'milk',
+  name: 'Leche',
+  detail: '1 L',
+  imageUrl: 'https://img.test/milk.png',
+};
+const BREAD = { itemId: 'bread', name: 'Pan', detail: null, imageUrl: null };
 
 /** The product a stepper moves, as the row that holds the stepper names it. */
 function on(listId: string, product: typeof MILK | typeof BREAD): VisitProduct {
-  return { listId, itemId: product.itemId, detail: product.detail };
+  return {
+    listId,
+    itemId: product.itemId,
+    detail: product.detail,
+    imageUrl: product.imageUrl,
+  };
 }
 
 function zone(id: string, name: string, status = 'APPROVED'): MyZone {
@@ -697,6 +707,8 @@ describe('CatalogAddStore', () => {
           lineId: 'line-1',
           name: 'Leche',
           detail: '1 L',
+          // The photo of the row the plus was pressed on (velista 0163).
+          imageUrl: 'https://img.test/milk.png',
           quantity: 1,
           before: 0,
           created: true,
@@ -1095,6 +1107,8 @@ describe('CatalogAddStore', () => {
           lineId: 'old',
           name: 'Leche',
           detail: '1 L',
+          // The photo of the row the plus was pressed on (velista 0163).
+          imageUrl: 'https://img.test/milk.png',
           quantity: 3,
           before: 2,
           created: false,

@@ -1104,6 +1104,10 @@ function referenceIds(value: RecordValue): readonly string[] {
   if (value.kind === 'reference') {
     return value.name === null ? [value.id] : [];
   }
+  // The record a picture came from is named as a reference is: a chain.
+  if (value.kind === 'image') {
+    return value.caption?.kind === 'reference' ? [value.caption.id] : [];
+  }
   return value.kind === 'references' ? value.ids : [];
 }
 
@@ -1112,10 +1116,16 @@ function targetIds(value: RecordValue): readonly string[] {
   if (value.kind === 'reference') {
     return [value.id];
   }
+  if (value.kind === 'image') {
+    return referenceIds(value);
+  }
   return value.kind === 'references' ? value.ids : [];
 }
 
 function resourceOf(value: RecordValue): string {
+  if (value.kind === 'image') {
+    return value.caption?.kind === 'reference' ? value.caption.resource : '';
+  }
   return value.kind === 'reference' || value.kind === 'references'
     ? value.resource
     : '';

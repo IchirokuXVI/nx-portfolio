@@ -78,7 +78,7 @@
       "automerge": false
     },
     {
-      "description": "Nx, Angular and the compiler move together through nx migrate (nx-migrate.yml), which also rewrites code",
+      "description": "Nx, Angular and the compiler move together through nx migrate (nx-migrate.yml), which also rewrites code. The list holds every package the packageJsonUpdates of @nx/angular's migrations.json name",
       "matchPackageNames": [
         "nx",
         "@nx/**",
@@ -87,10 +87,13 @@
         "@angular-eslint/**",
         "@schematics/angular",
         "@module-federation/**",
+        "@ngrx/**",
         "@rspack/**",
         "typescript",
         "jest-preset-angular",
-        "angular-eslint"
+        "angular-eslint",
+        "ng-packagr",
+        "zone.js"
       ],
       "enabled": false
     },

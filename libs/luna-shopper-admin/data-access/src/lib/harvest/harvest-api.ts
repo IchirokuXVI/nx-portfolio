@@ -23,6 +23,7 @@ import type {
   PostalCodeQuery,
   RunPriceQuery,
   RunQuery,
+  ScheduleQuery,
   ShopQuery,
   SourceEntryAcceptResult,
 } from './harvest-service';
@@ -397,6 +398,46 @@ export class HarvestApi implements HarvestServiceI {
 
   deleteSource(supermarketId: string): Promise<{ id: string }> {
     return this._send('delete', `${ROOT}/sources/${segment(supermarketId)}`);
+  }
+
+  listSchedules(
+    query: ScheduleQuery
+  ): Promise<Wire.HarvestHarvestSchedulePage> {
+    return this._send('get', `${ROOT}/schedules`, {
+      params: toParams(query),
+    });
+  }
+
+  readSchedule(id: string): Promise<Wire.HarvestHarvestScheduleView> {
+    return this._send('get', `${ROOT}/schedules/${segment(id)}`);
+  }
+
+  createSchedule(
+    input: Wire.CreateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    return this._send('post', `${ROOT}/schedules`, { body: input });
+  }
+
+  updateSchedule(
+    id: string,
+    patch: Wire.UpdateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    return this._send('put', `${ROOT}/schedules/${segment(id)}`, {
+      body: patch,
+    });
+  }
+
+  setScheduleEnabled(
+    id: string,
+    input: Wire.SetHarvestScheduleEnabledDto
+  ): Promise<Wire.HarvestHarvestScheduleView> {
+    return this._send('put', `${ROOT}/schedules/${segment(id)}/enabled`, {
+      body: input,
+    });
+  }
+
+  deleteSchedule(id: string): Promise<{ id: string }> {
+    return this._send('delete', `${ROOT}/schedules/${segment(id)}`);
   }
 
   private async _send<R>(

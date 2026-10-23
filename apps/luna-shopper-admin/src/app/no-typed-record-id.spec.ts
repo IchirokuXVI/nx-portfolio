@@ -29,10 +29,15 @@ import { ADMIN_SECTIONS } from './sections';
  * ## The way out
  *
  * `ALLOWED` names a field that is an ID of something outside this app, which
- * no typeahead can search. It is empty today. An entry needs the reason
+ * no typeahead can search, or one whose page draws a choice by name. An entry needs the reason
  * beside it.
  */
-const ALLOWED: ReadonlySet<string> = new Set<string>([]);
+const ALLOWED: ReadonlySet<string> = new Set<string>([
+  // A preset is no resource of the registry: it lives in a panel of the Runs
+  // tab. The page of a schedule draws this field as a choice of presets by
+  // name, grouped by chain, and never as a box (admin plan 0067).
+  'schedules.presetId',
+]);
 
 const NAMES_AN_ID = /Ids?$/;
 

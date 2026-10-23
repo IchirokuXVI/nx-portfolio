@@ -558,6 +558,34 @@ describe('composeBasketView, grouped by category', () => {
     ).toEqual([['category:cat-eggs-milk-and-butter', ['a', 'b', 'c']]]);
   });
 
+  it('draws a product under two parents under both, and under the first only while searching', () => {
+    const twoRoots = new Map(CATALOG).set(
+      'p-two',
+      product('p-two', 'Milk bread', null, [BREAD_LEAF, MILK_LEAF])
+    );
+    const rows = [
+      row('a', 'Milk', { productId: 'p-milk' }),
+      row('b', 'Milk bread', { productId: 'p-two' }),
+    ];
+    const keys = (query: string) =>
+      composeBasketView(rows, state({ grouping: 'category' }), {
+        ...CONTEXT,
+        products: twoRoots,
+        query,
+      }).map((part) => [part.key, part.rows.map((one) => one.row.rowKey)]);
+
+    expect(keys('')).toEqual([
+      ['category:cat-eggs-milk-and-butter', ['a', 'b']],
+      ['category:cat-bakery', ['b']],
+    ]);
+    expect(keys('milk')).toEqual([
+      ['category:cat-eggs-milk-and-butter', ['a']],
+      ['category:cat-bakery', ['b']],
+    ]);
+    // Blank is no search: the row is under both again.
+    expect(keys('  ')).toEqual(keys(''));
+  });
+
   it('heads a parent that holds one row, and never with a leaf', () => {
     const sections = grouped([row('a', 'Bread', { productId: 'p-bread' })]);
 
@@ -2017,6 +2045,22 @@ describe('composeBasketView, grouped by aisle', () => {
     expect(basketViewRows(sections).map((one) => one.rowKey)).toEqual([
       'pizza',
       'icecream',
+    ]);
+  });
+
+  it('draws a row in two aisles under the first one walked only, while searching', () => {
+    const rows = [
+      row('pizza', 'Pizza', { productId: 'p-pizza' }),
+      row('icecream', 'Ice cream', { productId: 'p-icecream' }),
+    ];
+
+    // The product names Frozen first, and the shop walks Pizzas first.
+    expect(outline(drawn(rows, { query: 'pizza' }))).toEqual([
+      ['aisle:sec-pizzas', 'Pizzas', ['pizza'], false],
+    ]);
+    expect(outline(drawn(rows, { query: 'i' }))).toEqual([
+      ['aisle:sec-pizzas', 'Pizzas', ['pizza'], false],
+      ['aisle:sec-frozen', 'Frozen', ['icecream'], false],
     ]);
   });
 

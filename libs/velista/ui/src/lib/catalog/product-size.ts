@@ -7,13 +7,21 @@ export type SizeTranslate = (
 /**
  * How big the packet is, as words, or null when there is nothing worth saying.
  *
- * The composer's rule (`SuggestionList.sizeOf`), for its reason: the catalog holds
- * one record per size, so the size is what tells two rows of one name apart, and a
- * count of one is what every product is and says nothing.
+ * **This is what stops a list drawing the same product three times.** The catalog
+ * holds one record per size, so "Leche entera Hacendado" at 1 L, at 1.5 L and at
+ * 6 L are three products with the same name and the same brand, and the size is
+ * what tells them apart.
  *
- * One function for the rows that name a product outside the composer: the catalog
- * row, a zone list line and a shopping list row. A unit this build has no words
- * for answers null, so a key never reaches the screen.
+ * A mass or a volume is always said when the catalog has one: most sizes are below
+ * one (0.35 kg, 0.75 L), which is exactly where two records differ. `UNIT` and
+ * `PACK` are counts, and a count of one is what every product is and says nothing,
+ * so they are said only from two. A count is also where
+ * `UNIT_OF_MEASURE_FALLBACK` lands, so a unit this build has never heard of is
+ * suppressed by the same rule. Zero and below are not sizes.
+ *
+ * One function for every card and row that names a product: the product card of
+ * the catalog and the search, a zone list line and a shopping list row. A unit
+ * this build has no words for answers null, so a key never reaches the screen.
  */
 export function productSizeText(
   size: number | null,

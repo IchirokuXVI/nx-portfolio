@@ -19,14 +19,18 @@ export const SETUP_INFO: InfoContent = {
   title: 'harvest.setup.info.title',
   points: [
     'harvest.setup.info.sources',
+    'harvest.schedules.setupInfo',
     'harvest.setup.info.brands',
     'harvest.setup.info.postalCodes',
   ],
 };
 
+/** A part of Setup that is a resource, by its name. */
+type ResourcePart = 'schedules' | 'brands' | 'postal-codes';
+
 /** One entry of the switch between the parts of Setup. */
 interface PartEntry {
-  readonly key: 'sources' | 'brands' | 'postal-codes';
+  readonly key: 'sources' | ResourcePart;
   readonly labelKey: string;
   readonly path: readonly string[];
 }
@@ -163,6 +167,9 @@ export class HarvestSetupPage {
       labelKey: 'harvest.sources.heading',
       path: harvestSetupPath(),
     },
+    // Beside the sources: a schedule runs a preset of a chain that has one
+    // (admin plan 0067).
+    ...this._resource('schedules'),
     ...this._resource('brands'),
     ...this._resource('postal-codes'),
   ];
@@ -176,7 +183,7 @@ export class HarvestSetupPage {
    * A part that is a resource, where the app mounted it. It is called what
    * its descriptor calls it, and it is where the registry says it is.
    */
-  private _resource(key: 'brands' | 'postal-codes'): readonly PartEntry[] {
+  private _resource(key: ResourcePart): readonly PartEntry[] {
     const descriptor = this._registry.byName(key);
     const path = this._registry.pathOf(key);
 

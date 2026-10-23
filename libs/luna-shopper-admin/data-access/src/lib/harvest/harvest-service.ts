@@ -315,6 +315,35 @@ export interface HarvestServiceI {
    * flight, which reads as `resource.error.conflict`.
    */
   deleteSource(supermarketId: string): Promise<{ id: string }>;
+
+  /**
+   * The schedules of the harvester, ordered by the next slot, the ones that
+   * are off last (backend plan 0206, section 4; admin plan 0067).
+   */
+  listSchedules(query: ScheduleQuery): Promise<Wire.HarvestHarvestSchedulePage>;
+  readSchedule(id: string): Promise<Wire.HarvestHarvestScheduleView>;
+  /**
+   * Run a preset at a time of day, on some days of the week.
+   *
+   * `acknowledgedAutomaticFetch` must be the JSON `true`, or the answer is
+   * `validation_failed` naming the field. A caller sends it only in the act in
+   * which the person ticked the box: nothing here remembers it.
+   */
+  createSchedule(
+    input: Wire.CreateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView>;
+  /** The time, the days or the timezone. The preset never changes. */
+  updateSchedule(
+    id: string,
+    patch: Wire.UpdateHarvestScheduleDto
+  ): Promise<Wire.HarvestHarvestScheduleView>;
+  /** On asks for `acknowledgedAutomaticFetch: true`, as a create does. */
+  setScheduleEnabled(
+    id: string,
+    input: Wire.SetHarvestScheduleEnabledDto
+  ): Promise<Wire.HarvestHarvestScheduleView>;
+  /** The runs it started keep their record and still name it. */
+  deleteSchedule(id: string): Promise<{ id: string }>;
 }
 
 /** A cursor and a size, which every collection route here accepts. */
@@ -335,6 +364,16 @@ export interface RunQuery extends PageQuery {
    */
   readonly reverted?: boolean;
   /** Runs started from one preset (backend plan 0120, section 7). */
+  readonly presetId?: string;
+  /** Runs one schedule started (backend plan 0206, section 9). */
+  readonly scheduleId?: string;
+  /** Runs a person started, or runs a schedule started. */
+  readonly trigger?: Wire.EnumsHarvestRunTrigger;
+}
+
+/** The schedules of one chain, or of one preset. Absent, every chain's. */
+export interface ScheduleQuery extends PageQuery {
+  readonly supermarketId?: string;
   readonly presetId?: string;
 }
 

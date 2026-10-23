@@ -13,7 +13,10 @@ import {
   HARVEST_SERVICE,
   RunWatches,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  ResourceReferences,
+  ResourceRegistry,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   exportFileName,
   failureBlockReason,
@@ -88,6 +91,25 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       @if (watch.run()?.revertedAt) {
         <p class="reverted" pageChip>
           {{ 'harvest.run.reverted.chip' | rokuT }}
+        </p>
+      }
+      <!-- A schedule started it (admin plan 0067, target 10), and the chip is
+           the way to that schedule. -->
+      <!-- One block for each, because a chip is projected into the header
+           only as the one element of its block. -->
+      @if (scheduled()?.link; as link) {
+        <a
+          [attr.title]="'harvest.schedules.runs.openSchedule' | rokuT"
+          [routerLink]="link"
+          class="scheduled"
+          pageChip
+          data-scheduled
+          >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
+        >
+      }
+      @if (scheduled() !== null && scheduled()?.link === null) {
+        <p class="scheduled" pageChip data-scheduled>
+          {{ 'harvest.schedules.runs.scheduled' | rokuT }}
         </p>
       }
     </lib-page-header>
@@ -604,6 +626,20 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       text-transform: uppercase;
       color: var(--admin-danger-on-wash);
     }
+
+    /* Who started the run, in the grey of a fact and not of a state. */
+    .scheduled {
+      padding: var(--admin-space-1) var(--admin-space-2);
+      border-radius: var(--admin-radius);
+      background: var(--admin-neutral-wash);
+      font-size: 0.75rem;
+      color: var(--admin-neutral-on-wash);
+    }
+
+    a.scheduled:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -611,6 +647,7 @@ export class RunPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _references = inject(ResourceReferences);
+  private readonly _registry = inject(ResourceRegistry);
 
   readonly shell = inject(HarvestShell);
 
@@ -624,6 +661,21 @@ export class RunPage {
   readonly watch = inject(RunWatches).for(
     this._route.snapshot.paramMap.get('id') ?? ''
   );
+
+  /**
+   * Whether a schedule started this run, and where that schedule is. `null`
+   * for a run a person started.
+   */
+  readonly scheduled = computed(() => {
+    const run = this.watch.run();
+    if (run?.trigger !== 'SCHEDULED') {
+      return null;
+    }
+    const id = run.scheduleId ?? null;
+    return {
+      link: id === null ? null : this._registry.rowPath('schedules', id),
+    };
+  });
 
   /** A finished run whose failure names one of the switches. */
   readonly blockedKey = computed(() => {

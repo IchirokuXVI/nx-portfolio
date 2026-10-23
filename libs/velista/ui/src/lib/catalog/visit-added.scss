@@ -24,39 +24,10 @@
   list-style: none;
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  min-block-size: var(--app-space-11);
-  padding-block: var(--app-space-3);
-  border-block-end: 1px solid var(--app-border-subtle);
-}
-
-.what {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  min-inline-size: 0;
-}
-
-.name {
-  font-size: var(--app-text-base);
-  line-height: var(--app-leading-heading);
-  overflow-wrap: anywhere;
-}
-
-.detail,
-.pending {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-}
-
-// A state, in words. Violet is the app's colour for something that waits.
-.pending {
-  font-weight: 600;
-  color: var(--app-status-attention-fg);
+// Each row is the compact product card (velista 0163), which draws its own
+// hairline.
+.added-row {
+  display: block;
 }
 
 .quiet,

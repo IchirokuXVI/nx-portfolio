@@ -11,7 +11,8 @@ import {
 } from './suggestion-card-view';
 
 /**
- * What one card says (velista `0101`). Each rule the canvas settles is one test
+ * What one search card says (velista `0101`, drawn as the one card since `0162`).
+ * Each rule the canvas settles is one test
  * here, because the view function is where the rule lives and the template only
  * places what it decided.
  *
@@ -92,25 +93,34 @@ describe('suggestionCardView, an item', () => {
   it('reads the name in the reader’s language, and brand and size under it', () => {
     const card = itemCard();
 
-    expect(card.name).toBe('Whole milk');
-    expect(card.meta).toBe('Hacendado · list.add.size.LITER {"size":"1"}');
-    expect(card.group).toBe(false);
+    expect(card.row.name).toBe('Whole milk');
+    expect(card.row.detail).toBe(
+      'Hacendado · list.add.size.LITER {"size":"1"}'
+    );
+    expect(card.group).toBeNull();
     expect(card.productId).toBe('item-1');
   });
 
-  it('says nothing about price, and draws no foot, for a product with none', () => {
-    // `Edge`: no dash and no reserved blank. The card falls back to the height of
-    // its own photograph.
+  it('carries the photo of the product, and none when it has none', () => {
+    expect(
+      itemCard({ imageUrl: 'https://img.test/milk.jpg' }).row.imageUrl
+    ).toBe('https://img.test/milk.jpg');
+    expect(itemCard().row.imageUrl).toBeNull();
+  });
+
+  it('has no price, no unit price and no chain line for a product with none', () => {
     const card = itemCard();
 
-    expect(card.price).toBeNull();
-    expect(card.aside).toBeNull();
-    expect(card.chains).toBeNull();
-    expect(card.foot).toBe(false);
+    expect(card.row.price).toBeNull();
+    expect(card.row.unitPrice).toBeNull();
+    expect(card.row.seen).toBeNull();
+    expect(card.row.chains).toBeNull();
+    expect(card.shops).toEqual([]);
+    expect(card.row.label).toContain('catalog.row.noPrice');
   });
 
   it('quotes the price of this packet', () => {
-    expect(itemCard({ offer: offer(0.95) }).price).toBe(money(0.95));
+    expect(itemCard({ offer: offer(0.95) }).row.price).toBe(money(0.95));
   });
 
   describe('the price per unit (rule 5)', () => {
@@ -121,7 +131,9 @@ describe('suggestionCardView, an item', () => {
         unitBasis: 'LITER',
       });
 
-      expect(card.aside).toBe(`catalog.unit.LITER {"price":"${money(1.09)}"}`);
+      expect(card.row.unitPrice).toBe(
+        `catalog.unit.LITER {"price":"${money(1.09)}"}`
+      );
     });
 
     it('is not drawn when it is the same number, a one litre carton', () => {
@@ -130,13 +142,13 @@ describe('suggestionCardView, an item', () => {
         unitBasis: 'LITER',
       });
 
-      expect(card.aside).toBeNull();
+      expect(card.row.unitPrice).toBeNull();
     });
 
     it('is not drawn without a basis to name, rather than guessing one', () => {
       const card = itemCard({ offer: offer(6.54, { unitPrice: 1.09 }) });
 
-      expect(card.aside).toBeNull();
+      expect(card.row.unitPrice).toBeNull();
     });
   });
 
@@ -147,15 +159,16 @@ describe('suggestionCardView, an item', () => {
       unitPrice: 1.35,
     });
 
-    it('is marked stale, and its age takes the second line’s trailing slot', () => {
+    it('is marked stale, and its age takes the unit price’s place', () => {
       const card = itemCard({ offer: stale, unitBasis: 'LITER' });
 
-      expect(card.stale).toBe(true);
-      expect(card.aside).toBe('list.add.card.seen {"when":"12 days ago"}');
+      expect(card.row.stale).toBe(true);
+      expect(card.row.seen).toBe('12 days ago');
+      expect(card.row.unitPrice).toBeNull();
     });
 
     it('is fresh when the server did not say otherwise', () => {
-      expect(itemCard({ offer: offer(1.35) }).stale).toBe(false);
+      expect(itemCard({ offer: offer(1.35) }).row.stale).toBe(false);
     });
   });
 
@@ -171,14 +184,16 @@ describe('suggestionCardView, an item', () => {
     it('names the cheapest chain and no other', () => {
       const card = itemCard({ offer: offer(1.19), chainPrices: five });
 
-      expect(card.chains?.lead).toBe('Mercadona');
-      expect(card.chains?.marks.map((mark) => mark.initial)).toEqual([
+      expect(card.row.chains?.lead).toBe('Mercadona');
+      expect(card.row.chains?.marks.map((mark) => mark.initial)).toEqual([
         'M',
         'C',
         'D',
       ]);
-      expect(card.chains?.more).toBe(2);
-      expect(card.chains?.label).toBe('list.add.card.soldAtMany {"count":5}');
+      expect(card.row.chains?.more).toBe(2);
+      expect(card.row.chains?.label).toBe(
+        'list.add.card.soldAtMany {"count":5}'
+      );
     });
 
     it('names the one chain in the button’s words when there is one', () => {
@@ -187,8 +202,10 @@ describe('suggestionCardView, an item', () => {
         chainPrices: [chain('dia', 'Dia', 0.95)],
       });
 
-      expect(card.chains?.more).toBe(0);
-      expect(card.chains?.label).toBe('list.add.card.soldAt {"chain":"Dia"}');
+      expect(card.row.chains?.more).toBe(0);
+      expect(card.row.chains?.label).toBe(
+        'list.add.card.soldAt {"chain":"Dia"}'
+      );
     });
 
     it('lists every chain with its own price when opened, the cheapest marked', () => {
@@ -226,15 +243,17 @@ describe('suggestionCardView, an item', () => {
   });
 
   describe('the pack (backend 0162)', () => {
-    it('reads "Pack 6" from the count, and names it to the add button', () => {
+    it('puts "Pack 6" on the detail line, and names it to the add button', () => {
       const card = itemCard({ packCount: 6, size: 6 });
 
-      expect(card.pack).toBe('list.add.card.pack {"count":6}');
+      expect(card.row.detail).toBe(
+        'Hacendado · list.add.size.LITER {"size":"6"} · list.add.card.pack {"count":6}'
+      );
       expect(card.pickLabel).toContain('list.add.card.pack {\\"count\\":6}');
     });
 
     it('draws no pack for a product that is not one', () => {
-      expect(itemCard().pack).toBeNull();
+      expect(itemCard().row.detail).not.toContain('list.add.card.pack');
     });
   });
 
@@ -270,49 +289,53 @@ describe('suggestionCardView, a group (rule 4)', () => {
   );
 
   it('labels its price as a floor, "from", and not as the price of a thing', () => {
-    expect(groupCard(6, five).price).toBe(
-      `list.add.card.from {"price":"${money(0.89)}"}`
+    const card = groupCard(6, five);
+
+    expect(card.row.price).toBe(money(0.89));
+    expect(card.row.label).toBe(
+      `Milk, list.add.card.groupBadge, list.add.card.from ${money(0.89)}`
     );
   });
 
-  it('says it is one line, cheapest of the count at the shop', () => {
-    expect(groupCard(6, five).meta).toBe('list.add.card.groupLine {"count":6}');
+  it('says what choosing it adds', () => {
+    expect(groupCard(6, five).row.detail).toBe(
+      'list.add.groupAdds {"count":6}'
+    );
   });
 
   it('reveals at most five products with a count of the rest', () => {
     const card = groupCard(6, five);
 
-    expect(card.members).toHaveLength(5);
-    expect(card.members[0]).toEqual({
+    expect(card.group?.members).toHaveLength(5);
+    expect(card.group?.members[0]).toEqual({
       id: 'i0',
       name: 'Whole milk',
       brand: 'Hacendado',
       price: money(0.89),
     });
-    expect(card.reveal).toBe('list.add.card.groupProducts {"count":6}');
-    expect(card.membersMore).toBe('list.add.card.groupMore {"count":1}');
+    expect(card.group?.reveal).toBe('list.add.card.groupProducts {"count":6}');
+    expect(card.group?.more).toBe('list.add.card.groupMore {"count":1}');
   });
 
   it('says no "and N more" when the five are all of them', () => {
-    expect(groupCard(5, five).membersMore).toBeNull();
+    expect(groupCard(5, five).group?.more).toBeNull();
   });
 
-  it('draws no reveal and no foot when the server sent no members', () => {
-    const card = groupCard(6, []);
-
-    expect(card.reveal).toBeNull();
-    expect(card.foot).toBe(false);
+  it('draws no reveal when the server sent no members', () => {
+    expect(groupCard(6, []).group?.reveal).toBeNull();
   });
 
-  it('names no chain and links to no product', () => {
+  it('names no chain, has no photo and links to no product', () => {
     const card = groupCard(6, five);
 
-    expect(card.chains).toBeNull();
+    expect(card.row.chains).toBeNull();
+    expect(card.row.imageUrl).toBeNull();
+    expect(card.shops).toEqual([]);
     expect(card.productId).toBeNull();
-    expect(card.group).toBe(true);
+    expect(card.group).not.toBeNull();
   });
 
   it('draws no price for a group nobody prices', () => {
-    expect(groupCard(6, five, null).price).toBeNull();
+    expect(groupCard(6, five, null).row.price).toBeNull();
   });
 });

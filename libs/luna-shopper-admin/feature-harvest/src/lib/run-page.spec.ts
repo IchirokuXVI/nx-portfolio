@@ -688,3 +688,25 @@ describe('RunPage, its two views', () => {
     fixture.componentInstance.watch.stop();
   });
 });
+
+/** Admin plan 0067, target 10: a run a schedule started says so. */
+describe('RunPage, who started it', () => {
+  it('says Scheduled for a run a schedule started', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', trigger: 'SCHEDULED', scheduleId: 'sched-1' })
+    );
+
+    expect(
+      fixture.nativeElement.querySelector('[data-scheduled]')?.textContent
+    ).toContain('harvest.schedules.runs.scheduled');
+    expect(fixture.componentInstance.scheduled()).not.toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('says nothing for a run a person started', async () => {
+    const fixture = await render(run({ status: 'COMPLETED' }));
+
+    expect(fixture.nativeElement.querySelector('[data-scheduled]')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+});

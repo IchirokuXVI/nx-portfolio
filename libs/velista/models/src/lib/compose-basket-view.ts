@@ -1,4 +1,4 @@
-import { matchesBasketRow } from './basket-search';
+import { foldForSearch, matchesBasketRow } from './basket-search';
 import type {
   BasketListRef,
   BasketPriceScope,
@@ -796,9 +796,19 @@ function groupRows(
     if (context.parents === null) {
       return ungrouped(rows, notes);
     }
+    // A search lists what it found, and a row found once is drawn once: under the
+    // first heading it would have, and under no other.
+    const once = foldForSearch(context.query) !== '';
     return basketGroupsByAisle(state, context)
-      ? byAisle(rows, context, context.sections ?? [], context.parents, notes)
-      : byCategory(rows, context, context.parents, notes);
+      ? byAisle(
+          rows,
+          context,
+          context.sections ?? [],
+          context.parents,
+          notes,
+          once
+        )
+      : byCategory(rows, context, context.parents, notes, once);
   }
   if (state.grouping === 'list') {
     return byList(rows, context, notes);
@@ -848,6 +858,9 @@ function ungrouped(
  * row under two headings. `basketViewRows` counts it once, which is what keeps the
  * sheet's button from reporting more rows than the basket has.
  *
+ * Except while searching: `once` draws each row under the first root it has and no
+ * other, because a search's answer listing the same row twice reads as two finds.
+ *
  * ## "No category" is last, always
  *
  * It holds every row with no resolved product: something somebody typed in an
@@ -862,7 +875,8 @@ function byCategory(
   rows: readonly BasketRow[],
   context: BasketViewContext,
   parents: ReadonlyMap<string, LocalizedName>,
-  notes: RowNotes
+  notes: RowNotes,
+  once = false
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first row's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
@@ -888,6 +902,9 @@ function byCategory(
       } else if (!held.rows.includes(row)) {
         // Two leaves of one root, or one leaf listed twice: one row under it.
         held.rows.push(row);
+      }
+      if (once) {
+        break;
       }
     }
     if (!placed) {
@@ -980,6 +997,9 @@ export function basketGroupsByAisle(
  * known section is one no aisle holds: a list read earlier than the basket is not a
  * reason to lose a row.
  *
+ * While searching, `once` draws a row under the first of its aisles in the shop's
+ * order and no other, as {@link byCategory} does with roots.
+ *
  * Inside every section the incoming order stays. `0141`'s walk order is an order of
  * rows and the shop's order is an order of aisles, so neither needs the other.
  */
@@ -988,7 +1008,8 @@ function byAisle(
   context: BasketViewContext,
   shopSections: readonly ShopSection[],
   parents: ReadonlyMap<string, LocalizedName>,
-  notes: RowNotes
+  notes: RowNotes,
+  once = false
 ): readonly BasketViewSection[] {
   const held = new Map<string, BasketRow[]>(
     shopSections.map((one) => [one.id, []])
@@ -996,7 +1017,11 @@ function byAisle(
   const uncovered: BasketRow[] = [];
 
   for (const row of rows) {
-    const ids = basketRowPick(row, context.products)?.sectionIds ?? [];
+    const named = basketRowPick(row, context.products)?.sectionIds ?? [];
+    // In the shop's order, so the one aisle a search keeps is the first one walked.
+    const ids = once
+      ? [...held.keys()].filter((id) => named.includes(id)).slice(0, 1)
+      : named;
     let placed = false;
     for (const id of ids) {
       const aisle = held.get(id);
@@ -1032,7 +1057,7 @@ function byAisle(
     );
   }
 
-  const rest = byCategory(uncovered, context, parents, notes);
+  const rest = byCategory(uncovered, context, parents, notes, once);
   const first = rest[0];
   if (
     sections.length > 0 &&

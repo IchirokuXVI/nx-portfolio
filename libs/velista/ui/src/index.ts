@@ -37,7 +37,6 @@ export * from './lib/catalog/product-row-view';
 export * from './lib/catalog/product-size';
 export * from './lib/catalog/visit-added';
 export * from './lib/choice/check-field';
-export * from './lib/choice/radio-row';
 export * from './lib/entry/account-lost-panel';
 export * from './lib/entry/asked-notice';
 export * from './lib/entry/invite-card';

@@ -5,6 +5,8 @@ import {
   type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { ResourceRow, Wire } from '@portfolio/luna-shopper-admin/models';
+import { seededLinks } from './catalog-seed';
+import { itemPhotos } from './item-photos';
 
 /**
  * The four rules of the category tree, kept by the in memory tables (backend
@@ -105,10 +107,19 @@ export function categoryMemoryRules(
   };
 }
 
-/** The products' rules, for the item table. */
+/**
+ * The products' rules, for the item table.
+ *
+ * A write of `imageUrl` is a write of our own photo, as catalog reads it
+ * (admin plan 0065, target 6). The photo a shopper sees is then worked out
+ * again from ours and the chain links of the seed, each shown when its chain
+ * is on in the chain table, so the two never drift apart the way a plain
+ * spread of the input would leave them.
+ */
 export function itemMemoryRules(
   categories: () => ResourceSource<Category>,
-  prices: () => ResourceSource<PriceRow>
+  prices: () => ResourceSource<PriceRow>,
+  chains: () => ResourceSource<Wire.CatalogSupermarketView>
 ): ResourceMemoryRules<ItemRow> {
   return {
     matches(row, param, value, tables) {
@@ -144,6 +155,8 @@ export function itemMemoryRules(
       const { categoryIds, ...rest } = input;
       return {
         ...rest,
+        // A new product has no source row yet, so no link either.
+        ...itemPhotos(ownPhotoOf(input), []),
         categories: resolveItemCategories(
           categoryIds,
           tables.table(categories())
@@ -151,20 +164,33 @@ export function itemMemoryRules(
       };
     },
 
-    update(_current, input, tables) {
-      if (!('categoryIds' in input)) {
-        return input;
-      }
+    update(current, input, tables) {
       const { categoryIds, ...rest } = input;
       return {
         ...rest,
-        categories: resolveItemCategories(
-          categoryIds,
-          tables.table(categories())
-        ),
+        ...('imageUrl' in input
+          ? itemPhotos(
+              ownPhotoOf(input),
+              seededLinks(current.id, tables.table(chains()))
+            )
+          : {}),
+        ...('categoryIds' in input
+          ? {
+              categories: resolveItemCategories(
+                categoryIds,
+                tables.table(categories())
+              ),
+            }
+          : {}),
       };
     },
   };
+}
+
+/** Our photo as a write names it: an address, or nothing. */
+function ownPhotoOf(input: ResourceRow): string | null {
+  const value = input['imageUrl'];
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /**

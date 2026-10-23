@@ -1,7 +1,8 @@
 <!--
   Change the product (velista 0140, section 2; artboards Change and ChangeAll).
-  The title and what it is for, one list of products with a radio each, the way
-  into the catalog, and at the foot the checkbox and the one button.
+  The title and what it is for, one list of products drawn as the compact card
+  with its radio at the right edge (velista 0163), the way into the catalog, and
+  at the foot the checkbox and the one button.
 -->
 <lib-sheet-shell
   (dismiss)="close()"
@@ -16,13 +17,10 @@
 
   @switch (state()) {
     @case ('loading') {
-      <!-- Rows of the same height, so the list does not move when it lands. -->
+      <!-- Cards of the same height, so the list does not move when it lands. -->
       <div aria-hidden="true" class="choices">
         @for (bone of skeletonRows; track bone) {
-          <div class="bone">
-            <span class="bone-dot"></span>
-            <span class="bone-text"></span>
-          </div>
+          <lib-product-row-skeleton [compact]="true" />
         }
       </div>
     }
@@ -42,42 +40,18 @@
         class="choices"
         role="radiogroup"
       >
-        @for (choice of choices(); track choice.itemId) {
-          <lib-radio-row
-            (chosen)="choose(choice.itemId)"
-            [checked]="choice.itemId === selected()"
+        @for (choice of choices(); track choice.id) {
+          <lib-product-row
+            (chosen)="choose($event)"
+            [choice]="{
+              name: 'basket-change-product',
+              checked: choice.id === selected(),
+            }"
+            [compact]="true"
             [disabled]="busy()"
+            [row]="choice"
             class="choice"
-            name="basket-change-product"
-          >
-            <span class="text">
-              <span class="name">{{ choice.name }}</span>
-              @switch (choice.caption) {
-                @case ('chosenNow') {
-                  <span class="caption">
-                    {{ 'basket.change.chosenNow' | rokuT }}
-                  </span>
-                }
-                @case ('cheaper') {
-                  <span class="caption">
-                    <em class="cheaper">{{
-                      'basket.change.cheaper' | rokuT
-                    }}</em>
-                  </span>
-                }
-                @case ('notSold') {
-                  <span class="caption">
-                    <em class="not-sold">{{
-                      'basket.change.notSold' | rokuT
-                    }}</em>
-                  </span>
-                }
-              }
-            </span>
-            @if (choice.price; as price) {
-              <span class="price">{{ price }}</span>
-            }
-          </lib-radio-row>
+          />
         }
       </div>
     }

@@ -917,6 +917,78 @@ describe('LineDetailSheet', () => {
     });
   });
 
+  describe('which one did you get (velista 0163)', () => {
+    const SEMI: CatalogItem = {
+      ...MILK,
+      id: 'item-milk-b',
+      name: { es: 'Leche semidesnatada', en: 'Semi-skimmed milk' },
+      brand: 'Pascual',
+      imageUrl: 'https://img.test/semi.png',
+    };
+
+    async function openStep(): Promise<ComponentFixture<LineDetailSheet>> {
+      const { fixture } = await render({
+        lines: [line({ itemIds: ['item-milk-a', 'item-milk-b'] })],
+        itemNames: fakeItemNames({ items: [MILK, SEMI] }),
+      });
+      button(fixture, 'list.detail.bought')?.click();
+      await settle(fixture);
+      return fixture;
+    }
+
+    const cards = (
+      fixture: ComponentFixture<LineDetailSheet>
+    ): HTMLElement[] => [
+      ...fixture.nativeElement.querySelectorAll('.choices lib-product-row'),
+    ];
+
+    it('draws each product as the compact card with its radio at the right edge', async () => {
+      const fixture = await openStep();
+
+      const [first, second] = cards(fixture);
+      expect(cards(fixture)).toHaveLength(2);
+      expect(first.querySelector('.row')?.classList.contains('compact')).toBe(
+        true
+      );
+      expect(first.querySelector('.name')?.textContent?.trim()).toBe(
+        'Whole milk'
+      );
+      expect(first.querySelector('.detail')?.textContent).toBe('Hacendado');
+      expect(second.querySelector('img')?.getAttribute('src')).toBe(
+        'https://img.test/semi.png'
+      );
+      // The whole card is the label, and the radio is its last part.
+      const label = first.querySelector('label.open');
+      expect(label?.lastElementChild?.matches('input[type="radio"]')).toBe(
+        true
+      );
+    });
+
+    it('marks the chosen one with its radio only, never a tint', async () => {
+      const fixture = await openStep();
+
+      const radios = cards(fixture).map(
+        (card) => card.querySelector('input[type="radio"]') as HTMLInputElement
+      );
+      expect(radios.map((radio) => radio.checked)).toEqual([true, false]);
+      expect(new Set(radios.map((radio) => radio.name)).size).toBe(1);
+      expect(fixture.nativeElement.querySelector('.chosen')).toBeNull();
+    });
+
+    it('records the second product once it is picked', async () => {
+      const fixture = await openStep();
+
+      (
+        cards(fixture)[1].querySelector(
+          'input[type="radio"]'
+        ) as HTMLInputElement
+      ).click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.chosenItemId()).toBe('item-milk-b');
+    });
+  });
+
   describe('where it was bought (velista 0114)', () => {
     const SHOP: BasketShop = {
       id: 'loc-1',
