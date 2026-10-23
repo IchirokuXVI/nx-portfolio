@@ -21,6 +21,10 @@
 {{- $hosts := dict }}
 {{- range .Values.apps }}
 {{- $_ := set $hosts (include "charts.host" (dict "item" . "root" $)) true }}
+{{- /* A mount usually lands on a host another entry already has, and the dict dedups it. */}}
+{{- range .mounts }}
+{{- $_ := set $hosts (include "charts.host" (dict "item" . "root" $)) true }}
+{{- end }}
 {{- end }}
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- range .Values.lunaShopperBackend.services }}

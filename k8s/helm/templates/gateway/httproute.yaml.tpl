@@ -21,10 +21,21 @@
 
   With the redirect off, as it is locally, sectionName is omitted on purpose so
   the routes answer on both plain HTTP and HTTPS.
+
+  On mounts (velista plan 0165). An entry may also be served at another address
+  by the same pods: each item of its `mounts` list renders one more route, named
+  <entry>-<mount>, with the same match, rewrite and backend. The mount is the
+  item that charts.host reads, so its own `hostPrefix`, `host` and a
+  `hostOverrides` key by the mount's name apply to it, not the entry's.
 */}}
 {{- $pinToHttps := and .Values.gateway.tls.enabled .Values.gateway.tls.redirectHttp }}
-{{- range .Values.apps }}
-{{- $host := include "charts.host" (dict "item" . "root" $) }}
+{{- range $app := .Values.apps }}
+{{- $routes := list (dict "name" $app.name "item" $app "path" $app.path) }}
+{{- range $mount := $app.mounts }}
+{{- $routes = append $routes (dict "name" (printf "%s-%s" $app.name $mount.name) "item" $mount "path" $mount.path) }}
+{{- end }}
+{{- range $routes }}
+{{- $host := include "charts.host" (dict "item" .item "root" $) }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -53,8 +64,9 @@ spec:
               replacePrefixMatch: /
       {{- end }}
       backendRefs:
-        - name: {{ .name }}
+        - name: {{ $app.name }}
           port: 80
+{{- end }}
 {{- end }}
 {{- if .Values.lunaShopperBackend.enabled }}
 {{/*
