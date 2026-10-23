@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { handleBackWhile } from '@portfolio/velista/platform';
-import { ChevronLeftIcon, CloseIcon } from '../icons/icons';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { handleBackWhile, LiveConnection } from '@portfolio/velista/platform';
+import { ChevronLeftIcon, CloseIcon, OfflineIcon } from '../icons/icons';
 
 /**
  * The one header every page inside `AppLayout` draws (velista `0130`).
@@ -27,6 +29,10 @@ import { ChevronLeftIcon, CloseIcon } from '../icons/icons';
  *   `[pageHeaderIcon]` does.
  * - **H5.** The right end holds quick actions, projected as `[pageHeaderActions]`.
  *   An action that is not ready is absent, and its absence changes nothing here.
+ *   Before them, on every page, the header draws one quiet mark while the realtime
+ *   socket has been down for more than two seconds (plan 0168). It reads
+ *   `LiveConnection` from `platform`, which is the one store this component reads:
+ *   the alternative was an input threaded through every page that draws a header.
  * - **H6.** The header never loads. `title` is required, so a page that waits for a
  *   name passes the word for the kind of page (Group, List) until it arrives.
  *
@@ -47,7 +53,7 @@ import { ChevronLeftIcon, CloseIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-page-header',
-  imports: [ChevronLeftIcon, CloseIcon],
+  imports: [ChevronLeftIcon, CloseIcon, OfflineIcon, RokuTranslatorPipe],
   templateUrl: './page-header.html',
   styleUrl: './page-header.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +75,9 @@ export class PageHeader {
   readonly leading = input<'back' | 'close'>('back');
 
   readonly back = output<void>();
+
+  /** Whether to draw the reconnecting mark. Two seconds late by design (plan 0168, D6). */
+  protected readonly attention = inject(LiveConnection).attention;
 
   constructor() {
     // A native back press means what the chevron means, and the page already knows

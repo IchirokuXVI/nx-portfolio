@@ -24,12 +24,10 @@ import {
   presenceNames,
   PresenceStore,
   ProfileStore,
-  REALTIME_CLIENT,
   SessionStore,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type AuthServiceI,
-  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
@@ -59,7 +57,6 @@ import {
   ErrorState,
   GuestUpgradeBanner,
   InviteCard,
-  OfflineIcon,
   PageHeader,
   PageHeaderAction,
   ShoppingListCard,
@@ -102,7 +99,6 @@ import { selectHomeState } from './select-home-state';
     ErrorState,
     GuestUpgradeBanner,
     InviteCard,
-    OfflineIcon,
     PageHeader,
     PageHeaderAction,
     ShoppingListCard,
@@ -120,7 +116,6 @@ export class HomePage {
   private readonly _generated = inject(BasketListStore);
   private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
-  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
   /**
    * Read for one field: whether the account's address is confirmed.
@@ -262,15 +257,6 @@ export class HomePage {
       ? (page.zones.find((zone) => zone.lists.length > 0)?.id ?? null)
       : null;
   });
-
-  /**
-   * Whether the live connection is up, for the header's offline mark (plan 0035,
-   * section 5.3).
-   *
-   * Straight off the client rather than through a store: it is a fact about the
-   * transport. Home is the one page that draws the mark since velista `0130`.
-   */
-  readonly connected = this._realtime.connected;
 
   /**
    * The letter in the header's account button.
