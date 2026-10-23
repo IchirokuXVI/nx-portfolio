@@ -19,11 +19,14 @@
 //   - a GATES entry names no directory under k8s/e2e
 //   - two TAG_PREFIX values are equal, or one starts with the other
 //   - a CHART directory has no Chart.yaml, once any unit's chart has one
+//   - a gate has no gate.sh or gate.env, or its gate.env is incomplete
+//   - a gate's TRIGGERS or IMAGES names a project or an image that does not exist
+//   - an e2e project is named by no gate's TRIGGERS, or by more than one (plan 0016)
+//   - a gate directory is listed in no unit's GATES
 //
-// The last rule is on since plan 0015 created k8s/helm/<unit>; it stays quiet
-// only in a workspace where no unit chart exists at all. The rendered Gateway
-// hostnames need a render, so `provision-release.sh --check` asserts those.
-// Plan 0016 adds the rule that every e2e project is named by exactly one gate.
+// The chart rule stays quiet only in a workspace where no unit chart exists at
+// all. The rendered Gateway hostnames need a render, so `provision-release.sh
+// --check` asserts those.
 //
 // The two apps/docker projects (the builder and the nginx base image) are not
 // units (plan 0014 D2). They are recognised by their type:static-docker and
@@ -33,6 +36,13 @@
 //   node tools/deploy/units.mjs list              every unit as JSON
 //   node tools/deploy/units.mjs projects <unit>   the projects of a unit, one per line
 //   node tools/deploy/units.mjs check             exits 1 and names each problem
+//   node tools/deploy/units.mjs endpoints <env>   https://<host> of every unit, one per line
+//   node tools/deploy/units.mjs images [--json]   every deployable image, without a tag
+//   node tools/deploy/units.mjs gates <unit> <affected>
+//                                                 the gates to run, as a JSON matrix
+//
+// `affected` is a comma separated list of project names. A gate runs when one
+// of its TRIGGERS is in it, or always when TRIGGERS is empty.
 //
 // UNITS_ROOT points the commands at another workspace root. The tests use it.
 
@@ -64,6 +74,13 @@ export const REQUIRED_KEYS = [
   'BUILD_ENV_STAGING',
   'BUILD_ENV_PRODUCTION',
 ];
+
+/** The fields of k8s/e2e/<gate>/gate.env. Only BROWSERS may not be empty. */
+export const GATE_KEYS = ['HOSTS', 'TRIGGERS', 'BROWSERS', 'IMAGES'];
+const BROWSERS = ['playwright', 'cypress', 'both', 'none'];
+
+/** Where the pipelines push, as the docker executor reads DOCKER_REGISTRY. */
+export const REGISTRY = 'ghcr.io/ichirokuxvi';
 
 /** A unit with no Secret of its own, such as the portfolio, states SECRETS="". */
 const MAY_BE_EMPTY = new Set(['SECRETS']);
@@ -101,15 +118,52 @@ export function deployableProjects(root) {
     if (!json.targets || !Object.hasOwn(json.targets, 'build:docker')) continue;
     const tags = json.tags ?? [];
     if (tags.some((tag) => WORKSPACE_ARTIFACT_TAGS.includes(tag))) continue;
+    const imageName =
+      json.targets['build:docker']?.options?.imageName ??
+      `nx-portfolio/${json.name}`;
     projects.push({
       name: json.name,
       file,
+      image: imageName.toLowerCase(),
       units: tags
         .filter((tag) => tag.startsWith(TAG_PREFIX))
         .map((tag) => tag.slice(TAG_PREFIX.length)),
     });
   }
   return projects;
+}
+
+/** Every project name under apps/, deployable or not. */
+export function allProjectNames(root) {
+  const appsDir = join(root, 'apps');
+  if (!existsSync(appsDir)) return [];
+  return projectFiles(appsDir)
+    .map((path) => JSON.parse(readFileSync(path, 'utf8')).name)
+    .filter(Boolean)
+    .sort();
+}
+
+/** The e2e projects: the projects under apps/ whose name ends in -e2e. */
+export const e2eProjects = (root) =>
+  allProjectNames(root).filter((name) => name.endsWith('-e2e'));
+
+/** Every directory under k8s/e2e that holds a gate.env, parsed. */
+export function readGates(root) {
+  const e2eDir = join(root, 'k8s', 'e2e');
+  if (!existsSync(e2eDir)) return [];
+  return readdirSync(e2eDir, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() && existsSync(join(e2eDir, entry.name, 'gate.env'))
+    )
+    .map((entry) => entry.name)
+    .sort()
+    .map((name) => ({
+      name,
+      envFile: join(e2eDir, name, 'gate.env'),
+      hasScript: existsSync(join(e2eDir, name, 'gate.sh')),
+      ...parseUnitEnv(readFileSync(join(e2eDir, name, 'gate.env'), 'utf8')),
+    }));
 }
 
 /** Every directory under k8s/units, with its parsed unit.env when one exists. */
@@ -222,6 +276,8 @@ export function checkUnits(root) {
       const gateDir = join(root, 'k8s', 'e2e', gate);
       if (!existsSync(gateDir) || !statSync(gateDir).isDirectory()) {
         say(`GATES names ${gate}, and k8s/e2e/${gate} is not a directory`);
+      } else if (!existsSync(join(gateDir, 'gate.env'))) {
+        say(`GATES names ${gate}, and k8s/e2e/${gate} has no gate.env`);
       }
     }
     if (
@@ -237,6 +293,8 @@ export function checkUnits(root) {
       );
     }
   }
+
+  problems.push(...checkGates(root, units, projects));
 
   // A release tag is matched by prefix, so velista-v must never also match a
   // tag of another unit.
@@ -258,6 +316,116 @@ export function checkUnits(root) {
   }
 
   return problems;
+}
+
+/** The gate half of `check` (plan 0016 D3). */
+function checkGates(root, units, projects) {
+  const problems = [];
+  const gates = readGates(root);
+  const names = new Set(allProjectNames(root));
+  const images = new Set(projects.map((p) => p.image.split('/').pop()));
+  const listed = new Set(units.flatMap((unit) => words(unit.fields?.GATES)));
+  const triggeredBy = new Map();
+
+  for (const gate of gates) {
+    const file = toPosix(relative(root, gate.envFile));
+    const say = (problem) => problems.push(`${file}: ${problem}`);
+    for (const lineNumber of gate.unreadable) {
+      say(
+        `line ${lineNumber} is neither a comment nor NAME="value", so it cannot be checked`
+      );
+    }
+    const { fields } = gate;
+    for (const key of GATE_KEYS) {
+      if (fields[key] === undefined) say(`${key} is absent`);
+    }
+    if (fields.BROWSERS !== undefined && !BROWSERS.includes(fields.BROWSERS)) {
+      say(
+        `BROWSERS is "${fields.BROWSERS}", and it must be one of ${BROWSERS.join(', ')}`
+      );
+    }
+    if (!gate.hasScript) say(`k8s/e2e/${gate.name}/gate.sh does not exist`);
+    if (!listed.has(gate.name)) {
+      say(`no unit lists ${gate.name} in GATES, so no pipeline runs it`);
+    }
+    for (const trigger of words(fields.TRIGGERS)) {
+      if (!names.has(trigger)) {
+        say(
+          `TRIGGERS names ${trigger}, and no project under apps/ has that name`
+        );
+      }
+      triggeredBy.set(trigger, [
+        ...(triggeredBy.get(trigger) ?? []),
+        gate.name,
+      ]);
+    }
+    for (const image of words(fields.IMAGES)) {
+      if (!images.has(image)) {
+        say(
+          `IMAGES names ${image}, and no deployable project builds that image`
+        );
+      }
+    }
+  }
+
+  // An e2e project that no gate names never runs before a deploy, and one that
+  // two gates name belongs to neither unit.
+  if (gates.length > 0) {
+    for (const project of e2eProjects(root)) {
+      const by = triggeredBy.get(project) ?? [];
+      if (by.length === 0) {
+        problems.push(
+          `${project} is an e2e project that no gate.env names in TRIGGERS, so no deploy runs it`
+        );
+      } else if (by.length > 1) {
+        problems.push(
+          `${project} is named in the TRIGGERS of ${by.length} gates (${by.join(', ')}). An e2e project belongs to one gate`
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/** `https://<host>` for every host of every unit in one environment. */
+export function endpoints(root, environment) {
+  const key = `HOSTS_${environment.toUpperCase()}`;
+  return listUnits(root).flatMap((unit) =>
+    words(unit[key]).map((host) => `https://${host}`)
+  );
+}
+
+/** Every deployable image, as `<registry>/<image>`, without a tag. */
+export const imageRefs = (root) =>
+  deployableProjects(root).map((project) => `${REGISTRY}/${project.image}`);
+
+/**
+ * The gates of one unit that `affected` triggers, in GATES order, as the
+ * matrix of the pipeline's gate job. `e2e` lists the affected e2e projects
+ * among the gate's TRIGGERS.
+ */
+export function gateMatrix(root, unitName, affected) {
+  const unit = listUnits(root).find((u) => u.name === unitName);
+  if (!unit) throw new Error(`${unitName} is not a unit`);
+  const changed = new Set(affected);
+  const gates = new Map(readGates(root).map((gate) => [gate.name, gate]));
+  const matrix = [];
+  for (const name of words(unit.GATES)) {
+    const gate = gates.get(name);
+    if (!gate) throw new Error(`k8s/e2e/${name}/gate.env does not exist`);
+    const triggers = words(gate.fields.TRIGGERS);
+    if (triggers.length > 0 && !triggers.some((t) => changed.has(t))) continue;
+    matrix.push({
+      gate: name,
+      e2e: triggers
+        .filter((t) => t.endsWith('-e2e') && changed.has(t))
+        .join(','),
+      hosts: gate.fields.HOSTS ?? '',
+      browsers: gate.fields.BROWSERS ?? 'none',
+      images: gate.fields.IMAGES ?? '',
+    });
+  }
+  return matrix;
 }
 
 function main(argv, root) {
@@ -295,8 +463,32 @@ function main(argv, root) {
     );
     return 0;
   }
+  if (command === 'endpoints') {
+    if (!['staging', 'production'].includes(unitName)) {
+      console.error('deploy units: endpoints takes staging or production');
+      return 1;
+    }
+    for (const url of endpoints(root, unitName)) console.log(url);
+    return 0;
+  }
+  if (command === 'images') {
+    const refs = imageRefs(root);
+    if (unitName === '--json') console.log(JSON.stringify(refs));
+    else for (const ref of refs) console.log(ref);
+    return 0;
+  }
+  if (command === 'gates') {
+    const affected = (argv[2] ?? '').split(',').filter(Boolean);
+    try {
+      console.log(JSON.stringify(gateMatrix(root, unitName, affected)));
+    } catch (error) {
+      console.error(`deploy units: ${error.message}`);
+      return 1;
+    }
+    return 0;
+  }
   console.error(
-    'usage: node tools/deploy/units.mjs list | projects <unit> | check'
+    'usage: node tools/deploy/units.mjs list | projects <unit> | check | endpoints <env> | images [--json] | gates <unit> <affected>'
   );
   return 1;
 }

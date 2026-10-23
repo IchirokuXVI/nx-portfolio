@@ -63,6 +63,23 @@ const PROJECTS = {
     tags: ['type:static-docker'],
   },
   'libs/ui': { name: 'ui', tags: [], docker: false },
+  'apps/home-e2e': { name: 'home-e2e', tags: [], docker: false },
+  'apps/server-e2e': { name: 'server-e2e', tags: [], docker: false },
+};
+
+const GATE_ENV = {
+  'web-gate': {
+    HOSTS: 'staging.example.test',
+    TRIGGERS: 'home-e2e',
+    BROWSERS: 'playwright',
+    IMAGES: 'home',
+  },
+  'api-gate': {
+    HOSTS: '',
+    TRIGGERS: 'server-e2e server-main',
+    BROWSERS: 'none',
+    IMAGES: 'server-main',
+  },
 };
 
 const envText = (fields) =>
@@ -74,7 +91,13 @@ const envText = (fields) =>
  * A throwaway workspace. `units` and `projects` override the complete fixture
  * by key; a null value removes the entry.
  */
-function workspace({ units = {}, projects = {}, gates, raw = {} } = {}) {
+function workspace({
+  units = {},
+  projects = {},
+  gates,
+  gateEnv = {},
+  raw = {},
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), 'deploy-units-'));
   roots.push(root);
   const write = (path, text) => {
@@ -88,6 +111,10 @@ function workspace({ units = {}, projects = {}, gates, raw = {} } = {}) {
   }
   for (const gate of gates ?? ['web-gate', 'api-gate']) {
     mkdirSync(join(root, 'k8s', 'e2e', gate), { recursive: true });
+    const fields = { ...GATE_ENV, ...gateEnv }[gate];
+    if (fields === null) continue;
+    write(`k8s/e2e/${gate}/gate.env`, envText(fields ?? GATE_ENV['web-gate']));
+    write(`k8s/e2e/${gate}/gate.sh`, '#!/usr/bin/env bash\n');
   }
   for (const [dir, project] of Object.entries({ ...PROJECTS, ...projects })) {
     if (project === null) continue;
@@ -243,6 +270,113 @@ test('the chart rule waits until one unit has a chart, then holds every unit to 
     root,
     /api\/unit\.env: CHART is k8s\/helm\/api, and it holds no Chart\.yaml/
   );
+});
+
+test('a gate directory with no gate.env fails', () => {
+  expectProblem(
+    workspace({ gateEnv: { 'api-gate': null } }),
+    /api\/unit\.env: GATES names api-gate, and k8s\/e2e\/api-gate has no gate\.env/
+  );
+});
+
+test('a gate with no gate.sh fails', () => {
+  const root = workspace();
+  rmSync(join(root, 'k8s', 'e2e', 'web-gate', 'gate.sh'));
+  expectProblem(
+    root,
+    /web-gate\/gate\.env: k8s\/e2e\/web-gate\/gate\.sh does not exist/
+  );
+});
+
+test('an absent gate key and an unknown browser fail', () => {
+  const { IMAGES, ...rest } = GATE_ENV['web-gate'];
+  expectProblem(
+    workspace({ gateEnv: { 'web-gate': rest } }),
+    /web-gate\/gate\.env: IMAGES is absent/
+  );
+  expectProblem(
+    workspace({
+      gateEnv: { 'web-gate': { ...GATE_ENV['web-gate'], BROWSERS: 'firefox' } },
+    }),
+    /BROWSERS is "firefox"/
+  );
+});
+
+test('a trigger or an image that does not exist fails', () => {
+  expectProblem(
+    workspace({
+      gateEnv: {
+        'web-gate': { ...GATE_ENV['web-gate'], TRIGGERS: 'home-e2e nope-e2e' },
+      },
+    }),
+    /TRIGGERS names nope-e2e, and no project under apps\/ has that name/
+  );
+  expectProblem(
+    workspace({
+      gateEnv: { 'web-gate': { ...GATE_ENV['web-gate'], IMAGES: 'nope' } },
+    }),
+    /IMAGES names nope, and no deployable project builds that image/
+  );
+});
+
+test('an e2e project must be named by exactly one gate', () => {
+  expectProblem(
+    workspace({
+      gateEnv: { 'web-gate': { ...GATE_ENV['web-gate'], TRIGGERS: '' } },
+    }),
+    /home-e2e is an e2e project that no gate\.env names in TRIGGERS/
+  );
+  expectProblem(
+    workspace({
+      gateEnv: {
+        'web-gate': {
+          ...GATE_ENV['web-gate'],
+          TRIGGERS: 'home-e2e server-e2e',
+        },
+      },
+    }),
+    /server-e2e is named in the TRIGGERS of 2 gates \(api-gate, web-gate\)/
+  );
+});
+
+test('a gate that no unit lists fails', () => {
+  expectProblem(
+    workspace({ gates: ['web-gate', 'api-gate', 'spare'] }),
+    /spare\/gate\.env: no unit lists spare in GATES/
+  );
+});
+
+test('gates runs a gate whose trigger is affected, or one with no triggers', async () => {
+  const { gateMatrix } = await import('./units.mjs');
+  const root = workspace({
+    gateEnv: { 'web-gate': { ...GATE_ENV['web-gate'], TRIGGERS: '' } },
+  });
+  assert.deepEqual(
+    gateMatrix(root, 'api', ['server-main']).map((g) => [g.gate, g.e2e]),
+    [['api-gate', '']]
+  );
+  assert.deepEqual(gateMatrix(root, 'api', ['home']), []);
+  assert.deepEqual(
+    gateMatrix(root, 'api', ['server-e2e']).map((g) => [g.gate, g.e2e]),
+    [['api-gate', 'server-e2e']]
+  );
+  assert.deepEqual(
+    gateMatrix(root, 'web', []).map((g) => g.gate),
+    ['web-gate']
+  );
+});
+
+test('endpoints and images read the registry', async () => {
+  const { endpoints, imageRefs } = await import('./units.mjs');
+  const root = workspace();
+  assert.deepEqual(endpoints(root, 'staging'), [
+    'https://api.staging.example.test',
+    'https://staging.example.test',
+  ]);
+  assert.deepEqual(imageRefs(root), [
+    'ghcr.io/ichirokuxvi/nx-portfolio/home',
+    'ghcr.io/ichirokuxvi/nx-portfolio/server-main',
+  ]);
 });
 
 test('the command exits 1 and names the file', () => {

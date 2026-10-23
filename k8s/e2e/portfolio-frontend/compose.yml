@@ -1,14 +1,12 @@
-# e2e stack that mirrors the Kubernetes reverse-proxy topology with the actual
-# published images, so the exact staging shell (which bakes the staging MFE host)
-# and remotes are tested unchanged. Used by .github/workflows/docker-ci.yml, and
-# runnable locally too:
+# The stack of the portfolio-frontend gate (k8s plan 0016 D3): the published
+# images behind a reverse proxy on the staging hostnames, mirroring the
+# Kubernetes topology, so the exact staging shell (which bakes the staging MFE
+# host) and remotes are tested unchanged. gate.sh drives it in CI, and it runs
+# locally too:
 #
-#   echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app" | sudo tee -a /etc/hosts
+#   echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 #   docker login ghcr.io   # to pull the private images
-#   docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
-#   E2E_BASE_URL=https://staging.ichirokuxvi.com \
-#     npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium
-#   docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v
+#   bash k8s/e2e/portfolio-frontend/gate.sh damoclesSword-e2e
 #
 # Override E2E_IMAGE_PREFIX / E2E_IMAGE_TAG to point at other images (e.g. a release
 # version instead of the mutable `staging` tag).
@@ -24,7 +22,7 @@ services:
       - |
         set -e
         apk add --no-cache openssl >/dev/null
-        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app; do
+        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com; do
           if [ ! -f "/certs/$$domain.crt" ]; then
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
               -keyout "/certs/$$domain.key" -out "/certs/$$domain.crt" \
@@ -40,8 +38,6 @@ services:
       certs:
         condition: service_completed_successfully
       shell:
-        condition: service_started
-      landing:
         condition: service_started
       odontogram:
         condition: service_started
@@ -60,19 +56,14 @@ services:
 
   shell:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/shell:${E2E_IMAGE_TAG:-staging}
-  landing:
-    image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/landing:${E2E_IMAGE_TAG:-staging}
   odontogram:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/odontogram:${E2E_IMAGE_TAG:-staging}
   damoclessword:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/damoclessword:${E2E_IMAGE_TAG:-staging}
   landingv2:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/landingv2:${E2E_IMAGE_TAG:-staging}
-  # velista is not a remote (velista plan 0165), and the shell no longer loads it.
-  # It stays a service because the proxy reaches it twice: on its own origin, which
-  # needs a server block and a certificate under its own name and is where
-  # velista-e2e runs, and under the portfolio host's /velista path, which the
-  # e2e-frontend job checks with curl.
+  # The other unit's image, for the portfolio's /velista route (plan 0015 D6).
+  # This gate checks only that the route reaches it.
   velista:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/velista:${E2E_IMAGE_TAG:-staging}
 
