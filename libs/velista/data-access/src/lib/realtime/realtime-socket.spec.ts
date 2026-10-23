@@ -393,6 +393,30 @@ describe('RealtimeSocket', () => {
       }
     });
 
+    it('retries a failure that landed while hidden when the page shows again in the same flush', async () => {
+      // The page hides, the socket fails, and the page shows again, all before the
+      // visibility effect runs. The effect sees no edge, so no resume comes; the
+      // failure must therefore have read the visibility the effect last saw, and
+      // scheduled its retry as on a visible page.
+      jest.useFakeTimers();
+      try {
+        build();
+        await settle();
+        socket().driveConnect();
+
+        visible.set(false);
+        socket().driveDisconnect();
+        visible.set(true);
+        TestBed.tick();
+        jest.advanceTimersByTime(120_000);
+        await settle();
+
+        expect(sockets.length).toBe(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('opens no socket while the page is hidden, even for a new session', async () => {
       visible.set(false);
       build();
@@ -494,9 +518,19 @@ describe('RealtimeSocket', () => {
         const client = build();
         await settle();
         socket().driveConnect();
+        const first = socket();
+
+        // The first socket's ask is still out when the stale rule drops it, so its
+        // reconcile pass is in flight across the drop. A dropped socket never answers,
+        // so the ask ends the way the library ends it: the five second timeout.
+        let timeOutFirst: () => void = () => undefined;
+        first.answers.set('zone.subscribe', [
+          new Promise((_resolve, reject) => {
+            timeOutFirst = () => reject(new Error('operation has timed out'));
+          }),
+        ]);
         client.subscribeZone('z1');
         await settle();
-        const first = socket();
 
         visible.set(false);
         TestBed.tick();
@@ -515,8 +549,13 @@ describe('RealtimeSocket', () => {
         await settle();
         expect(sockets.length).toBe(2);
 
-        // The new socket rejoins the room the screen still holds.
+        // The new socket's connect asks while the old pass still runs, so it only
+        // leaves the flag. The old pass then bails on the moved generation, and its
+        // `finally` is what starts the pass that joins the room on the new socket.
         socket().driveConnect();
+        await settle();
+        expect(socket().bodiesFor('zone.subscribe')).toEqual([]);
+        timeOutFirst();
         await settle();
         expect(socket().bodiesFor('zone.subscribe')).toEqual([
           { zoneId: 'z1' },

@@ -167,6 +167,14 @@ export class RealtimeSocket implements RealtimeClientI {
   /** When the page last went hidden, or null while it is visible. */
   private _hiddenAt: number | null = null;
 
+  /**
+   * The visibility the resume effect last observed, which is the only one the pause
+   * may read. The raw signal can flip and flip back before that effect runs, and a
+   * failure that read the hidden moment in between would schedule nothing while the
+   * effect, seeing no edge, would never resume it.
+   */
+  private _seenVisible = true;
+
   private _retryTimer: ReturnType<typeof setTimeout> | null = null;
   private _healthyTimer: ReturnType<typeof setTimeout> | null = null;
   private _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -219,16 +227,16 @@ export class RealtimeSocket implements RealtimeClientI {
     // Against a healthy socket close to free: `_start` returns when a socket is held.
     // The rooms need no help either, because `RoomRegistry.onConnected` rejoins
     // everything the screens still hold (R6), so nothing here knows which page is open.
-    let wasVisible = untracked(() => this._browser.visible());
+    this._seenVisible = untracked(() => this._browser.visible());
     let seenResumes = untracked(() => this._resumed.resumes());
     effect(() => {
       const visible = this._browser.visible();
       const resumes = this._resumed.resumes();
       untracked(() => {
-        const rose = visible && !wasVisible;
+        const rose = visible && !this._seenVisible;
         const resumed = visible && resumes > seenResumes;
-        const hid = !visible && wasVisible;
-        wasVisible = visible;
+        const hid = !visible && this._seenVisible;
+        this._seenVisible = visible;
         seenResumes = resumes;
 
         if (hid) {
@@ -388,7 +396,7 @@ export class RealtimeSocket implements RealtimeClientI {
   }
 
   private _isVisible(): boolean {
-    return untracked(() => this._browser.visible());
+    return this._seenVisible;
   }
 
   /**

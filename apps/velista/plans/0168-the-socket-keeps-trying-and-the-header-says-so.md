@@ -331,8 +331,10 @@ in on the home page. Trace times are UTC; `*.steps.log` times are local (UTC+2).
    `_reconcileAgain` and returns, and the old pass returned on the generation check
    without looking at the flag, so the new socket would have joined no room until a
    screen changed. The `finally` of `_reconcile` now starts a new pass when the flag is
-   set. The spec "drops the held socket and opens a new one after 46 s hidden" asserts the
-   room is rejoined.
+   set. The spec "drops the held socket and opens a new one after 46 s hidden" holds the
+   first socket's `zone.subscribe` ack across the drop, asserts the new socket has asked
+   for nothing while that pass is out, then ends the ask with a timeout and asserts the new
+   socket joins the room. With the re-run in the `finally` removed, that spec fails.
 6. **The mark is a touch target square** (`min-inline-size` and `block-size`
    `--app-touch-target`, glyph at `--app-icon-md`), the box of a header action. The home
    mark it replaces had `padding: 0 space-2`; the square keeps the glyph where an action's
@@ -346,9 +348,13 @@ in on the home page. Trace times are UTC; `*.steps.log` times are local (UTC+2).
    presentational and only sees `live`, so the rule "a refusal and not a plain disconnect"
    can only be tested on the page. `page-header.spec.ts` imports the testing translator,
    because the header now uses the `rokuT` pipe.
-9. **Left as they are:** the key `connection.notLive` has no reader now, and the doc of
-   `ListHeaderVm.live` in `libs/velista/models/src/lib/list-view.ts` still says "or the
-   connection dropped". Both are outside the scope list.
+9. **Residue removed in the review round.** The key `connection.notLive` had no reader
+   after the home mark went, so it is gone from `en.json` and `es.json`. The doc of
+   `ListHeaderVm.live` in `libs/velista/models/src/lib/list-view.ts` said the band draws
+   when "the connection dropped"; it now says the band draws only for a refused zone room
+   and that the page header carries the connection mark. That file is outside the scope
+   list, and the review asked for it because the old sentence described this plan's
+   behaviour wrongly.
 
 ### Evidence
 
