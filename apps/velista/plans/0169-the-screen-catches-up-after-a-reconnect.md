@@ -261,24 +261,59 @@ plan `0168` before that plan merged.
   by the summary. A deep link that loaded one group does not cause a read of every group.
 - **`ListStore` reads the zones it holds rows for** (`_byZone`), not the zones whose read
   failed, so a reconnect never turns a failed zone into an empty loaded one.
-- **`MembershipStore` reads every zone through `load`**, as the table says. `load` keeps the
-  rows and sets `loading`, which the members page draws over its rows rather than as a
-  skeleton. Its rethrow is caught at the edge. A zone that had paged past its first page is
-  back to the first page after the read, which is what `load` does today.
+- **`MembershipStore` reads every zone through a private `_reread`, not `load`** (review
+  round). `load` goes back to the first page, so a members page scrolled past it lost every
+  row below, and a `loadMore` in flight could lose its page. The store now counts the pages
+  each zone holds (`_pages`: one on `load`, one more per `loadMore`), and `_reread` reads as
+  many again, in order, under the zone's statuses, and swaps the rows, the cursor and the
+  state in one write at the end, the way `MemberNames` pages. A `loadMore` that lands while
+  the read runs raises the count and its page is read too; one still out counts as the
+  page it will add, so the read goes that page further, and a per zone generation that the
+  swap moves makes that `loadMore` drop its page instead of appending it twice. The state
+  is not set to `loading`, a failure keeps the rows and is swallowed, and a zone forgotten
+  or loaded again under other statuses meanwhile is left alone. It stayed contained to the
+  store: two private maps and one method.
 - **`MemberNames.refresh()` keeps a zone asked when its read fails**, unlike `ensure`: the
   names held are still right, and dropping the zone would let the next `ensure` read again
   for nothing.
 - **`ShoppingProfileStore` reads the profiles only, through a private `_refreshProfiles`**,
   laid over the held rows with `_applyRemote`, the path a `profiles.changed` event takes. A
   field whose write is in flight keeps what was typed. Chains and coverage are not read: the
-  socket does not feed them. No public `refreshProfiles` was added.
+  socket does not feed them. No public `refreshProfiles` was added. The review found that
+  the typed value survives through the overlay alone, so `_raw.set` passed the spec; what
+  `_applyRemote` adds is that the claimed field keeps the held value under the overlay, so a
+  write that then fails snaps back to what it showed before the edit, as after a live
+  event. The spec pins that, and a second one sets the guards (chains failed once, a postal
+  code held) so that a `load` would read chains and coverage, and asserts neither is read.
 - **`ProfileStore` reads only when a profile is held**, so a reconnect on a store that never
-  loaded, or whose first read failed, draws no skeleton.
+  loaded, or whose first read failed, draws no skeleton. It reads through a private
+  `_reread`, not `load` (review round): a failed `load` sets `failed` and an error even
+  while a profile is held, which turned the account page's email row into its failure
+  line and hid home's unverified email banner. `_reread` swallows a failure, keeps
+  `loaded` and the profile, joins a read already running by skipping, and drops an answer
+  that lands after a sign out.
 - **The comments sheet rereads through a private `_reread`** that swallows a failure,
   because `_load` sets the error line, and an error over a readable conversation would be
   the opposite of quiet.
 - **The fake `LineStore` in `testing/store-doubles.ts` gained `hold`**, since the list page
-  now calls it. The double already had `setReconnects` from plan `0168`.
+  now calls it. The double already had `setReconnects` from plan `0168`. After the review it
+  records each hold and release in `holdLog`, so the list page spec asserts that the page
+  holds the list it shows and releases it when it is destroyed.
+- **`loadLineContext` holds its list too** (review round, outside the scope list). Line and
+  list events reach `LineStore` through the zone room, so the line page and the history
+  page were live before a drop. After a reconnect `_caughtUp` only marked their list stale,
+  and the effect that reads the list reads `stateOf` under `untracked` once per list id, so
+  the stale `idle` never caused a read: a rename or a tick made while offline stayed off
+  screen until the person left. The review named it a defect of the `LineStore` rule of
+  D4, so `line-context.ts` was touched: the list effect returns `lines.hold(list)` to its
+  `onCleanup`, which holds the list for as long as the page shows it. Its spec runs the
+  real `LineStore`.
+- **Specs that a mutation could not fail were rewritten** (review round). The `onEdge`
+  spec on tracking counts the effect's runs through the counter's own reads, because a
+  rerun with the same counter value never calls `act`. `LineStore` has a spec for a
+  release called twice beside a second holder, and one for lists whose read failed, held
+  or not, which are neither read nor marked stale. `MemberNames` and the comments sheet
+  each have a failed reread spec.
 
 ### The browser check (target 5)
 
