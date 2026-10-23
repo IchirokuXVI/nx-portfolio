@@ -173,7 +173,9 @@ export function checkUnits(root) {
     }
     for (const unit of project.units) {
       if (!declared.has(unit)) {
-        say(`is tagged ${TAG_PREFIX}${unit}, and k8s/units/${unit}/unit.env does not exist`);
+        say(
+          `is tagged ${TAG_PREFIX}${unit}, and k8s/units/${unit}/unit.env does not exist`
+        );
       }
     }
   }
@@ -211,7 +213,9 @@ export function checkUnits(root) {
       fields.RELEASE_TASKS !== '' &&
       !['true', 'false'].includes(fields.RELEASE_TASKS)
     ) {
-      say(`RELEASE_TASKS is "${fields.RELEASE_TASKS}", and it must be true or false`);
+      say(
+        `RELEASE_TASKS is "${fields.RELEASE_TASKS}", and it must be true or false`
+      );
     }
     for (const gate of words(fields.GATES)) {
       const gateDir = join(root, 'k8s', 'e2e', gate);
@@ -227,7 +231,9 @@ export function checkUnits(root) {
       say(`CHART is ${fields.CHART}, and it holds no Chart.yaml`);
     }
     if (!projects.some((project) => project.units.includes(unit.name))) {
-      say(`no project is tagged ${TAG_PREFIX}${unit.name}, so the unit deploys nothing`);
+      say(
+        `no project is tagged ${TAG_PREFIX}${unit.name}, so the unit deploys nothing`
+      );
     }
   }
 

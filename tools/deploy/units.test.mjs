@@ -175,7 +175,10 @@ test('a unit with no project fails', () => {
 
 test('an absent key fails', () => {
   const { HOSTS_PRODUCTION, ...rest } = UNIT_ENV.web;
-  expectProblem(workspace({ units: { web: rest } }), /web\/unit\.env: HOSTS_PRODUCTION is absent/);
+  expectProblem(
+    workspace({ units: { web: rest } }),
+    /web\/unit\.env: HOSTS_PRODUCTION is absent/
+  );
 });
 
 test('an empty host list fails, and an empty SECRETS passes', () => {
@@ -236,11 +239,16 @@ test('the chart rule waits until one unit has a chart, then holds every unit to 
   assert.deepEqual(checkUnits(root), []);
   mkdirSync(join(root, 'k8s', 'helm', 'web'), { recursive: true });
   writeFileSync(join(root, 'k8s', 'helm', 'web', 'Chart.yaml'), 'name: web\n');
-  expectProblem(root, /api\/unit\.env: CHART is k8s\/helm\/api, and it holds no Chart\.yaml/);
+  expectProblem(
+    root,
+    /api\/unit\.env: CHART is k8s\/helm\/api, and it holds no Chart\.yaml/
+  );
 });
 
 test('the command exits 1 and names the file', () => {
-  const root = workspace({ projects: { 'apps/home': { name: 'home', tags: [] } } });
+  const root = workspace({
+    projects: { 'apps/home': { name: 'home', tags: [] } },
+  });
   const run = spawnSync(process.execPath, [CLI, 'check'], {
     env: { ...process.env, UNITS_ROOT: root },
     encoding: 'utf8',
