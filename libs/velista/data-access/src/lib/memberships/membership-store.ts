@@ -90,6 +90,19 @@ export class MembershipStore {
   /** Whether a further page is in flight, per zone. */
   private readonly _loadingMore = signal<ReadonlySet<string>>(new Set());
 
+  /**
+   * How many pages each zone's rows hold, so a reconnect reads as many again
+   * (velista `0169`). Plain, like `_statuses`: nothing renders it.
+   */
+  private readonly _pages = new Map<string, number>();
+
+  /**
+   * Moved by each reconnect read that swaps a zone's rows (velista `0169`), so a
+   * `loadMore` that was in flight from the rows before the swap drops its page rather
+   * than appending it a second time.
+   */
+  private readonly _generation = new Map<string, number>();
+
   constructor() {
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
     // entry point module federation does not dedupe, and a service several remotes
@@ -119,12 +132,10 @@ export class MembershipStore {
 
     // A join, a kick or a role change broadcast while the socket was down never
     // arrived (velista `0169`). Every zone the store holds rows for is read again
-    // under the statuses it was last asked for. `load` keeps the rows on screen while
-    // it runs, and its failure is already recorded on the zone, so the rethrow meant
-    // for a page that awaits it is dropped here.
+    // under the statuses it was last asked for, as many pages as it held.
     onEdge(this._realtime.reconnects, () => {
       for (const zoneId of this._byZone().keys()) {
-        this.load(zoneId, this._statuses.get(zoneId)).catch(() => undefined);
+        void this._reread(zoneId);
       }
     });
   }
@@ -184,6 +195,7 @@ export class MembershipStore {
       this._setMembers(zoneId, page.items);
       this._set(this._cursor, zoneId, page.nextCursor);
       this._set(this._state, zoneId, 'loaded');
+      this._pages.set(zoneId, 1);
     } catch (error) {
       this._set(this._error, zoneId, error);
       this._set(this._state, zoneId, 'failed');
@@ -205,13 +217,20 @@ export class MembershipStore {
     }
 
     this._loadingMore.update((current) => new Set(current).add(zoneId));
+    const generation = this._generation.get(zoneId);
     try {
       const page = await this._members.listMembers(zoneId, {
         cursor,
         statuses: this._statuses.get(zoneId) ?? DEFAULT_STATUSES,
       });
+      if (this._generation.get(zoneId) !== generation) {
+        // A reconnect read swapped the rows while this page was out, and read this
+        // page with them (see `_reread`).
+        return;
+      }
       this._setMembers(zoneId, [...this.membersIn(zoneId), ...page.items]);
       this._set(this._cursor, zoneId, page.nextCursor);
+      this._pages.set(zoneId, (this._pages.get(zoneId) ?? 1) + 1);
     } catch (error) {
       this._set(this._error, zoneId, error);
       throw error;
@@ -241,6 +260,7 @@ export class MembershipStore {
     this._error.set(new Map());
     this._cursor.set(new Map());
     this._statuses.clear();
+    this._pages.clear();
   }
 
   /** Forget a zone's rows. For a screen leaving a group it no longer belongs to. */
@@ -251,6 +271,65 @@ export class MembershipStore {
       return next;
     });
     this._statuses.delete(zoneId);
+    this._pages.delete(zoneId);
+  }
+
+  /**
+   * Read one zone again after a reconnect, quietly (velista `0169`).
+   *
+   * Not {@link load}, which goes back to the first page: a members page scrolled past
+   * it would lose every row below. As many pages are read as the zone holds, in order,
+   * and the rows are swapped in one write at the end, the way `MemberNames` pages, so
+   * the list never shrinks to one page while the rest is read. A `loadMore` that lands
+   * while this runs adds a page to the count and is read here too; one still out when
+   * the rows are swapped is dropped by its generation check, because this read already
+   * went one page further for it.
+   *
+   * The state stays as it is, so the page draws no skeleton and no busy mark. A
+   * failure keeps the rows, which are still the best thing to draw. A zone forgotten,
+   * or loaded again under other statuses, while this runs is left to that newer state.
+   */
+  private async _reread(zoneId: string): Promise<void> {
+    const asked = this._statuses.get(zoneId);
+    const statuses = asked ?? DEFAULT_STATUSES;
+    const generation = this._generation.get(zoneId);
+
+    try {
+      const rows: Membership[] = [];
+      let page = await this._members.listMembers(zoneId, { statuses });
+      rows.push(...page.items);
+      let read = 1;
+      // The target is read again each turn: a `loadMore` that lands meanwhile adds
+      // its page to the count, and one still out counts as the page it will add.
+      while (
+        page.nextCursor !== null &&
+        read <
+          (this._pages.get(zoneId) ?? 1) + (this.loadingMoreIn(zoneId) ? 1 : 0)
+      ) {
+        page = await this._members.listMembers(zoneId, {
+          cursor: page.nextCursor,
+          statuses,
+        });
+        rows.push(...page.items);
+        read += 1;
+      }
+
+      if (
+        !this._byZone().has(zoneId) ||
+        this._statuses.get(zoneId) !== asked ||
+        this._generation.get(zoneId) !== generation
+      ) {
+        return;
+      }
+      this._generation.set(zoneId, (generation ?? 0) + 1);
+      this._setMembers(zoneId, rows);
+      this._set(this._cursor, zoneId, page.nextCursor);
+      this._set(this._state, zoneId, 'loaded');
+      this._set(this._error, zoneId, null);
+      this._pages.set(zoneId, read);
+    } catch {
+      // Deliberately quiet. See above.
+    }
   }
 
   private _apply(event: RealtimeEvent): void {

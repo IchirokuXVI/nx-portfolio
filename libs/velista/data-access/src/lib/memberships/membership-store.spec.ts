@@ -221,5 +221,105 @@ describe('MembershipStore', () => {
       ]);
       expect(store.stateOf(ZONE)).toBe('loaded');
     });
+
+    /**
+     * Three pages behind cursors, the way the server pages a large group. The second
+     * page can be held back once, for a `loadMore` that is still out.
+     */
+    function paged(service: ReturnType<typeof setup>['service']) {
+      const pages: Record<string, readonly Membership[]> = {
+        first: [member('a'), member('b')],
+        p2: [member('c'), member('d')],
+        p3: [member('e')],
+      };
+      const next: Record<string, string | null> = {
+        first: 'p2',
+        p2: 'p3',
+        p3: null,
+      };
+      const control = {
+        pages,
+        holdNextSecondPage: false,
+        release: () => undefined as void,
+        cursors: [] as (string | undefined)[],
+      };
+      service.listMembers = async (_zoneId, options) => {
+        control.cursors.push(options?.cursor);
+        const key = options?.cursor ?? 'first';
+        if (key === 'p2' && control.holdNextSecondPage) {
+          control.holdNextSecondPage = false;
+          await new Promise<void>((resolve) => (control.release = resolve));
+        }
+        return { items: control.pages[key], nextCursor: next[key] };
+      };
+      return control;
+    }
+
+    async function settle(): Promise<void> {
+      for (let turn = 0; turn < 10; turn += 1) {
+        await Promise.resolve();
+      }
+    }
+
+    it('reads as many pages as the zone held, and swaps the rows in one write', async () => {
+      const { store, realtime, service } = setup();
+      const control = paged(service);
+      await store.load(ZONE, ['APPROVED']);
+      await store.loadMore(ZONE);
+      await store.loadMore(ZONE);
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b', 'c', 'd', 'e']);
+      control.cursors.length = 0;
+      // A rename on the last page, made while the socket was down.
+      control.pages['p3'] = [member('e', { username: 'Renamed' })];
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      // Mid read: the rows are not cut back to the first page.
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b', 'c', 'd', 'e']);
+      await settle();
+
+      expect(control.cursors).toEqual([undefined, 'p2', 'p3']);
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(store.membersIn(ZONE)[4].username).toBe('Renamed');
+      expect(store.cursorOf(ZONE)).toBeNull();
+      expect(store.stateOf(ZONE)).toBe('loaded');
+    });
+
+    it('does not append twice the page of a loadMore still out when the rows are swapped', async () => {
+      const { store, realtime, service } = setup();
+      const control = paged(service);
+      await store.load(ZONE, ['APPROVED']);
+      control.holdNextSecondPage = true;
+      const more = store.loadMore(ZONE);
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await settle();
+      // The reread read the second page itself, because a loadMore was out.
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b', 'c', 'd']);
+
+      control.release();
+      await more;
+
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b', 'c', 'd']);
+      expect(store.cursorOf(ZONE)).toBe('p3');
+    });
+
+    it('keeps the rows and the state when the read fails', async () => {
+      const { store, realtime, service } = setup();
+      await store.load(ZONE, ['APPROVED']);
+      service.listMembers = async () => {
+        throw new Error('offline again');
+      };
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await settle();
+
+      expect(ids(store.membersIn(ZONE))).toEqual(['a', 'b']);
+      expect(store.stateOf(ZONE)).toBe('loaded');
+      expect(store.errorOf(ZONE)).toBeNull();
+    });
   });
 });
