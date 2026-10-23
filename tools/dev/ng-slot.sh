@@ -210,7 +210,7 @@ DEFAULT_BACKEND_SLOT=0
 # it back. It is generated whole, with no merge.
 declare -A DERIVED_KEYS=(
   [shell]='MFE_REMOTE_URLS'
-  [velista]='LUNA_GATEWAY_URL LUNA_REALTIME_URL'
+  [velista]='LUNA_GATEWAY_URL LUNA_REALTIME_URL VELISTA_APP_URL'
   [luna-shopper-admin]='LUNA_GATEWAY_URL'
 )
 
@@ -648,6 +648,7 @@ EOF
 # compile time, the same way webpack.prod.config.ts supplies the deployed hosts.
 LUNA_GATEWAY_URL=http://localhost:${gateway_port}
 LUNA_REALTIME_URL=http://localhost:${realtime_port}
+VELISTA_APP_URL=http://localhost:${velista_port}
 EOF
 
   # The back office reaches the same gateway on different routes, and no realtime

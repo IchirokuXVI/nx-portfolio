@@ -352,6 +352,7 @@ jobs:
             -e MFE_REMOTE_URLS="$STAGING_MFE_REMOTE_URLS" \
             -e LUNA_GATEWAY_URL="$STAGING_LUNA_GATEWAY_URL" \
             -e LUNA_REALTIME_URL="$STAGING_LUNA_REALTIME_URL" \
+            -e VELISTA_APP_URL="https://staging.velista.app" \
             -e VELISTA_APP_VERSION="staging" \
             "$BUILD_IMAGE" \
             npx nx run-many -t build prune --configuration production \
