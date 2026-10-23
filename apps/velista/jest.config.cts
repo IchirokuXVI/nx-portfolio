@@ -12,6 +12,9 @@ module.exports = {
       },
     ],
   },
+  // The Capacitor project holds a copy of the built bundle and Gradle outputs, none of
+  // them tests, and the haste map would crawl all of it (plan 0167).
+  modulePathIgnorePatterns: ['<rootDir>/android'],
   transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$)'],
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',

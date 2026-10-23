@@ -1,6 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Velista</string>
     <string name="title_activity_main">Velista</string>
     <string name="package_name">app.velista</string>
     <string name="custom_url_scheme">app.velista</string>

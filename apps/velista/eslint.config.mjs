@@ -14,6 +14,12 @@ export default [
     ignores: ['**/plans/mocks/**'],
   },
   {
+    // The Capacitor project (plan 0167). Flat ESLint does not read .gitignore, so
+    // without this it would lint the copy of the built bundle that `cap sync` writes
+    // under android/app/src/main/assets/public.
+    ignores: ['android/**'],
+  },
+  {
     files: ['**/*.ts'],
     rules: {
       '@angular-eslint/directive-selector': [

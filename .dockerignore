@@ -55,3 +55,7 @@ dist
 # npm's cache, redirected into the workspace when installing inside the pinned build
 # container (see .github/actions/workspace).
 .npm
+
+# velista's Android project (plan 0167): Gradle caches and outputs the builder image
+# never reads.
+apps/velista/android
