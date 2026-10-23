@@ -1981,8 +1981,8 @@ describe('the 404', () => {
   /**
    * The table's own matching, with nothing that needs the app to run it: every guard,
    * resolver and lazy chunk is dropped, and the two components this asks about are
-   * swapped for stand ins. Paths, matchers and nesting are kept as they are, so what
-   * the router recognizes here is what it recognizes in the app for the same URL.
+   * swapped for stand ins. What is kept is paths, matchers and nesting, without
+   * `canMatch`, so this answers which route a URL reaches by its shape alone.
    */
   function matchingOnly(routes: readonly Route[]): Route[] {
     return routes.map((route) => {
@@ -2062,5 +2062,15 @@ describe('the 404', () => {
   it('leaves the front door and the pages to themselves', async () => {
     expect(await drawnFor('/en')).toEqual([LayoutStandIn, Blank]);
     expect(await drawnFor('/en/home')).toEqual([LayoutStandIn, Blank]);
+    // A sheet over the front door stays the front door's, not the catch-all's.
+    expect(await drawnFor('/en/sheet/zones/new')).toEqual([
+      LayoutStandIn,
+      Blank,
+      Blank,
+    ]);
+  });
+
+  it('sends a URL with no segment at all to the catch-all beside the layout', async () => {
+    expect(await drawnFor('/')).toEqual([NotFoundStandIn]);
   });
 });

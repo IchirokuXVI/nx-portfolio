@@ -1836,13 +1836,17 @@ export const AppShellRoutes: Route[] = [
              * for a newer version before it says so (plan 0150), because a link from
              * a newer release can name a route this build does not have.
              *
-             * **Here, under `AppLayout`, and after the front door.** By the time a URL
-             * reaches this table the guard has settled its first segment, so an
-             * unknown path is `/:locale/<anything>` and belongs to this branch. It
-             * used to fall out of it to the catch-all below, beside the layout rather
+             * **Here, under `AppLayout`, and after the front door.** Any URL with a
+             * first segment matches `:locale`, so an unknown path belongs to this
+             * branch, and the guard then settles or redirects its locale. It used to
+             * fall out of the branch to the catch-all below, beside the layout rather
              * than in it, and there no `--app-*` token resolves: the page drew with no
              * theme, no fonts, no spacing and under the status bar. Inside the layout
              * it is a page like any other, with no bar, like the front door.
+             *
+             * It also waits behind the layout's startup gate, like every page but the
+             * front door. On `too-old` the gate's update screen draws instead, and that
+             * screen is the newer version plan 0150 wanted the 404 to ask for.
              *
              * After `''` because a `**` matches the empty remainder too: declared
              * earlier it would take `/en` from the front door. The front door is a
