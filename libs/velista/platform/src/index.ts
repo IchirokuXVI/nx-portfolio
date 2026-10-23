@@ -20,6 +20,7 @@ export * from './lib/install-store';
 export * from './lib/leaves-with-unsaved-work';
 export * from './lib/list-search';
 export * from './lib/live-basket-badge';
+export * from './lib/live-connection';
 export * from './lib/money';
 export * from './lib/nav-chrome';
 export * from './lib/notification-tone';
