@@ -26,6 +26,11 @@ Layering: `models` → `platform` → { `ui`, `data-access` } → `feature-*`.
   the `RENDERS_WHILE_CONNECTING` route data flag.
 - `app-resumed`: `AppResumed`, a counter that moves when the app comes back from the
   background (`visibilitychange`, or a `pageshow` from the back/forward cache).
+- `live-connection`: `LiveConnection`, the realtime socket's phase (`off`, `down`,
+  `up`) and `attention`, which turns true once the socket has been down for two
+  seconds. The socket in `data-access` writes it and `PageHeader` draws one quiet mark
+  from it on every page (plan 0168). It never feeds `ConnectionState`: a socket that is
+  down while REST works gets a mark, not the blocking screen.
 - `reload-blocker`: `ReloadBlocker`, which defers an automatic reload while a
   component holds unsaved state.
 - `storage-keys`: `StorageKeys`, every browser storage key the app writes, namespaced

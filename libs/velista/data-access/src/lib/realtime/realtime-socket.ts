@@ -7,7 +7,11 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { AppResumed, BrowserFacade } from '@portfolio/velista/platform';
+import {
+  AppResumed,
+  BrowserFacade,
+  LiveConnection,
+} from '@portfolio/velista/platform';
 import { Subject, type Observable } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { TokenStore } from '../auth/token-store';
@@ -35,11 +39,17 @@ import { SOCKET_FACTORY, type SocketLike } from './socket-factory';
  */
 const ACK_TIMEOUT_MS = 5_000;
 
+/**
+ * The backoff: full jitter under a ceiling that doubles from a second to a cap of 30 s.
+ *
+ * There is no upper bound on attempts (plan 0168, D1). A fixed number of attempts used
+ * to latch the client into giving up, and on Android both attempts were spent while
+ * the screen was off, where none can succeed. Against the one case the latch was for,
+ * a token the gateway accepts and the realtime service refuses, an attempt every thirty
+ * seconds is a bounded, harmless cost.
+ */
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_CAP_MS = 30_000;
-
-/** Consecutive failed connects before `degraded` latches and retrying stops. */
-const MAX_CONSECUTIVE_FAILURES = 2;
 
 /**
  * How long a connection has to survive before it counts as a good one.
@@ -48,11 +58,23 @@ const MAX_CONSECUTIVE_FAILURES = 2;
  * `handleConnection` (`realtime.gateway.ts:79-87`), which reaches the client as a
  * `connect` immediately followed by a `disconnect` and no error at all. Clearing the
  * failure counter on `connect` alone would therefore reset it on the exact failure it
- * exists to catch, and the client would connect, be dropped and reconnect forever
- * against a token that will never be accepted. A connection is good when it has lasted,
- * or when the server has answered something.
+ * exists to catch, and the client would reconnect at once, forever, against a token
+ * that will never be accepted. As the backoff exponent, that counter is what spaces
+ * those reconnects out to the cap. A connection is good when it has lasted, or when
+ * the server has answered something.
  */
 const HEALTHY_AFTER_MS = 10_000;
+
+/**
+ * How long the page can stay hidden before a held socket is taken for dead on resume.
+ *
+ * The handshake's `pingInterval + pingTimeout` (25 000 + 20 000): a socket that has
+ * missed pongs for that long has been dropped by the server, and Android cuts the
+ * app's network within a second of the screen going off. The class cannot ask a socket
+ * whether its heartbeat expired (plan 0168, D3), so the hidden clock answers instead.
+ * A shorter absence keeps the socket and lets the heartbeat decide.
+ */
+const STALE_AFTER_HIDDEN_MS = 45_000;
 
 const KNOWN_EVENT_NAMES: ReadonlySet<string> = new Set(REALTIME_EVENT_NAMES);
 
@@ -71,11 +93,12 @@ type AskOutcome = 'ok' | 'refused' | 'failed';
  *   silently, forever. This class owns the backoff because only this class can await
  *   the refresh. It is the least obvious decision here and the one most likely to be
  *   undone by somebody tidying up.
- * - **`degraded` never reaches `ConnectionState`.** That service raises `0003`'s
- *   blocking screen and is fed by HTTP requests that got no response at all. Realtime
- *   being unavailable is a different condition with a much smaller treatment, and
- *   blocking a user whose every REST call succeeds is the specific harm. Nothing here
- *   injects it, which is the cheapest way to keep that true.
+ * - **A socket that is down never reaches `ConnectionState`.** That service raises
+ *   `0003`'s blocking screen and is fed by HTTP requests that got no response at all.
+ *   Realtime being unavailable is a different condition with a much smaller treatment,
+ *   one quiet mark through `LiveConnection` (plan 0168), and blocking a user whose
+ *   every REST call succeeds is the specific harm. Nothing here injects it, which is
+ *   the cheapest way to keep that true.
  * - **A token refresh never reconnects.** The socket reads the token at connect time,
  *   so the next reconnect uses the current one by itself. Tearing down a healthy
  *   connection every fifteen minutes buys a full resubscribe cycle and nothing else.
@@ -110,12 +133,13 @@ export class RealtimeSocket implements RealtimeClientI {
   private readonly _tokens = inject(TokenStore);
   private readonly _browser = inject(BrowserFacade);
   private readonly _resumed = inject(AppResumed);
+  private readonly _live = inject(LiveConnection);
   private readonly _factory = inject(SOCKET_FACTORY);
   private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _events = new Subject<RealtimeEvent>();
   private readonly _connected = signal(false);
-  private readonly _degraded = signal(false);
+  private readonly _reconnects = signal(0);
   private readonly _refused = signal<ReadonlySet<string>>(new Set());
   private readonly _dropped = signal<ReadonlyMap<string, number>>(new Map());
 
@@ -137,6 +161,20 @@ export class RealtimeSocket implements RealtimeClientI {
   private _connecting = false;
   private _failures = 0;
 
+  /** Whether this session has connected once, so the next `connect` is a reconnect. */
+  private _connectedOnce = false;
+
+  /** When the page last went hidden, or null while it is visible. */
+  private _hiddenAt: number | null = null;
+
+  /**
+   * The visibility the resume effect last observed, which is the only one the pause
+   * may read. The raw signal can flip and flip back before that effect runs, and a
+   * failure that read the hidden moment in between would schedule nothing while the
+   * effect, seeing no edge, would never resume it.
+   */
+  private _seenVisible = true;
+
   private _retryTimer: ReturnType<typeof setTimeout> | null = null;
   private _healthyTimer: ReturnType<typeof setTimeout> | null = null;
   private _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
@@ -146,7 +184,7 @@ export class RealtimeSocket implements RealtimeClientI {
 
   readonly events: Observable<RealtimeEvent> = this._events.asObservable();
   readonly connected: Signal<boolean> = this._connected.asReadonly();
-  readonly degraded: Signal<boolean> = this._degraded.asReadonly();
+  readonly reconnects: Signal<number> = this._reconnects.asReadonly();
   readonly refusedZones: Signal<ReadonlySet<string>> =
     this._refused.asReadonly();
   readonly droppedEvents: Signal<ReadonlyMap<string, number>> =
@@ -161,9 +199,9 @@ export class RealtimeSocket implements RealtimeClientI {
       untracked(() => (authenticated ? this._start() : this._stop()));
     });
 
-    // R3's re-arm. A latched `degraded` is a user permanently and invisibly stale, and
-    // regaining the network is the most common reason the thing that failed would now
-    // work. `retry()` is the same door with a handle on it, for a UI to call.
+    // Regaining the network is the most common reason the thing that failed would now
+    // work, so it attempts at once rather than waiting out the backoff. `retry()` is
+    // the same door with a handle on it, for a UI to call.
     effect(() => {
       const online = this._browser.onLine();
       untracked(() => {
@@ -173,21 +211,38 @@ export class RealtimeSocket implements RealtimeClientI {
       });
     });
 
-    // The other re-arm, and the one the `online` event cannot cover (plan 0035,
-    // section 3). A backgrounded app never lost the network: the browser froze the
-    // page, closed the socket and let the retry timers stop, so the page comes back
-    // holding a latched `degraded` and an `online` event that already happened or will
-    // never come. Before this, that ended only in a reload.
+    // Going away and coming back (plan 0035, section 3; plan 0168, D1 and D2). The
+    // `online` event cannot cover this: a backgrounded app never lost the network as
+    // far as `navigator.onLine` knows. Android cuts it within a second of the screen
+    // going off, the socket dies, and every attempt made while hidden fails.
     //
-    // Unconditional, and against a healthy socket close to free: `retry()` resets the
-    // failure count and `_start` returns immediately when a socket is already open. The
-    // rooms need no help either, because `RoomRegistry.onConnected` rejoins everything
-    // the screens still hold (R6), so nothing here has to know which page is open.
+    // So going hidden pauses the retries, and coming back attempts at once with the
+    // backoff reset. One effect for both edges, with `visible` read through the
+    // facade, so no second visibility listener exists. A resume is the false to true
+    // edge of `visible`, or a move of `AppResumed.resumes` while visible, which is the
+    // only way a page restored from the back/forward cache says so. Both can land in
+    // one flush or in two; the second is harmless, because the stale rule consumes the
+    // hidden time and `_start` returns while an attempt is in flight.
+    //
+    // Against a healthy socket close to free: `_start` returns when a socket is held.
+    // The rooms need no help either, because `RoomRegistry.onConnected` rejoins
+    // everything the screens still hold (R6), so nothing here knows which page is open.
+    this._seenVisible = untracked(() => this._browser.visible());
+    let seenResumes = untracked(() => this._resumed.resumes());
     effect(() => {
+      const visible = this._browser.visible();
       const resumes = this._resumed.resumes();
       untracked(() => {
-        if (resumes > 0) {
-          this.retry();
+        const rose = visible && !this._seenVisible;
+        const resumed = visible && resumes > seenResumes;
+        const hid = !visible && this._seenVisible;
+        this._seenVisible = visible;
+        seenResumes = resumes;
+
+        if (hid) {
+          this._onHidden();
+        } else if (rose || resumed) {
+          this._onResumed();
         }
       });
     });
@@ -259,7 +314,6 @@ export class RealtimeSocket implements RealtimeClientI {
 
   retry(): void {
     this._failures = 0;
-    this._degraded.set(false);
     this._clearTimer('_retryTimer');
     this._start();
   }
@@ -270,14 +324,79 @@ export class RealtimeSocket implements RealtimeClientI {
     // A server render has no socket to open and no window to open it from. R1's
     // authentication check is the other half of the same guard.
     if (!this._browser.isBrowser || !this._tokens.hasSession()) {
+      this._live.report('off');
       return;
     }
 
-    if (this._degraded() || this._socket !== null || this._connecting) {
+    if (this._socket !== null || this._connecting) {
+      return;
+    }
+
+    this._live.report('down');
+
+    // Nothing while hidden (plan 0168, target 2). Every attempt made there fails on
+    // Android, and the resume attempts at once.
+    if (!this._isVisible()) {
       return;
     }
 
     void this._connect();
+  }
+
+  /** The page went hidden: stop retrying, and remember when, for the stale rule. */
+  private _onHidden(): void {
+    this._hiddenAt = Date.now();
+    this._clearTimer('_retryTimer');
+
+    // The phase is `down` while hidden even over a socket that is still up, because
+    // nothing here can vouch for it. Nobody is looking, and it means a resume after a
+    // long absence shows the mark on its first frame, which is the honest state. A
+    // resume that finds the socket alive reports `up` again at once.
+    if (this._browser.isBrowser && this._tokens.hasSession()) {
+      this._live.report('down');
+    }
+  }
+
+  /**
+   * The page is back. Attempt at once, and after a long absence take the held socket
+   * for dead (plan 0168, D2).
+   */
+  private _onResumed(): void {
+    const hiddenAt = this._hiddenAt;
+    this._hiddenAt = null;
+
+    const stale =
+      hiddenAt !== null && Date.now() - hiddenAt > STALE_AFTER_HIDDEN_MS;
+    if (stale && this._socket !== null) {
+      this._dropSocket();
+    } else if (this._connected()) {
+      this._live.report('up');
+    }
+
+    this.retry();
+  }
+
+  /**
+   * Let go of the held socket without counting a failure.
+   *
+   * The generation moves first, so the `disconnect` this raises is ignored by `_wire`
+   * and schedules nothing; the caller connects again itself.
+   */
+  private _dropSocket(): void {
+    this._generation += 1;
+    this._clearTimer('_healthyTimer');
+    this._clearTimer('_reconcileTimer');
+
+    const socket = this._socket;
+    this._socket = null;
+    socket?.disconnect();
+
+    this._connected.set(false);
+    this._registry.onDisconnected();
+  }
+
+  private _isVisible(): boolean {
+    return this._seenVisible;
   }
 
   /**
@@ -362,6 +481,11 @@ export class RealtimeSocket implements RealtimeClientI {
 
   private _onConnected(): void {
     this._connected.set(true);
+    this._live.report('up');
+    if (this._connectedOnce) {
+      this._reconnects.update((count) => count + 1);
+    }
+    this._connectedOnce = true;
 
     // R6 and R8 together. Rooms are per connection and server side, so a new socket is
     // in none of them however confident the refcounts are; and a refusal is core's
@@ -386,6 +510,7 @@ export class RealtimeSocket implements RealtimeClientI {
 
     this._socket = null;
     this._connected.set(false);
+    this._live.report('down');
     this._clearTimer('_healthyTimer');
     this._registry.onDisconnected();
     this._onAttemptFailed();
@@ -395,24 +520,27 @@ export class RealtimeSocket implements RealtimeClientI {
   private _markHealthy(): void {
     this._clearTimer('_healthyTimer');
     this._failures = 0;
-    this._degraded.set(false);
   }
 
   private _onAttemptFailed(): void {
+    // R3. Counted, and retried for as long as the session lasts (plan 0168, D1). The
+    // count is the backoff exponent, so a token the realtime service refuses costs one
+    // attempt every thirty seconds rather than a tight loop.
     this._failures += 1;
 
-    if (this._failures >= MAX_CONSECUTIVE_FAILURES) {
-      // R3. Stop rather than retry: the client cannot tell a rejected token from a
-      // dropped network, and against the former no number of retries ever succeeds.
-      this._degraded.set(true);
+    // Nothing while hidden. The resume attempts at once with the count reset.
+    if (!this._isVisible()) {
+      this._clearTimer('_retryTimer');
       return;
     }
 
     // Exponential from a second, capped, full jitter. The jitter matters because every
     // client of a service that just came back would otherwise retry in step.
+    // The exponent stops at a value well past the cap, so a long outage cannot
+    // push it towards infinity.
     const ceiling = Math.min(
       BACKOFF_CAP_MS,
-      BACKOFF_BASE_MS * 2 ** (this._failures - 1)
+      BACKOFF_BASE_MS * 2 ** Math.min(this._failures - 1, 16)
     );
     this._clearTimer('_retryTimer');
     this._retryTimer = setTimeout(() => {
@@ -433,8 +561,11 @@ export class RealtimeSocket implements RealtimeClientI {
 
     this._connecting = false;
     this._failures = 0;
+    this._hiddenAt = null;
     this._connected.set(false);
-    this._degraded.set(false);
+    this._live.report('off');
+    this._connectedOnce = false;
+    this._reconnects.set(0);
     this._registry.clear();
     this._publishRefused();
   }
@@ -469,10 +600,10 @@ export class RealtimeSocket implements RealtimeClientI {
 
         const outcomes = await Promise.all([
           ...plan.zonesToSubscribe.map((ask) =>
-            this._subscribeZone(socket, ask)
+            this._subscribeZone(socket, ask, generation)
           ),
           ...plan.listsToSubscribe.map((listId) =>
-            this._subscribeList(socket, listId)
+            this._subscribeList(socket, listId, generation)
           ),
           ...plan.zonesToUnsubscribe.map((zoneId) =>
             this._emit(socket, REALTIME_CLIENT_MESSAGES.zoneUnsubscribe, {
@@ -497,7 +628,7 @@ export class RealtimeSocket implements RealtimeClientI {
         // answered; folding this into the do/while instead would re-ask a room whose
         // subscribe had merely timed out, turning R7's deliberate five second retry
         // into a tight loop against a slow core (plan 0017, section 5.1).
-        const presence = await this._announcePresence(socket);
+        const presence = await this._announcePresence(socket, generation);
 
         if (generation !== this._generation) {
           return;
@@ -514,12 +645,27 @@ export class RealtimeSocket implements RealtimeClientI {
       } while (this._reconcileAgain);
     } finally {
       this._reconciling = false;
+      // A pass that bailed because the generation moved leaves behind any ask that
+      // arrived meanwhile, and that ask is usually the new socket's own `connect`
+      // (plan 0168, D2 drops a socket on resume while its asks are still out). Left
+      // unanswered, the new socket would join no room until a screen changed.
+      if (this._reconcileAgain) {
+        this._reconcileAgain = false;
+        void this._reconcile();
+      }
     }
   }
 
+  /**
+   * The generation is the one the asking pass started under. An ack that arrives after
+   * it moved answers for a socket that is gone (plan 0168, D2 drops one on resume while
+   * its asks are still out), so it touches neither the registry nor the health timer:
+   * a late yes would count the room as joined and the new socket would never ask.
+   */
   private async _subscribeZone(
     socket: SocketLike,
-    ask: ZoneAsk
+    ask: ZoneAsk,
+    generation: number
   ): Promise<AskOutcome> {
     // The body carries the zone and nothing else: the staff room is joined by the
     // server's own check inside this handler, so the intent is not ours to send. What
@@ -529,6 +675,10 @@ export class RealtimeSocket implements RealtimeClientI {
       REALTIME_CLIENT_MESSAGES.zoneSubscribe,
       { zoneId: ask.zoneId }
     );
+
+    if (generation !== this._generation) {
+      return outcome;
+    }
 
     if (outcome === 'ok') {
       this._registry.onZoneSubscribed(ask.zoneId, ask.staff);
@@ -543,15 +693,21 @@ export class RealtimeSocket implements RealtimeClientI {
     return outcome;
   }
 
+  /** Same generation rule as `_subscribeZone`. */
   private async _subscribeList(
     socket: SocketLike,
-    listId: string
+    listId: string,
+    generation: number
   ): Promise<AskOutcome> {
     const outcome = await this._emit(
       socket,
       REALTIME_CLIENT_MESSAGES.listSubscribe,
       { listId }
     );
+
+    if (generation !== this._generation) {
+      return outcome;
+    }
 
     if (outcome === 'ok') {
       this._registry.onListSubscribed(listId);
@@ -574,17 +730,31 @@ export class RealtimeSocket implements RealtimeClientI {
    * connection instead of spinning on it. None of it touches `refusedZones`: that
    * signal is about a group going stale, and a presence intent going unheard costs an
    * avatar, not an update.
+   *
+   * An answer that arrives after the generation moved is ignored, for the reason
+   * `_subscribeZone` gives: the new socket has to announce again.
    */
-  private async _announcePresence(socket: SocketLike): Promise<AskOutcome[]> {
+  private async _announcePresence(
+    socket: SocketLike,
+    generation: number
+  ): Promise<(AskOutcome | 'stale')[]> {
     const plan = this._registry.reconcilePresence();
+    const ask = async (
+      message: string,
+      body: unknown
+    ): Promise<AskOutcome | 'stale'> => {
+      const outcome = await this._emit(socket, message, body);
+      return generation === this._generation ? outcome : 'stale';
+    };
 
     return Promise.all([
       ...plan.zonesToEnter.map(async (zoneId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.zoneEnter,
-          { zoneId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.zoneEnter, {
+          zoneId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onZonePresenceStarted(zoneId);
         } else if (outcome === 'refused') {
@@ -595,11 +765,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.zonesToLeave.map(async (zoneId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.zoneLeave,
-          { zoneId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.zoneLeave, {
+          zoneId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         // A refusal to a leave is a leave, as it is for an unview: the server
         // acknowledges it whatever state it was in, so only a timeout is retried.
         if (outcome === 'failed') {
@@ -610,11 +781,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.viewsToStart.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.listView,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.listView, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onViewStarted(listId);
         } else if (outcome === 'refused') {
@@ -625,11 +797,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.viewsToStop.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.listUnview,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.listUnview, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         // A refusal to a stop is a stop: the server acknowledges an unview whatever
         // state it was in, so anything but a timeout means it is not counting us.
         if (outcome === 'failed') {
@@ -640,11 +813,13 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.editsToStart.map(async ({ listId, lineId }) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.lineEdit,
-          { listId, lineId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.lineEdit, {
+          listId,
+          lineId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onEditStarted(listId, lineId);
         } else if (outcome === 'refused') {
@@ -655,11 +830,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.editsToStop.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.lineStopEdit,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.lineStopEdit, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'failed') {
           this._registry.onPresenceAskFailed(listId);
         } else {

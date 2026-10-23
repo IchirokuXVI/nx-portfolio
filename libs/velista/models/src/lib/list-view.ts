@@ -412,7 +412,11 @@ export interface ListHeaderVm {
    * what it opens onto needs a role and an arrival time for each of them.
    */
   readonly viewers: readonly ListViewerVm[];
-  /** The list room was refused or the connection dropped (section 3.1). */
+  /**
+   * False only when the zone room was refused, which is the one case the band draws
+   * (plan 0168, D7). A dropped connection leaves it true, because the page header
+   * carries the connection mark.
+   */
   readonly live: boolean;
 }
 
