@@ -1,3 +1,5 @@
+> **PR:** [#809](https://github.com/IchirokuXVI/nx-portfolio/pull/809)
+
 # 0165: velista leaves the shell
 
 > Asked for by the owner on 2026-10-23: "velista needs to be separated from my portfolio
