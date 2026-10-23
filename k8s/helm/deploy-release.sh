@@ -12,11 +12,11 @@
 #   ./deploy-release.sh velista 1.0.0     # roll it back to 1.0.0
 #
 # The unit (k8s plan 0015 D10) names a directory of k8s/units, whose unit.env
-# gives the chart, the namespace and the release. With a version and no unit,
-# the script deploys the release nx-portfolio of the old chart, which
-# release.yml still calls until plan 0016 replaces it:
+# gives the chart, the namespace and the release.
 #
-#   ./deploy-release.sh 1.1.3
+# Every helm and kubectl call runs under the host lock (k8s plan 0016 D2), so a
+# deploy and a host patch never overlap. A caller that holds it already, such
+# as the deploy-unit action, passes through.
 #
 # The `/root/helm-live/prod-tag.yaml` file this used to write is gone (plan 0002,
 # section 2.3). It existed only because a staging deploy and a production deploy
@@ -27,9 +27,7 @@
 # was deployed when.
 #
 # Environment overrides:
-#   RELEASE_NAME    helm release name        (old chart only, default: nx-portfolio)
-#   NAMESPACE       kubernetes namespace     (old chart only, default: nx-portfolio)
-#   TIMEOUT         helm/rollout wait        (default: 10m, 20m on a first install)
+#   TIMEOUT        helm/rollout wait        (default: 10m, 20m on a first install)
 #   KUBECONFIG      kubeconfig path          (default: /etc/rancher/k3s/k3s.yaml)
 
 set -euo pipefail
@@ -37,34 +35,27 @@ set -euo pipefail
 HELM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$HELM_DIR")"
 
-UNIT_NAME=""
-case $# in
-  1) VERSION="$1" ;;
-  2) UNIT_NAME="$1"; VERSION="$2" ;;
-  *) VERSION="" ;;
-esac
-if [ -z "$VERSION" ]; then
+if [ $# -ne 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
   echo "Usage: $0 <unit> <release-version>" >&2
   echo "Example: $0 velista 1.1.3" >&2
   exit 1
 fi
+UNIT_NAME="$1"
+VERSION="$2"
 
-if [ -n "$UNIT_NAME" ]; then
-  # shellcheck source=../units/unit-env.sh
-  . "$K8S_DIR/units/unit-env.sh"
-  load_unit "$K8S_DIR" "$UNIT_NAME"
-  CHART_DIR="$CHART_PATH"
-  TASKS_UNIT=(--unit "$UNIT_NAME")
-  # The library chart is packaged from the committed Chart.lock, offline.
-  helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
-else
-  CHART_DIR="$HELM_DIR"
-  RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
-  NAMESPACE="${NAMESPACE:-nx-portfolio}"
-  TASKS_UNIT=()
-  echo "No unit: deploying the release $RELEASE_NAME of the old chart."
-fi
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
+load_unit "$K8S_DIR" "$UNIT_NAME"
+CHART_DIR="$CHART_PATH"
+TASKS_UNIT=(--unit "$UNIT_NAME")
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+# shellcheck source=../bootstrap/host-lock.sh
+. "$K8S_DIR/bootstrap/host-lock.sh"
+host_lock
+
+# The library chart is packaged from the committed Chart.lock, offline.
+helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
 
 # ---------------------------------------------------------------------------
 # What state is the release in before anything touches it?
@@ -219,28 +210,23 @@ helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
 # A statement a script makes about the world should be one it verified, or it
 # trains the reader to disbelieve the output. This used to print "Production is
 # now serving release X" immediately after a command it had not checked.
-if [ -n "$UNIT_NAME" ]; then
-  # Only this release's Deployments: a namespace may hold another release's,
-  # and its rollout is not this deploy's to wait on.
-  echo "Waiting for every deployment of release ${RELEASE_NAME} to report ready..."
-  for deployment in $(helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE" | awk '
-    /^---/ { deployment = 0; meta = 0 }
-    /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
-    /^metadata:/ { meta = 1; next }
-    /^[^[:space:]]/ { meta = 0 }
-    deployment && meta && /^  name:/ { print $2; deployment = 0 }
-  '); do
-    kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout=5m
-  done
-else
-  echo "Waiting for every deployment to report ready..."
-  kubectl rollout status deployment -n "$NAMESPACE" --timeout=5m
-fi
+# Only this release's Deployments: a namespace may hold another release's,
+# and its rollout is not this deploy's to wait on.
+echo "Waiting for every deployment of release ${RELEASE_NAME} to report ready..."
+for deployment in $(helm get manifest "$RELEASE_NAME" --namespace "$NAMESPACE" | awk '
+  /^---/ { deployment = 0; meta = 0 }
+  /^kind:[[:space:]]+Deployment[[:space:]]*$/ { deployment = 1 }
+  /^metadata:/ { meta = 1; next }
+  /^[^[:space:]]/ { meta = 0 }
+  deployment && meta && /^  name:/ { print $2; deployment = 0 }
+'); do
+  kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout=5m
+done
 
 # The post phase finishes each task the pre phase started, against the new pods.
 bash "$K8S_DIR/release-tasks/run-release-tasks.sh" "${TASKS_UNIT[@]}" \
   --env production --phase post --release "$VERSION"
 
-echo "Production is now serving release ${VERSION}${UNIT_NAME:+ of the unit $UNIT_NAME}"
+echo "Production is now serving release ${VERSION} of the unit $UNIT_NAME"
 echo "Helm revision history (use 'helm rollback ${RELEASE_NAME} <rev>' as an alternative):"
 helm history "$RELEASE_NAME" --namespace "$NAMESPACE" --max 10

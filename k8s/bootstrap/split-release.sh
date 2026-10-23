@@ -87,7 +87,7 @@ die() { echo "split-release: $*" >&2; exit 1; }
 get_or_empty() {
   local out
   if out="$(kubectl "$@" 2>&1)"; then
-    printf '%s' "$out"
+    [ -z "$out" ] || printf '%s\n' "$out"
     return 0
   fi
   case "$out" in *NotFound* | *'not found'*) return 0 ;; esac
@@ -208,7 +208,7 @@ image_tag() {
   local image
   image="$(get_or_empty -n "$OLD_NS" get deployment "$1" \
     -o jsonpath='{.spec.template.spec.containers[0].image}')"
-  [ -n "$image" ] && printf '%s' "${image##*:}"
+  if [ -n "$image" ]; then printf '%s' "${image##*:}"; fi
 }
 
 # The tags the live pods run, read once and kept in the marker, because step 5

@@ -2,13 +2,12 @@
 #
 # Run the release tasks of one environment (README.md in this directory).
 #
-#   run-release-tasks.sh --unit velista --env staging --phase check         # one unit
-#   run-release-tasks.sh --env staging --phase check                        # before anything
-#   run-release-tasks.sh --env staging --phase pre                          # before helm upgrade
-#   run-release-tasks.sh --env staging --phase post                         # after the rollout
-#   run-release-tasks.sh --env production --phase check --release 1.2.3     # the same three,
-#   run-release-tasks.sh --env production --phase pre --release 1.2.3       # with the version
-#   run-release-tasks.sh --env production --phase post --release 1.2.3      # being deployed
+#   run-release-tasks.sh --unit velista --env staging --phase check     # before anything
+#   run-release-tasks.sh --unit velista --env staging --phase pre       # before helm upgrade
+#   run-release-tasks.sh --unit velista --env staging --phase post      # after the rollout
+#   run-release-tasks.sh --unit velista --env production --phase check --release 1.2.3
+#   run-release-tasks.sh --unit velista --env production --phase pre --release 1.2.3
+#   run-release-tasks.sh --unit velista --env production --phase post --release 1.2.3
 #
 # A task is a directory under tasks/, named NNNN-kebab-title, holding task.env,
 # check.sh and at least one of pre.sh and post.sh. Tasks run in name order.
@@ -55,14 +54,9 @@
 #
 # --unit <unit> reads NAMESPACE and RELEASE_NAME from k8s/units/<unit>/unit.env
 # (k8s plan 0015 D9), runs only the tasks whose task.env says UNIT=<unit>, and
-# exits at once when the unit's RELEASE_TASKS is false. Without --unit the
-# runner acts on the old release nx-portfolio, which the deploy workflows still
-# use until plan 0016, and runs every task.
+# exits at once when the unit's RELEASE_TASKS is false. --unit is required.
 #
-# Environment overrides, without --unit:
-#   NAMESPACE     kubernetes namespace          (default: nx-portfolio)
-#   RELEASE_NAME  helm release                  (default: nx-portfolio)
-# and in every case:
+# Environment overrides:
 #   KUBECONFIG    kubeconfig path               (default: /etc/rancher/k3s/k3s.yaml)
 #   DUMP_TIMEOUT  seconds to wait for one dump  (default: 900)
 
@@ -72,7 +66,7 @@ set -euo pipefail
 shopt -s inherit_errexit
 
 usage() {
-  echo "usage: run-release-tasks.sh [--unit <unit>] --env <staging|production> --phase <check|pre|post> [--release <version>]" >&2
+  echo "usage: run-release-tasks.sh --unit <unit> --env <staging|production> --phase <check|pre|post> [--release <version>]" >&2
   echo "       --release is required with --env production and refused with --env staging" >&2
   exit 1
 }
@@ -109,17 +103,13 @@ esac
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$HERE")"
 
-if [ -n "$UNIT_NAME" ]; then
-  # shellcheck source=../units/unit-env.sh
-  . "$K8S_DIR/units/unit-env.sh"
-  load_unit "$K8S_DIR" "$UNIT_NAME"
-  if [ "$RELEASE_TASKS" != true ]; then
-    echo "release tasks, $ENVIRONMENT, phase $PHASE: the unit $UNIT_NAME runs none (RELEASE_TASKS=$RELEASE_TASKS)"
-    exit 0
-  fi
-else
-  NAMESPACE="${NAMESPACE:-nx-portfolio}"
-  RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
+[ -n "$UNIT_NAME" ] || usage
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
+load_unit "$K8S_DIR" "$UNIT_NAME"
+if [ "$RELEASE_TASKS" != true ]; then
+  echo "release tasks, $ENVIRONMENT, phase $PHASE: the unit $UNIT_NAME runs none (RELEASE_TASKS=$RELEASE_TASKS)"
+  exit 0
 fi
 DUMP_TIMEOUT="${DUMP_TIMEOUT:-900}"
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
@@ -403,12 +393,10 @@ REFUSALS=0
 for dir in "${TASKS[@]}"; do
   dir="${dir%/}"
   task="$(basename "$dir")"
-  if [ -n "$UNIT_NAME" ]; then
-    task_unit="$(task_field "$dir" UNIT || true)"
-    if [ "$task_unit" != "$UNIT_NAME" ]; then
-      [ "$PHASE" != check ] || line "$task" "not this unit's: its task.env says UNIT=${task_unit:-<nothing>}"
-      continue
-    fi
+  task_unit="$(task_field "$dir" UNIT || true)"
+  if [ "$task_unit" != "$UNIT_NAME" ]; then
+    [ "$PHASE" != check ] || line "$task" "not this unit's: its task.env says UNIT=${task_unit:-<nothing>}"
+    continue
   fi
   ledger="$(ledger_get "$task")"
   state="${ledger%% *}"

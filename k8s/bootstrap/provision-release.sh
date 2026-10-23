@@ -23,10 +23,6 @@
 #   --render-only               with --check: the render half only, no cluster
 #   --rotate                    regenerate secrets that already exist (dangerous)
 #   --out <path>                where to write the operator's plaintext copy
-#
-# Without --unit the script acts on the one release `nx-portfolio` of the old
-# chart k8s/helm, in namespace nx-portfolio (or --namespace), which the deploy
-# workflows still use until plan 0016 replaces them.
 
 set -euo pipefail
 
@@ -35,7 +31,6 @@ CHECK_ONLY=false
 RENDER_ONLY=false
 ROTATE=false
 UNIT_NAME=""
-NAMESPACE_FLAG=""
 OUT_PATH=""
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -68,7 +63,6 @@ while [ $# -gt 0 ]; do
     --render-only) RENDER_ONLY=true;    shift ;;
     --rotate)      ROTATE=true;         shift ;;
     --out)         OUT_PATH="$2";       shift 2 ;;
-    --namespace)   NAMESPACE_FLAG="$2"; shift 2 ;;
     -h|--help)     sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -79,24 +73,14 @@ if [ "$RENDER_ONLY" = true ] && [ "$CHECK_ONLY" = false ]; then
   exit 1
 fi
 
-if [ -n "$UNIT_NAME" ]; then
-  if [ -n "$NAMESPACE_FLAG" ]; then
-    echo "--namespace and --unit exclude each other: the unit's NAMESPACE decides." >&2
-    exit 1
-  fi
-  load_unit "$K8S_DIR" "$UNIT_NAME"
-  CHART_DIR="$CHART_PATH"
-  UNIT_SECRETS="$SECRETS"
-  LABEL="$UNIT_NAME"
-else
-  # The old chart, until plan 0016 deletes it.
-  NAMESPACE="${NAMESPACE_FLAG:-${NAMESPACE:-nx-portfolio}}"
-  RELEASE_NAME=nx-portfolio
-  CHART_DIR="$K8S_DIR/helm"
-  UNIT_SECRETS=""
-  LABEL="luna-shopper"
-  echo "No --unit: acting on the release nx-portfolio of the old chart in namespace $NAMESPACE."
+if [ -z "$UNIT_NAME" ]; then
+  echo "--unit is required: one of $(unit_names "$K8S_DIR" | paste -sd, -)." >&2
+  exit 1
 fi
+load_unit "$K8S_DIR" "$UNIT_NAME"
+CHART_DIR="$CHART_PATH"
+UNIT_SECRETS="$SECRETS"
+LABEL="$UNIT_NAME"
 
 if [ -z "$ENVIRONMENT" ]; then
   echo "--env is required (production or staging)." >&2
@@ -342,10 +326,8 @@ run_check() {
   local chart_failures=0
   local registry_failures=0
 
-  if [ -n "$UNIT_NAME" ]; then
-    # The library chart is packaged from the committed Chart.lock, offline.
-    helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
-  fi
+  # The library chart is packaged from the committed Chart.lock, offline.
+  helm dependency build --skip-refresh "$CHART_DIR" > /dev/null
 
   echo "Rendering $CHART_DIR as release $RELEASE_NAME in $NAMESPACE for $ENVIRONMENT..."
   local rendered
@@ -354,9 +336,7 @@ run_check() {
     --values "$CHART_DIR/values.yaml" \
     --values "$VALUES_FILE")"
 
-  if [ -n "$UNIT_NAME" ]; then
-    check_unit_render "$rendered" || registry_failures=1
-  fi
+  check_unit_render "$rendered" || registry_failures=1
 
   # Every `secretKeyRef` / `configMapKeyRef` in the render, as "kind name key".
   # awk over the YAML rather than a parser: the two are always name-then-key on
@@ -372,7 +352,7 @@ run_check() {
 
   # A unit that provisions Secrets and renders no reference to any of them has
   # lost its workloads, which cannot be right. The portfolio provisions none.
-  if [ -z "$refs" ] && { [ -z "$UNIT_NAME" ] || [ -n "$UNIT_SECRETS" ]; }; then
+  if [ -z "$refs" ] && [ -n "$UNIT_SECRETS" ]; then
     echo "The render references no Secret or ConfigMap keys at all, which cannot" >&2
     echo "be right. Is lunaShopperBackend.enabled true in $VALUES_FILE?" >&2
     return 1
@@ -528,7 +508,7 @@ fi
 # A path check rather than reading a git ignore file, which is fragile. A
 # worktree is exactly the kind of place a hurried operator would put this file.
 # ---------------------------------------------------------------------------
-echo "Provisioning ${UNIT_NAME:-the old release} for $ENVIRONMENT in namespace $NAMESPACE"
+echo "Provisioning $UNIT_NAME for $ENVIRONMENT in namespace $NAMESPACE"
 echo
 
 # 1. The namespace. Created rather than applied from a manifest, so the unit's

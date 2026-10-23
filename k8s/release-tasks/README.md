@@ -272,7 +272,7 @@ The ConfigMap `release-tasks` in the namespace holds the ledger:
 To read it:
 
 ```sh
-kubectl -n nx-portfolio get configmap release-tasks -o yaml
+kubectl -n luna-shopper get configmap release-tasks -o yaml
 ```
 
 To run a task again, remove its two keys. The second rule makes that safe, and
@@ -281,7 +281,7 @@ window, in the release it names, and with a `check.sh` that passes. With a
 closed window, the next deploy records the task as `expired` instead.
 
 ```sh
-kubectl -n nx-portfolio patch configmap release-tasks --type json \
+kubectl -n luna-shopper patch configmap release-tasks --type json \
   -p '[{"op":"remove","path":"/data/0001-reset-catalog-and-harvester"}]'
 ```
 
