@@ -345,4 +345,146 @@ commands that produced the two APKs.
 
 ## What the build decided
 
-(The builder fills this section.)
+Built on `feat/velista-capacitor-android` from `a3b348da` (plan 0166 built). Every numbered
+target is in. Evidence files are in `C:\Users\Ichi\.claude\jobs\9ef4eefc\tmp\evidence\`
+(called `evidence/` below); `evidence/cdp-checks.txt` holds the DevTools and adb outputs.
+
+### Decisions the plan left open, or got wrong
+
+1. **Gradle needs a JDK 21, not 17.** Every Capacitor 8 plugin compiles with
+   `JavaVersion.VERSION_21` and `jvmToolchain(21)`, so Temurin 17 fails with "Cannot find a
+   Java installation matching languageVersion=21". Temurin 21.0.12 was unpacked to
+   `C:\Users\Ichi\.jdks\jdk-21.0.12.1+1`, outside the repository, and the script takes it
+   through `VELISTA_JAVA_HOME`. The README says so.
+2. **`@capacitor/assets` is 3.0.5.** It has its own version line; no 8.x exists.
+3. **The lock file holds additions only.** npm on Windows pruned the ten
+   `@rspack/binding-*` entries of other platforms, which fails `npm ci` in CI. They were put
+   back in npm's own order, so the diff is 154 added packages plus the three entries npm
+   itself changed (the root, `detect-libc`, `node-addon-api`).
+4. **`EdgeToEdge.enable(this)` runs after `super.onCreate`, not before.** Before it, the window
+   decor is built under the launch theme (`Theme.SplashScreen` with the splash as
+   `android:background`), and the app shows a dark action bar with a stretched logo above the
+   page (`evidence/02-settled.png`). After it, the page is right (`03-cold-start-fixed.png`).
+   Capacitor's own note asks for the call inside `onCreate`, not before `super`.
+5. **The activity label is `@string/app_name` too.** The launcher shows the activity's label,
+   so with the generated `title_activity_main` the staging app was named "Velista" on the
+   home screen. `title_activity_main` stays in `strings.xml`, unused.
+6. **Icons.** `assets-src/derive.sh` (ImageMagick) writes the five inputs
+   `@capacitor/assets` reads in custom mode: `icon-only.png` (the maskable icon at 1024),
+   `icon-foreground.png` (its orange made transparent), `icon-background.png` (the icon's
+   orange `#ffb454`), and `splash.png` and `splash-dark.png` (the rounded icon at 640 on
+   `#0a0c14`). So the adaptive icon keeps the PWA's orange and only the splash is on the
+   Night ground. Command: `npx capacitor-assets generate --android --assetPath assets-src`
+   from `apps/velista`. It also reformatted `AndroidManifest.xml` (whitespace only).
+7. **Hygiene beyond the list.** `namedInputs.default` also excludes `assets-src/**` and
+   `scripts/build-android.mjs`, for the same reason as `android/**`. The ESLint ignore is
+   `**/android/**`: a bare `android/**` matched nothing when Nx ran the lint, and the Gradle
+   intermediates were linted. The root `.gitignore` repeats all five entries, although the
+   generated `android/.gitignore` covers all but `keystore.properties`.
+8. **The assetlinks spec is a sibling,** `src/app/velista-asset-links.spec.ts`, with the
+   package names as literals: reading them from `capacitor.config.ts` or `build.gradle` would
+   read files that are no longer test inputs.
+9. **nginx.** Plan 0165 is not merged here, so the fixes are in the shared
+   `apps/docker/local-http-server/src/nginx-static-app.conf`, the smallest edit: one `types`
+   line and one location. The location regex is quoted, because nginx reads the brace of
+   `{16,}` as a block. Probed in `nginx:latest`: the manifest is `application/manifest+json`
+   with `no-cache`; `main.*.js`, `styles.*.css` and the hashed `woff2` get
+   `public, max-age=31536000, immutable`; `index.html`, `ngsw-worker.js` and
+   `remoteEntry.mjs` keep `no-cache`; `/.well-known/assetlinks.json` is 200
+   `application/json`. The orchestrator ports it to `apps/velista/src/nginx.conf` after the
+   rebase onto 0165.
+10. **`ng-slot.sh`** writes `VELISTA_APP_URL=http://localhost:${velista_port}`, the slot's
+    own velista origin.
+11. **The plugins load by dynamic import behind one seam,** `NATIVE_PLUGINS` (a loader
+    returning narrow interfaces of the five plugins). No `@capacitor/*` module is evaluated
+    on the web, and the specs hand in doubles (`src/lib/testing/native-plugin-doubles.ts`)
+    with no `jest.mock`.
+12. **`APP_STORE_URL`** is built from the app id that `getInfo()` returns at startup, cached on
+    `NativeShell`, and the production id `app.velista` until it answers.
+13. **Links.** Capacitor raises `appUrlOpen` for the launch intent too and keeps it until a
+    listener is added, so one listener covers a cold and a warm start. A first version also
+    read `getLaunchUrl()` and navigated twice; it was removed. Every link is a push (back
+    returns to where the person was, or to the entry page on a cold start). Only `https`
+    URLs are followed.
+14. **No `appStateChange` listener.** `visibilitychange` fires on pause and on resume
+    (`evidence/cdp-checks.txt`), so `BrowserFacade.visible` already follows the app.
+15. **Share.** The plugin rejects a closed chooser with the message "Share canceled", so a
+    message matching `cancel` is `dismissed` and any other rejection `unavailable`.
+16. **Geolocation.** `checkPermissions().location`: `granted` and `denied` map through,
+    `prompt` and `prompt-with-rationale` are `prompt`, a throw (location services off) is
+    `unknown`. Read errors: `OS-PLUG-GLOC-0003` and `0008` are `denied`, `0010` is
+    `timed-out`, the rest `unavailable`.
+17. **`openExternal`** falls back to the web `window.open` if the Browser plugin fails.
+18. **Both APKs are signed with the release key.** The assetlinks file lists both package
+    names under that one certificate.
+19. **The dead end copy.** `update.failed.bodyNative`: "This version of the app is too old to
+    keep working. Install the newer version, then open velista again." and "Esta versión de
+    la app es demasiado antigua para seguir funcionando. Instala la versión nueva y vuelve a
+    abrir velista." `AppLayout` picks it when `APP_RUNTIME` is `native`.
+20. **The build script** reads `DEFAULT_APP_VERSION` out of `app-version.ts` with a regex (it
+    is TypeScript and the script stays plain Node), calls `gradlew` by full path (cmd.exe did
+    not find `gradlew.bat` in the working directory), and prints the APK certificate's
+    SHA-256 through the newest `apksigner`.
+21. **Slot testing is documented as it is.** Capacitor takes only the host from
+    `VELISTA_APP_URL` and serves on `https` with no port, so against a slot the WebView
+    origin is `https://localhost`, which no slot's `CORS_ORIGINS` lists. The README says so;
+    nothing in the backend changed.
+
+### Device test results (target 8)
+
+Staging APK on `Medium_Phone_API_37.0` (Android 17, WebView 145.0.7632.218).
+
+| Check                                               | Result                                                                                                                                                                                                                        | Evidence                                                                                                |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Cold start reaches `/en`, no JS error               | Pass, `am start -W` TotalTime 1617 ms; the only `E chromium` line is the WebView's "Seed missing signature"                                                                                                                   | `03-cold-start-fixed.png`, `logcat-cold-start.txt`                                                      |
+| Status bar follows the theme; header below it       | Pass on pages with a page header or auth screen: Day sets `LIGHT`, Night sets `DARK`, meta `#f7f8fc` then `#0a0c14`, `env(safe-area-inset-top)` is 24 px. The landing and join pages draw under the status bar (see findings) | `05-sign-in.png`, `19-home.png`, `14-night-theme.png`, `04-landing-connected.png`                       |
+| Keyboard pushes a sheet's footer up                 | Pass, the join code sheet's Ask to join and Cancel sit above the keyboard                                                                                                                                                     | `09-join-sheet.png`                                                                                     |
+| Hardware back: sheet, page, floor                   | Pass: closes the join sheet (the first press hides the keyboard), pops sign in to the landing page, minimizes at the floor; the activity stays `STOPPED finishing=false` and relaunch resumes the same route                  | `11-back-closed-sheet.png`, `08-back-popped-page.png`, `dumpsys-after-floor-back.txt`, `17-resumed.png` |
+| Deep link `/join/ABCDEF`                            | Pass warm (HOT) and cold, final APK included; `pm get-app-links` reports `staging.velista.app: 1024` (not verified, the file is not deployed)                                                                                 | `12-deep-link-warm.png`, `23-final-deep-link-cold.png`, `get-app-links.txt`                             |
+| Share opens the system sheet; cancel copies nothing | Pass: focus on `ChooserActivityLauncher`, the shared URL is `https://staging.velista.app/join/XBYVMZF9`, after cancel no copied notice                                                                                        | `20-share-sheet.png`, `logcat-share.txt`, `cdp-checks.txt`                                              |
+| Staging gateway from the WebView origin             | Pass, a wrong password shows "That email and password do not match", the backend's answer                                                                                                                                     | `07-wrong-password.png`                                                                                 |
+| Reload lands on the same route                      | Pass, `/en/auth/login` before and after, navigation type `reload`                                                                                                                                                             | `cdp-checks.txt`, `15-after-reload.png`                                                                 |
+| API 26                                              | Installs, then a **blank page**: WebView (Chrome) 69.0.3497.100, `Uncaught SyntaxError: Unexpected token .` in `main.js`. Capacitor does not show its "too old" message, because its default `minWebViewVersion` is 60        | `22-api26-start.png`, `logcat-api26.txt`                                                                |
+| Both APKs                                           | Pass, see below                                                                                                                                                                                                               |                                                                                                         |
+
+The checks after the first fix ran on a staging build with `VELISTA_NATIVE_DEBUG=1`, to read
+the page through DevTools; the delivered staging APK was then rebuilt without it
+(`webContentsDebuggingEnabled: false`) and the cold deep link was repeated on it.
+
+**The WebView floor.** Chrome 69 cannot parse the bundle. The real floor is whatever Angular
+21's default browser set compiles for, which is far above 69; it was not measured, because no
+image between 26 and 35 is installed.
+
+### The two APKs
+
+| File                                                         | Package                                  | Size                      | Signed with                            |
+| ------------------------------------------------------------ | ---------------------------------------- | ------------------------- | -------------------------------------- |
+| `dist/apps/velista-android/velista-staging-0.0.0-dev.apk`    | `app.velista.staging`, "Velista Staging" | 5,838,591 bytes (5.57 MB) | release key, SHA-256 `0896620d…c0b192` |
+| `dist/apps/velista-android/velista-production-0.0.0-dev.apk` | `app.velista`, "Velista"                 | 5,838,551 bytes (5.57 MB) | release key, SHA-256 `0896620d…c0b192` |
+
+`aapt dump badging`: `versionName 0.0.0-dev`, `versionCode 1`, `sdkVersion 24`,
+`targetSdkVersion 36`, and the six permissions of the Context.
+
+Commands, from the worktree root in Git Bash:
+
+```sh
+export VELISTA_JAVA_HOME="C:/Users/Ichi/.jdks/jdk-21.0.12.1+1"
+export VELISTA_ANDROID_KEYSTORE_PROPERTIES="D:/Projects/nx-portfolio/tmp/velista-android/keystore.properties"
+npx nx run velista:android:staging
+npx nx run velista:android:production
+```
+
+### Findings for the owner, not fixed here (outside this plan's scope)
+
+1. **The landing page and the join page draw under the status bar.** Neither carries
+   `--app-safe-top`; the page header, the auth screens and the support strip do. A one line
+   padding in `feature-landing` and the join screen fixes it, and the same gap exists in an
+   iOS PWA.
+2. **The auth screens do not register with `BackStack`.** After a reload (when no entry of
+   ours is behind), the hardware back on sign in minimizes the app instead of walking to the
+   chevron's fallback (`16-create-group.png` is the home screen that press produced).
+3. **`loggingBehavior: 'production'` logs in release builds.** It means "log always": every
+   plugin call and console line reaches logcat from the release APK. `'debug'` would keep the
+   release APK quiet.
+4. **API 26 shows a blank page.** Setting `android.minWebViewVersion` to the bundle's real
+   floor would make Capacitor show its own message instead.
