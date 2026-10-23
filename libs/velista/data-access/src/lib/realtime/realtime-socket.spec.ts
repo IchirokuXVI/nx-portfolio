@@ -566,6 +566,47 @@ describe('RealtimeSocket', () => {
       }
     });
 
+    it('ignores a join that the dropped socket acknowledges late, and the new socket still asks for the room', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnect();
+        const first = socket();
+
+        // This time the dropped socket's ask ends with a yes. That answer is about a
+        // connection that no longer exists, so it must not count the room as joined.
+        let acceptFirst: () => void = () => undefined;
+        first.answers.set('zone.subscribe', [
+          new Promise((resolve) => {
+            acceptFirst = () => resolve({ ok: true });
+          }),
+        ]);
+        client.subscribeZone('z1');
+        await settle();
+
+        visible.set(false);
+        TestBed.tick();
+        jest.advanceTimersByTime(46_000);
+        visible.set(true);
+        TestBed.tick();
+        await settle();
+        expect(sockets.length).toBe(2);
+
+        socket().driveConnect();
+        await settle();
+        acceptFirst();
+        await settle();
+
+        expect(socket()).not.toBe(first);
+        expect(socket().bodiesFor('zone.subscribe')).toEqual([
+          { zoneId: 'z1' },
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('keeps the held socket after 30 s hidden, and reports it up again', async () => {
       jest.useFakeTimers();
       try {

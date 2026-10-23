@@ -600,10 +600,10 @@ export class RealtimeSocket implements RealtimeClientI {
 
         const outcomes = await Promise.all([
           ...plan.zonesToSubscribe.map((ask) =>
-            this._subscribeZone(socket, ask)
+            this._subscribeZone(socket, ask, generation)
           ),
           ...plan.listsToSubscribe.map((listId) =>
-            this._subscribeList(socket, listId)
+            this._subscribeList(socket, listId, generation)
           ),
           ...plan.zonesToUnsubscribe.map((zoneId) =>
             this._emit(socket, REALTIME_CLIENT_MESSAGES.zoneUnsubscribe, {
@@ -628,7 +628,7 @@ export class RealtimeSocket implements RealtimeClientI {
         // answered; folding this into the do/while instead would re-ask a room whose
         // subscribe had merely timed out, turning R7's deliberate five second retry
         // into a tight loop against a slow core (plan 0017, section 5.1).
-        const presence = await this._announcePresence(socket);
+        const presence = await this._announcePresence(socket, generation);
 
         if (generation !== this._generation) {
           return;
@@ -656,9 +656,16 @@ export class RealtimeSocket implements RealtimeClientI {
     }
   }
 
+  /**
+   * The generation is the one the asking pass started under. An ack that arrives after
+   * it moved answers for a socket that is gone (plan 0168, D2 drops one on resume while
+   * its asks are still out), so it touches neither the registry nor the health timer:
+   * a late yes would count the room as joined and the new socket would never ask.
+   */
   private async _subscribeZone(
     socket: SocketLike,
-    ask: ZoneAsk
+    ask: ZoneAsk,
+    generation: number
   ): Promise<AskOutcome> {
     // The body carries the zone and nothing else: the staff room is joined by the
     // server's own check inside this handler, so the intent is not ours to send. What
@@ -668,6 +675,10 @@ export class RealtimeSocket implements RealtimeClientI {
       REALTIME_CLIENT_MESSAGES.zoneSubscribe,
       { zoneId: ask.zoneId }
     );
+
+    if (generation !== this._generation) {
+      return outcome;
+    }
 
     if (outcome === 'ok') {
       this._registry.onZoneSubscribed(ask.zoneId, ask.staff);
@@ -682,15 +693,21 @@ export class RealtimeSocket implements RealtimeClientI {
     return outcome;
   }
 
+  /** Same generation rule as `_subscribeZone`. */
   private async _subscribeList(
     socket: SocketLike,
-    listId: string
+    listId: string,
+    generation: number
   ): Promise<AskOutcome> {
     const outcome = await this._emit(
       socket,
       REALTIME_CLIENT_MESSAGES.listSubscribe,
       { listId }
     );
+
+    if (generation !== this._generation) {
+      return outcome;
+    }
 
     if (outcome === 'ok') {
       this._registry.onListSubscribed(listId);
@@ -713,17 +730,31 @@ export class RealtimeSocket implements RealtimeClientI {
    * connection instead of spinning on it. None of it touches `refusedZones`: that
    * signal is about a group going stale, and a presence intent going unheard costs an
    * avatar, not an update.
+   *
+   * An answer that arrives after the generation moved is ignored, for the reason
+   * `_subscribeZone` gives: the new socket has to announce again.
    */
-  private async _announcePresence(socket: SocketLike): Promise<AskOutcome[]> {
+  private async _announcePresence(
+    socket: SocketLike,
+    generation: number
+  ): Promise<(AskOutcome | 'stale')[]> {
     const plan = this._registry.reconcilePresence();
+    const ask = async (
+      message: string,
+      body: unknown
+    ): Promise<AskOutcome | 'stale'> => {
+      const outcome = await this._emit(socket, message, body);
+      return generation === this._generation ? outcome : 'stale';
+    };
 
     return Promise.all([
       ...plan.zonesToEnter.map(async (zoneId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.zoneEnter,
-          { zoneId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.zoneEnter, {
+          zoneId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onZonePresenceStarted(zoneId);
         } else if (outcome === 'refused') {
@@ -734,11 +765,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.zonesToLeave.map(async (zoneId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.zoneLeave,
-          { zoneId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.zoneLeave, {
+          zoneId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         // A refusal to a leave is a leave, as it is for an unview: the server
         // acknowledges it whatever state it was in, so only a timeout is retried.
         if (outcome === 'failed') {
@@ -749,11 +781,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.viewsToStart.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.listView,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.listView, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onViewStarted(listId);
         } else if (outcome === 'refused') {
@@ -764,11 +797,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.viewsToStop.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.listUnview,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.listUnview, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         // A refusal to a stop is a stop: the server acknowledges an unview whatever
         // state it was in, so anything but a timeout means it is not counting us.
         if (outcome === 'failed') {
@@ -779,11 +813,13 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.editsToStart.map(async ({ listId, lineId }) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.lineEdit,
-          { listId, lineId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.lineEdit, {
+          listId,
+          lineId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'ok') {
           this._registry.onEditStarted(listId, lineId);
         } else if (outcome === 'refused') {
@@ -794,11 +830,12 @@ export class RealtimeSocket implements RealtimeClientI {
         return outcome;
       }),
       ...plan.editsToStop.map(async (listId) => {
-        const outcome = await this._emit(
-          socket,
-          REALTIME_CLIENT_MESSAGES.lineStopEdit,
-          { listId }
-        );
+        const outcome = await ask(REALTIME_CLIENT_MESSAGES.lineStopEdit, {
+          listId,
+        });
+        if (outcome === 'stale') {
+          return outcome;
+        }
         if (outcome === 'failed') {
           this._registry.onPresenceAskFailed(listId);
         } else {

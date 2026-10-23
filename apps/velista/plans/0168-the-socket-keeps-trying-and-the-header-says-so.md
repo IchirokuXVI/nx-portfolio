@@ -355,6 +355,7 @@ in on the home page. Trace times are UTC; `*.steps.log` times are local (UTC+2).
    and that the page header carries the connection mark. That file is outside the scope
    list, and the review asked for it because the old sentence described this plan's
    behaviour wrongly.
+10. **A room ack from a dropped socket is ignored (review round).** `_subscribeZone`, `_subscribeList` and every presence ask now return without touching the registry or the health timer when the generation moved while the ack was out, because a late `{ ok: true }` from the dropped socket counted the room as joined and the new socket never asked for it; the spec "ignores a join that the dropped socket acknowledges late, and the new socket still asks for the room" fails without the check.
 
 ### Evidence
 
