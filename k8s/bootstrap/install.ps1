@@ -4,11 +4,16 @@
   PowerShell twin of install.sh.
 
 .DESCRIPTION
-  Installs, once per cluster: the Gateway API CRDs (standard channel), a Gateway
-  API implementation, cert-manager with its Gateway integration enabled, and a
-  ClusterIssuer. These are deliberately NOT part of the application chart: the
-  chart names the implementation only through `gateway.className`, so swapping it
-  is this script plus one values key.
+  Installs, once per cluster: the Gateway API CRDs (standard channel), Envoy
+  Gateway with merged gateways, cert-manager with its Gateway integration
+  enabled, and for a local cluster a self signed ClusterIssuer. These are
+  deliberately NOT part of a chart: the unit charts name the implementation only
+  through `gateway.className`, and each brings its own Gateway and ACME Issuer
+  (k8s plan 0015).
+
+  It installs no MetalLB controller, because Docker Desktop publishes a
+  LoadBalancer Service on localhost. -Ip applies the MetalLB pool on a cluster
+  where install.sh installed the controller.
 
   Idempotent: every step is an `apply` or a `helm upgrade --install`.
 
@@ -17,7 +22,8 @@
   # Docker Desktop: self signed certs, no public DNS needed.
 
 .EXAMPLE
-  ./k8s/bootstrap/install.ps1 -Issuer letsencrypt -Email you@example.com
+  ./k8s/bootstrap/install.ps1 -Ip 203.0.113.7
+  # A cluster with MetalLB: the unit charts issue their own certificates.
 #>
 [CmdletBinding()]
 param(
@@ -27,14 +33,9 @@ param(
   [ValidateSet('letsencrypt', 'selfsigned')]
   [string]$Issuer = 'letsencrypt',
 
-  # Let's Encrypt wants a contact address for expiry warnings. Only the ACME
-  # issuer reads it; the self signed one ignores it.
-  [string]$Email = 'danieliyo65@gmail.com',
-
-  # The Gateway the ACME HTTP-01 solver attaches its challenge routes to. Must
-  # match the Gateway the chart renders (templates/gateway/gateway.yaml.tpl).
-  [string]$GatewayName = 'portfolio',
-  [string]$GatewayNamespace = 'nx-portfolio'
+  # The address the MetalLB pool advertises. Empty leaves the pool as it is.
+  [ValidatePattern('^$|^[0-9]{1,3}(\.[0-9]{1,3}){3}$')]
+  [string]$Ip = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,7 +55,21 @@ function Invoke-Checked {
 }
 
 Write-Host "==> cluster: $(kubectl config current-context)"
-Write-Host "==> implementation: $Implementation, issuer: $Issuer"
+Write-Host "==> implementation: $Implementation, issuer: $Issuer, pool address: $(if ($Ip) { $Ip } else { 'unchanged' })"
+
+# Applies a YAML document through a temporary file, which is how this script
+# hands kubectl a document without a Bash heredoc.
+function Invoke-KubectlApply {
+  param([string]$Yaml, [string]$Name)
+  $file = Join-Path ([System.IO.Path]::GetTempPath()) "nx-portfolio-$Name.yaml"
+  Set-Content -Path $file -Value $Yaml -Encoding utf8
+  try {
+    Invoke-Checked { kubectl apply -f $file }
+  }
+  finally {
+    Remove-Item $file -ErrorAction SilentlyContinue
+  }
+}
 
 # ---------------------------------------------------------------------------
 # 1. Gateway API CRDs, standard channel.
@@ -114,10 +129,27 @@ Invoke-Checked {
 
 # The GatewayClass. Contrary to what is sometimes assumed, the Envoy Gateway
 # chart does NOT create one: it only sets the controller name it will answer to.
-# The class is what `gateway.className` in values.yaml points at, so it is part
-# of the bootstrap rather than the application chart, which keeps the chart free
-# of any reference to the implementation beyond that one value.
-Write-Host '==> creating GatewayClass eg'
+# The class is what `gateway.className` in the unit charts points at, so it is
+# part of the bootstrap rather than a chart.
+#
+# Merged gateways (k8s plan 0015 D3): every unit's Gateway is served by one data
+# plane with one LoadBalancer Service. See install.sh for why a cluster that
+# already serves Gateways is left unmerged here.
+Write-Host '==> creating EnvoyProxy merged'
+Invoke-KubectlApply -Name 'envoyproxy' -Yaml @'
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: merged
+  namespace: envoy-gateway-system
+spec:
+  mergeGateways: true
+'@
+
+$classParams = kubectl get gatewayclass eg -o 'jsonpath={.spec.parametersRef.name}' 2>$null
+$classes = kubectl get gateways --all-namespaces -o 'jsonpath={range .items[*]}{.spec.gatewayClassName}{"\n"}{end}' 2>$null
+$mergeClass = ($classParams -eq 'merged') -or -not (@($classes) -contains 'eg')
+
 $gatewayClassYaml = @'
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -126,13 +158,62 @@ metadata:
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
 '@
-$gcFile = Join-Path ([System.IO.Path]::GetTempPath()) 'nx-portfolio-gatewayclass.yaml'
-Set-Content -Path $gcFile -Value $gatewayClassYaml -Encoding utf8
-try {
-  Invoke-Checked { kubectl apply -f $gcFile }
+if ($mergeClass) {
+  Write-Host '==> creating GatewayClass eg (merged gateways)'
+  $gatewayClassYaml += @'
+
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: merged
+    namespace: envoy-gateway-system
+'@
 }
-finally {
-  Remove-Item $gcFile -ErrorAction SilentlyContinue
+else {
+  Write-Host '==> GatewayClass eg serves Gateways on a data plane each; left unmerged'
+  Write-Host '    (k8s plan 0016 merges it when it splits the release)'
+}
+Invoke-KubectlApply -Name 'gatewayclass' -Yaml $gatewayClassYaml
+
+# ---------------------------------------------------------------------------
+# The MetalLB pool, when -Ip names the address (k8s plan 0015 D5). Only the
+# Envoy data plane may take it. A pool that the old one release chart rendered
+# is Helm's and is left alone.
+# ---------------------------------------------------------------------------
+if ($Ip) {
+  kubectl get crd ipaddresspools.metallb.io *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw '-Ip applies a MetalLB pool, and MetalLB is not installed here. install.sh installs it.'
+  }
+  $poolOwner = kubectl -n metallb-system get ipaddresspool main-pool -o 'jsonpath={.metadata.annotations.meta\.helm\.sh/release-name}' 2>$null
+  if ($poolOwner) {
+    Write-Host "==> IPAddressPool main-pool belongs to the Helm release '$poolOwner'; left as it is"
+  }
+  else {
+    Write-Host "==> applying IPAddressPool main-pool ($Ip) and L2Advertisement main-advertisement"
+    Invoke-KubectlApply -Name 'metallb-pool' -Yaml @"
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: main-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - $Ip/32
+  serviceAllocation:
+    namespaces:
+      - envoy-gateway-system
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: main-advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - main-pool
+"@
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -157,57 +238,26 @@ Invoke-Checked {
 }
 
 # ---------------------------------------------------------------------------
-# 4. The ClusterIssuer.
+# 4. The issuer.
 #
-# The local and production paths differ by this flag rather than by mechanism:
-# both end up as cert-manager issued Secrets referenced from the Gateway's
-# listeners, so a local deploy exercises the same wiring production uses.
+# A public cluster needs nothing here: each unit chart renders a namespaced ACME
+# Issuer that solves HTTP-01 through the unit's own Gateway (k8s plan 0015 D4).
+# A local cluster gets one self signed ClusterIssuer that the local values files
+# name.
 # ---------------------------------------------------------------------------
 if ($Issuer -eq 'letsencrypt') {
-  Write-Host '==> creating ClusterIssuer letsencrypt-prod (ACME HTTP-01 via the Gateway)'
-  $issuerYaml = @"
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: $Email
-    privateKeySecretRef:
-      name: letsencrypt-prod-account-key
-    solvers:
-      # The HTTP-01 solver creates a temporary HTTPRoute with an exact path match
-      # on the challenge token, parented to the chart's Gateway. Gateway API
-      # specifies route precedence (exact beats prefix), so the challenge wins
-      # over the catch all HTTPS redirect deterministically.
-      - http01:
-          gatewayHTTPRoute:
-            parentRefs:
-              - kind: Gateway
-                name: $GatewayName
-                namespace: $GatewayNamespace
-"@
+  Write-Host '==> no ClusterIssuer: each unit chart brings its own ACME Issuer'
 }
 else {
   Write-Host '==> creating ClusterIssuer selfsigned'
-  $issuerYaml = @"
+  Invoke-KubectlApply -Name 'clusterissuer' -Yaml @'
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: selfsigned
 spec:
   selfSigned: {}
-"@
-}
-
-$issuerFile = Join-Path ([System.IO.Path]::GetTempPath()) 'nx-portfolio-clusterissuer.yaml'
-Set-Content -Path $issuerFile -Value $issuerYaml -Encoding utf8
-try {
-  Invoke-Checked { kubectl apply -f $issuerFile }
-}
-finally {
-  Remove-Item $issuerFile -ErrorAction SilentlyContinue
+'@
 }
 
 # ---------------------------------------------------------------------------
@@ -227,8 +277,8 @@ Write-Host ''
 Write-Host '==> clusterissuers'
 kubectl get clusterissuer
 Write-Host ''
-Write-Host 'Bootstrap done. After deploying the chart, check the data plane Service that'
-Write-Host 'Envoy Gateway provisions for the Gateway. It is NOT declared by the chart and'
-Write-Host 'it lives in envoy-gateway-system, not the application namespace:'
+Write-Host 'Bootstrap done. After deploying a unit chart, check the one merged data plane'
+Write-Host 'Service that Envoy Gateway provisions for every Gateway of class eg. No chart'
+Write-Host 'declares it, and it lives in envoy-gateway-system:'
 Write-Host ''
-Write-Host '  kubectl get svc -n envoy-gateway-system'
+Write-Host '  kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gatewayclass=eg'
