@@ -2,13 +2,12 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 
 /**
- * The standalone build's bootstrap component, and the one thing the mounted build
- * has no equivalent of (plan 0013 D3).
+ * velista's bootstrap component (plan 0013 D3), at both addresses it is served at.
  *
  * It draws no chrome. `AppLayout`, on the `:locale` child inside `feature-shell`,
  * already owns the header, the navigation, the theme scope and every token, so a
  * root component that drew anything would be drawing it twice. All this supplies is
- * the outlet the shell supplies in the other mode.
+ * the outlet.
  *
  * It replaces `RemoteEntry`, whose template was empty so that hitting port 4205
  * rendered nothing. velista is the one app that rule stops applying to: it borrows
@@ -17,8 +16,8 @@ import { RouterOutlet } from '@angular/router';
  *
  * The update handling that used to live here is `AppUpdates` in
  * `@portfolio/velista/platform` (plan 0034, section 4). It moved for two reasons:
- * this component exists in one of the two run modes and the schedule wanted to be
- * reachable from the gateway interceptor in both, and a service can be driven by a
+ * this component did not exist when the portfolio shell mounted the app, and the
+ * schedule wanted to be reachable from the gateway interceptor in both, and a service can be driven by a
  * spec without standing up a component fixture to reach a constructor.
  */
 @Component({
@@ -26,10 +25,9 @@ import { RouterOutlet } from '@angular/router';
   imports: [RouterOutlet],
   template: `<router-outlet />`,
   // The one thing this component does draw, and it is not chrome: the box `AppLayout`
-  // is a flex item of, as it is of the portfolio shell's root when mounted
-  // (`apps/shell/src/app/app.scss` is `display: flex`). `AppLayout` sets its own height,
-  // exactly `100svh`, and is the frame the document never scrolls past (velista 0106),
-  // so all this has to do is be a flex row in both run modes alike. The minimum is kept
+  // is a flex item of. `AppLayout` sets its own height, exactly `100svh`, and is the
+  // frame the document never scrolls past (velista 0106), so all this has to do is be
+  // a flex row. The minimum is kept
   // so the ground colour fills the screen while no route has activated yet.
   //
   // `svh` and not the shell's `dvh`, because this is the document the installed app

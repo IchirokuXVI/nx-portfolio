@@ -14,9 +14,9 @@ import type { ModuleFederationConfig } from '@nx/module-federation';
  *
  * It was also in the wrong number of places. A `shared` callback governs only the build
  * it is written in: webpack decides how a module is consumed from the config of the
- * build doing the consuming, so a rule the host declares alone leaves five remotes
- * consuming on their own terms. It has to be stated in all six configs to mean
- * anything, and six copies of a rule is how a rule drifts. Hence one file, next to
+ * build doing the consuming, so a rule the host declares alone leaves every remote
+ * consuming on its own terms. It has to be stated in all four configs (the shell and
+ * its three remotes) to mean anything, and four copies of a rule is how a rule drifts. Hence one file, next to
  * `tsconfig.base.json` where the alias it names actually lives.
  *
  * ## Why this library, and what changed about the reason
