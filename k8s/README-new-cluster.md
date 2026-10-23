@@ -11,10 +11,12 @@ Three scripts do the work, and each one starts where the last one stopped:
 | ------------------------------------ | --------------- | ---------------------------------------------------- |
 | `k8s/bootstrap/provision-host.sh`    | a root only VPS | accounts, keys, a hardened sshd                      |
 | `k8s/bootstrap/install.sh`           | a machine       | a cluster: k3s, MetalLB, Envoy Gateway, cert-manager |
-| `k8s/bootstrap/provision-release.sh` | a cluster       | one the chart can deploy to: namespace and Secrets   |
+| `k8s/bootstrap/provision-release.sh` | a cluster       | one a unit can deploy to: its namespace and Secrets  |
 
-`provision-host.sh --k3s` runs the second for you, so in practice there are two
-commands and one interactive session.
+`provision-host.sh --k3s` runs the second for you, and section 4 runs it again
+with the machine's address for the MetalLB pool. The third runs one time per
+deploy unit (k8s plan 0014): `portfolio` and `velista`, each into its own
+namespace.
 
 Two things in here are ordering constraints rather than preferences, and both
 have a section explaining why: **DNS moves before the first deploy** (section 4)
@@ -139,16 +141,19 @@ count as one.
 
 ## 4. The address and the DNS records
 
-Put the machine's address in its values file and commit it:
+Give the machine's address to MetalLB. On the box, as the admin user:
 
-```yaml
-# k8s/helm/values.<env>.yaml
-ipAddress: <IP>
+```sh
+bash ~/nx-portfolio/k8s/bootstrap/install.sh --ip <IP>
 ```
 
-MetalLB binds it as the `IPAddressPool`, and the chart refuses to render while it
-is empty rather than leaving a LoadBalancer `<pending>` forever with everything
-else looking healthy.
+It applies `IPAddressPool main-pool` with that one address and
+`L2Advertisement main-advertisement`, and lets only `envoy-gateway-system` take
+the address (k8s plan 0015 D5). The pool belongs to the machine, not to a unit:
+every unit's Gateway is served by the one merged Envoy Service, which is the only
+LoadBalancer here. Without the pool that Service stays `<pending>` forever while
+everything else looks healthy, and `install.sh` warns when it finds no pool. The
+rest of the run reapplies what section 2 installed and changes nothing.
 
 Then point the six records at it. `mfe` carries three remotes, velista has its
 own origin because it is installable there as a PWA, and `admin` serves the
@@ -199,16 +204,22 @@ the Secret holds no value for it yet). A piped or `ssh host "..."` invocation
 takes its "not a terminal" branch and leaves all three as they are, which on a new
 cluster means unset.
 
+One run per deploy unit:
+
 ```sh
-bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit portfolio --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env>
 ```
 
-It creates the namespace and the Secrets the chart reads through `secretKeyRef`:
-four database passwords (auth, core, catalog and harvester), two JWT keypairs (one
-for user tokens, one for admin tokens), the `HARVESTER_ACTOR_ID` uuid, the three
-optional values above, and the connection strings, which are derived from the
-same shell variables as the passwords so the two cannot disagree. It writes your
-plaintext copy to `~/luna-shopper-<env>-secrets.txt`.
+Each run reads `k8s/units/<unit>/unit.env` and creates the unit's namespace
+(`portfolio`, `luna-shopper`). The portfolio lists no Secret, so its run stops
+there. The velista run creates the Secrets its chart reads through
+`secretKeyRef`: four database passwords (auth, core, catalog and harvester), two
+JWT keypairs (one for user tokens, one for admin tokens), the
+`HARVESTER_ACTOR_ID` uuid, the three optional values above, and the connection
+strings, which are derived from the same shell variables as the passwords so the
+two cannot disagree. It writes your plaintext copy to
+`~/velista-<env>-secrets.txt`.
 
 Move that file into your password manager and delete it. It holds the JWT
 keypairs, and losing the user keypair invalidates every issued token at once,
@@ -228,11 +239,14 @@ that sits directly in `$HOME`, such as the CI copy at `~deploy/k8s`.
 Then verify what the chart will actually ask for:
 
 ```sh
-bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit portfolio --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit velista --env <env>
 ```
 
-`--check` renders the chart and asserts every `secretKeyRef` and
-`configMapKeyRef` it references can be satisfied. What this script provisions has
+`--check` renders the unit's chart and asserts that its Gateway hostnames equal
+the `HOSTS_<ENV>` of `unit.env`, that a namespace it names for the other unit is
+that unit's, and that every `secretKeyRef` and `configMapKeyRef` it references can
+be satisfied. What this script provisions has
 to exist in the cluster. What the chart creates itself, today only
 `luna-shopper-backend-config`, is checked against the render instead and marked
 `(chart)`, because helm creates it during the very deploy this check gates. This
@@ -245,7 +259,7 @@ Production renders the backup CronJobs, and they need credentials the script
 cannot generate. It prints the exact command; the shape is:
 
 ```sh
-kubectl -n nx-portfolio create secret generic luna-shopper-backend-backup-secret \
+kubectl -n luna-shopper create secret generic luna-shopper-backend-backup-secret \
   --from-literal=S3_ENDPOINT=... --from-literal=S3_BUCKET=... \
   --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=...
 ```
@@ -290,34 +304,52 @@ host, which is the point of pinning the key.
 `staging`, followed by a rollout that is waited on rather than assumed.
 
 **Production** deploys when a GitHub Release is published, at that commit, pinned
-to the version tag. By hand, on the box:
+to the version tag. One release per unit, each into its own namespace. By hand,
+on the box:
 
 ```sh
-bash ~/nx-portfolio/k8s/helm/deploy-release.sh <version>
+bash ~/nx-portfolio/k8s/helm/deploy-release.sh portfolio <version>
+bash ~/nx-portfolio/k8s/helm/deploy-release.sh velista <version>
 ```
 
-Rollback is the same command with an older version, or `helm rollback`.
+Rollback is the same command with an older version, or `helm rollback <unit>`.
+
+**Until plan 0016 lands**, both workflows still deploy the old one release chart
+(`nx-portfolio`). A machine built from this runbook does not accept it: the old
+chart renders the MetalLB pool that section 4 applied, and names a
+`letsencrypt-prod` ClusterIssuer that `install.sh` no longer creates. Until 0016
+switches the workflows to the unit charts, deploy each unit by hand: production
+with the two commands above, staging with these, for `portfolio` in `portfolio`
+and for `velista` in `luna-shopper`:
+
+```sh
+chart=~/nx-portfolio/k8s/helm/<unit>
+helm dependency build --skip-refresh "$chart"
+helm upgrade --install <unit> "$chart" --namespace <namespace> \
+  --values "$chart/values.yaml" --values "$chart/values.staging.yaml" --wait
+```
 
 ## 9. Verify
 
 ```sh
-kubectl get pods -n nx-portfolio
-kubectl get certificate -n nx-portfolio          # six, all READY=True
-kubectl get svc -n envoy-gateway-system          # EXTERNAL-IP is your address
+kubectl get pods -n portfolio
+kubectl get pods -n luna-shopper
+kubectl get certificate -A                      # six, all READY=True
+kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gatewayclass=eg
 ```
 
-That last one is the piece people hunt for. The data plane Service is provisioned
-by Envoy Gateway and is **not** declared by the chart, so it lives in
-`envoy-gateway-system` rather than the application namespace. An `EXTERNAL-IP`
-stuck at `<pending>` means MetalLB has no address to hand out, which means
-`ipAddress` in section 4.
+That last one is the piece people hunt for. Envoy Gateway serves the Gateways of
+both units from one merged data plane, and its Service is **not** declared by any
+chart, so it lives in `envoy-gateway-system` rather than a unit's namespace. Its
+`EXTERNAL-IP` is your address. Stuck at `<pending>` means MetalLB has no address
+to hand out, which means `install.sh --ip` in section 4.
 
 When something is wrong, events are the part that matters and the part people
 forget. `ImagePullBackOff`, a PVC that cannot bind, and a failing readiness probe
 all announce themselves there and nowhere else:
 
 ```sh
-kubectl -n nx-portfolio get events --sort-by=.lastTimestamp | tail -40
+kubectl -n luna-shopper get events --sort-by=.lastTimestamp | tail -40
 ```
 
 ## 10. Production only: the data
@@ -445,14 +477,19 @@ ssh -t root@<IP> "bash /tmp/provision-host.sh --lock-root"
 ```
 
 ```sh
-# 4. ipAddress in values.<env>.yaml, commit, move the six DNS records, dig to confirm
+# 4. on the box, as the admin user: the MetalLB pool. Then move the six DNS
+#    records and dig to confirm
+bash ~/nx-portfolio/k8s/bootstrap/install.sh --ip <IP>
 
-# 5. on the box, as the admin user, interactively
-bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env>
-bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --env <env>
+# 5. on the box, as the admin user, interactively, one time per unit
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit portfolio --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit portfolio --env <env>
+bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit velista --env <env>
 
-# 6. production only: the backup Secret
+# 6. production only: the backup Secret, in the namespace luna-shopper
 # 7. GitHub secrets: SSH_DEPLOY_USER, SSH_DEPLOY_KEY, the host
 #    GitHub variable: SSH_KNOWN_HOSTS, refreshed with the new host key
-# 8. push to main (staging) or publish a Release (production)
+# 8. one release per unit: deploy-release.sh portfolio <version> and
+#    deploy-release.sh velista <version> (by hand until plan 0016, see section 8)
 ```
