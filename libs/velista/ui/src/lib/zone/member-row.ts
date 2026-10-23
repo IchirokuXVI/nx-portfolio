@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { MemberAction, MemberRowVm } from '@portfolio/velista/models';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { EllipsisIcon } from '../icons/icons';
 import { RoleChip } from './role-chip';
 
@@ -59,6 +60,11 @@ export class MemberRow {
   readonly act = output<{ action: MemberAction; membershipId: string }>();
 
   readonly menuOpen = signal(false);
+
+  constructor() {
+    // A native back press closes the open menu, as Escape does (velista `0166`).
+    handleBackWhile(this.menuOpen, () => this.close());
+  }
 
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 

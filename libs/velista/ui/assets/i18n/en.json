@@ -161,7 +161,8 @@
     "failed": {
       "title": "velista could not update itself",
       "body": "Close velista completely and open it again. If that does not work, open it in your browser once.",
-      "reload": "Try again"
+      "reload": "Try again",
+      "store": "Get the newer version"
     }
   },
   "notFound": {

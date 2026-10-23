@@ -26,7 +26,11 @@ import {
   isLinkVisitor,
   isNamedPerson,
 } from '@portfolio/velista/models';
-import { BrowserFacade, SheetNavigation } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  SHARE_TARGET,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import {
   PeoplePicker,
   ShareIcon,
@@ -126,6 +130,7 @@ export class ShareSheet {
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _share = inject(SHARE_TARGET);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -168,11 +173,10 @@ export class ShareSheet {
    * Whether to offer the operating system's share sheet at all.
    *
    * The Web Share API is a phone's and mostly is not a desktop's. Read through
-   * `BrowserFacade` (rule D2) rather than off `navigator`, and read once: it is a
-   * fact about the browser and does not change while this sheet is open.
+   * `SHARE_TARGET`, so a native shell answers with its own, and read once: it is a
+   * fact about the host and does not change while this sheet is open.
    */
-  protected readonly canShare =
-    this._browser.window?.navigator.share !== undefined;
+  protected readonly canShare = this._share.canShare();
 
   /** How many people arrived through this link, for both panes' sentences. */
   protected readonly joinedCount = computed(
@@ -488,10 +492,11 @@ export class ShareSheet {
   /**
    * Hand the link to the operating system's share sheet.
    *
-   * Falls back to copying when the API is missing, which is what makes the control
-   * safe to offer at all, and swallows a rejection: dismissing the system sheet
-   * rejects, and a dismissal is not a failure worth a sentence. Nothing is claimed
-   * either way, because this screen cannot know where the link went.
+   * Falls back to copying when there is no share sheet or it refuses, which is what
+   * makes the control safe to offer at all, and leaves a dismissal alone: a person
+   * who closed the system sheet chose to, and that is not a failure worth a sentence.
+   * Nothing is claimed either way, because this screen cannot know where the link
+   * went.
    *
    * The URL alone, as the invite card's share already does: the system sheet reads
    * the page it is handed, and a title written here would be this app's words
@@ -503,16 +508,14 @@ export class ShareSheet {
       return;
     }
 
-    const navigator = this._browser.window?.navigator;
-    if (navigator?.share === undefined) {
+    if (!this.canShare) {
       await this.copy();
       return;
     }
 
-    try {
-      await navigator.share({ url });
-    } catch {
-      // Dismissed, or refused. The link is still on screen and still copyable.
+    // Dismissed is left alone: the link is still on screen and still copyable.
+    if ((await this._share.share({ url })) === 'unavailable') {
+      await this.copy();
     }
   }
 

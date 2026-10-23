@@ -6,6 +6,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { APP_RUNTIME } from './app-runtime';
 import { BrowserFacade } from './browser-facade';
 import {
   installGuideFor,
@@ -72,6 +73,17 @@ export class InstallStore {
   private readonly _installed = signal(false);
 
   constructor() {
+    // Inside a native shell the app is installed by definition, and no browser event
+    // will ever say so: `display-mode` reads `browser` in a WebView and
+    // `beforeinstallprompt` never fires, which used to tell a person inside the app to
+    // add it to their home screen (velista `0166`, target 4).
+    if (inject(APP_RUNTIME) === 'native') {
+      this.state = signal<InstallState>('installed').asReadonly();
+      this.canPrompt = signal(false).asReadonly();
+      this.guide = signal(this._guide()).asReadonly();
+      return;
+    }
+
     this._installed.set(
       this._browser.readStorage(StorageKeys.installed) === 'true'
     );
@@ -96,11 +108,7 @@ export class InstallStore {
 
     this.canPrompt = computed(() => this.state() === 'ready');
 
-    const navigator = this._browser.window?.navigator;
-    const decided = installGuideFor(navigator?.userAgent ?? '', {
-      maxTouchPoints: navigator?.maxTouchPoints,
-    });
-    this.guide = signal(decided).asReadonly();
+    this.guide = signal(this._guide()).asReadonly();
 
     this._listen();
   }
@@ -136,6 +144,13 @@ export class InstallStore {
       // spent. Not a failure anybody has copy for: the steps are still on the page.
       return 'unavailable';
     }
+  }
+
+  private _guide(): InstallGuide {
+    const navigator = this._browser.window?.navigator;
+    return installGuideFor(navigator?.userAgent ?? '', {
+      maxTouchPoints: navigator?.maxTouchPoints,
+    });
   }
 
   /**

@@ -1,11 +1,14 @@
 import {
   computed,
+  effect,
   inject,
   Injectable,
   type Signal,
   signal,
+  untracked,
 } from '@angular/core';
 import {
+  APP_BASE_PATH,
   APP_BRAND,
   type AppTheme,
   appThemeClass,
@@ -14,6 +17,7 @@ import {
 } from '@portfolio/velista/models';
 import { BrowserFacade } from './browser-facade';
 import { StorageKeys } from './storage-keys';
+import { SYSTEM_BARS } from './system-bars';
 
 /**
  * Where the user's theme choice is persisted. Namespaced by the Nx project name,
@@ -104,6 +108,8 @@ export class ThemeStore {
     this.isPinned = this._brand.themeClass != null;
     const pinned = this._brand.themeClass;
     this.themeClass = computed(() => pinned ?? appThemeClass(this.theme()));
+
+    this._paintSystemBars();
   }
 
   /**
@@ -117,5 +123,26 @@ export class ThemeStore {
   setPreference(preference: AppThemePreference): void {
     this._preference.set(preference);
     this._browser.writeStorage(THEME_STORAGE_KEY, preference);
+  }
+
+  /**
+   * Keep the status bar the colour of the screen under it (velista `0166`, D6).
+   *
+   * Only on the app's own origin. Mounted under the portfolio, the document and its
+   * `theme-color` belong to the portfolio, which keeps its own after velista's routes
+   * are left, the reason the service worker is registered in `app.config.ts` alone
+   * (plan 0013 D4).
+   */
+  private _paintSystemBars(): void {
+    const mount = inject(APP_BASE_PATH, { optional: true }) ?? '';
+    if (mount !== '') {
+      return;
+    }
+
+    const bars = inject(SYSTEM_BARS);
+    effect(() => {
+      const theme = this.theme();
+      untracked(() => bars.apply(theme));
+    });
   }
 }

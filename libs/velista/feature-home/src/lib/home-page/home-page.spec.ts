@@ -32,7 +32,11 @@ import {
   type RealtimeMemory,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
-import type { BasketSummary, MyZone } from '@portfolio/velista/models';
+import {
+  APP_STANDALONE_ORIGIN,
+  type BasketSummary,
+  type MyZone,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -64,6 +68,8 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
 
 interface Options {
   identity?: FakeIdentity;
+  /** `APP_STANDALONE_ORIGIN`, which the app layer supplies. Empty when unset. */
+  standaloneOrigin?: string;
   zones?: readonly MyZone[];
   fails?: boolean;
   storage?: Map<string, string>;
@@ -157,6 +163,10 @@ async function render(
       // reason the store is, so a presence test changes one fact about the world.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
       provideFakeMemberNames(namesDouble),
+      {
+        provide: APP_STANDALONE_ORIGIN,
+        useValue: options.standaloneOrigin ?? '',
+      },
     ],
   }).compileComponents();
 
@@ -1200,6 +1210,36 @@ describe('HomePage', () => {
       fixture.componentInstance.shareCode('HK7M2QPD');
 
       expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
+    });
+
+    it('names the app’s own origin over the document’s, as the basket link does', async () => {
+      // Velista `0166`: inside a native shell the document is the WebView's local
+      // origin, which nobody the invite is sent to can open.
+      const sent: { url?: string } = {};
+      const fixture = await render({
+        zones: [invited],
+        standaloneOrigin: 'https://velista.app',
+        browser: fakeWindow('https://localhost', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
+    });
+
+    it('copies nothing when the person closes the share sheet', async () => {
+      const copied: string[] = [];
+      const browser = fakeWindow('https://velista.app', {}, copied);
+      (
+        browser.window as unknown as { navigator: { share: unknown } }
+      ).navigator.share = () =>
+        Promise.reject(new DOMException('closed', 'AbortError'));
+      const fixture = await render({ zones: [invited], browser });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+      await fixture.whenStable();
+
+      expect(copied).toEqual([]);
     });
   });
 });

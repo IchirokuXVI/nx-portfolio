@@ -34,6 +34,7 @@ import {
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
+  APP_STANDALONE_ORIGIN,
   displayNames,
   formatGeneratedDate,
   isSameDay,
@@ -43,6 +44,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   BrowserFacade,
+  SHARE_TARGET,
   shareUrl,
   sheetSegments,
   TourAnchor,
@@ -132,6 +134,8 @@ export class HomePage {
   private readonly _accountNotice = inject(AccountNotice);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _share = inject(SHARE_TARGET);
+  private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -408,9 +412,9 @@ export class HomePage {
    * Whether the invite card offers sharing.
    *
    * The Web Share API is a phone's, and a button that opens nothing is worse than one
-   * that is absent. Read through `BrowserFacade` (rule D2) rather than off `navigator`.
+   * that is absent. Asked of `SHARE_TARGET`, so a native shell answers with its own.
    */
-  readonly canShare = this._browser.window?.navigator.share !== undefined;
+  readonly canShare = this._share.canShare();
 
   constructor() {
     void this._zoneStore.load();
@@ -535,8 +539,8 @@ export class HomePage {
    * The URL is built here rather than by the card, because it is an absolute address
    * of this app on this origin, which is a fact about where the app is deployed and
    * not about how an invite looks. Falls back to copying when the share sheet is
-   * unavailable or the person dismisses it, which is what makes the button safe to
-   * offer at all (plan 0008, section 9).
+   * unavailable or refuses, which is what makes the button safe to offer at all
+   * (plan 0008, section 9). A person who dismissed the sheet is left alone.
    *
    * **`shareUrl` and not a relative navigation, because the link carries no locale.**
    * It used to be `createUrlTree(['..', 'join', code])`, which is this session's own
@@ -546,22 +550,27 @@ export class HomePage {
    * invite in Spanish to somebody who reads English is the whole of the defect.
    */
   shareCode(code: string): void {
+    // The app's own origin first, as the basket link does: inside a native shell the
+    // document's origin is the WebView's, which nobody else can open (velista `0166`).
     const url = shareUrl(
-      this._browser.location?.origin ?? '',
+      this._standaloneOrigin || this._browser.location?.origin || '',
       this._basePath,
       'join',
       code
     );
 
-    const share = this._browser.window?.navigator.share;
-    if (share === undefined) {
+    // The no share case copies synchronously, before anything is awaited, because
+    // the clipboard needs the same gesture the share sheet does.
+    if (!this.canShare) {
       this.copyCode(url);
       return;
     }
 
-    void share
-      .call(this._browser.window?.navigator, { url })
-      .catch(() => undefined);
+    void this._share.share({ url }).then((outcome) => {
+      if (outcome === 'unavailable') {
+        this.copyCode(url);
+      }
+    });
   }
 
   retry(): void {

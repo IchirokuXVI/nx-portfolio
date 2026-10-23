@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { BrandWordmark } from '../brand/brand-wordmark';
 import { ChevronDownIcon } from '../icons/icons';
 
@@ -85,6 +86,11 @@ export class AppBar {
 
   /** Whether there is anything to disclose. Drives the chevron and the ARIA. */
   protected readonly hasMenu = computed(() => this.locales().length > 0);
+
+  constructor() {
+    // A native back press closes the open menu, as Escape does (velista `0166`).
+    handleBackWhile(this.menuOpen, () => this.closeOnEscape());
+  }
 
   protected toggleMenu(): void {
     if (!this.hasMenu()) {

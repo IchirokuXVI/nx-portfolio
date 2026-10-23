@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { BackStack, provideVelistaTesting } from '@portfolio/velista/platform';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PageHeader } from './page-header';
@@ -193,5 +193,28 @@ describe('PageHeader', () => {
 
     expect(query(fixture, 'h1')).toBe(before);
     expect(before?.textContent?.trim()).toBe('Compra semanal');
+  });
+});
+
+/**
+ * Velista `0166`. A native back press means what the chevron means, so the header
+ * answers it from `BackStack` while the chevron is drawn, and the page's own fallback
+ * decides where it goes.
+ */
+describe('PageHeader and a native back press', () => {
+  it('emits back while the chevron is drawn', async () => {
+    const fixture = await render();
+
+    expect(TestBed.inject(BackStack).handle()).toBe(true);
+    expect(fixture.componentInstance.backs).toBe(1);
+  });
+
+  it('passes the press on when the left end is an icon', async () => {
+    const fixture = await render();
+    fixture.componentInstance.backLabel.set(null);
+    fixture.detectChanges();
+
+    expect(TestBed.inject(BackStack).handle()).toBe(false);
+    expect(fixture.componentInstance.backs).toBe(0);
   });
 });

@@ -12,6 +12,7 @@ import {
   type ElementRef,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { handleBackWhile } from '@portfolio/velista/platform';
 
 /**
  * One card of the tour (velista `0099`, section 4).
@@ -63,6 +64,12 @@ export class TourCard {
     viewChild.required<ElementRef<HTMLElement>>('nextButton');
 
   constructor() {
+    // A native back press is Skip, as Escape is (velista `0166`).
+    handleBackWhile(
+      () => true,
+      () => this.skip.emit()
+    );
+
     // Every new card takes the focus, not only the first one.
     effect(() => {
       this.titleKey();

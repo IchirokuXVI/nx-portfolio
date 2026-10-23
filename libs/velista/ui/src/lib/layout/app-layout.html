@@ -42,7 +42,10 @@
         [body]="'update.required.body' | rokuT"
         [failedBody]="'update.failed.body' | rokuT"
         [failedTitle]="'update.failed.title' | rokuT"
-        [reloadLabel]="'update.failed.reload' | rokuT"
+        [reloadLabel]="
+          (updateFromStore ? 'update.failed.store' : 'update.failed.reload')
+            | rokuT
+        "
         [spent]="updateFailed()"
         [title]="'update.required.title' | rokuT"
       />

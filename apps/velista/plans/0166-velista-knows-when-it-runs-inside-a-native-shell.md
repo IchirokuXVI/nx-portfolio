@@ -265,4 +265,37 @@ plan did not settle, in the section "What the build decided" at the end of this 
 
 ## What the build decided
 
-(The builder fills this section.)
+Built on `feat/velista-capacitor-android` from `07e4ceb3`. Every numbered target is in. Nothing was left out.
+
+### The platform surface plan 0167 codes against
+
+All exported from `@portfolio/velista/platform` (the barrel is `libs/velista/platform/src/index.ts`; the plan's `src/lib/index.ts` does not exist).
+
+- `app-runtime.ts`: `type AppRuntime = 'web' | 'native'`, `APP_RUNTIME: InjectionToken<AppRuntime>` (root, `'web'`), `APP_STORE_URL: InjectionToken<string | null>` (root, `null`), `detectNativeShell(): boolean`.
+- `back-stack.ts`: `type BackHandler = () => boolean`, `BackStack` (root) with `register(handler: BackHandler): () => void` and `handle(): boolean`, and `handleBackWhile(active: () => boolean, act: () => void): void`.
+- `app-back.ts`: `type AppBackOutcome = 'handled' | 'popped' | 'floor'`, `AppBack` (root) with `request(): AppBackOutcome`.
+- `page-navigation.ts`: `PageNavigation.popIfOurs(): boolean`, new.
+- `share-target.ts`: `ShareTargetData { title?; text?; url? }`, `type ShareOutcome = 'shared' | 'dismissed' | 'unavailable'`, `ShareTargetI { canShare(): boolean; share(data: ShareTargetData): Promise<ShareOutcome> }`, `WebShareTarget` (root), `SHARE_TARGET: InjectionToken<ShareTargetI>` (root, `inject(WebShareTarget)`).
+- `system-bars.ts`: `THEME_GROUND_COLORS: Readonly<Record<AppTheme, string>>`, `SystemBarsI { apply(theme: AppTheme): void }`, `WebSystemBars` (root), `SYSTEM_BARS: InjectionToken<SystemBarsI>` (root, `inject(WebSystemBars)`).
+
+### Decisions the plan left open
+
+1. **A helper for the registrations.** Twelve components register with `BackStack`, so `handleBackWhile(active, act)` in `back-stack.ts` does it once: an effect that registers while `active()` is true and releases in its cleanup, which covers both "on close" and "on destroy". The handler reads `active()` again when it fires and declines when it is false, because a press can land between a close and the next change detection.
+2. **What each overlay registers.** `app-bar`, `order-menu`, `quantity-reel`, `list-viewers`, `member-row` and `profile-selector` register while their own open signal is true and call the close their Escape already calls. `photo-viewer`, `leave-question` (Stay), `tour-card` (Skip) and `hold-menu` (dismiss) exist only while open, so they register for their whole life. `hold-menu` lives in `feature-shop-map`, so that project was tested and linted too.
+3. **A sheet that may not close takes the press anyway.** `SheetShell` returns true while `dismissible` is false, so the press does not fall through to the page header beneath while a request is in flight. `requestDismiss()` already ignores it.
+4. **The pop for `AppBack`** is `PageNavigation.popIfOurs()`, which checks `AppHistory.hasEntryBehind()` itself and pops once. `AppBack` does not read `AppHistory` directly. `no-unguarded-history-back.spec.ts` stays green with no allowlist change.
+5. **A share that the browser refuses for a reason other than `AbortError`** (a spent gesture, `NotAllowedError`) maps to `unavailable`, so the caller copies. Before this the home and group pages swallowed every rejection. A dismissal still copies nothing, and the three doc comments that said otherwise now say so.
+6. **The no share case copies synchronously.** The home and group pages check `canShare` and copy before any `await`, because the clipboard needs the click's gesture and the existing specs assert the copy in the same tick. `WebShareTarget.share` calls `navigator.share` synchronously for the same reason.
+7. **The status bar is left alone in the mounted mode.** `ThemeStore` writes the meta only when `APP_BASE_PATH` is `''`. Under the portfolio the document and its `theme-color` belong to the portfolio, and the colour would stay after velista's routes are left. This is the plan 0013 D4 reasoning the service worker already follows.
+8. **The colour map lives in `platform`** (`THEME_GROUND_COLORS`), beside `SYSTEM_BARS`. `system-bars.spec.ts` reads `_themes.scss` and `_primitives.scss` and fails if the map and the stylesheet disagree.
+9. **The store action decides once.** `AppLayout` reads `APP_STORE_URL` only when `APP_RUNTIME` is `native`, and `updateFromStore` is a plain boolean. The label key is `update.failed.store`: "Get the newer version" and "Obtener la versión nueva". `UpdateScreen` did not change; `AppLayout` passes the label and branches in `reloadForUpdate()`.
+10. **`AppUpdates` native order.** `demandUpdate()` keeps its latch and its spent attempt check first, then gives up at once when native. It writes no attempt flag, because nothing reloads.
+11. **`app.config.ts` and `index.html` got exactly the term and the attribute** the plan allows, plus the one import of `detectNativeShell`. No comment was added there, to keep the merge with plan 0165 trivial.
+12. **Extra specs beyond the list:** `system-bars.spec.ts`, the native dead end in `app-layout.spec.ts`, the back press in `sheet-shell.spec.ts` and `page-header.spec.ts`, and the standalone origin invite in `home-page.spec.ts` and `group-page.spec.ts` (plus a dismissed share copying nothing on home). The PWA spec is `apps/velista/src/app/velista-pwa-shell.spec.ts`.
+
+### Known limits, for plan 0167
+
+- **Registration order is creation order.** The tour card registers once and stays while the tour moves between pages, so a page header created at a later stop sits above it in the stack, and a native back press during the tour goes to that header instead of Skip. The same holds for any long lived overlay that outlives a navigation. A priority on `register`, or the tour registering again per stop, would fix it; nothing in the web app reads the stack today.
+- **The dead end body copy** still says "open it in your browser once", which is wrong inside the app. The plan allowed one new string, so it was not changed.
+- **No feature in `feature-install`, `feature-account` or `not-found-page` changed.** Both install surfaces read `InstallStore.state` with mount `''` and already have copy for `installed`. The not found page draws `missing` at once because `newerVersionForUnknownPage` resolves false.
+- The production build reports a budget warning on `libs/velista/ui/src/lib/layout/app-layout.scss` (13.81 kB against 12 kB). This change does not touch that file.

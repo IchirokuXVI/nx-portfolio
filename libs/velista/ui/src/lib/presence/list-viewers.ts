@@ -13,6 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import type { ListViewerVm } from '@portfolio/velista/models';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronRightIcon } from '../icons/icons';
 import { RoleChip } from '../zone/role-chip';
 
@@ -73,6 +74,11 @@ export class ListViewers {
 
   /** Whether the panel naming everybody is showing. Closed on arrival, every time. */
   readonly open = signal(false);
+
+  constructor() {
+    // A native back press closes the open panel, as Escape does (velista `0166`).
+    handleBackWhile(this.open, () => this.close());
+  }
 
   /**
    * How many avatars are drawn before the count takes over.

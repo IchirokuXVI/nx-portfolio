@@ -22,10 +22,11 @@ import {
   type FakeZoneStore,
   type ZoneLoadState,
 } from '@portfolio/velista/data-access';
-import type {
-  ErrorCode,
-  MyZone,
-  ShoppingListSummary,
+import {
+  APP_STANDALONE_ORIGIN,
+  type ErrorCode,
+  type MyZone,
+  type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -75,6 +76,8 @@ function list(id: string, name: string): ShoppingListSummary {
 
 interface Options {
   readonly zone?: MyZone;
+  /** `APP_STANDALONE_ORIGIN`, which the app layer supplies. Empty when unset. */
+  readonly standaloneOrigin?: string;
   /** A cold deep link, where nothing put this group in the cache first. */
   readonly noZoneCached?: boolean;
   readonly lists?: readonly ShoppingListSummary[];
@@ -177,6 +180,10 @@ async function render(options: Options = {}): Promise<{
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: routeWith(ZONE_ID) },
+      {
+        provide: APP_STANDALONE_ORIGIN,
+        useValue: options.standaloneOrigin ?? '',
+      },
     ],
   }).compileComponents();
 
@@ -922,6 +929,21 @@ describe('GroupPage', () => {
       fixture.componentInstance.shareCode('HK7M2QPD');
 
       expect(copied).toEqual(['https://ichirokuxvi.com/velista/join/HK7M2QPD']);
+    });
+
+    it('names the app’s own origin over the document’s, as the basket link does', async () => {
+      // Velista `0166`: inside a native shell the document is the WebView's local
+      // origin, which nobody the invite is sent to can open.
+      const sent: { url?: string } = {};
+      const { fixture } = await render({
+        basePath: '',
+        standaloneOrigin: 'https://velista.app',
+        browser: fakeWindow('https://localhost', sent, []),
+      });
+
+      fixture.componentInstance.shareCode('HK7M2QPD');
+
+      expect(sent.url).toBe('https://velista.app/join/HK7M2QPD');
     });
   });
 });

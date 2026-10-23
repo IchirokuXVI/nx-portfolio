@@ -5,6 +5,7 @@ import {
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
+import { detectNativeShell } from '@portfolio/velista/platform';
 import { appRoutes } from './app.routes';
 
 /**
@@ -45,7 +46,7 @@ export const appConfig: ApplicationConfig = {
      * ends up with a worker.
      */
     provideServiceWorker('ngsw-worker.js', {
-      enabled: !isDevMode(),
+      enabled: !isDevMode() && !detectNativeShell(),
       registrationStrategy: 'registerWhenStable:30000',
     }),
   ],
