@@ -27,12 +27,17 @@
   <entry>-<mount>, with the same match, rewrite and backend. The mount is the
   item that charts.host reads, so its own `hostPrefix`, `host` and a
   `hostOverrides` key by the mount's name apply to it, not the entry's.
+
+  A mount with `keepPrefix: true` gets no URLRewrite filter and reaches its pods
+  with the path as it arrived. Other mounts strip, like the entry routes. velista's
+  mount keeps it, because its own nginx owns the prefix and rewrites the
+  document's base under it (plan 0165 D2).
 */}}
 {{- $pinToHttps := and .Values.gateway.tls.enabled .Values.gateway.tls.redirectHttp }}
 {{- range $app := .Values.apps }}
-{{- $routes := list (dict "name" $app.name "item" $app "path" $app.path) }}
+{{- $routes := list (dict "name" $app.name "item" $app "path" $app.path "keepPrefix" false) }}
 {{- range $mount := $app.mounts }}
-{{- $routes = append $routes (dict "name" (printf "%s-%s" $app.name $mount.name) "item" $mount "path" $mount.path) }}
+{{- $routes = append $routes (dict "name" (printf "%s-%s" $app.name $mount.name) "item" $mount "path" $mount.path "keepPrefix" (default false $mount.keepPrefix)) }}
 {{- end }}
 {{- range $routes }}
 {{- $host := include "charts.host" (dict "item" .item "root" $) }}
@@ -55,7 +60,7 @@ spec:
         - path:
             type: PathPrefix
             value: {{ .path }}
-      {{- if ne .path "/" }}
+      {{- if and (ne .path "/") (not .keepPrefix) }}
       filters:
         - type: URLRewrite
           urlRewrite:

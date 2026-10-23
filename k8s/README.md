@@ -215,8 +215,8 @@ npx cypress run --project apps/shell-e2e --browser electron
 behind its own nginx on the staging hostnames, mirroring the Kubernetes topology,
 so the exact shell image, which bakes the staging MFE host, is tested unchanged.
 That stack is Docker Compose and deliberately keeps nginx: it exists to test the
-**images**, not the cluster's routing layer. Its prefix stripping must stay
-equivalent to the `HTTPRoute` filters, so changing one is a prompt to check the other.
+**images**, not the cluster's routing layer. Its prefix handling must stay
+equivalent to the `HTTPRoute`s, so changing one is a prompt to check the other.
 CI runs this after pushing the staging images and before deploying, so a failure
 gates the deploy. To run it yourself:
 
