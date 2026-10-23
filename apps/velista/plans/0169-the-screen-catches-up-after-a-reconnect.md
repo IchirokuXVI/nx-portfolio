@@ -233,3 +233,68 @@ members; `line-detail-sheet.ts` loads settlements.
   list to the builder.
 - The order of the table, which is also a sensible build order: platform helper, zones and
   lists, lines, memberships, the rest.
+
+## 6. What the build decided
+
+Built on `feat/velista-0168-socket-keeps-trying` at `61f0ddd3`, which carries the counter of
+plan `0168` before that plan merged.
+
+- **`onEdge` acts on a rise, not on any change.** The plan says "differs from the remembered
+  one". The counter falls to zero on a sign out, and a sign out is not a reconnect: acting on
+  it would read the account's state at the moment the session ends. A fall is remembered, so
+  the first connect after it, zero to one, is a rise again. `on-edge.spec.ts` asserts both.
+- **`LineStore` gained `hold(listId): () => void`.** The list page names its list to the
+  realtime client through `viewList`, which `LineStore` cannot see, and its line read is
+  `load`, which says nothing about how long the page stays. So the page holds the list in
+  the same effect, and for the same span, as its room: one more line beside `viewList` and
+  `enterZone`, released in the same `onCleanup`. Counted, like the rooms.
+- **A stale list answers `idle` from `stateOf`, and keeps its rows.** `load` never served the
+  cache; it always reads. The one caller that serves the cache is `loadLineContext`, which
+  calls `load` only when `stateOf` is `idle`. Reporting a stale list as `idle` makes that
+  caller read it, with no edit outside the scope, and keeps `watchLineGone` from taking a
+  stale read as proof that a line is gone. `load`, `refresh` and `forget` clear the mark. The
+  stale set is a signal, because `stateOf` is read inside computeds.
+- **`ZoneStore.refresh()` reads the listing only when the dashboard loaded it**, then each
+  zone whose own detail state is `loaded`, after the listing, so a detail is not overwritten
+  by the summary. A deep link that loaded one group does not cause a read of every group.
+- **`ListStore` reads the zones it holds rows for** (`_byZone`), not the zones whose read
+  failed, so a reconnect never turns a failed zone into an empty loaded one.
+- **`MembershipStore` reads every zone through `load`**, as the table says. `load` keeps the
+  rows and sets `loading`, which the members page draws over its rows rather than as a
+  skeleton. Its rethrow is caught at the edge. A zone that had paged past its first page is
+  back to the first page after the read, which is what `load` does today.
+- **`MemberNames.refresh()` keeps a zone asked when its read fails**, unlike `ensure`: the
+  names held are still right, and dropping the zone would let the next `ensure` read again
+  for nothing.
+- **`ShoppingProfileStore` reads the profiles only, through a private `_refreshProfiles`**,
+  laid over the held rows with `_applyRemote`, the path a `profiles.changed` event takes. A
+  field whose write is in flight keeps what was typed. Chains and coverage are not read: the
+  socket does not feed them. No public `refreshProfiles` was added.
+- **`ProfileStore` reads only when a profile is held**, so a reconnect on a store that never
+  loaded, or whose first read failed, draws no skeleton.
+- **The comments sheet rereads through a private `_reread`** that swallows a failure,
+  because `_load` sets the error line, and an error over a readable conversation would be
+  the opposite of quiet.
+- **The fake `LineStore` in `testing/store-doubles.ts` gained `hold`**, since the list page
+  now calls it. The double already had `setReconnects` from plan `0168`.
+
+### The browser check (target 5)
+
+Luna slot 4 (ephemeral, no backend slot was listening) and velista on front end slot 1, on
+2026-10-23. One account, seeded over the gateway. Tab A was a headless Chromium page driven
+by Playwright; tab B's actions were the same account's calls to the gateway, which raise the
+same events a second tab would. The DevTools offline switch (`setOffline`) did **not** close
+the websocket in headless Chromium, so the drop was made by routing the socket and closing
+it, refusing reconnects while offline, with `setOffline(true)` beside it so the page saw
+`navigator.onLine` fall and rise. Going back online is what re-arms the socket today; the
+latch removal of plan `0168` was not on the branch yet.
+
+- **List page.** Bread ticked while A was offline: not ticked in A. After the handshake it
+  was ticked in A 51 to 62 ms later. No navigation. The rows of the list stayed drawn; the
+  one skeleton seen was a `li.skeleton` in the new trip's group, the trip that the tick
+  itself created, whose rows are read when it first appears, as they are for a tick that
+  arrives live.
+- **Home.** A list created while A was offline appeared on the group card 110 ms after the
+  handshake. No skeleton, no navigation.
+- **Members page.** The account renamed itself in the group while A was offline. The new
+  name appeared 62 ms after the handshake. No skeleton, no navigation.
