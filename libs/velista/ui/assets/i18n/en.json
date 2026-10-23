@@ -161,6 +161,7 @@
     "failed": {
       "title": "velista could not update itself",
       "body": "Close velista completely and open it again. If that does not work, open it in your browser once.",
+      "bodyNative": "This version of the app is too old to keep working. Install the newer version, then open velista again.",
       "reload": "Try again",
       "store": "Get the newer version"
     }

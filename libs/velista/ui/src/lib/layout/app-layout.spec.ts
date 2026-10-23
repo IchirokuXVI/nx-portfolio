@@ -356,7 +356,8 @@ describe('AppLayout', () => {
         const button = (fixture.nativeElement as HTMLElement).querySelector(
           'lib-update-screen button'
         ) as HTMLButtonElement | null;
-        return { button, reload, openExternal };
+        const host: HTMLElement = fixture.nativeElement;
+        return { button, reload, openExternal, host };
       }
 
       it('offers the newer version from the store, and opens it', async () => {
@@ -368,6 +369,14 @@ describe('AppLayout', () => {
 
         expect(openExternal).toHaveBeenCalledWith(store);
         expect(reload).not.toHaveBeenCalled();
+      });
+
+      // The web body sends the person to their browser, which inside the app is a
+      // different install with its own session (plan 0167).
+      it('tells the person to install the newer version, not to open a browser', async () => {
+        const { host } = await refusedNative(null);
+
+        expect(host.textContent).toContain('update.failed.bodyNative');
       });
 
       it('keeps Try again where no listing is configured', async () => {

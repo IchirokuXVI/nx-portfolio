@@ -110,6 +110,15 @@ export class AppLayout {
   readonly updateFromStore = this._storeUrl !== null;
 
   /**
+   * The dead end face's body. The web one sends the person to their browser, which
+   * inside the native app opens a different install with its own session (plan 0167).
+   */
+  readonly failedBodyKey =
+    inject(APP_RUNTIME) === 'native'
+      ? 'update.failed.bodyNative'
+      : 'update.failed.body';
+
+  /**
    * The support session this tab holds, or null (velista `0133`). Always null in an
    * ordinary tab, where nothing below changes at all.
    */

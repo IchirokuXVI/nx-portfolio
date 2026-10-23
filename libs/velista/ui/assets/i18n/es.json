@@ -161,6 +161,7 @@
     "failed": {
       "title": "velista no ha podido actualizarse",
       "body": "Cierra velista del todo y vuelve a abrirlo. Si así no funciona, ábrelo una vez en tu navegador.",
+      "bodyNative": "Esta versión de la app es demasiado antigua para seguir funcionando. Instala la versión nueva y vuelve a abrir velista.",
       "reload": "Reintentar",
       "store": "Obtener la versión nueva"
     }

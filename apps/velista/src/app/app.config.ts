@@ -5,6 +5,7 @@ import {
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
+import { provideNativeShell } from '@portfolio/velista/native';
 import { detectNativeShell } from '@portfolio/velista/platform';
 import { appRoutes } from './app.routes';
 
@@ -25,6 +26,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(appRoutes),
+    provideNativeShell(),
 
     /**
      * The service worker, registered **here and nowhere else** (plan 0013 D4).

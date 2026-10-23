@@ -40,7 +40,7 @@
       <lib-update-screen
         (reload)="reloadForUpdate()"
         [body]="'update.required.body' | rokuT"
-        [failedBody]="'update.failed.body' | rokuT"
+        [failedBody]="failedBodyKey | rokuT"
         [failedTitle]="'update.failed.title' | rokuT"
         [reloadLabel]="
           (updateFromStore ? 'update.failed.store' : 'update.failed.reload')
