@@ -429,6 +429,12 @@ target is in. Evidence files are in `C:\Users\Ichi\.claude\jobs\9ef4eefc\tmp\evi
     `VELISTA_APP_URL` and serves on `https` with no port, so against a slot the WebView
     origin is `https://localhost`, which no slot's `CORS_ORIGINS` lists. The README says so;
     nothing in the backend changed.
+22. **`android.minWebViewVersion` is 94.** The bundle is ES2022 output, and class static
+    blocks and native class fields need Chromium 94; Chrome 69 on the API 26 emulator drew a
+    blank page with a SyntaxError. Below 94 Capacitor shows its own "update your WebView"
+    dialog. 94 is a lower bound read from the syntax, not a measured floor: no image between
+    API 26 and API 35 was run. `loggingBehavior` is `debug`, so the release APK stays quiet in
+    logcat.
 
 ### Device test results (target 8)
 

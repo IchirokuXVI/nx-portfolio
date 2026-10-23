@@ -4,6 +4,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronLeftIcon } from '../icons/icons';
 
 /**
@@ -25,8 +26,9 @@ import { ChevronLeftIcon } from '../icons/icons';
  * their copy. The title is rendered here rather than projected because it is the one
  * element the frame has to place precisely and the one a screen reader reaches first.
  *
- * Rule D1: this injects nothing. `back` is an output, because where back goes is a
- * fact about routing and this library may not know one.
+ * Rule D1: this injects no data. `back` is an output, because where back goes is a
+ * fact about routing and this library may not know one. The one injection is
+ * `BackStack`, through `handleBackWhile`, which carries no route either.
  */
 @Component({
   selector: 'lib-auth-screen',
@@ -46,4 +48,14 @@ export class AuthScreen {
   readonly backLabel = input.required<string>();
 
   readonly back = output<void>();
+
+  constructor() {
+    // A native back press means what the chevron means (velista `0166`). Without
+    // this, after a reload left no entry of ours behind, the press minimized the app
+    // instead of walking to the page's fallback. The chevron is always drawn.
+    handleBackWhile(
+      () => true,
+      () => this.back.emit()
+    );
+  }
 }

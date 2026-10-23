@@ -22,13 +22,21 @@ const config: CapacitorConfig = {
   appName: 'Velista',
   webDir: '../../dist/apps/velista',
   zoomEnabled: false,
-  loggingBehavior: 'production',
+  // Capacitor's 'production' means "log always", so a release APK would write every
+  // plugin call and console line to logcat. 'debug' logs only in a debug build.
+  loggingBehavior: 'debug',
   server: {
     androidScheme: 'https',
     hostname: appHostname(),
   },
   android: {
     webContentsDebuggingEnabled: process.env.VELISTA_NATIVE_DEBUG === '1',
+    // The bundle is ES2022 output: class static blocks and native class fields need
+    // Chromium 94. An older WebView cannot parse it (Chrome 69 on the API 26 emulator
+    // drew a blank page with a SyntaxError), so below 94 Capacitor's own "update your
+    // WebView" message is the honest answer. A lower bound read from the syntax, not
+    // a measured floor.
+    minWebViewVersion: 94,
   },
   plugins: {
     SystemBars: {
