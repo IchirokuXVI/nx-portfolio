@@ -22,6 +22,13 @@ import { listErrorEffect } from '../list-error-copy';
  *
  * Called from a constructor. It watches the route's ids, because the router
  * reuses a page for another line of another list.
+ *
+ * **The list is held live for as long as the page shows it** (velista `0169`). Its
+ * line and list events reach `LineStore` through the zone room, so these pages are
+ * live like the list page, and a reconnect has to read the list again for them too.
+ * `LineStore` reads a held list at once and only marks the others stale, and the
+ * read below runs once per list id, so without the hold a rename or a tick made
+ * while the socket was down would stay off screen until the person left the page.
  */
 export function loadLineContext(
   zoneId: Signal<string>,
@@ -46,13 +53,14 @@ export function loadLineContext(
     });
   });
 
-  effect(() => {
+  effect((onCleanup) => {
     const list = listId();
     untracked(() => {
       if (lines.stateOf(list) === 'idle') {
         void lines.load(list);
       }
     });
+    onCleanup(lines.hold(list));
   });
 }
 
