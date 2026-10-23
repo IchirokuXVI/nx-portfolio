@@ -715,5 +715,23 @@ describe('ProfileStore', () => {
 
       expect(reads(service)).toBe(2);
     });
+
+    it('keeps the held profile and stays loaded when the read again fails', async () => {
+      const service = fakeAccount();
+      const { store, realtime } = setUp(service);
+      await store.load();
+      const held = store.profile();
+      service.getProfile = async () => {
+        service.calls.push({ method: 'getProfile' });
+        throw new Error('offline again');
+      };
+
+      await reconnect(realtime);
+
+      expect(reads(service)).toBe(2);
+      expect(store.state()).toBe('loaded');
+      expect(store.error()).toBeNull();
+      expect(store.profile()).toBe(held);
+    });
   });
 });
