@@ -10,7 +10,7 @@ import type {
   LiveBasketSummary,
   ShoppingListsLoad,
 } from '@portfolio/velista/models';
-import { AppResumed } from '@portfolio/velista/platform';
+import { AppResumed, onEdge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -96,6 +96,14 @@ export class LiveBasketStore {
           void this.load();
         }
       });
+    });
+
+    // And when the socket comes back (velista `0169`): a basket event broadcast
+    // while it was down never arrived. The resume effect above stays as it is.
+    onEdge(this._realtime.reconnects, () => {
+      if (this._asked) {
+        void this.load();
+      }
     });
 
     // By hand, not `takeUntilDestroyed`, for the reason above.
