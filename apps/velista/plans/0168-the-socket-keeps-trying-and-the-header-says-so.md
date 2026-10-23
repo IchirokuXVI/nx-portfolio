@@ -1,3 +1,5 @@
+> **PR:** [#814](https://github.com/IchirokuXVI/nx-portfolio/pull/814)
+
 # 0168: the socket keeps trying, and the header says so
 
 > Asked for by the owner on 2026-10-23, after the Android app of plans 0166 and 0167: "Let's
