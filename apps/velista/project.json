@@ -5,6 +5,29 @@
   "prefix": "app",
   "sourceRoot": "apps/velista/src",
   "tags": [],
+  "namedInputs": {
+    "default": [
+      "{projectRoot}/**/*",
+      "!{projectRoot}/android/**/*",
+      "!{projectRoot}/capacitor.config.ts",
+      "!{projectRoot}/assets-src/**/*",
+      "!{projectRoot}/scripts/build-android.mjs",
+      "sharedGlobals"
+    ],
+    "production": [
+      "default",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/eslint.config.mjs",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/jest.config.[jt]s",
+      "!{projectRoot}/src/test-setup.[jt]s",
+      "!{projectRoot}/test-setup.[jt]s",
+      "!{projectRoot}/cypress/**/*",
+      "!{projectRoot}/**/*.cy.[jt]s?(x)",
+      "!{projectRoot}/cypress.config.[jt]s"
+    ]
+  },
   "targets": {
     "build": {
       "executor": "@nx/angular:webpack-browser",
@@ -19,6 +42,11 @@
           {
             "glob": "**/*",
             "input": "apps/velista/public"
+          },
+          {
+            "glob": "nginx.conf",
+            "input": "apps/velista/src",
+            "output": "/"
           }
         ],
         "styles": ["apps/velista/src/styles.scss"],
@@ -33,8 +61,8 @@
           "budgets": [
             {
               "type": "initial",
-              "maximumWarning": "500kb",
-              "maximumError": "1mb"
+              "maximumWarning": "1.6mb",
+              "maximumError": "2mb"
             },
             {
               "type": "anyComponentStyle",
@@ -105,8 +133,7 @@
           "buildTarget": "velista:build:development"
         }
       },
-      "defaultConfiguration": "development",
-      "dependsOn": ["shell:serve"]
+      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -140,6 +167,28 @@
         },
         "production": {
           "buildTarget": "velista:build:production"
+        }
+      }
+    },
+    "cap:sync": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "npx cap sync android",
+        "cwd": "apps/velista"
+      }
+    },
+    "android": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {},
+      "defaultConfiguration": "staging",
+      "configurations": {
+        "staging": {
+          "command": "node apps/velista/scripts/build-android.mjs --flavor staging"
+        },
+        "production": {
+          "command": "node apps/velista/scripts/build-android.mjs --flavor production"
         }
       }
     }

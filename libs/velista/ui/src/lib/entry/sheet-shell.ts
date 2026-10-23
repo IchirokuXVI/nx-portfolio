@@ -10,7 +10,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { OpenSheet, type FallingSheet } from '@portfolio/velista/platform';
+import {
+  handleBackWhile,
+  OpenSheet,
+  type FallingSheet,
+} from '@portfolio/velista/platform';
 
 /** The motion tokens this component reads, by name, so a typo is one place wrong. */
 const MOTION_BASE = '--app-motion-base';
@@ -247,6 +251,14 @@ export class SheetShell implements FallingSheet {
     // an unregistered sheet is one the guard cannot animate.
     this._openSheet.register(this);
     inject(DestroyRef).onDestroy(() => this._openSheet.release(this));
+
+    // A native back press is the same gesture as Escape (velista `0166`). Taken even
+    // while the sheet may not close, so the press does not fall through to the page
+    // beneath while a request is in flight.
+    handleBackWhile(
+      () => true,
+      () => this.requestDismiss()
+    );
 
     afterNextRender(() => {
       const doc = this._host.nativeElement.ownerDocument;

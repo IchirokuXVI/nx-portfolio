@@ -59,8 +59,9 @@ lunaShopperBackend:
   enabled: true
   config:
     logLevel: debug
-    # Three origins, exactly as production, one label down: the portfolio and
-    # velista while both are live, plus the back office.
+    # Three origins, exactly as production, one label down: the portfolio, whose
+    # `/velista` path the Gateway serves from the velista image (plan 0165),
+    # velista's own host, and the back office.
     corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app,https://admin.staging.velista.app
     authJwtKid: staging-1
     adminJwtKid: staging-admin-1

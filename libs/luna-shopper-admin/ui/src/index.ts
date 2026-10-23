@@ -35,7 +35,7 @@ export { PAGE_HEADING_LEVEL, PageHeader } from './lib/page/page-header';
 export { PAGE_FRAME_TABS, type PageTab } from './lib/page/page-tabs';
 export { PopoverSheet } from './lib/page/popover-sheet';
 export { ScopeMark } from './lib/page/scope-mark';
-export { FieldRow, describedByOf } from './lib/record/field-row';
+export { FieldRow, describedByOf, labelIdOf } from './lib/record/field-row';
 export {
   FieldValue,
   NAME_UNREAD,

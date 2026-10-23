@@ -246,7 +246,12 @@ describe('readReply', () => {
     expect(reply).toEqual({
       text: 'un momento',
       toolCalls: [{ name: 'query_lists', args: { item: 'leche' } }],
-      usage: { promptTokens: 120, responseTokens: 8, totalTokens: 128 },
+      usage: {
+        promptTokens: 120,
+        responseTokens: 8,
+        totalTokens: 128,
+        cachedPromptTokens: null,
+      },
     });
   });
 

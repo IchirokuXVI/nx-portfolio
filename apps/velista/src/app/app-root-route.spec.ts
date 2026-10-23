@@ -23,7 +23,7 @@ import { appConfig } from './app.config';
 /**
  * D2, asserted. This is the whole reason the factory exists.
  *
- * velista is mounted at `/velista` by the shell and at `''` on its own origin, and
+ * velista is mounted at `/velista` under the portfolio and at `''` on its own origin, and
  * the mount reaches two different consumers by two different mechanisms: route
  * `data`, which `localeGuard` reads because a guard cannot rely on a route's own
  * injector, and `APP_BASE_PATH`, which components read to build links.
@@ -47,27 +47,36 @@ describe('appRootRoute', () => {
 
   it.each([
     ['standalone, on velista own origin', ''],
-    ['mounted under the portfolio shell', '/velista'],
+    ['under the portfolio path', '/velista'],
   ])('%s: data.mountPath is the mount it was given', (_name, mount) => {
     expect(appRootRoute(mount).data?.['mountPath']).toBe(mount);
   });
 
   it.each([
     ['standalone, on velista own origin', ''],
-    ['mounted under the portfolio shell', '/velista'],
+    ['under the portfolio path', '/velista'],
   ])('%s: APP_BASE_PATH is the mount it was given', (_name, mount) => {
     expect(providersOf(mount).get(APP_BASE_PATH)).toBe(mount);
   });
 
   it.each([
     ['standalone, on velista own origin', ''],
-    ['mounted under the portfolio shell', '/velista'],
+    ['under the portfolio path', '/velista'],
   ])('%s: APP_MOUNT_PATH follows APP_BASE_PATH', (_name, mount) => {
     // The alias lives in `appProviders`, which knows no mount. It resolves in the
     // injector the route builds, so it picks up whichever value that route bound.
     // If it ever stops following, the locale switcher rewrites the mount segment
     // instead of the locale one.
     expect(providersOf(mount).get(APP_MOUNT_PATH)).toBe(mount);
+  });
+
+  it.each([
+    ['on velista own origin', '', ''],
+    ['under the portfolio path', '/velista', 'velista'],
+  ])('%s: the route path consumes the mount', (_name, mount, path) => {
+    // The router sees the mount because `APP_BASE_HREF` stays `/` (plan 0165 D3), so
+    // the route has to match it before the locale child does.
+    expect(appRootRoute(mount).path).toBe(path);
   });
 
   it('states the mount in both places from one argument', () => {

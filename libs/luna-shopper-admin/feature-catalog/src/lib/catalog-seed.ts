@@ -3,6 +3,8 @@ import {
   type ProductCategory,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import { itemPhotos } from './item-photos';
+import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /**
  * The catalog, as it looks with no backend listening.
@@ -240,9 +242,65 @@ function categoriesOf(...slugs: string[]): ProductCategory[] {
 }
 
 /**
+ * The chain photos saved for each product, by product, as
+ * `GET items/{id}/linked-images` answers them (backend plan 0198, section
+ * 3.2), keyed on the source rows the harvest seed binds to the product.
+ *
+ * The whole milk has two: Mercadona's, whose photos are on, so a shopper sees
+ * it while we have no photo of our own, and DEZA's, which is saved with the
+ * chain off and shown nowhere.
+ *
+ * **A link holds no `enabled` of its own.** Whether it is shown is the
+ * switch of its chain (`linkedImagesEnabled`), read off the chain table by
+ * {@link seededLinks}, as catalog joins it (admin plan 0066). A flag held
+ * here would disagree with the chain the moment the switch moved.
+ */
+export const ITEM_LINKED_IMAGE_SEED: Readonly<
+  Record<string, readonly Omit<Wire.CatalogItemLinkedImageView, 'enabled'>[]>
+> = {
+  it_milk_1l: [
+    {
+      sourceEntryId: 'entry-bound-milk',
+      supermarketId: 'sm_mercadona',
+      url: 'https://prod-mercadona.imgix.net/images/seed-10381.jpg',
+      firstLinkedAt: '2026-07-01T07:00:00.000Z',
+      lastSeenAt: '2026-09-02T07:00:00.000Z',
+    },
+    {
+      sourceEntryId: 'entry-bound-milk-deza',
+      supermarketId: '33333333-3333-4333-8333-333333333333',
+      url: 'https://www.deza.example/images/leche-entera-1l.jpg',
+      firstLinkedAt: '2026-08-28T07:00:00.000Z',
+      lastSeenAt: '2026-08-28T07:00:00.000Z',
+    },
+  ],
+};
+
+/**
+ * The links of one product in {@link ITEM_LINKED_IMAGE_SEED}, each `enabled`
+ * when its chain's photos are on in `chains`. A chain that is not there is
+ * off.
+ */
+export function seededLinks(
+  itemId: string,
+  chains: readonly Pick<
+    Wire.CatalogSupermarketView,
+    'id' | 'linkedImagesEnabled'
+  >[]
+): readonly Wire.CatalogItemLinkedImageView[] {
+  return (ITEM_LINKED_IMAGE_SEED[itemId] ?? []).map((link) => ({
+    ...link,
+    enabled: chains.some(
+      (chain) => chain.id === link.supermarketId && chain.linkedImagesEnabled
+    ),
+  }));
+}
+
+/**
  * Products.
  *
- * The last one belongs to no group on purpose. That is the resting state of a
+ * The whole milk has no photo of our own and shows Mercadona's. The olive oil
+ * has ours. The last one belongs to no group on purpose. That is the resting state of a
  * freshly harvested product rather than a fault, and it is what the item list's
  * "belonging to no group" filter is for.
  */
@@ -251,11 +309,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     id: 'it_milk_1l',
     name: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
     brand: 'Hacendado',
-    imageUrl: null,
-    imageSource: null,
-    imageSupermarketId: null,
-    ownImageUrl: null,
-    images: [],
+    ...itemPhotos(null, seededLinks('it_milk_1l', SUPERMARKET_SEED)),
     sku: '12345',
     ean: '8480000123459',
     eans: ['8480000123459'],
@@ -269,11 +323,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     id: 'it_milk_6pack',
     name: { en: 'Whole milk 6 × 1 L', es: 'Leche entera 6 × 1 L' },
     brand: 'Hacendado',
-    imageUrl: null,
-    imageSource: null,
-    imageSupermarketId: null,
-    ownImageUrl: null,
-    images: [],
+    ...itemPhotos(null, seededLinks('it_milk_6pack', SUPERMARKET_SEED)),
     sku: '12346',
     ean: '8480000123466',
     eans: ['8480000123466'],
@@ -290,11 +340,10 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
       es: 'Aceite de oliva virgen extra 1 L',
     },
     brand: 'Hacendado',
-    imageUrl: null,
-    imageSource: null,
-    imageSupermarketId: null,
-    ownImageUrl: null,
-    images: [],
+    ...itemPhotos(
+      'https://images.example.org/products/olive-oil-1l.jpg',
+      seededLinks('it_olive_oil_1l', SUPERMARKET_SEED)
+    ),
     sku: '22001',
     ean: '8480000220011',
     eans: ['8480000220011'],
@@ -308,11 +357,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     id: 'it_dish_soap',
     name: { en: 'Dishwashing liquid 750 ml', es: 'Lavavajillas 750 ml' },
     brand: 'Bosque Verde',
-    imageUrl: null,
-    imageSource: null,
-    imageSupermarketId: null,
-    ownImageUrl: null,
-    images: [],
+    ...itemPhotos(null, seededLinks('it_dish_soap', SUPERMARKET_SEED)),
     sku: '31007',
     ean: '8480000310071',
     eans: ['8480000310071'],

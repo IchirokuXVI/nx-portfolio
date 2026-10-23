@@ -67,12 +67,14 @@ services:
       # Neither values file sets it, so the clusters keep the written numbers.
       THROTTLE_MULTIPLIER: ${THROTTLE_MULTIPLIER:-20}
       # The front end origins this stack answers. The default is the two
-      # luna-slot.sh already allows: the portfolio shell, which mounts velista as
-      # a remote, and velista's own origin, which is where a confirmation link
-      # lands (MAIL_VERIFY_BASE_URL below). The browser gate (velista plan 0080)
-      # drives the staging velista image from `https://staging.velista.app`
-      # instead, so the list comes from the environment; it is one variable on
-      # every service because every service reads it.
+      # luna-slot.sh already allows: the portfolio shell, kept because in the
+      # clusters the app under the portfolio's /velista path calls the API from
+      # the portfolio origin (velista plan 0165), and velista's own origin, which
+      # is where a confirmation link lands (MAIL_VERIFY_BASE_URL below). The
+      # browser gate (velista plan 0080) drives the staging velista image from
+      # `https://staging.velista.app` instead, so the list comes from the
+      # environment; it is one variable on every service because every service
+      # reads it.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4205}
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       # The operator trust root (plan 0071, section 3). Required, so this file
@@ -345,7 +347,8 @@ services:
   # produces one dead service while the gateway stays up and returns 500s, which
   # is a slow thing to diagnose from the outside. Keep the two in step by hand.
   #
-  # GEMINI_API_KEY is empty on purpose and the suite needs it to stay that way:
+  # GEMINI_API_KEY and ANTHROPIC_API_KEY are empty on purpose and the suite needs
+  # them to stay that way:
   # rule A4 forbids any test in this repository from reaching a model provider, so
   # a stack that could answer a real turn is a stack that could spend somebody's
   # quota from CI. Empty means /v1/assistant answers 501, which is exactly what an
@@ -360,7 +363,9 @@ services:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
       GATEWAY_INTERNAL_URL: http://gateway:3000
+      ASSISTANT_PROVIDER: gemini
       GEMINI_API_KEY: ''
+      ANTHROPIC_API_KEY: ''
       ASSISTANT_MODEL: gemini-3.5-flash-lite
       # Voice input (plan 0041). Empty transcription model means the same model
       # answers and transcribes, which is the default everywhere.

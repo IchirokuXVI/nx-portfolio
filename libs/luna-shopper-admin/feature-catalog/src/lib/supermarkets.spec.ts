@@ -415,13 +415,20 @@ describe('supermarkets through the generic machinery', () => {
       'defaultPriceScopeId',
       // Counted by catalog on the read, and never typed (admin plan 0042).
       'locationCount',
+      // Changed by its named actions only (admin plan 0066).
+      'linkedImagesEnabled',
     ]);
     const count = fieldOf(SUPERMARKETS, 'locationCount');
     expect(count === undefined ? null : isEditable(count, 'edit')).toBe(false);
+    const photos = fieldOf(SUPERMARKETS, 'linkedImagesEnabled');
+    expect(photos === undefined ? null : isEditable(photos, 'edit')).toBe(
+      false
+    );
     expect(SUPERMARKETS.actions).toEqual({
       create: true,
       edit: true,
       delete: true,
+      named: expect.any(Function),
     });
   });
 });

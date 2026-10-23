@@ -10,6 +10,7 @@ import {
 import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs';
+import { APP_RUNTIME } from './app-runtime';
 import { BackendReadiness } from './backend-readiness';
 import { BrowserFacade } from './browser-facade';
 import { ReloadBlocker } from './reload-blocker';
@@ -95,6 +96,14 @@ export class AppUpdates {
   private readonly _destroyRef = inject(DestroyRef);
 
   /**
+   * Inside a native shell (velista `0166`, target 3). The bundle there changes only
+   * with the app, so there is nothing to check and nothing a reload could fetch, and a
+   * worker that registered anyway would leave `checkForUpdate()` waiting for a
+   * controller that never comes.
+   */
+  private readonly _native = inject(APP_RUNTIME) === 'native';
+
+  /**
    * Set when a new version is downloaded and the reload is waiting for the user to
    * leave the screen they are on (plan 0013, section 6.4).
    */
@@ -140,7 +149,7 @@ export class AppUpdates {
     // `index.html` and a fresh bundle, and it is bounded by the same one attempt.
     this._watchRefusals();
 
-    if (!this._updates?.isEnabled) {
+    if (this._native || !this._updates?.isEnabled) {
       return;
     }
 
@@ -164,6 +173,10 @@ export class AppUpdates {
    * with a rejection.
    */
   checkNow(): void {
+    if (this._native) {
+      return;
+    }
+
     void this._check();
   }
 
@@ -194,6 +207,13 @@ export class AppUpdates {
     // already reloaded once for this, and come back refused. Another check and
     // another twenty seconds would only delay the same screen.
     if (this._attemptSpent()) {
+      this._giveUp();
+      return;
+    }
+
+    // Native: a reload would load the same bundle and be refused again, so the dead
+    // end face comes at once, and that face offers the store instead (D3).
+    if (this._native) {
       this._giveUp();
       return;
     }
@@ -260,6 +280,12 @@ export class AppUpdates {
    * document is then the newest there is, and the page is a real 404.
    */
   newerVersionForUnknownPage(url: string): Promise<boolean> {
+    // Native: the bundled version is the newest this app has, so an unknown page is a
+    // real 404 and is drawn as one at once.
+    if (this._native) {
+      return Promise.resolve(false);
+    }
+
     if (this._browser.readSessionStorage(StorageKeys.notFoundUpdate) === url) {
       return Promise.resolve(false);
     }
@@ -295,7 +321,7 @@ export class AppUpdates {
    * same way everywhere.
    */
   private _check(): Promise<boolean> {
-    if (!this._updates?.isEnabled) {
+    if (this._native || !this._updates?.isEnabled) {
       return Promise.resolve(false);
     }
 

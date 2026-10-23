@@ -1,8 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The front door, through the shell (CLAUDE.md), which is the only place this app
- * renders.
+ * The front door, on velista's own origin (plan 0165 D8).
  *
  * Two things are checked here that no unit test can reach, because both were reported
  * from a running browser and both were invisible to a green suite:
@@ -26,7 +25,7 @@ test.describe('velista landing page', () => {
   test('renders translated English, with no key left on screen', async ({
     page,
   }) => {
-    await page.goto('/velista/en');
+    await page.goto('/en');
 
     await expect(page.locator('.app-root')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
@@ -42,7 +41,7 @@ test.describe('velista landing page', () => {
   test('renders Spanish at /es, including the invented preview list', async ({
     page,
   }) => {
-    await page.goto('/velista/es');
+    await page.goto('/es');
 
     const text = await appText(page);
 
@@ -55,7 +54,7 @@ test.describe('velista landing page', () => {
   test('the language control opens, and switches the locale in place', async ({
     page,
   }) => {
-    await page.goto('/velista/en');
+    await page.goto('/en');
 
     const trigger = page.locator('.locale');
 
@@ -76,7 +75,7 @@ test.describe('velista landing page', () => {
 
     // A router navigation, not a reload: the URL carries the new locale and the
     // strings follow it without a round trip.
-    await expect(page).toHaveURL(/\/velista\/es\/?$/);
+    await expect(page).toHaveURL(/\/es\/?$/);
     await expect(trigger).toHaveText('ES');
     await expect(page.locator('.menu')).toHaveCount(0);
     expect(await appText(page)).not.toMatch(RAW_KEY);
@@ -85,7 +84,7 @@ test.describe('velista landing page', () => {
   test('the menu closes on an outside click and on Escape', async ({
     page,
   }) => {
-    await page.goto('/velista/en');
+    await page.goto('/en');
 
     const trigger = page.locator('.locale');
 
@@ -107,11 +106,9 @@ test.describe('velista landing page', () => {
     // back to the front door, and the locale segment survives the redirect. Plan
     // 0154: the redirect names the page that was asked for, so that signing in
     // can return there.
-    await page.goto('/velista/es/home');
+    await page.goto('/es/home');
 
-    await expect(page).toHaveURL(
-      /\/velista\/es\/?\?returnUrl=%2Fvelista%2Fes%2Fhome$/
-    );
+    await expect(page).toHaveURL(/\/es\/?\?returnUrl=%2Fes%2Fhome$/);
   });
 
   test('the content column is centred on a wide viewport', async ({ page }) => {
@@ -119,7 +116,7 @@ test.describe('velista landing page', () => {
     // filling the shell's flex row, so a 480px column was centred inside a 480px
     // box pinned to the left edge.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/velista/en');
+    await page.goto('/en');
 
     const measured = await page.locator('.app-main').boundingBox();
 

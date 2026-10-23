@@ -61,6 +61,24 @@ export class PageNavigation {
   }
 
   /**
+   * Pop one entry when the entry behind is one this document pushed, and say whether
+   * it did (velista `0166`).
+   *
+   * For `AppBack`, which has no page of its own and therefore no fallback: a back
+   * press that nothing on screen answered either pops inside velista or reaches the
+   * floor, and the floor is the native shell's to act on. It lives here so the one
+   * guarded pop stays in one file.
+   */
+  popIfOurs(): boolean {
+    if (!this._history.hasEntryBehind()) {
+      return false;
+    }
+
+    this._location.back();
+    return true;
+  }
+
+  /**
    * Go back to the screen that stood at `depth` (`AppHistory.depth`), past every
    * entry pushed since (velista `0140`, section 3).
    *

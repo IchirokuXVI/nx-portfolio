@@ -40,6 +40,12 @@
 -->
 @if (crossed()) {
   <div class="row is-removed">
+    <!--
+      The picture's place, kept empty (velista 0164, target 3): the row is no
+      longer a thing to find on a shelf, and its name still starts where every
+      other row's does.
+    -->
+    <span aria-hidden="true" class="picture is-empty"></span>
     @if (removed()) {
       <div class="removed-body">
         <ng-container [ngTemplateOutlet]="crossedText" />
@@ -112,6 +118,18 @@
       >
         <ng-container [ngTemplateOutlet]="glyph" />
       </span>
+    }
+
+    <!--
+      The product's picture (velista 0164), the list rows' 44 px square. Not a
+      control and hidden from a screen reader: the body's name already says what
+      the product is. A row with no product keeps the place as an empty dashed
+      square, so the names of all rows start at one edge.
+    -->
+    @if (isProduct()) {
+      <lib-product-picture [imageUrl]="imageUrl()" class="picture" />
+    } @else {
+      <span aria-hidden="true" class="picture is-empty"></span>
     }
 
     <!--

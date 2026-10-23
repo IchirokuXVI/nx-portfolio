@@ -34,6 +34,8 @@ interface Seed {
   readonly itemId: string;
   readonly name: string;
   readonly detail?: string;
+  /** The photo of the row the plus was pressed on. */
+  readonly imageUrl?: string;
   /** How many the list held before the visit. Above zero is a merge. */
   readonly before?: number;
   /** The line the add made waits for approval. */
@@ -181,6 +183,7 @@ async function render(options: Options = {}): Promise<Harness> {
       itemId: seed.itemId,
       name: seed.name,
       detail: seed.detail ?? null,
+      imageUrl: seed.imageUrl ?? null,
     });
   }
   // The stepper of a line under a row of the catalog, pressed once.
@@ -188,7 +191,12 @@ async function render(options: Options = {}): Promise<Harness> {
     store.choose(line.listId);
     await pause();
     await store.step(
-      { listId: line.listId, itemId: line.itemId, detail: null },
+      {
+        listId: line.listId,
+        itemId: line.itemId,
+        detail: null,
+        imageUrl: null,
+      },
       line.lineId,
       1
     );
@@ -235,7 +243,9 @@ function row(
 /** Every row of the sheet, in the order drawn. */
 function rows(fixture: ComponentFixture<AddedSheet>): HTMLElement[] {
   return [
-    ...host(fixture).querySelectorAll<HTMLElement>('lib-visit-added .row'),
+    ...host(fixture).querySelectorAll<HTMLElement>(
+      'lib-visit-added .added-row'
+    ),
   ];
 }
 
@@ -305,7 +315,7 @@ describe('AddedSheet', () => {
 
     // One row for each product, in the order the visit added them.
     const names = [
-      ...host(fixture).querySelectorAll('lib-visit-added .row .name'),
+      ...host(fixture).querySelectorAll('lib-visit-added .added-row .name'),
     ].map((name) => name.textContent?.trim());
     expect(names).toEqual(['Extra virgin olive oil', 'Short grain rice']);
     expect(
@@ -331,8 +341,12 @@ describe('AddedSheet', () => {
         section.querySelector('h3')?.textContent?.trim()
       )
     ).toEqual(['Cleaning', 'Weekly shop']);
-    expect(sections(fixture)[0]?.querySelectorAll('.row')).toHaveLength(1);
-    expect(sections(fixture)[1]?.querySelectorAll('.row')).toHaveLength(2);
+    expect(sections(fixture)[0]?.querySelectorAll('.added-row')).toHaveLength(
+      1
+    );
+    expect(sections(fixture)[1]?.querySelectorAll('.added-row')).toHaveLength(
+      2
+    );
   });
 
   it('says a line waits for approval under its name', async () => {
@@ -341,9 +355,27 @@ describe('AddedSheet', () => {
     });
 
     expect(
-      row(fixture, 'item-oil')?.querySelector('.pending')?.textContent
+      row(fixture, 'item-oil')?.querySelector('.caption')?.textContent
     ).toContain('catalog.added.pending');
-    expect(row(fixture, 'item-rice')?.querySelector('.pending')).toBeNull();
+    expect(row(fixture, 'item-rice')?.querySelector('.caption')).toBeNull();
+  });
+
+  it('keeps the photo from the plus to the sheet, and draws the glyph with none (velista 0163)', async () => {
+    const { fixture, store } = await render({
+      added: [{ ...OIL, imageUrl: 'https://img.test/oil.png' }, RICE],
+    });
+
+    expect(store.visit().map((entry) => entry.imageUrl)).toEqual([
+      'https://img.test/oil.png',
+      null,
+    ]);
+    expect(
+      row(fixture, 'item-oil')?.querySelector('img')?.getAttribute('src')
+    ).toBe('https://img.test/oil.png');
+    expect(row(fixture, 'item-rice')?.querySelector('img')).toBeNull();
+    expect(
+      row(fixture, 'item-rice')?.querySelector('lib-product-icon')
+    ).not.toBeNull();
   });
 
   it('passes a step to the store, for that list, that product and that line', async () => {
@@ -355,7 +387,12 @@ describe('AddedSheet', () => {
 
     expect(step).toHaveBeenCalledTimes(1);
     expect(step).toHaveBeenCalledWith(
-      { listId: 'list-weekly', itemId: 'item-rice', detail: null },
+      {
+        listId: 'list-weekly',
+        itemId: 'item-rice',
+        detail: null,
+        imageUrl: null,
+      },
       lineIdOf(RICE),
       1
     );
@@ -368,7 +405,12 @@ describe('AddedSheet', () => {
     await settle(fixture);
 
     expect(step).toHaveBeenLastCalledWith(
-      { listId: 'list-weekly', itemId: 'item-rice', detail: null },
+      {
+        listId: 'list-weekly',
+        itemId: 'item-rice',
+        detail: null,
+        imageUrl: null,
+      },
       lineIdOf(RICE),
       -1
     );
@@ -377,8 +419,10 @@ describe('AddedSheet', () => {
     expect(quantityOf(fixture, 'item-rice')).toBe('1');
   });
 
-  it('hands the detail the record keeps back with a step, so the row still says it', async () => {
-    const { fixture, store } = await render({ added: [OIL] });
+  it('hands the detail and the photo the record keeps back with a step, so the row still says it', async () => {
+    const { fixture, store } = await render({
+      added: [{ ...OIL, imageUrl: 'https://img.test/oil.png' }],
+    });
     const step = jest.spyOn(store, 'step');
 
     stepper(fixture, 'item-oil').plus?.click();
@@ -389,6 +433,7 @@ describe('AddedSheet', () => {
         listId: 'list-weekly',
         itemId: 'item-oil',
         detail: 'Hacendado · 1 L · €8.45 at Mercadona',
+        imageUrl: 'https://img.test/oil.png',
       },
       lineIdOf(OIL),
       1
@@ -434,7 +479,12 @@ describe('AddedSheet', () => {
 
       expect(step).toHaveBeenCalledTimes(1);
       expect(step).toHaveBeenCalledWith(
-        { listId: 'list-weekly', itemId: 'item-oil', detail: null },
+        {
+          listId: 'list-weekly',
+          itemId: 'item-oil',
+          detail: null,
+          imageUrl: null,
+        },
         'line-frying',
         1
       );

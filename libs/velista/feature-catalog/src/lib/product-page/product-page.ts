@@ -65,7 +65,7 @@ import {
   PageHeader,
   PriceHistory,
   PriceTable,
-  ProductIcon,
+  ProductPicture,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
@@ -142,7 +142,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
     PageHeader,
     PriceHistory,
     PriceTable,
-    ProductIcon,
+    ProductPicture,
     ProductRow,
     ProductRowSkeleton,
     RokuTranslatorPipe,
@@ -187,9 +187,6 @@ export class ProductPage {
   /** Whether the person has a shopping place, without which nothing is priced. */
   protected readonly priced = signal(true);
 
-  /** A picture that failed to load, so the carton takes its place. */
-  protected readonly brokenImage = signal<string | null>(null);
-
   private readonly _browseContext = signal<CatalogBrowseContext | null>(null);
 
   /** One year of history, read once. The ranges are cut from it. */
@@ -217,10 +214,8 @@ export class ProductPage {
     return item === null ? '' : catalogName(item.name, this._locale());
   });
 
-  protected readonly image = computed(() => {
-    const src = this._item()?.imageUrl ?? null;
-    return src !== null && src !== this.brokenImage() ? src : null;
-  });
+  /** The photo; the picture draws the carton for none and for one that fails. */
+  protected readonly imageUrl = computed(() => this._item()?.imageUrl ?? null);
 
   /** `brand · size`, with the row's own rule for when a size is worth saying. */
   protected readonly detail = computed(() => {
@@ -440,6 +435,7 @@ export class ProductPage {
       itemId: row.id,
       name: row.name,
       detail: row.summary,
+      imageUrl: row.imageUrl,
     });
   }
 
@@ -451,7 +447,12 @@ export class ProductPage {
     }
     this.addFailed.set(false);
     void this._adds.step(
-      { listId: target.listId, itemId: row.id, detail: row.summary },
+      {
+        listId: target.listId,
+        itemId: row.id,
+        detail: row.summary,
+        imageUrl: row.imageUrl,
+      },
       step.lineId,
       step.by
     );
@@ -461,7 +462,12 @@ export class ProductPage {
   protected addToList(listId: string): void {
     this.addFailed.set(false);
     void this._adds.add(
-      { itemId: this.itemId(), name: this.name(), detail: this.detail() },
+      {
+        itemId: this.itemId(),
+        name: this.name(),
+        detail: this.detail(),
+        imageUrl: this.imageUrl(),
+      },
       listId
     );
   }
@@ -470,7 +476,12 @@ export class ProductPage {
   protected stepListLine(step: ListsTableStep): void {
     this.addFailed.set(false);
     void this._adds.step(
-      { listId: step.listId, itemId: this.itemId(), detail: this.detail() },
+      {
+        listId: step.listId,
+        itemId: this.itemId(),
+        detail: this.detail(),
+        imageUrl: this.imageUrl(),
+      },
       step.lineId,
       step.by
     );

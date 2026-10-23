@@ -11,11 +11,12 @@ import {
   fakeZoneStore,
   provideFakeZoneStore,
 } from '@portfolio/velista/data-access';
-import type {
-  BasketParticipant,
-  BasketShareLink,
-  Contact,
-  MyZone,
+import {
+  APP_STANDALONE_ORIGIN,
+  type BasketParticipant,
+  type BasketShareLink,
+  type Contact,
+  type MyZone,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -111,6 +112,8 @@ const CONTACTS: readonly Contact[] = [
 const ZONE = { id: 'z1', name: 'Flat', myStatus: 'APPROVED' } as MyZone;
 
 interface PeopleOptions {
+  /** `APP_STANDALONE_ORIGIN`, which the app layer supplies. Empty when unset. */
+  readonly standaloneOrigin?: string;
   readonly participants?: readonly BasketParticipant[];
   /** What `addParticipant` answers. True also puts the person on the basket. */
   readonly addSaves?: boolean;
@@ -203,6 +206,10 @@ async function render(
     imports: [ShareSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
+      {
+        provide: APP_STANDALONE_ORIGIN,
+        useValue: people.standaloneOrigin ?? '',
+      },
       // Absent by default, so every test above runs against the real facade, which in
       // jsdom is a browser with no share sheet and no clipboard.
       ...(browser ? [provideFakeBrowserFacade(undefined, browser)] : []),
@@ -331,7 +338,8 @@ describe('ShareSheet: sending the link', () => {
   function fakeWindow(
     sent: { url?: string },
     copied: string[],
-    canShare = true
+    canShare = true,
+    origin = 'https://velista.app'
   ): Partial<BrowserFacade> {
     const navigator = {
       share: canShare
@@ -349,7 +357,7 @@ describe('ShareSheet: sending the link', () => {
     };
 
     return {
-      window: { navigator, location: { origin: 'https://velista.app' } },
+      window: { navigator, location: { origin } },
     } as unknown as Partial<BrowserFacade>;
   }
 
@@ -390,6 +398,21 @@ describe('ShareSheet: sending the link', () => {
     await fixture.whenStable();
 
     expect(copied).toEqual(['https://velista.app/velista/s/s3cr3t']);
+  });
+
+  it('names the standalone origin with no mount, under the portfolio too', async () => {
+    // Velista `0094`: the link names the app's own address. That origin has no
+    // mount, so `velista.app/velista/s` would be a page that does not exist.
+    const sent: { url?: string } = {};
+    const fixture = await render(
+      fakeWindow(sent, [], true, 'https://ichirokuxvi.com'),
+      { standaloneOrigin: 'https://velista.app' }
+    );
+
+    share(fixture)?.click();
+    await fixture.whenStable();
+
+    expect(sent.url).toBe('https://velista.app/s/s3cr3t');
   });
 });
 

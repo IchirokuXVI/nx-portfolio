@@ -1,0 +1,106 @@
+apply plugin: 'com.android.application'
+
+// The version comes from the build script's environment (velista plan 0167, D3): the
+// bundle's VELISTA_APP_VERSION and this versionName are one string, so the gateway's
+// client floor can retire an old APK. Nobody edits a version in this file.
+def velistaVersionName = (project.findProperty('velistaVersionName') ?: '0.0.0-dev').toString()
+def velistaVersionCode = (project.findProperty('velistaVersionCode') ?: '1').toString().toInteger()
+
+// The keystore lives outside the repository. Its properties file is named by a Gradle
+// property, else expected beside the Android project. With neither, a release build
+// signs with the debug key so it still installs (D4).
+def keystorePropertiesFile = file(project.findProperty('velistaKeystoreProperties') ?: rootProject.file('keystore.properties'))
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+} else {
+    logger.warn("velista: no keystore properties at ${keystorePropertiesFile}, so release builds are signed with the debug key")
+}
+
+android {
+    namespace = "app.velista"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.velista"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode velistaVersionCode
+        versionName velistaVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+
+    // Two installable apps that can sit on one phone (D2). The flavor is the only
+    // environment switch in Gradle; the hosts inside the bundle come from the script.
+    flavorDimensions = ["env"]
+    productFlavors {
+        staging {
+            dimension "env"
+            applicationIdSuffix ".staging"
+            resValue "string", "app_name", "Velista Staging"
+            manifestPlaceholders = [appLinkHost: "staging.velista.app"]
+        }
+        production {
+            dimension "env"
+            resValue "string", "app_name", "Velista"
+            manifestPlaceholders = [appLinkHost: "velista.app"]
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                // A relative storeFile is read against the properties file, which is
+                // where the keystore sits beside it.
+                def storePath = keystoreProperties.getProperty('storeFile')
+                def store = new File(storePath)
+                storeFile store.isAbsolute() ? store : new File(keystorePropertiesFile.parentFile, storePath)
+                storePassword keystoreProperties.getProperty('storePassword')
+                keyAlias keystoreProperties.getProperty('keyAlias')
+                keyPassword keystoreProperties.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

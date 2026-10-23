@@ -155,28 +155,35 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     hostPrefix: mfe
     path: /landingV2
-  # velista is served from its **own origin**, not from the micro-frontend host under
-  # a path (plan 0013). One image serves both roles: `/` is the standalone app that a
-  # phone installs, and `/remoteEntry.mjs` on the same host is what the shell loads.
+  # velista is a standalone app, not a remote of the shell (plan 0165). One image is
+  # served at two addresses by one deployment.
   #
-  # Since velista got a domain of its own that origin is `velista.app` rather than a
+  # Its own origin is the entry itself. That origin is `velista.app` rather than a
   # label under `baseDomain`, so both clusters override this entry's host (see
   # `hostOverrides` above). The `velista` prefix below is what a single domain deploy
-  # falls back to, which is what values.homelab.yaml still serves.
+  # falls back to, which is what values.homelab.yaml still serves. `path: /` emits no
+  # rewrite filter, and the Gateway's HTTPS listener and its certificate follow from
+  # this host appearing in `apps` at all. DNS is the one manual prerequisite:
+  # cert-manager cannot solve an HTTP-01 challenge for a name that does not resolve.
   #
-  # This entry **moved**, it was not added. A second velista entry would run the same
-  # image twice on two hostnames, which is the two origin hazard D5 exists to avoid,
-  # rebuilt in the cluster. So `mfe.<domain>/velista` stops existing, and the shell's
-  # `MFE_REMOTE_URLS` in the workflows is what points it at the new host.
-  #
-  # `path: /` emits no rewrite filter, which is exactly what a host root wants, and
-  # the Gateway's HTTPS listener and its certificate follow from this host appearing
-  # in `apps` at all. DNS is the one manual prerequisite: cert-manager cannot solve an
-  # HTTP-01 challenge for a name that does not resolve.
+  # The `portfolio` mount is the second address: `/velista` on the portfolio host.
+  # `keepPrefix: true` forwards the path as it arrived, because the pod owns the
+  # prefix: velista's own nginx maps `/velista/...` onto the bundle, rewrites the
+  # document's `<base>` to `/velista/` so its relative asset URLs stay under the
+  # prefix, and drops the manifest link (plan 0165 D2). The app registers no service
+  # worker there. A longer path prefix outranks the shell's
+  # `/` on the same host, so the shell never sees `/velista`. The mount is a cluster
+  # fact only: the local values files have no velista entry, and a development shell
+  # answers `/velista` with its not found page.
   - name: velista
     image: ghcr.io/ichirokuxvi/nx-portfolio/velista
     hostPrefix: velista
     path: /
+    mounts:
+      - name: portfolio
+        hostPrefix: ''
+        path: /velista
+        keepPrefix: true
   # The back office for the luna-shopper backend (luna-shopper-admin plan 0001).
   #
   # Named after the backend it administers rather than after velista: velista is one
@@ -525,13 +532,18 @@ lunaShopperBackend:
   # one small stateless Node process with no database at all, so there is nothing
   # to gate: it deploys everywhere.
   #
-  # What decides whether it can actually answer is `GEMINI_API_KEY` in the Secret,
-  # and an absent key is a supported deployment rather than a broken one. The pod
-  # boots, its health probes pass, and `/v1/assistant` answers 501 not_configured
-  # (plan 0026). That is also why the key is in `OPTIONAL_EMPTY_KEYS` in
-  # provision-release.sh, so `--check` keeps passing on a cluster where the
-  # assistant is simply unconfigured. Nothing here may be made required without
-  # breaking that property.
+  # `provider` decides which model answers a turn (plan 0224): `gemini`, the
+  # default, or `claude`. Claude takes no audio, so with `claude` a spoken turn and
+  # a voice comment are still transcribed by Gemini.
+  #
+  # What decides whether it can actually answer is the key of that provider in
+  # the Secret: `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`. With `claude`,
+  # `GEMINI_API_KEY` decides whether it can hear. An absent key is a supported
+  # deployment rather than a broken one. The pod boots, its health probes pass,
+  # and `/v1/assistant` answers 501 not_configured (plan 0026). That is also why
+  # both keys are in `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so `--check`
+  # keeps passing on a cluster where the assistant is simply unconfigured.
+  # Nothing here may be made required without breaking that property.
   #
   # There are **no environment values file changes for this service at all**,
   # because it is not routed: no host, no DNS record, no certificate and no CORS
@@ -545,11 +557,22 @@ lunaShopperBackend:
     # TLS and the ingress twice for a call that never leaves the cluster.
     gatewayInternalUrl: ''
 
+    # Which provider answers a turn: `gemini` or `claude` (plan 0224). Turning
+    # Claude on is this value and ANTHROPIC_API_KEY in the Secret, and a rollout.
+    provider: 'gemini'
+
     # A config value and not a literal, so changing it is an env edit and a
-    # restart. `gemini-3.1-flash-lite` is the first thing to try if quality
-    # disappoints, and the version numbers do not order those two the way they
-    # look.
-    model: 'gemini-3.5-flash-lite'
+    # restart. Empty means the provider's own default: `gemini-3.5-flash-lite` for
+    # Gemini, `claude-haiku-5-5` for Claude. Set it only together with
+    # `provider`, because a model name belongs to one provider.
+    model: ''
+
+    # Claude only (plan 0224, section 10). Empty means the defaults the
+    # evaluation chose: effort `low` (`low`, `medium` or `high`) and thinking
+    # `adaptive` (`adaptive` or `off`). `off` on a Sonnet model is a 400 on the
+    # first turn.
+    claudeEffort: ''
+    claudeThinking: ''
 
     # Voice input (plan 0041). A spoken turn is transcribed by the provider the
     # service already holds a credential for, and then runs the identical code a

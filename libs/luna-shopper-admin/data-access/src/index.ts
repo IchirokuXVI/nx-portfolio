@@ -91,7 +91,11 @@ export {
 export { HarvestApi } from './lib/harvest/harvest-api';
 export { HarvestMemory } from './lib/harvest/harvest-memory';
 export {
+  DEZA_CATALOG_PRESET,
+  DEZA_NIGHTLY_SCHEDULE,
   HARVEST_RUN_SEED,
+  MERCADONA_SUNDAY_SCHEDULE,
+  MERCADONA_WEEKDAYS_SCHEDULE,
   MERCADONA_WEEKLY_PRESET,
   PLACE_CHAIN_SEED,
   PLACE_SHOP_SEED,

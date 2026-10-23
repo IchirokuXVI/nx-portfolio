@@ -416,29 +416,22 @@
             class="choices"
             role="radiogroup"
           >
-            @for (choice of line.choices; track choice.itemId) {
-              <button
-                (click)="chooseItem(choice.itemId)"
-                [attr.aria-checked]="chosenItemId() === choice.itemId"
-                [class.chosen]="chosenItemId() === choice.itemId"
+            <!--
+              The compact product card (velista 0163), its radio at the right edge
+              and the whole card its label. The radio carries the choice: no tint.
+            -->
+            @for (choice of choiceCards(); track choice.id) {
+              <lib-product-row
+                (chosen)="chooseItem($event)"
+                [choice]="{
+                  name: 'line-detail-which-one',
+                  checked: chosenItemId() === choice.id,
+                }"
+                [compact]="true"
                 [disabled]="line.busy"
+                [row]="choice"
                 class="choice"
-                role="radio"
-                type="button"
-              >
-                <!--
-                  A product with no name is drawn as **unnamed**, never as "No products
-                  yet" (section 1.2): it is one of the products this line carries, it is
-                  on screen being offered as a choice, and saying the line has none of
-                  them under a row that is one of them is the defect this plan is about.
-                -->
-                <span class="choice-name">{{
-                  choice.name ?? ('list.detail.unnamedProduct' | rokuT)
-                }}</span>
-                @if (choice.brand) {
-                  <span class="choice-brand">{{ choice.brand }}</span>
-                }
-              </button>
+              />
             }
           </div>
         </div>

@@ -35,28 +35,11 @@
   gap: var(--app-space-5);
 }
 
-.picture {
-  box-sizing: border-box;
-  display: grid;
-  flex: none;
-  place-items: center;
-  inline-size: var(--app-product-page-image-size);
-  block-size: var(--app-product-page-image-size);
-  overflow: hidden;
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
-  background: var(--app-surface-sunken);
-}
-
-.picture-image {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: contain;
-}
-
-.picture-glyph {
-  font-size: var(--app-icon-lg);
-  color: var(--app-text-muted);
+// The shared picture (velista 0162, section 3), at this page's size.
+lib-product-picture.picture {
+  --app-line-picture-size: var(--app-product-page-image-size);
+  --app-line-picture-radius: var(--app-card-radius);
+  --app-line-picture-glyph: var(--app-icon-lg);
 }
 
 .about {
@@ -135,13 +118,18 @@
   }
 }
 
+// The similar products lie on the page's ground on hairlines, out to the edges of
+// the screen (velista 0162, option A). No hairline under the last.
 .rows {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-3);
-  margin: 0;
+  margin: 0 calc(var(--app-space-5) * -1);
   padding: 0;
   list-style: none;
+}
+
+.rows > li:last-child > lib-product-row {
+  border-block-end: 0;
 }
 
 // The failed read and the product that is gone: a quiet card with one way on.
@@ -205,6 +193,9 @@
 }
 
 .picture.bone {
+  flex: none;
+  inline-size: var(--app-product-page-image-size);
+  block-size: var(--app-product-page-image-size);
   border-radius: var(--app-card-radius);
 }
 

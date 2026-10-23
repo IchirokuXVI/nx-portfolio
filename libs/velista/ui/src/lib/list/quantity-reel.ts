@@ -18,6 +18,7 @@ import {
   QUANTITY_REEL_PAGE_STEP,
   QUANTITY_REEL_PX_PER_UNIT,
 } from '@portfolio/velista/models';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { classifyReelGesture } from './quantity-reel-gesture';
 
 /**
@@ -322,6 +323,10 @@ export class QuantityReel {
       const pending = this._pending();
       untracked(() => this.preview.emit(pending));
     });
+
+    // A native back press shuts the open overlay and sends what it holds, the same
+    // close a tap elsewhere on the row makes (velista `0166`).
+    handleBackWhile(this.open, () => this.close());
 
     this._destroyRef.onDestroy(() => {
       // The commit is the close, so a control torn off screen mid gesture has to send

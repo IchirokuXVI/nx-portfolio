@@ -71,8 +71,8 @@ const END: ConnectedPosition[] = [
  * A small popover held against an element on the page, with whatever the container
  * puts in it (velista `0110`).
  *
- * The group help popover's wiring (`SuggestionList`), made into a component so a
- * second popover is not a second copy of it: a CDK connected overlay drawn as an
+ * One popover's wiring, made into a component so a second popover is not a second
+ * copy of it: a CDK connected overlay drawn as an
  * **inline** native popover, so it sits in the top layer above a clipping or sticky
  * container and still inherits the app's tokens, and it is inserted in the document
  * right after its anchor, so the keyboard reaches its controls next.

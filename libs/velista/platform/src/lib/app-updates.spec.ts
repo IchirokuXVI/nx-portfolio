@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate, type VersionEvent } from '@angular/service-worker';
 import { Subject } from 'rxjs';
+import { APP_RUNTIME, type AppRuntime } from './app-runtime';
 import {
   AppUpdates,
   UPDATE_CHECK_INTERVAL_MS,
@@ -54,7 +55,7 @@ describe('AppUpdates', () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
   };
 
-  function configure(isEnabled: boolean) {
+  function configure(isEnabled: boolean, runtime: AppRuntime = 'web') {
     versionUpdates = new Subject();
     unrecoverable = new Subject();
     routerEvents = new Subject();
@@ -65,6 +66,7 @@ describe('AppUpdates', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        { provide: APP_RUNTIME, useValue: runtime },
         {
           provide: SwUpdate,
           useValue: {
@@ -551,6 +553,62 @@ describe('AppUpdates', () => {
         expect(reload).not.toHaveBeenCalled();
         expect(updates.updateFailed()).toBe(true);
       });
+    });
+  });
+
+  /**
+   * Velista `0166`, target 3. A worker that is enabled anyway is the worst case: in a
+   * WebView `isEnabled` can read true with no controller ever arriving, so every one
+   * of these asserts that `SwUpdate` is never touched rather than that it said no.
+   */
+  describe('inside a native shell', () => {
+    beforeEach(() => {
+      configure(true, 'native');
+    });
+
+    it('installs neither the visibility check nor the interval', () => {
+      TestBed.inject(AppUpdates);
+
+      doc.emit('visibilitychange');
+      jest.advanceTimersByTime(UPDATE_CHECK_INTERVAL_MS * 3);
+
+      expect(doc.listenerCount('visibilitychange')).toBe(0);
+      expect(checkForUpdate).not.toHaveBeenCalled();
+    });
+
+    it('ignores checkNow', () => {
+      TestBed.inject(AppUpdates).checkNow();
+
+      expect(checkForUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does not reload when a version event arrives anyway', () => {
+      TestBed.inject(AppUpdates);
+
+      ready({ critical: true });
+      routerEvents.next(new NavigationEnd(1, '/en/home', '/en/home'));
+
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('tells a page no route matched that nothing newer exists, without asking', async () => {
+      await expect(
+        TestBed.inject(AppUpdates).newerVersionForUnknownPage('/en/nowhere')
+      ).resolves.toBe(false);
+      expect(checkForUpdate).not.toHaveBeenCalled();
+    });
+
+    it('goes straight to the dead end on a refusal, with no reload', async () => {
+      // The same bundle would come back and be refused again (D3).
+      const updates = TestBed.inject(AppUpdates);
+
+      refuse();
+      await flushMicrotasks();
+
+      expect(updates.updateFailed()).toBe(true);
+      expect(reload).not.toHaveBeenCalled();
+      expect(checkForUpdate).not.toHaveBeenCalled();
+      expect(session.has(StorageKeys.updateAttempt)).toBe(false);
     });
   });
 });

@@ -15,6 +15,7 @@ import {
   toGatewayError,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   canAbort,
   failureBlockReason,
@@ -67,6 +68,13 @@ const MODES: readonly Wire.EnumsHarvestRunMode[] = (
 ).sort((a, b) => MODE_ORDER[a] - MODE_ORDER[b]);
 
 type ModeFilter = Wire.EnumsHarvestRunMode | '';
+
+/**
+ * Who started a run, as the filter offers it (admin plan 0067, target 10).
+ * `SYSTEM` is not offered: no screen starts one, and no person looks for one.
+ */
+const TRIGGERS = ['MANUAL', 'SCHEDULED'] as const;
+type TriggerFilter = (typeof TRIGGERS)[number] | '';
 
 /**
  * How many pages of presets the screen reads for names and the filter.
@@ -285,6 +293,27 @@ export const IMPORT_INFO: InfoContent = {
                 }
               </select>
             </label>
+
+            <!-- By who started it (admin plan 0067, target 10). One way, for
+                 the reason the reverted filter gives. -->
+            <label>
+              <span>{{ 'harvest.schedules.runs.filter' | rokuT }}</span>
+              <select
+                (ngModelChange)="onTriggerChange($event)"
+                [ngModel]="triggerFilter()"
+                name="trigger"
+                data-trigger-filter
+              >
+                <option value="">
+                  {{ 'harvest.schedules.runs.anyone' | rokuT }}
+                </option>
+                @for (trigger of triggers; track trigger) {
+                  <option [value]="trigger">
+                    {{ 'harvest.schedules.runs.' + trigger | rokuT }}
+                  </option>
+                }
+              </select>
+            </label>
           </div>
 
           @if (failed()) {
@@ -310,6 +339,21 @@ export const IMPORT_INFO: InfoContent = {
                         }}
                       } @else {
                         {{ 'harvest.runs.row.deletedPreset' | rokuT }}
+                      }
+                    </p>
+                  }
+                  @if (scheduledBy(row.id); as scheduled) {
+                    <p class="preset" data-scheduled>
+                      @if (scheduled.link; as link) {
+                        <a
+                          [attr.title]="
+                            'harvest.schedules.runs.openSchedule' | rokuT
+                          "
+                          [routerLink]="link"
+                          >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
+                        >
+                      } @else {
+                        {{ 'harvest.schedules.runs.scheduled' | rokuT }}
                       }
                     </p>
                   }
@@ -665,6 +709,7 @@ export class RunsPage {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _router = inject(Router);
   private readonly _handoff = inject(ImportHandoff);
+  private readonly _registry = inject(ResourceRegistry);
 
   readonly shell = inject(HarvestShell);
   readonly status = inject(HarvestStatus);
@@ -685,6 +730,9 @@ export class RunsPage {
   readonly modes = MODES;
   /** The mode whose runs are listed, or `''` for every mode. */
   readonly modeFilter = signal<ModeFilter>('');
+  readonly triggers = TRIGGERS;
+  /** Runs a person started, runs a schedule started, or `''` for both. */
+  readonly triggerFilter = signal<TriggerFilter>('');
 
   readonly loading = signal(true);
   readonly runs = signal<readonly HarvestRun[]>([]);
@@ -828,6 +876,28 @@ export class RunsPage {
     void this.load();
   }
 
+  onTriggerChange(trigger: TriggerFilter): void {
+    this.triggerFilter.set(trigger);
+    void this.load();
+  }
+
+  /**
+   * Whether a schedule started the run, and where that schedule is (admin
+   * plan 0067, target 10). `null` for a run a person started.
+   */
+  scheduledBy(
+    runId: string
+  ): { readonly link: readonly string[] | null } | null {
+    const run = this.runs().find((entry) => entry.id === runId);
+    if (run?.trigger !== 'SCHEDULED') {
+      return null;
+    }
+    const id = run.scheduleId ?? null;
+    return {
+      link: id === null ? null : this._registry.rowPath('schedules', id),
+    };
+  }
+
   /**
    * What a run row says about its preset, or null when it has none to say.
    *
@@ -857,11 +927,13 @@ export class RunsPage {
       const filter = this.reverted();
       const presetId = this.presetFilter();
       const mode = this.modeFilter();
+      const trigger = this.triggerFilter();
       const page = await this._service.listRuns({
         limit: 20,
         ...(filter === 'any' ? {} : { reverted: filter === 'reverted' }),
         ...(presetId === '' ? {} : { presetId }),
         ...(mode === '' ? {} : { mode }),
+        ...(trigger === '' ? {} : { trigger }),
       });
       this.runs.set(page.items);
       void this.names.resolve([

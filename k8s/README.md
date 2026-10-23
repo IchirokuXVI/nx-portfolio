@@ -1,8 +1,9 @@
 # Kubernetes / Helm
 
 The Helm chart in [`helm/`](./helm) deploys the whole system as one release: the
-`shell` host, the `odontogram`, `damoclesSword`, `landingV2` and `velista` remotes,
-the `luna-shopper-admin` back office, and the Luna Shopper backend behind velista.
+`shell` host, the `odontogram`, `damoclesSword` and `landingV2` remotes, the
+standalone `velista` app, the `luna-shopper-admin` back office, and the Luna Shopper
+backend behind velista.
 The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
@@ -115,8 +116,8 @@ kubectl get pods -n nx-portfolio
 **The local overlays deploy four apps, not six.** `values.localhost.yaml`,
 `values.localhost-mfe.yaml` and `values.local.yaml` each replace the whole `apps`
 list with `shell`, `odontogram`, `damoclesSword` and `landingV2`. `velista` and
-`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so the shell's
-`/velista` mount has no remote to load in a local deployment.
+`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so a local
+deployment has no velista and no `/velista` route on the portfolio host.
 
 There is no build stage inside an app image (k8s plan 0007). `nx build` runs on the
 host, and `build:docker` sets `"context": "dist"`, so the image only copies the
@@ -214,8 +215,8 @@ npx cypress run --project apps/shell-e2e --browser electron
 behind its own nginx on the staging hostnames, mirroring the Kubernetes topology,
 so the exact shell image, which bakes the staging MFE host, is tested unchanged.
 That stack is Docker Compose and deliberately keeps nginx: it exists to test the
-**images**, not the cluster's routing layer. Its prefix stripping must stay
-equivalent to the `HTTPRoute` filters, so changing one is a prompt to check the other.
+**images**, not the cluster's routing layer. Its prefix handling must stay
+equivalent to the `HTTPRoute`s, so changing one is a prompt to check the other.
 CI runs this after pushing the staging images and before deploying, so a failure
 gates the deploy. To run it yourself:
 

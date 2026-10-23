@@ -207,7 +207,9 @@ import { ReferencesControl } from './references-control';
             <!-- The picture an address points at, beside the field once it
                  loads. An address that is half typed, or that names no
                  picture, draws nothing: the field itself is the answer
-                 there. The alt is empty because the address names it. -->
+                 there. The alt is empty because the address names it. No
+                 referrer goes with the request: an address may be a
+                 chain's (backend plan 0198, section 3.1). -->
             @if (isImage() && asText() !== '') {
               <img
                 (error)="pictured.set(null)"
@@ -215,6 +217,7 @@ import { ReferencesControl } from './references-control';
                 [class.loaded]="pictured() === asText()"
                 [src]="asText()"
                 alt=""
+                referrerpolicy="no-referrer"
                 data-picture
               />
             }

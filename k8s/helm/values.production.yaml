@@ -22,9 +22,9 @@ environment: production
 # the portfolio domain would have kept a second, unrelated name in play for every
 # certificate and every CORS decision.
 #
-# `ichirokuxvi.com/velista` is unaffected. The shell still mounts the remote at that
-# path, it just loads `remoteEntry.mjs` from the new origin (MFE_REMOTE_URLS in
-# .github/workflows/release.yml), which is why https://ichirokuxvi.com stays on
+# `ichirokuxvi.com/velista` still serves the app. The Gateway routes that path to
+# the velista deployment (the `portfolio` mount of the velista entry in
+# values.yaml, plan 0165), which is why https://ichirokuxvi.com stays on
 # corsOrigins below.
 #
 # All four names must resolve to `ipAddress` BEFORE this deploys: cert-manager
@@ -74,9 +74,10 @@ lunaShopperBackend:
     # it above the version actually deployed, or the floor refuses the client
     # it was meant to serve.
     minClientVersion: '0.5.2'
-    # Three origins. Two of them can be serving velista, because after plan 0013
-    # both can: the portfolio at `/velista` and velista's own host, which is
-    # `velista.app` now. Once D5's redirect lands the portfolio entry can go.
+    # Three origins. Two of them serve velista: velista's own host, `velista.app`,
+    # and the portfolio, where the Gateway serves the same image at `/velista`
+    # (plan 0165). The app there calls this API from the portfolio origin, so the
+    # portfolio entry stays for as long as that mount does.
     #
     # The third is the back office, which reaches this gateway on the `/v1/admin`
     # routes from an origin of its own (luna-shopper-admin plan 0001, section 8).

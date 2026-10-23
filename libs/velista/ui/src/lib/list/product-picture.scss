@@ -1,5 +1,6 @@
-// A square the size of a touch target, on the sunken surface the catalog draws its
-// pictures on, so a row with a photo and a row with the icon line up.
+// A square the size of a touch target, so a row with a photo and a row with the
+// icon line up. A photo sits on the raised surface, so a white product photo reads
+// as a photo and not a hole; the icon sits on the sunken fill (velista 0162).
 :host {
   box-sizing: border-box;
   display: flex;
@@ -14,6 +15,10 @@
   background: var(--app-surface-sunken);
 }
 
+:host(.has-photo) {
+  background: var(--app-surface-raised);
+}
+
 .image {
   inline-size: 100%;
   block-size: 100%;
@@ -21,7 +26,7 @@
 }
 
 .glyph {
-  font-size: var(--app-icon-md);
+  font-size: var(--app-line-picture-glyph, var(--app-icon-md));
   color: var(--app-text-muted);
 }
 

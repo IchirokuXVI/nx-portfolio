@@ -353,13 +353,15 @@ describe('the resources a chain holds', () => {
       ]);
     });
 
-    it('draws a chain in two sections, and its count of shops in none', () => {
+    it('draws a chain in three sections, and its count of shops in none', () => {
       expect(names(recordLayout(SUPERMARKETS, 'read'))).toEqual([
         [
           'catalog.supermarkets.section.name',
           ['name', 'websiteUrl', 'logoUrl', 'externalBrandKey'],
         ],
         ['catalog.supermarkets.section.prices', ['defaultPriceScopeId']],
+        // Whether shoppers see its photos (admin plan 0066).
+        ['catalog.supermarkets.section.photos', ['linkedImagesEnabled']],
       ]);
       // A new chain has no scope to pick yet.
       expect(names(recordLayout(SUPERMARKETS, 'create'))).toEqual([
@@ -1227,7 +1229,10 @@ describe('the record of a product', () => {
     ).toEqual([
       ['catalog.items.section.name', ['name', 'brand', 'ean', 'sku']],
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
-      ['catalog.items.section.sold', ['defaultUnit', 'unitSize', 'imageUrl']],
+      [
+        'catalog.items.section.sold',
+        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+      ],
     ]);
   });
 

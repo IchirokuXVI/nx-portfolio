@@ -21,6 +21,7 @@ function row(overrides: Partial<VisitAddedRow> = {}): VisitAddedRow {
     itemId: 'item-oil',
     name: 'Olive oil',
     detail: '1 L · €8.45 at Mercadona',
+    imageUrl: null,
     quantity: 2,
     floor: 1,
     pending: false,
@@ -61,6 +62,7 @@ const OIL_DOWN: VisitAddedStep = {
   itemId: 'item-oil',
   lineId: 'line-oil',
   detail: '1 L · €8.45 at Mercadona',
+  imageUrl: null,
   by: -1,
 };
 
@@ -177,8 +179,12 @@ describe('VisitAdded', () => {
           (one) => one.textContent
         )
       ).toEqual(['Weekly shop', 'Barbecue']);
-      expect(section(fixture, 'l1').querySelectorAll('.row')).toHaveLength(2);
-      expect(section(fixture, 'l2').querySelectorAll('.row')).toHaveLength(1);
+      expect(
+        section(fixture, 'l1').querySelectorAll('.added-row')
+      ).toHaveLength(2);
+      expect(
+        section(fixture, 'l2').querySelectorAll('.added-row')
+      ).toHaveLength(1);
     });
 
     it('draws nothing for no sections', async () => {
@@ -194,7 +200,7 @@ describe('VisitAdded', () => {
       const fixture = await render([WEEKLY]);
 
       expect(
-        [...host(fixture).querySelectorAll('.row .name')].map(
+        [...host(fixture).querySelectorAll('.added-row .name')].map(
           (one) => one.textContent
         )
       ).toEqual(['Olive oil', 'Milk']);
@@ -215,10 +221,9 @@ describe('VisitAdded', () => {
       const fixture = await render([WEEKLY]);
 
       expect(
-        [...host(fixture).querySelectorAll<HTMLElement>('.row')].map((one) => [
-          one.dataset['line'],
-          one.dataset['item'],
-        ])
+        [...host(fixture).querySelectorAll<HTMLElement>('.added-row')].map(
+          (one) => [one.dataset['line'], one.dataset['item']]
+        )
       ).toEqual([
         ['line-oil', 'item-oil'],
         ['line-milk', 'item-milk'],
@@ -228,7 +233,9 @@ describe('VisitAdded', () => {
     it('draws a row for each line when two lines hold one product', async () => {
       const fixture = await render([TWICE]);
 
-      expect(section(fixture, 'l1').querySelectorAll('.row')).toHaveLength(2);
+      expect(
+        section(fixture, 'l1').querySelectorAll('.added-row')
+      ).toHaveLength(2);
       expect(
         line(fixture, 'l1', 'line-oil').querySelector('.name')?.textContent
       ).toBe('Olive oil');
@@ -241,6 +248,34 @@ describe('VisitAdded', () => {
       expect(
         line(fixture, 'l1', 'line-fry').querySelector('.value')?.textContent
       ).toBe('4');
+    });
+
+    it('draws each row as the compact card, with the photo of the product', async () => {
+      const fixture = await render([
+        {
+          ...WEEKLY,
+          rows: [row({ imageUrl: 'https://img.test/oil.png' }), MILK],
+        },
+      ]);
+
+      const oil = item(fixture, 'l1', 'item-oil');
+      expect(
+        oil.querySelector('lib-product-row .row')?.classList.contains('compact')
+      ).toBe(true);
+      expect(oil.querySelector('img')?.getAttribute('src')).toBe(
+        'https://img.test/oil.png'
+      );
+      // Nothing on the card opens: the stepper is its one control.
+      expect(oil.querySelector('button.open')).toBeNull();
+      expect(oil.querySelector('.price, .no-price')).toBeNull();
+    });
+
+    it('draws the glyph for an entry with no photo', async () => {
+      const fixture = await render([WEEKLY]);
+
+      const milk = item(fixture, 'l1', 'item-milk');
+      expect(milk.querySelector('img')).toBeNull();
+      expect(milk.querySelector('lib-product-icon')).not.toBeNull();
     });
 
     it('draws no detail line for a row with none', async () => {
@@ -257,10 +292,10 @@ describe('VisitAdded', () => {
       ]);
 
       expect(
-        item(fixture, 'l1', 'item-oil').querySelector('.pending')?.textContent
+        item(fixture, 'l1', 'item-oil').querySelector('.caption')?.textContent
       ).toContain('catalog.added.pending');
       expect(
-        item(fixture, 'l1', 'item-milk').querySelector('.pending')
+        item(fixture, 'l1', 'item-milk').querySelector('.caption')
       ).toBeNull();
     });
 
@@ -302,6 +337,7 @@ describe('VisitAdded', () => {
           itemId: 'item-coal',
           lineId: 'line-coal',
           detail: '1 L · €8.45 at Mercadona',
+          imageUrl: null,
           by: 1,
         },
       ]);
@@ -372,6 +408,7 @@ describe('VisitAdded', () => {
           itemId: 'item-milk',
           lineId: 'line-milk',
           detail: null,
+          imageUrl: null,
           by: -1,
         },
       ]);

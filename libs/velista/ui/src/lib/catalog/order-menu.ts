@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { CatalogOrder } from '@portfolio/velista/models';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronDownIcon } from '../icons/icons';
 import {
   AnchoredPopover,
@@ -118,6 +119,11 @@ export class OrderMenu {
 
   protected readonly open = signal(false);
   protected readonly titleId = `order-menu-title-${++menuCount}`;
+
+  constructor() {
+    // A native back press closes the open menu, as Escape does (velista `0166`).
+    handleBackWhile(this.open, () => this.close('escape'));
+  }
 
   protected toggle(): void {
     if (this.open()) {

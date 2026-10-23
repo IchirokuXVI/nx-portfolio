@@ -1,9 +1,7 @@
-import { withModuleFederation } from '@nx/module-federation/angular';
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
 import { DEFAULT_APP_VERSION } from './app-version';
-import mfeConfig from './module-federation.config';
 
 /**
  * The production hosts, and the single place they are written down (plan 0014).
@@ -29,9 +27,9 @@ export const DEFAULT_LUNA_REALTIME_URL = 'https://rt.velista.app';
 /**
  * The app's own origin (plan 0033 D10).
  *
- * The mounted copy under the portfolio's shell cannot install anything, because the
- * document, the manifest and the worker there all belong to the portfolio, so it points
- * at this address instead. It is environment specific for the same reason the two above
+ * The copy served under the portfolio's `/velista` path cannot install anything,
+ * because that origin is the portfolio's (plan 0165 D4), so it points at this address
+ * instead. It is environment specific for the same reason the two above
  * are, and it arrives the same way: a build argument, not a third Angular
  * configuration.
  *
@@ -62,15 +60,8 @@ export const DEFAULT_VELISTA_APP_URL = 'https://velista.app';
  * configuration that lacks it, which is the worst place to find out. See the
  * comment in `webpack.config.ts` for what each rule is for.
  */
-export default composePlugins(async (config) => {
-  const federatedModules = await withModuleFederation(
-    {
-      ...mfeConfig,
-    },
-    { dts: false }
-  );
-
-  return merge(federatedModules(config), {
+export default composePlugins((config) => {
+  return merge(config, {
     plugins: [
       new DefinePlugin({
         // A build with neither variable set produces exactly the intended

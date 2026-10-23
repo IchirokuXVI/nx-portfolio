@@ -89,6 +89,7 @@ describe('what an info button says', () => {
       'harvest.places.info',
       'harvest.postalCodes.add.info',
       'harvest.review.info',
+      'harvest.schedules.info',
       'harvest.setup.info',
       'harvest.shops.info',
       'harvest.switch.info',

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { APP_RUNTIME } from './app-runtime';
 import { InstallStore } from './install-store';
 import { StorageKeys } from './storage-keys';
 import { provideVelistaTesting } from './testing/velista-testing';
@@ -164,5 +165,40 @@ describe('InstallStore', () => {
 
     expect(store.state()).toBe('ready');
     expect(store.guide()).toBe('android-menu');
+  });
+
+  /**
+   * Velista `0166`, target 4. In a WebView `display-mode` reads `browser` and no
+   * install event ever fires, so without this the app told people inside it to add it
+   * to their home screen.
+   */
+  describe('inside a native shell', () => {
+    function createNative(): InstallStore {
+      TestBed.configureTestingModule({
+        providers: [
+          provideVelistaTesting(),
+          { provide: APP_RUNTIME, useValue: 'native' },
+        ],
+      });
+      return TestBed.inject(InstallStore);
+    }
+
+    it('reads as installed, with nothing to prompt', () => {
+      const store = createNative();
+
+      expect(store.state()).toBe('installed');
+      expect(store.canPrompt()).toBe(false);
+    });
+
+    it('attaches no listener, so a stray prompt event changes nothing', async () => {
+      const store = createNative();
+      const event = beforeInstallPrompt();
+
+      window.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(store.canPrompt()).toBe(false);
+      await expect(store.prompt()).resolves.toBe('unavailable');
+    });
   });
 });

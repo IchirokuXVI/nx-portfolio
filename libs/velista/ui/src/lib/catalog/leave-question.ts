@@ -10,6 +10,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
+import { handleBackWhile } from '@portfolio/velista/platform';
 
 /**
  * "Leave without saving?" (velista `0146`, section 4): a card in the middle of a
@@ -77,6 +78,11 @@ export class LeaveQuestion {
     // when the card goes and the person keeps choosing.
     const asker = inject(DOCUMENT).activeElement;
     afterNextRender(() => this._keep()?.nativeElement.focus());
+    // A native back press is Escape here: the safe answer (velista `0166`).
+    handleBackWhile(
+      () => true,
+      () => this.stay.emit()
+    );
     inject(DestroyRef).onDestroy(() => {
       if (asker instanceof HTMLElement && asker.isConnected) {
         asker.focus();

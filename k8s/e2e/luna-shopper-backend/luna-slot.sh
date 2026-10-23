@@ -1202,9 +1202,9 @@ REDIS_URL=redis://localhost:${REDIS_PORT}
 LOG_LEVEL=debug
 # Every front end slot's two origins, not this slot's: the front end numbering is
 # independent of this one, and several front end slots may call one backend at the
-# same time. Each slot contributes the portfolio shell, which mounts velista as a
-# remote, and velista's own origin, which is a first class way to run it (plan
-# 0013) and was missing from this list even on slot 0.
+# same time. Each slot contributes the portfolio shell and velista's own origin.
+# The shell origin stays because in the clusters the app under the portfolio's
+# /velista path calls the API from the portfolio origin (velista plan 0165).
 CORS_ORIGINS=$(frontend_origins)
 # Telemetry deliberately does NOT live here; see the note in each service's .env.
 EOF
@@ -1541,7 +1541,18 @@ GEMINI_API_KEY=
 # Empty is the provider's own endpoint. Point it at a local stand in to drive the
 # turn loop without a key and without leaving the machine.
 GEMINI_BASE_URL=
-ASSISTANT_MODEL=gemini-3.5-flash-lite
+# Which provider answers a turn (plan 0224): gemini or claude. With claude, Gemini
+# still transcribes, so a spoken turn needs GEMINI_API_KEY too. A key pasted
+# below survives a re-run: none of these is derived from the slot.
+ASSISTANT_PROVIDER=gemini
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=
+# Empty means the defaults: low and adaptive.
+ASSISTANT_CLAUDE_EFFORT=
+ASSISTANT_CLAUDE_THINKING=
+# Empty means the default model of the provider that answers. An existing slot
+# keeps its ASSISTANT_MODEL, so blank it when you flip the provider.
+ASSISTANT_MODEL=
 # Voice input (plan 0041). An empty transcription model means the model that
 # answers the turn also transcribes it, which is the default everywhere.
 ASSISTANT_TRANSCRIPTION_MODEL=

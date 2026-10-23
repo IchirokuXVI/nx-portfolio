@@ -14,6 +14,8 @@
   display: flex;
   flex-direction: column;
   min-block-size: 100%;
+  // No page header here either, so the page clears the status bar itself.
+  padding-block-start: var(--app-safe-top);
 }
 
 .head {

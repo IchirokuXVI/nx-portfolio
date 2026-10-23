@@ -60,6 +60,11 @@
           {{ 'landingV2.project_view' | rokuT }}
           <lib-arrow-icon class="project-card__view-icon" />
         </span>
+      } @else if (appLink() && appLinkIsExternal()) {
+        <a [href]="appLink()" class="project-card__view">
+          {{ 'landingV2.project_view' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </a>
       } @else if (appLink()) {
         <a [routerLink]="[appLink()]" class="project-card__view">
           {{ 'landingV2.project_view' | rokuT }}

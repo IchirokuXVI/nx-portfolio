@@ -124,6 +124,14 @@ export interface LineItemChipVm {
   readonly brand: string | null;
   /** False while a removal is in flight, so the chip cannot be pressed twice. */
   readonly removable: boolean;
+  /** The product's photo, or null, which draws the glyph (velista `0163`). */
+  readonly imageUrl: string | null;
+  /** `brand · size`, or whichever of them the catalog knows, or null. */
+  readonly detail: string | null;
+  /** The product's best known price, formatted, or null for none. */
+  readonly price: string | null;
+  /** The chain that has {@link price}, by name, or null when none can be named. */
+  readonly chain: string | null;
 }
 
 /**

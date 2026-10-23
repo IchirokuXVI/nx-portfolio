@@ -253,7 +253,41 @@
       "noDefaultScope": "No default scope",
       "section": {
         "name": "Chain",
-        "prices": "Prices"
+        "prices": "Prices",
+        "photos": "Photos"
+      },
+      "linkedImagesEnabled": "Photos shown",
+      "linkedImagesEnabledHelp": "Shoppers see this chain's product photos when we have none of our own. The photos stay on the chain's site. Turning this off hides them at once.",
+      "photosSetBy": "Changed from the More menu",
+      "photosShown": "Photos shown",
+      "action": {
+        "showPhotos": "Show this chain's photos",
+        "hidePhotos": "Hide this chain's photos",
+        "hideAllPhotos": "Hide every chain's photos"
+      },
+      "confirm": {
+        "showPhotos": {
+          "heading": "Show this chain's photos?",
+          "body": "Products with no photo of our own show the photo {{name}} gives. Nothing is copied. You can hide them again at any time.",
+          "confirm": "Show photos"
+        },
+        "hidePhotos": {
+          "heading": "Hide this chain's photos?",
+          "body": "Every product stops showing the photos of {{name}} at once. The saved links stay, so showing them again needs no harvest.",
+          "confirm": "Hide photos"
+        },
+        "hideAllPhotos": {
+          "heading": "Hide the photos of every chain?",
+          "body": "Hide the photos of every chain? Every product stops showing chain photos at once, for {{name}} and for every other chain. Each chain must then be shown again one by one.",
+          "confirm": "Hide every chain's photos"
+        }
+      },
+      "photosHidden": {
+        "line": "Photos hidden for {{chains}} and {{products}}.",
+        "chains_one": "{{n}} chain",
+        "chains_other": "{{n}} chains",
+        "products_one": "{{n}} product",
+        "products_other": "{{n}} products"
       }
     },
     "locations": {
@@ -410,7 +444,11 @@
         "sharedEan": "{{count}} rows of this chain share this barcode",
         "matchSharedEan": "A barcode other products share",
         "matchNone": "Not matched",
-        "more": "Show more"
+        "more": "Show more",
+        "photo": "Photo",
+        "photoShown": "Shown",
+        "photoSaved": "Saved, chain off",
+        "photosFailed": "The chain photos could not be read. The rows are still here."
       },
       "one": "product",
       "many": "Products",
@@ -427,7 +465,7 @@
       "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
       "productGroupId": "Product group",
       "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
-      "imageUrl": "Picture",
+      "imageUrl": "Our photo",
       "section": {
         "name": "Name and codes",
         "where": "Where it belongs",
@@ -483,7 +521,15 @@
         "title": "the product list",
         "tick": "Tick products to set their group or categories together.",
         "scope": "Choose a scope in Prices at to see what each product costs there."
-      }
+      },
+      "imageUrlHelp": "Shoppers see this photo first. With no photo here, they see a chain's photo, if that chain's photos are on.",
+      "shown": "Shoppers see",
+      "shownFrom": {
+        "owner": "Ours",
+        "chain": "A chain",
+        "none": "No photo"
+      },
+      "shownSetBy": "Follows our photo, or a chain's photo when that chain is on"
     },
     "products": {
       "deleteBody": "Every price it holds is deleted with it. This cannot be taken back.",
@@ -1826,6 +1872,126 @@
         "nearbyProfiles": "Profiles we widened into it",
         "nearbyUsers": "People, counted once each",
         "suppressed": "{{count}} profiles were offered this code and removed it. They are not waiting on it."
+      }
+    },
+    "schedules": {
+      "one": "Schedule",
+      "many": "Schedules",
+      "noun": "schedule",
+      "add": "Add a schedule",
+      "empty": "No preset runs on a schedule yet. Add one to start a preset by itself at a time of day.",
+      "setupInfo": "Schedules start a preset by themselves at the times they name.",
+      "brief": "{{chain}}, {{when}}",
+      "enabledSetBy": "Changed from the More menu",
+      "choosePreset": "Choose a preset",
+      "presetsFailed": "The presets could not be read",
+      "presetFixed": "Fixed when the schedule was added. To run another preset, delete this schedule and add one.",
+      "chainFromPreset": "Comes from the preset",
+      "noPreset": "Choose a preset first",
+      "thisChain": "this chain",
+      "busyRun": "the run that was going",
+      "cadence": {
+        "days": "{{days}} at {{time}}",
+        "daily": "Every day at {{time}}"
+      },
+      "info": {
+        "what": "A schedule starts a preset by itself at a time of day, on the days it names.",
+        "source": "The source of the chain must stay on. A schedule of a chain whose source is off starts nothing.",
+        "production": "Only production starts schedules. On any other cluster each one says why it will not run."
+      },
+      "section": {
+        "what": "What runs",
+        "when": "When"
+      },
+      "field": {
+        "preset": "Preset",
+        "chain": "Chain",
+        "cadence": "Runs",
+        "estimate": "How long it takes",
+        "time": "Time",
+        "days": "Days",
+        "timezone": "Timezone",
+        "enabled": "On",
+        "consent": "Fetching by itself",
+        "nextRunAt": "Next run",
+        "lastSlotAt": "Last slot",
+        "lastOutcome": "What it did",
+        "lastRun": "Last run",
+        "blockedBy": "Why it will not run"
+      },
+      "help": {
+        "when": "A slot that cannot start is skipped, not queued: the next slot is the next try. A late slot still runs if less than half of the gap to the next slot has passed. A run that a deploy stopped is started again one time.",
+        "timezone": "The time and the days are read on this clock."
+      },
+      "estimate": {
+        "PRESET_one": "About {{minutes}} min, from 1 run of this preset",
+        "PRESET_other": "About {{minutes}} min, from {{count}} runs of this preset",
+        "SOURCE_one": "About {{minutes}} min, from 1 run of this chain",
+        "SOURCE_other": "About {{minutes}} min, from {{count}} runs of this chain",
+        "DEFAULT": "About {{minutes}} min. A first guess, until a run of this preset completes.",
+        "none": "Known once a preset is chosen"
+      },
+      "consent": {
+        "text": "Velista will fetch {{chain}}'s website by itself at these times, with nobody watching. A chain can block a crawl that comes too often or too fast.",
+        "missing": "Tick the box to add the schedule. Nothing was saved."
+      },
+      "state": {
+        "on": "On",
+        "off": "Off",
+        "blocked": "Will not run"
+      },
+      "action": {
+        "on": "Turn this schedule on",
+        "off": "Turn this schedule off",
+        "delete": "Delete this schedule"
+      },
+      "confirm": {
+        "on": {
+          "heading": "Turn this schedule on?",
+          "confirm": "Turn it on"
+        },
+        "delete": {
+          "heading": "Delete this schedule?",
+          "body": "{{name}} will no longer start by itself at these times. The runs it started keep their record. This cannot be taken back.",
+          "confirm": "Delete schedule"
+        }
+      },
+      "blocked": {
+        "HARVEST_DISABLED": "This cluster cannot start harvest runs.",
+        "SCHEDULER_DISABLED": "Schedules do not start by themselves on this cluster. Only production starts them.",
+        "SOURCE_DISABLED": "{{chain}} may not be fetched. Turn its source on and leave it on.",
+        "SOURCE_FAILING": "{{chain}} failed three runs in a row. Start the preset by hand. When it completes, the schedule runs again."
+      },
+      "blockLink": {
+        "source": "Open the source",
+        "runs": "Open the Runs tab"
+      },
+      "outcome": {
+        "STARTED": "Started",
+        "SKIPPED_LATE": "Skipped, too late",
+        "SKIPPED_FAILING": "Skipped, the chain is failing",
+        "REFUSED": "Refused",
+        "SKIPPED_BUSY": "Skipped, a run was already going",
+        "none": "No slot has come yet"
+      },
+      "next": {
+        "there": "{{day}} at {{time}} {{place}}",
+        "here": "{{here}} your time",
+        "none": "None while it is off"
+      },
+      "runs": {
+        "filter": "Started by",
+        "anyone": "Anyone",
+        "MANUAL": "A person",
+        "SCHEDULED": "A schedule",
+        "scheduled": "Scheduled",
+        "openSchedule": "Open the schedule that started it"
+      },
+      "panel": {
+        "add": "Add a schedule",
+        "label": "Schedules of {{name}}",
+        "deleteRefused_one": "A schedule runs this preset: {{when}}. Delete the schedule first, then the preset.",
+        "deleteRefused_other": "{{count}} schedules run this preset: {{when}}. Delete the schedules first, then the preset."
       }
     }
   },

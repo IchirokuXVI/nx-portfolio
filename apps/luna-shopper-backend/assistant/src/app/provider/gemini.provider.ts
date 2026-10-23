@@ -389,6 +389,9 @@ function readUsage(payload: unknown): ModelUsage | null {
     promptTokens: read('promptTokenCount'),
     responseTokens: read('candidatesTokenCount'),
     totalTokens: read('totalTokenCount'),
+    // Null today, because nothing on this side caches; read so the record has
+    // the same field whichever provider answered (plan 0224, section 8).
+    cachedPromptTokens: read('cachedContentTokenCount'),
   };
 }
 

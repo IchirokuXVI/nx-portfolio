@@ -49,7 +49,7 @@ import {
 } from './zone-guards';
 
 /**
- * This app's route table. The shell lazy-loads it through `velista/Routes`.
+ * This app's route table. `appRootRoute` in `apps/velista` lazy loads it below the mount.
  *
  * Every page renders inside `AppLayout`, the parent route that owns the app's own
  * chrome and its theme token scope (plan 0001, the extraction contract, items 1

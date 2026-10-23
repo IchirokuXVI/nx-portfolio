@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ShoppingProfile } from '@portfolio/velista/models';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronDownIcon, PlusIcon, TrashIcon } from '@portfolio/velista/ui';
 
 /**
@@ -61,6 +62,11 @@ export class ProfileSelector {
   readonly remove = output<void>();
 
   protected readonly open = signal(false);
+
+  constructor() {
+    // A native back press closes the open list, as Escape does (velista `0166`).
+    handleBackWhile(this.open, () => this.close());
+  }
 
   /** The profile on the row, or null before anything has loaded. */
   protected readonly current = computed<ShoppingProfile | null>(() => {

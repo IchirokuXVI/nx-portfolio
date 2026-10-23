@@ -98,9 +98,9 @@
   "landingV2.detail.velista.sections.overview.deep.p3": "It is in production with real users and still in early development, so it keeps changing as I learn what those users need. It runs on its own domain and installs on a phone like a native app, and the same build is also mounted inside this portfolio.",
 
   "landingV2.detail.velista.sections.stack.title": "Stack",
-  "landingV2.detail.velista.sections.stack.highlight.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same build runs on its own origin and as a micro-frontend inside this site.",
+  "landingV2.detail.velista.sections.stack.highlight.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same build runs on its own origin, and this site's gateway also serves it under /velista.",
   "landingV2.detail.velista.sections.stack.highlight.p2": "The backend is seven NestJS services that talk over NATS, with four PostgreSQL databases and Redis. Everything ships as Docker images to staging and production Kubernetes clusters.",
-  "landingV2.detail.velista.sections.stack.deep.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same app runs on its own origin and as a micro-frontend inside this site.",
+  "landingV2.detail.velista.sections.stack.deep.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same app runs on its own origin, and this site's gateway also serves it under /velista.",
   "landingV2.detail.velista.sections.stack.deep.p2": "The backend is seven NestJS services: a gateway, a realtime service, auth, core, catalog, a harvester and an assistant. They talk over NATS, keep their data in four PostgreSQL databases through TypeORM, and share Redis. Live updates reach the browser over Socket.IO.",
   "landingV2.detail.velista.sections.stack.deep.p3": "A separate Angular back office manages the catalog, the harvester and the people who run them. Everything ships as Docker images to staging and production Kubernetes clusters through Helm and GitHub Actions, tested with Jest and with Playwright suites that shop against a real backend.",
 

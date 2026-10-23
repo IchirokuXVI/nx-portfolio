@@ -440,6 +440,11 @@ describe('the tabs of a chain', () => {
 describe('the harvester state of a chain', () => {
   const FETCHED = 'catalog.chains.source.fetched';
   const OFF = 'catalog.chains.source.off';
+  // Mercadona's photos are on in the seed, and that state is a chip too.
+  const sourceChips = (fixture: ComponentFixture<TestHost>) =>
+    page(fixture)
+      .chips()
+      .filter((chip) => chip.label !== 'catalog.supermarkets.photosShown');
 
   const labels = (fixture: ComponentFixture<TestHost>) =>
     page(fixture)
@@ -456,7 +461,7 @@ describe('the harvester state of a chain', () => {
     ]);
 
     expect(asked).toContain('sm_mercadona');
-    expect(page(fixture).chips()).toEqual([{ label: FETCHED, tone: 'good' }]);
+    expect(sourceChips(fixture)).toEqual([{ label: FETCHED, tone: 'good' }]);
     const chip = pageElement(fixture).querySelector('lib-page-header .chip');
     expect(chip?.textContent?.trim()).toBe(FETCHED);
     expect(chip?.classList.contains('good')).toBe(true);
@@ -470,7 +475,7 @@ describe('the harvester state of a chain', () => {
       harvester(async () => ({ enabled: false })),
     ]);
 
-    expect(page(fixture).chips()).toEqual([{ label: OFF, tone: 'neutral' }]);
+    expect(sourceChips(fixture)).toEqual([{ label: OFF, tone: 'neutral' }]);
   });
 
   /** Not found is an answer: every price of this chain is typed by a person. */
@@ -481,7 +486,7 @@ describe('the harvester state of a chain', () => {
       }),
     ]);
 
-    expect(page(fixture).chips()).toEqual([{ label: OFF, tone: 'neutral' }]);
+    expect(sourceChips(fixture)).toEqual([{ label: OFF, tone: 'neutral' }]);
   });
 
   it('says nothing when the harvester did not answer, and still opens', async () => {
@@ -491,7 +496,7 @@ describe('the harvester state of a chain', () => {
       }),
     ]);
 
-    expect(page(fixture).chips()).toEqual([]);
+    expect(sourceChips(fixture)).toEqual([]);
     expect(page(fixture).heading()).toBe('Mercadona');
     expect(rowsOf(fixture)).toHaveLength(3);
   });
@@ -524,7 +529,7 @@ describe('the harvester state of a chain', () => {
       WIDE,
       harvester(async (id) => ({ enabled: id === 'sm_mercadona' })),
     ]);
-    expect(labels(fixture)).toEqual([FETCHED]);
+    expect(sourceChips(fixture).map((chip) => chip.label)).toEqual([FETCHED]);
 
     await go(fixture, '/chains/sm_consum/shops');
 
@@ -576,7 +581,10 @@ describe('a chain with no default scope', () => {
     ]);
     const value = view(fixture).valueOf(field(fixture, 'defaultPriceScopeId'));
 
-    expect(page(fixture).chips()).toEqual([]);
+    // Only the state of its photos, which are on in the seed.
+    expect(page(fixture).chips()).toEqual([
+      { label: 'catalog.supermarkets.photosShown', tone: 'good' },
+    ]);
     expect(value).toMatchObject({
       kind: 'reference',
       resource: 'price-scopes',
@@ -848,7 +856,7 @@ describe('the Price scopes tab of a chain', () => {
 });
 
 describe('the Details tab of a chain', () => {
-  it('draws the chain in two sections, reading, under the one header', async () => {
+  it('draws the chain in three sections, reading, under the one header', async () => {
     const fixture = await boot('/chains/sm_mercadona/details');
     const layout = view(fixture).layout();
 
@@ -864,6 +872,7 @@ describe('the Details tab of a chain', () => {
         ['name', 'websiteUrl', 'logoUrl', 'externalBrandKey'],
       ],
       ['catalog.supermarkets.section.prices', ['defaultPriceScopeId']],
+      ['catalog.supermarkets.section.photos', ['linkedImagesEnabled']],
     ]);
     // The count of the first tab is drawn there and nowhere else, and the
     // Record block of a chain holds the ID alone.

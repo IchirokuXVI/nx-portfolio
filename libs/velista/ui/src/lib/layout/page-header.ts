@@ -4,6 +4,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, CloseIcon } from '../icons/icons';
 
 /**
@@ -68,4 +69,14 @@ export class PageHeader {
   readonly leading = input<'back' | 'close'>('back');
 
   readonly back = output<void>();
+
+  constructor() {
+    // A native back press means what the chevron means, and the page already knows
+    // its fallback (velista `0166`). Only while the chevron is drawn: an icon on the
+    // left is a page with nowhere above it.
+    handleBackWhile(
+      () => this.backLabel() !== null,
+      () => this.back.emit()
+    );
+  }
 }

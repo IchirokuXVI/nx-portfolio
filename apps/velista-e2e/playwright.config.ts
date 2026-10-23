@@ -5,28 +5,15 @@ import { withProgressReporter } from '../../playwright.reporters';
 
 const preset = nxE2EPreset(__filename, { testDir: './src' });
 
-// These specs drive velista mounted under the shell, so baseURL is the shell's
-// origin by default. Paths in the specs carry their own mount and locale
-// segments. velista is also servable standalone on its own origin (CLAUDE.md),
-// so unlike the other remotes it is legitimate to point this at velista's own
-// port, slot 0's 4205 or a slot's 42005.
+// These specs drive velista on its own origin (plan 0165 D8), so paths in the
+// specs start at the locale: `/en`, not `/velista/en`.
 //
-// Either variable points the suite at a server that is ALREADY running, so both
-// of them suppress the dev-server `webServer` below. Both are a bare origin
-// here, since this config appends no route suffix of its own.
-//
-// E2E_BASE_URL names a deployment (the local Docker/Kubernetes reverse proxy at
-// http://portfolio.localhost, or staging) or a dev slot's shell at
-// http://localhost:42000 (see tools/dev/README.md).
-//
-// Keying the webServer off both is the reason they are separate names here. It
-// used to depend on E2E_BASE_URL alone, so a run with only BASE_URL set drove
-// that URL *and* started `nx serve shell` on 4200, which belongs to another slot
-// and, on slot 0, to the developer's own dev server.
-const externalOrigin = process.env['E2E_BASE_URL'];
-const explicitBaseURL = process.env['BASE_URL'];
-const usesExternalServer = !!(explicitBaseURL || externalOrigin);
-const baseURL = explicitBaseURL || externalOrigin || 'http://localhost:4200';
+// VELISTA_BASE_URL points the suite at a velista that is ALREADY running, and so
+// suppresses the dev-server `webServer` below. It is the variable
+// `velista-luna-e2e` reads too: staging's https://staging.velista.app on CI, or a
+// dev slot's velista such as http://localhost:42005 (see tools/dev/README.md).
+const externalOrigin = process.env['VELISTA_BASE_URL'];
+const baseURL = externalOrigin || 'http://localhost:4205';
 
 export default defineConfig({
   ...preset,
@@ -36,7 +23,7 @@ export default defineConfig({
   use: {
     baseURL,
     // The local reverse proxy serves self-signed TLS; accept it so an https
-    // E2E_BASE_URL still works. Harmless for the http/dev-server defaults.
+    // VELISTA_BASE_URL still works. Harmless for the http/dev-server defaults.
     ignoreHTTPSErrors: true,
     /* Both default to 0 under the test runner, and 0 means *no* limit, so a
      * navigation that never completes is bounded only by the test timeout. See
@@ -45,20 +32,20 @@ export default defineConfig({
     navigationTimeout: 30_000,
     trace: 'on-first-retry',
   },
-  /* With neither BASE_URL nor E2E_BASE_URL set, run the shell dev server on the
-   * default port before starting the tests (or reuse one you started yourself:
+  /* With VELISTA_BASE_URL unset, run velista's dev server on its default port
+   * before starting the tests (or reuse one you started yourself:
    * reuseExistingServer attaches to it and never manages its lifecycle).
    *
    * `url` is only the readiness probe and must return a status Playwright accepts
-   * (<400), otherwise reuseExistingServer can't detect an already-running shell
-   * and launches a duplicate `nx serve shell` that collides on port 4200. The dev
+   * (<400), otherwise reuseExistingServer can't detect an already-running velista
+   * and launches a duplicate `nx serve velista` that collides on port 4205. The dev
    * server's SPA fallback returns 404 to the probe's non-`text/html` request for
    * deep routes, so probe the root. */
-  webServer: usesExternalServer
+  webServer: externalOrigin
     ? undefined
     : {
-        command: 'npx nx serve shell',
-        url: 'http://localhost:4200',
+        command: 'npx nx serve velista',
+        url: 'http://localhost:4205',
         reuseExistingServer: true,
         cwd: workspaceRoot,
       },
