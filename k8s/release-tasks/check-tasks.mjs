@@ -18,6 +18,9 @@
 //     a task stays reversible. Without a cap, somebody writes 2099
 //   - UNIT is absent, or names no directory of k8s/units with a unit.env. The
 //     runner of that unit's release runs the task (k8s plan 0015 D9)
+//   - that unit.env states no TAG_PREFIX. PRODUCTION_RELEASE is the version
+//     after the prefix, and with no prefix no release of the unit has one
+//     (k8s plan 0017 D4)
 //   - check.sh is absent, or neither pre.sh nor post.sh exists
 //   - ENVIRONMENTS is still set. The two windows replaced it
 //   - two task directories share a number
@@ -60,6 +63,17 @@ export function unitNames(unitsDir = UNITS_DIR) {
         existsSync(join(unitsDir, entry.name, 'unit.env'))
     )
     .map((entry) => entry.name);
+}
+
+/** TAG_PREFIX of each unit, or '' for a unit.env that states none. */
+export function unitTagPrefixes(unitsDir = UNITS_DIR) {
+  return Object.fromEntries(
+    unitNames(unitsDir).map((unit) => [
+      unit,
+      parseTaskEnv(readFileSync(join(unitsDir, unit, 'unit.env'), 'utf8'))
+        .fields.TAG_PREFIX ?? '',
+    ])
+  );
 }
 
 /**
@@ -128,7 +142,11 @@ export function lastChangedInGit(file) {
  */
 export function checkTasks(
   tasksDir,
-  { lastChanged = lastChangedInGit, units = unitNames() } = {}
+  {
+    lastChanged = lastChangedInGit,
+    units = unitNames(),
+    tagPrefixes = unitTagPrefixes(),
+  } = {}
 ) {
   const problems = [];
   if (!existsSync(tasksDir)) {
@@ -192,6 +210,10 @@ export function checkTasks(
       say(
         `UNIT is "${fields.UNIT}", and k8s/units/${fields.UNIT}/unit.env does not exist`
       );
+    } else if (!tagPrefixes[fields.UNIT]) {
+      say(
+        `k8s/units/${fields.UNIT}/unit.env states no TAG_PREFIX, so no release of ${fields.UNIT} has a version for PRODUCTION_RELEASE to name`
+      );
     }
     if ('ENVIRONMENTS' in fields) {
       say(
@@ -226,6 +248,14 @@ export function checkTasks(
       if (release === undefined || release === '') {
         say(
           'RUN_UNTIL_PRODUCTION is a date and PRODUCTION_RELEASE is absent. Production runs a task in one release only'
+        );
+      } else if (
+        fields.UNIT &&
+        tagPrefixes[fields.UNIT] &&
+        release.startsWith(tagPrefixes[fields.UNIT])
+      ) {
+        say(
+          `PRODUCTION_RELEASE is "${release}", the whole tag. Write the version after ${tagPrefixes[fields.UNIT]} alone (1.2.3)`
         );
       } else if (!VERSION.test(release)) {
         say(
