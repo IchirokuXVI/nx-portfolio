@@ -27,7 +27,10 @@ name: Host maintenance
 #     for production and SSH_SOAK_CHECK_HOST, the staging host
 #   - variable SSH_KNOWN_HOSTS: ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com
 #   - on each host, once: provision-host.sh --k3s, which installs nx-host-patch
-# Until the owner moves them there, the repository secrets below stand in.
+# k8s/bootstrap/github-environments.sh sets both environments. The calls below
+# pass `secrets: inherit`, because host-patch.yml sees no secret of its
+# environment otherwise, and the environment's value wins over a repository
+# secret of the same name.
 
 on:
   schedule:
@@ -88,10 +91,7 @@ jobs:
       environment: host-staging
       snapshot: ${{ needs.plan.outputs.snapshot }}
       endpoints: ${{ needs.plan.outputs.staging }}
-    secrets:
-      SSH_DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
-      SSH_DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
-      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+    secrets: inherit
 
   production:
     needs: [plan, staging]
@@ -102,8 +102,4 @@ jobs:
       snapshot: ${{ needs.plan.outputs.snapshot }}
       endpoints: ${{ needs.plan.outputs.production }}
       soak-check-endpoints: ${{ needs.plan.outputs.staging }}
-    secrets:
-      SSH_DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
-      SSH_SOAK_CHECK_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
-      SSH_DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
-      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+    secrets: inherit

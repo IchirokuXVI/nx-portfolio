@@ -30,10 +30,10 @@ on:
         description: Endpoints of the host that was patched first. When set, that host must still be healthy before this one is touched.
         type: string
         default: ''
-    # A secret of the same name on the job's environment wins over the value
-    # passed here. host-maintenance.yml passes the repository secrets until the
-    # owner moves them into host-staging and host-production (k8s plan 0016,
-    # section 6).
+    # host-maintenance.yml calls with `secrets: inherit`, and the values come
+    # from the job's environment, host-staging or host-production (k8s plan
+    # 0016, section 6). Not required, so that a missing one fails below with
+    # its name.
     secrets:
       SSH_DEPLOY_HOST:
         required: false

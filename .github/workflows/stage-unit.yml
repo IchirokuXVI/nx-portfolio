@@ -348,9 +348,13 @@ jobs:
   # the other unit's deploy is never touched. Host patching is kept out by the
   # lock on the host, not by a group.
   #
-  # The secrets are the environment's alone. The callers pass none on purpose:
-  # with `secrets: inherit`, an environment that lacked SSH_DEPLOY_HOST would
-  # fall back to the repository secret of that name, which is production's.
+  # The secrets come from the environment <unit>-staging, and the callers must
+  # pass `secrets: inherit`: a called workflow sees no secret its caller did not
+  # pass, environment ones included, so without it all three arrive empty. The
+  # environment's value wins over a repository secret of the same name. An
+  # environment that lacked SSH_DEPLOY_HOST would fall back to the repository
+  # one, which is production's, so deploy-unit refuses a host that the
+  # environment's SSH_KNOWN_HOSTS does not name.
   deploy:
     needs: [setup, lint-test, build, gate]
     if: >-

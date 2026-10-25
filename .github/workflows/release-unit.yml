@@ -210,7 +210,8 @@ jobs:
             npx nx run-many -t build:docker --configuration production \
             --projects "$IMAGES" --exclude-task-dependencies
 
-  # The secrets are the environment's alone, as in stage-unit.yml. The group is
+  # The secrets come from the environment, through the callers' `secrets:
+  # inherit`, as in stage-unit.yml. The group is
   # per unit (k8s plan 0016 D2), and ALLOW_CUTOVER of the environment decides
   # whether a cluster that still runs nx-portfolio is cut over here.
   deploy:
