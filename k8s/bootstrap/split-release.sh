@@ -21,7 +21,8 @@
 #   2  delete the Helm storage of nx-portfolio; every object stays
 #   3  take the MetalLB pool over (install.sh --pool-only --ip)
 #   4  namespaces, copied Secrets and ledger, `helm install portfolio`, no routes
-#   5  dump, move the volumes, `helm install velista`, no routes  backend out for minutes
+#   5  dump, move the volumes, `helm install velista`, no routes  backend out from
+#      here until step 6 deletes the old Gateway, for minutes
 #   6  enable both Gateways, then delete the old Gateway and routes
 #   7  after an hour, and every Certificate Ready: delete nx-portfolio and
 #      ClusterIssuer letsencrypt-prod
@@ -72,7 +73,7 @@ while [ $# -gt 0 ]; do
     --env) ENVIRONMENT="${2:-}"; shift 2 ;;
     --plan) MODE=plan; shift ;;
     --status) MODE=status; shift ;;
-    -h | --help) sed -n '2,42p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,43p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -463,7 +464,7 @@ helm_unit() {
 }
 
 dump_databases() {
-  local cronjob job conditions waited key keys='' found
+  local cronjob job conditions waited key keys='' found pod
   found="$(backup_cronjobs)"
   if [ "$ENVIRONMENT" = local ]; then
     echo "    --env local: no object storage, so no dump"
@@ -493,7 +494,12 @@ dump_databases() {
       sleep 5
       waited=$((waited + 5))
     done
-    key="$(kubectl -n "$OLD_NS" logs "job/$job" | sed -n 's/^uploaded //p' | tail -1)"
+    # The pod that succeeded: logs of job/<name> may pick a failed earlier
+    # attempt after a retry, which printed no key.
+    pod="$(kubectl -n "$OLD_NS" get pods -l "job-name=$job" \
+      --field-selector=status.phase=Succeeded -o name | head -1)"
+    [ -n "$pod" ] || die "job/$job completed and no pod of it Succeeded"
+    key="$(kubectl -n "$OLD_NS" logs "$pod" | sed -n 's/^uploaded //p' | tail -1)"
     [ -n "$key" ] || die "job/$job completed and printed no uploaded key"
     echo "    ${cronjob#*/}: $key"
     keys="$keys ${cronjob#*/}=$key"
@@ -608,9 +614,12 @@ if [ "$STEP_DONE" -lt 5 ]; then
     for cronjob in $(backup_cronjobs); do
       kubectl -n "$OLD_NS" patch "$cronjob" -p '{"spec":{"suspend":true}}' > /dev/null
     done
-    echo "    the backend is down from here until velista is Ready"
-    BACKEND_DOWN="$(date +%s)"
-    marker_set backendDownAt "$BACKEND_DOWN"
+    # The old HTTPRoutes keep pointing at Services with no endpoints from here,
+    # and the new HTTPS listeners stay Conflicted while the old Gateway lives,
+    # so api. and rt. answer 503 until step 6 deletes it. A rerun keeps the
+    # first value, which is when the outage began.
+    echo "    the backend is down from here until step 6 deletes the old Gateway"
+    [ -n "$(marker_get "$OLD_NS" backendDownAt)" ] || marker_set backendDownAt "$(date +%s)"
     workloads="$(luna_statefulsets; luna_deployments)"
     if [ -n "$workloads" ]; then
       # shellcheck disable=SC2086
@@ -627,9 +636,17 @@ if [ "$STEP_DONE" -lt 5 ]; then
   echo "    helm install $V_RELEASE at $V_TAG, no Gateway"
   helm_unit velista false 20m
   down_at="$(marker_get "$OLD_NS" backendDownAt)"
-  [ -z "$down_at" ] || echo "    the backend was down for $(($(date +%s) - down_at))s"
+  [ -z "$down_at" ] || echo "    velista Ready $(($(date +%s) - down_at))s after the backend stopped; it answers again after step 6"
   finish
 fi
+
+# The outage of the backend, from the stop in step 5 to the moment the old
+# Gateway no longer holds the hosts. Step 6 follows step 5 in the same run.
+print_backend_outage() {
+  local down_at
+  down_at="$(marker_get "$OLD_NS" backendDownAt)"
+  [ -z "$down_at" ] || echo "    the backend was down for $(($(date +%s) - down_at))s (step 5 stop to the old Gateway's delete)"
+}
 
 if [ "$STEP_DONE" -lt 6 ]; then
   begin 6
@@ -640,12 +657,14 @@ if [ "$STEP_DONE" -lt 6 ]; then
     helm_unit portfolio true 10m
     helm_unit velista true 20m
     kubectl -n "$OLD_NS" delete gateway --all --wait=true
+    print_backend_outage
     kubectl -n "$OLD_NS" delete httproute --all
   else
     kubectl -n "$OLD_NS" delete gateway --all --wait=true
     kubectl -n "$OLD_NS" delete httproute --all
     helm_unit portfolio true 10m
     helm_unit velista true 20m
+    print_backend_outage
   fi
   wait_programmed "$P_NS" "$P_RELEASE"
   wait_programmed "$V_NS" "$V_RELEASE"

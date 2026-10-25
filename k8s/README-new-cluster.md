@@ -32,7 +32,8 @@ and **root stays reachable until the replacement accounts are proven** (section
   key. All three are supported as blank: the Google routes and registration
   answer 501, and so does `/v1/assistant`, rather than a service failing to
   start. A cluster with none of them is a working cluster with three features off.
-- Production only: an S3 compatible bucket and a key for backups.
+- An S3 compatible bucket and a key for backups, one bucket per environment
+  (section 6).
 
 Decide which environment this machine is before you begin. It selects the values
 file, the `--env` flag and the six DNS names, and nothing else differs.
@@ -253,22 +254,28 @@ to exist in the cluster. What the chart creates itself, today only
 is the same command CI runs before each deploy, so a pass here means the
 preflight will pass there.
 
-## 6. Backups, production only
+## 6. Backups
 
-Production renders the backup CronJobs, and they need credentials the script
-cannot generate. It prints the exact command; the shape is:
+Both environments render the backup CronJobs and both need this Secret, so
+`--check` and the deploy preflight fail without it. Production runs the
+CronJobs nightly. Staging keeps them suspended, and the release tasks
+(`k8s/release-tasks`) and the cutover start their dumps from them. The script
+cannot generate the credentials, so it prints the command. On the box, as the
+admin user:
 
 ```sh
 kubectl -n luna-shopper create secret generic luna-shopper-backend-backup-secret \
-  --from-literal=S3_ENDPOINT=... --from-literal=S3_BUCKET=... \
-  --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=...
+  --from-literal=S3_ENDPOINT=<endpoint> --from-literal=S3_BUCKET=<this environment's bucket> \
+  --from-literal=AWS_ACCESS_KEY_ID=<key id> --from-literal=AWS_SECRET_ACCESS_KEY=<secret>
 ```
 
-Use a bucket scoped, ideally write only key. A backup credential that can delete
-its own bucket turns a compromised cluster into a compromised backup.
+**Each environment gets a bucket of its own.** Staging must never write into
+production's bucket, whose `latest` would then pick up a staging dump.
 
-Staging gets no such Secret on purpose. An empty placeholder would make `--check`
-pass against credentials that cannot write anywhere.
+Use a bucket scoped, ideally write only key. A backup credential that can delete
+its own bucket turns a compromised cluster into a compromised backup. Do not
+create the Secret with placeholder values: `--check` would pass against
+credentials that cannot write anywhere.
 
 ## 7. Point CI at the machine
 
@@ -289,6 +296,19 @@ of them holds the same four names:
 `host-production` also holds `SSH_SOAK_CHECK_HOST`, the staging address, because
 it checks staging before it patches production, and a wait timer of 2880
 minutes.
+
+**The soak check signs in to staging with production's deploy key.** It runs in
+`host-production`, which holds only that key. One deploy key that serves both
+machines (the setup today) needs nothing more. With a key per machine, as
+section 1 makes, staging's `deploy` account must also accept the production
+public key. On the staging box, as the admin user, after the production pair
+exists (the script adds the key beside the ones already there):
+
+```sh
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line of nx_production_deploy.pub>'
+```
+
+Without it the weekly soak gate fails, and production is never patched.
 
 The production environments also carry rules (k8s plan 0017). `<unit>-production`
 runs on the unit's release tags only (`portfolio-v*`, `velista-v*`) and on no
@@ -322,6 +342,11 @@ A new repository never needs them.
 Optionally give the two `<unit>-production` environments a required reviewer
 too. The script leaves a reviewer that is already there in place.
 
+`ALLOW_CUTOVER` (section "Existing clusters: the cutover") is only ever set on
+a `<unit>-production` environment, never as a repository variable. The
+pipelines read `vars.ALLOW_CUTOVER`, which also resolves a repository variable
+of that name, and one there would let every production deploy run the cutover.
+
 ## 8. Deploy
 
 **Staging** deploys each unit on every push to `main` (`staging-<unit>.yml`):
@@ -350,11 +375,24 @@ of `<unit>-production-redeploy`:
 gh workflow run redeploy.yml --ref main -f unit=velista -f environment=production -f version=<older version>
 ```
 
-It deploys that version's images with the chart of the unit's newest release.
-It refuses a version from before the unit's first release under k8s plan 0016.
-Below that line, `helm rollback <unit> 1 -n <namespace>` restores the cutover
-install. On the box, `deploy-release.sh <unit> <older version>` from the current
-checkout does the same as the workflow.
+It deploys that version's images with the chart of the unit's newest published
+Release, and its summary names that tag. A tag with no published Release is
+never used. It refuses a version from before the unit's first release under
+k8s plan 0016. A published Release can still have failed to deploy
+(`deploy-release.sh` has no `--atomic`), and its chart is then suspect: pass an
+older release as `-f chart_ref=<version>`, or go back on the host with
+`helm history <unit> -n <namespace>` and
+`helm rollback <unit> <previous revision> -n <namespace>`. On the box,
+`deploy-release.sh <unit> <older version>` does the same as the workflow only
+from a checkout of the tag the workflow would choose; from any other checkout it
+deploys that checkout's chart.
+
+Below the floor of the workflow, `helm rollback <unit> 1 -n <namespace>`
+restores the cutover install (`helm rollback portfolio 1 -n portfolio`,
+`helm rollback velista 1 -n luna-shopper`). On a cluster that still runs
+`nx-portfolio`, `deploy-release.sh` and the redeploy both refuse to run until
+the cutover, and production rolls back with
+`helm rollback nx-portfolio -n nx-portfolio`.
 
 A deploy and the weekly host patch never overlap: both hold
 `/run/lock/nx-deploy.lock`, which section 2 created and which the host writes
@@ -523,7 +561,14 @@ bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit portfolio --env <env>
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit velista --env <env>
 
-# 6. production only: the backup Secret, in the namespace luna-shopper
+# 6. the backup Secret, with this environment's own bucket (section 6)
+kubectl -n luna-shopper create secret generic luna-shopper-backend-backup-secret \
+  --from-literal=S3_ENDPOINT=<endpoint> --from-literal=S3_BUCKET=<this environment's bucket> \
+  --from-literal=AWS_ACCESS_KEY_ID=<key id> --from-literal=AWS_SECRET_ACCESS_KEY=<secret>
+
+# 6b. production with a key per machine only: on the STAGING box, so that the
+#     soak check of host maintenance can sign in there (section 7)
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line of nx_production_deploy.pub>'
 ```
 
 ```sh
@@ -554,23 +599,36 @@ releases `portfolio` (namespace `portfolio`) and `velista` (namespace
   `<unit>-production` is `true`. Otherwise it stops before any change, with one
   line that says the cluster is not cut over. Choose a quiet hour, then either
   `gh variable set ALLOW_CUTOVER --env velista-production --body true` and re-run
-  the deploy job, or on the box as the deploy account:
+  the deploy job, or on the box as the admin user, from its clone at the
+  release commit (the script finds its charts beside itself, and reads the
+  k3s kubeconfig when `KUBECONFIG` is unset):
 
   ```sh
-  bash ~/deploy/velista/k8s/bootstrap/split-release.sh --env production --plan   # read first
-  bash ~/deploy/velista/k8s/bootstrap/host-lock.sh \
-    bash ~/deploy/velista/k8s/bootstrap/split-release.sh --env production
+  git -C ~/nx-portfolio pull
+  bash ~/nx-portfolio/k8s/bootstrap/split-release.sh --env production --plan   # read first
+  bash ~/nx-portfolio/k8s/bootstrap/host-lock.sh \
+    bash ~/nx-portfolio/k8s/bootstrap/split-release.sh --env production
   ```
 
-  Delete the variable afterwards: `gh variable delete ALLOW_CUTOVER --env velista-production`.
+  The copy under `~/deploy/<unit>/k8s` of the `deploy` account exists only
+  after a CI deploy job of that unit reached its rsync step, so it is not the
+  path to rely on here.
+
+  Set the variable only on the environment, never on the repository (section
+  7). Delete it afterwards: `gh variable delete ALLOW_CUTOVER --env velista-production`.
+
+  **Run the production cutover only after the staging cutover finished.**
+  Steps 1 and 3 have never run against a real MetalLB: the rehearsal had none,
+  and `install.sh --merge-only` deletes the old Envoy Service while the one
+  address pool still holds its address. Staging is where that runs first.
 
 **What it does**, each step safe to run again, the step reached recorded in
 ConfigMap `deploy-cutover`:
 
 1. `install.sh --merge-only`: EnvoyProxy `merged` and the GatewayClass
    `parametersRef`. Envoy Gateway replaces the Gateway's data plane with the
-   merged one. The edge is down until the merged Service holds the address: 12
-   seconds in the rehearsal.
+   merged one. The edge is down until the merged Service holds the address: 11.0
+   and 11.7 seconds in the two rehearsal runs.
 2. Deletes the Helm storage Secrets of `nx-portfolio`. Every object stays.
 3. Takes the MetalLB pool over: strips its Helm annotations and runs
    `install.sh --pool-only --ip <the address it has>`.
@@ -581,11 +639,16 @@ ConfigMap `deploy-cutover`:
 5. Dumps the four databases through their backup CronJobs (staging and
    production), sets the five volumes to `Retain`, stops the Luna workloads of
    `nx-portfolio`, moves each volume to a claim of the same name in
-   `luna-shopper`, and installs `velista` with no Gateway. The backend is down
-   from the stop until velista is Ready: 78 seconds in the rehearsal, more on a
-   cluster that pulls every image.
+   `luna-shopper`, and installs `velista` with no Gateway. From the stop, `api.`
+   and `rt.` answer 503: the old routes point at Services with no endpoints, and
+   the new HTTPS listeners stay Conflicted while the old Gateway lives. That
+   lasts until step 6 deletes the old Gateway, so it covers velista becoming
+   Ready and the two helm waits of step 6. The rehearsal measured step 5 alone,
+   from the stop to velista Ready: 78 and 79 seconds, more on a cluster that
+   pulls every image. The script prints the whole outage when step 6 deletes the
+   old Gateway.
 6. Enables both new Gateways, then deletes the old Gateway and its routes. In
-   the rehearsal nothing stopped answering.
+   the rehearsal the edge never stopped answering, beyond the 503s of step 5.
 7. An hour later, when every Certificate is Ready under its unit's issuer, a
    later deploy deletes the namespace `nx-portfolio` and the ClusterIssuer
    `letsencrypt-prod` with its account Secret. The volumes stay, bound in

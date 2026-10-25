@@ -229,11 +229,15 @@ rollback is only possible to a version whose images still exist.
 > destructive to data, restore from a dump instead (`k8s/helm/restore-database.sh`).
 
 **Where new versions come from.** Publishing a GitHub Release still builds, tests
-and pushes every image exactly as before. Only the SSH deploy is skipped while no
-`SSH_DEPLOY_HOST` secret exists, and the run says so in a notice and in the job
-summary rather than failing. So the flow is: publish the release, wait for the
-workflow, then `deploy-homelab.sh <unit> <version>` here. Staging behaves the same way
-against `SSH_DEPLOY_HOST_STAGING`.
+and pushes every image of each unit. The deploy job of each unit then checks its
+GitHub environment (`<unit>-production`, k8s plan 0016) for `SSH_DEPLOY_HOST`,
+`SSH_DEPLOY_USER`, `SSH_DEPLOY_KEY` and `SSH_KNOWN_HOSTS`. A repository with no
+cluster for CI to reach leaves them unset, so that job stops before any SSH and
+the run goes red, with a summary that says the images were pushed and names
+each missing value. That red deploy job is expected here, and the images it
+reports are the ones to deploy. So the flow is: publish the release, wait for
+the build to push the images, then `deploy-homelab.sh <unit> <version>` here.
+A staging run behaves the same way against `<unit>-staging`.
 
 ## 8. Keeping development and production apart
 

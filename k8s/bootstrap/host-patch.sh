@@ -12,7 +12,8 @@
 #   nx-host-patch apply <snapshot>    upgrade every package to the state that
 #                                     snapshot.debian.org held at <snapshot>
 #   nx-host-patch k3s <version>       install that k3s release
-#   nx-host-patch reboot              reboot in 15 seconds, so the SSH call returns
+#   nx-host-patch reboot              wait for the deploy lock, then reboot 15 seconds
+#                                     later, so the SSH call returns first
 #   nx-host-patch version             the version of this tool
 #
 # Why a snapshot and not the live mirror. The host-maintenance workflow patches
@@ -44,7 +45,7 @@ export KUBECONFIG
 die() { echo "nx-host-patch: $*" >&2; exit 1; }
 
 usage() {
-  sed -n '11,16p' "$0" >&2
+  sed -n '11,17p' "$0" >&2
   exit 2
 }
 
@@ -280,16 +281,31 @@ cmd_k3s() {
 }
 
 cmd_reboot() {
-  # Waits for a running deploy to finish first. The reboot itself runs from a
-  # transient unit that takes the deploy lock again and keeps it, so no deploy
-  # can start in the 15 seconds before the machine goes down.
-  hold_deploy_lock
-  exec 8<&-
-  # Through systemd-run, so the SSH session that asked gets its answer before
-  # the network goes away.
-  systemd-run --quiet --unit=nx-host-patch-reboot /bin/sh -c \
-    "exec 8< $DEPLOY_LOCK; flock -w $DEPLOY_LOCK_WAIT 8; sleep 15; exec /bin/systemctl reboot"
-  echo "rebooting in 15 seconds (boot_id $(cat /proc/sys/kernel/random/boot_id))"
+  # The transient unit below is the only taker of the deploy lock here. It
+  # waits for a running deploy to finish, then holds the lock until the machine
+  # goes down, so no deploy can start in the 15 seconds before the reboot. A
+  # hold in this process first would have to be released before the unit takes
+  # it, and a deploy waiting in flock could win that gap. Through systemd-run,
+  # so the SSH session that asked gets its answer before the network goes away.
+  local unit=nx-host-patch-reboot held=/run/nx-host-patch-reboot.locked waited=0
+  [ -e "$DEPLOY_LOCK" ] || install -m 0644 -o root -g root /dev/null "$DEPLOY_LOCK"
+  rm -f "$held"
+  systemctl reset-failed "$unit" > /dev/null 2>&1 || true
+  echo "==> the reboot waits for the deploy lock $DEPLOY_LOCK (up to ${DEPLOY_LOCK_WAIT}s), then reboots 15 seconds later"
+  # && throughout: a unit that never got the lock exits non zero and reboots
+  # nothing, instead of cutting a deploy that still holds it.
+  systemd-run --quiet --unit="$unit" /bin/sh -c     "exec 8< $DEPLOY_LOCK && flock -w $DEPLOY_LOCK_WAIT 8 && touch $held && sleep 15 && exec /bin/systemctl reboot"
+  # This call returns once the unit holds the lock, or fails when the unit
+  # gave up on it.
+  until [ -e "$held" ]; do
+    if ! systemctl is-active --quiet "$unit"; then
+      [ -e "$held" ] || die "the reboot unit did not get the deploy lock in ${DEPLOY_LOCK_WAIT}s, so nothing reboots (journalctl -u $unit)"
+    fi
+    sleep 1
+    waited=$((waited + 1))
+    [ "$waited" -le $((DEPLOY_LOCK_WAIT + 60)) ] || die "the reboot unit has not reported the deploy lock after ${waited}s"
+  done
+  echo "deploy lock held; rebooting in 15 seconds (boot_id $(cat /proc/sys/kernel/random/boot_id))"
 }
 
 case "${1:-}" in

@@ -221,7 +221,10 @@ jobs:
       && needs.test.result != 'failure'
       && needs.build.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Room for the cutover of k8s plan 0016 D5, which the first deploy runs:
+    # four dumps of up to 15 minutes each and four helm waits. An ordinary
+    # deploy ends long before, bounded by its own helm and rollout timeouts.
+    timeout-minutes: 150
     environment: ${{ inputs.unit }}-production
     concurrency:
       group: deploy-${{ inputs.unit }}-production

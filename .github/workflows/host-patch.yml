@@ -163,7 +163,7 @@ jobs:
           echo "updating:$drift"
           # Under the host lock, like a deploy: the helm upgrades of the add-ons
           # must not run beside one.
-          { cat k8s/bootstrap/host-lock.sh; echo 'host_lock'; cat k8s/bootstrap/install.sh; } \
+          { cat k8s/bootstrap/host-lock.sh; echo 'host_lock || exit 1'; cat k8s/bootstrap/install.sh; } \
             | ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s'
 
       - name: Reboot when one is due
@@ -175,6 +175,10 @@ jobs:
             exit 0
           fi
           before="$(sed -n 's/^boot_id=//p' <<< "$status")"
+          # The call returns once the reboot holds the deploy lock, which can
+          # take up to 15 minutes behind a running deploy, and fails when it
+          # never got it. The boot_id wait below starts only after that, so its
+          # eleven minutes cover the reboot alone.
           ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch reboot'
           sleep 60
           # A new boot_id is the proof. An SSH that answers could still be the
