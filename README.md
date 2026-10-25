@@ -73,7 +73,7 @@ Helm release and GitHub environments ([k8s plan 0016](./k8s/plans/0016-each-unit
 | **`pr-title.yml`** | any PR opened, edited, reopened or synchronized | validates the PR title against `tools/release/rules.mjs` (see [`CONTRIBUTING.md`](./CONTRIBUTING.md)). It has no branch filter, so a stacked PR is checked too. |
 | **`pr.yml`** | PR into `main` or `dev` | `verify`: lint, unit-test and `manifest-check` the affected projects (against the PR's target branch), and the unit registry check. `verify-infra`: when a Luna Shopper project is affected, brings up a stack and runs the backend integration suites plus the `luna-shopper-backend-e2e` suite. |
 | **`staging-portfolio.yml`**, **`staging-velista.yml`** | push to `main`, or manual dispatch | call `stage-unit.yml` for their unit: lint + unit-test affected, build + push the unit's affected images under `staging`, run the unit's e2e gates against them, deploy the unit to staging. |
-| **`release-portfolio.yml`**, **`release-velista.yml`** | GitHub Release published | call `release-unit.yml` for their unit: test what changed since the unit's previous release, build + push every image of the unit under the version, deploy the unit to production. |
+| **`release-portfolio.yml`**, **`release-velista.yml`** | a GitHub Release `portfolio-v*` or `velista-v*` published | call `release-unit.yml` for their unit: test what changed since the unit's previous release, build + push every image of the unit under the version, deploy the unit to production. |
 | **`host-maintenance.yml`** | Monday 03:30 UTC | patches the staging host, waits two days, patches production (k8s plan 0013). |
 | **`image-scan.yml`** | Monday 06:00 UTC | scans every deployable image, listed by `tools/deploy/units.mjs images`. |
 
@@ -135,7 +135,7 @@ That SHA becomes `--base` for the `nx show projects --affected` queries in the `
 
 ### Images & registry
 
-- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. The base image `local-http-server` is tagged `staging` or `<unit>-v<version>` and never `latest` by a deploy. Production pins the immutable version; rollback is `deploy-release.sh <unit> <older-version>`.
+- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. The base image `local-http-server` is tagged `staging` or `<unit>-v<version>` and never `latest` by a deploy. Production pins the immutable version; rollback is `redeploy.yml` dispatched on `main` with the unit and the older version (k8s plan 0017), or `deploy-release.sh <unit> <older-version>` on the host.
 - The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
 - Nothing compiles on the runner. Lint, unit tests and every `nx build` run inside `BUILD_IMAGE`, a digest pinned `node:24-slim` named at the top of `stage-unit.yml` and `release-unit.yml`.
@@ -143,7 +143,7 @@ That SHA becomes `--base` for the `nx show projects --affected` queries in the `
 ### GitHub environments
 
 Each unit deploys with the values of its environment, `<unit>-staging` or
-`<unit>-production`. Host maintenance uses `host-staging` and `host-production`.
+`<unit>-production`, and `redeploy.yml` uses `<unit>-production-redeploy` on production. Host maintenance uses `host-staging` and `host-production`.
 Each holds the secrets `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` and
 the variable `SSH_KNOWN_HOSTS`; `host-production` also holds `SSH_SOAK_CHECK_HOST`.
 `k8s/bootstrap/github-environments.sh` writes them

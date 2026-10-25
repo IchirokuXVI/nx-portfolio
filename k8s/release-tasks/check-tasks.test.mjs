@@ -31,6 +31,7 @@ import {
   parseDay,
   parseTaskEnv,
   unitNames,
+  unitTagPrefixes,
 } from './check-tasks.mjs';
 
 const CHECKER = fileURLToPath(new URL('./check-tasks.mjs', import.meta.url));
@@ -387,4 +388,38 @@ test('the command exits 1 and names the task when the window is past the cap', (
     /0001-a-task: RUN_UNTIL_PRODUCTION is 15 days after task\.env last changed \(2026-01-01\)/
   );
   assert.doesNotMatch(result.stderr, /RUN_UNTIL_STAGING/);
+});
+
+test('fails on a task whose unit states no tag prefix', () => {
+  const problems = checkTasks(tasksDir({ '0001-a-task': { env: COMPLETE } }), {
+    lastChanged,
+    units: ['velista'],
+    tagPrefixes: { velista: '' },
+  });
+  assertOneProblem(
+    problems,
+    /0001-a-task: k8s\/units\/velista\/unit\.env states no TAG_PREFIX/
+  );
+});
+
+test('fails on a PRODUCTION_RELEASE written as the whole tag', () => {
+  const problems = checkTasks(
+    tasksDir({
+      '0001-a-task': {
+        env: { ...COMPLETE, PRODUCTION_RELEASE: 'velista-v0.15.0' },
+      },
+    }),
+    { lastChanged }
+  );
+  assertOneProblem(
+    problems,
+    /PRODUCTION_RELEASE is "velista-v0\.15\.0", the whole tag\. Write the version after velista-v alone/
+  );
+});
+
+test('reads the tag prefix of each unit of the repository', () => {
+  assert.deepEqual(unitTagPrefixes(), {
+    portfolio: 'portfolio-v',
+    velista: 'velista-v',
+  });
 });

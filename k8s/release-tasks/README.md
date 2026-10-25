@@ -56,8 +56,9 @@ DATABASES="catalog harvester core"
   which makes the window wide for the environment that matters most.
 - **A window that is absent or empty is an error, not a default.** The task does
   not run and the deploy fails.
-- **`PRODUCTION_RELEASE`.** The version that `deploy-release.sh` receives,
-  without the `v`. A task with a date in `RUN_UNTIL_PRODUCTION` must state it.
+- **`PRODUCTION_RELEASE`.** The version that `deploy-release.sh` receives: the
+  part of the unit's tag after its `TAG_PREFIX` (`k8s/units/<unit>/unit.env`),
+  so `0.15.0` for the tag `velista-v0.15.0`, never the whole tag. A task with a date in `RUN_UNTIL_PRODUCTION` must state it.
   Production deploys an immutable version, so a version is exact where a date
   is only close. Staging deploys the tag `staging` on every push to `main`, so
   the date is its only gate.
@@ -217,6 +218,10 @@ fails when:
 - a window is absent, empty, or neither a date nor `never`.
 - `RUN_UNTIL_PRODUCTION` is a date and `PRODUCTION_RELEASE` is absent, or is
   not a version written without its `v`.
+- `PRODUCTION_RELEASE` is written as the whole tag (`velista-v0.15.0`). The
+  value is the version after the unit's `TAG_PREFIX` alone (`0.15.0`).
+- `UNIT` is absent or names no directory of `k8s/units`, or that unit's
+  `unit.env` states no `TAG_PREFIX`, so no release of it has a version to name.
 - a window is more than 14 days after the commit that last changed that
   `task.env`. Without a cap, somebody writes 2099.
 - `check.sh` is absent, or neither `pre.sh` nor `post.sh` exists.

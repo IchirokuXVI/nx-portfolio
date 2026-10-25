@@ -17,7 +17,7 @@ on:
         type: string
         required: true
       tag:
-        description: The release tag, <unit>-vX.Y.Z or, until k8s plan 0017, a bare vX.Y.Z.
+        description: The release tag, the unit's TAG_PREFIX and a version (k8s plan 0017 D1).
         type: string
         required: true
 
@@ -39,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prefix: ${{ steps.version.outputs.prefix }}
       images: ${{ steps.lists.outputs.images }}
       luna: ${{ steps.lists.outputs.luna }}
       testable: ${{ steps.lists.outputs.testable }}
@@ -55,13 +56,20 @@ jobs:
       - name: Resolve the release version
         id: version
         run: |
-          version="${TAG#"$UNIT"-v}"
-          version="${version#v}"
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+          if [[ "$TAG" != "$TAG_PREFIX"* ]]; then
+            echo "::error::the tag $TAG is not a release of $UNIT, whose tags start with $TAG_PREFIX"
+            exit 1
+          fi
+          version="${TAG#"$TAG_PREFIX"}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]*)?$ ]]; then
             echo "::error::cannot read a version from the tag $TAG"
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "prefix=$TAG_PREFIX"
+          } >> "$GITHUB_OUTPUT"
           echo "Releasing $UNIT $version"
 
       - name: Setup Node.js
@@ -79,9 +87,10 @@ jobs:
       # this release. With no previous tag, everything is tested.
       - name: List the images and what to test
         id: lists
+        env:
+          PREFIX: ${{ steps.version.outputs.prefix }}
         run: |
-          previous="$(git describe --tags --abbrev=0 --match "$UNIT-v*" "$TAG^" 2> /dev/null \
-            || git describe --tags --abbrev=0 --match 'v[0-9]*' "$TAG^" 2> /dev/null || true)"
+          previous="$(git describe --tags --abbrev=0 --match "$PREFIX*" "$TAG^" 2> /dev/null || true)"
           list() { npx nx show projects "$@" --json | jq -r 'join(",")'; }
           images="$(list --with-target build:docker --projects "tag:deploy:$UNIT")"
           if [ -n "$previous" ]; then

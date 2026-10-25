@@ -281,9 +281,10 @@ credentials that cannot write anywhere.
 
 Each deploy unit deploys with the values of a GitHub **environment** of its own
 (k8s plan 0016 D2): `portfolio-staging`, `velista-staging`,
-`portfolio-production` and `velista-production`. Host maintenance uses
-`host-staging` and `host-production`. Every one of them holds the same four
-names:
+`portfolio-production` and `velista-production`. A rollback from `redeploy.yml`
+uses `portfolio-production-redeploy` and `velista-production-redeploy` (k8s plan
+0017 D7). Host maintenance uses `host-staging` and `host-production`. Every one
+of them holds the same four names:
 
 | Name              | Kind     | Value                                          |
 | ----------------- | -------- | ---------------------------------------------- |
@@ -309,6 +310,11 @@ sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line
 
 Without it the weekly soak gate fails, and production is never patched.
 
+The production environments also carry rules (k8s plan 0017). `<unit>-production`
+runs on the unit's release tags only (`portfolio-v*`, `velista-v*`) and on no
+branch. `<unit>-production-redeploy` runs on the branch `main` only, and waits
+for the reviewer that `--reviewer` names.
+
 One command per environment writes all of them, from your workstation with
 `gh auth login` as a repository admin. It creates an environment that does not
 exist and keeps the rules of one that does:
@@ -318,7 +324,7 @@ bash k8s/bootstrap/github-environments.sh --env staging \
   --host staging.ichirokuxvi.com --key-file ~/.ssh/nx_staging_deploy
 bash k8s/bootstrap/github-environments.sh --env production \
   --host ichirokuxvi.com --key-file ~/.ssh/nx_production_deploy \
-  --soak-host staging.ichirokuxvi.com
+  --soak-host staging.ichirokuxvi.com --reviewer <your GitHub login>
 ```
 
 A pipeline whose environment lacks one of the four stops before any SSH and
@@ -333,7 +339,8 @@ The pipelines read nothing from repository secrets. The old repository secrets
 environments, and are then deleted (section "Existing clusters: the cutover").
 A new repository never needs them.
 
-Optionally give the two production environments a required reviewer.
+Optionally give the two `<unit>-production` environments a required reviewer
+too. The script leaves a reviewer that is already there in place.
 
 `ALLOW_CUTOVER` (section "Existing clusters: the cutover") is only ever set on
 a `<unit>-production` environment, never as a repository variable. The
@@ -349,20 +356,43 @@ earlier green run to compare with, so it builds and deploys every image of its
 unit. To deploy everything by hand from GitHub, dispatch `staging-portfolio.yml`
 and `staging-velista.yml` with `build_all`.
 
-**Production** deploys when a GitHub Release is published (`release-<unit>.yml`),
-at that commit, pinned to the version tag. Until k8s plan 0017 a bare `vX.Y.Z`
-deploys both units. By hand, on the box:
+**Production** deploys one unit when a GitHub Release with that unit's prefix is
+published (`release-<unit>.yml`, k8s plan 0017): `portfolio-vX.Y.Z` or
+`velista-vX.Y.Z`, at that commit, pinned to the version. A bare `vX.Y.Z` deploys
+nothing. `CONTRIBUTING.md` ("Release notes") has the commands. A new machine
+changes nothing about the tags: the next release of each unit is the next
+number above its newest tag. By hand, on the box:
 
 ```sh
 bash ~/nx-portfolio/k8s/helm/deploy-release.sh portfolio <version>
 bash ~/nx-portfolio/k8s/helm/deploy-release.sh velista <version>
 ```
 
-Rollback is the same command with an older version, or
-`helm rollback <unit> -n <namespace>` (`helm rollback portfolio -n portfolio`,
-`helm rollback velista -n luna-shopper`). On a cluster that still runs
-`nx-portfolio`, `deploy-release.sh` refuses to run until the cutover, and
-production rolls back with `helm rollback nx-portfolio -n nx-portfolio`.
+Rollback is `redeploy.yml`, dispatched on `main`, which waits for the reviewer
+of `<unit>-production-redeploy`:
+
+```sh
+gh workflow run redeploy.yml --ref main -f unit=velista -f environment=production -f version=<older version>
+```
+
+It deploys that version's images with the chart of the unit's newest published
+Release, and its summary names that tag. A tag with no published Release is
+never used. It refuses a version from before the unit's first release under
+k8s plan 0016. A published Release can still have failed to deploy
+(`deploy-release.sh` has no `--atomic`), and its chart is then suspect: pass an
+older release as `-f chart_ref=<version>`, or go back on the host with
+`helm history <unit> -n <namespace>` and
+`helm rollback <unit> <previous revision> -n <namespace>`. On the box,
+`deploy-release.sh <unit> <older version>` does the same as the workflow only
+from a checkout of the tag the workflow would choose; from any other checkout it
+deploys that checkout's chart.
+
+Below the floor of the workflow, `helm rollback <unit> 1 -n <namespace>`
+restores the cutover install (`helm rollback portfolio 1 -n portfolio`,
+`helm rollback velista 1 -n luna-shopper`). On a cluster that still runs
+`nx-portfolio`, `deploy-release.sh` and the redeploy both refuse to run until
+the cutover, and production rolls back with
+`helm rollback nx-portfolio -n nx-portfolio`.
 
 A deploy and the weekly host patch never overlap: both hold
 `/run/lock/nx-deploy.lock`, which section 2 created and which the host writes
@@ -543,12 +573,13 @@ sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line
 
 ```sh
 # 7. on your workstation: the GitHub environments of this machine, for both
-#    units and host maintenance (add --soak-host <staging> for production)
+#    units and host maintenance (add --soak-host <staging> --reviewer <login>
+#    for production)
 bash k8s/bootstrap/github-environments.sh --env <env> --host <IP or name> \
   --key-file ~/.ssh/nx_<env>_deploy
 
 # 8. one release per unit: dispatch staging-portfolio.yml and staging-velista.yml
-#    (staging), or publish a Release (production)
+#    (staging), or publish a Release portfolio-vX.Y.Z and velista-vX.Y.Z (production)
 ```
 
 ## Existing clusters: the cutover

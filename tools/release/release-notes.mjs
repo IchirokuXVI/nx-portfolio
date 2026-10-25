@@ -17,23 +17,31 @@
 //   node tools/release/release-notes.mjs --to v0.3.2 --out notes.md
 //   node tools/release/release-notes.mjs --audit                # only the offenders
 //   node tools/release/release-notes.mjs --check "feat(velista): a title"
+//   node tools/release/release-notes.mjs --unit velista --version velista-v0.15.0
 //
 // `gh` must be logged in for everything except --check and --commits.
 
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   parseTitle,
   SCOPES,
   sectionFor,
   sectionOrder,
   TYPES,
+  UNITS,
+  WORKSPACE_SCOPES,
 } from './rules.mjs';
 
 const USAGE = `Usage: node tools/release/release-notes.mjs [options]
 
-  --from <ref>     Start of the range, exclusive. Default: the tag before --to.
+  --unit <unit>    The notes of one deploy unit (k8s plan 0017): its own scopes, the
+                   workspace scopes and titles with no scope. --from then defaults
+                   to the unit's previous tag, and --version must carry the
+                   unit's prefix.
+  --from <ref>     Start of the range, exclusive. Default: the tag before --to
+                   (with --unit, the tag before --to with the unit's prefix).
   --to <ref>       End of the range, inclusive. Default: HEAD.
   --version <v>    Title the notes with this version, and end the changelog link there.
                    Default: --to, when it is a tag. With neither, the link is left out.
@@ -55,6 +63,7 @@ function run(command, args) {
   return execFileSync(command, args, {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
 
@@ -86,9 +95,62 @@ function gh(args) {
 // The range, and what is in it
 // ---------------------------------------------------------------------------
 
-/** The tag before `ref`, which is what a release is normally measured from. */
-function previousTag(ref) {
-  return tryGit(['describe', '--tags', '--abbrev=0', `${ref}^`]);
+/**
+ * The tag before `ref`, which is what a release is normally measured from.
+ * With a prefix only that unit's tags count, so a release of the other unit in
+ * between does not shorten the range.
+ */
+function previousTag(ref, prefix = null) {
+  const match = prefix ? ['--match', `${prefix}*`] : [];
+  return tryGit(['describe', '--tags', '--abbrev=0', ...match, `${ref}^`]);
+}
+
+// ---------------------------------------------------------------------------
+// Deploy units
+// ---------------------------------------------------------------------------
+
+const UNITS_DIR = fileURLToPath(new URL('../../k8s/units', import.meta.url));
+
+/** TAG_PREFIX of k8s/units/<unit>/unit.env, the one place the prefix is written. */
+function tagPrefix(unit, unitsDir = UNITS_DIR) {
+  const file = `${unitsDir}/${unit}/unit.env`;
+  if (!existsSync(file)) throw new Error(`${file} does not exist`);
+  const match = /^TAG_PREFIX=["']?([^"'\s]+)["']?\s*$/m.exec(
+    readFileSync(file, 'utf8').replace(/\r/g, '')
+  );
+  if (!match) throw new Error(`${file} has no TAG_PREFIX`);
+  return match[1];
+}
+
+/**
+ * Whether an entry belongs in the notes of `unit`. A title that cannot be read
+ * stays in the notes of every unit, because leaving it out would hide it.
+ */
+function belongsToUnit(parsed, unit) {
+  if (!parsed.ok || parsed.scopes.length === 0) return true;
+  return parsed.scopes.some(
+    (scope) => UNITS[unit].includes(scope) || WORKSPACE_SCOPES.includes(scope)
+  );
+}
+
+/** The entries of one unit, and how many were left out as another unit's. */
+function filterForUnit(entries, unit) {
+  if (!unit) return { entries, otherUnits: 0 };
+  const kept = entries.filter((entry) => belongsToUnit(entry.parsed, unit));
+  return { entries: kept, otherUnits: entries.length - kept.length };
+}
+
+const RELEASE_TAG = /^(?:[a-z][a-z0-9-]*-)?v?\d+\.\d+\.\d+/;
+
+/** A version tag, bare (`v0.14.3`) or with a unit prefix (`velista-v0.15.0`). */
+function isReleaseTag(ref) {
+  return RELEASE_TAG.test(ref);
+}
+
+function isUnitTag(ref, prefix) {
+  return (
+    ref.startsWith(prefix) && /^\d+\.\d+\.\d+/.test(ref.slice(prefix.length))
+  );
 }
 
 const RECORD = '%H\x1f%P\x1f%s';
@@ -249,9 +311,10 @@ function collect({ from, to, useCommits }) {
 // Rendering
 // ---------------------------------------------------------------------------
 
-function label(entry) {
+function label(entry, unit = null) {
   const { parsed } = entry;
-  const scope = parsed.scopes.length ? `**${parsed.scopes.join(', ')}**: ` : '';
+  let scope = parsed.scopes.length ? `**${parsed.scopes.join(', ')}**: ` : '';
+  if (unit && !scope) scope = '**no scope**: ';
   const link = entry.url ? `[${entry.ref}](${entry.url})` : entry.ref;
   return `- ${scope}${parsed.summary} (${link})`;
 }
@@ -266,7 +329,17 @@ function compareEnd({ to, version }) {
   return null;
 }
 
-function render({ entries, rollups, from, to, version, all, repo }) {
+function render({
+  entries,
+  rollups,
+  from,
+  to,
+  version,
+  all,
+  repo,
+  unit = null,
+  otherUnits = 0,
+}) {
   const lines = [];
   const shown = new Map();
   const broken = [];
@@ -302,7 +375,7 @@ function render({ entries, rollups, from, to, version, all, repo }) {
         : String(a.ref).localeCompare(String(b.ref));
     });
     lines.push(`## ${section}`, '');
-    for (const entry of inSection) lines.push(label(entry));
+    for (const entry of inSection) lines.push(label(entry, unit));
     lines.push('');
   }
 
@@ -311,7 +384,7 @@ function render({ entries, rollups, from, to, version, all, repo }) {
     for (const entry of hidden) {
       const parsed = entry.parsed;
       const text = parsed.ok
-        ? label(entry)
+        ? label(entry, unit)
         : `- ${parsed.title} (${entry.ref})`;
       lines.push(text);
     }
@@ -340,7 +413,14 @@ function render({ entries, rollups, from, to, version, all, repo }) {
     `${plural(loose, 'commit', 'commits')} outside a pull request`,
     `${plural(rollups, 'rollup', 'rollups')} skipped`,
   ];
+  if (unit) counts.push(`${otherUnits} left out as another unit's`);
   lines.push(`<sub>${counts.join(', ')}.</sub>`, '');
+  if (unit) {
+    lines.push(
+      `<sub>The notes of ${unit}: its own scopes, the workspace scopes, and titles with no scope, which every unit lists.</sub>`,
+      ''
+    );
+  }
 
   const end = compareEnd({ to, version });
   if (repo && from && end) {
@@ -377,6 +457,9 @@ function parseArgs(argv) {
         break;
       case '--version':
         options.version = next();
+        break;
+      case '--unit':
+        options.unit = next();
         break;
       case '--out':
         options.out = next();
@@ -450,17 +533,45 @@ function main(argv) {
     return checkOne(title, options.json);
   }
 
-  const to = options.to ?? 'HEAD';
-  const from = options.from ?? previousTag(to) ?? null;
-  const version =
-    options.version ??
-    (options.to && /^v?\d+\.\d+\.\d+/.test(options.to) ? options.to : null);
+  const unit = options.unit ?? null;
+  let prefix = null;
+  if (unit !== null) {
+    if (!Object.hasOwn(UNITS, unit)) {
+      console.error(
+        `\`${unit}\` is not a deploy unit. Use one of: ${Object.keys(UNITS).join(', ')}`
+      );
+      return 2;
+    }
+    prefix = tagPrefix(unit);
+    if (options.version && !isUnitTag(options.version, prefix)) {
+      console.error(
+        `--version ${options.version} is not a release of ${unit}. Its tags are ${prefix}X.Y.Z`
+      );
+      return 2;
+    }
+  }
 
-  const { entries, rollups } = collect({
+  const to = options.to ?? 'HEAD';
+  const from = options.from ?? previousTag(to, prefix) ?? null;
+  if (unit !== null && from === null) {
+    console.error(
+      `No tag ${prefix}* comes before ${to}, so the notes of ${unit} have no start.\n` +
+        'Pass --from <ref>, or push the seed tag that CONTRIBUTING.md ("The first tag of a unit") lists.'
+    );
+    return 2;
+  }
+  const toNamesRelease =
+    options.to &&
+    (prefix ? isUnitTag(options.to, prefix) : isReleaseTag(options.to));
+  const version = options.version ?? (toNamesRelease ? options.to : null);
+
+  const collected = collect({
     from,
     to,
     useCommits: options.commits,
   });
+  const { rollups } = collected;
+  const { entries, otherUnits } = filterForUnit(collected.entries, unit);
   const badTitles = entries.filter(
     (entry) => entry.kind === 'pr' && !entry.parsed.ok
   );
@@ -491,7 +602,9 @@ function main(argv) {
       from,
       to,
       version,
+      unit,
       rollups,
+      otherUnits,
       entries: entries.map((entry) => ({
         kind: entry.kind,
         ref: entry.ref,
@@ -522,6 +635,8 @@ function main(argv) {
     version,
     all: options.all,
     repo: repoSlug(),
+    unit,
+    otherUnits,
   });
 
   if (options.out) {
@@ -549,12 +664,18 @@ if (
 }
 
 export {
+  belongsToUnit,
   collect,
   compareEnd,
+  filterForUnit,
+  isReleaseTag,
   isRollup,
+  isUnitTag,
   label,
   main,
   parseArgs,
+  previousTag,
   pullRequestNumber,
   render,
+  tagPrefix,
 };
