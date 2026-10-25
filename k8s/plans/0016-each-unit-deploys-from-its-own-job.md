@@ -381,9 +381,14 @@ hand.
 >   else, after stripping the pool's Helm annotations. A cluster with no MetalLB skips
 >   the step. `--env local` takes no dump, because Docker Desktop has no object storage.
 >
-> The pipelines also pass no `secrets: inherit` (D2): an environment that lacked
-> `SSH_DEPLOY_HOST` would otherwise fall back to the repository secret of that name,
-> which is production's.
+> The pipelines first shipped with no `secrets: inherit`, to keep a repository secret
+> from showing through. The first staging runs (2026-10-25) proved that wrong: a called
+> workflow sees no secret its caller did not pass, environment secrets included, so
+> both deploy jobs got three empty values. The callers now pass `secrets: inherit` as
+> D2 wrote it, and host-maintenance.yml does too (section 6). A missing environment
+> secret still falls back to the repository one, so deploy-unit refuses a host that
+> the environment's `SSH_KNOWN_HOSTS` does not name. Deleting the four repository
+> secrets after the cutover removes the fallback.
 >
 > **The backend outage is longer than step 5.** From the stop of step 5 the old
 > HTTPRoutes point at Services with no endpoints, and the new HTTPS listeners stay

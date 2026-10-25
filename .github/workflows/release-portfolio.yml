@@ -23,6 +23,9 @@ jobs:
     with:
       unit: portfolio
       tag: ${{ github.event.release.tag_name }}
+    # Without it the deploy job of release-unit.yml sees none of the secrets of
+    # portfolio-production, although it names that environment.
+    secrets: inherit
 
   refuse:
     if: ${{ !startsWith(github.event.release.tag_name, 'portfolio-v') }}

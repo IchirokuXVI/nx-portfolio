@@ -27,3 +27,6 @@ jobs:
     with:
       unit: velista
       build_all: ${{ inputs.build_all || false }}
+    # Without it the deploy job of stage-unit.yml sees none of the secrets of
+    # velista-staging, although it names that environment.
+    secrets: inherit
