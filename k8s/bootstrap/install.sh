@@ -7,13 +7,17 @@
 # swapping it is this script plus one values key.
 #
 # Usage:
-#   ./k8s/bootstrap/install.sh --k3s                            # bare VPS, start here
-#   ./k8s/bootstrap/install.sh                                  # envoy + letsencrypt
+#   ./k8s/bootstrap/install.sh --k3s --ip 203.0.113.7           # bare VPS, start here
+#   ./k8s/bootstrap/install.sh                                  # upgrade the add-ons
 #   ./k8s/bootstrap/install.sh --issuer selfsigned --no-metallb # local (Docker Desktop)
-#   ./k8s/bootstrap/install.sh --implementation envoy --issuer letsencrypt \
-#     --email you@example.com
+#
+#   --ip <address>   the public address MetalLB advertises (the pool, step 2)
+#   --issuer         letsencrypt (default) or selfsigned (step 5)
 #
 # Idempotent: every step is an `apply` or a `helm upgrade --install`.
+#
+# Each unit chart brings its own Gateway and its own ACME Issuer (k8s plan 0015),
+# so nothing here names a Gateway, a namespace or a unit.
 
 set -euo pipefail
 
@@ -49,29 +53,23 @@ ISSUER=letsencrypt
 # It is still idempotent, and skips itself if k3s is already installed.
 INSTALL_K3S=false
 # MetalLB, by contrast, is on by default. This script is the Linux/VPS path (the
-# local one is install.ps1), and on a bare metal cluster the chart's IPAddressPool
-# has nothing to bind to without it. --no-metallb is for a Docker Desktop cluster,
-# which surfaces LoadBalancer services on localhost by itself.
+# local one is install.ps1), and on a bare metal cluster the Envoy LoadBalancer
+# Service gets no address without it. --no-metallb is for a Docker Desktop
+# cluster, which surfaces LoadBalancer services on localhost by itself.
 INSTALL_METALLB=true
-# Let's Encrypt wants a contact address for expiry warnings. Only the ACME issuer
-# reads it; the self signed one ignores it.
-ACME_EMAIL="${ACME_EMAIL:-danieliyo65@gmail.com}"
-# The Gateway the ACME HTTP-01 solver attaches its challenge routes to. Must
-# match the Gateway the chart renders (templates/gateway/gateway.yaml.tpl).
-GATEWAY_NAME="${GATEWAY_NAME:-portfolio}"
-GATEWAY_NAMESPACE="${GATEWAY_NAMESPACE:-nx-portfolio}"
+# The address the MetalLB pool advertises, the machine's public IP. Empty leaves
+# the pool as it is, which is what an add-on upgrade from host maintenance wants.
+POOL_IP=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --implementation) IMPLEMENTATION="$2"; shift 2 ;;
     --issuer)         ISSUER="$2";         shift 2 ;;
-    --email)          ACME_EMAIL="$2";     shift 2 ;;
-    --gateway)        GATEWAY_NAME="$2";   shift 2 ;;
-    --namespace)      GATEWAY_NAMESPACE="$2"; shift 2 ;;
+    --ip)             POOL_IP="$2";        shift 2 ;;
     --k3s)            INSTALL_K3S=true;    shift ;;
     --metallb)        INSTALL_METALLB=true;  shift ;;
     --no-metallb)     INSTALL_METALLB=false; shift ;;
-    -h|--help)        sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -84,6 +82,16 @@ case "$ISSUER" in
   letsencrypt|selfsigned) ;;
   *) echo "unsupported issuer: $ISSUER (expected letsencrypt or selfsigned)" >&2; exit 1 ;;
 esac
+if [ -n "$POOL_IP" ]; then
+  if [ "$INSTALL_METALLB" = false ]; then
+    echo "--ip names the address of the MetalLB pool, and --no-metallb skips MetalLB." >&2
+    exit 1
+  fi
+  if ! [[ "$POOL_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    echo "--ip takes one IPv4 address, got '$POOL_IP'." >&2
+    exit 1
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # 0. k3s.
@@ -191,7 +199,7 @@ for tool in kubectl helm; do
 done
 
 echo "==> cluster: $(kubectl config current-context)"
-echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER, metallb: $INSTALL_METALLB"
+echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER, metallb: $INSTALL_METALLB, pool address: ${POOL_IP:-unchanged}"
 
 # ---------------------------------------------------------------------------
 # 1. Gateway API CRDs, standard channel.
@@ -209,14 +217,12 @@ kubectl apply --server-side --force-conflicts -f \
   "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
 
 # ---------------------------------------------------------------------------
-# 2. MetalLB.
+# 2. MetalLB, and its pool when --ip names the address.
 #
-# The controller only. The address pool itself stays in the application chart
-# (templates/ipadd-pool.yaml.tpl, from .Values.ipAddress), because which address
-# this cluster answers on is a property of the deployment, not of the machine.
-# That split is also why this step has to exist: the chart declares an
-# IPAddressPool and an L2Advertisement, so without the CRDs installed here the
-# very first `helm upgrade` fails with `no matches for kind "IPAddressPool"`.
+# The pool belongs to the machine and not to a unit (k8s plan 0015 D5): every
+# unit's Gateway is served by the one merged Envoy Service of step 3, and that
+# Service is the only LoadBalancer that takes the address. Two unit releases
+# that both rendered the pool would collide on Helm ownership.
 #
 # L2 mode, which is what a single node with one address in front of it wants:
 # MetalLB answers ARP for the pool address on the node's own interface. No BGP
@@ -232,6 +238,73 @@ if [ "$INSTALL_METALLB" = true ]; then
     --wait
 else
   echo "==> skipping MetalLB (--no-metallb)"
+fi
+
+if [ -n "$POOL_IP" ]; then
+  # A pool is a Helm release's only while `helm status` finds that release. The
+  # cutover of plan 0016 deletes the release's storage and leaves the Helm
+  # annotations on the live objects, so a pool whose release is gone is taken over.
+  pool_release="$(kubectl -n metallb-system get ipaddresspool main-pool \
+    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+  pool_release_ns="$(kubectl -n metallb-system get ipaddresspool main-pool \
+    -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}' 2>/dev/null || true)"
+  if [ -n "$pool_release" ] \
+    && helm status "$pool_release" -n "${pool_release_ns:-default}" >/dev/null 2>&1; then
+    echo "==> IPAddressPool main-pool belongs to the Helm release '$pool_release'; left as it is"
+    echo "    (k8s plan 0016 takes it over when it splits that release)"
+  else
+    if [ -n "$pool_release" ]; then
+      echo "==> the Helm release '$pool_release' of IPAddressPool main-pool is gone; taking the pool over"
+      for obj in ipaddresspool/main-pool l2advertisement/main-advertisement; do
+        if kubectl -n metallb-system get "$obj" >/dev/null 2>&1; then
+          kubectl -n metallb-system annotate "$obj" \
+            meta.helm.sh/release-name- meta.helm.sh/release-namespace- >/dev/null
+          kubectl -n metallb-system label "$obj" app.kubernetes.io/managed-by- >/dev/null
+        fi
+      done
+    fi
+    echo "==> applying IPAddressPool main-pool ($POOL_IP) and L2Advertisement main-advertisement"
+    pool_manifest="$(cat <<YAML
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: main-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - ${POOL_IP}/32
+  # Only the Envoy data plane may take the address. A LoadBalancer Service in an
+  # application namespace would otherwise race it for the one address.
+  serviceAllocation:
+    namespaces:
+      - envoy-gateway-system
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: main-advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - main-pool
+YAML
+)"
+    # MetalLB's validating webhook can refuse for a few seconds after its install.
+    attempt=1
+    until printf '%s\n' "$pool_manifest" | kubectl apply -f -; do
+      if [ "$attempt" -ge 6 ]; then
+        echo "ERROR: the MetalLB pool could not be applied after $attempt attempts." >&2
+        exit 1
+      fi
+      echo "==> retrying the pool in 5s (attempt $attempt of 6 failed)"
+      attempt=$((attempt + 1))
+      sleep 5
+    done
+  fi
+elif [ "$INSTALL_METALLB" = true ] \
+  && ! kubectl -n metallb-system get ipaddresspool main-pool >/dev/null 2>&1; then
+  echo "==> WARNING: no IPAddressPool main-pool and no --ip. The Envoy Service will"
+  echo "    stay <pending> until one exists. Re-run with --ip <public address>."
 fi
 
 # ---------------------------------------------------------------------------
@@ -268,11 +341,63 @@ helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
 
 # The GatewayClass. Contrary to what is sometimes assumed, the Envoy Gateway
 # chart does NOT create one: it only sets the controller name it will answer to.
-# The class is what `gateway.className` in values.yaml points at, so it is part
-# of the bootstrap rather than the application chart, which keeps the chart free
-# of any reference to the implementation beyond that one value.
-echo "==> creating GatewayClass eg"
+# The class is what `gateway.className` in the unit charts points at, so it is
+# part of the bootstrap rather than a chart.
+#
+# Merged gateways (k8s plan 0015 D3). Each unit chart renders a Gateway of its
+# own, and Envoy Gateway would give each one a data plane and a LoadBalancer
+# Service, while MetalLB has one address. The EnvoyProxy `merged` makes the class
+# serve every Gateway from one data plane with one Service.
+echo "==> creating EnvoyProxy merged"
 kubectl apply -f - <<'YAML'
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: merged
+  namespace: envoy-gateway-system
+spec:
+  mergeGateways: true
+YAML
+
+# Switching a cluster that already serves Gateways replaces their data plane
+# Service, and the new one waits <pending> while the old one holds the address.
+# That switch is the cutover of plan 0016 (`--merge-only`), so here the class is
+# merged only on a cluster with no Gateway yet, or one that is merged already.
+merge_class=false
+if [ "$(kubectl get gatewayclass eg -o jsonpath='{.spec.parametersRef.name}' 2>/dev/null || true)" = merged ]; then
+  merge_class=true
+else
+  # A failed query is a stop, never "no Gateway": that would merge a live class.
+  if ! gateway_classes="$(kubectl get gateways --all-namespaces \
+    -o custom-columns=CLASS:.spec.gatewayClassName --no-headers)"; then
+    echo "ERROR: kubectl could not list the Gateways, so it is unknown whether the" >&2
+    echo "       GatewayClass eg may be merged. Fix cluster access and run again." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$gateway_classes" | grep -x eg > /dev/null; then
+    merge_class=true
+  fi
+fi
+
+if [ "$merge_class" = true ]; then
+  echo "==> creating GatewayClass eg (merged gateways)"
+  kubectl apply -f - <<'YAML'
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: merged
+    namespace: envoy-gateway-system
+YAML
+else
+  echo "==> GatewayClass eg serves Gateways on a data plane each; left unmerged"
+  echo "    (k8s plan 0016 merges it when it splits the release)"
+  kubectl apply -f - <<'YAML'
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
@@ -280,6 +405,7 @@ metadata:
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
 YAML
+fi
 
 # ---------------------------------------------------------------------------
 # 4. cert-manager, with the Gateway API integration enabled.
@@ -301,37 +427,17 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --wait
 
 # ---------------------------------------------------------------------------
-# 5. The ClusterIssuer.
+# 5. The issuer.
 #
-# The local and production paths differ by this flag rather than by mechanism:
-# both end up as cert-manager issued Secrets referenced from the Gateway's
-# listeners, so a local deploy exercises the same wiring production uses.
+# A public cluster needs nothing here: each unit chart renders a namespaced ACME
+# Issuer that solves HTTP-01 through the unit's own Gateway (k8s plan 0015 D4).
+# A local cluster has no public DNS, so it gets one self signed ClusterIssuer
+# that the local values files name. Both end up as cert-manager issued Secrets
+# referenced from the Gateway's listeners, so a local deploy exercises the same
+# wiring production uses.
 # ---------------------------------------------------------------------------
 if [ "$ISSUER" = "letsencrypt" ]; then
-  echo "==> creating ClusterIssuer letsencrypt-prod (ACME HTTP-01 via the Gateway)"
-  kubectl apply -f - <<YAML
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: ${ACME_EMAIL}
-    privateKeySecretRef:
-      name: letsencrypt-prod-account-key
-    solvers:
-      # The HTTP-01 solver creates a temporary HTTPRoute with an exact path match
-      # on the challenge token, parented to the chart's Gateway. Gateway API
-      # specifies route precedence (exact beats prefix), so the challenge wins
-      # over the catch all HTTPS redirect deterministically.
-      - http01:
-          gatewayHTTPRoute:
-            parentRefs:
-              - kind: Gateway
-                name: ${GATEWAY_NAME}
-                namespace: ${GATEWAY_NAMESPACE}
-YAML
+  echo "==> no ClusterIssuer: each unit chart brings its own ACME Issuer"
 else
   echo "==> creating ClusterIssuer selfsigned"
   kubectl apply -f - <<YAML
@@ -355,6 +461,7 @@ echo
 if [ "$INSTALL_METALLB" = true ]; then
   echo "==> metallb-system (controller + one speaker per node)"
   kubectl get pods -n metallb-system
+  kubectl get ipaddresspool -n metallb-system
   echo
 fi
 echo "==> envoy-gateway-system"
@@ -366,8 +473,9 @@ echo
 echo "==> clusterissuers"
 kubectl get clusterissuer
 echo
-echo "Bootstrap done. After deploying the chart, check the data plane Service that"
-echo "Envoy Gateway provisions for the Gateway. It is NOT declared by the chart and"
-echo "it lives in envoy-gateway-system, not the application namespace:"
+echo "Bootstrap done. After deploying a unit chart, check the one merged data plane"
+echo "Service that Envoy Gateway provisions for every Gateway of class eg. No chart"
+echo "declares it, and it lives in envoy-gateway-system. With MetalLB, its"
+echo "EXTERNAL-IP is the pool address:"
 echo
-echo "  kubectl get svc -n envoy-gateway-system"
+echo "  kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gatewayclass=eg"

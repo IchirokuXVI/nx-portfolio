@@ -1,6 +1,7 @@
 # Luna Shopper runtime Secrets
 
-The Luna Shopper chart (`lunaShopperBackend` in `values.yaml`, plan 0002) reads its
+The Luna Shopper backend (`lunaShopperBackend` in `velista/values.yaml`, plans 0002
+and 0015) reads its
 sensitive values from Kubernetes Secrets that are **created out of band and never
 committed**. Nothing secret lives in the chart, `values.yaml`, an image, or a build
 arg. Non secret config (hosts, log level, mail sender, token TTLs, the JWT key id)
@@ -14,9 +15,12 @@ exist and the `api.` / `rt.` DNS records point at the cluster.
 **Do not create these by hand.** Run:
 
 ```sh
-./k8s/bootstrap/provision-release.sh --env staging
-./k8s/bootstrap/provision-release.sh --check --env staging
+./k8s/bootstrap/provision-release.sh --unit velista --env staging
+./k8s/bootstrap/provision-release.sh --check --unit velista --env staging
 ```
+
+The Secrets are the `SECRETS` of `k8s/units/velista/unit.env`, written into its
+`NAMESPACE`, `luna-shopper`.
 
 This document used to be a block of `kubectl create secret` commands to copy,
 edit and paste. Plan 0006 replaced that with the script, for reasons that are
