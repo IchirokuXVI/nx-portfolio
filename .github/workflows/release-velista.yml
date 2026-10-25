@@ -23,6 +23,9 @@ jobs:
     with:
       unit: velista
       tag: ${{ github.event.release.tag_name }}
+    # Without it the deploy job of release-unit.yml sees none of the secrets of
+    # velista-production, although it names that environment.
+    secrets: inherit
 
   refuse:
     if: ${{ !startsWith(github.event.release.tag_name, 'velista-v') }}

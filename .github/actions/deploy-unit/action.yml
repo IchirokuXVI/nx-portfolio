@@ -101,6 +101,12 @@ runs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
         fi
+        # A host the environment pins no key for is the repository secret
+        # showing through (stage-unit.yml), or a typo. Either way, stop here.
+        if ! printf '%s\n' "$KNOWN_HOSTS" | awk '{print $1}' | tr ',' '\n' | grep -qxF "$DEPLOY_HOST"; then
+          echo "::error title=$UNIT-$MODE names an unpinned host::SSH_DEPLOY_HOST is not a host of SSH_KNOWN_HOSTS in the environment $UNIT-$MODE. Set SSH_DEPLOY_HOST on that environment (k8s/bootstrap/github-environments.sh)."
+          exit 1
+        fi
         install -d -m 700 ~/.ssh
         printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
         chmod 600 ~/.ssh/known_hosts
