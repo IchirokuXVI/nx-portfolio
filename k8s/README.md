@@ -105,7 +105,7 @@ its own pipelines:
 A Release whose tag lacks the unit's prefix starts `release-<unit>.yml`, which
 writes one summary line and deploys nothing. `redeploy.yml` is the rollback
 (plan 0017 D7): it builds nothing, and on production it deploys an existing
-version with the chart of the unit's newest release tag.
+version with the chart of the unit's newest tag that has a published Release.
 
 `stage-unit.yml` lists the unit's affected images (`tag:deploy:<unit>`), runs
 lint and tests over everything affected, builds the base image and the unit's

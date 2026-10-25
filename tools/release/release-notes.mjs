@@ -556,7 +556,7 @@ function main(argv) {
   if (unit !== null && from === null) {
     console.error(
       `No tag ${prefix}* comes before ${to}, so the notes of ${unit} have no start.\n` +
-        'Pass --from <ref>, or seed the first tag as CONTRIBUTING.md describes.'
+        'Pass --from <ref>, or push the seed tag that CONTRIBUTING.md ("The first tag of a unit") lists.'
     );
     return 2;
   }

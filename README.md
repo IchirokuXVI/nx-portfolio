@@ -73,7 +73,7 @@ Helm release and GitHub environments ([k8s plan 0016](./k8s/plans/0016-each-unit
 | **`pr-title.yml`** | any PR opened, edited, reopened or synchronized | validates the PR title against `tools/release/rules.mjs` (see [`CONTRIBUTING.md`](./CONTRIBUTING.md)). It has no branch filter, so a stacked PR is checked too. |
 | **`pr.yml`** | PR into `main` or `dev` | `verify`: lint, unit-test and `manifest-check` the affected projects (against the PR's target branch), and the unit registry check. `verify-infra`: when a Luna Shopper project is affected, brings up a stack and runs the backend integration suites plus the `luna-shopper-backend-e2e` suite. |
 | **`staging-portfolio.yml`**, **`staging-velista.yml`** | push to `main`, or manual dispatch | call `stage-unit.yml` for their unit: lint + unit-test affected, build + push the unit's affected images under `staging`, run the unit's e2e gates against them, deploy the unit to staging. |
-| **`release-portfolio.yml`**, **`release-velista.yml`** | GitHub Release published | call `release-unit.yml` for their unit: test what changed since the unit's previous release, build + push every image of the unit under the version, deploy the unit to production. |
+| **`release-portfolio.yml`**, **`release-velista.yml`** | a GitHub Release `portfolio-v*` or `velista-v*` published | call `release-unit.yml` for their unit: test what changed since the unit's previous release, build + push every image of the unit under the version, deploy the unit to production. |
 | **`host-maintenance.yml`** | Monday 03:30 UTC | patches the staging host, waits two days, patches production (k8s plan 0013). |
 | **`image-scan.yml`** | Monday 06:00 UTC | scans every deployable image, listed by `tools/deploy/units.mjs images`. |
 

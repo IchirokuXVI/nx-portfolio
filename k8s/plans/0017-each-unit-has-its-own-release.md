@@ -235,7 +235,15 @@ that lacks an image the unit has now is refused there, and not found as a Deploy
 cannot pull. A refusal fails the run: unlike a foreign tag on `release-<unit>.yml`, a
 dispatch that deployed nothing did not do what it was asked. The way back below the line
 is written `helm rollback <release> 1 -n <namespace>`, because `helm` needs the namespace.
-The `version` input takes `0.15.0`, `v0.15.0` or `velista-v0.15.0`.
+The `version` input takes `0.15.0`, `v0.15.0` or `velista-v0.15.0`. Every tag the workflow
+considers, for the version and for the chart, must have a published, non draft Release, so a
+tag pushed by hand never supplies the chart, and the summary names the chart's tag. A
+published Release can still have failed to deploy, so an optional `chart_ref` input names
+an older release whose chart deploys, and the summary names
+`helm rollback <release> <previous revision> -n <namespace>` on the host as the other way
+back. A production redeploy never runs the cutover of `0016` D5. Known limit: the previous
+tag of a release is found by `git describe` ancestry, so a hotfix tag cut on a branch off
+`main` is skipped by the next release from `main`.
 
 ## 4. Who edits what
 
@@ -246,7 +254,7 @@ per deploy unit (plan 0017)`. The scope list is the file list.
 
 - `node tools/release/release-notes.mjs --check "feat(velista): a thing (plan 0017)"` still
   passes; `node --test tools/release/release-notes.test.mjs` passes with the new cases.
-- `node tools/release/release-notes.mjs --unit velista --from velista-v0.14.2 --to HEAD`
+- `node tools/release/release-notes.mjs --unit velista --from velista-v0.14.3 --to HEAD`
   prints notes with no portfolio scope, and the portfolio command the reverse.
 - A Release `velista-v0.15.0` runs `release-velista.yml` through deploy and
   `release-portfolio.yml` to its one summary line. `helm history portfolio` is unchanged.
@@ -255,14 +263,14 @@ per deploy unit (plan 0017)`. The scope list is the file list.
   through `kubectl get deployment -n luna-shopper -o
   jsonpath='{.items[*].spec.template.spec.containers[*].image}'`. The run's log shows the
   checkout of the newest `velista-v*` tag, and `helm history portfolio` is unchanged.
-- `redeploy.yml` with `velista`, `production`, `0.14.2` is refused before any SSH, with a
+- `redeploy.yml` with `velista`, `production`, `0.14.3` is refused before any SSH, with a
   summary line that names `velista-v0.15.0` as the oldest version it deploys and `helm
-  rollback velista 1` as the way back below it.
+  rollback velista 1 -n luna-shopper` as the way back below it.
 
 ## 6. The owner's part
 
-1. `git tag portfolio-v0.14.2 v0.14.2 && git tag velista-v0.14.2 v0.14.2 && git push
-   origin portfolio-v0.14.2 velista-v0.14.2` (two tags in one push, under the limit of
+1. `git fetch origin --tags && git tag portfolio-v0.14.3 v0.14.3 && git tag velista-v0.14.3
+   v0.14.3 && git push origin portfolio-v0.14.3 velista-v0.14.3` (two tags in one push, under the limit of
    three that creates no events).
 2. Tag rules `portfolio-v*` on `portfolio-production` and `velista-v*` on
    `velista-production`. No branch is allowed on either.
