@@ -22,7 +22,7 @@
 # section 2.3). It existed only because a staging deploy and a production deploy
 # shared one Helm release, so the staging upgrade had to be told the live
 # production version in order not to clobber it. Staging is a different cluster
-# now, and two releases on two clusters cannot collide — so the pinned version is
+# now, and two releases on two clusters cannot collide. So the pinned version is
 # just an argument to this command, and `helm history` remains the record of what
 # was deployed when.
 #
@@ -49,6 +49,22 @@ load_unit "$K8S_DIR" "$UNIT_NAME"
 CHART_DIR="$CHART_PATH"
 TASKS_UNIT=(--unit "$UNIT_NAME")
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+# A cluster that still runs the one release nx-portfolio is not cut over (k8s
+# plan 0016 D5). A unit release installed beside it would make a second Gateway
+# that Envoy does not merge, a LoadBalancer Service that waits for an address
+# the old one holds, and ACME orders that fail, while nx-portfolio serves on as
+# before. The cutover comes first.
+if ! CUTOVER_STATE="$(bash "$K8S_DIR/bootstrap/split-release.sh" --status)"; then
+  echo "ERROR: could not read the cutover state with split-release.sh --status, so nothing was deployed." >&2
+  exit 1
+fi
+if [ "$CUTOVER_STATE" = pending ]; then
+  echo "ERROR: this cluster still runs the release nx-portfolio, and its cutover (k8s plan 0016 D5) has not run." >&2
+  echo "Run the cutover first: k8s/README-new-cluster.md, section \"Existing clusters: the cutover\"." >&2
+  echo "Until then, production rolls back with: helm rollback nx-portfolio -n nx-portfolio" >&2
+  exit 1
+fi
 
 # shellcheck source=../bootstrap/host-lock.sh
 . "$K8S_DIR/bootstrap/host-lock.sh"
@@ -196,7 +212,7 @@ echo "Upgrading helm release '${RELEASE_NAME}' in namespace '${NAMESPACE}' to ${
 #
 # Deliberately NOT --atomic, unlike the staging deploy. --atomic on production
 # turns a partial failure into an automatic rollback of the whole release,
-# including the pods that ran alongside database migrations — and migrations do
+# including the pods that ran alongside database migrations, and migrations do
 # not roll back with them. It is in fact safe here, BECAUSE migrations are expand
 # and contract and therefore backward compatible, so rolling the pods back leaves
 # them talking to a newer but compatible schema. That reasoning is written down
@@ -240,5 +256,5 @@ bash "$K8S_DIR/release-tasks/run-release-tasks.sh" "${TASKS_UNIT[@]}" \
   --env production --phase post --release "$VERSION"
 
 echo "Production is now serving release ${VERSION} of the unit $UNIT_NAME"
-echo "Helm revision history (use 'helm rollback ${RELEASE_NAME} <rev>' as an alternative):"
+echo "Helm revision history (use 'helm rollback ${RELEASE_NAME} <rev> -n ${NAMESPACE}' as an alternative):"
 helm history "$RELEASE_NAME" --namespace "$NAMESPACE" --max 10
