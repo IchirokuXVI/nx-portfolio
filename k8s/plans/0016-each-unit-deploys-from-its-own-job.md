@@ -384,6 +384,20 @@ hand.
 > The pipelines also pass no `secrets: inherit` (D2): an environment that lacked
 > `SSH_DEPLOY_HOST` would otherwise fall back to the repository secret of that name,
 > which is production's.
+>
+> **The backend outage is longer than step 5.** From the stop of step 5 the old
+> HTTPRoutes point at Services with no endpoints, and the new HTTPS listeners stay
+> Conflicted while the old Gateway lives, so `api.` and `rt.` answer 503 until step 6
+> deletes the old Gateway: velista becoming Ready plus the two helm waits of step 6, not
+> "the few minutes of step 5" written above. The rehearsal measured step 5 alone, from the
+> stop to velista Ready: 78 and 79 seconds. The step 1 edge gap was 11.0 and 11.7
+> seconds. `split-release.sh` keeps the first stop time across reruns and prints the whole
+> outage when step 6 deletes the old Gateway. Step 6 already starts directly after step 5
+> in the same run.
+>
+> **`deploy-release.sh` refuses a cluster that is not cut over.** It reads
+> `split-release.sh --status` and stops on `pending`, because a unit release installed
+> beside `nx-portfolio` would make a second Gateway that Envoy does not merge.
 
 ### D6. The base image is tagged per environment and version
 

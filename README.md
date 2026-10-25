@@ -2,15 +2,15 @@
 
 A personal portfolio built as an **Angular module-federation micro-frontend system** inside an [Nx](https://nx.dev) monorepo, plus a **NestJS backend** for velista, shipped with a custom Nx Docker build/push toolchain and deployed to **k3s** clusters via **Helm**.
 
-- **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
-- **`odontogram`, `damoclesSword`, `landingV2`, `velista`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). The first three render **only through the shell**: served on their own port they show a blank page. **velista is the exception**, a standalone app that is also exposed as a remote, served from its own origin (`velista.app`) and installable there as a PWA.
-- **`apps/luna-shopper-backend/*`** — velista's backend: seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) talking over NATS, with four Postgres instances and Redis.
+- **`shell`**: the host application. Owns the router and lazy-loads the remotes at runtime.
+- **`odontogram`, `damoclesSword`, `landingV2`, `velista`**: remote micro-frontends, each exposing its routes via `./Routes` (module federation). The first three render **only through the shell**: served on their own port they show a blank page. **velista is the exception**, a standalone app that is also exposed as a remote, served from its own origin (`velista.app`) and installable there as a PWA.
+- **`apps/luna-shopper-backend/*`**: velista's backend, with seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) talking over NATS, with four Postgres instances and Redis.
 - **`luna-shopper-admin`**: the Luna Shopper back office. A standalone Angular app (port 4206), not a remote, so the shell never loads it. It is served from its own origin (`admin.velista.app`) and talks to the same gateway as velista, on the `/v1/admin` routes.
-- **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `local-http-server`).
-- **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
-- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`).
-- **`k8s/helm`** — one Helm chart per deploy unit (`portfolio`, `velista`) over the library chart `common`, deployed by CI. Each describes **one** environment; which one comes from the cluster you point it at and the values file you pass beside `values.yaml`.
-- **`k8s/bootstrap`** — the once-per-cluster install (Gateway API CRDs, Envoy Gateway, cert-manager, a ClusterIssuer) plus the host and release provisioning scripts. Deliberately outside the chart.
+- **`apps/docker/*`**: non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `local-http-server`).
+- **`tools/docker`**: the custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
+- **`libs/<scope>/*`**: libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`).
+- **`k8s/helm`**: one Helm chart per deploy unit (`portfolio`, `velista`) over the library chart `common`, each deployed by its own CI pipeline into its own namespace. Each unit chart renders its own Gateway, its HTTPRoutes and its own cert-manager Issuer. Each describes **one** environment. The cluster you point it at and the values file you pass beside `values.yaml` decide which one.
+- **`k8s/bootstrap`**: the once-per-cluster install (Gateway API CRDs, Envoy Gateway with one merged data plane, cert-manager, MetalLB) plus the host and release provisioning scripts and the cutover `split-release.sh`. Deliberately outside the charts, which bring their own Issuers.
 
 For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
 
@@ -124,7 +124,7 @@ the host, not through a GitHub group.
 
 ### How "affected" is computed
 
-Nx doesn't diff against the previous commit — it diffs against the **last successful run of the same caller workflow**, so each unit keeps its own history. That SHA is fetched with the GitHub CLI:
+Nx doesn't diff against the previous commit. It diffs against the **last successful run of the same caller workflow**, so each unit keeps its own history. That SHA is fetched with the GitHub CLI:
 
 ```sh
 gh run list --branch "$branch" --workflow "$workflow" --json headSha,conclusion \
@@ -155,7 +155,7 @@ a production environment lets its deploy run the cutover of k8s plan 0016 D5.
 
 ### Adding a new deployable app
 
-1. Give it a `build:docker` target with `development`/`production` configurations and an `imageName` (mirror an existing Angular app's `project.json`), **or** — for a plain Dockerfile wrapper — a `build` target using `@portfolio/docker:build` plus the `type:static-docker` / `type:dynamic-docker` tag.
+1. Give it a `build:docker` target with `development`/`production` configurations and an `imageName` (mirror an existing Angular app's `project.json`), **or**, for a plain Dockerfile wrapper, a `build` target using `@portfolio/docker:build` plus the `type:static-docker` / `type:dynamic-docker` tag.
 2. Tag it `deploy:<unit>` and add **one** entry to `k8s/helm/<unit>/values.yaml` under `apps` (`name`, `image`, `hostPrefix`, `path`). No environment field and no second staging entry.
 3. Name its e2e project in the `TRIGGERS` of one gate. `node tools/deploy/units.mjs check` fails until both are done.
 
