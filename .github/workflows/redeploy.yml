@@ -1,0 +1,205 @@
+name: Redeploy a unit
+
+# Deploys an already built version of one unit again, which is the rollback
+# (k8s plan 0017 D7). Nothing is built.
+#
+#   gh workflow run redeploy.yml --ref main -f unit=velista -f environment=production -f version=0.15.0
+#
+# It runs from the default branch, because a dispatch needs the workflow file
+# at the ref it runs on. On production it checks out the unit's newest release
+# tag, not main and not the tag of the version: that tag holds the chart that
+# production runs now and the deploy-unit action, and main may hold chart
+# changes no release has shipped. A version older than the unit's first release
+# under k8s plan 0016 is refused, because its images were never deployed by a
+# unit chart. On staging it checks out main and deploys the `staging` tag again.
+#
+# The production job uses <unit>-production-redeploy: <unit>-production allows
+# the unit's release tags only, and this run is on main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        description: The deploy unit.
+        type: choice
+        options: [portfolio, velista]
+        required: true
+      environment:
+        description: Where to deploy.
+        type: choice
+        options: [production, staging]
+        required: true
+      version:
+        description: Production only. The version to put back, such as 0.15.0. Ignored on staging.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+      version: ${{ steps.resolve.outputs.version }}
+      deployments: ${{ steps.resolve.outputs.deployments }}
+    env:
+      UNIT: ${{ inputs.unit }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Runs from the default branch
+        env:
+          REF: ${{ github.ref_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$REF" != "$DEFAULT" ]; then
+            line="Dispatch redeploy.yml on \`$DEFAULT\`, not \`$REF\`: gh workflow run redeploy.yml --ref $DEFAULT ..."
+            echo "::error::$line"
+            echo "$line" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      # The whole history and every tag, to find the unit's releases.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve the tag and the version
+        id: resolve
+        run: |
+          refuse() {
+            echo "::error title=Redeploy refused::$1"
+            {
+              echo "### Redeploy of $UNIT to $ENVIRONMENT refused before any SSH"
+              echo
+              echo "$1"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+
+          if [ "$ENVIRONMENT" = staging ]; then
+            ref="$(git rev-parse HEAD)"
+            version=''
+            image_tag=staging
+          else
+            version="${VERSION#"$TAG_PREFIX"}"
+            version="${version#v}"
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]*)?$ ]] \
+              || refuse "\`$VERSION\` is not a version. Pass the number, such as 0.15.0."
+            mapfile -t tags < <(git tag -l "$TAG_PREFIX*" --sort=v:refname)
+            [ "${#tags[@]}" -gt 0 ] || refuse "No tag \`$TAG_PREFIX*\` exists, so $UNIT has no release to deploy again."
+
+            # The oldest release cut after plan 0016 landed is the oldest tag
+            # that carries the deploy-unit action.
+            floor=-1 target=-1
+            for i in "${!tags[@]}"; do
+              if [ "$floor" -lt 0 ] && git cat-file -e "${tags[$i]}:.github/actions/deploy-unit/action.yml" 2> /dev/null; then
+                floor=$i
+              fi
+              [ "${tags[$i]}" != "$TAG_PREFIX$version" ] || target=$i
+            done
+            back="Below that line the way back is \`helm rollback $RELEASE_NAME 1 -n $NAMESPACE\` on the host, which restores the cutover install (k8s plan 0017 D7)."
+            [ "$floor" -ge 0 ] \
+              || refuse "No release of $UNIT was cut after k8s plan 0016, so this workflow deploys no version of it yet. $back"
+            [ "$target" -ge 0 ] \
+              || refuse "No tag \`$TAG_PREFIX$version\` exists. Only a published release can be deployed again."
+            [ "$target" -ge "$floor" ] \
+              || refuse "\`$TAG_PREFIX$version\` is older than \`${tags[$floor]}\`, the oldest version this workflow deploys. $back"
+
+            ref="${tags[${#tags[@]} - 1]}"
+            image_tag="$version"
+            git checkout --quiet "$ref"
+          fi
+
+          projects="$(node tools/deploy/units.mjs projects "$UNIT")"
+          deployments="$(echo "$projects" | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)"
+          {
+            echo "ref=$ref"
+            echo "version=$version"
+            echo "deployments=$deployments"
+            echo "image_tag=$image_tag"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Redeploy of $UNIT to $ENVIRONMENT"
+            echo
+            echo "- chart and scripts from \`$ref\`"
+            echo "- images tagged \`$image_tag\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The chart of the newest release names every image the unit has now. An
+      # older version that lacks one would leave a Deployment that cannot pull.
+      - name: Every image of the unit exists at that tag
+        env:
+          IMAGE_TAG: ${{ steps.resolve.outputs.image_tag }}
+          DEPLOYMENTS: ${{ steps.resolve.outputs.deployments }}
+        run: |
+          missing=""
+          for ref in $(node tools/deploy/units.mjs images); do
+            case " $DEPLOYMENTS " in *" ${ref##*/} "*) ;; *) continue ;; esac
+            docker manifest inspect "$ref:$IMAGE_TAG" > /dev/null 2>&1 || missing="$missing $ref:$IMAGE_TAG"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error title=Redeploy refused::these images do not exist:$missing"
+            {
+              echo "### Redeploy of $UNIT to $ENVIRONMENT refused before any SSH"
+              echo
+              echo "The chart deploys images that the registry does not hold:"
+              echo
+              for m in $missing; do echo "- \`$m\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+  # The same concurrency group as the pipelines of the unit, so a redeploy
+  # waits for a running release or staging deploy and never overlaps it.
+  deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.environment == 'production' && format('{0}-production-redeploy', inputs.unit) || format('{0}-staging', inputs.unit) }}
+    concurrency:
+      group: deploy-${{ inputs.unit }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy
+        uses: ./.github/actions/deploy-unit
+        with:
+          unit: ${{ inputs.unit }}
+          mode: ${{ inputs.environment }}
+          version: ${{ needs.resolve.outputs.version }}
+          deployments: ${{ inputs.environment == 'staging' && needs.resolve.outputs.deployments || '' }}
+          host: ${{ secrets.SSH_DEPLOY_HOST }}
+          user: ${{ secrets.SSH_DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          known_hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          allow_cutover: ${{ vars.ALLOW_CUTOVER }}
