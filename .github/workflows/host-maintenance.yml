@@ -17,11 +17,17 @@ name: Host maintenance
 # patch always lands after a fresh dump. 03:30 UTC is 05:30 in Spain in summer
 # and 04:30 in winter, the quietest hour of both products.
 #
-# One time setup, in the repository settings:
-#   - environment host-staging, no rules
-#   - environment host-production, wait timer 2880 minutes
+# A patch never overlaps a deploy: both hold the lock on the host (k8s plan
+# 0016 D2), so neither names a concurrency group of the other.
+#
+# One time setup, in the repository settings (k8s/README-new-cluster.md, 10b):
+#   - environment host-staging, no rules, with the secrets SSH_DEPLOY_HOST,
+#     SSH_DEPLOY_USER and SSH_DEPLOY_KEY of the staging host
+#   - environment host-production, wait timer 2880 minutes, with the same three
+#     for production and SSH_SOAK_CHECK_HOST, the staging host
 #   - variable SSH_KNOWN_HOSTS: ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com
 #   - on each host, once: provision-host.sh --k3s, which installs nx-host-patch
+# Until the owner moves them there, the repository secrets below stand in.
 
 on:
   schedule:
@@ -45,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       snapshot: ${{ steps.snapshot.outputs.snapshot }}
+      staging: ${{ steps.endpoints.outputs.staging }}
+      production: ${{ steps.endpoints.outputs.production }}
     steps:
       # The hour, not the minute: snapshot.debian.org resolves a timestamp to
       # the newest import at or before it, and a round number is easier to read
@@ -59,21 +67,31 @@ jobs:
           echo "snapshot=$snap" >> "$GITHUB_OUTPUT"
           echo "### Debian snapshot \`$snap\`" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Checkout the unit registry
+        uses: actions/checkout@v4
+
+      # Every host of every unit, from k8s/units (k8s plan 0016 D7), so a new
+      # unit needs no edit here.
+      - name: The endpoints of each environment
+        id: endpoints
+        run: |
+          staging="$(node tools/deploy/units.mjs endpoints staging | paste -sd' ' -)"
+          production="$(node tools/deploy/units.mjs endpoints production | paste -sd' ' -)"
+          [ -n "$staging" ] && [ -n "$production" ] || { echo "::error::k8s/units names no host"; exit 1; }
+          echo "staging=$staging" >> "$GITHUB_OUTPUT"
+          echo "production=$production" >> "$GITHUB_OUTPUT"
+
   staging:
     needs: plan
     uses: ./.github/workflows/host-patch.yml
     with:
       environment: host-staging
-      concurrency-group: staging-deploy
       snapshot: ${{ needs.plan.outputs.snapshot }}
-      endpoints: >-
-        https://staging.ichirokuxvi.com https://mfe.staging.ichirokuxvi.com
-        https://staging.velista.app https://admin.staging.velista.app
-        https://api.staging.velista.app https://rt.staging.velista.app
+      endpoints: ${{ needs.plan.outputs.staging }}
     secrets:
-      host: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
-      user: ${{ secrets.SSH_DEPLOY_USER }}
-      key: ${{ secrets.SSH_DEPLOY_KEY }}
+      SSH_DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+      SSH_DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
+      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
 
   production:
     needs: [plan, staging]
@@ -81,18 +99,11 @@ jobs:
     uses: ./.github/workflows/host-patch.yml
     with:
       environment: host-production
-      concurrency-group: production-release
       snapshot: ${{ needs.plan.outputs.snapshot }}
-      endpoints: >-
-        https://ichirokuxvi.com https://mfe.ichirokuxvi.com
-        https://velista.app https://admin.velista.app
-        https://api.velista.app https://rt.velista.app
-      soak-check-endpoints: >-
-        https://staging.ichirokuxvi.com https://mfe.staging.ichirokuxvi.com
-        https://staging.velista.app https://admin.staging.velista.app
-        https://api.staging.velista.app https://rt.staging.velista.app
+      endpoints: ${{ needs.plan.outputs.production }}
+      soak-check-endpoints: ${{ needs.plan.outputs.staging }}
     secrets:
-      host: ${{ secrets.SSH_DEPLOY_HOST }}
-      soak-check-host: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
-      user: ${{ secrets.SSH_DEPLOY_USER }}
-      key: ${{ secrets.SSH_DEPLOY_KEY }}
+      SSH_DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
+      SSH_SOAK_CHECK_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+      SSH_DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
+      SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}

@@ -1,0 +1,38 @@
+name: Production release, velista
+
+# A published GitHub Release whose tag is velista-vX.Y.Z deploys the velista
+# unit at that tag, with the GitHub environment velista-production (k8s plans
+# 0016 D4 and 0017 D1). The pipeline itself is release-unit.yml.
+#
+# The release event has no tag filter, so every Release starts this workflow.
+# The test sits on the calling job, so a tag of another unit starts no reusable
+# workflow and enters no concurrency group. `refuse` then says so and stays green.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    if: startsWith(github.event.release.tag_name, 'velista-v')
+    uses: ./.github/workflows/release-unit.yml
+    with:
+      unit: velista
+      tag: ${{ github.event.release.tag_name }}
+
+  refuse:
+    if: ${{ !startsWith(github.event.release.tag_name, 'velista-v') }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: This tag is not a release of velista
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          line="\`$TAG\` is not a release of velista; the prefixes are \`portfolio-v\` and \`velista-v\`."
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"

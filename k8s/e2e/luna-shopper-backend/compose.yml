@@ -216,7 +216,7 @@ services:
     # The rest stays on the command line, because CLI flags win over the file and
     # this way the service still says what it is at a glance.
     #
-    # **This and `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl` are one
+    # **This and `k8s/helm/velista/templates/luna-shopper-backend/nats.yaml.tpl` are one
     # decision and change together.** A raise here and not there is a feature that
     # works on this machine and fails in the cluster with a broker level rejection.
     command: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']

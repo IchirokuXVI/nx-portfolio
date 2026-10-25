@@ -85,7 +85,7 @@ that person can.
   (`apps/luna-shopper-admin`) calls only the gateway, under `/v1/admin/...`, with an operator
   token checked by the gateway's admin JWT guard.
 - **Two public services.** The gateway and the realtime service are the only services with an
-  HTTPRoute (`routed: true` in `k8s/helm/values.yaml`, hosts `api.` and `rt.`). The other five are
+  HTTPRoute (`routed: true` in `k8s/helm/velista/values.yaml`, hosts `api.` and `rt.`). The other five are
   ClusterIP services with no route.
 - **The gateway** translates each HTTP route into a broker request to the service that owns the
   data. It owns no domain logic and no database. Redis holds its rate limit counters and the

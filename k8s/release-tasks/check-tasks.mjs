@@ -16,6 +16,11 @@
 //   - a window is more than 14 days after the commit that last changed that
 //     task.env. 14 days is how long the bucket keeps a dump, which is how long
 //     a task stays reversible. Without a cap, somebody writes 2099
+//   - UNIT is absent, or names no directory of k8s/units with a unit.env. The
+//     runner of that unit's release runs the task (k8s plan 0015 D9)
+//   - that unit.env states no TAG_PREFIX. PRODUCTION_RELEASE is the version
+//     after the prefix, and with no prefix no release of the unit has one
+//     (k8s plan 0017 D4)
 //   - check.sh is absent, or neither pre.sh nor post.sh exists
 //   - ENVIRONMENTS is still set. The two windows replaced it
 //   - two task directories share a number
@@ -46,6 +51,30 @@ const ASSIGNMENT =
 // What `deploy-release.sh` receives: the release tag without its `v`.
 const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const DAY = 24 * 60 * 60 * 1000;
+const UNITS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'units');
+
+/** The deploy units of the repository: each directory of k8s/units with a unit.env. */
+export function unitNames(unitsDir = UNITS_DIR) {
+  if (!existsSync(unitsDir)) return [];
+  return readdirSync(unitsDir, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(join(unitsDir, entry.name, 'unit.env'))
+    )
+    .map((entry) => entry.name);
+}
+
+/** TAG_PREFIX of each unit, or '' for a unit.env that states none. */
+export function unitTagPrefixes(unitsDir = UNITS_DIR) {
+  return Object.fromEntries(
+    unitNames(unitsDir).map((unit) => [
+      unit,
+      parseTaskEnv(readFileSync(join(unitsDir, unit, 'unit.env'), 'utf8'))
+        .fields.TAG_PREFIX ?? '',
+    ])
+  );
+}
 
 /**
  * The assignments of a task.env, and the lines that are neither a comment nor
@@ -109,9 +138,16 @@ export function lastChangedInGit(file) {
  * Every problem in a tasks directory, as sentences. An empty list is a pass.
  *
  * `lastChanged` answers when a task.env last changed. The tests pass their own,
- * so a fixture needs no repository.
+ * so a fixture needs no repository. `units` is the list a UNIT must be in.
  */
-export function checkTasks(tasksDir, { lastChanged = lastChangedInGit } = {}) {
+export function checkTasks(
+  tasksDir,
+  {
+    lastChanged = lastChangedInGit,
+    units = unitNames(),
+    tagPrefixes = unitTagPrefixes(),
+  } = {}
+) {
   const problems = [];
   if (!existsSync(tasksDir)) {
     return [`${tasksDir} does not exist, so there is nothing to check`];
@@ -166,6 +202,19 @@ export function checkTasks(tasksDir, { lastChanged = lastChangedInGit } = {}) {
         `task.env line ${lineNumber} is neither a comment nor NAME="value", so it cannot be checked`
       );
     }
+    if (fields.UNIT === undefined || fields.UNIT === '') {
+      say(
+        'UNIT is absent. Name the deploy unit whose release runs the task, a directory of k8s/units'
+      );
+    } else if (!units.includes(fields.UNIT)) {
+      say(
+        `UNIT is "${fields.UNIT}", and k8s/units/${fields.UNIT}/unit.env does not exist`
+      );
+    } else if (!tagPrefixes[fields.UNIT]) {
+      say(
+        `k8s/units/${fields.UNIT}/unit.env states no TAG_PREFIX, so no release of ${fields.UNIT} has a version for PRODUCTION_RELEASE to name`
+      );
+    }
     if ('ENVIRONMENTS' in fields) {
       say(
         'ENVIRONMENTS is still set. RUN_UNTIL_STAGING and RUN_UNTIL_PRODUCTION replaced it'
@@ -199,6 +248,14 @@ export function checkTasks(tasksDir, { lastChanged = lastChangedInGit } = {}) {
       if (release === undefined || release === '') {
         say(
           'RUN_UNTIL_PRODUCTION is a date and PRODUCTION_RELEASE is absent. Production runs a task in one release only'
+        );
+      } else if (
+        fields.UNIT &&
+        tagPrefixes[fields.UNIT] &&
+        release.startsWith(tagPrefixes[fields.UNIT])
+      ) {
+        say(
+          `PRODUCTION_RELEASE is "${release}", the whole tag. Write the version after ${tagPrefixes[fields.UNIT]} alone (1.2.3)`
         );
       } else if (!VERSION.test(release)) {
         say(

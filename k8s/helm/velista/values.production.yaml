@@ -1,0 +1,216 @@
+# Production of the velista unit (plans 0002 and 0015).
+#
+#   ./k8s/helm/deploy-release.sh velista <version>
+#
+# which also pins `imageTag` to the release version being deployed.
+#
+# This file holds only what differs between the two clusters. Compare it against
+# values.staging.yaml: the two should read as the same keys with different
+# answers, and a key in one but not the other is either a deliberate production
+# only concern (backups) or a drift to fix.
+
+# velista's own domain. velista is a product rather than a page of the portfolio,
+# and an installable app is identified by its origin, so it owns one. `admin.`,
+# `api.` and `rt.` follow because they exist only to serve it.
+#
+# `ichirokuxvi.com/velista` still serves the app: the portfolio chart routes that
+# path to the velista Service (plan 0015 D6), which is why https://ichirokuxvi.com
+# stays on corsOrigins below.
+#
+# All four names are CNAMEs onto `velista.app` and must resolve before this
+# deploys: cert-manager requests a certificate per Gateway listener the moment
+# the chart applies, and Let's Encrypt rate limits failed validations hard.
+# `.app` is on the HSTS preload list, so there is no plain HTTP fallback while a
+# certificate is pending.
+baseDomain: velista.app
+environment: production
+
+# Overwritten per deploy by deploy-release.sh with the release version.
+# `latest` is the floor, so a hand run `helm upgrade` with this file and nothing
+# else still deploys something coherent.
+imageTag: latest
+
+gateway:
+  tls:
+    issuer:
+      acme:
+        # Let's Encrypt sends expiry warnings here.
+        email: danieliyo65@gmail.com
+
+lunaShopperBackend:
+  enabled: true
+  config:
+    logLevel: info
+    # The oldest client this deployment serves (velista plan 0034, set by
+    # backend plan 0080, section 11). Plan 0080 renamed two fields of the
+    # supermarket items view and moved its controllers to v3, so a velista or
+    # back office build from before it reads a missing price where there is
+    # one. Every build from before the plan is v0.5.1 or older, and every build
+    # that carries it is newer than that, so this floor retires exactly the
+    # builds that predate it whatever number the release that ships it takes.
+    # Raise it when a later wire change needs to retire builds again; never set
+    # it above the version actually deployed, or the floor refuses the client
+    # it was meant to serve.
+    minClientVersion: '0.5.2'
+    # Three origins. Two of them serve velista: velista's own host, `velista.app`,
+    # and the portfolio, where the Gateway serves the same image at `/velista`
+    # (plan 0165). The app there calls this API from the portfolio origin, so the
+    # portfolio entry stays for as long as that route does.
+    #
+    # The third is the back office, which reaches this gateway on the `/v1/admin`
+    # routes from an origin of its own (luna-shopper-admin plan 0001, section 8).
+    #
+    # Comma separated, and the gateway splits and trims it. Plan 0013 section 9
+    # claimed CORS was unaffected by the move; it is not. The gateway was never
+    # same origin with the app, but it allows an explicit list of hosts, so an
+    # origin that is not on the list has every request blocked — the app loads and
+    # then fails on its first call, which looks like a broken backend rather than a
+    # missing line here.
+    corsOrigins: https://ichirokuxvi.com,https://velista.app,https://admin.velista.app
+    authJwtKid: prod-1
+    # The operator keypair's own kid (plan 0071, section 3), so a verification
+    # failure names which key was expected instead of only saying the signature
+    # is invalid.
+    adminJwtKid: prod-admin-1
+    # What GET /v1/admin/auth/me answers with, and therefore the accent colour the
+    # back office renders. ADMIN_DEV_AUTOLOGIN is not here and must never be: auth
+    # refuses to boot with it on against a non local database, and
+    # `provision-release.sh --check` asserts no rendered manifest carries it.
+    environmentName: production
+    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
+    # The path the gateway actually serves: its controllers are versioned, so the
+    # callback lives under /v1. It must match a URI pre-registered with Google
+    # exactly, which is why it is spelled out rather than derived from a domain.
+    # Moving it to velista.app means registering the new URI in the Google console
+    # before this deploys: an unregistered redirect_uri fails the whole sign in.
+    googleCallbackUrl: https://api.velista.app/v1/auth/google/callback
+    # Where the Google callback hands the browser back (plan 0023, section 3.4).
+    # `{locale}` is substituted with the locale the flow started in.
+    #
+    # velista's own origin, and the locale is the **first** segment, which is the
+    # canonical URL D5 wants the flow to land on: shell plan 0003 gave each app
+    # ownership of the segment below its own mount, and on a standalone origin
+    # the mount is empty, so the rule degenerates to `/{locale}`.
+    appBaseUrl: https://velista.app/{locale}
+    # The sender stays on ichirokuxvi.com, which is the domain that has mail set
+    # up. Moving it to velista.app is a DNS job (MX, SPF, DKIM, DMARC), not a
+    # values change, and a From: on a domain with no SPF record is how a
+    # confirmation mail lands in spam. SMTP is off in this cluster either way
+    # (smtpHost is empty), so nothing here is live yet.
+    mailFrom: Velista <no-reply@velista.app>
+    smtpHost: in-v3.mailjet.com
+    # 2525 rather than 587, for the reason spelled out beside the staging pair:
+    # this machine's provider blocks 25, 465 and 587 outbound, and Mailjet
+    # answers on 2525. Both clusters were measured, and both are blocked.
+    smtpPort: 2525
+    smtpUser: 497721f71489adfcbc3078d2b292aad8
+
+    # The links inside those mails, on the other hand, point at the app, and the
+    # app is on velista.app now.
+    #
+    # `auth/verify` is the route the app actually has (`routes.ts`, the public
+    # one below `:locale`). `/verify-email` was the name in the plan and never
+    # the name in the route table, so every confirmation link this cluster sent
+    # landed on velista's own 404.
+    #
+    # No locale segment on purpose. `localeGuard` inserts one in front of a path
+    # that has none and carries the query string across, so the link resolves to
+    # `/{locale}/auth/verify?token=...` in the reader's own language: their last
+    # used locale, else the browser's, else the app default. Pinning a locale
+    # here would hand every recipient the same one.
+    mailVerifyBaseUrl: https://velista.app/auth/verify
+    # `auth/reset-password`, beside `auth/verify`, which is where velista plan
+    # 0148 puts the reset page, and with no locale segment for the same reason.
+    # One base for both links of the mail (backend plan 0210, decision D6): the
+    # sign in link is this URL with `&mode=sign-in` after the token.
+    mailResetBaseUrl: https://velista.app/auth/reset-password
+
+  # The harvester (plan 0038) is deployed to production. k8s plan 0008 turned it
+  # on for store discovery after a soak on staging, and backend plan 0206 makes
+  # production the one cluster where a schedule starts a run.
+  #
+  # The old reason was capacity, and it came apart into two halves. The fetching
+  # half is gone for this workload: a catalog discovery run is 4,383 HTTP requests
+  # over eighteen minutes, but a STORE_DISCOVERY run is two, one geocode and one
+  # Overpass query, once per postal code per thirty day cooldown. The resident
+  # half stands and is what production would be paying: a FOURTH Postgres (auth,
+  # core and catalog come first, and this file used to miscount it as the third)
+  # with its own 2Gi volume on a node whose Postgres instances are capped at 256Mi
+  # each, plus another Node process at roughly 230 MB. Section 5 of that plan
+  # sizes it: store discovery writes tens of thousands of small rows, which is
+  # comfortable inside both numbers.
+  #
+  # WHICH CHAINS ARE FETCHED is not in this file. It is the `supermarket_sources`
+  # row of each chain (plan 0083), off by default and written from the back
+  # office. A person turns a row on to let a run of that chain start, by hand or
+  # from a schedule. A SCHEDULE NEEDS ITS ROW LEFT ON: a slot of a chain whose
+  # row is off starts nothing and is recorded as refused, and the schedule shows
+  # `SOURCE_DISABLED` before the slot comes. The rate is on the same row
+  # (`workers` and `maxRequestsPerSecond`), and so are the schedules, in
+  # `harvest_schedules`: none of them is configuration.
+  #
+  # Run `k8s/bootstrap/provision-release.sh --check --unit velista --env production` before a
+  # deploy that changes this block: it renders the chart and asserts every
+  # secretKeyRef exists, which is the failure a newly enabled service introduces.
+  #
+  # The nightly backup of the harvester's database is not optional when that
+  # happens. Its places are regenerable and its import decisions are not: see the
+  # note beside `backupSchedule` in values.yaml.
+  harvester:
+    enabled: true
+    # The second switch, on since plan 0081 section 11: an admin uploading a
+    # leaflet is a run, and a pod that exists and refuses every spawn cannot
+    # import one. Which chains may be fetched is a row per chain in the
+    # harvester's own database (plan 0083), and an upload touches no storefront
+    # at all.
+    #
+    # The actor id is no longer a values field: `provision-release.sh` generates
+    # it into the per environment Secret and both catalog and the harvester read
+    # it from there. Run `--check --unit velista --env production` before the first deploy that
+    # carries this, which is what asserts the key is actually in the cluster.
+    harvestEnabled: true
+    # The third switch (plan 0206, section 10): a due schedule starts its preset
+    # here and nowhere else. Staging keeps it off. With no schedule row it does
+    # nothing, so it was safe to turn on before the back office had a screen.
+    # The owner creates each schedule and turns each chain's row on from the
+    # back office; neither is in this file.
+    schedulerEnabled: true
+
+  # Two cores for the catalog database. values.yaml gives it one, with the
+  # measurements. One search statement is one process, so the second core is for
+  # the second statement that runs beside it: a typeahead sends a search for each
+  # pause in the typing, and the back office opens a page with about ten reads at
+  # once. This node has eight cores and 2,560m of them requested, so the request
+  # costs nothing that another pod needs. Memory, buffers and `jit` are not
+  # restated here and come from values.yaml.
+  postgres:
+    instanceOverrides:
+      luna-shopper-backend-catalog-db:
+        resources:
+          requests:
+            cpu: '2'
+            memory: 1Gi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+
+  # Redis does 5m of work, and its limit is still what stalls it. Each health
+  # probe is a `redis-cli ping` that runs inside the container, and one cost about
+  # 30 ms of CPU when measured on staging. A limit of 100m allows 10 ms in each 100 ms period, so the
+  # probe uses the whole period and the server waits about 20 ms for the next
+  # one. That happened in 2% of the periods here (385,885 of 18,449,527). 500m
+  # allows 50 ms, which holds one probe and the server together. Memory and
+  # `maxmemory` do not move.
+  redis:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 128Mi
+
+  # Nightly pg_dump off the node (plan 0005). Production only: staging holds
+  # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
+  backups:
+    enabled: true

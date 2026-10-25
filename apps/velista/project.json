@@ -4,7 +4,7 @@
   "projectType": "application",
   "prefix": "app",
   "sourceRoot": "apps/velista/src",
-  "tags": [],
+  "tags": ["deploy:velista"],
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",

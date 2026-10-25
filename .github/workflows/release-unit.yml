@@ -1,0 +1,254 @@
+name: Release one unit
+
+# The production pipeline of one deploy unit (k8s plan 0016 D1 and D4), called
+# by release-<unit>.yml when a GitHub Release is published. Every image of the
+# unit is built at the release tag under the immutable version, and the unit is
+# deployed with deploy-release.sh <unit> <version> into its own namespace and
+# release, with the host and key of the GitHub environment <unit>-production.
+#
+# The deploy is its own job, so "Re-run failed jobs" on it is "deploy this exact
+# version again", with no rebuild.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: A directory of k8s/units.
+        type: string
+        required: true
+      tag:
+        description: The release tag, the unit's TAG_PREFIX and a version (k8s plan 0017 D1).
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep it equal to stage-unit.yml and the seven Luna Dockerfiles.
+  BUILD_IMAGE: node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+  DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+  DOCKER_SKIP_LOGIN: true
+  DOCKER_BUILD_CACHE: gha
+  DOCKER_BUILD_CACHE_MODE: min
+
+jobs:
+  # The version, every image of the unit (no affected here, a release builds
+  # all of its unit), and what to test.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prefix: ${{ steps.version.outputs.prefix }}
+      images: ${{ steps.lists.outputs.images }}
+      luna: ${{ steps.lists.outputs.luna }}
+      testable: ${{ steps.lists.outputs.testable }}
+    env:
+      UNIT: ${{ inputs.unit }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Resolve the release version
+        id: version
+        run: |
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+          if [[ "$TAG" != "$TAG_PREFIX"* ]]; then
+            echo "::error::the tag $TAG is not a release of $UNIT, whose tags start with $TAG_PREFIX"
+            exit 1
+          fi
+          version="${TAG#"$TAG_PREFIX"}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-][0-9A-Za-z.+-]*)?$ ]]; then
+            echo "::error::cannot read a version from the tag $TAG"
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "prefix=$TAG_PREFIX"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $UNIT $version"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      # Tested: what changed since this unit's previous release, shared
+      # libraries included. A red test in the other unit's own code cannot block
+      # this release. With no previous tag, everything is tested.
+      - name: List the images and what to test
+        id: lists
+        env:
+          PREFIX: ${{ steps.version.outputs.prefix }}
+        run: |
+          previous="$(git describe --tags --abbrev=0 --match "$PREFIX*" "$TAG^" 2> /dev/null || true)"
+          list() { npx nx show projects "$@" --json | jq -r 'join(",")'; }
+          images="$(list --with-target build:docker --projects "tag:deploy:$UNIT")"
+          if [ -n "$previous" ]; then
+            testable="$(list --affected --base "$previous" --head "$TAG" --with-target test)"
+          else
+            testable="$(list --with-target test)"
+          fi
+          luna="$(echo "$images" | tr ',' '\n' | grep -E '^luna-shopper-backend-' | paste -sd, - || true)"
+          {
+            echo "images=$images"
+            echo "testable=$testable"
+            echo "luna=$luna"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### $UNIT ${{ steps.version.outputs.version }}"
+            echo
+            echo "- images: \`$images\`"
+            echo "- tested since \`${previous:-(the first tag)}\`: \`${testable:-(nothing)}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    needs: setup
+    if: needs.setup.outputs.testable != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Lint & test
+        env:
+          TESTABLE: ${{ needs.setup.outputs.testable }}
+        run: |
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t lint test --projects "$TESTABLE"
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      UNIT: ${{ inputs.unit }}
+      VERSION: ${{ needs.setup.outputs.version }}
+      IMAGES: ${{ needs.setup.outputs.images }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Expose GitHub Actions runtime for the gha cache
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      # Alone, under the full release tag and no `latest` (k8s plan 0016 D6):
+      # two units at one number would otherwise overwrite one base from two commits.
+      - name: Build the base image
+        run: DOCKER_IMAGE_TAG="$UNIT-v$VERSION" npx nx run docker/local-http-server:build --configuration production
+
+      # VELISTA_APP_VERSION is the version the images are tagged with, so the
+      # version a client reports is the one serving it (velista plan 0034 D4).
+      - name: Build the bundles in the pinned image
+        run: |
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+          build_env=(-e "VELISTA_APP_VERSION=$VERSION")
+          for pair in $BUILD_ENV_PRODUCTION; do build_env+=(-e "$pair"); done
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "${build_env[@]}" \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t build prune --configuration production --projects "$IMAGES"
+
+      - name: Every bundle can resolve what it requires
+        if: needs.setup.outputs.luna != ''
+        env:
+          LUNA: ${{ needs.setup.outputs.luna }}
+        run: |
+          dirs="$(echo "$LUNA" | tr ',' '\n' | sed '/^$/d; s|^|dist/apps/|' | paste -sd' ' -)"
+          node apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.mjs $dirs
+
+      - name: Build & push the release images
+        run: |
+          DOCKER_IMAGE_TAG="$VERSION,latest" BUILDER_TAG="$UNIT-v$VERSION" \
+            npx nx run-many -t build:docker --configuration production \
+            --projects "$IMAGES" --exclude-task-dependencies
+
+  # The secrets are the environment's alone, as in stage-unit.yml. The group is
+  # per unit (k8s plan 0016 D2), and ALLOW_CUTOVER of the environment decides
+  # whether a cluster that still runs nx-portfolio is cut over here.
+  deploy:
+    needs: [setup, test, build]
+    if: >-
+      !cancelled()
+      && needs.setup.result == 'success'
+      && needs.test.result != 'failure'
+      && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    # Room for the cutover of k8s plan 0016 D5, which the first deploy runs:
+    # four dumps of up to 15 minutes each and four helm waits. An ordinary
+    # deploy ends long before, bounded by its own helm and rollout timeouts.
+    timeout-minutes: 150
+    environment: ${{ inputs.unit }}-production
+    concurrency:
+      group: deploy-${{ inputs.unit }}-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy
+        uses: ./.github/actions/deploy-unit
+        with:
+          unit: ${{ inputs.unit }}
+          mode: production
+          version: ${{ needs.setup.outputs.version }}
+          host: ${{ secrets.SSH_DEPLOY_HOST }}
+          user: ${{ secrets.SSH_DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          known_hosts: ${{ vars.SSH_KNOWN_HOSTS }}
+          allow_cutover: ${{ vars.ALLOW_CUTOVER }}
