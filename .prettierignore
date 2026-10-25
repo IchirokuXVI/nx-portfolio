@@ -6,8 +6,6 @@
 .angular
 /node_modules
 # Ignore all Helm template files except those with .yaml.tpl extension
-k8s/helm/templates/**/*.tpl
-!k8s/helm/templates/**/*.yaml.tpl
 k8s/helm/*/templates/**/*.tpl
 !k8s/helm/*/templates/**/*.yaml.tpl
 

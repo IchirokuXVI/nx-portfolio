@@ -1,0 +1,26 @@
+name: Production release, velista
+
+# A published GitHub Release deploys the velista unit at its tag (k8s plan
+# 0016 D4), with the GitHub environment velista-production. The pipeline itself
+# is release-unit.yml.
+#
+# The release event has no tag filter, so the job tests the tag: velista-v*, or
+# until k8s plan 0017 a bare vX.Y.Z, which deploys both units at one version.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    if: >-
+      startsWith(github.event.release.tag_name, 'velista-v')
+      || (startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-v'))
+    uses: ./.github/workflows/release-unit.yml
+    with:
+      unit: velista
+      tag: ${{ github.event.release.tag_name }}

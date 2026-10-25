@@ -4,9 +4,8 @@ Each deploy unit has its own Helm chart: [`helm/portfolio`](./helm/portfolio)
 deploys the `shell` host and the `odontogram`, `damoclesSword` and `landingV2`
 remotes, and [`helm/velista`](./helm/velista) deploys the standalone `velista` app,
 the `luna-shopper-admin` back office and the Luna Shopper backend behind velista.
-Both depend on the library chart [`helm/common`](./helm/common). The old one
-release chart (`helm/Chart.yaml`, `helm/templates/`, `helm/values*.yaml`) still
-deploys both clusters until plan 0016 switches the workflows.
+Both depend on the library chart [`helm/common`](./helm/common). Each unit deploys
+from its own pipeline into its own release (plan 0016, "Pipelines and gates" below).
 Each unit chart runs in these shapes:
 
 | Environment    | Driven by                                                         | Notes                                                                                                                                                  |
@@ -32,7 +31,6 @@ helm/
   portfolio/   the portfolio unit: its four apps and the /velista route
   velista/     the velista unit: velista, the back office, luna-shopper-backend/,
                the ReferenceGrant and the PriorityClass
-  Chart.yaml, templates/, values*.yaml    the old chart, until plan 0016
 ```
 
 The rule: **a unit renders only into `.Release.Namespace`, and it owns its
@@ -84,16 +82,52 @@ fails when an app with a `build:docker` target has no `deploy:` tag or has two,
 and when a `unit.env` is incomplete. `node tools/deploy/units.mjs list` prints
 every unit as JSON, and `projects <unit>` prints the apps of one unit.
 
-Each unit has its chart since plan 0015. The workflows still deploy the one
-release `nx-portfolio` of the old chart into the namespace `nx-portfolio`. Plan
-0016 moves each unit to its own deploy job and release, and plan 0017 to its own
-version stream.
+Each unit has its chart (plan 0015) and its own pipelines and release (plan
+0016). Plan 0017 gives each its own version stream.
 
 To move an app to another unit, change its tag. To split a unit or add one,
 follow section 4 of plan 0014: retag the apps, add `units/<new>/unit.env` and a
 chart, create the two GitHub environments, and add the scopes of the moved apps
 to `UNITS` in `tools/release/rules.mjs`. The stateful member of a split keeps the
 namespace, so data never moves for a split.
+
+### Pipelines and gates
+
+[Plan 0016](./plans/0016-each-unit-deploys-from-its-own-job.md) gives each unit
+its own pipelines:
+
+| Workflow             | Trigger                  | Calls              | Environment         |
+| -------------------- | ------------------------ | ------------------ | ------------------- |
+| `staging-<unit>.yml` | push to `main`, dispatch | `stage-unit.yml`   | `<unit>-staging`    |
+| `release-<unit>.yml` | a published Release      | `release-unit.yml` | `<unit>-production` |
+
+`stage-unit.yml` lists the unit's affected images (`tag:deploy:<unit>`), runs
+lint and tests over everything affected, builds the base image and the unit's
+images under `staging`, runs the unit's gates, and deploys. `release-unit.yml`
+builds every image of the unit under the version and deploys with
+`deploy-release.sh <unit> <version>`. Both deploy through the composite action
+`.github/actions/deploy-unit`: the registry check, the environment check, SSH
+with pinned host keys, an rsync of `k8s/` to `~/deploy/<unit>/k8s/`, the
+cutover, the preflight, the upgrade, and a diagnosis on failure.
+
+**A gate is a directory** under `e2e/` with `gate.sh` and `gate.env`. `gate.env`
+names the `/etc/hosts` names the runner points at itself (`HOSTS`), the projects
+whose being affected runs the gate (`TRIGGERS`), the browsers to install
+(`BROWSERS`) and the images it pulls (`IMAGES`). `gate.sh <e2e projects>` starts
+its stack, runs the suites and tears down. `units.mjs check` asserts that every
+e2e project is named by exactly one gate.
+
+| Gate                   | Unit      | What it runs                                                                                  |
+| ---------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| `portfolio-frontend`   | portfolio | the shell and the remotes behind a proxy, the remote entry checks, `/velista` reaches velista |
+| `luna-shopper-backend` | velista   | `luna-shopper-backend-e2e` against the service images                                         |
+| `velista-luna`         | velista   | velista on its origin and under `/velista`, plus the Luna stack for `velista-luna-e2e`        |
+
+**Deploys and host patching exclude each other on the host.** Every helm and
+kubectl step of a deploy, and `nx-host-patch` from its first package operation
+until it reboots, holds `flock` on `/run/lock/nx-deploy.lock`
+(`bootstrap/host-lock.sh`). A deploy waits up to fifteen minutes for it and
+says that it waits.
 
 This document is about running the stack **locally end to end** (build every image
 from scratch, deploy, and run e2e against the real containers). For the production
@@ -297,16 +331,15 @@ so the exact shell image, which bakes the staging MFE host, is tested unchanged.
 That stack is Docker Compose and deliberately keeps nginx: it exists to test the
 **images**, not the cluster's routing layer. Its prefix handling must stay
 equivalent to the `HTTPRoute`s, so changing one is a prompt to check the other.
-CI runs this after pushing the staging images and before deploying, so a failure
-gates the deploy. To run it yourself:
+It is the stack of the `portfolio-frontend` gate, which the portfolio pipeline
+runs after pushing the staging images and before deploying, so a failure gates
+the deploy. velista's own origin is the `velista-luna` gate's
+(`e2e/velista-luna`). To run a gate yourself:
 
 ```sh
-echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app" | sudo tee -a /etc/hosts
+echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 docker login ghcr.io                                   # only if a package is still private
-docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
-E2E_BASE_URL=https://staging.ichirokuxvi.com \
-  npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium
-docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v
+bash k8s/e2e/portfolio-frontend/gate.sh damoclesSword-e2e
 ```
 
 Override `E2E_IMAGE_PREFIX` / `E2E_IMAGE_TAG` to point at other images (e.g. a

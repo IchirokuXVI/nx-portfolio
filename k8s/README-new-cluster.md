@@ -27,12 +27,13 @@ and **root stays reachable until the replacement accounts are proven** (section
 
 - The VPS address and its root password or key.
 - Control of the domain's DNS records.
-- Admin on the GitHub repository, to set secrets.
+- Admin on the GitHub repository and `gh auth login`, to create its environments (section 7).
 - Optionally, a Google OAuth client secret, an SMTP password and a Gemini API
   key. All three are supported as blank: the Google routes and registration
   answer 501, and so does `/v1/assistant`, rather than a service failing to
   start. A cluster with none of them is a working cluster with three features off.
-- Production only: an S3 compatible bucket and a key for backups.
+- An S3 compatible bucket and a key for backups, one bucket per environment
+  (section 6).
 
 Decide which environment this machine is before you begin. It selects the values
 file, the `--env` flag and the six DNS names, and nothing else differs.
@@ -234,7 +235,7 @@ explicit opt in, and it tells you what else has to happen.
 The script refuses to write secrets inside the repository it lives in. With the
 clone at `~/nx-portfolio` the default path is your home directory, which is
 outside it, so the default is fine. Pass `--out` if you are running from a copy
-that sits directly in `$HOME`, such as the CI copy at `~deploy/k8s`.
+that sits directly in `$HOME`.
 
 Then verify what the chart will actually ask for:
 
@@ -253,89 +254,119 @@ to exist in the cluster. What the chart creates itself, today only
 is the same command CI runs before each deploy, so a pass here means the
 preflight will pass there.
 
-## 6. Backups, production only
+## 6. Backups
 
-Production renders the backup CronJobs, and they need credentials the script
-cannot generate. It prints the exact command; the shape is:
+Both environments render the backup CronJobs and both need this Secret, so
+`--check` and the deploy preflight fail without it. Production runs the
+CronJobs nightly. Staging keeps them suspended, and the release tasks
+(`k8s/release-tasks`) and the cutover start their dumps from them. The script
+cannot generate the credentials, so it prints the command. On the box, as the
+admin user:
 
 ```sh
 kubectl -n luna-shopper create secret generic luna-shopper-backend-backup-secret \
-  --from-literal=S3_ENDPOINT=... --from-literal=S3_BUCKET=... \
-  --from-literal=AWS_ACCESS_KEY_ID=... --from-literal=AWS_SECRET_ACCESS_KEY=...
+  --from-literal=S3_ENDPOINT=<endpoint> --from-literal=S3_BUCKET=<this environment's bucket> \
+  --from-literal=AWS_ACCESS_KEY_ID=<key id> --from-literal=AWS_SECRET_ACCESS_KEY=<secret>
 ```
 
-Use a bucket scoped, ideally write only key. A backup credential that can delete
-its own bucket turns a compromised cluster into a compromised backup.
+**Each environment gets a bucket of its own.** Staging must never write into
+production's bucket, whose `latest` would then pick up a staging dump.
 
-Staging gets no such Secret on purpose. An empty placeholder would make `--check`
-pass against credentials that cannot write anywhere.
+Use a bucket scoped, ideally write only key. A backup credential that can delete
+its own bucket turns a compromised cluster into a compromised backup. Do not
+create the Secret with placeholder values: `--check` would pass against
+credentials that cannot write anywhere.
 
 ## 7. Point CI at the machine
 
-Repository secrets:
+Each deploy unit deploys with the values of a GitHub **environment** of its own
+(k8s plan 0016 D2): `portfolio-staging`, `velista-staging`,
+`portfolio-production` and `velista-production`. Host maintenance uses
+`host-staging` and `host-production`. Every one of them holds the same four
+names:
 
-| Secret                    | Value                                          |
-| ------------------------- | ---------------------------------------------- |
-| `SSH_DEPLOY_USER`         | `deploy`                                       |
-| `SSH_DEPLOY_KEY`          | the **private** key from section 1, whole file |
-| `SSH_DEPLOY_HOST`         | production's address                           |
-| `SSH_DEPLOY_HOST_STAGING` | staging's address                              |
+| Name              | Kind     | Value                                          |
+| ----------------- | -------- | ---------------------------------------------- |
+| `SSH_DEPLOY_HOST` | secret   | the machine's address                          |
+| `SSH_DEPLOY_USER` | secret   | `deploy`                                       |
+| `SSH_DEPLOY_KEY`  | secret   | the **private** key from section 1, whole file |
+| `SSH_KNOWN_HOSTS` | variable | `ssh-keyscan -t ed25519 <the machine>`         |
 
-Paste the private key including the `-----BEGIN OPENSSH PRIVATE KEY-----` and
-`-----END-----` lines and the trailing newline. A truncated paste is the usual
-cause of `Load key: error in libcrypto` in the deploy job.
+`host-production` also holds `SSH_SOAK_CHECK_HOST`, the staging address, because
+it checks staging before it patches production, and a wait timer of 2880
+minutes.
 
-`SSH_DEPLOY_USER` is shared by both workflows, so both machines must trust the
-same CI key, or that secret needs splitting first.
+**The soak check signs in to staging with production's deploy key.** It runs in
+`host-production`, which holds only that key. One deploy key that serves both
+machines (the setup today) needs nothing more. With a key per machine, as
+section 1 makes, staging's `deploy` account must also accept the production
+public key. On the staging box, as the admin user, after the production pair
+exists (the script adds the key beside the ones already there):
 
-One repository **variable**, not a secret, because a host key is public:
+```sh
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line of nx_production_deploy.pub>'
+```
 
-| Variable          | Value                                                            |
-| ----------------- | ---------------------------------------------------------------- |
-| `SSH_KNOWN_HOSTS` | `ssh-keyscan -t ed25519 ichirokuxvi.com staging.ichirokuxvi.com` |
+Without it the weekly soak gate fails, and production is never patched.
 
-A new machine has a new host key, so a rebuilt host needs this variable
-refreshed. Until it is, the host-maintenance workflow refuses to connect to the
-host, which is the point of pinning the key.
+One command per environment writes all of them, from your workstation with
+`gh auth login` as a repository admin. It creates an environment that does not
+exist and keeps the rules of one that does:
+
+```sh
+bash k8s/bootstrap/github-environments.sh --env staging \
+  --host staging.ichirokuxvi.com --key-file ~/.ssh/nx_staging_deploy
+bash k8s/bootstrap/github-environments.sh --env production \
+  --host ichirokuxvi.com --key-file ~/.ssh/nx_production_deploy \
+  --soak-host staging.ichirokuxvi.com
+```
+
+A pipeline whose environment lacks one of the four stops before any SSH and
+names the missing value in its summary. A new machine has a new host key, so a
+rebuilt host needs `SSH_KNOWN_HOSTS` refreshed, which is the same command again.
+Until it is, every deploy and host patch refuses to connect, which is the point
+of pinning the key.
+
+The pipelines read nothing from repository secrets. The old repository secrets
+`SSH_DEPLOY_HOST`, `SSH_DEPLOY_HOST_STAGING`, `SSH_DEPLOY_USER` and
+`SSH_DEPLOY_KEY` stay only until host maintenance reads the `host-*`
+environments, and are then deleted (section "Existing clusters: the cutover").
+A new repository never needs them.
+
+Optionally give the two production environments a required reviewer.
+
+`ALLOW_CUTOVER` (section "Existing clusters: the cutover") is only ever set on
+a `<unit>-production` environment, never as a repository variable. The
+pipelines read `vars.ALLOW_CUTOVER`, which also resolves a repository variable
+of that name, and one there would let every production deploy run the cutover.
 
 ## 8. Deploy
 
-**Staging** deploys on every push to `main`: affected projects only, tagged
-`staging`, followed by a rollout that is waited on rather than assumed.
+**Staging** deploys each unit on every push to `main` (`staging-<unit>.yml`):
+the unit's affected images, tagged `staging`, its gates, then an upgrade and a
+rollout that is waited on rather than assumed. A first run of a pipeline has no
+earlier green run to compare with, so it builds and deploys every image of its
+unit. To deploy everything by hand from GitHub, dispatch `staging-portfolio.yml`
+and `staging-velista.yml` with `build_all`.
 
-**Production** deploys when a GitHub Release is published, at that commit, pinned
-to the version tag. One release per unit, each into its own namespace. By hand,
-on the box:
+**Production** deploys when a GitHub Release is published (`release-<unit>.yml`),
+at that commit, pinned to the version tag. Until k8s plan 0017 a bare `vX.Y.Z`
+deploys both units. By hand, on the box:
 
 ```sh
 bash ~/nx-portfolio/k8s/helm/deploy-release.sh portfolio <version>
 bash ~/nx-portfolio/k8s/helm/deploy-release.sh velista <version>
 ```
 
-Rollback is the same command with an older version, or `helm rollback <unit>`.
+Rollback is the same command with an older version, or
+`helm rollback <unit> -n <namespace>` (`helm rollback portfolio -n portfolio`,
+`helm rollback velista -n luna-shopper`). On a cluster that still runs
+`nx-portfolio`, `deploy-release.sh` refuses to run until the cutover, and
+production rolls back with `helm rollback nx-portfolio -n nx-portfolio`.
 
-**Until plan 0016 lands**, both workflows still deploy the old one release chart
-(`nx-portfolio`). A machine built from this runbook does not accept it: the old
-chart renders the MetalLB pool that section 4 applied, and names a
-`letsencrypt-prod` ClusterIssuer that `install.sh` no longer creates. Until 0016
-switches the workflows to the unit charts, deploy each unit by hand: production
-with the two commands above, staging with these, for `portfolio` in `portfolio`
-and for `velista` in `luna-shopper`. The release tasks run around the upgrade in
-the order the pipeline runs them, so the ledger is written and the first pipeline
-deploy later sees an existing release. 20m is the budget `deploy-release.sh` gives
-a first install on one small node:
-
-```sh
-k8s=~/nx-portfolio/k8s
-chart=$k8s/helm/<unit>
-bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase check
-bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase pre
-helm dependency build --skip-refresh "$chart"
-helm upgrade --install <unit> "$chart" --namespace <namespace> \
-  --values "$chart/values.yaml" --values "$chart/values.staging.yaml" \
-  --wait --timeout 20m
-bash $k8s/release-tasks/run-release-tasks.sh --unit <unit> --env staging --phase post
-```
+A deploy and the weekly host patch never overlap: both hold
+`/run/lock/nx-deploy.lock`, which section 2 created and which the host writes
+again at every boot.
 
 ## 9. Verify
 
@@ -387,12 +418,17 @@ broke, and GitHub mails the failure. Versions move only through git: Renovate
 proposes a new k3s or cert-manager, and the next Monday carries the merged
 version to staging and then to production.
 
+A patch never overlaps a deploy: `nx-host-patch` holds the deploy lock
+`/run/lock/nx-deploy.lock` from its first package operation until the reboot,
+and the add-on upgrade holds it too (k8s plan 0016 D2).
+
 What this needs, once per repository: the environments `host-staging` and
-`host-production` (wait timer 2880 minutes), the `SSH_KNOWN_HOSTS` variable
-(section 7), and the Renovate app. Once per host, which a new host gets from
-section 2 already: `nx-host-patch` and its sudo rule, and
-`/etc/rancher/k3s/config.yaml`. A host provisioned before plan 0013 gets both
-from one run, as the admin account:
+`host-production` with their values (section 7), and the Renovate app. Once per
+host, which a new host gets from section 2 already: `nx-host-patch` and its
+sudo rule, `/etc/rancher/k3s/config.yaml`, and the tmpfiles rule that creates
+the deploy lock at every boot. A host provisioned before plan 0016 gets all of
+them from one run, as the admin account (the workflow refuses an
+`nx-host-patch` older than the repository's until then):
 
 ```sh
 git -C ~/nx-portfolio pull
@@ -495,9 +531,119 @@ bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit portfolio --env <env>
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --unit velista --env <env>
 
-# 6. production only: the backup Secret, in the namespace luna-shopper
-# 7. GitHub secrets: SSH_DEPLOY_USER, SSH_DEPLOY_KEY, the host
-#    GitHub variable: SSH_KNOWN_HOSTS, refreshed with the new host key
-# 8. one release per unit: deploy-release.sh portfolio <version> and
-#    deploy-release.sh velista <version> (by hand until plan 0016, see section 8)
+# 6. the backup Secret, with this environment's own bucket (section 6)
+kubectl -n luna-shopper create secret generic luna-shopper-backend-backup-secret \
+  --from-literal=S3_ENDPOINT=<endpoint> --from-literal=S3_BUCKET=<this environment's bucket> \
+  --from-literal=AWS_ACCESS_KEY_ID=<key id> --from-literal=AWS_SECRET_ACCESS_KEY=<secret>
+
+# 6b. production with a key per machine only: on the STAGING box, so that the
+#     soak check of host maintenance can sign in there (section 7)
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --deploy-key '<the line of nx_production_deploy.pub>'
 ```
+
+```sh
+# 7. on your workstation: the GitHub environments of this machine, for both
+#    units and host maintenance (add --soak-host <staging> for production)
+bash k8s/bootstrap/github-environments.sh --env <env> --host <IP or name> \
+  --key-file ~/.ssh/nx_<env>_deploy
+
+# 8. one release per unit: dispatch staging-portfolio.yml and staging-velista.yml
+#    (staging), or publish a Release (production)
+```
+
+## Existing clusters: the cutover
+
+A cluster built before k8s plan 0016 runs one release, `nx-portfolio`, in the
+namespace `nx-portfolio`. `k8s/bootstrap/split-release.sh` turns it into the
+releases `portfolio` (namespace `portfolio`) and `velista` (namespace
+`luna-shopper`), at the image tags that run now, and moves nothing else.
+
+**Who runs it.** The preflight of every deploy runs `split-release.sh --status`.
+`none` (no namespace `nx-portfolio`) is the normal answer and the deploy goes on.
+
+- **Staging**: the first `staging-*` run after the merge runs the cutover by
+  itself. The other unit's pipeline waits on the host lock and then finds it
+  done.
+- **Production**: a deploy runs it only when the variable `ALLOW_CUTOVER` of
+  `<unit>-production` is `true`. Otherwise it stops before any change, with one
+  line that says the cluster is not cut over. Choose a quiet hour, then either
+  `gh variable set ALLOW_CUTOVER --env velista-production --body true` and re-run
+  the deploy job, or on the box as the admin user, from its clone at the
+  release commit (the script finds its charts beside itself, and reads the
+  k3s kubeconfig when `KUBECONFIG` is unset):
+
+  ```sh
+  git -C ~/nx-portfolio pull
+  bash ~/nx-portfolio/k8s/bootstrap/split-release.sh --env production --plan   # read first
+  bash ~/nx-portfolio/k8s/bootstrap/host-lock.sh \
+    bash ~/nx-portfolio/k8s/bootstrap/split-release.sh --env production
+  ```
+
+  The copy under `~/deploy/<unit>/k8s` of the `deploy` account exists only
+  after a CI deploy job of that unit reached its rsync step, so it is not the
+  path to rely on here.
+
+  Set the variable only on the environment, never on the repository (section
+  7). Delete it afterwards: `gh variable delete ALLOW_CUTOVER --env velista-production`.
+
+  **Run the production cutover only after the staging cutover finished.**
+  Steps 1 and 3 have never run against a real MetalLB: the rehearsal had none,
+  and `install.sh --merge-only` deletes the old Envoy Service while the one
+  address pool still holds its address. Staging is where that runs first.
+
+**What it does**, each step safe to run again, the step reached recorded in
+ConfigMap `deploy-cutover`:
+
+1. `install.sh --merge-only`: EnvoyProxy `merged` and the GatewayClass
+   `parametersRef`. Envoy Gateway replaces the Gateway's data plane with the
+   merged one. The edge is down until the merged Service holds the address: 11.0
+   and 11.7 seconds in the two rehearsal runs.
+2. Deletes the Helm storage Secrets of `nx-portfolio`. Every object stays.
+3. Takes the MetalLB pool over: strips its Helm annotations and runs
+   `install.sh --pool-only --ip <the address it has>`.
+4. Creates `portfolio` and `luna-shopper`, copies the TLS Secrets of each unit's
+   hosts, the six Luna Secrets and the `release-tasks` ledger into them
+   (verbatim, never regenerated: it stops if a copy exists with other values),
+   and installs `portfolio` with no Gateway.
+5. Dumps the four databases through their backup CronJobs (staging and
+   production), sets the five volumes to `Retain`, stops the Luna workloads of
+   `nx-portfolio`, moves each volume to a claim of the same name in
+   `luna-shopper`, and installs `velista` with no Gateway. From the stop, `api.`
+   and `rt.` answer 503: the old routes point at Services with no endpoints, and
+   the new HTTPS listeners stay Conflicted while the old Gateway lives. That
+   lasts until step 6 deletes the old Gateway, so it covers velista becoming
+   Ready and the two helm waits of step 6. The rehearsal measured step 5 alone,
+   from the stop to velista Ready: 78 and 79 seconds, more on a cluster that
+   pulls every image. The script prints the whole outage when step 6 deletes the
+   old Gateway.
+6. Enables both new Gateways, then deletes the old Gateway and its routes. In
+   the rehearsal the edge never stopped answering, beyond the 503s of step 5.
+7. An hour later, when every Certificate is Ready under its unit's issuer, a
+   later deploy deletes the namespace `nx-portfolio` and the ClusterIssuer
+   `letsencrypt-prod` with its account Secret. The volumes stay, bound in
+   `luna-shopper`, with reclaim policy `Retain`.
+
+A failure in steps 1 to 4 leaves the old release serving. A failure in step 5
+prints each volume and the command that binds it. A failure in step 6 needs a
+person; the deploy's diagnosis prints both Gateways, both releases and the
+Envoy Service.
+
+**Check after it**, on the box:
+
+```sh
+helm list -A                          # portfolio in portfolio, velista in luna-shopper
+kubectl get gateway -A                # portfolio and velista, both PROGRAMMED True
+kubectl get certificate -A            # six, all READY True
+kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gatewayclass=eg
+kubectl get cm release-tasks -n luna-shopper -o yaml   # the ledger, copied
+kubectl get pv                        # five volumes, Retain, bound in luna-shopper
+```
+
+and from anywhere, each public URL over TLS, `/velista/en` on the portfolio host,
+and `/.well-known/assetlinks.json` on velista's host.
+
+**After both clusters are cut over**, with host maintenance reading the `host-*`
+environments (section 7): `bash k8s/bootstrap/github-environments.sh` for both
+environments if not done yet, then delete the four repository secrets
+`SSH_DEPLOY_HOST`, `SSH_DEPLOY_HOST_STAGING`, `SSH_DEPLOY_USER` and
+`SSH_DEPLOY_KEY`.

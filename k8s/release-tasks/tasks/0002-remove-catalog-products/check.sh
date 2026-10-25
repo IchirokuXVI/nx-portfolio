@@ -12,7 +12,7 @@
 # that cannot be looked up, a query that fails.
 #
 # Environment overrides:
-#   NAMESPACE     kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE     kubernetes namespace (default: luna-shopper)
 #   CATALOG_PSQL  command that runs psql against catalog, reading SQL on stdin
 #
 # The override is the one k8s/catalog-reset/remove-catalog-products.sh takes,
@@ -26,7 +26,7 @@ shopt -s inherit_errexit
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_NAME="${TASK_NAME:-$(basename "$HERE")}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+NAMESPACE="${NAMESPACE:-luna-shopper}"
 NUMBER="${TASK_NAME%%-*}"
 MARKER="products removed by release task ${TASK_NAME}"
 

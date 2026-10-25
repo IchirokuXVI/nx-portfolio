@@ -103,7 +103,7 @@ jobs:
   # creates and destroys. The services run as plain `node dist/.../main.js`
   # processes rather than images, which is fast enough to block a merge on and
   # covers everything except the image itself; the images are covered before the
-  # staging deploy by docker-ci.yml's tier 2.
+  # staging deploy by the luna-shopper-backend gate of stage-unit.yml.
   #
   # LUNA_REQUIRE_STACK is the whole point. Both suites are written to skip when no
   # stack answers, which is right at a developer's keyboard and a lie here: this

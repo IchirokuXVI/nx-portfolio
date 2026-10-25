@@ -102,6 +102,11 @@ fix: the gap (#87)                                     GitHub adds the number
 
 ## Release notes
 
+Publishing a Release deploys it. Each deploy unit has its own release workflow
+(`release-portfolio.yml`, `release-velista.yml`, k8s plan 0016), and until k8s
+plan 0017 adds a tag prefix per unit, a bare tag such as `v0.15.0` deploys both
+units at that version.
+
 `tools/release/release-notes.mjs` reads the titles above and writes the notes.
 It walks the commits between two refs, finds the pull requests that produced
 them, and groups the conforming titles by section. It runs on plain Node with no

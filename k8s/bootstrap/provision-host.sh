@@ -440,6 +440,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6c. The deploy lock (k8s plan 0016 D2).
+#
+# Deploys and nx-host-patch exclude each other through flock on this file
+# (k8s/bootstrap/host-lock.sh). /run is a tmpfs, so tmpfiles.d writes it at
+# every boot, owned by root and readable by the deploy account, which is all
+# flock needs. Owned by root because fs.protected_regular lets anyone open a
+# root owned file in the sticky /run/lock, and refuses root an O_CREAT open of a
+# file the deploy account made.
+# ---------------------------------------------------------------------------
+echo "==> deploy lock: /run/lock/nx-deploy.lock, recreated at every boot"
+printf 'f /run/lock/nx-deploy.lock 0644 root root -\n' > /etc/tmpfiles.d/nx-deploy-lock.conf
+if [ -e /run/lock/nx-deploy.lock ]; then
+  chown root:root /run/lock/nx-deploy.lock
+  chmod 0644 /run/lock/nx-deploy.lock
+fi
+systemd-tmpfiles --create /etc/tmpfiles.d/nx-deploy-lock.conf
+
+# ---------------------------------------------------------------------------
 # 7. Closing the door, last and only on request.
 #
 # Guarded twice rather than trusted once: locking root out of a machine whose

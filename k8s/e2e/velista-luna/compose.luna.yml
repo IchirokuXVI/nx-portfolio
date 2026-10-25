@@ -13,12 +13,12 @@
 #
 # Always on top of compose.yml, never alone:
 #
-#   docker compose -f k8s/e2e/portfolio-frontend/compose.yml \
-#                  -f k8s/e2e/portfolio-frontend/compose.luna.yml up -d --pull always
+#   docker compose -f k8s/e2e/velista-luna/compose.yml \
+#                  -f k8s/e2e/velista-luna/compose.luna.yml up -d --pull always
 #
-# The base file stays the single definition of the frontend stack; this one adds
-# the backend hosts and nothing else, so `e2e-frontend` (which has no backend)
-# keeps running the base file unchanged.
+# The base file stays the single definition of the velista stack; this one adds
+# the backend hosts and nothing else, so gate.sh runs the base file alone when
+# only velista-e2e (which stubs the network) is affected.
 services:
   # Compose replaces `command` wholesale, so the whole list is stated here again
   # with the two new names. nginx refuses to start without a certificate for
@@ -30,7 +30,7 @@ services:
       - |
         set -e
         apk add --no-cache openssl >/dev/null
-        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app api.staging.velista.app rt.staging.velista.app; do
+        for domain in staging.velista.app staging.ichirokuxvi.com api.staging.velista.app rt.staging.velista.app; do
           if [ ! -f "/certs/$$domain.crt" ]; then
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
               -keyout "/certs/$$domain.key" -out "/certs/$$domain.crt" \

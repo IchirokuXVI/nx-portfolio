@@ -3,7 +3,7 @@
 A release task is a script that runs by itself on a deploy, once per cluster.
 Use one for a change to data that a migration cannot own, for example resetting
 a database. Both deploy paths run them: `k8s/helm/deploy-release.sh` for
-production and the staging job in `.github/workflows/docker-ci.yml`.
+production and the staging deploy of `.github/actions/deploy-unit`.
 
 ## The rules
 
@@ -226,11 +226,11 @@ fails when:
 - a line of `task.env` is neither a comment nor `NAME="value"`. The check reads
   the file as text and cannot know what bash does with such a line.
 
-It runs in three places:
+It runs in two places:
 
 - the `verify` job of `.github/workflows/pr.yml`, with its own tests.
-- the deploy job of `docker-ci.yml`, as the first step after the checkout.
-- the deploy job of `release.yml`, in the same position.
+- the composite action `.github/actions/deploy-unit`, before any SSH, in both
+  `stage-unit.yml` and `release-unit.yml`.
 
 ```sh
 node k8s/release-tasks/check-tasks.mjs
@@ -272,7 +272,7 @@ The ConfigMap `release-tasks` in the namespace holds the ledger:
 To read it:
 
 ```sh
-kubectl -n nx-portfolio get configmap release-tasks -o yaml
+kubectl -n luna-shopper get configmap release-tasks -o yaml
 ```
 
 To run a task again, remove its two keys. The second rule makes that safe, and
@@ -281,7 +281,7 @@ window, in the release it names, and with a `check.sh` that passes. With a
 closed window, the next deploy records the task as `expired` instead.
 
 ```sh
-kubectl -n nx-portfolio patch configmap release-tasks --type json \
+kubectl -n luna-shopper patch configmap release-tasks --type json \
   -p '[{"op":"remove","path":"/data/0001-reset-catalog-and-harvester"}]'
 ```
 

@@ -25,7 +25,7 @@
 #     dumps with the credentials that Secret holds
 #
 # Environment overrides:
-#   NAMESPACE       kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE       kubernetes namespace (default: luna-shopper)
 #   BACKUP_SECRET   secret holding the S3 credentials
 #                   (default: luna-shopper-backend-backup-secret)
 #   CATALOG_PSQL    command that runs psql against catalog, reading SQL on stdin
@@ -44,7 +44,7 @@ shopt -s inherit_errexit
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_NAME="${TASK_NAME:-$(basename "$HERE")}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+NAMESPACE="${NAMESPACE:-luna-shopper}"
 BACKUP_SECRET="${BACKUP_SECRET:-luna-shopper-backend-backup-secret}"
 NUMBER="${TASK_NAME%%-*}"
 MARKER="first catalog restored by release task ${TASK_NAME}"

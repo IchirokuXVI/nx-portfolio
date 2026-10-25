@@ -13,6 +13,9 @@
 #
 #   --ip <address>   the public address MetalLB advertises (the pool, step 2)
 #   --issuer         letsencrypt (default) or selfsigned (step 5)
+#   --merge-only     only merge the Gateways of class eg into one data plane,
+#                    on a cluster that already serves them (k8s plan 0016 D5)
+#   --pool-only      with --ip: only apply the MetalLB pool (plan 0016 D5)
 #
 # Idempotent: every step is an `apply` or a `helm upgrade --install`.
 #
@@ -60,6 +63,8 @@ INSTALL_METALLB=true
 # The address the MetalLB pool advertises, the machine's public IP. Empty leaves
 # the pool as it is, which is what an add-on upgrade from host maintenance wants.
 POOL_IP=""
+MERGE_ONLY=false
+POOL_ONLY=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,7 +74,9 @@ while [ $# -gt 0 ]; do
     --k3s)            INSTALL_K3S=true;    shift ;;
     --metallb)        INSTALL_METALLB=true;  shift ;;
     --no-metallb)     INSTALL_METALLB=false; shift ;;
-    -h|--help)        sed -n '2,20p' "$0"; exit 0 ;;
+    --merge-only)     MERGE_ONLY=true;     shift ;;
+    --pool-only)      POOL_ONLY=true;      shift ;;
+    -h|--help)        sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -91,6 +98,14 @@ if [ -n "$POOL_IP" ]; then
     echo "--ip takes one IPv4 address, got '$POOL_IP'." >&2
     exit 1
   fi
+fi
+if [ "$MERGE_ONLY" = true ] && { [ "$POOL_ONLY" = true ] || [ "$INSTALL_K3S" = true ] || [ -n "$POOL_IP" ]; }; then
+  echo "--merge-only does one thing and takes no --pool-only, --k3s or --ip." >&2
+  exit 1
+fi
+if [ "$POOL_ONLY" = true ] && { [ -z "$POOL_IP" ] || [ "$INSTALL_K3S" = true ]; }; then
+  echo "--pool-only applies the pool of --ip and nothing else, so it needs --ip and no --k3s." >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -202,6 +217,86 @@ echo "==> cluster: $(kubectl config current-context)"
 echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER, metallb: $INSTALL_METALLB, pool address: ${POOL_IP:-unchanged}"
 
 # ---------------------------------------------------------------------------
+# --merge-only: merge the data plane of a cluster that already serves Gateways
+# (k8s plan 0016 D5, step 1 of the cutover).
+#
+# Envoy Gateway then replaces the data plane of each Gateway with one merged
+# fleet and one Service. With a one address pool the new Service stays
+# <pending> while the old one holds the address, so an old Service the
+# controller leaves behind is deleted here. The traffic stops from that delete
+# until the merged Service has the address, which is seconds.
+# ---------------------------------------------------------------------------
+MERGE_WAIT="${MERGE_WAIT:-300}"
+EG_NS=envoy-gateway-system
+MERGED_LABEL=gateway.envoyproxy.io/owning-gatewayclass=eg
+OLD_LABEL='app.kubernetes.io/managed-by=envoy-gateway,gateway.envoyproxy.io/owning-gateway-name'
+
+# The merged Service as "<name> <address>", or nothing. A failed query stops
+# the script: it is never read as "no Service".
+merged_service() {
+  kubectl -n "$EG_NS" get svc -l "$MERGED_LABEL" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}{"\n"}{end}'
+}
+
+if [ "$MERGE_ONLY" = true ]; then
+  kubectl get gatewayclass eg > /dev/null
+  echo "==> merging the Gateways of class eg: EnvoyProxy merged and the class parametersRef"
+  kubectl apply -f - <<'YAML'
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: merged
+  namespace: envoy-gateway-system
+spec:
+  mergeGateways: true
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: merged
+    namespace: envoy-gateway-system
+YAML
+
+  started="$(date +%s)"
+  pending_since=""
+  while :; do
+    now="$(date +%s)"
+    merged="$(merged_service)"
+    old="$(kubectl -n "$EG_NS" get svc,deployment -l "$OLD_LABEL" -o name)"
+    if [ -n "$merged" ] && [ -n "$(printf '%s' "$merged" | awk 'NF > 1 { print $2; exit }')" ]; then
+      if [ -n "$old" ]; then
+        echo "==> merged Service has its address; deleting what the controller left: $(echo $old)"
+        kubectl -n "$EG_NS" delete $old --wait=false
+      fi
+      echo "==> merged data plane serves after $((now - started))s: $merged"
+      break
+    fi
+    if [ -n "$merged" ] && [ -n "$old" ]; then
+      [ -n "$pending_since" ] || pending_since="$now"
+      # Fifteen seconds for the controller to retire the old fleet by itself.
+      if [ $((now - pending_since)) -ge 15 ]; then
+        echo "==> merged Service waits for the address the old one holds; deleting $(echo $old)"
+        kubectl -n "$EG_NS" delete $old --wait=false
+      fi
+    fi
+    if [ $((now - started)) -ge "$MERGE_WAIT" ]; then
+      echo "The merged Service has no address after ${MERGE_WAIT}s." >&2
+      echo "  kubectl -n $EG_NS get svc,deployment -o wide" >&2
+      echo "  kubectl get gatewayclass eg -o yaml" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Gateway API CRDs, standard channel.
 #
 # Envoy Gateway's chart bundles these, but applying them from a pinned URL keeps
@@ -212,9 +307,11 @@ echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER, metallb: $INSTALL_ME
 # Requires Kubernetes >= 1.31: from v1.5 these CRDs use CEL functions (isIP,
 # format.dns1123Label) that older API servers cannot compile, and the bundle's
 # own admission policy refuses to install anything older than v1.5.0 over it.
-echo "==> installing Gateway API CRDs $GATEWAY_API_VERSION (standard channel)"
-kubectl apply --server-side --force-conflicts -f \
-  "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
+if [ "$POOL_ONLY" = false ]; then
+  echo "==> installing Gateway API CRDs $GATEWAY_API_VERSION (standard channel)"
+  kubectl apply --server-side --force-conflicts -f \
+    "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. MetalLB, and its pool when --ip names the address.
@@ -228,7 +325,9 @@ kubectl apply --server-side --force-conflicts -f \
 # MetalLB answers ARP for the pool address on the node's own interface. No BGP
 # peer, no FRR, nothing to configure beyond the pool.
 # ---------------------------------------------------------------------------
-if [ "$INSTALL_METALLB" = true ]; then
+if [ "$POOL_ONLY" = true ]; then
+  echo "==> --pool-only: MetalLB itself is left as it is"
+elif [ "$INSTALL_METALLB" = true ]; then
   echo "==> installing MetalLB $METALLB_VERSION"
   helm repo add metallb https://metallb.github.io/metallb >/dev/null
   helm repo update metallb >/dev/null
@@ -305,6 +404,11 @@ elif [ "$INSTALL_METALLB" = true ] \
   && ! kubectl -n metallb-system get ipaddresspool main-pool >/dev/null 2>&1; then
   echo "==> WARNING: no IPAddressPool main-pool and no --ip. The Envoy Service will"
   echo "    stay <pending> until one exists. Re-run with --ip <public address>."
+fi
+
+if [ "$POOL_ONLY" = true ]; then
+  kubectl get ipaddresspool,l2advertisement -n metallb-system
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------
