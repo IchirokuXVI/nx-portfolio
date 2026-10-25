@@ -115,6 +115,10 @@ other case and writes one summary line ("this tag is not a release of <unit>; th
 are `portfolio-v` and `velista-v`") and exits green, so that the Actions list shows the
 refusal and not a failure. The transitional bare `v` branch of `0016` D4 is removed.
 
+**As built.** The caller passes the whole tag, not the version: `release-unit.yml` needs
+the tag to check out, and it reads the version after `TAG_PREFIX` of `unit.env`. It
+refuses a tag without that prefix, so the version has one source.
+
 ### D2. Both streams continue from `0.14.2`
 
 The owner seeds `portfolio-v0.14.2` and `velista-v0.14.2` on the commit of `v0.14.2`, so
@@ -125,6 +129,11 @@ or higher. The old `v*` tags stay in history and are never created again.
 The portfolio could restart at `1.0.0`; nothing compares its number. The recommendation is to
 continue, so that one rule covers both and the release notes range needs no special case.
 
+**As built.** The seeds sit on `v0.14.3`, not `v0.14.2`. `v0.14.3` was published after this
+plan was written, so it is the commit both streams continue from: `portfolio-v0.14.3` and
+`velista-v0.14.3`. Everything below that names `0.14.2` as the seed reads `0.14.3`. The
+next releases are still `portfolio-v0.15.0` and `velista-v0.15.0`.
+
 ### D3. Notes per unit
 
 `release-notes.mjs --unit <u>` keeps a PR when its scope is in `UNITS[u]` or in
@@ -134,11 +143,21 @@ to `HEAD` or the given tag. `--version` accepts the prefixed tag. A workspace sc
 appears in both units' notes; that is the honest account of a shared change that ships
 twice. The test covers the filter, the default range, and an unscoped title.
 
+**As built.** A title that cannot be parsed stays in the notes of every unit, under the
+section that names it, because the notes drop nothing. An unscoped title is labelled
+`**no scope**`, and a footnote says which titles every unit lists and counts the ones left
+out as another unit's. With `--unit` and no `--from`, a range with no earlier tag of the
+unit is refused instead of walking all of history. `--version` must carry the unit's
+prefix; `--to` may name any ref.
+
 ### D4. Release tasks compare against the unit's version
 
 `run-release-tasks.sh --release <version>` receives the version without the prefix, as
 today. `check-tasks.mjs` keeps `PRODUCTION_RELEASE` as a bare number and asserts that the
 task's `UNIT` has a `TAG_PREFIX`. The existing four tasks name velista versions already.
+
+**As built.** It also refuses a `PRODUCTION_RELEASE` written as the whole tag
+(`velista-v0.15.0`) with a message that says to write the version alone.
 
 ### D5. Build variables per unit in a release
 
@@ -208,6 +227,14 @@ same secrets and variable, allows the branch `main` only, and has a required rev
 Releases stay tag only. On staging the job names `<unit>-staging`, checks out `main` and
 redeploys the `staging` tag; `version` is ignored there.
 
+**As built.** Three additions. Before any SSH, the resolve job checks with `docker manifest
+inspect` that every image the newest chart deploys exists at the tag. An older version
+that lacks an image the unit has now is refused there, and not found as a Deployment that
+cannot pull. A refusal fails the run: unlike a foreign tag on `release-<unit>.yml`, a
+dispatch that deployed nothing did not do what it was asked. The way back below the line
+is written `helm rollback <release> 1 -n <namespace>`, because `helm` needs the namespace.
+The `version` input takes `0.15.0`, `v0.15.0` or `velista-v0.15.0`.
+
 ## 4. Who edits what
 
 One builder, one PR, title `feat(release): one tag prefix, one notes file and one redeploy
@@ -241,6 +268,13 @@ per deploy unit (plan 0017)`. The scope list is the file list.
    with the values of the matching production environment, the branch rule `main` only and
    a required reviewer.
 4. Publish the next Release of each unit with its prefix.
+
+**As built.** Items 2 and 3 are a script, not settings pages:
+`k8s/bootstrap/github-environments.sh --env production ... --reviewer <login>` gives each
+`<unit>-production` the tag rule `<TAG_PREFIX>*` and no branch, and creates each
+`<unit>-production-redeploy` with the four values, the branch rule `main` and the
+reviewer. A reviewer or a wait timer that an environment already has is kept. Item 1
+seeds `v0.14.3` (D2).
 
 ## 7. `CLAUDE.md` and `CONTRIBUTING.md`
 

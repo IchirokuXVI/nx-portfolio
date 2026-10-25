@@ -135,7 +135,7 @@ That SHA becomes `--base` for the `nx show projects --affected` queries in the `
 
 ### Images & registry
 
-- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. The base image `local-http-server` is tagged `staging` or `<unit>-v<version>` and never `latest` by a deploy. Production pins the immutable version; rollback is `deploy-release.sh <unit> <older-version>`.
+- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. The base image `local-http-server` is tagged `staging` or `<unit>-v<version>` and never `latest` by a deploy. Production pins the immutable version; rollback is `redeploy.yml` dispatched on `main` with the unit and the older version (k8s plan 0017), or `deploy-release.sh <unit> <older-version>` on the host.
 - The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
 - Nothing compiles on the runner. Lint, unit tests and every `nx build` run inside `BUILD_IMAGE`, a digest pinned `node:24-slim` named at the top of `stage-unit.yml` and `release-unit.yml`.
@@ -143,7 +143,7 @@ That SHA becomes `--base` for the `nx show projects --affected` queries in the `
 ### GitHub environments
 
 Each unit deploys with the values of its environment, `<unit>-staging` or
-`<unit>-production`. Host maintenance uses `host-staging` and `host-production`.
+`<unit>-production`, and `redeploy.yml` uses `<unit>-production-redeploy` on production. Host maintenance uses `host-staging` and `host-production`.
 Each holds the secrets `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` and
 the variable `SSH_KNOWN_HOSTS`; `host-production` also holds `SSH_SOAK_CHECK_HOST`.
 `k8s/bootstrap/github-environments.sh` writes them

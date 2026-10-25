@@ -82,8 +82,8 @@ fails when an app with a `build:docker` target has no `deploy:` tag or has two,
 and when a `unit.env` is incomplete. `node tools/deploy/units.mjs list` prints
 every unit as JSON, and `projects <unit>` prints the apps of one unit.
 
-Each unit has its chart (plan 0015) and its own pipelines and release (plan
-0016). Plan 0017 gives each its own version stream.
+Each unit has its chart (plan 0015), its own pipelines and release (plan
+0016), and its own tag prefix, notes and version stream (plan 0017).
 
 To move an app to another unit, change its tag. To split a unit or add one,
 follow section 4 of plan 0014: retag the apps, add `units/<new>/unit.env` and a
@@ -96,10 +96,16 @@ namespace, so data never moves for a split.
 [Plan 0016](./plans/0016-each-unit-deploys-from-its-own-job.md) gives each unit
 its own pipelines:
 
-| Workflow             | Trigger                  | Calls              | Environment         |
-| -------------------- | ------------------------ | ------------------ | ------------------- |
-| `staging-<unit>.yml` | push to `main`, dispatch | `stage-unit.yml`   | `<unit>-staging`    |
-| `release-<unit>.yml` | a published Release      | `release-unit.yml` | `<unit>-production` |
+| Workflow             | Trigger                  | Calls              | Environment                                      |
+| -------------------- | ------------------------ | ------------------ | ------------------------------------------------ |
+| `staging-<unit>.yml` | push to `main`, dispatch | `stage-unit.yml`   | `<unit>-staging`                                 |
+| `release-<unit>.yml` | a Release `<unit>-v*`    | `release-unit.yml` | `<unit>-production`                              |
+| `redeploy.yml`       | dispatch on `main`       | `deploy-unit`      | `<unit>-production-redeploy` or `<unit>-staging` |
+
+A Release whose tag lacks the unit's prefix starts `release-<unit>.yml`, which
+writes one summary line and deploys nothing. `redeploy.yml` is the rollback
+(plan 0017 D7): it builds nothing, and on production it deploys an existing
+version with the chart of the unit's newest release tag.
 
 `stage-unit.yml` lists the unit's affected images (`tag:deploy:<unit>`), runs
 lint and tests over everything affected, builds the base image and the unit's

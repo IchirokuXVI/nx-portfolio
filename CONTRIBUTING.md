@@ -102,10 +102,46 @@ fix: the gap (#87)                                     GitHub adds the number
 
 ## Release notes
 
-Publishing a Release deploys it. Each deploy unit has its own release workflow
-(`release-portfolio.yml`, `release-velista.yml`, k8s plan 0016), and until k8s
-plan 0017 adds a tag prefix per unit, a bare tag such as `v0.15.0` deploys both
-units at that version.
+Publishing a Release deploys it. A Release belongs to one deploy unit, and its
+tag says which (k8s plan 0017): `portfolio-vX.Y.Z` runs `release-portfolio.yml`,
+and `velista-vX.Y.Z` runs `release-velista.yml`. Each workflow builds and
+deploys its own unit only. A bare tag such as `v0.15.0` deploys nothing: both
+workflows write one summary line that names the two prefixes.
+
+**velista's numbers never go down.** The gateway's `minClientVersion` and the
+installed Android apps compare against them, so the next velista tag is always
+above the last one. The portfolio continues on the same line, because one rule
+for both is simpler.
+
+To release one unit, from a checkout of `main`:
+
+```sh
+# velista
+node tools/release/release-notes.mjs --unit velista --version velista-v0.15.0 --out notes.md
+gh release create velista-v0.15.0 --target main --title velista-v0.15.0 --notes-file notes.md
+
+# the portfolio
+node tools/release/release-notes.mjs --unit portfolio --version portfolio-v0.15.0 --out notes.md
+gh release create portfolio-v0.15.0 --target main --title portfolio-v0.15.0 --notes-file notes.md
+```
+
+`--unit` keeps a title whose scope is in that unit's list of `UNITS` in
+`tools/release/rules.mjs`, a title with a workspace scope (`k8s`, `deps`, ...),
+a title with no scope, and every title it cannot read. A shared change thus
+appears in the notes of both units, because it ships with both. `--from`
+defaults to the unit's previous tag, found by its prefix, so a release of the
+other unit in between does not shorten the range.
+
+To roll a unit back, deploy an older version again. Nothing is rebuilt:
+
+```sh
+gh workflow run redeploy.yml --ref main -f unit=velista -f environment=production -f version=0.15.0
+```
+
+It waits for the required reviewer of `velista-production-redeploy`, then
+deploys that version's images with the chart of the newest velista release. It
+refuses a version from before the first release under k8s plan 0016, and names
+`helm rollback <unit> 1` as the way back below it.
 
 `tools/release/release-notes.mjs` reads the titles above and writes the notes.
 It walks the commits between two refs, finds the pull requests that produced
@@ -113,13 +149,15 @@ them, and groups the conforming titles by section. It runs on plain Node with no
 install step, so a release can be cut from a bare checkout.
 
 ```sh
-# Everything since the last tag, before the tag exists. --version names the
-# release, and the changelog link ends at that tag.
-node tools/release/release-notes.mjs --version v0.3.2 --out notes.md
+# One unit, everything since its last tag, before the new tag exists.
+# --version names the release, and the changelog link ends at that tag.
+node tools/release/release-notes.mjs --unit velista --version velista-v0.15.0 --out notes.md
 
-# One release exactly, written to a file
-node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md
-gh release create v0.3.2 --title v0.3.2 --notes-file notes.md
+# One unit's release exactly, written to a file
+node tools/release/release-notes.mjs --unit velista --from velista-v0.15.0 --to velista-v0.15.1 --out notes.md
+
+# Every unit at once, over any range
+node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2
 
 # Which titles in a range would need renaming (exit 1 if any)
 node tools/release/release-notes.mjs --audit --from v0.3.1
