@@ -515,23 +515,21 @@ echo
 #    NAMESPACE is the one place that names it.
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-if [ -n "$UNIT_NAME" ]; then
-  if [ -z "$UNIT_SECRETS" ]; then
-    echo "k8s/units/$UNIT_NAME/unit.env lists no Secret, so the namespace is all it needs."
-    exit 0
-  fi
-  # The provisioning below writes the Luna Secrets. A unit that lists another
-  # Secret needs code here first, not a silent skip.
-  for secret in $UNIT_SECRETS; do
-    case " $APP_SECRET $AUTH_DB_SECRET $CORE_DB_SECRET $CATALOG_DB_SECRET $HARVESTER_DB_SECRET $BACKUP_SECRET " in
-      *" $secret "*) ;;
-      *)
-        echo "k8s/units/$UNIT_NAME/unit.env lists the Secret $secret, and this script does not know how to write it." >&2
-        exit 1
-        ;;
-    esac
-  done
+if [ -z "$UNIT_SECRETS" ]; then
+  echo "k8s/units/$UNIT_NAME/unit.env lists no Secret, so the namespace is all it needs."
+  exit 0
 fi
+# The provisioning below writes the Luna Secrets. A unit that lists another
+# Secret needs code here first, not a silent skip.
+for secret in $UNIT_SECRETS; do
+  case " $APP_SECRET $AUTH_DB_SECRET $CORE_DB_SECRET $CATALOG_DB_SECRET $HARVESTER_DB_SECRET $BACKUP_SECRET " in
+    *" $secret "*) ;;
+    *)
+      echo "k8s/units/$UNIT_NAME/unit.env lists the Secret $secret, and this script does not know how to write it." >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [ -z "$OUT_PATH" ]; then
   OUT_PATH="$HOME/${LABEL}-${ENVIRONMENT}-secrets.txt"
@@ -688,7 +686,7 @@ if [ -z "$ADMIN_JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
 fi
 
 # What cannot be generated. All three may be empty: since plan 0026 that is a
-# supported configuration rather than a broken one — the Google routes answer 501,
+# supported configuration rather than a broken one. The Google routes answer 501,
 # registration answers 501, and (plan 0039) the assistant answers 501, instead of
 # the service failing to boot.
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
@@ -851,4 +849,4 @@ fi
 
 echo
 echo "Now verify what you just created actually satisfies the chart:"
-echo "  $0 --check${UNIT_NAME:+ --unit $UNIT_NAME} --env $ENVIRONMENT"
+echo "  $0 --check --unit $UNIT_NAME --env $ENVIRONMENT"

@@ -152,11 +152,13 @@ runs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
         fi
-        status=0
+        # Through tee, so a cutover of many minutes prints as it goes.
+        set +e
         ssh $SSH_OPTS "$DEPLOY_TARGET" \
           "bash ~/$DIR/bootstrap/host-lock.sh bash ~/$DIR/bootstrap/split-release.sh --env $MODE" \
-          > cutover.txt 2>&1 || status=$?
-        cat cutover.txt
+          2>&1 | tee cutover.txt
+        status="${PIPESTATUS[0]}"
+        set -e
         {
           echo "### Cutover (k8s plan 0016 D5)"
           echo

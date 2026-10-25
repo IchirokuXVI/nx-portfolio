@@ -27,6 +27,8 @@
 #
 # ALLOW_CUTOVER is not set here. It is a decision for one maintenance window:
 #   gh variable set ALLOW_CUTOVER --env <unit>-production --body true
+# Only ever at environment level: vars.ALLOW_CUTOVER also resolves a repository
+# variable of that name, which would open the cutover to every production deploy.
 
 set -euo pipefail
 
@@ -40,7 +42,7 @@ while [ $# -gt 0 ]; do
     --soak-host) SOAK_HOST="$2"; shift 2 ;;
     --units-only) UNITS_ONLY=true; shift ;;
     --repo) REPO="$2"; shift 2 ;;
-    -h | --help) sed -n '2,30p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -48,6 +50,12 @@ done
 case "$ENVIRONMENT" in staging | production) ;; *) echo "--env must be staging or production" >&2; exit 2 ;; esac
 [ -n "$HOST" ] || { echo "--host is required" >&2; exit 2; }
 [ -r "$KEY_FILE" ] || { echo "--key-file must name a readable private key" >&2; exit 2; }
+# A .pub passed by mistake would upload a public key as SSH_DEPLOY_KEY, and
+# every deploy would then fail at the SSH step with no clear reason.
+if [ "$(head -n 1 "$KEY_FILE" | tr -d '\r')" != '-----BEGIN OPENSSH PRIVATE KEY-----' ]; then
+  echo "--key-file $KEY_FILE does not start with -----BEGIN OPENSSH PRIVATE KEY-----, so it is not the private key" >&2
+  exit 2
+fi
 if [ "$ENVIRONMENT" = production ] && [ "$UNITS_ONLY" = false ] && [ -z "$SOAK_HOST" ]; then
   echo "--soak-host is required for host-production: host maintenance checks staging first" >&2
   exit 2
@@ -59,12 +67,25 @@ K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../units/unit-env.sh
 . "$K8S_DIR/units/unit-env.sh"
 
-# The keys of every host CI talks to in this environment, pinned once.
-known_hosts="$(ssh-keyscan -t ed25519 "$HOST" 2> /dev/null)"
-[ -n "$known_hosts" ] || { echo "ssh-keyscan found no ed25519 key on $HOST" >&2; exit 1; }
+# The keys of every host CI talks to in this environment, pinned once. The \r
+# goes because a Windows OpenSSH ssh-keyscan can write CRLF.
+scan() {
+  local keys
+  keys="$(ssh-keyscan -t ed25519 "$1" 2> /dev/null | tr -d '\r')"
+  [ -n "$keys" ] || { echo "ssh-keyscan found no ed25519 key on $1" >&2; exit 1; }
+  printf '%s' "$keys"
+}
+known_hosts="$(scan "$HOST")"
 if [ -n "$SOAK_HOST" ]; then
-  known_hosts="$known_hosts"$'\n'"$(ssh-keyscan -t ed25519 "$SOAK_HOST" 2> /dev/null)"
+  known_hosts="$known_hosts"$'\n'"$(scan "$SOAK_HOST")"
 fi
+# A scan trusts whatever answered. The fingerprints are printed so that a person
+# compares them with the host's own before any deploy relies on them.
+echo "The host keys that will be pinned:"
+printf '%s\n' "$known_hosts" | ssh-keygen -lf - | sed 's/^/  /'
+echo "Compare each with the output of this command on that host:"
+echo "  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub"
+echo
 
 environments=()
 for unit in $(unit_names "$K8S_DIR"); do environments+=("$unit-$ENVIRONMENT"); done
