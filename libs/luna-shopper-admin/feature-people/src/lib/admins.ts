@@ -71,7 +71,7 @@ export const ADMINS_INFO: InfoContent = {
   title: 'people.admins.many',
   points: ['people.admins.info.readOnly', 'people.admins.info.add'],
   command:
-    'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
+    'kubectl -n luna-shopper exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
 };
 
 /**
