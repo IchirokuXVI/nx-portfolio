@@ -116,7 +116,7 @@
     "@types/deep-equal": "^1.0.4",
     "@types/jest": "30.0.0",
     "@types/multer": "^2.2.0",
-    "@types/node": "20.19.9",
+    "@types/node": "20.19.43",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-jwt": "^4.0.1",
