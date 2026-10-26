@@ -178,6 +178,13 @@ lunaShopperBackend:
     # back office; neither is in this file.
     schedulerEnabled: true
 
+  # Claude answers a turn in production and Gemini still hears (plan 0224). The
+  # key is ANTHROPIC_API_KEY in the Secret, from the Velista workspace of the
+  # Anthropic Console, whose monthly spend limit is the cost ceiling. The model,
+  # effort and thinking stay empty, so the service's own Claude defaults apply.
+  assistant:
+    provider: 'claude'
+
   # Two cores for the catalog database. values.yaml gives it one, with the
   # measurements. One search statement is one process, so the second core is for
   # the second statement that runs beside it: a typeahead sends a search for each
