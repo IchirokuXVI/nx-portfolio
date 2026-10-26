@@ -507,9 +507,14 @@ dump_databases() {
   marker_set dumps "${keys# }"
 }
 
+# A finished pod never goes away by itself and holds no volume: the pods of the
+# nightly backup Jobs stay Completed, and production keeps them. Counting them
+# stopped the production cutover after 300s with the backend down (2026-10-26).
 wait_pods_gone() {
   local waited=0
-  while [ -n "$(get_or_empty -n "$OLD_NS" get pods -o name | grep '/luna-shopper-backend-' || true)" ]; do
+  while [ -n "$(get_or_empty -n "$OLD_NS" get pods -o name \
+    --field-selector=status.phase!=Succeeded,status.phase!=Failed \
+    | grep '/luna-shopper-backend-' || true)" ]; do
     [ "$waited" -lt 300 ] || die "the Luna pods of $OLD_NS did not stop in 300s"
     sleep 3
     waited=$((waited + 3))
