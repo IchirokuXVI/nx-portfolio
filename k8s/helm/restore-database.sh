@@ -35,7 +35,7 @@
 # ---------------------------------------------------------------------------
 #
 # Environment overrides:
-#   NAMESPACE     kubernetes namespace          (default: nx-portfolio)
+#   NAMESPACE     kubernetes namespace          (default: the NAMESPACE of k8s/units/velista/unit.env)
 #   BACKUP_SECRET secret holding S3 credentials (default: luna-shopper-backend-backup-secret)
 #   APP_SECRET    secret holding the DB URLs    (default: luna-shopper-backend-secrets)
 #   SCRATCH_SUFFIX suffix for the scratch db    (default: _restore)
@@ -83,7 +83,13 @@ if [ -n "$EXPECTED_SHA256" ] && ! [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]; th
   exit 1
 fi
 
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+# The velista unit holds the databases (k8s plan 0015 D10).
+if [ -z "${NAMESPACE:-}" ]; then
+  units_k8s_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  # shellcheck source=../units/unit-env.sh
+  . "$units_k8s_dir/units/unit-env.sh"
+  NAMESPACE="$(unit_field "$units_k8s_dir" velista NAMESPACE)"
+fi
 BACKUP_SECRET="${BACKUP_SECRET:-luna-shopper-backend-backup-secret}"
 APP_SECRET="${APP_SECRET:-luna-shopper-backend-secrets}"
 SCRATCH_SUFFIX="${SCRATCH_SUFFIX:-_restore}"

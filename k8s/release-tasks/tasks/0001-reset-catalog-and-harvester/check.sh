@@ -19,7 +19,7 @@
 # between its drop and its create leaves behind. A person looks at that one.
 #
 # Environment overrides:
-#   NAMESPACE       kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE       kubernetes namespace (default: luna-shopper)
 #   CATALOG_PSQL    command that runs psql against catalog, reading SQL on stdin
 #   HARVESTER_PSQL  command that runs psql against harvester, reading SQL on
 #                   stdin. Set it to an empty string where there is no harvester
@@ -37,7 +37,7 @@ shopt -s inherit_errexit
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TASK_NAME="${TASK_NAME:-$(basename "$HERE")}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+NAMESPACE="${NAMESPACE:-luna-shopper}"
 NUMBER="${TASK_NAME%%-*}"
 MARKER="reset by release task ${TASK_NAME}"
 

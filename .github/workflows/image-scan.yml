@@ -17,7 +17,22 @@ permissions:
   contents: read
 
 jobs:
+  # Every deployable image, from the project tags (k8s plan 0016 D7), so a new
+  # app needs no edit here.
+  images:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.list.outputs.images }}
+    steps:
+      - name: Checkout the unit registry
+        uses: actions/checkout@v4
+
+      - name: List the images
+        id: list
+        run: echo "images=$(node tools/deploy/units.mjs images --json)" >> "$GITHUB_OUTPUT"
+
   scan:
+    needs: images
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,25 +40,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - ghcr.io/ichirokuxvi/nx-portfolio/shell:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/odontogram:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/damoclessword:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/landingv2:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/velista:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-admin:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-harvester:staging
-          - ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-assistant:staging
+        image: ${{ fromJSON(needs.images.outputs.images) }}
     steps:
       - name: Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ matrix.image }}
+          image-ref: ${{ matrix.image }}:staging
           format: sarif
           output: trivy.sarif
           severity: HIGH,CRITICAL
@@ -55,4 +57,4 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy.sarif
-          category: ${{ matrix.image }}
+          category: ${{ matrix.image }}:staging

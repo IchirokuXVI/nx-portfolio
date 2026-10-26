@@ -1,3 +1,5 @@
+> **PR:** [#815](https://github.com/IchirokuXVI/nx-portfolio/pull/815)
+
 # 0015 One chart becomes one chart per unit
 
 > Second plan of the deploy unit series (`0014` defines the unit, `0016` deploys it, `0017`
@@ -289,7 +291,9 @@ hosts of both units.
 [envoy-gateway-system]` (the only namespace that holds a LoadBalancer Service now). The
 `metallb.*` and `ipAddress` keys are removed from the unit charts. `README-new-cluster.md`
 step 4 moves the address from the values file to the `install.sh` call. The objects that
-the old release owns are taken over by the cutover (`0016` D5).
+the old release owns are taken over by the cutover (`0016` D5). The scripts count the pool as
+a Helm release's only while `helm status` finds the release its annotations name; otherwise
+they strip the Helm annotations and label and apply the pool.
 
 The fresh install path of `install.sh` and `install.ps1` also creates the merged
 `EnvoyProxy` of D3 and the `parametersRef`. The `--merge-only` entry point that switches an
@@ -400,9 +404,10 @@ run `helm dependency build --skip-refresh` on the chart, and pass `--namespace`.
 `deploy-release.sh` waits on the Deployments of its own release (`helm get manifest |
 kubectl rollout status -f -` over the Deployment documents), not on every Deployment in the
 namespace. Its recovery path (`:76-100`), which uninstalls a release whose only revision is
-`failed` on the assumption that it never served traffic, refuses when the namespace holds a
-StatefulSet or the release carries the adoption annotation that `0016` D5 writes: a release
-that adopted live objects is never one that never served. `deploy-homelab.sh` reads the
+`failed` on the assumption that it never served traffic, skips the uninstall when the
+namespace holds a StatefulSet or the release carries the adoption annotation that `0016` D5
+writes: a release that adopted live objects is never one that never served. It then upgrades
+the failed release in place, which Helm 3 allows. `deploy-homelab.sh` reads the
 live tag from the first Deployment of the unit's own chart, not from `shell`.
 `restore-database.sh`, `catalog-import`, `catalog-reset` and `catalog-seed` default
 `NAMESPACE` from the velista `unit.env`.
@@ -431,7 +436,9 @@ the adopting install of `0016` D5 fail. Expected differences, and no others:
 - HTTPRoute `velista-portfolio`: in the portfolio namespace with a namespaced backend
   (D6). `ReferenceGrant`: new (D6).
 - `IPAddressPool`, `L2Advertisement`: gone (D5).
-- `GATEWAY_INTERNAL_URL`: same string, now from `.Release.Namespace` (D2).
+- `GATEWAY_INTERNAL_URL`: now from `.Release.Namespace` (D2), so its host changes from
+  `luna-shopper-backend-gateway.nx-portfolio.svc` to `luna-shopper-backend-gateway.luna-shopper.svc`. That changes `checksum/config`
+  on all seven Luna Deployments, and they roll during the adopting install.
 
 ## 4. Who edits what
 

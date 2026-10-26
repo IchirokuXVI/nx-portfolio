@@ -1,3 +1,5 @@
+> **PR:** [#818](https://github.com/IchirokuXVI/nx-portfolio/pull/818)
+
 # 0016 Each unit deploys from its own job
 
 > Third plan of the deploy unit series (`0014` the unit, `0015` the charts, `0017` the
@@ -358,6 +360,49 @@ want an hour of the day with little traffic for production: the edge is interrup
 seconds in steps 1 and 6, and the backend for the few minutes of step 5, all inside a
 quarter of an hour. `--env homelab` exists for the owner's home release and is run by
 hand.
+
+> **As built.** Three changes to D5, all in `split-release.sh` and the runbook
+> section "Existing clusters: the cutover":
+>
+> - **Production runs the cutover only when allowed.** The preflight runs it by itself
+>   on staging. On production it runs only when the variable `ALLOW_CUTOVER` of
+>   `<unit>-production` is `true`. Otherwise a deploy to a cluster that is not cut over
+>   stops before any change, with one summary line that names the two ways forward:
+>   set the variable inside a maintenance window and re-run, or run
+>   `split-release.sh --env production` by hand. The orchestrator decided this because
+>   the production maintenance window was closed.
+> - **Step 6 enables the new Gateways first and deletes the old one after.** With the
+>   old Gateway deleted first, the class has no Gateway for a moment, Envoy Gateway
+>   tears the merged data plane down and builds it again, and the rehearsal measured 12
+>   to 17 seconds with no answer. In the other order the duplicate HTTPS listeners wait
+>   as Conflicted until the old Gateway goes, and the rehearsal measured no gap.
+>   `SPLIT_SWAP_ORDER=old-first` restores the order written above.
+> - **Step 3 uses `install.sh --pool-only --ip`**, which applies the pool and nothing
+>   else, after stripping the pool's Helm annotations. A cluster with no MetalLB skips
+>   the step. `--env local` takes no dump, because Docker Desktop has no object storage.
+>
+> The pipelines first shipped with no `secrets: inherit`, to keep a repository secret
+> from showing through. The first staging runs (2026-10-25) proved that wrong: a called
+> workflow sees no secret its caller did not pass, environment secrets included, so
+> both deploy jobs got three empty values. The callers now pass `secrets: inherit` as
+> D2 wrote it, and host-maintenance.yml does too (section 6). A missing environment
+> secret still falls back to the repository one, so deploy-unit refuses a host that
+> the environment's `SSH_KNOWN_HOSTS` does not name. Deleting the four repository
+> secrets after the cutover removes the fallback.
+>
+> **The backend outage is longer than step 5.** From the stop of step 5 the old
+> HTTPRoutes point at Services with no endpoints, and the new HTTPS listeners stay
+> Conflicted while the old Gateway lives, so `api.` and `rt.` answer 503 until step 6
+> deletes the old Gateway: velista becoming Ready plus the two helm waits of step 6, not
+> "the few minutes of step 5" written above. The rehearsal measured step 5 alone, from the
+> stop to velista Ready: 78 and 79 seconds. The step 1 edge gap was 11.0 and 11.7
+> seconds. `split-release.sh` keeps the first stop time across reruns and prints the whole
+> outage when step 6 deletes the old Gateway. Step 6 already starts directly after step 5
+> in the same run.
+>
+> **`deploy-release.sh` refuses a cluster that is not cut over.** It reads
+> `split-release.sh --status` and stops on `pending`, because a unit release installed
+> beside `nx-portfolio` would make a second Gateway that Envoy does not merge.
 
 ### D6. The base image is tagged per environment and version
 

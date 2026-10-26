@@ -238,7 +238,7 @@ describe('the Admins section', () => {
         'people.admins.info.add',
       ]);
       expect(textOf(panel?.querySelector('.command code') ?? null)).toBe(
-        'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>'
+        'kubectl -n luna-shopper exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>'
       );
       expect(textOf(panel?.querySelector('.command button') ?? null)).toBe(
         'info.copy'
@@ -273,7 +273,7 @@ describe('the Admins section', () => {
         title: 'people.admins.many',
         points: ['people.admins.info.readOnly', 'people.admins.info.add'],
         command:
-          'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
+          'kubectl -n luna-shopper exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
       });
     });
 

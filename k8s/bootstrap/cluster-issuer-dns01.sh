@@ -3,8 +3,8 @@
 # A Let's Encrypt ClusterIssuer that proves domain control over the Cloudflare
 # API instead of over an inbound HTTP connection.
 #
-# install.sh creates `letsencrypt-prod`, which solves HTTP-01 by attaching a
-# challenge route to the chart's Gateway. That is the right solver on a VPS with
+# Each unit chart renders an ACME Issuer that solves HTTP-01 by attaching a
+# challenge route to the unit's Gateway (k8s plan 0015). That is the right solver on a VPS with
 # a public address and ports 80 and 443 open to the world. It is the wrong one on
 # a home connection: many domestic ISPs block inbound port 80, and behind CGNAT
 # there is no inbound path at all, so the challenge can never be reached and
@@ -17,7 +17,7 @@
 #
 # This is separate from install.sh rather than a flag on it because it is a
 # temporary arrangement for the home hosting window (see k8s/README-homelab.md).
-# The netcup box will use install.sh's HTTP-01 issuer like the VPS before it.
+# The netcup box will use the unit charts' HTTP-01 issuers like the VPS before it.
 #
 # Usage:
 #   CLOUDFLARE_API_TOKEN=... ./k8s/bootstrap/cluster-issuer-dns01.sh
@@ -35,7 +35,7 @@ set -euo pipefail
 ACME_EMAIL='danieliyo65@gmail.com'
 ISSUER_NAME='letsencrypt-dns01'
 # cert-manager reads the token from a Secret in its OWN namespace, not in the
-# chart's. A Secret sitting in nx-portfolio is invisible to it and the issuer
+# charts'. A Secret sitting in a unit's namespace is invisible to it and the issuer
 # stays NotReady with a message that does not obviously say so.
 CERT_MANAGER_NAMESPACE='cert-manager'
 SECRET_NAME='cloudflare-api-token'
@@ -117,7 +117,7 @@ echo "==> waiting for the issuer to register with Let's Encrypt"
 if kubectl wait --for=condition=Ready "clusterissuer/${ISSUER_NAME}" --timeout=60s; then
   echo
   echo "Ready. Deploy with values.homelab.yaml, then watch the certificates:"
-  echo "  kubectl -n nx-portfolio get certificate -w"
+  echo "  kubectl get certificate -A -w"
   echo
   echo "DNS-01 is slower than HTTP-01: expect a couple of minutes per name while"
   echo "the TXT record propagates. Five names are issued, one per host."

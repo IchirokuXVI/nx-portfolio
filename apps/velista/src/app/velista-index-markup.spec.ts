@@ -10,8 +10,8 @@ import { dirname, join, resolve } from 'node:path';
  * Angular re-serialises both tags without the self closing slash that prettier
  * writes in the source, so the filters match the built spelling. The source half
  * runs everywhere; the built half needs `nx build velista` and is skipped without
- * it, which is the case in the PR workflow. The staging gate's curls in
- * docker-ci.yml check the rewritten document from outside the image.
+ * it, which is the case in the PR workflow. The velista-luna gate's curls
+ * (k8s/e2e/velista-luna/gate.sh) check the rewritten document from outside the image.
  */
 describe('velista index markup and the nginx sub filters', () => {
   /** Walk up to the directory holding nx.json, so this works under any cwd. */

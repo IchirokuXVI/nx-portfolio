@@ -1,3 +1,5 @@
+> **PR:** [#812](https://github.com/IchirokuXVI/nx-portfolio/pull/812)
+
 # 0014 A deploy unit is a tag, a chart and two environments
 
 > Asked for by the owner on 2026-10-23: "isolate velista and luna-shopper deployments from

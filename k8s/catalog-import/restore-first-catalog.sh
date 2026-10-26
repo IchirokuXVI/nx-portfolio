@@ -48,7 +48,7 @@
 #                                (default: 0)
 #   MAX_SOURCE_ENTRIES_REPLACED  the most source_catalog_entries the live
 #                                harvester may hold (default: 0)
-#   NAMESPACE                    kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE                    kubernetes namespace (default: the NAMESPACE of k8s/units/velista/unit.env)
 #   KUBECONFIG                   kubeconfig path (default: /etc/rancher/k3s/k3s.yaml)
 #   MANIFEST                     the manifest (default: first-catalog.manifest
 #                                beside this script)
@@ -94,7 +94,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$HERE")"
 MANIFEST="${MANIFEST:-$HERE/first-catalog.manifest}"
 EXPECTED_LOSSES="${EXPECTED_LOSSES:-$HERE/expected-losses.txt}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+# The velista unit holds the databases (k8s plan 0015 D10).
+if [ -z "${NAMESPACE:-}" ]; then
+  units_k8s_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  # shellcheck source=../units/unit-env.sh
+  . "$units_k8s_dir/units/unit-env.sh"
+  NAMESPACE="$(unit_field "$units_k8s_dir" velista NAMESPACE)"
+fi
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
 TASK='0003-restore-the-first-catalog'

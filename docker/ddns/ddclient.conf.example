@@ -46,7 +46,7 @@ web-skip='ip='
 ## window where the world still holds the old address down to a minute. Use
 ## ttl=1 to mean "automatic" instead if 60 is ever rejected.
 ##
-## Every record below is one that k8s/helm/values.production.yaml serves:
+## Every record below is one that k8s/helm/<unit>/values.production.yaml serves:
 ## the shell at the apex, the micro-frontend host, velista's own origin, and the
 ## backend's gateway and realtime hosts. Staging is deliberately absent: it is
 ## not running during this window.

@@ -34,7 +34,7 @@
 # that catalog still holds.
 #
 # Environment overrides:
-#   NAMESPACE      kubernetes namespace (default: nx-portfolio)
+#   NAMESPACE      kubernetes namespace (default: the NAMESPACE of k8s/units/velista/unit.env)
 #   KUBECONFIG     kubeconfig path      (default: /etc/rancher/k3s/k3s.yaml)
 #   MARKER         the comment written on the items table
 #   CATALOG_PSQL   command that runs psql against catalog, reading SQL on stdin
@@ -57,7 +57,13 @@ case "${1:-}" in
     ;;
 esac
 
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+# The velista unit holds the databases (k8s plan 0015 D10).
+if [ -z "${NAMESPACE:-}" ]; then
+  units_k8s_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  # shellcheck source=../units/unit-env.sh
+  . "$units_k8s_dir/units/unit-env.sh"
+  NAMESPACE="$(unit_field "$units_k8s_dir" velista NAMESPACE)"
+fi
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 MARKER="${MARKER:-products removed by remove-catalog-products.sh}"
 CATALOG_PSQL="${CATALOG_PSQL:-kubectl -n $NAMESPACE exec -i luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d luna_catalog}"
