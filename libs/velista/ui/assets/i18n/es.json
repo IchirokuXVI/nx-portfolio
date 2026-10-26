@@ -134,7 +134,7 @@
     }
   },
   "connection": {
-    "notLive": "Las actualizaciones en directo están desactivadas",
+    "reconnecting": "Reconectando las actualizaciones en directo",
     "lost": {
       "title": "Te has quedado sin conexión",
       "body": "Comprueba tu wifi o tus datos móviles. Esta página se recargará sola en cuanto vuelvas a tener conexión.",

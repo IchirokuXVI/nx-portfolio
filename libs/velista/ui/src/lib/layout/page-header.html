@@ -26,6 +26,21 @@
   <h1 class="title">{{ title() }}</h1>
 
   <div class="actions">
+    <!--
+      The socket has been down for more than two seconds (plan 0168). A `span` and not
+      a `button`: it reports a state and leads nowhere. Its accessible name sits on the
+      element, and the glyph is hidden like every other icon here. First in the row, so
+      it sits immediately before whatever actions the page projects.
+    -->
+    @if (attention()) {
+      <span
+        [attr.aria-label]="'connection.reconnecting' | rokuT"
+        class="live-mark"
+        role="img"
+      >
+        <lib-offline-icon aria-hidden="true" />
+      </span>
+    }
     <ng-content select="[pageHeaderActions]" />
   </div>
 </header>
