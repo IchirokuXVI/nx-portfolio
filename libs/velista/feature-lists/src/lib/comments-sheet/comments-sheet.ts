@@ -430,13 +430,10 @@ export class CommentsSheet {
 
   private async _load(): Promise<void> {
     try {
-      const page = await this._comments.listComments(this.lineId(), {
-        limit: 50,
-      });
       // Rows and count together, since a loaded page is the only honest source of
       // either and setting one without the other lets a row claim a number its own
       // list disagrees with.
-      this._lines.recordComments(this.lineId(), page.items);
+      await this._read();
     } catch (error) {
       this.errorKey.set(listErrorKey(error, 'comments'));
     } finally {
@@ -453,12 +450,60 @@ export class CommentsSheet {
    */
   private async _reread(): Promise<void> {
     try {
-      const page = await this._comments.listComments(this.lineId(), {
-        limit: 50,
-      });
-      this._lines.recordComments(this.lineId(), page.items);
+      await this._read();
     } catch {
       // Deliberately quiet. See above.
     }
   }
+
+  /**
+   * Read the line's comments and record them, keeping whatever landed meanwhile.
+   *
+   * A read that left before a comment committed can answer after that comment reached
+   * the store, from the reader's own send or from the socket. Recorded wholesale, the
+   * answer would take the comment off the screen and the count down with it until the
+   * next event. That is the ordinary case for the reread, which starts the moment a
+   * phone wakes, and the reader's first act on waking is often to say something.
+   *
+   * So each comment the store got **during** the read is laid over the answer. The
+   * test is identity, not id: the store replaces a comment's object on every write, so
+   * an object the read did not start with is a write it cannot know about. A comment
+   * the store held before the read and the answer lacks is left out, so a comment
+   * removed elsewhere is not brought back.
+   */
+  private async _read(): Promise<void> {
+    const lineId = this.lineId();
+    const before = new Set(this._lines.commentsOf(lineId) ?? []);
+
+    const page = await this._comments.listComments(lineId, { limit: 50 });
+
+    const landed = (this._lines.commentsOf(lineId) ?? []).filter(
+      (comment) => !before.has(comment)
+    );
+    this._lines.recordComments(lineId, keepLanded(page.items, landed));
+  }
+}
+
+/**
+ * A read's answer with the comments that landed while it was in flight laid over it.
+ *
+ * A landed comment the answer also holds replaces it in place, since the landed one is
+ * the later write (a transcript, say). One the answer lacks is newer than the read and
+ * goes on top, in the newest first order the store keeps.
+ */
+function keepLanded(
+  read: readonly Comment[],
+  landed: readonly Comment[]
+): readonly Comment[] {
+  if (landed.length === 0) {
+    return read;
+  }
+
+  const byId = new Map(landed.map((comment) => [comment.id, comment]));
+  const answered = new Set(read.map((comment) => comment.id));
+
+  return [
+    ...landed.filter((comment) => !answered.has(comment.id)),
+    ...read.map((comment) => byId.get(comment.id) ?? comment),
+  ];
 }

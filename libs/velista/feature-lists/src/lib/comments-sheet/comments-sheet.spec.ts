@@ -160,6 +160,11 @@ interface RenderOptions {
   audioUrl?: CommentServiceI['commentAudioUrl'];
   /** How many comment reads answer before every later one rejects. */
   readsAnswered?: number;
+  /**
+   * Answer one read by hand, by its position (0 is the read on open). Undefined falls
+   * through to `page`, so a test can hold one read open and leave the rest alone.
+   */
+  answerRead?: (read: number) => Promise<readonly Comment[]> | undefined;
 }
 
 async function render(
@@ -194,7 +199,11 @@ async function render(
       ) {
         throw new Error('offline again');
       }
-      return { items: [...page], nextCursor: null };
+      const held = options.answerRead?.(commentReads.length - 1);
+      return {
+        items: [...(held === undefined ? page : await held)],
+        nextCursor: null,
+      };
     },
     addComment: async (lineId, body) => ({
       id: 'c-new',
@@ -272,6 +281,11 @@ function route() {
     snapshot: { paramMap: map, parent: null, data: {} },
     parent: null,
   };
+}
+
+/** Past the awaits inside a read the test answered by hand, which no TestBed tracks. */
+function settled(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve));
 }
 
 function bodies(fixture: ComponentFixture<CommentsSheet>): string[] {
@@ -382,6 +396,60 @@ describe('CommentsSheet', () => {
         (fixture.nativeElement as HTMLElement).querySelector('.error')
       ).toBeNull();
       expect(bodies(fixture)).toHaveLength(3);
+    });
+
+    it('keeps a comment sent while the read again was in flight', async () => {
+      // The race: the reread reads the database before the send commits, and its
+      // answer arrives after the send's. Recorded wholesale, it took the comment away.
+      let answer!: (comments: readonly Comment[]) => void;
+      const { fixture, lines } = await render({
+        answerRead: (read) =>
+          read === 1
+            ? new Promise((resolve) => {
+                answer = resolve;
+              })
+            : undefined,
+      });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+
+      await fixture.componentInstance.send('and the olives');
+      answer(NEWEST_FIRST);
+      await settled();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(bodies(fixture)).toEqual([
+        'which bread?',
+        'the sourdough one',
+        'and olives',
+        'and the olives',
+      ]);
+      expect(lines.commentCountOf(LINE_ID)).toBe(4);
+    });
+
+    it('still drops a comment the store held before the read and the answer lacks', async () => {
+      let answer!: (comments: readonly Comment[]) => void;
+      const { fixture, lines } = await render({
+        answerRead: (read) =>
+          read === 1
+            ? new Promise((resolve) => {
+                answer = resolve;
+              })
+            : undefined,
+      });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+
+      answer(NEWEST_FIRST.slice(1));
+      await settled();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(bodies(fixture)).toEqual(['which bread?', 'the sourdough one']);
+      expect(lines.commentCountOf(LINE_ID)).toBe(2);
     });
   });
 
