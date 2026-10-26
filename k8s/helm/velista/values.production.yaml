@@ -77,7 +77,9 @@ lunaShopperBackend:
     # refuses to boot with it on against a non local database, and
     # `provision-release.sh --check` asserts no rendered manifest carries it.
     environmentName: production
-    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
+    # The web client velista-web in Google Cloud project velista-512817, owned by
+    # admin@velista.app. Its secret is GOOGLE_CLIENT_SECRET in the Secret.
+    googleClientId: 717012688744-diupovqba48a48vpjpbta5caipv9bn16.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
     # exactly, which is why it is spelled out rather than derived from a domain.
