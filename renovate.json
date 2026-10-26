@@ -42,7 +42,7 @@
     {
       "description": "Plain `image: name:tag` lines in the Helm values, which the helm-values manager does not read",
       "customType": "regex",
-      "managerFilePatterns": ["/^k8s/helm/values[^/]*\\.yaml$/"],
+      "managerFilePatterns": ["/^k8s/helm/[^/]+/values[^/]*\\.yaml$/"],
       "matchStrings": [
         "image:\\s+['\"]?(?<depName>[a-z0-9][a-z0-9./_-]*):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?['\"]?\\s"
       ],

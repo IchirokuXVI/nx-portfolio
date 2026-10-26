@@ -16,8 +16,8 @@ comes back no, section 9 is where to go instead.
 Three things have to be true, and only the first is under your control.
 
 **a. The router forwards 80 and 443 to this machine.** DNS-01 certificates
-(section 5) remove the need for inbound port 80 *for the certificate challenge
-only*. Visitors still arrive on 443, and the HTTP to HTTPS redirect answers on 80.
+(section 5) remove the need for inbound port 80 _for the certificate challenge
+only_. Visitors still arrive on 443, and the HTTP to HTTPS redirect answers on 80.
 Forward both.
 
 **b. The ISP does not block them.** Inbound 80 and 443 are blocked on many Spanish
@@ -39,17 +39,22 @@ predate both velista and the Luna Shopper backend, so they cover the shell and
 three remotes and nothing else. Deploying one would put up a site missing half of
 production.
 
-`k8s/helm/values.homelab.yaml` is the file for this. It is production's hostnames,
-production's backend config and six certificates, running the
-published `ghcr.io` images at a pinned release version. It sets no `apps` list and
-no `services` list of its own: both are inherited from `values.yaml`, so the image
-paths are literally production's.
+Each deploy unit has a `values.homelab.yaml` for this (k8s plan 0015):
+`k8s/helm/portfolio/values.homelab.yaml` and `k8s/helm/velista/values.homelab.yaml`.
+They are production's hostnames, production's backend config and six
+certificates, running the published `ghcr.io` images at a pinned release version.
+They set no `apps` list and no `services` list of their own: both are inherited
+from each chart's `values.yaml`, so the image paths are literally production's.
+The two units are two releases in two namespaces, `portfolio` and `luna-shopper`,
+deployed one after the other.
 
-The hostnames differ from production in one way. `values.homelab.yaml` sets no
-`hostOverrides`, so every host is a label under `ichirokuxvi.com`: velista is served
-at `velista.ichirokuxvi.com` rather than `velista.app`, and the `luna-shopper-admin`
-entry that `values.yaml` carries adds `admin.ichirokuxvi.com`. The Gateway takes one
-listener, and one certificate, per distinct host.
+The hostnames differ from production in one way. Everything sits under
+`ichirokuxvi.com`: the velista homelab file names `velista.ichirokuxvi.com`,
+`admin.`, `api.` and `rt.ichirokuxvi.com` in `hostOverrides`, so velista is served
+at `velista.ichirokuxvi.com` rather than `velista.app`. `ichirokuxvi.com/velista`
+is not served at home: the portfolio homelab file has no `externalRoutes`, and the
+velista one no ReferenceGrant. Each Gateway takes one HTTP and one HTTPS listener,
+and one certificate, per host of its unit.
 
 ## 3. Point the domain here
 
@@ -130,14 +135,15 @@ plus one values key.
 
 Both flags matter here:
 
-- `--no-metallb` matches `metallb.enabled: false` in `values.homelab.yaml`. MetalLB
-  exists to advertise a VPS's address on a bare metal network; Docker Desktop
-  publishes LoadBalancer services on localhost by itself, and the pool's address
-  is not routable here anyway.
-- `--issuer selfsigned` installs cert-manager but creates only the `selfsigned`
+- `--no-metallb`: MetalLB exists to advertise a VPS's address on a bare metal
+  network; Docker Desktop publishes LoadBalancer services on localhost by itself.
+  Pass no `--ip` here.
+- `--issuer selfsigned` installs cert-manager and creates the `selfsigned`
   ClusterIssuer. The real issuer for this deploy is the DNS-01 one in section 5,
-  and passing `--issuer letsencrypt` here would additionally register an ACME
-  account for an HTTP-01 issuer that nothing references.
+  which both homelab values files name with `create: false`.
+
+It also turns on merged gateways, so both units' Gateways share one Envoy Service
+on ports 80 and 443.
 
 The script prints the GatewayClass name at the end. It should be `eg` with
 `ACCEPTED=True`, which is what `gateway.className` expects.
@@ -154,7 +160,7 @@ Encrypt never connects to this machine and a blocked inbound port 80 stops
 mattering for issuance.
 
 Expect a couple of minutes per name while TXT records propagate. Six names are
-issued. Watch with `kubectl -n nx-portfolio get certificate -w`.
+issued. Watch with `kubectl get certificate -A -w`.
 
 **Do not iterate blindly here.** Let's Encrypt rate limits failed validations far
 more tightly than successful ones. If one fails, read
@@ -165,31 +171,37 @@ more tightly than successful ones. If one fails, read
 **Registry credentials.** The VPS authenticated to ghcr.io at the node level. This
 machine has no such credential, and if the packages are private every pod fails as
 `ImagePullBackOff` carrying an authentication error that names no fix. Create the
-Secret once, with a GitHub personal access token carrying only `read:packages`:
+Secret once in each unit's namespace, with a GitHub personal access token
+carrying only `read:packages`. The two `provision-release.sh` runs below create the
+namespaces, so run them first:
 
 ```sh
-kubectl create namespace nx-portfolio
-kubectl -n nx-portfolio create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
-  --docker-username=IchirokuXVI \
-  --docker-password=<token with read:packages>
+./k8s/bootstrap/provision-release.sh --unit portfolio --env production
+./k8s/bootstrap/provision-release.sh --unit velista --env production
+for ns in portfolio luna-shopper; do
+  kubectl -n "$ns" create secret docker-registry ghcr-pull \
+    --docker-server=ghcr.io \
+    --docker-username=IchirokuXVI \
+    --docker-password=<token with read:packages>
+done
 ```
 
-Harmless if the packages are public: Kubernetes simply will not need it.
+Harmless if the packages are public: Kubernetes simply will not need it. The
+velista run is the one that writes the backend Secrets. It generates its own
+passwords and JWT keypair, so this cluster's credentials are its own and share
+nothing with the VPS that is gone.
 
-**Backend Secrets.** Once. The script generates its own passwords and JWT keypair,
-so this cluster's credentials are its own and share nothing with the VPS that is
-gone:
+**Deploy a release of each unit.** Nothing is built; the images come from the
+registry:
 
 ```sh
-./k8s/bootstrap/provision-release.sh --env production
+./k8s/helm/deploy-homelab.sh portfolio 0.1.1
+./k8s/helm/deploy-homelab.sh velista 0.1.1
 ```
 
-**Deploy a release.** Nothing is built; the images come from the registry:
-
-```sh
-./k8s/helm/deploy-homelab.sh 0.1.1
-```
+A home machine that still runs the one release `nx-portfolio` of the old chart
+moves to these two with the cutover of k8s plan 0016 (`split-release.sh --env
+homelab`), not by installing them beside it: both would claim the same hosts.
 
 ## 7. Switching versions
 
@@ -197,12 +209,13 @@ This is the whole point of pinning to immutable release tags. Rolling forward an
 rolling back are the same command with a different argument:
 
 ```sh
-./k8s/helm/deploy-homelab.sh --current   # what is being served, per workload
-./k8s/helm/deploy-homelab.sh --list      # versions actually published
-./k8s/helm/deploy-homelab.sh 0.1.0       # roll back
-./k8s/helm/deploy-homelab.sh 0.1.1       # roll forward again
+./k8s/helm/deploy-homelab.sh velista --current   # what is being served, per workload
+./k8s/helm/deploy-homelab.sh velista --list      # versions actually published
+./k8s/helm/deploy-homelab.sh velista 0.1.0       # roll back
+./k8s/helm/deploy-homelab.sh velista 0.1.1       # roll forward again
 ```
 
+Each unit moves on its own; the same commands take `portfolio`.
 `--current` reads the live Deployment rather than the Helm release, because those
 two can disagree: a failed upgrade leaves the release recording a version no pod
 ever ran. `--list` asks the registry rather than listing git tags, because a
@@ -216,11 +229,15 @@ rollback is only possible to a version whose images still exist.
 > destructive to data, restore from a dump instead (`k8s/helm/restore-database.sh`).
 
 **Where new versions come from.** Publishing a GitHub Release still builds, tests
-and pushes every image exactly as before. Only the SSH deploy is skipped while no
-`SSH_DEPLOY_HOST` secret exists, and the run says so in a notice and in the job
-summary rather than failing. So the flow is: publish the release, wait for the
-workflow, then `deploy-homelab.sh <version>` here. Staging behaves the same way
-against `SSH_DEPLOY_HOST_STAGING`.
+and pushes every image of each unit. The deploy job of each unit then checks its
+GitHub environment (`<unit>-production`, k8s plan 0016) for `SSH_DEPLOY_HOST`,
+`SSH_DEPLOY_USER`, `SSH_DEPLOY_KEY` and `SSH_KNOWN_HOSTS`. A repository with no
+cluster for CI to reach leaves them unset, so that job stops before any SSH and
+the run goes red, with a summary that says the images were pushed and names
+each missing value. That red deploy job is expected here, and the images it
+reports are the ones to deploy. So the flow is: publish the release, wait for
+the build to push the images, then `deploy-homelab.sh <unit> <version>` here.
+A staging run behaves the same way against `<unit>-staging`.
 
 ## 8. Keeping development and production apart
 
@@ -228,15 +245,15 @@ The requirement is that the two stacks never share infrastructure or read each
 other's values. They already do not, and it is worth knowing exactly why rather
 than trusting it.
 
-| | Development | Production (here) |
-| --- | --- | --- |
-| Runtime | Docker Compose | Docker Desktop Kubernetes |
-| Project / namespace | `luna-shopper-backend` (slot 0) | namespace `nx-portfolio` |
-| Postgres, NATS, Redis | containers publishing host ports | StatefulSets on **ClusterIP, no host ports** |
-| Storage | compose named volumes | Kubernetes PVCs (local-path) |
-| Config source | `.env` files generated by `luna-slot` | ConfigMap + six Secrets |
-| Images | built locally, `:dev` | pulled from ghcr.io, `:<version>` |
-| Host ports | 5432/5433/5434/5435, 4222, 6379, 1025, 8025, 9090, 3010, 16686 | **80 and 443 only**, via Envoy |
+|                       | Development                                                    | Production (here)                            |
+| --------------------- | -------------------------------------------------------------- | -------------------------------------------- |
+| Runtime               | Docker Compose                                                 | Docker Desktop Kubernetes                    |
+| Project / namespace   | `luna-shopper-backend` (slot 0)                                | namespaces `portfolio` and `luna-shopper`    |
+| Postgres, NATS, Redis | containers publishing host ports                               | StatefulSets on **ClusterIP, no host ports** |
+| Storage               | compose named volumes                                          | Kubernetes PVCs (local-path)                 |
+| Config source         | `.env` files generated by `luna-slot`                          | ConfigMap + six Secrets                      |
+| Images                | built locally, `:dev`                                          | pulled from ghcr.io, `:<version>`            |
+| Host ports            | 5432/5433/5434/5435, 4222, 6379, 1025, 8025, 9090, 3010, 16686 | **80 and 443 only**, via Envoy               |
 
 The infrastructure is therefore already duplicated: two Postgres sets, two NATS,
 two Redis, none of them shared. Production's databases publish no host port at
@@ -266,7 +283,7 @@ One real hazard remains, and nothing in the setup prevents it:
 > down at the next pod restart, because `imagePullPolicy: IfNotPresent` will not
 > re-fetch them on its own. Running pods survive, so it looks fine until something
 > restarts and then everything is `ImagePullBackOff` at once. Recover by
-> re-running `deploy-homelab.sh <version>`, which re-pulls.
+> re-running `deploy-homelab.sh <unit> <version>` for each unit, which re-pulls.
 
 ## 9. If the home line will not work, or you would rather not
 
@@ -275,8 +292,8 @@ Two alternatives, both better than fighting a residential connection.
 **A cheap VPS for four days.** Providers with hourly billing (netcup's own G12
 line, Scaleway, Vultr, DigitalOcean) will rent something adequate for roughly one
 or two euros over a long weekend. Static address, open ports, and the same shape
-as every deploy you have done: point DNS at it, `install.sh --k3s`,
-`provision-release.sh`, `deploy-release.sh <version>`. No dynamic DNS, no port
+as every deploy you have done: point DNS at it, `install.sh --k3s --ip <address>`,
+`provision-release.sh --unit <unit>`, `deploy-release.sh <unit> <version>`. No dynamic DNS, no port
 forwarding, no CGNAT question, and your PC stays yours. This is the cheapest way
 out and it is what to do if section 1 came back no.
 
@@ -294,19 +311,20 @@ When netcup is ready:
 1. Take a database dump first. `values.homelab.yaml` has backups off, so this
    window produced none.
    ```sh
-   kubectl -n nx-portfolio exec luna-shopper-backend-core-db-0 -- \
+   kubectl -n luna-shopper exec luna-shopper-backend-core-db-0 -- \
      pg_dump -U luna_core luna_core > core.sql
    ```
    Repeat for `auth` and `catalog`, then restore with `k8s/helm/restore-database.sh`.
 2. Set `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` in the repository
    secrets. The release workflow starts deploying again on its own; nothing in it
    needs editing back.
-3. Stand up netcup with `install.sh --k3s`, `provision-release.sh --env production`
-   and `values.production.yaml`, setting `ipAddress` to the new address.
+3. Stand up netcup with k8s/README-new-cluster.md: `install.sh --k3s`, then
+   `install.sh --ip <the new address>`, then `provision-release.sh --unit <unit>
+--env production` for both units.
 4. `docker compose -f docker/ddns/compose.yml down`, then point the six records at
    the netcup address by hand. Do this last: while ddclient runs it will happily
    put your home address back.
-5. Delete `values.homelab.yaml`, `deploy-homelab.sh`, `cluster-issuer-dns01.sh`,
+5. Delete both `values.homelab.yaml`, `deploy-homelab.sh`, `cluster-issuer-dns01.sh`,
    `docker/ddns/` and this file. They describe a situation that no longer exists,
    and a stale runbook for serving production from a desktop is worse than none.
 

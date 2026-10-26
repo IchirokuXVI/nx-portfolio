@@ -9,7 +9,7 @@
 # processes, which is fast and tests everything except the image itself. This
 # overlay is the other half: it runs the image, so the things only an image can
 # get wrong are covered — entrypoint, non root user, the runtime `npm install`,
-# baked config, and SIGTERM reaching PID 1. `docker-ci.yml` already builds these
+# baked config, and SIGTERM reaching PID 1. `stage-unit.yml` already builds these
 # images on the way to staging, so running the suite against them before the
 # `helm upgrade` costs the stack boot and the suite, not a rebuild, and it turns
 # the staging deploy into a gated one.

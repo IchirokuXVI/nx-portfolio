@@ -26,7 +26,13 @@ import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { checkTasks, parseDay, parseTaskEnv } from './check-tasks.mjs';
+import {
+  checkTasks,
+  parseDay,
+  parseTaskEnv,
+  unitNames,
+  unitTagPrefixes,
+} from './check-tasks.mjs';
 
 const CHECKER = fileURLToPath(new URL('./check-tasks.mjs', import.meta.url));
 
@@ -35,6 +41,7 @@ const CHANGED = new Date('2026-10-03T10:00:00Z');
 const lastChanged = () => CHANGED;
 
 const COMPLETE = {
+  UNIT: 'velista',
   RUN_UNTIL_STAGING: '2026-10-10',
   RUN_UNTIL_PRODUCTION: '2026-10-17',
   PRODUCTION_RELEASE: '0.6.0',
@@ -223,6 +230,7 @@ test('fails on a task with no task.env', () => {
 test('fails on a task.env line it cannot read without running it', () => {
   const env = [
     '# a comment',
+    'UNIT="velista"',
     'RUN_UNTIL_STAGING="2026-10-10"',
     'RUN_UNTIL_PRODUCTION="$(date +%F)"',
     'PRODUCTION_RELEASE="0.6.0"',
@@ -234,9 +242,33 @@ test('fails on a task.env line it cannot read without running it', () => {
   assert.equal(problems.length, 2, problems.join('\n'));
   assert.match(
     problems[0],
-    /task\.env line 3 is neither a comment nor NAME="value"/
+    /task\.env line 4 is neither a comment nor NAME="value"/
   );
   assert.match(problems[1], /RUN_UNTIL_PRODUCTION is absent/);
+});
+
+test('fails on a task that names no unit', () => {
+  const env = { ...COMPLETE };
+  delete env.UNIT;
+  const problems = checkTasks(tasksDir({ '0001-a-task': { env } }), {
+    lastChanged,
+  });
+  assertOneProblem(problems, /0001-a-task: UNIT is absent/);
+});
+
+test('fails on a task whose unit has no unit.env', () => {
+  const problems = checkTasks(
+    tasksDir({ '0001-a-task': { env: { ...COMPLETE, UNIT: 'portfolio' } } }),
+    { lastChanged, units: ['velista'] }
+  );
+  assertOneProblem(
+    problems,
+    /0001-a-task: UNIT is "portfolio", and k8s\/units\/portfolio\/unit\.env does not exist/
+  );
+});
+
+test('reads the units of the repository', () => {
+  assert.deepEqual(unitNames().sort(), ['portfolio', 'velista']);
 });
 
 test('fails on a directory the runner would not see', () => {
@@ -356,4 +388,38 @@ test('the command exits 1 and names the task when the window is past the cap', (
     /0001-a-task: RUN_UNTIL_PRODUCTION is 15 days after task\.env last changed \(2026-01-01\)/
   );
   assert.doesNotMatch(result.stderr, /RUN_UNTIL_STAGING/);
+});
+
+test('fails on a task whose unit states no tag prefix', () => {
+  const problems = checkTasks(tasksDir({ '0001-a-task': { env: COMPLETE } }), {
+    lastChanged,
+    units: ['velista'],
+    tagPrefixes: { velista: '' },
+  });
+  assertOneProblem(
+    problems,
+    /0001-a-task: k8s\/units\/velista\/unit\.env states no TAG_PREFIX/
+  );
+});
+
+test('fails on a PRODUCTION_RELEASE written as the whole tag', () => {
+  const problems = checkTasks(
+    tasksDir({
+      '0001-a-task': {
+        env: { ...COMPLETE, PRODUCTION_RELEASE: 'velista-v0.15.0' },
+      },
+    }),
+    { lastChanged }
+  );
+  assertOneProblem(
+    problems,
+    /PRODUCTION_RELEASE is "velista-v0\.15\.0", the whole tag\. Write the version after velista-v alone/
+  );
+});
+
+test('reads the tag prefix of each unit of the repository', () => {
+  assert.deepEqual(unitTagPrefixes(), {
+    portfolio: 'portfolio-v',
+    velista: 'velista-v',
+  });
 });

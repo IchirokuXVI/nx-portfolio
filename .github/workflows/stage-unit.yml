@@ -1,0 +1,398 @@
+name: Stage one unit
+
+# The staging pipeline of one deploy unit (k8s plan 0016 D1), called by
+# staging-<unit>.yml on every push to main. The unit's affected images are built
+# under the mutable `staging` tag, its gates run against them, and the unit is
+# deployed into its own namespace and release with the host and key of the
+# GitHub environment <unit>-staging.
+#
+# Jobs rather than one long one (k8s plan 0007): the suites and the build run
+# side by side, and "Re-run failed jobs" retries a deploy that lost its SSH
+# connection in a minute, against images already in the registry.
+#
+# Nothing compiles on the runner. Every `nx build` runs inside BUILD_IMAGE, and
+# the image builds pass --exclude-task-dependencies so they cannot recompile
+# outside it.
+
+on:
+  workflow_call:
+    inputs:
+      unit:
+        description: A directory of k8s/units.
+        type: string
+        required: true
+      build_all:
+        description: Build and deploy every image of the unit, ignoring affected.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # The one build environment. Bump deliberately, in a commit, with
+  #   docker buildx imagetools inspect node:24-slim --format '{{println .Manifest.Digest}}'
+  # and keep it equal to release-unit.yml and the seven Luna Dockerfiles.
+  BUILD_IMAGE: node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+  DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+  DOCKER_SKIP_LOGIN: true
+  DOCKER_BUILD_CACHE: gha
+  # The images are a base plus a COPY of a finished bundle, so `min` writes the least.
+  DOCKER_BUILD_CACHE_MODE: min
+
+jobs:
+  # What changed for this unit. Every later job reads these outputs, which is
+  # also what lets the deploy job be re-run alone.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.lists.outputs.images }}
+      deployments: ${{ steps.lists.outputs.deployments }}
+      testable: ${{ steps.lists.outputs.testable }}
+      luna: ${{ steps.lists.outputs.luna }}
+      gates: ${{ steps.lists.outputs.gates }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UNIT: ${{ inputs.unit }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Node on the runner only for `nx show projects`, whose --affected shells
+      # out to git, which node:24-slim lacks. Nothing is compiled here.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      # Inside a reusable workflow github.workflow is the caller's name, so each
+      # unit diffs against its own last green run.
+      - name: Last successful commit of this unit's pipeline
+        id: last_success
+        env:
+          WORKFLOW: ${{ github.workflow }}
+        run: |
+          sha="$(gh run list --branch "$GITHUB_REF_NAME" --workflow "$WORKFLOW" \
+            --json headSha,conclusion \
+            --jq '[.[] | select(.conclusion=="success")][0].headSha')"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Last successful commit of '$WORKFLOW': ${sha:-(none)}"
+
+      - name: Work out what is affected
+        id: lists
+        env:
+          BASE_SHA: ${{ steps.last_success.outputs.sha }}
+          BUILD_ALL: ${{ inputs.build_all }}
+        run: |
+          if [ -z "$BASE_SHA" ] || [ "$BUILD_ALL" = true ]; then
+            echo "Building every image of $UNIT (first run or build_all)."
+            scope=()
+          else
+            scope=(--affected --base "$BASE_SHA" --head "$GITHUB_SHA")
+          fi
+
+          # --json everywhere: `nx show projects` prints one name per line only
+          # on a TTY, and parsing the pretty form silently finds nothing.
+          list() { npx nx show projects "${scope[@]}" "$@" --json | jq -r 'join(",")'; }
+
+          images="$(list --with-target build:docker --projects "tag:deploy:$UNIT")"
+          if [ -z "$images" ]; then
+            echo "Nothing of $UNIT is affected; the pipeline stops here."
+            testable='' gates='[]'
+          else
+            # The whole graph, not the unit: a shared library is tested in both pipelines.
+            testable="$(list --with-target test)"
+            affected="$(list)"
+            gates="$(node tools/deploy/units.mjs gates "$UNIT" "$affected")"
+          fi
+          # The Deployment name is the lowercased project name.
+          deployments="$(echo "$images" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)"
+          luna="$(echo "$images" | tr ',' '\n' | grep -E '^luna-shopper-backend-' | paste -sd, - || true)"
+
+          {
+            echo "images=$images"
+            echo "deployments=$deployments"
+            echo "testable=$testable"
+            echo "luna=$luna"
+            echo "gates=$gates"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### $UNIT: affected"
+            echo
+            echo "- images: \`${images:-(none)}\`"
+            echo "- testable: \`${testable:-(none)}\`"
+            echo "- gates: \`$(echo "$gates" | jq -r 'map(.gate + (if .e2e != "" then " (" + .e2e + ")" else "" end)) | join(", ")')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Lint and unit tests on the merged commit, over everything affected since
+  # this unit's last green run. Nothing here needs an image.
+  lint-test:
+    needs: setup
+    if: needs.setup.outputs.testable != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Lint & test affected
+        env:
+          TESTABLE: ${{ needs.setup.outputs.testable }}
+        run: |
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t lint test --projects "$TESTABLE"
+
+  # The base image, then the bundles in one `nx run-many` inside the pinned
+  # image (one Nx cache across the unit), then the images.
+  build:
+    needs: setup
+    if: needs.setup.outputs.images != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      UNIT: ${{ inputs.unit }}
+      IMAGES: ${{ needs.setup.outputs.images }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The docker executor calls buildx itself, so the gha cache needs the
+      # runtime variables exposed.
+      - name: Expose GitHub Actions runtime for the gha cache
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      # Every run builds the base under `staging` and every frontend of the run
+      # builds FROM that tag (k8s plan 0016 D6), so a staging push never moves
+      # what a release builds on. Both units may push it from one commit, which
+      # is the same bytes.
+      - name: Build the base image
+        env:
+          DOCKER_IMAGE_TAG: staging
+        run: npx nx run docker/local-http-server:build --configuration production
+
+      # The unit's BUILD_ENV_STAGING from unit.env, plus the version, which on
+      # staging is the literal `staging`: no client is ever refused for being
+      # old there (velista plan 0034 D6).
+      - name: Build the bundles in the pinned image
+        run: |
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+          build_env=(-e VELISTA_APP_VERSION=staging)
+          for pair in $BUILD_ENV_STAGING; do build_env+=(-e "$pair"); done
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "${build_env[@]}" \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t build prune --configuration production --projects "$IMAGES"
+
+      # The last moment a missing runtime dependency costs nothing (k8s plan 0009).
+      - name: Every bundle can resolve what it requires
+        if: needs.setup.outputs.luna != ''
+        env:
+          LUNA: ${{ needs.setup.outputs.luna }}
+        run: |
+          dirs="$(echo "$LUNA" | tr ',' '\n' | sed '/^$/d; s|^|dist/apps/|' | paste -sd' ' -)"
+          node apps/luna-shopper-backend/tools/ci/assert-runtime-manifest.mjs $dirs
+
+      # --exclude-task-dependencies keeps a cold cache from recompiling here,
+      # outside the pinned image.
+      - name: Build & push the staging images
+        env:
+          DOCKER_IMAGE_TAG: staging
+          BUILDER_TAG: staging
+        run: |
+          npx nx run-many -t build:docker --configuration production \
+            --projects "$IMAGES" --exclude-task-dependencies
+
+  # One job per gate of the unit whose triggers are affected (k8s plan 0016 D3),
+  # against the images this run pushed. A failure stops the deploy.
+  gate:
+    needs: [setup, build]
+    if: needs.setup.outputs.gates != '[]' && needs.setup.outputs.gates != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.gates) }}
+    name: gate (${{ matrix.gate }})
+    env:
+      E2E_IMAGE_PREFIX: ghcr.io/ichirokuxvi/nx-portfolio
+      E2E_IMAGE_TAG: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve browser versions
+        id: browsers
+        run: |
+          echo "playwright=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "cypress=$(node -p "require('cypress/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: matrix.browsers == 'playwright' || matrix.browsers == 'both'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.browsers.outputs.playwright }}
+
+      - name: Cache Cypress binary
+        if: matrix.browsers == 'cypress' || matrix.browsers == 'both'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ steps.browsers.outputs.cypress }}
+
+      - name: Install browsers
+        env:
+          BROWSERS: ${{ matrix.browsers }}
+        run: |
+          case "$BROWSERS" in playwright | both) npx playwright install --with-deps chromium ;; esac
+          case "$BROWSERS" in cypress | both) npx cypress install ;; esac
+
+      - name: Point the gate's hosts at this runner
+        if: matrix.hosts != ''
+        env:
+          HOSTS: ${{ matrix.hosts }}
+        run: echo "127.0.0.1 $HOSTS" | sudo tee -a /etc/hosts
+
+      # Fails here, with the name, when an image the gate needs was never pushed.
+      - name: Pull the gate's images
+        env:
+          IMAGES: ${{ matrix.images }}
+        run: |
+          for image in $IMAGES; do
+            docker pull -q "$E2E_IMAGE_PREFIX/$image:$E2E_IMAGE_TAG"
+          done
+
+      - name: Run the gate
+        env:
+          GATE: ${{ matrix.gate }}
+          E2E: ${{ matrix.e2e }}
+        run: bash "k8s/e2e/$GATE/gate.sh" "$E2E"
+
+      - name: Upload the gate diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-${{ matrix.gate }}-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            test-output/
+            dist/.playwright/
+
+  # The deploy, alone, so it can be retried alone. A gate skips when nothing it
+  # covers changed, so each result is tested against failure rather than for
+  # success, and !cancelled() keeps a cancelled run from deploying.
+  #
+  # The group is per unit (k8s plan 0016 D2): two runs of this unit queue, and
+  # the other unit's deploy is never touched. Host patching is kept out by the
+  # lock on the host, not by a group.
+  #
+  # The secrets come from the environment <unit>-staging, and the callers must
+  # pass `secrets: inherit`: a called workflow sees no secret its caller did not
+  # pass, environment ones included, so without it all three arrive empty. The
+  # environment's value wins over a repository secret of the same name. An
+  # environment that lacked SSH_DEPLOY_HOST would fall back to the repository
+  # one, which is production's, so deploy-unit refuses a host that the
+  # environment's SSH_KNOWN_HOSTS does not name.
+  deploy:
+    needs: [setup, lint-test, build, gate]
+    if: >-
+      !cancelled()
+      && needs.setup.result == 'success'
+      && needs.setup.outputs.images != ''
+      && needs.lint-test.result != 'failure'
+      && needs.build.result == 'success'
+      && needs.gate.result != 'failure'
+    runs-on: ubuntu-latest
+    # Room for the cutover of k8s plan 0016 D5, which the first deploy runs:
+    # four dumps of up to 15 minutes each and four helm waits. An ordinary
+    # deploy ends long before, bounded by its own helm and rollout timeouts.
+    timeout-minutes: 150
+    environment: ${{ inputs.unit }}-staging
+    concurrency:
+      group: deploy-${{ inputs.unit }}-staging
+      cancel-in-progress: false
+    steps:
+      # The whole history, because check-tasks.mjs measures each window from
+      # the commit that last changed its task.env.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Deploy
+        uses: ./.github/actions/deploy-unit
+        with:
+          unit: ${{ inputs.unit }}
+          mode: staging
+          deployments: ${{ needs.setup.outputs.deployments }}
+          host: ${{ secrets.SSH_DEPLOY_HOST }}
+          user: ${{ secrets.SSH_DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          known_hosts: ${{ vars.SSH_KNOWN_HOSTS }}

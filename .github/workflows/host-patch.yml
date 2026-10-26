@@ -18,10 +18,6 @@ on:
         description: GitHub environment of the job. host-production carries the soak wait timer.
         type: string
         required: true
-      concurrency-group:
-        description: The deploy workflow's concurrency group, so a patch never reboots a host mid deploy.
-        type: string
-        required: true
       snapshot:
         description: snapshot.debian.org timestamp, e.g. 20261026T030000Z
         type: string
@@ -34,38 +30,57 @@ on:
         description: Endpoints of the host that was patched first. When set, that host must still be healthy before this one is touched.
         type: string
         default: ''
+    # host-maintenance.yml calls with `secrets: inherit`, and the values come
+    # from the job's environment, host-staging or host-production (k8s plan
+    # 0016, section 6). Not required, so that a missing one fails below with
+    # its name.
     secrets:
-      host:
-        required: true
-      soak-check-host:
+      SSH_DEPLOY_HOST:
         required: false
-      user:
-        required: true
-      key:
-        required: true
+      SSH_SOAK_CHECK_HOST:
+        required: false
+      SSH_DEPLOY_USER:
+        required: false
+      SSH_DEPLOY_KEY:
+        required: false
 
 permissions:
   contents: read
 
 env:
-  # As in release.yml, with one difference: host keys are checked. This job
-  # holds a sudo rule on the far end, so it does not accept whatever answers.
+  # Host keys are checked, as in every deploy. This job holds a sudo rule on
+  # the far end, so it does not accept whatever answers.
   SSH_OPTS: '-o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10'
 
 jobs:
   patch:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    concurrency:
-      group: ${{ inputs.concurrency-group }}
-      cancel-in-progress: false
+    # No concurrency group: a deploy and a patch exclude each other through the
+    # lock on the host (k8s plan 0016 D2), which nx-host-patch and install.sh
+    # below hold.
     timeout-minutes: 90
     env:
-      HOST: ${{ secrets.host }}
-      SOAK_HOST: ${{ secrets.soak-check-host }}
-      DEPLOY_USER: ${{ secrets.user }}
+      HOST: ${{ secrets.SSH_DEPLOY_HOST }}
+      SOAK_HOST: ${{ secrets.SSH_SOAK_CHECK_HOST }}
+      DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
       SNAPSHOT: ${{ inputs.snapshot }}
     steps:
+      - name: The environment names a host
+        env:
+          DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          SOAK_ENDPOINTS: ${{ inputs.soak-check-endpoints }}
+        run: |
+          missing=""
+          [ -n "$HOST" ] || missing="$missing SSH_DEPLOY_HOST"
+          [ -n "$DEPLOY_USER" ] || missing="$missing SSH_DEPLOY_USER"
+          [ -n "$DEPLOY_KEY" ] || missing="$missing SSH_DEPLOY_KEY"
+          [ -z "$SOAK_ENDPOINTS" ] || [ -n "$SOAK_HOST" ] || missing="$missing SSH_SOAK_CHECK_HOST"
+          if [ -n "$missing" ]; then
+            echo "::error title=${{ inputs.environment }} is incomplete::Set these secrets on the environment ${{ inputs.environment }}:$missing"
+            exit 1
+          fi
+
       - name: Checkout the bootstrap scripts
         uses: actions/checkout@v4
         with:
@@ -89,7 +104,7 @@ jobs:
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.key }}
+          ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
       # The gate. Production is patched only while the host that went first,
       # with the same snapshot, is still healthy after the soak.
@@ -146,7 +161,10 @@ jobs:
             exit 0
           fi
           echo "updating:$drift"
-          ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s' < k8s/bootstrap/install.sh
+          # Under the host lock, like a deploy: the helm upgrades of the add-ons
+          # must not run beside one.
+          { cat k8s/bootstrap/host-lock.sh; echo 'host_lock || exit 1'; cat k8s/bootstrap/install.sh; } \
+            | ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'bash -s'
 
       - name: Reboot when one is due
         run: |
@@ -157,6 +175,10 @@ jobs:
             exit 0
           fi
           before="$(sed -n 's/^boot_id=//p' <<< "$status")"
+          # The call returns once the reboot holds the deploy lock, which can
+          # take up to 15 minutes behind a running deploy, and fails when it
+          # never got it. The boot_id wait below starts only after that, so its
+          # eleven minutes cover the reboot alone.
           ssh $SSH_OPTS "$DEPLOY_USER@$HOST" 'sudo -n /usr/local/sbin/nx-host-patch reboot'
           sleep 60
           # A new boot_id is the proof. An SSH that answers could still be the

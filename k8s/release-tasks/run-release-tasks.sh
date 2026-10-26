@@ -2,12 +2,12 @@
 #
 # Run the release tasks of one environment (README.md in this directory).
 #
-#   run-release-tasks.sh --env staging --phase check                        # before anything
-#   run-release-tasks.sh --env staging --phase pre                          # before helm upgrade
-#   run-release-tasks.sh --env staging --phase post                         # after the rollout
-#   run-release-tasks.sh --env production --phase check --release 1.2.3     # the same three,
-#   run-release-tasks.sh --env production --phase pre --release 1.2.3       # with the version
-#   run-release-tasks.sh --env production --phase post --release 1.2.3      # being deployed
+#   run-release-tasks.sh --unit velista --env staging --phase check     # before anything
+#   run-release-tasks.sh --unit velista --env staging --phase pre       # before helm upgrade
+#   run-release-tasks.sh --unit velista --env staging --phase post      # after the rollout
+#   run-release-tasks.sh --unit velista --env production --phase check --release 1.2.3
+#   run-release-tasks.sh --unit velista --env production --phase pre --release 1.2.3
+#   run-release-tasks.sh --unit velista --env production --phase post --release 1.2.3
 #
 # A task is a directory under tasks/, named NNNN-kebab-title, holding task.env,
 # check.sh and at least one of pre.sh and post.sh. Tasks run in name order.
@@ -27,6 +27,7 @@
 #   the window of this environment is `never`       nothing happens
 #   the window is absent, empty or not a date       refused, exit 1
 #   the release is a first install                  recorded as skipped
+#     (helm knows no release AND the ledger did not exist before this run)
 #   today (UTC) is after the window                 recorded as expired
 #   production, and --release is another version    it waits for its release
 #   check.sh is absent or fails                     refused, exit 1
@@ -51,9 +52,11 @@
 # task from the ConfigMap runs it again, if its window is still open, which every
 # task must survive (the second rule in README.md).
 #
+# --unit <unit> reads NAMESPACE and RELEASE_NAME from k8s/units/<unit>/unit.env
+# (k8s plan 0015 D9), runs only the tasks whose task.env says UNIT=<unit>, and
+# exits at once when the unit's RELEASE_TASKS is false. --unit is required.
+#
 # Environment overrides:
-#   NAMESPACE     kubernetes namespace          (default: nx-portfolio)
-#   RELEASE_NAME  helm release                  (default: nx-portfolio)
 #   KUBECONFIG    kubeconfig path               (default: /etc/rancher/k3s/k3s.yaml)
 #   DUMP_TIMEOUT  seconds to wait for one dump  (default: 900)
 
@@ -63,7 +66,7 @@ set -euo pipefail
 shopt -s inherit_errexit
 
 usage() {
-  echo "usage: run-release-tasks.sh --env <staging|production> --phase <check|pre|post> [--release <version>]" >&2
+  echo "usage: run-release-tasks.sh --unit <unit> --env <staging|production> --phase <check|pre|post> [--release <version>]" >&2
   echo "       --release is required with --env production and refused with --env staging" >&2
   exit 1
 }
@@ -72,8 +75,10 @@ ENVIRONMENT=''
 PHASE=''
 RELEASE=''
 RELEASE_GIVEN=false
+UNIT_NAME=''
 while [ $# -gt 0 ]; do
   case "$1" in
+    --unit) UNIT_NAME="${2:-}"; shift 2 || usage ;;
     --env) ENVIRONMENT="${2:-}"; shift 2 || usage ;;
     --phase) PHASE="${2:-}"; shift 2 || usage ;;
     --release) RELEASE="${2:-}"; RELEASE_GIVEN=true; shift 2 || usage ;;
@@ -95,13 +100,19 @@ case "$ENVIRONMENT" in
   *) usage ;;
 esac
 
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
-RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
-DUMP_TIMEOUT="${DUMP_TIMEOUT:-900}"
-export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$HERE")"
+
+[ -n "$UNIT_NAME" ] || usage
+# shellcheck source=../units/unit-env.sh
+. "$K8S_DIR/units/unit-env.sh"
+load_unit "$K8S_DIR" "$UNIT_NAME"
+if [ "$RELEASE_TASKS" != true ]; then
+  echo "release tasks, $ENVIRONMENT, phase $PHASE: the unit $UNIT_NAME runs none (RELEASE_TASKS=$RELEASE_TASKS)"
+  exit 0
+fi
+DUMP_TIMEOUT="${DUMP_TIMEOUT:-900}"
+export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 LEDGER='release-tasks'
 TODAY="$(date -u +%Y-%m-%d)"
 
@@ -149,6 +160,7 @@ task_field() {
     RUN_UNTIL_PRODUCTION=''
     PRODUCTION_RELEASE=''
     DATABASES=''
+    UNIT=''
     # shellcheck disable=SC1090,SC1091
     . "$1/task.env" > /dev/null
     case "$2" in
@@ -156,6 +168,7 @@ task_field() {
       RUN_UNTIL_PRODUCTION) value="$RUN_UNTIL_PRODUCTION" ;;
       PRODUCTION_RELEASE) value="$PRODUCTION_RELEASE" ;;
       DATABASES) value="$DATABASES" ;;
+      UNIT) value="$UNIT" ;;
       *) exit 1 ;;
     esac
     # A checkout with CRLF line endings leaves a carriage return on each value.
@@ -325,10 +338,14 @@ decide() {
   DECISION=due
 }
 
+# Read before the pre phase creates it: a ledger that existed before this run is
+# proof of an earlier deploy, whatever helm says.
+if ledger_present; then LEDGER_EXISTED=true; else LEDGER_EXISTED=false; fi
+
 if [ "$PHASE" = check ]; then
   # The check phase writes nothing, so it does not create the ledger either. An
   # absent ledger reads as an empty one.
-  if ledger_present; then LEDGER_PRESENT=true; else LEDGER_PRESENT=false; fi
+  LEDGER_PRESENT="$LEDGER_EXISTED"
 else
   # The ledger exists before anything reads it.
   kubectl -n "$NAMESPACE" create configmap "$LEDGER" --dry-run=client -o yaml \
@@ -339,14 +356,16 @@ fi
 # A first install has no data for a task to change. Every due task is recorded
 # as skipped, so a task written for an existing cluster never runs on a new one.
 #
-# Only helm saying that the release is not found counts. A cluster that does not
-# answer is not a new cluster, and `skipped` is final, so any other failure
-# stops here.
+# It takes two answers (k8s plan 0015 D9). Helm must say that the release is not
+# found: a cluster that does not answer is not a new cluster, and `skipped` is
+# final, so any other failure stops here. And the ledger must be absent: the
+# cutover of plan 0016 copies the ledger into the unit's namespace before the
+# unit's release exists, and that data has a history.
 FRESH=false
 if [ "$PHASE" != post ]; then
   if ! helm_answer="$(helm status "$RELEASE_NAME" --namespace "$NAMESPACE" 2>&1 > /dev/null)"; then
     case "$helm_answer" in
-      *'release: not found'*) FRESH=true ;;
+      *'release: not found'*) [ "$LEDGER_EXISTED" = true ] || FRESH=true ;;
       *)
         echo "cannot tell whether the helm release '$RELEASE_NAME' exists: ${helm_answer:-helm status failed and printed nothing}" >&2
         echo "  A release that cannot be read is not a first install. Nothing was changed." >&2
@@ -374,6 +393,11 @@ REFUSALS=0
 for dir in "${TASKS[@]}"; do
   dir="${dir%/}"
   task="$(basename "$dir")"
+  task_unit="$(task_field "$dir" UNIT || true)"
+  if [ "$task_unit" != "$UNIT_NAME" ]; then
+    [ "$PHASE" != check ] || line "$task" "not this unit's: its task.env says UNIT=${task_unit:-<nothing>}"
+    continue
+  fi
   ledger="$(ledger_get "$task")"
   state="${ledger%% *}"
   # A value that starts with a space has an empty first word. It is not "no

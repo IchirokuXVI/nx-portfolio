@@ -44,8 +44,8 @@ describe('velista production API hosts', () => {
     );
   }
 
-  const chart = readValues('k8s/helm/values.yaml');
-  const production = readValues('k8s/helm/values.production.yaml');
+  const chart = readValues('k8s/helm/velista/values.yaml');
+  const production = readValues('k8s/helm/velista/values.production.yaml');
 
   /** The domain the production cluster serves, from its environment values file. */
   function baseDomain(): string {
@@ -87,7 +87,11 @@ describe('velista production API hosts', () => {
     ).exec(chart);
     if (!entry)
       throw new Error(`no hostPrefix for ${entryName} in values.yaml`);
-    return `https://${entry[1]}.${baseDomain()}`;
+    // An empty prefix (`hostPrefix: ''`) is the domain root, where velista lives.
+    const prefix = entry[1].replace(/^['"]|['"]$/g, '');
+    return prefix
+      ? `https://${prefix}.${baseDomain()}`
+      : `https://${baseDomain()}`;
   }
 
   it('points the gateway URL at the routed REST service', () => {

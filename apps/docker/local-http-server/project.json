@@ -3,6 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/docker/local-http-server/src",
+  "// build": "The deploy pipelines set DOCKER_IMAGE_TAG to `staging` or `<unit>-v<version>` and build every frontend FROM that tag (k8s plan 0016 D6), so no deploy pushes `latest`. Only a hand run of the production configuration does.",
   "targets": {
     "build": {
       "executor": "@portfolio/docker:build",

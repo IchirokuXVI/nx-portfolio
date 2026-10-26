@@ -7,15 +7,32 @@
 //   node --test tools/release/
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
+  belongsToUnit,
   compareEnd,
+  filterForUnit,
+  isReleaseTag,
   isRollup,
+  isUnitTag,
   label,
   pullRequestNumber,
   render,
+  tagPrefix,
 } from './release-notes.mjs';
-import { parseTitle, sectionFor, sectionOrder } from './rules.mjs';
+import {
+  parseTitle,
+  SCOPES,
+  sectionFor,
+  sectionOrder,
+  UNITS,
+  WORKSPACE_SCOPES,
+} from './rules.mjs';
 
 describe('parseTitle', () => {
   it('reads type, scope and summary', () => {
@@ -308,5 +325,217 @@ describe('compareEnd', () => {
     assert.equal(compareEnd({ to: 'HEAD', version: 'v1.0.0' }), 'v1.0.0');
     assert.equal(compareEnd({ to: 'v0.9.0', version: null }), 'v0.9.0');
     assert.equal(compareEnd({ to: 'HEAD', version: null }), null);
+  });
+});
+
+describe('deploy units', () => {
+  it('places every scope in exactly one unit or in the workspace', () => {
+    for (const scope of SCOPES) {
+      const homes = [
+        ...Object.entries(UNITS)
+          .filter(([, scopes]) => scopes.includes(scope))
+          .map(([unit]) => unit),
+        ...(WORKSPACE_SCOPES.includes(scope) ? ['workspace'] : []),
+      ];
+      assert.equal(
+        homes.length,
+        1,
+        `${scope} belongs to ${homes.length ? homes.join(' and ') : 'nothing'}`
+      );
+    }
+  });
+
+  it('names no scope that SCOPES lacks', () => {
+    for (const scope of [...Object.values(UNITS).flat(), ...WORKSPACE_SCOPES]) {
+      assert.ok(SCOPES.includes(scope), `${scope} is not in SCOPES`);
+    }
+  });
+
+  it('has one key per directory under k8s/units', () => {
+    const unitsDir = fileURLToPath(new URL('../../k8s/units', import.meta.url));
+    const directories = readdirSync(unitsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    assert.deepEqual(Object.keys(UNITS).sort(), directories);
+  });
+});
+
+describe('the title check', () => {
+  it('accepts every scope of the workspace', () => {
+    for (const scope of SCOPES) {
+      const parsed = parseTitle(`feat(${scope}): a change in this area`);
+      assert.equal(parsed.ok, true, `${scope}: ${parsed.errors.join('; ')}`);
+    }
+  });
+});
+
+describe('notes per unit', () => {
+  const keeps = (title, unit) => belongsToUnit(parseTitle(title), unit);
+
+  it('keeps a unit scope in its own unit only', () => {
+    assert.equal(keeps('feat(velista): a card for the list', 'velista'), true);
+    assert.equal(
+      keeps('feat(velista): a card for the list', 'portfolio'),
+      false
+    );
+    assert.equal(
+      keeps('fix(shell): the host mounts the remote', 'portfolio'),
+      true
+    );
+    assert.equal(
+      keeps('fix(shell): the host mounts the remote', 'velista'),
+      false
+    );
+    assert.equal(
+      keeps('fix(gateway): a route answers again', 'portfolio'),
+      false
+    );
+  });
+
+  it('keeps a workspace scope, no scope and a mixed title in every unit', () => {
+    for (const unit of Object.keys(UNITS)) {
+      assert.equal(
+        keeps('fix(k8s): the deploy waits for its rollout', unit),
+        true
+      );
+      assert.equal(keeps('fix: the tag no longer moves under it', unit), true);
+      assert.equal(
+        keeps('feat(velista,shell): one change in both units', unit),
+        true
+      );
+    }
+  });
+
+  it('keeps a title it cannot read in every unit', () => {
+    for (const unit of Object.keys(UNITS)) {
+      assert.equal(keeps('Voice comments: velista 0039', unit), true);
+    }
+  });
+
+  it('counts what it leaves out', () => {
+    const entries = [
+      { parsed: parseTitle('feat(velista): a card for the list') },
+      { parsed: parseTitle('feat(shell): the host mounts the remote') },
+      { parsed: parseTitle('chore(deps): bump the pinned node image') },
+    ];
+    const portfolio = filterForUnit(entries, 'portfolio');
+    assert.equal(portfolio.entries.length, 2);
+    assert.equal(portfolio.otherUnits, 1);
+    assert.deepEqual(filterForUnit(entries, null), { entries, otherUnits: 0 });
+  });
+
+  it('marks a title with no scope and says what it left out', () => {
+    const notes = render({
+      entries: [
+        {
+          kind: 'pr',
+          ref: '#5',
+          url: 'https://example.test/5',
+          parsed: parseTitle('fix: the tag no longer moves under it'),
+        },
+      ],
+      rollups: 0,
+      from: 'velista-v0.15.0',
+      to: 'HEAD',
+      version: 'velista-v0.15.1',
+      all: false,
+      repo: 'o/r',
+      unit: 'velista',
+      otherUnits: 3,
+    });
+    assert.match(notes, /- \*\*no scope\*\*: the tag no longer moves under it/);
+    assert.match(notes, /3 left out as another unit's/);
+    assert.match(notes, /compare\/velista-v0\.15\.0\.\.\.velista-v0\.15\.1/);
+  });
+
+  it('reads each prefix from unit.env', () => {
+    for (const unit of Object.keys(UNITS)) {
+      assert.equal(tagPrefix(unit), `${unit}-v`);
+    }
+  });
+
+  it('tells a unit tag from a bare one', () => {
+    assert.equal(isUnitTag('velista-v0.15.0', 'velista-v'), true);
+    assert.equal(isUnitTag('v0.15.0', 'velista-v'), false);
+    assert.equal(isUnitTag('portfolio-v0.15.0', 'velista-v'), false);
+    assert.equal(isReleaseTag('portfolio-v0.15.0'), true);
+    assert.equal(isReleaseTag('v0.14.3'), true);
+    assert.equal(isReleaseTag('main'), false);
+  });
+});
+
+// A throwaway repository with tags of both units, read through the command
+// itself with --commits, so no `gh` is needed.
+describe('the range of a unit', () => {
+  const script = fileURLToPath(new URL('./release-notes.mjs', import.meta.url));
+  let repo;
+
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  const commit = (subject, tag) => {
+    git('commit', '--allow-empty', '-q', '-m', subject);
+    if (tag) git('tag', tag);
+  };
+  const notes = (...args) =>
+    spawnSync(process.execPath, [script, '--commits', ...args], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'release-notes-'));
+    git('init', '-q');
+    git('config', 'user.name', 'Test');
+    git('config', 'user.email', 'test@example.test');
+    git('config', 'commit.gpgsign', 'false');
+    git('config', 'tag.gpgsign', 'false');
+    commit('feat(velista): the first thing velista does', 'velista-v0.1.0');
+    commit('feat(shell): the host mounts the remote', 'portfolio-v0.2.0');
+    commit('feat(velista): the second thing velista does');
+    commit('fix(shell): the host keeps its locale');
+    commit('chore: tidy the workspace for both units');
+  });
+
+  after(() => rmSync(repo, { recursive: true, force: true }));
+
+  const summaries = (payload) =>
+    payload.entries.map((entry) => entry.summary).sort();
+
+  it("starts at the unit's own previous tag, past the other unit's", () => {
+    const result = notes('--unit', 'velista', '--json');
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.from, 'velista-v0.1.0');
+    assert.deepEqual(summaries(payload), [
+      'the second thing velista does',
+      'tidy the workspace for both units',
+    ]);
+    assert.equal(payload.otherUnits, 2);
+  });
+
+  it('gives the other unit the reverse', () => {
+    const result = notes('--unit', 'portfolio', '--json');
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.from, 'portfolio-v0.2.0');
+    assert.deepEqual(summaries(payload), [
+      'the host keeps its locale',
+      'tidy the workspace for both units',
+    ]);
+  });
+
+  it('refuses a version without the unit prefix', () => {
+    const result = notes('--unit', 'velista', '--version', 'v0.3.0');
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /not a release of velista/);
+  });
+
+  it('refuses a unit with no tag before the range', () => {
+    const result = notes('--unit', 'velista', '--to', 'velista-v0.1.0');
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /No tag velista-v\* comes before/);
   });
 });
