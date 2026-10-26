@@ -1,0 +1,21 @@
+# Production of the portfolio unit (plans 0002 and 0015).
+#
+#   ./k8s/helm/deploy-release.sh portfolio <version>
+#
+# which also pins `imageTag` to the release version. Compare against
+# values.staging.yaml: same keys, production's answers.
+
+baseDomain: ichirokuxvi.com
+environment: production
+
+# Overwritten per deploy by deploy-release.sh with the release version.
+# `latest` is the floor, so a hand run `helm upgrade` still deploys something
+# coherent.
+imageTag: latest
+
+gateway:
+  tls:
+    issuer:
+      acme:
+        # Let's Encrypt sends expiry warnings here.
+        email: danieliyo65@gmail.com

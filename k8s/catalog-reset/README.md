@@ -45,11 +45,11 @@ hold. Run each one without arguments first, and read the counts it prints.
 1. Take a backup of all four databases.
 
    ```sh
-   kubectl -n nx-portfolio create job --from=cronjob/luna-shopper-backend-auth-db-backup reset-backup-auth
-   kubectl -n nx-portfolio create job --from=cronjob/luna-shopper-backend-core-db-backup reset-backup-core
-   kubectl -n nx-portfolio create job --from=cronjob/luna-shopper-backend-catalog-db-backup reset-backup-catalog
-   kubectl -n nx-portfolio create job --from=cronjob/luna-shopper-backend-harvester-db-backup reset-backup-harvester
-   kubectl -n nx-portfolio wait --for=condition=complete --timeout=10m \
+   kubectl -n luna-shopper create job --from=cronjob/luna-shopper-backend-auth-db-backup reset-backup-auth
+   kubectl -n luna-shopper create job --from=cronjob/luna-shopper-backend-core-db-backup reset-backup-core
+   kubectl -n luna-shopper create job --from=cronjob/luna-shopper-backend-catalog-db-backup reset-backup-catalog
+   kubectl -n luna-shopper create job --from=cronjob/luna-shopper-backend-harvester-db-backup reset-backup-harvester
+   kubectl -n luna-shopper wait --for=condition=complete --timeout=10m \
      job/reset-backup-auth job/reset-backup-core job/reset-backup-catalog job/reset-backup-harvester
    ```
 
@@ -59,15 +59,15 @@ hold. Run each one without arguments first, and read the counts it prints.
 2. Stop the catalog and the harvester, so that nothing writes during the reset.
 
    ```sh
-   kubectl -n nx-portfolio scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=0
+   kubectl -n luna-shopper scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=0
    ```
 
 3. Drop and recreate the two databases. The pods and their volumes stay.
 
    ```sh
-   kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- \
+   kubectl -n luna-shopper exec luna-shopper-backend-catalog-db-0 -- \
      psql -U luna_catalog -d postgres -c 'DROP DATABASE luna_catalog WITH (FORCE)' -c 'CREATE DATABASE luna_catalog OWNER luna_catalog'
-   kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
+   kubectl -n luna-shopper exec luna-shopper-backend-harvester-db-0 -- \
      psql -U luna_harvester -d postgres -c 'DROP DATABASE luna_harvester WITH (FORCE)' -c 'CREATE DATABASE luna_harvester OWNER luna_harvester'
    ```
 

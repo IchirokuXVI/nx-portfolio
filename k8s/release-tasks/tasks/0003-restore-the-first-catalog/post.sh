@@ -17,7 +17,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="${K8S_DIR:-$(cd "$HERE/../../.." && pwd)}"
-NAMESPACE="${NAMESPACE:-nx-portfolio}"
+NAMESPACE="${NAMESPACE:-luna-shopper}"
 
 # Cleared first, so that a variable of the caller's shell cannot stand in for a
 # ceiling that task.env does not state. Each is read by name further down.

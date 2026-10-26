@@ -1,0 +1,295 @@
+name: Deploy one unit
+description: >
+  The deploy steps both pipelines share (k8s plan 0016 D1): the registry and
+  release task checks, the environment gate, SSH with pinned host keys, the
+  rsync, the cutover of plan 0016 D5, the preflight, the upgrade, the rollout
+  observation, the release tasks and the diagnosis. Every helm and kubectl step
+  on the host runs under the host lock (k8s/bootstrap/host-lock.sh).
+
+inputs:
+  unit:
+    description: A directory of k8s/units.
+    required: true
+  mode:
+    description: staging or production.
+    required: true
+  version:
+    description: The release version, production only.
+    default: ''
+  deployments:
+    description: Space separated Deployments to restart, staging only, because the staging tag is mutable.
+    default: ''
+  host:
+    description: SSH_DEPLOY_HOST of the unit's environment.
+    default: ''
+  user:
+    description: SSH_DEPLOY_USER of the unit's environment.
+    default: ''
+  key:
+    description: SSH_DEPLOY_KEY of the unit's environment.
+    default: ''
+  known_hosts:
+    description: SSH_KNOWN_HOSTS of the unit's environment.
+    default: ''
+  allow_cutover:
+    description: ALLOW_CUTOVER of the production environment. Only `true` lets a production deploy run split-release.sh.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Read the unit
+      id: unit
+      shell: bash
+      env:
+        UNIT: ${{ inputs.unit }}
+        MODE: ${{ inputs.mode }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        case "$MODE" in
+          staging) [ -z "$VERSION" ] || { echo "::error::a staging deploy takes no version"; exit 1; } ;;
+          production) [ -n "$VERSION" ] || { echo "::error::a production deploy needs a version"; exit 1; } ;;
+          *) echo "::error::mode must be staging or production, got '$MODE'"; exit 1 ;;
+        esac
+        [ -f "k8s/units/$UNIT/unit.env" ] || { echo "::error::k8s/units/$UNIT/unit.env does not exist"; exit 1; }
+        . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+        {
+          echo "namespace=$NAMESPACE"
+          echo "release=$RELEASE_NAME"
+          echo "dir=deploy/$UNIT/k8s"
+        } >> "$GITHUB_OUTPUT"
+
+    # Files only, before any SSH: the unit registry, each release task's window
+    # (k8s plan 0011), and the render half of the preflight (plan 0015 D8).
+    - name: The registry, the release tasks and the render are sound
+      shell: bash
+      env:
+        UNIT: ${{ inputs.unit }}
+        MODE: ${{ inputs.mode }}
+      run: |
+        node tools/deploy/units.mjs check
+        node k8s/release-tasks/check-tasks.mjs
+        bash k8s/bootstrap/provision-release.sh --check --unit "$UNIT" --env "$MODE" --render-only
+
+    # The four values live in the GitHub environment <unit>-<mode>. A missing
+    # one fails here, with the list, before anything reaches a host.
+    - name: The environment names a host
+      shell: bash
+      env:
+        UNIT: ${{ inputs.unit }}
+        MODE: ${{ inputs.mode }}
+        DEPLOY_HOST: ${{ inputs.host }}
+        DEPLOY_USER: ${{ inputs.user }}
+        DEPLOY_KEY: ${{ inputs.key }}
+        KNOWN_HOSTS: ${{ inputs.known_hosts }}
+      run: |
+        missing=""
+        [ -n "$DEPLOY_HOST" ] || missing="$missing secret:SSH_DEPLOY_HOST"
+        [ -n "$DEPLOY_USER" ] || missing="$missing secret:SSH_DEPLOY_USER"
+        [ -n "$DEPLOY_KEY" ] || missing="$missing secret:SSH_DEPLOY_KEY"
+        [ -n "$KNOWN_HOSTS" ] || missing="$missing variable:SSH_KNOWN_HOSTS"
+        if [ -n "$missing" ]; then
+          echo "::error title=$UNIT-$MODE is incomplete::The GitHub environment $UNIT-$MODE lacks:$missing"
+          {
+            echo "### Deploy of $UNIT to $MODE stopped before SSH"
+            echo
+            echo "The images were built and pushed. The GitHub environment \`$UNIT-$MODE\` lacks:"
+            echo
+            for m in $missing; do echo "- ${m%%:*} \`${m#*:}\`"; done
+            echo
+            echo "Set them (k8s/README-new-cluster.md, section 7, or k8s/bootstrap/github-environments.sh) and re-run this job."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+        # A host the environment pins no key for is the repository secret
+        # showing through (stage-unit.yml), or a typo. Either way, stop here.
+        if ! printf '%s\n' "$KNOWN_HOSTS" | awk '{print $1}' | tr ',' '\n' | grep -qxF "$DEPLOY_HOST"; then
+          echo "::error title=$UNIT-$MODE names an unpinned host::SSH_DEPLOY_HOST is not a host of SSH_KNOWN_HOSTS in the environment $UNIT-$MODE. Set SSH_DEPLOY_HOST on that environment (k8s/bootstrap/github-environments.sh)."
+          exit 1
+        fi
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
+        # Keepalives because the runner's SNAT drops a flow idle for 4 minutes,
+        # and `helm --wait` and a wait on the host lock print nothing.
+        echo "SSH_OPTS=-o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10" >> "$GITHUB_ENV"
+        echo "DEPLOY_TARGET=$DEPLOY_USER@$DEPLOY_HOST" >> "$GITHUB_ENV"
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ inputs.key }}
+
+    # Each unit has its own copy on the host, so two units deploying from two
+    # commits never overwrite each other's chart.
+    - name: Sync the charts and scripts to the host
+      shell: bash
+      env:
+        DIR: ${{ steps.unit.outputs.dir }}
+      run: |
+        rsync -az --delete -e "ssh $SSH_OPTS" \
+          --rsync-path="mkdir -p ~/$DIR && rsync" \
+          ./k8s/ "$DEPLOY_TARGET:~/$DIR/"
+
+    # The cutover of k8s plan 0016 D5, a no op on a cluster with no namespace
+    # nx-portfolio. On production it runs only when the environment's
+    # ALLOW_CUTOVER is true, so it happens inside a window the owner chose.
+    - name: The cluster runs one release per unit
+      shell: bash
+      env:
+        DIR: ${{ steps.unit.outputs.dir }}
+        MODE: ${{ inputs.mode }}
+        UNIT: ${{ inputs.unit }}
+        ALLOW_CUTOVER: ${{ inputs.allow_cutover }}
+      run: |
+        state="$(ssh $SSH_OPTS "$DEPLOY_TARGET" "bash ~/$DIR/bootstrap/split-release.sh --status")"
+        echo "cutover: $state"
+        if [ "$state" = none ]; then
+          exit 0
+        fi
+        if [ "$MODE" = production ] && [ "$state" = pending ] && [ "$ALLOW_CUTOVER" != true ]; then
+          echo "::error title=Production is not cut over::The cluster still runs the release nx-portfolio. Set ALLOW_CUTOVER=true on $UNIT-production inside a maintenance window and re-run, or run split-release.sh --env production by hand."
+          {
+            echo "### Production is not cut over, so nothing was changed"
+            echo
+            echo "The cluster still runs the one release \`nx-portfolio\` (k8s plan 0016 D5). Either set the"
+            echo "variable \`ALLOW_CUTOVER=true\` on the environment \`$UNIT-production\` inside a maintenance window"
+            echo "and re-run this job, or run \`bash ~/$DIR/bootstrap/split-release.sh --env production\` on the host by hand."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+        # Through tee, so a cutover of many minutes prints as it goes.
+        set +e
+        ssh $SSH_OPTS "$DEPLOY_TARGET" \
+          "bash ~/$DIR/bootstrap/host-lock.sh bash ~/$DIR/bootstrap/split-release.sh --env $MODE" \
+          2>&1 | tee cutover.txt
+        status="${PIPESTATUS[0]}"
+        set -e
+        {
+          echo "### Cutover (k8s plan 0016 D5)"
+          echo
+          echo '```'
+          grep -E '^(==>|    |split-release)' cutover.txt || true
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit "$status"
+
+    # A deploy that cannot work is rejected in seconds here (k8s plans 0006 and
+    # 0011). `--phase check` changes nothing.
+    - name: Preflight the Secrets and the release tasks
+      shell: bash
+      env:
+        DIR: ${{ steps.unit.outputs.dir }}
+        MODE: ${{ inputs.mode }}
+        UNIT: ${{ inputs.unit }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        release=''
+        [ "$MODE" != production ] || release="--release '$VERSION'"
+        status=0
+        ssh $SSH_OPTS "$DEPLOY_TARGET" \
+          "bash ~/$DIR/bootstrap/host-lock.sh bash -c \"bash ~/$DIR/bootstrap/provision-release.sh --check --unit $UNIT --env $MODE && bash ~/$DIR/release-tasks/run-release-tasks.sh --unit $UNIT --env $MODE --phase check $release\"" \
+          > preflight.txt 2>&1 || status=$?
+        cat preflight.txt
+        {
+          echo "### Preflight of $UNIT${VERSION:+ $VERSION}"
+          echo
+          echo '```'
+          sed -n '/^release tasks/,$p' preflight.txt
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit "$status"
+
+    - name: Deploy staging
+      if: inputs.mode == 'staging'
+      shell: bash
+      env:
+        DIR: ${{ steps.unit.outputs.dir }}
+        UNIT: ${{ inputs.unit }}
+        DEPLOYMENTS: ${{ inputs.deployments }}
+      run: |
+        ssh $SSH_OPTS "$DEPLOY_TARGET" "bash -s -- '$DIR' '$UNIT' '$DEPLOYMENTS'" << 'EOF'
+          set -euo pipefail
+          K8S="$HOME/$1"
+          UNIT="$2"
+          AFFECTED="$3"
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          . "$K8S/units/unit-env.sh"
+          load_unit "$K8S" "$UNIT"
+          . "$K8S/bootstrap/host-lock.sh"
+          host_lock
+
+          # The pre phase dumps what each due task touches and runs its pre.sh
+          # before the upgrade's migrations (k8s plan 0011).
+          bash "$K8S/release-tasks/run-release-tasks.sh" --unit "$UNIT" --env staging --phase pre
+
+          # --atomic implies --wait and rolls back on failure, which is right for
+          # the environment that exists to absorb failures. 10m covers the
+          # migration hooks and a rollout behind readiness probes on one node.
+          helm dependency build --skip-refresh "$CHART_PATH" > /dev/null
+          helm upgrade --install "$RELEASE_NAME" "$CHART_PATH" \
+            --namespace "$NAMESPACE" --create-namespace \
+            --values "$CHART_PATH/values.yaml" \
+            --values "$CHART_PATH/values.staging.yaml" \
+            --atomic --timeout 10m
+
+          # An affected image is not always a rendered Deployment (the harvester
+          # is off in some clusters), so the list is narrowed and the rest printed.
+          deployed=""
+          for dep in $AFFECTED; do
+            if kubectl get "deployment/$dep" -n "$NAMESPACE" > /dev/null 2>&1; then
+              deployed="$deployed $dep"
+            else
+              echo "Skipping deployment/$dep: not rendered in this cluster"
+            fi
+          done
+          # The staging tag is mutable, so an unchanged template does not re-pull.
+          # All restarts first, then every wait, so the rollouts overlap.
+          for dep in $deployed; do
+            kubectl rollout restart "deployment/$dep" -n "$NAMESPACE"
+          done
+          for dep in $deployed; do
+            kubectl rollout status "deployment/$dep" -n "$NAMESPACE" --timeout=5m
+          done
+
+          bash "$K8S/release-tasks/run-release-tasks.sh" --unit "$UNIT" --env staging --phase post
+          echo "Staging deploy of $UNIT complete."
+        EOF
+
+    # deploy-release.sh waits on the release's Deployments and runs the release
+    # tasks around the upgrade, with --wait and no --atomic for the reasons it
+    # records. It takes the host lock itself.
+    - name: Deploy production
+      if: inputs.mode == 'production'
+      shell: bash
+      env:
+        DIR: ${{ steps.unit.outputs.dir }}
+        UNIT: ${{ inputs.unit }}
+        VERSION: ${{ inputs.version }}
+      run: ssh $SSH_OPTS "$DEPLOY_TARGET" "bash ~/$DIR/helm/deploy-release.sh '$UNIT' '$VERSION'"
+
+    # Events are the part people forget: ImagePullBackOff, a claim that cannot
+    # bind and a failing probe announce themselves there and nowhere else.
+    - name: Diagnose the failed deploy
+      if: failure() && env.DEPLOY_TARGET != ''
+      shell: bash
+      env:
+        NS: ${{ steps.unit.outputs.namespace }}
+      run: |
+        ssh $SSH_OPTS "$DEPLOY_TARGET" "bash -s -- '$NS'" << 'EOF'
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          ns="$1"
+          echo "::group::releases, Gateways and the Envoy Service"
+          helm list -A || true
+          kubectl get gateway -A || true
+          kubectl get svc -n envoy-gateway-system || true
+          echo "::endgroup::"
+          kubectl -n "$ns" get pods -o wide || true
+          kubectl -n "$ns" get events --sort-by=.lastTimestamp | tail -40 || true
+          for p in $(kubectl -n "$ns" get pods --field-selector=status.phase!=Running -o name 2> /dev/null); do
+            echo "::group::$p"
+            kubectl -n "$ns" describe "$p" | tail -30 || true
+            kubectl -n "$ns" logs "$p" --tail=50 --all-containers || true
+            echo "::endgroup::"
+          done
+        EOF

@@ -1,0 +1,32 @@
+name: Staging deploy, velista
+
+# Every push to main stages the velista unit (k8s plan 0016 D2): its affected
+# images, its gates, and a deploy with the GitHub environment velista-staging.
+# The pipeline itself is stage-unit.yml.
+
+on:
+  push:
+    branches:
+      - main
+  # Manual run. Leave build_all on to rebuild and redeploy every image of the
+  # unit, for example to bootstrap images that affected never rebuilt.
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: Build and deploy every image of the unit (ignore affected)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  stage:
+    uses: ./.github/workflows/stage-unit.yml
+    with:
+      unit: velista
+      build_all: ${{ inputs.build_all || false }}
+    # Without it the deploy job of stage-unit.yml sees none of the secrets of
+    # velista-staging, although it names that environment.
+    secrets: inherit

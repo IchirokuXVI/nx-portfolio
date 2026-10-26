@@ -440,6 +440,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6c. The deploy lock (k8s plan 0016 D2).
+#
+# Deploys and nx-host-patch exclude each other through flock on this file
+# (k8s/bootstrap/host-lock.sh). /run is a tmpfs, so tmpfiles.d writes it at
+# every boot, owned by root and readable by the deploy account, which is all
+# flock needs. Owned by root because fs.protected_regular lets anyone open a
+# root owned file in the sticky /run/lock, and refuses root an O_CREAT open of a
+# file the deploy account made.
+# ---------------------------------------------------------------------------
+echo "==> deploy lock: /run/lock/nx-deploy.lock, recreated at every boot"
+printf 'f /run/lock/nx-deploy.lock 0644 root root -\n' > /etc/tmpfiles.d/nx-deploy-lock.conf
+if [ -e /run/lock/nx-deploy.lock ]; then
+  chown root:root /run/lock/nx-deploy.lock
+  chmod 0644 /run/lock/nx-deploy.lock
+fi
+systemd-tmpfiles --create /etc/tmpfiles.d/nx-deploy-lock.conf
+
+# ---------------------------------------------------------------------------
 # 7. Closing the door, last and only on request.
 #
 # Guarded twice rather than trusted once: locking root out of a machine whose
@@ -564,7 +582,9 @@ if [ "$LOCK_ROOT" = false ]; then
   echo "     root login. The keys are not needed again, and it asks you to"
   echo "     confirm before it touches sshd."
 fi
-echo "  3. Set ipAddress in k8s/helm/values.<env>.yaml and move the five DNS records"
-echo "  4. As $ADMIN_USER, in an interactive shell (it prompts for two secrets):"
-echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env> --out ~/luna-<env>-secrets.txt"
+echo "  3. As $ADMIN_USER: bash ~/nx-portfolio/k8s/bootstrap/install.sh --ip <public address>"
+echo "     then move the six DNS records"
+echo "  4. As $ADMIN_USER, in an interactive shell (it prompts for the velista secrets):"
+echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit portfolio --env <env>"
+echo "       bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --unit velista --env <env>"
 echo "  5. Set SSH_DEPLOY_USER=$DEPLOY_USER and the host secret in the GitHub repository"

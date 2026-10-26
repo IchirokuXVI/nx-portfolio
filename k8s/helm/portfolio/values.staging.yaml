@@ -1,0 +1,21 @@
+# Staging of the portfolio unit (plans 0002 and 0015).
+#
+#   helm upgrade --install portfolio k8s/helm/portfolio --namespace portfolio \
+#     --values k8s/helm/portfolio/values.yaml \
+#     --values k8s/helm/portfolio/values.staging.yaml
+#
+# Compare against values.production.yaml: same keys, staging's answers.
+
+baseDomain: staging.ichirokuxvi.com
+environment: staging
+
+# Staging tracks the mutable tag CI overwrites on every push to main. The deploy
+# rolls the changed deployments so they re-pull it.
+imageTag: staging
+
+gateway:
+  tls:
+    issuer:
+      acme:
+        # Let's Encrypt sends expiry warnings here.
+        email: danieliyo65@gmail.com
