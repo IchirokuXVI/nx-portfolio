@@ -280,8 +280,9 @@ export class AppUpdates {
    * document is then the newest there is, and the page is a real 404.
    */
   newerVersionForUnknownPage(url: string): Promise<boolean> {
-    // Native: the bundled version is the newest this app has, so an unknown page is a
-    // real 404 and is drawn as one at once.
+    // Native: the bundled version is the newest this app has. The 404 sits inside the
+    // layout and behind its startup gate, so the gate answers about the backend and the
+    // version first, and `false` here means only that the page itself asks nothing more.
     if (this._native) {
       return Promise.resolve(false);
     }

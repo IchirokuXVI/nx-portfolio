@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import {
   provideRouter,
   Router,
+  RouterOutlet,
+  type ActivatedRouteSnapshot,
   type Route,
   type RouterStateSnapshot,
 } from '@angular/router';
@@ -18,10 +20,12 @@ import {
   SHOP_PATHS,
   WORKS_WITHOUT_BACKEND,
 } from '@portfolio/velista/platform';
+import { AppLayout } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
+import { NotFoundPage } from './not-found-page/not-found-page';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
 import {
@@ -70,13 +74,17 @@ describe('AppShellRoutes', () => {
    * by accident, it costs nothing as the table grows, and it fails the moment somebody
    * appends `zones/:zoneId` in the obvious place, which is exactly the mistake it
    * exists to catch.
+   *
+   * The one route after it is the `**` catch-all, the app's 404, which must be after
+   * the front door for the opposite reason: it matches the empty remainder too, and
+   * would take `/en` from it. Nothing but that one route may follow.
    */
   it('declares every non empty path before the empty one', () => {
     const paths = pages.map((route) => route.path);
     const emptyAt = paths.indexOf('');
 
     expect(emptyAt).toBeGreaterThanOrEqual(0);
-    expect(paths.slice(emptyAt + 1)).toEqual([]);
+    expect(paths.slice(emptyAt + 1)).toEqual(['**']);
   });
 
   /**
@@ -1521,6 +1529,8 @@ describe('the bottom bar', () => {
     'zones/:zoneId/lists/:listId/lines/:lineId/products/supermarket',
     'zones/:zoneId/lists/:listId/lines/:lineId/products/categories',
     'zones/:zoneId/lists/:listId/lines/:lineId/products/categories/:parentSlug',
+    // The 404, drawn inside the layout with no bar, like the front door.
+    '**',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {
@@ -1948,5 +1958,119 @@ describe('the walk lab', () => {
         true
       );
     });
+  });
+});
+
+/**
+ * The 404 is drawn inside `AppLayout`. It used to be the catch-all beside the layout,
+ * where no `--app-*` token resolves, so the page drew with no theme, no spacing and
+ * under the status bar (found on the Android build). The catch-all beside the layout
+ * stays, because the guard needs a child that matches a URL with no segment at all.
+ */
+describe('the 404', () => {
+  @Component({
+    selector: 'lib-layout-stand-in',
+    imports: [RouterOutlet],
+    template: '<router-outlet />',
+  })
+  class LayoutStandIn {}
+
+  @Component({ selector: 'lib-not-found-stand-in', template: '' })
+  class NotFoundStandIn {}
+
+  /**
+   * The table's own matching, with nothing that needs the app to run it: every guard,
+   * resolver and lazy chunk is dropped, and the two components this asks about are
+   * swapped for stand ins. What is kept is paths, matchers and nesting, without
+   * `canMatch`, so this answers which route a URL reaches by its shape alone.
+   */
+  function matchingOnly(routes: readonly Route[]): Route[] {
+    return routes.map((route) => {
+      const component =
+        route.component === AppLayout
+          ? LayoutStandIn
+          : route.path === '**'
+            ? NotFoundStandIn
+            : route.component || route.loadComponent
+              ? Blank
+              : undefined;
+      const children = route.children
+        ? matchingOnly(route.children)
+        : route.loadChildren
+          ? []
+          : undefined;
+
+      return {
+        ...(route.path !== undefined ? { path: route.path } : {}),
+        ...(route.matcher ? { matcher: route.matcher } : {}),
+        ...(route.pathMatch ? { pathMatch: route.pathMatch } : {}),
+        ...(route.redirectTo !== undefined
+          ? { redirectTo: route.redirectTo }
+          : {}),
+        ...(component ? { component } : {}),
+        ...(children ? { children } : {}),
+      };
+    });
+  }
+
+  /** The components from the root down to the page a URL activates. */
+  async function drawnFor(url: string): Promise<unknown[]> {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideRouter(matchingOnly(AppShellRoutes))],
+    });
+    const router = TestBed.inject(Router);
+
+    await router.navigateByUrl(url);
+
+    const drawn: unknown[] = [];
+    let node: ActivatedRouteSnapshot | null = router.routerState.snapshot.root;
+    while (node) {
+      if (node.routeConfig?.component) drawn.push(node.routeConfig.component);
+      node = node.firstChild;
+    }
+    return drawn;
+  }
+
+  it('is the last page under the layout, with no bar', async () => {
+    const last = pages[pages.length - 1];
+
+    expect(localeRoute?.component).toBe(AppLayout);
+    expect(last.path).toBe('**');
+    expect(await last.loadComponent?.()).toBe(NotFoundPage);
+    expect(last.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+  });
+
+  it('keeps the catch-all beside the layout that keeps the guard reachable', () => {
+    expect(AppShellRoutes[0].children?.map((route) => route.path)).toEqual([
+      ':locale',
+      '**',
+    ]);
+  });
+
+  it('draws an unknown path that carries a locale inside the layout', async () => {
+    expect(await drawnFor('/en/does-not-exist')).toEqual([
+      LayoutStandIn,
+      NotFoundStandIn,
+    ]);
+    expect(await drawnFor('/es/zones/nope/deeper')).toEqual([
+      LayoutStandIn,
+      NotFoundStandIn,
+    ]);
+  });
+
+  it('leaves the front door and the pages to themselves', async () => {
+    expect(await drawnFor('/en')).toEqual([LayoutStandIn, Blank]);
+    expect(await drawnFor('/en/home')).toEqual([LayoutStandIn, Blank]);
+    // A sheet over the front door stays the front door's, not the catch-all's.
+    expect(await drawnFor('/en/sheet/zones/new')).toEqual([
+      LayoutStandIn,
+      Blank,
+      Blank,
+    ]);
+  });
+
+  it('sends a URL with no segment at all to the catch-all beside the layout', async () => {
+    expect(await drawnFor('/')).toEqual([NotFoundStandIn]);
   });
 });

@@ -2,7 +2,18 @@
 
 // The sheet covers the page it was opened over, so it is fixed to the viewport
 // rather than positioned inside whatever the host page's layout happens to be.
+//
+// Fixed to the foot of the screen, so it also covers the tab bar's room, and the bar
+// keeps that room reserved while a sheet is open (plan 0097). The layout zeroes
+// `--app-safe-bottom` for everything under it while the room is reserved, which is
+// right for a page that ends at the top of the bar and wrong here: the sheet ends at
+// the foot of the screen, where the bar used to be. **A fixed surface that covers the
+// bar carries the inset itself**, so the token is put back to the value the bar reads,
+// and the body and the footer below keep reading the one name they always have. Under
+// a page with no bar the two are already the same value, so nothing changes there.
 :host {
+  --app-safe-bottom: var(--app-nav-safe-bottom);
+
   position: fixed;
   inset: 0;
   z-index: 10;
