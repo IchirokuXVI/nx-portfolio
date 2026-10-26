@@ -3,6 +3,7 @@ import {
   TRIPS_REFETCH_QUIET_MS,
   type DueLine,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -61,6 +62,10 @@ export class DueLineStore {
       subscription.unsubscribe();
       this.leave();
     });
+
+    // A settle or a claim broadcast while the socket was down never arrived (velista
+    // `0169`). `refetch` reads nothing while no list is open.
+    onEdge(this._realtime.reconnects, () => this.refetch());
   }
 
   /** The page opened a list, after its lines. Reads its due lines. */

@@ -1310,4 +1310,68 @@ describe('ZoneStore', () => {
       });
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    /** The socket came back, and the store has had a moment to react. */
+    async function reconnect(count = 1): Promise<void> {
+      realtime.setReconnects(count);
+      TestBed.tick();
+      await settle();
+    }
+
+    it('reads nothing at construction', async () => {
+      TestBed.tick();
+      await settle();
+
+      expect(listCalls).toBe(0);
+      expect(getCalls).toEqual([]);
+    });
+
+    it('reads nothing when nothing is loaded', async () => {
+      TestBed.tick();
+      await reconnect();
+
+      expect(listCalls).toBe(0);
+      expect(getCalls).toEqual([]);
+    });
+
+    it('reads the listing again, quietly, and every zone whose detail was read', async () => {
+      await store.load();
+      await store.loadZone('z2');
+      TestBed.tick();
+      listCalls = 0;
+      getCalls = [];
+
+      await reconnect();
+
+      expect(listCalls).toBe(1);
+      expect(getCalls).toEqual(['z2']);
+      // No skeleton: the dashboard never went back to loading.
+      expect(store.state()).toBe('loaded');
+      expect(store.zoneState().get('z2')).toBe('loaded');
+    });
+
+    it('keeps the dashboard drawn while the listing is in flight', async () => {
+      await store.load();
+      TestBed.tick();
+      holdList = true;
+
+      await reconnect();
+
+      expect(listCalls).toBe(2);
+      expect(store.state()).toBe('loaded');
+      expect(store.myZones().map((z) => z.id)).toEqual(['z1', 'z2']);
+    });
+
+    it('does not read the listing when only a detail was loaded', async () => {
+      await store.loadZone('z1');
+      TestBed.tick();
+      getCalls = [];
+
+      await reconnect();
+
+      expect(listCalls).toBe(0);
+      expect(getCalls).toEqual(['z1']);
+    });
+  });
 });

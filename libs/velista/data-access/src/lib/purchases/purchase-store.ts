@@ -12,6 +12,7 @@ import {
   type PurchaseEntryRow,
   type ShoppingListsLoad,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import type { Subscription } from 'rxjs';
 import { GatewayError } from '../errors';
 import {
@@ -95,6 +96,10 @@ export class PurchaseStore {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.detach());
+
+    // A settle broadcast while the socket was down never arrived (velista `0169`).
+    // `refetch` reads only once the first page has landed, and quietly.
+    onEdge(this._realtime.reconnects, () => this.refetch());
   }
 
   /** Start listening for the two signals. Called by the page when it is built. */

@@ -1,3 +1,5 @@
+> **PR:** [#817](https://github.com/IchirokuXVI/nx-portfolio/pull/817)
+
 # 0169: the screen catches up after a reconnect
 
 > Asked for by the owner on 2026-10-23, with plan `0168`: "make the user reconnect to the
@@ -233,3 +235,103 @@ members; `line-detail-sheet.ts` loads settlements.
   list to the builder.
 - The order of the table, which is also a sensible build order: platform helper, zones and
   lists, lines, memberships, the rest.
+
+## 6. What the build decided
+
+Built on `feat/velista-0168-socket-keeps-trying` at `61f0ddd3`, which carries the counter of
+plan `0168` before that plan merged.
+
+- **`onEdge` acts on a rise, not on any change.** The plan says "differs from the remembered
+  one". The counter falls to zero on a sign out, and a sign out is not a reconnect: acting on
+  it would read the account's state at the moment the session ends. A fall is remembered, so
+  the first connect after it, zero to one, is a rise again. `on-edge.spec.ts` asserts both.
+- **`LineStore` gained `hold(listId): () => void`.** The list page names its list to the
+  realtime client through `viewList`, which `LineStore` cannot see, and its line read is
+  `load`, which says nothing about how long the page stays. So the page holds the list in
+  the same effect, and for the same span, as its room: one more line beside `viewList` and
+  `enterZone`, released in the same `onCleanup`. Counted, like the rooms.
+- **A stale list answers `idle` from `stateOf`, and keeps its rows.** `load` never served the
+  cache; it always reads. The one caller that serves the cache is `loadLineContext`, which
+  calls `load` only when `stateOf` is `idle`. Reporting a stale list as `idle` makes that
+  caller read it, with no edit outside the scope, and keeps `watchLineGone` from taking a
+  stale read as proof that a line is gone. `load`, `refresh` and `forget` clear the mark. The
+  stale set is a signal, because `stateOf` is read inside computeds.
+- **`ZoneStore.refresh()` reads the listing only when the dashboard loaded it**, then each
+  zone whose own detail state is `loaded`, after the listing, so a detail is not overwritten
+  by the summary. A deep link that loaded one group does not cause a read of every group.
+- **`ListStore` reads the zones it holds rows for** (`_byZone`), not the zones whose read
+  failed, so a reconnect never turns a failed zone into an empty loaded one.
+- **`MembershipStore` reads every zone through a private `_reread`, not `load`** (review
+  round). `load` goes back to the first page, so a members page scrolled past it lost every
+  row below, and a `loadMore` in flight could lose its page. The store now counts the pages
+  each zone holds (`_pages`: one on `load`, one more per `loadMore`), and `_reread` reads as
+  many again, in order, under the zone's statuses, and swaps the rows, the cursor and the
+  state in one write at the end, the way `MemberNames` pages. A `loadMore` that lands while
+  the read runs raises the count and its page is read too; one still out counts as the
+  page it will add, so the read goes that page further, and a per zone generation that the
+  swap moves makes that `loadMore` drop its page instead of appending it twice. The state
+  is not set to `loading`, a failure keeps the rows and is swallowed, and a zone forgotten
+  or loaded again under other statuses meanwhile is left alone. It stayed contained to the
+  store: two private maps and one method.
+- **`MemberNames.refresh()` keeps a zone asked when its read fails**, unlike `ensure`: the
+  names held are still right, and dropping the zone would let the next `ensure` read again
+  for nothing.
+- **`ShoppingProfileStore` reads the profiles only, through a private `_refreshProfiles`**,
+  laid over the held rows with `_applyRemote`, the path a `profiles.changed` event takes. A
+  field whose write is in flight keeps what was typed. Chains and coverage are not read: the
+  socket does not feed them. No public `refreshProfiles` was added. The review found that
+  the typed value survives through the overlay alone, so `_raw.set` passed the spec; what
+  `_applyRemote` adds is that the claimed field keeps the held value under the overlay, so a
+  write that then fails snaps back to what it showed before the edit, as after a live
+  event. The spec pins that, and a second one sets the guards (chains failed once, a postal
+  code held) so that a `load` would read chains and coverage, and asserts neither is read.
+- **`ProfileStore` reads only when a profile is held**, so a reconnect on a store that never
+  loaded, or whose first read failed, draws no skeleton. It reads through a private
+  `_reread`, not `load` (review round): a failed `load` sets `failed` and an error even
+  while a profile is held, which turned the account page's email row into its failure
+  line and hid home's unverified email banner. `_reread` swallows a failure, keeps
+  `loaded` and the profile, joins a read already running by skipping, and drops an answer
+  that lands after a sign out.
+- **The comments sheet rereads through a private `_reread`** that swallows a failure,
+  because `_load` sets the error line, and an error over a readable conversation would be
+  the opposite of quiet.
+- **The fake `LineStore` in `testing/store-doubles.ts` gained `hold`**, since the list page
+  now calls it. The double already had `setReconnects` from plan `0168`. After the review it
+  records each hold and release in `holdLog`, so the list page spec asserts that the page
+  holds the list it shows and releases it when it is destroyed.
+- **`loadLineContext` holds its list too** (review round, outside the scope list). Line and
+  list events reach `LineStore` through the zone room, so the line page and the history
+  page were live before a drop. After a reconnect `_caughtUp` only marked their list stale,
+  and the effect that reads the list reads `stateOf` under `untracked` once per list id, so
+  the stale `idle` never caused a read: a rename or a tick made while offline stayed off
+  screen until the person left. The review named it a defect of the `LineStore` rule of
+  D4, so `line-context.ts` was touched: the list effect returns `lines.hold(list)` to its
+  `onCleanup`, which holds the list for as long as the page shows it. Its spec runs the
+  real `LineStore`.
+- **Specs that a mutation could not fail were rewritten** (review round). The `onEdge`
+  spec on tracking counts the effect's runs through the counter's own reads, because a
+  rerun with the same counter value never calls `act`. `LineStore` has a spec for a
+  release called twice beside a second holder, and one for lists whose read failed, held
+  or not, which are neither read nor marked stale. `MemberNames` and the comments sheet
+  each have a failed reread spec.
+
+### The browser check (target 5)
+
+Luna slot 4 (ephemeral, no backend slot was listening) and velista on front end slot 1, on
+2026-10-23. One account, seeded over the gateway. Tab A was a headless Chromium page driven
+by Playwright; tab B's actions were the same account's calls to the gateway, which raise the
+same events a second tab would. The DevTools offline switch (`setOffline`) did **not** close
+the websocket in headless Chromium, so the drop was made by routing the socket and closing
+it, refusing reconnects while offline, with `setOffline(true)` beside it so the page saw
+`navigator.onLine` fall and rise. Going back online is what re-arms the socket today; the
+latch removal of plan `0168` was not on the branch yet.
+
+- **List page.** Bread ticked while A was offline: not ticked in A. After the handshake it
+  was ticked in A 51 to 62 ms later. No navigation. The rows of the list stayed drawn; the
+  one skeleton seen was a `li.skeleton` in the new trip's group, the trip that the tick
+  itself created, whose rows are read when it first appears, as they are for a tick that
+  arrives live.
+- **Home.** A list created while A was offline appeared on the group card 110 ms after the
+  handshake. No skeleton, no navigation.
+- **Members page.** The account renamed itself in the group while A was offline. The new
+  name appeared 62 ms after the handshake. No skeleton, no navigation.

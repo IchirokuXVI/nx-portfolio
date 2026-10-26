@@ -12,6 +12,7 @@ import {
   type Zone,
   type ZoneRole,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { Mutations } from '../mutations';
 import {
@@ -213,6 +214,33 @@ export class ZoneStore {
       subscription.unsubscribe();
       this._releaseRooms();
     });
+
+    // Rooms come back on a reconnect and the events sent while the socket was down
+    // do not (velista `0169`), so what the store holds is read again, quietly.
+    onEdge(this._realtime.reconnects, () => void this.refresh());
+  }
+
+  /**
+   * Read again what the store holds, without a skeleton (velista `0169`).
+   *
+   * The dashboard's listing is read only when it was loaded, and a zone's detail only
+   * when that zone's own read has landed: a refresh never reads something no screen
+   * asked for. Both reads keep what is on screen while they run and swallow a
+   * failure, for the reasons {@link _reconcile} and {@link loadZone} give.
+   */
+  async refresh(): Promise<void> {
+    if (!this._session.isAuthenticated()) {
+      return;
+    }
+    const details = [...this._zoneState()]
+      .filter(([, state]) => state === 'loaded')
+      .map(([zoneId]) => zoneId);
+    // The listing first, so a detail that lands after it is not overwritten by the
+    // summary the listing carries.
+    if (this._state() === 'loaded') {
+      await this._reconcile();
+    }
+    await Promise.all(details.map((zoneId) => this.loadZone(zoneId)));
   }
 
   /**

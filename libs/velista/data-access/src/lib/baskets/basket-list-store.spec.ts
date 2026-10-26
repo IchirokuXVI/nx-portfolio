@@ -866,4 +866,66 @@ describe('BasketListStore', () => {
       expect(store.active()).toHaveLength(1);
     });
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const reads = (calls: ReturnType<typeof harness>['calls']) =>
+      calls.filter((call) => call.method === 'listMine');
+
+    it('reads nothing at construction', async () => {
+      const { calls } = harness();
+      TestBed.tick();
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(reads(calls)).toHaveLength(0);
+    });
+
+    it('reads nothing before the listing was asked for', async () => {
+      const { realtime, calls } = harness();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(reads(calls)).toHaveLength(0);
+    });
+
+    it('reads the listing again, quietly, once it was asked for', async () => {
+      const { store, realtime, calls } = harness({
+        pages: [
+          {
+            items: [summary({ id: 'a', settledLineCount: 4 })],
+            nextCursor: null,
+          },
+        ],
+        refreshPage: {
+          items: [summary({ id: 'a', settledLineCount: 5 })],
+          nextCursor: null,
+        },
+      });
+      await store.load();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      expect(store.state()).toBe('loaded');
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(reads(calls)).toHaveLength(2);
+      expect(store.state()).toBe('loaded');
+      expect(store.lists()[0]?.settledLineCount).toBe(5);
+    });
+  });
 });

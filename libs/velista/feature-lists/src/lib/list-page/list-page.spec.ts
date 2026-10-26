@@ -1324,6 +1324,17 @@ describe('ListPage', () => {
       expect(realtime.rooms).not.toContain(`list:${LIST_ID}`);
     });
 
+    it('holds its list live in the line store, and lets go on the way out (velista 0169)', async () => {
+      const { fixture, lines } = await render();
+
+      // Held, so a reconnect reads the lines again at once rather than marking stale.
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`]);
+
+      fixture.destroy();
+
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`, `release:${LIST_ID}`]);
+    });
+
     it('names the other people shopping it, in the header', async () => {
       const { fixture } = await render({
         presence: { viewers: { [LIST_ID]: ['u2'] } },

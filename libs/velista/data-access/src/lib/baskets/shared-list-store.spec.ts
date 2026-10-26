@@ -145,4 +145,51 @@ describe('SharedListStore', () => {
 
     expect(reads).toEqual([]);
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads nothing at construction', async () => {
+      jest.useFakeTimers();
+      const { reads } = harness([{ items: [shared('a')], nextCursor: null }]);
+      TestBed.tick();
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(reads).toEqual([]);
+    });
+
+    it('reads nothing before the tab was opened', async () => {
+      jest.useFakeTimers();
+      const { realtime, reads } = harness([
+        { items: [shared('a')], nextCursor: null },
+      ]);
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(reads).toEqual([]);
+    });
+
+    it('reads the first page again, quietly, once the tab was opened', async () => {
+      jest.useFakeTimers();
+      const { store, realtime, reads } = harness([
+        { items: [shared('a')], nextCursor: null },
+        { items: [shared('b'), shared('a')], nextCursor: null },
+      ]);
+      await store.load();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(reads).toEqual([undefined, undefined]);
+      expect(store.state()).toBe('loaded');
+      expect(store.lists().map((list) => list.id)).toEqual(['b', 'a']);
+    });
+  });
 });
