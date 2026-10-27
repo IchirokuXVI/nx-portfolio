@@ -84,6 +84,12 @@ const esc = (s) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+/** A value as a JSON literal that cannot close the script element it sits in. */
+const scriptJson = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+
+/** The leaflet id names a store path, so it is one segment of plain characters. */
+export const LEAFLET_ID = /^[\w-]+$/;
+
 const norm = (v) =>
   v == null ? '' : String(v).trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -148,8 +154,8 @@ export function compareRows(cells) {
  */
 export function parseMine(markdown) {
   const mine = {};
-  for (const line of markdown.split('\n')) {
-    const m = line.match(/^\| *(\d+)[^|]*\| *(\d+) *\|(.*)\|$/);
+  for (const line of markdown.split(/\r?\n/)) {
+    const m = line.trimEnd().match(/^\| *(\d+)[^|]*\| *(\d+) *\|(.*)\|$/);
     if (!m) {
       continue;
     }
@@ -261,7 +267,7 @@ ${legend}
 <nav>${nav}</nav>
 </div>
 ${sections}
-<script>${SCRIPT.replace('__LEAFLET__', JSON.stringify(leaflet))}</script>
+<script>${SCRIPT.replace('__LEAFLET__', () => scriptJson(leaflet))}</script>
 `;
 }
 
@@ -492,6 +498,11 @@ export function main(argv) {
     if (!flags[name]) {
       throw new Error(`--${name} is required.`);
     }
+  }
+  if (!LEAFLET_ID.test(flags.leaflet)) {
+    throw new Error(
+      `--leaflet ${flags.leaflet} must be letters, digits, _ or - only, because it names the store path reviews/<leaflet>/rows.`
+    );
   }
   if (flags.runs.length === 0) {
     throw new Error('At least one --run label=<dir> is required.');

@@ -4,6 +4,7 @@ import {
   buildPage,
   cellsOf,
   compareRows,
+  main,
   parseArgs,
   parseMine,
   parsePages,
@@ -125,4 +126,44 @@ test('the arguments name runs as label=dir and pages as a list', () => {
   assert.deepEqual(parsePages(flags.pages), [4, 10, 11, 12]);
   assert.throws(() => parseArgs(['--run', 'nolabel']), /label=<dir>/);
   assert.throws(() => parsePages('4,x'), /not a list of pages/);
+});
+
+test("a person's table with CRLF line endings is read", () => {
+  const mine = parseMine(
+    '| page | # | name |\r\n|---|---|---|\r\n| 4 FRUTERÍA | 1 | Pera | B | 1 kg | 1.99 | KILO | unit | |\r\n| 4 | 2 | Kiwi | B | 1 kg | 2.49 | KILO | unit | |\r\n'
+  );
+  assert.equal(mine[4].length, 2);
+  assert.equal(mine[4][1].name, 'Kiwi');
+});
+
+test('the leaflet id cannot close the script or expand a replacement pattern', () => {
+  const html = buildPage({
+    leaflet: "x$&</script>$'",
+    title: 't',
+    runs: ['a'],
+    pages: [],
+  });
+  // The JSON escape of "<", spelled out so the test reads it literally.
+  const lt = String.fromCharCode(92) + 'u003c';
+  assert.ok(html.includes(`var LEAFLET = "x$&${lt}/script>$'";`));
+  assert.equal(html.match(/<\/script>/g).length, 1);
+});
+
+test('the CLI refuses a leaflet id that is not one plain path segment', () => {
+  assert.throws(
+    () =>
+      main([
+        '--leaflet',
+        'deza/2026',
+        '--pages',
+        '4',
+        '--images',
+        'nowhere',
+        '--out',
+        'nowhere',
+        '--run',
+        'a=nowhere',
+      ]),
+    /--leaflet deza\/2026 must be letters/
+  );
 });
