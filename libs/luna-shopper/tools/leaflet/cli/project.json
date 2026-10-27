@@ -18,6 +18,14 @@
         "forwardAllArgs": true
       }
     },
+    "review": {
+      "//": "The review page: page images beside one or more readings, with a wrong mark and a comment box per row that an artifact saves. The README's procedure (c).",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/luna-shopper/tools/leaflet/cli/src/review-page.mjs",
+        "forwardAllArgs": true
+      }
+    },
     "test": {
       "//": "Plain ESM with zero npm dependencies, so the tests are Node's own runner rather than jest. The glob is quoted because Node expands it itself; a shell that expanded it first would answer a different set of files on Windows than on Linux.",
       "executor": "nx:run-commands",
