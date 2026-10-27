@@ -46,9 +46,11 @@
     outline-offset: var(--app-focus-ring-offset);
   }
 
-  // Room for the cross, so the last words typed never run under it.
+  // Room for the cross and its inset, so the last words typed never run under it.
   &.clearable {
-    padding-inline-end: calc(var(--app-space-7) + var(--app-space-2));
+    padding-inline-end: calc(
+      var(--app-space-7) + var(--app-space-3) + var(--app-space-2)
+    );
   }
 
   // Locked (velista 0110): read as unavailable, and still answer a tap, which is
@@ -62,11 +64,12 @@
 }
 
 // The cross inside the field's trailing end. Smaller than a full target inside a
-// field that is already tall enough, as the catalog's search draws it.
+// field that is already tall enough, as the catalog's search draws it. Inset by
+// the field's own text padding, as there: `--app-space-1` is zero and left it flush.
 .clear {
   position: absolute;
   inset-block-start: 50%;
-  inset-inline-end: var(--app-space-1);
+  inset-inline-end: var(--app-space-3);
   translate: 0 -50%;
   display: flex;
   align-items: center;
@@ -99,7 +102,9 @@
   color: var(--app-text-muted);
 
   .clearable ~ & {
-    inset-inline-end: calc(var(--app-space-7) + var(--app-space-2));
+    inset-inline-end: calc(
+      var(--app-space-7) + var(--app-space-3) + var(--app-space-2)
+    );
   }
 }
 
