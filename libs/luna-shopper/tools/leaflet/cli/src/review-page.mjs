@@ -26,12 +26,13 @@
  * `{ rows: { p4r3: "..." } }` with a verdict per row id. Both are optional and
  * are printed under the row they belong to.
  *
- * The page is meant to be published as a claude.ai artifact with the `db`
- * capability declared. Each row then carries a "wrong" mark and a comment box
- * whose values are saved in the artifact's database at
- * `reviews/<leaflet>/rows/<rowId>`, where the `ArtifactData` tool reads them
- * back. Without that capability the page still renders and says that marks
- * cannot be saved. Page images are copied beside the page, shrunk with
+ * The page is meant to be published as a claude.ai artifact with the `db` and
+ * `downloads` capabilities declared. Each row is named `page.item` (`4.3`) and
+ * carries a "wrong" mark and a comment box whose values are saved in the
+ * artifact's database at `reviews/<leaflet>/rows/<rowId>`, where the
+ * `ArtifactData` tool reads them back; a button offers them all as one JSON
+ * file for a tool that cannot read the database. Without those capabilities
+ * the page still renders and says that marks cannot be saved. Page images are copied beside the page, shrunk with
  * ImageMagick when it is installed, so the published page stays small.
  *
  * Zero npm dependencies, Node built ins only. Not browser reachable.
@@ -224,10 +225,10 @@ export function buildPage({ leaflet, title, runs, pages, intro = '' }) {
             ? `<p class="verdict"><b>Verdict</b> ${esc(row.verdict)}</p>`
             : '';
           return `<article class="row ${status}" id="${row.id}" data-row="${row.id}">
-<header><span class="idx">${i + 1}</span><span class="pill ${status}">${PILL[status]}</span><span class="names">${names || esc(first?.name ?? '')}</span><span class="saved" aria-live="polite"></span></header>
+<header><span class="idx">${p.page}.${i + 1}</span><span class="pill ${status}">${PILL[status]}</span><span class="names">${names || esc(first?.name ?? '')}</span><span class="saved" aria-live="polite"></span></header>
 <div class="tbl"><table><thead><tr><th>Reading</th>${FIELDS.map(([, lab]) => `<th>${lab}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>
 ${my}${verdict}
-<div class="mark"><label><input type="checkbox" class="wrong" id="w-${row.id}"> Wrong</label><textarea class="comment" id="c-${row.id}" rows="1" placeholder="Comment" aria-label="Comment on row ${i + 1} of page ${p.page}"></textarea></div>
+<div class="mark"><label><input type="checkbox" class="wrong" id="w-${row.id}"> Wrong</label><textarea class="comment" id="c-${row.id}" rows="1" placeholder="Comment" aria-label="Comment on row ${p.page}.${i + 1}"></textarea></div>
 </article>`;
         })
         .join('');
@@ -255,9 +256,9 @@ ${my}${verdict}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>${CSS}</style>
 <div class="top">
-<div><h1>${esc(title)}</h1><p>${esc(intro)} ${pages.length} pages, ${totalRows} rows. ${runs.length > 1 ? 'A highlighted cell is where the readings disagree.' : ''} Tick Wrong and write a comment on any row; both are saved as you type. Click an image to open it full size.</p><p class="dbnote" id="dbnote"></p></div>
+<div><h1>${esc(title)}</h1><p>${esc(intro)} ${pages.length} pages, ${totalRows} rows, each named page.item. ${runs.length > 1 ? 'A highlighted cell is where the readings disagree.' : ''} Tick Wrong and write a comment on any row; both are saved as you type. Click an image to open it full size.</p><p class="dbnote" id="dbnote"></p></div>
 ${legend}
-<div class="filters">${filters}</div>
+<div class="filters">${filters}<button type="button" class="download" id="download-comments" hidden>Download the marks and comments as JSON</button></div>
 <nav>${nav}</nav>
 </div>
 ${sections}
@@ -283,6 +284,9 @@ nav a { font-family: var(--mono); font-size: 13px; padding: 2px 8px; border: 1px
 nav a:hover, nav a:focus-visible { border-color: var(--accent); outline: none }
 .filters { display: flex; gap: 14px; flex-wrap: wrap }
 label.filter { display: flex; gap: 6px; align-items: center; cursor: pointer }
+.download { font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--fg); cursor: pointer }
+.download:hover, .download:focus-visible { border-color: var(--accent); outline: none }
+.download:disabled { opacity: .6; cursor: default }
 .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted) }
 .legend span { padding: 1px 8px; border-radius: 4px }
 .legend .h { background: var(--hard); color: var(--hard-fg) }
@@ -372,6 +376,24 @@ const SCRIPT = `
       return;
     }
     var col = db.collection('reviews/' + LEAFLET + '/rows');
+    var dlButton = document.getElementById('download-comments');
+    window.claude.use('downloads').then(function (downloads) {
+      if (!downloads || !dlButton) return;
+      dlButton.hidden = false;
+      dlButton.addEventListener('click', function () {
+        dlButton.disabled = true;
+        col.get().then(function (snap) {
+          var rows = {};
+          snap.docs.forEach(function (d) { rows[d.id] = d.data(); });
+          var payload = { leaflet: LEAFLET, exportedAt: new Date().toISOString(), rows: rows };
+          return downloads.save({ filename: 'review-' + LEAFLET + '-comments.json', data: JSON.stringify(payload, null, 2) });
+        }).then(function () {
+          note.textContent = 'The marks and comments were saved as a file.';
+        }, function (e) {
+          if (e && e.code !== 'declined') note.textContent = 'The file could not be saved (' + (e && e.code) + ').';
+        }).then(function () { dlButton.disabled = false; });
+      });
+    });
     col.onSnapshot(function (snap) {
       snap.docs.forEach(function (d) { applyRow(d.id, d.data() || {}); });
       countWrong();

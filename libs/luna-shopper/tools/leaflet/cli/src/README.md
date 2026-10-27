@@ -361,10 +361,13 @@ id. Both are optional and print under the row they belong to. Page images are
 shrunk with ImageMagick when it is installed and copied under `<out>/pages/`.
 
 Publish `<out>/index.html` as a claude.ai artifact with `pages/` as its files
-and the `db` capability declared. Each row then has a "Wrong" mark and a
+and the `db` and `downloads` capabilities declared. Each row is named
+`page.item` (`4.3` is the third offer of page 4) and has a "Wrong" mark and a
 comment box, saved as the person types at `reviews/<leaflet>/rows/<rowId>` in
-the artifact's database, where `ArtifactData` reads them back. The first one
-was built for the Deza November 2026 leaflet (Opus 5.5 against Sonnet 5.5).
+the artifact's database, where `ArtifactData` reads them back; a button on the
+page offers them all as one JSON file. The first one was built for the Deza
+November 2026 leaflet (Opus 5.5 against Sonnet 5.5), and
+`../records/2026-10-27-deza-noviembre-26.md` is the record of that review.
 
 ## Procedure (b): a new chain
 
