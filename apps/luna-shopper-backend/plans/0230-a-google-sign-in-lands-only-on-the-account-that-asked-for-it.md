@@ -1,3 +1,5 @@
+> **PR:** [#848](https://github.com/IchirokuXVI/nx-portfolio/pull/848)
+
 # 0230: a Google sign in lands only on the account that asked for it
 
 > The session token review of 2026-10-27
