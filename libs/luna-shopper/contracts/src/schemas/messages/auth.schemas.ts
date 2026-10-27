@@ -39,9 +39,14 @@ export const AUTH_SCHEMA_IDS = {
   recoverySignInResult: schemaId('auth/RecoverySignInResult'),
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
-  googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
   oAuthStatePayload: schemaId('auth/OAuthStatePayload'),
   mintOAuthStateResult: schemaId('auth/MintOAuthStateResult'),
+  // The callback stages and the app exchanges (plan 0230).
+  stageGoogleSignInRequest: schemaId('msg/auth.stageGoogleSignIn/request'),
+  stageGoogleSignInResult: schemaId('auth/StageGoogleSignInResult'),
+  exchangeGoogleSignInRequest: schemaId(
+    'msg/auth.exchangeGoogleSignIn/request'
+  ),
   // The basket scoped socket token (plan 0051, section 9): the one token auth
   // signs that names no user.
   mintParticipantTokenRequest: schemaId('auth/MintParticipantTokenRequest'),
@@ -235,29 +240,54 @@ const upgradeRequest = object(
   ['userId']
 );
 
-const googleLoginRequest = object(
-  AUTH_SCHEMA_IDS.googleLoginRequest,
-  {
-    providerUserId: nonEmptyString(),
-    email: string({ format: 'email' }),
-    displayName: string(),
-    linkUserId: string(),
-  },
-  ['providerUserId']
-);
+/**
+ * A PKCE challenge or verifier (plan 0230, section 2). Its exact shape, 43
+ * base64url characters, is checked by the gateway DTO and again by auth, so the
+ * schema states only that it is present.
+ */
+const pkceValue = () => nonEmptyString();
 
 /**
  * What a state carries, and the mint request that fills it (plan 0023, section
  * 4.1). One schema for both: the request is the payload, and writing it twice
  * would let the two drift into disagreeing about what a state may hold.
  *
- * Nothing is required. A state with no `userId` is the genuine sign in from
- * scratch, not a malformed one.
+ * Only the challenge is required (plan 0230, section 2). A state with no
+ * `userId` is the genuine sign in from scratch, not a malformed one.
  */
 const oAuthStatePayload = object(
   AUTH_SCHEMA_IDS.oAuthStatePayload,
-  { userId: string(), locale: string() },
-  []
+  { userId: string(), locale: string(), codeChallenge: pkceValue() },
+  ['codeChallenge']
+);
+
+const stageGoogleSignInRequest = object(
+  AUTH_SCHEMA_IDS.stageGoogleSignInRequest,
+  {
+    providerUserId: nonEmptyString(),
+    email: string({ format: 'email' }),
+    displayName: string(),
+    linkUserId: string(),
+    codeChallenge: pkceValue(),
+    locale: string(),
+  },
+  ['providerUserId', 'codeChallenge']
+);
+
+const stageGoogleSignInResult = object(
+  AUTH_SCHEMA_IDS.stageGoogleSignInResult,
+  { code: nonEmptyString() },
+  ['code']
+);
+
+const exchangeGoogleSignInRequest = object(
+  AUTH_SCHEMA_IDS.exchangeGoogleSignInRequest,
+  {
+    code: nonEmptyString(),
+    codeVerifier: pkceValue(),
+    callerUserId: string(),
+  },
+  ['code', 'codeVerifier']
 );
 
 const mintOAuthStateResult = object(
@@ -382,10 +412,12 @@ export const authSchemas: JsonSchema[] = [
   recoverySignInResult,
   refreshRequest,
   upgradeRequest,
-  googleLoginRequest,
   oAuthStatePayload,
   mintOAuthStateResult,
   consumeOAuthStateRequest,
+  stageGoogleSignInRequest,
+  stageGoogleSignInResult,
+  exchangeGoogleSignInRequest,
   mintParticipantTokenRequest,
   mintParticipantTokenResult,
   setUsernameRequest,
@@ -445,10 +477,6 @@ export const authMessageContracts: Record<
     request: AUTH_SCHEMA_IDS.upgradeRequest,
     response: AUTH_SCHEMA_IDS.authTokens,
   },
-  [AUTH_PATTERNS.googleLogin]: {
-    request: AUTH_SCHEMA_IDS.googleLoginRequest,
-    response: AUTH_SCHEMA_IDS.authTokens,
-  },
   [AUTH_PATTERNS.mintOAuthState]: {
     // The payload is the request: what the gateway asks to have stored is
     // exactly what the callback reads back out.
@@ -458,6 +486,14 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.consumeOAuthState]: {
     request: AUTH_SCHEMA_IDS.consumeOAuthStateRequest,
     response: AUTH_SCHEMA_IDS.oAuthStatePayload,
+  },
+  [AUTH_PATTERNS.stageGoogleSignIn]: {
+    request: AUTH_SCHEMA_IDS.stageGoogleSignInRequest,
+    response: AUTH_SCHEMA_IDS.stageGoogleSignInResult,
+  },
+  [AUTH_PATTERNS.exchangeGoogleSignIn]: {
+    request: AUTH_SCHEMA_IDS.exchangeGoogleSignInRequest,
+    response: AUTH_SCHEMA_IDS.authTokens,
   },
   [AUTH_PATTERNS.setUsername]: {
     request: AUTH_SCHEMA_IDS.setUsernameRequest,

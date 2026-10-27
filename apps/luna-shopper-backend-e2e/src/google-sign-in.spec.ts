@@ -3,6 +3,9 @@ import { GATEWAY_URL } from '../playwright.config';
 import { expectDocumentedShape } from './support/contract';
 import { gateOnStack } from './support/db';
 
+/** A challenge of the right shape: base64url of a SHA-256, 43 characters. */
+const CHALLENGE = 'lgghW2CGVJuIAQbifjAcK_8CsFoeysR6G6EYjaO0E8c';
+
 /**
  * Google sign in against a running stack (plan 0023, section 7).
  *
@@ -14,10 +17,11 @@ import { gateOnStack } from './support/db';
  * What that leaves is everything on this side of the redirect, and it is the half
  * where the bugs were: the state mint and the guard on it (section 4.2), and the
  * callback's promise that it never answers with a body and never strands the user
- * on the API's origin (section 3.3). The remaining assertion, that a guest keeps
- * their `userId` through a completed sign in, is covered by the unit test that the
- * callback calls `googleLogin` with the `linkUserId` the state carried, since that
- * parameter is the whole of what makes it true.
+ * on the API's origin (section 3.3), and the two doors of plan 0230: the mint
+ * takes a challenge and the exchange refuses a code it does not know. What a
+ * completed sign in does to a guest, linked only with the verifier and the
+ * guest's bearer, is proven at the service level in
+ * `identity-google-handoff.spec.ts`, because no suite here can finish the hop.
  *
  * Infra-gated through the shared `gateOnStack`, so with no stack up this is a
  * clean skip and under LUNA_REQUIRE_STACK a failure.
@@ -42,6 +46,7 @@ test.describe('Luna Shopper Google sign in', () => {
 
     const stateRes = await ctx.post('/v1/auth/google/state', {
       headers: { Authorization: `Bearer ${guestToken}` },
+      data: { codeChallenge: CHALLENGE },
     });
     expect(stateRes.status()).toBe(201);
     const minted = await stateRes.json();
@@ -58,10 +63,37 @@ test.describe('Luna Shopper Google sign in', () => {
     // The genuine sign in from scratch. It carries nobody, and that is correct.
     const ctx = await request.newContext({ baseURL: GATEWAY_URL });
 
-    const res = await ctx.post('/v1/auth/google/state');
+    const res = await ctx.post('/v1/auth/google/state', {
+      data: { codeChallenge: CHALLENGE },
+    });
 
     expect(res.status()).toBe(201);
     expect(typeof (await res.json()).state).toBe('string');
+  });
+
+  test('refuses a mint without a challenge (plan 0230)', async () => {
+    // The challenge is what ties the code of the callback to this browser. A
+    // state without one could be finished by any browser a link reached.
+    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
+
+    const res = await ctx.post('/v1/auth/google/state');
+
+    expect(res.status()).toBe(400);
+  });
+
+  test('refuses an exchange of a code nobody staged (plan 0230)', async () => {
+    // Missing, spent, expired and a wrong verifier are one answer on the wire.
+    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
+
+    const res = await ctx.post('/v1/auth/google/exchange', {
+      data: {
+        code: 'never-staged',
+        codeVerifier: 'dBjftJeZ4CVP-mJ92K1ifhZ-dDyiYZUiYvyCxt3zbJs',
+      },
+    });
+
+    expect(res.status()).toBe(401);
+    expect((await res.json()).code).toBe('unauthorized');
   });
 
   test('refuses a stale token instead of minting an anonymous state', async () => {
@@ -72,6 +104,7 @@ test.describe('Luna Shopper Google sign in', () => {
 
     const res = await ctx.post('/v1/auth/google/state', {
       headers: { Authorization: 'Bearer not-a-real-token' },
+      data: { codeChallenge: CHALLENGE },
     });
 
     expect(res.status()).toBe(401);

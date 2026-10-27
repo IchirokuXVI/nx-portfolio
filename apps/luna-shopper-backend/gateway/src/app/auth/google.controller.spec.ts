@@ -21,6 +21,10 @@ import { JwtStrategy, type CurrentUser } from './jwt.strategy';
  * origin, and it sent no `linkUserId`, so a guest who tapped Continue with Google
  * got a brand new account and silently lost every zone they owned. Both are what
  * these tests are about.
+ *
+ * Since plan 0230 the callback signs nobody in. It stages the profile and the
+ * link target and redirects with a single use code, and the exchange is where
+ * an account changes.
  */
 
 const APP_BASE_URL = 'https://app.example/{locale}/velista';
@@ -41,6 +45,12 @@ const unconfiguredConfigService = {
     google: { enabled: false },
   }),
 } as never;
+
+/** A challenge of the right shape. Only auth ever compares it to a verifier. */
+const CHALLENGE = 'lgghW2CGVJuIAQbifjAcK_8CsFoeysR6G6EYjaO0E8c';
+
+/** What the callback puts in the fragment on success (plan 0230). */
+const STAGED_CODE = 'staged-code';
 
 const profile = {
   providerUserId: 'g-123',
@@ -77,7 +87,10 @@ function build(state: unknown) {
       }
       return state;
     }
-    if (subject === AUTH_PATTERNS.googleLogin) {
+    if (subject === AUTH_PATTERNS.stageGoogleSignIn) {
+      return { code: STAGED_CODE };
+    }
+    if (subject === AUTH_PATTERNS.exchangeGoogleSignIn) {
       return pair;
     }
     if (subject === AUTH_PATTERNS.mintOAuthState) {
@@ -94,32 +107,65 @@ const fragmentOf = (url: string) =>
   Object.fromEntries(new URLSearchParams(url.split('#')[1] ?? ''));
 
 describe('GET /v1/auth/google/callback', () => {
-  it('links the guest the state was carrying, so they keep their userId', async () => {
-    // The whole point of the plan. `linkUserId` is what routes googleLogin into
-    // `upgrade()` and converts the caller in place instead of minting a stranger.
-    const { controller, send } = build({ userId: 'guest-1', locale: 'en' });
+  it('stages the guest the state was carrying, with the challenge of the mint', async () => {
+    // `linkUserId` is what lets a guest keep every zone they own. Since plan
+    // 0230 it is staged here and applied only at the exchange, by a browser
+    // that holds the verifier and the guest's bearer.
+    const { controller, send } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
 
     await controller.resolveCallback({ user: profile, query: { state: 's' } });
 
-    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.googleLogin, {
+    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.stageGoogleSignIn, {
       ...profile,
       linkUserId: 'guest-1',
+      codeChallenge: CHALLENGE,
+      locale: 'en',
     });
   });
 
-  it('links nobody when the state carried nobody', async () => {
-    const { controller, send } = build({ locale: 'en' });
+  it('stages a link onto nobody when the state carried nobody', async () => {
+    const { controller, send } = build({
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
 
     await controller.resolveCallback({ user: profile, query: { state: 's' } });
 
-    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.googleLogin, {
+    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.stageGoogleSignIn, {
       ...profile,
       linkUserId: undefined,
+      codeChallenge: CHALLENGE,
+      locale: 'en',
     });
   });
 
-  it('redirects to the app with the pair in the fragment, never a JSON body', async () => {
-    const { controller } = build({ userId: 'guest-1', locale: 'es' });
+  it('signs nobody in: it asks auth to consume and to stage, and nothing else', async () => {
+    // The fix of plan 0230 in one assertion. The exchange is the only way an
+    // account changes, and the callback never reaches it.
+    const { controller, send } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
+
+    await controller.resolveCallback({ user: profile, query: { state: 's' } });
+
+    expect(send.mock.calls.map(([subject]) => subject)).toEqual([
+      AUTH_PATTERNS.consumeOAuthState,
+      AUTH_PATTERNS.stageGoogleSignIn,
+    ]);
+  });
+
+  it('redirects to the app with the code in the fragment, and no pair', async () => {
+    const { controller } = build({
+      userId: 'guest-1',
+      locale: 'es',
+      codeChallenge: CHALLENGE,
+    });
 
     const result = await controller.resolveCallback({
       user: profile,
@@ -132,21 +178,22 @@ describe('GET /v1/auth/google/callback', () => {
     expect(result.url.split('#')[0]).toBe(
       'https://app.example/es/velista/auth/callback'
     );
-    expect(fragmentOf(result.url)).toEqual({
-      accessToken: pair.accessToken,
-      refreshToken: pair.refreshToken,
-      userId: pair.userId,
-      kind: pair.kind,
-      username: pair.username,
-    });
+    // The code and nothing else (plan 0230, section 3.3). The pair leaves the
+    // URL: the app trades the code for it with the verifier.
+    expect(fragmentOf(result.url)).toEqual({ code: STAGED_CODE });
+    expect(result.url).not.toContain(pair.accessToken);
+    expect(result.url).not.toContain(pair.refreshToken);
   });
 
-  it('puts neither token in the query string', async () => {
-    // Section 3.1, asserted explicitly because it is the property that section
-    // exists to guarantee. A fragment is never sent to a server; a query string
-    // is, which would write the refresh token into the gateway's access log,
-    // every proxy log in front of it, and the next request's `Referer`.
-    const { controller } = build({ userId: 'guest-1', locale: 'en' });
+  it('puts the code in the fragment and not in the query string', async () => {
+    // Plan 0023 section 3.1, still. A fragment is never sent to a server; a
+    // query string is, which would write the code into the gateway's access
+    // log, every proxy log in front of it, and the next request's `Referer`.
+    const { controller } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
 
     const { url } = await controller.resolveCallback({
       user: profile,
@@ -155,12 +202,14 @@ describe('GET /v1/auth/google/callback', () => {
 
     const beforeFragment = url.split('#')[0];
     expect(beforeFragment).not.toContain('?');
-    expect(beforeFragment).not.toContain(pair.accessToken);
-    expect(beforeFragment).not.toContain(pair.refreshToken);
+    expect(beforeFragment).not.toContain(STAGED_CODE);
   });
 
   it('falls back to the default locale when the state carried none', async () => {
-    const { controller } = build({ userId: 'guest-1' });
+    const { controller } = build({
+      userId: 'guest-1',
+      codeChallenge: CHALLENGE,
+    });
 
     const { url } = await controller.resolveCallback({
       user: profile,
@@ -177,7 +226,11 @@ describe('GET /v1/auth/google/callback', () => {
     // is still narrowed before it is put into a URL. Both halves of "built from
     // nothing the client supplied" have to hold for the first half to mean
     // anything.
-    const { controller } = build({ userId: 'guest-1', locale: '../../evil' });
+    const { controller } = build({
+      userId: 'guest-1',
+      locale: '../../evil',
+      codeChallenge: CHALLENGE,
+    });
 
     const { url } = await controller.resolveCallback({
       user: profile,
@@ -190,7 +243,7 @@ describe('GET /v1/auth/google/callback', () => {
   });
 
   describe('a state that does not hold up', () => {
-    it('does not call googleLogin at all, and redirects with an error', async () => {
+    it('stages nothing, and redirects with an error', async () => {
       const { controller, send } = build(
         Object.assign(
           new Error('rejected'),
@@ -207,7 +260,7 @@ describe('GET /v1/auth/google/callback', () => {
       // reached from a different direction, and it would depend on a race
       // between a token's expiry and a user's typing speed.
       expect(send).not.toHaveBeenCalledWith(
-        AUTH_PATTERNS.googleLogin,
+        AUTH_PATTERNS.stageGoogleSignIn,
         expect.anything()
       );
       expect(result.statusCode).toBe(HttpStatus.FOUND);
@@ -253,7 +306,11 @@ describe('GET /v1/auth/google/callback', () => {
     // A refused consent, a bad code, or Google being unreachable. An error page
     // on the API's origin is the one thing this route must never produce: the
     // user has no way back from there and the app never learns the flow ended.
-    const { controller, send } = build({ userId: 'guest-1', locale: 'en' });
+    const { controller, send } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
 
     const result = await controller.resolveCallback({ query: { state: 's' } });
 
@@ -342,11 +399,12 @@ describe('POST /v1/auth/google/state', () => {
     const { context, request } = contextFor({});
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    await controller.mintState(request.user);
+    await controller.mintState({ codeChallenge: CHALLENGE }, request.user);
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.mintOAuthState, {
       userId: undefined,
       locale: undefined,
+      codeChallenge: CHALLENGE,
     });
   });
 
@@ -357,13 +415,15 @@ describe('POST /v1/auth/google/state', () => {
     });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    await expect(controller.mintState(request.user)).resolves.toEqual({
+    await expect(
+      controller.mintState({ codeChallenge: CHALLENGE }, request.user)
+    ).resolves.toEqual({
       state: 'minted-state',
     });
 
     expect(send).toHaveBeenCalledWith(
       AUTH_PATTERNS.mintOAuthState,
-      expect.objectContaining({ userId: 'guest-1' })
+      expect.objectContaining({ userId: 'guest-1', codeChallenge: CHALLENGE })
     );
   });
 
@@ -378,6 +438,43 @@ describe('POST /v1/auth/google/state', () => {
     // than starting a flow that would end on somebody else's account.
     expect(send).not.toHaveBeenCalled();
     expect(controller).toBeDefined();
+  });
+});
+
+/**
+ * The exchange (plan 0230, section 4.3). The gateway forwards the code and the
+ * verifier, and names the caller from the verified bearer and from nothing in
+ * the body. Auth decides the rest.
+ */
+describe('POST /v1/auth/google/exchange', () => {
+  const VERIFIER = 'dBjftJeZ4CVP-mJ92K1ifhZ-dDyiYZUiYvyCxt3zbJs';
+
+  it('names the caller from the bearer', async () => {
+    const { controller, send } = build(undefined);
+
+    await expect(
+      controller.exchange({ code: STAGED_CODE, codeVerifier: VERIFIER }, {
+        userId: 'guest-1',
+      } as CurrentUser)
+    ).resolves.toEqual(pair);
+
+    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.exchangeGoogleSignIn, {
+      code: STAGED_CODE,
+      codeVerifier: VERIFIER,
+      callerUserId: 'guest-1',
+    });
+  });
+
+  it('names nobody without a bearer', async () => {
+    const { controller, send } = build(undefined);
+
+    await controller.exchange({ code: STAGED_CODE, codeVerifier: VERIFIER });
+
+    expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.exchangeGoogleSignIn, {
+      code: STAGED_CODE,
+      codeVerifier: VERIFIER,
+      callerUserId: undefined,
+    });
   });
 });
 
@@ -535,7 +632,11 @@ describe('the callback response itself', () => {
   }
 
   it('sends the location as a header and nothing as a body', async () => {
-    const { controller } = build({ userId: 'guest-1', locale: 'en' });
+    const { controller } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
     const response = responseDouble();
 
     await controller.callback(
@@ -549,8 +650,12 @@ describe('the callback response itself', () => {
     expect(response.end).toHaveBeenCalledWith();
   });
 
-  it('carries no copy of the tokens outside that header', async () => {
-    const { controller } = build({ userId: 'guest-1', locale: 'en' });
+  it('carries no copy of the code outside that header', async () => {
+    const { controller } = build({
+      userId: 'guest-1',
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
     const response = responseDouble();
 
     await controller.callback(
@@ -558,7 +663,7 @@ describe('the callback response itself', () => {
       response.res
     );
 
-    expect(response.headers['Location']).toContain(pair.refreshToken);
+    expect(response.headers['Location']).toContain(`code=${STAGED_CODE}`);
     expect(response.end.mock.calls).toEqual([[]]);
   });
 });

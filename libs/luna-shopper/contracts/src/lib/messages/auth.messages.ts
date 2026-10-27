@@ -39,12 +39,20 @@ export const AUTH_PATTERNS = {
   refresh: 'auth.refresh',
   /** Upgrade a temporary user into a registered one, in place. */
   upgrade: 'auth.upgrade',
-  /** Create or link an account from a verified Google profile. */
-  googleLogin: 'auth.googleLogin',
   /** Mint the opaque OAuth `state` that carries a caller across the Google hop. */
   mintOAuthState: 'auth.mintOAuthState',
   /** Spend an OAuth `state`, once, and read back what it was carrying. */
   consumeOAuthState: 'auth.consumeOAuthState',
+  /**
+   * Stage what Google said at the callback, and answer a single use code
+   * (plan 0230, section 3). Nothing permanent happens here.
+   */
+  stageGoogleSignIn: 'auth.stageGoogleSignIn',
+  /**
+   * Trade a staged code and its verifier for the pair (plan 0230, section 4).
+   * The one place a Google sign in creates or links an account.
+   */
+  exchangeGoogleSignIn: 'auth.exchangeGoogleSignIn',
   /** Delete the authenticated user's account and all personal identity data. */
   deleteAccount: 'auth.deleteAccount',
   /** Change the caller's global username, optionally propagating to zones. */
@@ -369,6 +377,9 @@ export interface GoogleProfile {
  * Google login (plan 0005, section 4.4). If `linkUserId` is set (the caller held
  * a temporary token), the Google identity is linked onto that user, upgrading it
  * in place; otherwise auth finds or creates a registered user.
+ *
+ * No longer a message (plan 0230): auth runs it inside the exchange, once the
+ * verifier and the bearer have both been checked, and nothing else reaches it.
  */
 export interface GoogleLoginRequest extends GoogleProfile {
   linkUserId?: string;
@@ -387,14 +398,22 @@ export interface GoogleLoginRequest extends GoogleProfile {
 export interface OAuthStatePayload {
   userId?: string;
   locale?: string;
+  /**
+   * base64url of SHA-256 of a verifier only the minting browser holds (plan
+   * 0230, section 2). Carried so the callback can copy it onto the handoff.
+   */
+  codeChallenge: string;
 }
 
 /**
  * Mint an OAuth `state` (plan 0023, section 4.2). `userId` is set by the gateway
  * from the verified token, never from a body: a caller who could name the user a
  * state links to could link their Google identity onto somebody else's account.
+ * `codeChallenge` comes from the body and is required (plan 0230, section 2).
  */
-export type MintOAuthStateRequest = OAuthStatePayload;
+export type MintOAuthStateRequest = OAuthStatePayload & {
+  codeChallenge: string;
+};
 
 /** The raw state, returned exactly once. Auth stores only its hash. */
 export interface MintOAuthStateResult {
@@ -408,4 +427,32 @@ export interface MintOAuthStateResult {
  */
 export interface ConsumeOAuthStateRequest {
   state: string;
+}
+
+/**
+ * Stage a Google sign in at the callback (plan 0230, section 3.3). The profile
+ * is what Google said, `linkUserId` and `locale` are what the state carried,
+ * and `codeChallenge` is copied from the state. Auth writes one handoff row and
+ * nothing else.
+ */
+export interface StageGoogleSignInRequest extends GoogleProfile {
+  linkUserId?: string;
+  codeChallenge: string;
+  locale?: string;
+}
+
+/** The raw single use code, returned exactly once. Auth stores only its hash. */
+export interface StageGoogleSignInResult {
+  code: string;
+}
+
+/**
+ * Trade a staged code for the pair (plan 0230, section 4.1). `callerUserId` is
+ * set by the gateway from the verified bearer and never from a body: a handoff
+ * that names a link target is redeemed only by that account.
+ */
+export interface ExchangeGoogleSignInRequest {
+  code: string;
+  codeVerifier: string;
+  callerUserId?: string;
 }

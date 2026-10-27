@@ -23,9 +23,15 @@ describe('auth contracts', () => {
     expect(AUTH_PATTERNS.forgotPassword).toBe('auth.forgotPassword');
     expect(AUTH_PATTERNS.resetPassword).toBe('auth.resetPassword');
     expect(AUTH_PATTERNS.recoverySignIn).toBe('auth.recoverySignIn');
-    expect(AUTH_PATTERNS.googleLogin).toBe('auth.googleLogin');
     expect(AUTH_PATTERNS.mintOAuthState).toBe('auth.mintOAuthState');
     expect(AUTH_PATTERNS.consumeOAuthState).toBe('auth.consumeOAuthState');
+    expect(AUTH_PATTERNS.stageGoogleSignIn).toBe('auth.stageGoogleSignIn');
+    expect(AUTH_PATTERNS.exchangeGoogleSignIn).toBe(
+      'auth.exchangeGoogleSignIn'
+    );
+    // Gone with its handler (plan 0230): a pattern that no gateway route sends
+    // is a door with no lock.
+    expect('googleLogin' in AUTH_PATTERNS).toBe(false);
   });
 
   it('pins the identity event names', () => {

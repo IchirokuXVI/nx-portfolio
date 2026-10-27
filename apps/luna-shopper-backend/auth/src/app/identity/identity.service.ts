@@ -13,6 +13,7 @@ import {
   type CreateAdminRecoveryLinksResult,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ExchangeGoogleSignInRequest,
   type ForgotPasswordRequest,
   type GetProfileRequest,
   type GetUsernamesRequest,
@@ -30,6 +31,8 @@ import {
   type RetryAfterResult,
   type SendAdminPasswordResetResult,
   type SetUsernameRequest,
+  type StageGoogleSignInRequest,
+  type StageGoogleSignInResult,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -49,7 +52,7 @@ import {
   validateUsername,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   AuthAuditService,
@@ -59,6 +62,7 @@ import type { AuthConfig } from '../config/app-config';
 import {
   Credential,
   EmailVerification,
+  OAuthHandoff,
   OAuthIdentity,
   OAuthState,
   PasswordReset,
@@ -117,6 +121,22 @@ const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
  * expiry and a user's typing speed.
  */
 const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
+
+/**
+ * How long a staged Google sign in waits to be redeemed (plan 0230, section
+ * 3.2). Two minutes: the callback page of the app spends the code within one
+ * page load of the redirect, and two minutes is that load on a slow phone plus
+ * a retry. A longer life only widens the time in which a profile staged through
+ * a forwarded link sits in the table, waiting for a verifier that never comes.
+ */
+const OAUTH_HANDOFF_TTL_MS = 2 * 60 * 1000;
+
+/**
+ * The one answer an exchange refusal gets: a missing, spent or expired code, a
+ * wrong verifier, or a bearer that is not the link target. On the wire it is
+ * 401 `unauthorized`, as a state is (plan 0023, section 4.4).
+ */
+const INVALID_GOOGLE_CODE = 'Invalid or expired sign in code';
 
 /**
  * The identity domain (plan 0005, section 4). Every way a user comes to exist
@@ -982,65 +1002,9 @@ export class IdentityService {
       this.requireMail();
     }
     const { user, email, rawVerificationToken } =
-      await this.dataSource.transaction(async (manager) => {
-        const user = await manager
-          .getRepository(User)
-          .findOne({ where: { id: req.userId } });
-        if (!user) {
-          throw new NotFoundException('User not found');
-        }
-        if (user.kind !== UserKind.TEMPORARY) {
-          throw new ConflictException('This account is already registered');
-        }
-
-        let email: string | null = null;
-        let rawVerificationToken: string | null = null;
-
-        if (req.google) {
-          await this.linkGoogle(manager, user.id, req.google.providerUserId);
-          if (req.google.email && !user.email) {
-            const googleEmail = this.normalizeEmail(req.google.email);
-            // The same check the email branch makes. Without it the partial
-            // unique index on `users.email` surfaces as a raw 500 for the
-            // situation the other branch answers with a conflict.
-            await this.assertEmailFree(manager, googleEmail, user.id);
-            user.email = googleEmail;
-            // Google verified this address; asking the person to confirm it
-            // again is a nudge with nothing behind it. Matches what the create
-            // branch of `googleLogin` already does.
-            user.emailVerifiedAt = new Date();
-          }
-        } else if (req.email && req.password) {
-          email = this.normalizeEmail(req.email);
-          await this.assertEmailFree(manager, email, user.id);
-          user.email = email;
-          const passwordHash = await this.passwords.hash(req.password);
-          await manager
-            .getRepository(Credential)
-            .save(
-              manager
-                .getRepository(Credential)
-                .create({ userId: user.id, passwordHash })
-            );
-          rawVerificationToken = (
-            await this.createVerification(manager, user.id)
-          ).raw;
-        } else {
-          throw new ValidationException(
-            'Provide a Google identity or an email and password to upgrade'
-          );
-        }
-
-        user.kind = UserKind.REGISTERED;
-        if (req.displayName) {
-          user.displayName = req.displayName;
-        }
-        return {
-          user: await manager.getRepository(User).save(user),
-          email,
-          rawVerificationToken,
-        };
-      });
+      await this.dataSource.transaction((manager) =>
+        this.upgradeIn(manager, req)
+      );
 
     // Sent outside the transaction, for the reason registration gives: delivery
     // must not roll back an upgrade that succeeded, verification is optional, and
@@ -1051,6 +1015,81 @@ export class IdentityService {
 
     this.events.userUpgraded({ userId: user.id });
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * The writes of an upgrade, on the caller's transaction. Split from
+   * {@link upgrade} so the Google exchange can run it inside the transaction
+   * that spends its code (plan 0230, section 4.2).
+   *
+   * **Every other session of the account ends here** (plan 0230). The account
+   * is now somebody's for good, and whatever held the guest's refresh token
+   * before this moment must not keep it. The caller issues its own pair after
+   * the commit, so the person upgrading stays signed in and nobody else does,
+   * the same order a password reset keeps.
+   */
+  private async upgradeIn(
+    manager: EntityManager,
+    req: UpgradeRequest
+  ): Promise<{
+    user: User;
+    email: string | null;
+    rawVerificationToken: string | null;
+  }> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { id: req.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.kind !== UserKind.TEMPORARY) {
+      throw new ConflictException('This account is already registered');
+    }
+
+    let email: string | null = null;
+    let rawVerificationToken: string | null = null;
+
+    if (req.google) {
+      await this.linkGoogle(manager, user.id, req.google.providerUserId);
+      if (req.google.email && !user.email) {
+        const googleEmail = this.normalizeEmail(req.google.email);
+        // The same check the email branch makes. Without it the partial
+        // unique index on `users.email` surfaces as a raw 500 for the
+        // situation the other branch answers with a conflict.
+        await this.assertEmailFree(manager, googleEmail, user.id);
+        user.email = googleEmail;
+        // Google verified this address; asking the person to confirm it
+        // again is a nudge with nothing behind it. Matches what the create
+        // branch of `googleLogin` already does.
+        user.emailVerifiedAt = new Date();
+      }
+    } else if (req.email && req.password) {
+      email = this.normalizeEmail(req.email);
+      await this.assertEmailFree(manager, email, user.id);
+      user.email = email;
+      const passwordHash = await this.passwords.hash(req.password);
+      await manager
+        .getRepository(Credential)
+        .save(
+          manager
+            .getRepository(Credential)
+            .create({ userId: user.id, passwordHash })
+        );
+      rawVerificationToken = (await this.createVerification(manager, user.id))
+        .raw;
+    } else {
+      throw new ValidationException(
+        'Provide a Google identity or an email and password to upgrade'
+      );
+    }
+
+    user.kind = UserKind.REGISTERED;
+    if (req.displayName) {
+      user.displayName = req.displayName;
+    }
+    const saved = await manager.getRepository(User).save(user);
+    await this.tokens.revokeAllForUser(saved.id, manager);
+    return { user: saved, email, rawVerificationToken };
   }
 
   /** Refuses an address that already belongs to somebody else. */
@@ -1402,15 +1441,28 @@ export class IdentityService {
    * beside what the state stands for. `userId` arrives already established by the
    * gateway's guard, so an absent one here means the caller genuinely held no
    * token, not that a stale one was quietly ignored (section 4.2).
+   *
+   * The challenge is required (plan 0230, section 2). It is what ties the code
+   * the callback stages to the browser that minted this state, and a state
+   * without one could be finished by any browser a link reached.
    */
   async mintOAuthState(
     req: MintOAuthStateRequest
   ): Promise<MintOAuthStateResult> {
+    if (!isPkceValue(req.codeChallenge)) {
+      throw new ValidationException(
+        'A codeChallenge is required to start a Google sign in'
+      );
+    }
     const state = await this.dataSource.transaction((manager) =>
       this.grants.issue(
         manager,
         OAuthState,
-        { userId: req.userId ?? null, locale: req.locale ?? null },
+        {
+          userId: req.userId ?? null,
+          locale: req.locale ?? null,
+          codeChallenge: req.codeChallenge,
+        },
         OAUTH_STATE_TTL_MS
       )
     );
@@ -1423,6 +1475,10 @@ export class IdentityService {
    * Single use, which is the property the whole design is for: a state that could
    * be replayed is a way to link an attacker's Google identity onto an account
    * that is not theirs, and unlike a stolen token that is permanent.
+   *
+   * A row with no challenge is refused like an unknown one (plan 0230, section
+   * 2). Only a state minted before that plan lacks one, it is at most ten
+   * minutes old, and nobody holds a verifier for it.
    */
   async consumeOAuthState(
     req: ConsumeOAuthStateRequest
@@ -1435,40 +1491,152 @@ export class IdentityService {
         INVALID_OAUTH_STATE
       )
     );
+    if (!record.codeChallenge) {
+      throw new ValidationException(INVALID_OAUTH_STATE);
+    }
     // Omitted rather than null: `OAuthStatePayload` says absent, and a `userId`
-    // of null reaching `googleLogin` as `linkUserId` would read as a link
+    // of null reaching the handoff as `linkUserId` would read as a link
     // request for nobody.
     return {
       ...(record.userId ? { userId: record.userId } : {}),
       ...(record.locale ? { locale: record.locale } : {}),
+      codeChallenge: record.codeChallenge,
     };
   }
 
-  /** Google login: find, link, or create (plan 0005, section 4.4). */
-  async googleLogin(req: GoogleLoginRequest): Promise<AuthTokens> {
-    // Refuse rather than attempt a lookup against credentials this deployment
-    // does not have (plan 0026, section 3.2).
+  /**
+   * Stage what Google said at the callback (plan 0230, section 3.3).
+   *
+   * One handoff row and nothing else. No identity is looked up here, so the
+   * callback has no branch that depends on the state of an account, and a
+   * profile staged through a link somebody forwarded changes nothing until a
+   * browser holding the verifier redeems it, which never happens.
+   */
+  async stageGoogleSignIn(
+    req: StageGoogleSignInRequest
+  ): Promise<StageGoogleSignInResult> {
     this.requireGoogle();
-    const identity = await this.dataSource
-      .getRepository(OAuthIdentity)
-      .findOne({
-        where: {
-          provider: AuthProvider.GOOGLE,
+    if (!isPkceValue(req.codeChallenge)) {
+      throw new ValidationException(INVALID_OAUTH_STATE);
+    }
+    const code = await this.dataSource.transaction((manager) =>
+      this.grants.issue(
+        manager,
+        OAuthHandoff,
+        {
+          userId: req.linkUserId ?? null,
           providerUserId: req.providerUserId,
+          email: req.email ?? null,
+          displayName: req.displayName ?? null,
+          codeChallenge: req.codeChallenge,
+          locale: req.locale ?? null,
         },
-      });
+        OAUTH_HANDOFF_TTL_MS
+      )
+    );
+    return { code };
+  }
+
+  /**
+   * Trade a staged code for the pair (plan 0230, section 4.2). This is where a
+   * Google sign in creates or links an account, and the only place.
+   *
+   * One transaction spends the code, checks the verifier against the challenge,
+   * checks the bearer against the link target, and runs {@link googleLogin}.
+   * A refusal is returned out of the transaction rather than thrown inside it,
+   * so the spend commits: a code that met a wrong verifier is burnt, and it
+   * cannot be tried again. A failure of the login itself rolls the spend back
+   * with it.
+   *
+   * The verifier proves the browser and the bearer proves the account. A link
+   * needs both. A handoff with no link target ignores the bearer, so a caller
+   * cannot turn a sign in from scratch into a link onto themselves.
+   */
+  async exchangeGoogleSignIn(
+    req: ExchangeGoogleSignInRequest
+  ): Promise<AuthTokens> {
+    this.requireGoogle();
+    const outcome = await this.dataSource.transaction(
+      async (manager): Promise<ExchangeOutcome> => {
+        const handoff = await this.grants.spend(
+          manager,
+          OAuthHandoff,
+          this.grants.hash(req.code ?? '')
+        );
+        if (!handoff) {
+          return { refused: 'unknown_code' };
+        }
+        if (!verifierMatches(req.codeVerifier, handoff.codeChallenge)) {
+          return { refused: 'verifier_mismatch', handoffId: handoff.id };
+        }
+        if (handoff.userId && req.callerUserId !== handoff.userId) {
+          return { refused: 'caller_mismatch', handoffId: handoff.id };
+        }
+        return {
+          login: await this.googleLogin(manager, {
+            providerUserId: handoff.providerUserId,
+            ...(handoff.email ? { email: handoff.email } : {}),
+            ...(handoff.displayName
+              ? { displayName: handoff.displayName }
+              : {}),
+            ...(handoff.userId ? { linkUserId: handoff.userId } : {}),
+          }),
+        };
+      }
+    );
+
+    if ('refused' in outcome) {
+      // The reason and the row, and never the code, the verifier or the
+      // challenge: a log line is not a place to keep a credential.
+      this.logger.warn(
+        `Google sign in exchange refused: ${outcome.refused}` +
+          (outcome.handoffId ? ` (handoff ${outcome.handoffId})` : '')
+      );
+      throw new UnauthorizedException(INVALID_GOOGLE_CODE);
+    }
+
+    const { user, created, upgraded } = outcome.login;
+    if (created) {
+      this.events.userRegistered({ userId: user.id });
+    }
+    if (upgraded) {
+      this.events.userUpgraded({ userId: user.id });
+    }
+    return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Google login: find, link, or create (plan 0005, section 4.4), on the
+   * caller's transaction.
+   *
+   * The one place that knows the three branches. Since plan 0230 its one
+   * caller is {@link exchangeGoogleSignIn}, after the verifier and the bearer
+   * were checked. It answers the user and what happened to it, and the caller
+   * publishes the events and issues the pair after the commit, because a pair
+   * issued inside the transaction would name a user that may not exist yet.
+   */
+  private async googleLogin(
+    manager: EntityManager,
+    req: GoogleLoginRequest
+  ): Promise<GoogleLoginOutcome> {
+    const identity = await manager.getRepository(OAuthIdentity).findOne({
+      where: {
+        provider: AuthProvider.GOOGLE,
+        providerUserId: req.providerUserId,
+      },
+    });
 
     if (identity) {
-      const user = await this.dataSource
+      const user = await manager
         .getRepository(User)
         .findOneOrFail({ where: { id: identity.userId } });
-      return this.tokens.issueTokens(user);
+      return { user, created: false, upgraded: false };
     }
 
     // No linked user yet: either link onto the caller's temporary user (upgrade
     // in place) or create a fresh registered user.
     if (req.linkUserId) {
-      return this.upgrade({
+      const { user } = await this.upgradeIn(manager, {
         userId: req.linkUserId,
         google: {
           providerUserId: req.providerUserId,
@@ -1476,25 +1644,56 @@ export class IdentityService {
           displayName: req.displayName,
         },
       });
+      return { user, created: false, upgraded: true };
     }
 
-    const user = await this.dataSource.transaction(async (manager) => {
-      const created = await manager.getRepository(User).save(
-        manager.getRepository(User).create({
-          kind: UserKind.REGISTERED,
-          email: req.email ? this.normalizeEmail(req.email) : null,
-          displayName: req.displayName ?? null,
-          emailVerifiedAt: req.email ? new Date() : null,
-          // Specifically NOT the Google profile name (plan 0018, section 1):
-          // that is the person's real name, which they never chose to publish.
-          username: this.usernames.generate(),
-        })
-      );
-      await this.linkGoogle(manager, created.id, req.providerUserId);
-      return created;
-    });
-
-    this.events.userRegistered({ userId: user.id });
-    return this.tokens.issueTokens(user);
+    const created = await manager.getRepository(User).save(
+      manager.getRepository(User).create({
+        kind: UserKind.REGISTERED,
+        email: req.email ? this.normalizeEmail(req.email) : null,
+        displayName: req.displayName ?? null,
+        emailVerifiedAt: req.email ? new Date() : null,
+        // Specifically NOT the Google profile name (plan 0018, section 1):
+        // that is the person's real name, which they never chose to publish.
+        username: this.usernames.generate(),
+      })
+    );
+    await this.linkGoogle(manager, created.id, req.providerUserId);
+    return { user: created, created: true, upgraded: false };
   }
+}
+
+/** What {@link IdentityService.googleLogin} did, for the caller to finish. */
+interface GoogleLoginOutcome {
+  user: User;
+  created: boolean;
+  upgraded: boolean;
+}
+
+/** The answer of the exchange's transaction: a login, or why there is none. */
+type ExchangeOutcome =
+  | { login: GoogleLoginOutcome }
+  | {
+      refused: 'unknown_code' | 'verifier_mismatch' | 'caller_mismatch';
+      handoffId?: string;
+    };
+
+/** base64url of 32 bytes or of a SHA-256: 43 characters, no padding. */
+function isPkceValue(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+/**
+ * Whether `base64url(sha256(verifier))` is the stored challenge (plan 0230,
+ * section 4.2), compared in constant time over buffers of equal length.
+ */
+function verifierMatches(verifier: unknown, challenge: string): boolean {
+  if (!isPkceValue(verifier)) {
+    return false;
+  }
+  const actual = Buffer.from(
+    createHash('sha256').update(verifier).digest('base64url')
+  );
+  const expected = Buffer.from(challenge);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
