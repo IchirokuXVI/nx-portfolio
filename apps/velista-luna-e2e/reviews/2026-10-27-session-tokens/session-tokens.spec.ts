@@ -12,7 +12,7 @@ import {
   GATEWAY_URL,
   SHOP_ASK_OFF_KEY,
   VELISTA_BASE_URL,
-} from '../playwright.config';
+} from '../../playwright.config';
 
 /**
  * How session tokens are issued, stored, rotated and spent, as invariants checked
@@ -411,6 +411,9 @@ test.describe('session tokens', () => {
       delayBeforeServer: true,
     },
   ]) {
+    // The title is one of the two literals above, chosen by the ordering the
+    // variant stages. The rule cannot read through the loop.
+    // eslint-disable-next-line playwright/valid-title
     test(variant.title, async ({ browser }) => {
       // Invariant: two tabs of one origin, both holding the same expired looking
       // pair, refresh at once. Neither ever removes the session, neither shows

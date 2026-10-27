@@ -232,7 +232,7 @@ Each finding names its reviewer: A (correctness), B (security), both, or lead (t
 
 ## 7. Test battery
 
-Branch `worktree-review-session-tokens`, based on `origin/dev` at 83f982bd1, pushed. The spec is `apps/velista-luna-e2e/src/session-tokens.spec.ts`. No pull request was opened. Refreshes were forced by rewriting the `exp` of the stored access token to the past. Pages were signed in through `storageState` on `session:velista`.
+Branch `worktree-review-session-tokens`, based on `origin/dev` at 83f982bd1, pushed. The spec is `apps/velista-luna-e2e/reviews/2026-10-27-session-tokens/session-tokens.spec.ts`, beside this report and a `playwright.config.ts` that runs the folder on its own, outside the staging gate. No pull request was opened. Refreshes were forced by rewriting the `exp` of the stored access token to the past. Pages were signed in through `storageState` on `session:velista`.
 
 | Test | Invariant | Result | What the failure shows |
 |---|---|---|---|
@@ -253,7 +253,7 @@ Rerun, with an ephemeral Luna slot and a velista slot up as CLAUDE.md describes 
 ```sh
 git checkout worktree-review-session-tokens
 VELISTA_BASE_URL=http://localhost:42005 E2E_GATEWAY_URL=http://localhost:43300 \
-  npx nx e2e velista-luna-e2e --skip-nx-cache -- src/session-tokens.spec.ts
+  npx nx e2e velista-luna-e2e --skip-nx-cache -- --config reviews/2026-10-27-session-tokens/playwright.config.ts
 ```
 
 The worktree sandbox refuses inline environment chains. Put the command in a script file under the job tmp directory and run it with bash.
