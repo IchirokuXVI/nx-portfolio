@@ -193,7 +193,7 @@ k3s messages rather than user data, and 30 days costs nothing to state.
 A config key `ASSISTANT_LOG_TURN_TEXT` (Joi boolean, default `false`) in
 `assistant/src/app/config/app-config.ts`, read into the service config. When false,
 `record()` writes `saidChars` and `repliedChars` in place of `said` and `replied`; every
-other field stays, so the listResolution and latency analysis of plan 0039 section 10 still
+other field stays, so the listResolution and latency analysis of backend plan 0039 section 10 still
 works. Chart value `lunaShopperBackend.assistant.logTurnText`, default `false` in
 `values.yaml`, rendered into the ConfigMap beside the other `ASSISTANT_*` keys
 (`configmap.yaml.tpl:187-215`).

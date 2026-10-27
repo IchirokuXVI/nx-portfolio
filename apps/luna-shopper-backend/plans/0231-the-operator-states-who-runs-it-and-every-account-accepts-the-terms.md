@@ -10,7 +10,9 @@
 > read the contract fixed here.
 >
 > Prerequisite reading: `0005` sections 4.1 to 4.5 (the four ways an account starts), `0023`
-> sections 4.1 and 4.2 (the OAuth state), `0026` (an unconfigured feature answers 501 and
+> sections 4.1 and 4.2 (the OAuth state), `0230` sections 3 and 4 (the callback stages a
+> handoff and `exchangeGoogleSignIn` signs in; this plan assumes `0230` is built and changes
+> that flow, not the one before it), `0026` (an unconfigured feature answers 501 and
 > never breaks boot), `0194` (support sessions, and why production waits for the policy to
 > name them), `0224` (the provider switch), and in the k8s tree `bootstrap/provision-release.sh`
 > and `helm/velista/templates/luna-shopper-backend/_env.tpl`.
@@ -39,10 +41,12 @@ Every statement below was read on `dev` on 2026-10-27.
   to `:113`), and the request contract for it is empty: `CreateTemporaryUserRequest =
   Record<string, never>` (`libs/luna-shopper/contracts/src/lib/messages/auth.messages.ts:157`).
 - The Google flow starts with `POST /v1/auth/google/state` (`gateway/src/app/auth/google.controller.ts:96`
-  to `:117`), which takes no body today, and ends in the callback, which spends the state and
-  calls `googleLogin` with what the state carried (`:206` to `:216`). The state row is
+  to `:117`), which takes no body today, and ends in the callback, which spends the state.
+  After plan `0230` the callback copies what the state carried into an `oauth_handoffs` row,
+  and `exchangeGoogleSignIn` spends that row and calls `googleLogin`. The state row is
   `oauth_states` (`auth/src/app/entities/oauth-state.entity.ts:25`), holding `userId` and
-  `locale`. Whatever must cross the Google round trip has to ride in that row.
+  `locale`. Whatever must cross the Google round trip has to ride in that row and then in the
+  handoff row.
 - `GET /v1/account/me` composes auth's `UserProfileView` with core's app state and the token's
   permissions (`gateway/src/app/account/account.controller.ts:113` to `:127`). The view is
   `AccountMeView` (`contracts/src/lib/messages/app-state.messages.ts:77`) and its schema is
@@ -325,13 +329,13 @@ matching gateway DTO gains it with `@IsOptional() @IsString() @MaxLength(64)`.
 | Upgrade with a typed address (`POST /v1/auth/upgrade`) | `UpgradeRequest` | `upgrade`, before the transaction; recorded inside it, `via UPGRADE` |
 | Guest creation (`POST /v1/zones`, `POST /v1/zones/join`, anonymous only) | `CreateTemporaryUserRequest` becomes `{ acceptedTermsVersion?: string }`; `CreateZoneDto` and `JoinZoneDto` gain the field, and the gateway passes it only on the anonymous branch of `resolveIdentity` | `createTemporaryUser`, one transaction with the user insert, `via GUEST` |
 | Google, start (`POST /v1/auth/google/state`) | The route gains a body DTO `MintOAuthStateDto { acceptedTermsVersion? }`; `MintOAuthStateRequest` and `OAuthStatePayload` gain the field; `oauth_states` gains a nullable `termsVersion` column in the same migration | `mintOAuthState` checks; nothing is recorded yet, because no account may exist yet |
-| Google, finish (the callback) | `GoogleLoginRequest` gains the field, filled from the spent state | `googleLogin` records `via GOOGLE` on all three branches: an existing identity, a guest upgraded in place (passed on to `upgrade`, which records `via GOOGLE` rather than `UPGRADE`), and a new account |
+| Google, finish (the callback stages, the exchange signs in, plan `0230`) | The callback copies the state's version into `stageGoogleSignIn`'s request, and `oauth_handoffs` gains a nullable `termsVersion` column in the same migration; `GoogleLoginRequest` gains the field, filled by `exchangeGoogleSignIn` from the spent handoff | Nothing at the callback; `exchangeGoogleSignIn` passes the version to `googleLogin`, which records `via GOOGLE` on all three branches: an existing identity, a guest upgraded in place (passed on to `upgrade`, which records `via GOOGLE` rather than `UPGRADE`), and a new account |
 
 Rules that are easy to get wrong:
 
 - **The Google check happens at the start and not at the finish.** The start is a JSON POST,
   so a refusal there reaches velista as a problem it can show; the finish is a redirect, where
-  a refusal costs the person the whole sign in. At the finish, a version that is no longer
+  a refusal costs the person the whole sign in. At the exchange, a version that is no longer
   current (it changed inside the state's ten minutes) is recorded as nothing, the sign in
   succeeds, and `GET /v1/account/me` then says acceptance is required. Never fail a sign in
   over it.
@@ -505,7 +509,7 @@ only `0233` enforces.
   revision and a revision earlier than the template (the later date wins for `updatedOn`; the
   version still carries both).
 - Auth unit specs, `identity-terms.spec.ts`: each path of 4.2 with the current version, a
-  stale one, none with acceptance off, none with acceptance on; the Google finish with a state
+  stale one, none with acceptance off, none with acceptance on; the Google exchange with a handoff
   whose version went stale; an existing Google identity recording a new version; the accept
   route twice.
 - Auth integration spec on real Postgres, `terms-acceptance.integration.spec.ts`, in a scratch
@@ -553,8 +557,8 @@ Mine, for the owner to change:
    socket, the assistant and every open screen at the moment of a version bump.
 3. **A history table with a `via` column** rather than two columns on `users`.
 4. **An existing account that signs in with Google records an acceptance.**
-5. **A stale Google state signs the person in and asks afterwards**, rather than refusing at
-   the callback.
+5. **A stale version in a Google handoff signs the person in and asks afterwards**, rather
+   than refusing at the exchange.
 6. **The operator's values live in a Secret of their own, written from a file outside the
    repository**, with chart values winning per key when a self hoster sets them.
 7. **`features.supportAccess` and the `retention` block** were not in the brief's list. The

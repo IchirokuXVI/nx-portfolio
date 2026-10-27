@@ -18,7 +18,7 @@
 > `c6241a693`) on 2026-10-27.
 >
 > Prerequisite reading: backend `0231` (the public settings route, the terms version, the
-> feature flags), plan `0001` section 6.2 (the route table), plan `0005` (locale routing),
+> feature flags), plan `0001` section 6.2 (the route table), shell plan `0003` (app owned locale routing),
 > plan `0071` (the startup gate), plan `0033` (the install page: the precedent for a public
 > page with no guard), plan `0165` (velista on its own origin), plan `0168` section 1 D5 (state
 > that `ui` draws lives in `platform`), rule D4 in `libs/velista/data-access` (map from
