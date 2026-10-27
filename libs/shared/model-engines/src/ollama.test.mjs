@@ -775,9 +775,13 @@ test('OLLAMA_BATCH=1 is plan 0002 back exactly, one request at a time', async ()
 test('a width above what was measured runs, and says so once', async () => {
   const stderr = sink();
   const fake = pooledServer();
+  // A stopped clock, for the reason the next test gives: on a busy runner the
+  // timed first round can read as a serialized server, and that notice is a
+  // second line in a sink that must hold one.
   const engine = engineOn(fake, {
     env: { OLLAMA_BATCH: '16' },
     stderr,
+    now: () => 0,
   });
 
   assert.equal(engine.batchSize, 16);
