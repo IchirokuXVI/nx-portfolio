@@ -1,0 +1,108 @@
+{
+  "title": "Velista: a typed name that is already on the list",
+  "lede": "You type a name and press the plus. If one line that holds a product already has that name, the plus adds the units to it. If two or more do, the plus asks before it makes a new line. Drawn for the zone list and the basket. The first artboards of each row are screenshots of <code>staging.velista.app</code> taken on 2026-10-27, so the mocks can be read against what ships today. The products are real staging catalog rows. The second list, Cumple de Lucía, is a sample. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "TodayList.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Staging today: the zone list" },
+    { "file": "TodayListEggs.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "Staging today: typing Huevos (one line holds it)" },
+    { "file": "OneHint.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "A. The row shows +1" },
+    { "file": "OneStrip.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844, "title": "B. A line above the field" },
+    { "file": "OneDone.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844, "title": "After the plus: the row took the units" },
+
+    { "file": "TodayListMilk.dc.html", "x": 0, "y": 1400, "w": 390, "h": 844, "title": "Staging today: typing Leche entera (two lines hold it)" },
+    { "file": "ManyAsk.dc.html", "x": 470, "y": 1400, "w": 390, "h": 844, "title": "C. The plus asks: add a new line?" },
+    { "file": "ManyChoose.dc.html", "x": 940, "y": 1400, "w": 390, "h": 844, "title": "D. The plus asks: which line, or a new one" },
+
+    { "file": "TodayBasket.dc.html", "x": 0, "y": 2800, "w": 390, "h": 844, "title": "Staging today: the basket" },
+    { "file": "TodayBasketMilk.dc.html", "x": 470, "y": 2800, "w": 390, "h": 844, "title": "Staging today: the basket, typing Leche entera" },
+    { "file": "TodayBasketPick.dc.html", "x": 940, "y": 2800, "w": 390, "h": 844, "title": "Staging today: the plus asks which list" },
+    { "file": "BasketPick.dc.html", "x": 1410, "y": 2800, "w": 390, "h": 844, "title": "Basket: which list, marked" },
+    { "file": "BasketAsk.dc.html", "x": 1880, "y": 2800, "w": 390, "h": 844, "title": "Basket: the same question, inside the list" },
+    { "file": "BasketDone.dc.html", "x": 2350, "y": 2800, "w": 390, "h": 844, "title": "Basket: one line held it, the row took the units" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -470,
+      "w": 420,
+      "text": "THE ASK. A free text add whose name is the name of a line that already holds a product. One such line: the plus adds the composer's quantity to it. Two or more: the plus asks first.\nTODAY. Staging makes a second line, and nobody is told. The add is keyed by its name, and a product line by its products. Plan 0091 merges names and plan 0214 merges products, and neither crosses over. Typing Leche entera next to the product line Leche entera thus adds a free text line."
+    },
+    {
+      "id": "match",
+      "x": 470,
+      "y": -470,
+      "w": 420,
+      "text": "WHAT COUNTS AS THE SAME NAME. The whole typed text, folded for case and accents, is the name the row shows: the line's own name, or the name of its product when it has none (plan 0144). Leche does not match Leche entera. The search still finds that line, and the plus makes a new one as today.\nOnly lines that hold a product count. A free text line of that name already takes the add (plan 0091). A catalog card press is unchanged: its held stepper already says where it goes."
+    },
+    {
+      "id": "a",
+      "x": 940,
+      "y": -470,
+      "w": 420,
+      "text": "A. THE ROW SAYS IT. While the typed name is the name of exactly one line, that row under On your list carries +1 beside its chip. The number is the composer's quantity, so +2 when the stepper says 2. Nothing new is added to the page except a number. My pick."
+    },
+    {
+      "id": "b",
+      "x": 1410,
+      "y": -470,
+      "w": 420,
+      "text": "B. A LINE ABOVE THE FIELD. Adds to Huevos, 2 → 3, in the secondary colour on a hairline. It says it in words for a person who never looks at the rows. Louder, and it takes 30 px from the results."
+    },
+    {
+      "id": "done",
+      "x": 1880,
+      "y": -470,
+      "w": 420,
+      "text": "AFTER THE PLUS, A OR B. The field clears and the list comes back. The row that took the units keeps an amber edge on its chip for about 1.5 s, then goes plain. If the row is off screen, the list scrolls to it. A screen reader hears Huevos, 3. No toast and no banner: the row is the answer."
+    },
+    {
+      "id": "c",
+      "x": 470,
+      "y": 930,
+      "w": 420,
+      "text": "C. ASK, AS WRITTEN. The plus opens a popover held against it, the same anchored popover the basket's list picker uses (anchored-popover). Add a new line sends today's free text add. Cancel, a tap outside and Escape all close it and keep the words in the field. Focus starts on Add a new line, so Enter twice still adds."
+    },
+    {
+      "id": "d",
+      "x": 940,
+      "y": 930,
+      "w": 420,
+      "text": "D. ASK WHERE. The popover lists the lines that hold it, each with its count going up by the composer's quantity, and A new line last. One press either way: a person who meant the Hacendado milk does not have to find that row after a Cancel. It has the same shape as Which list is it for?, so the two basket steps read as one family."
+    },
+    {
+      "id": "open",
+      "x": 1410,
+      "y": 930,
+      "w": 420,
+      "text": "OPEN, FOR THE PLAN THAT FOLLOWS A PICK.\n1. A line already bought: does it count? I would count only lines still to buy, so a new trip starts a fresh line.\n2. Two product lines plus one free text line of that name: today the add merges into the free text line without asking (plan 0091). Ask anyway, or keep that merge?\n3. The backend cannot do the one line case today. Either the client raises the found line's quantity, or the add learns to meet a product line by its shown name."
+    },
+    {
+      "id": "basket",
+      "x": 0,
+      "y": 2330,
+      "w": 420,
+      "text": "THE BASKET TODAY. Typing finds lines across every list. The plus always asks which list first (plan 0116), even when there is one, and lines merge per list. So the rule runs after the list is picked, against that list only."
+    },
+    {
+      "id": "pick",
+      "x": 1410,
+      "y": 2330,
+      "w": 420,
+      "text": "WHICH LIST, MARKED. A list that already holds the typed name says how many lines do: 2 on it, in the tertiary colour, with no icon. A list with one such line adds to it and closes. A list with none adds a new line, as today."
+    },
+    {
+      "id": "ask2",
+      "x": 1880,
+      "y": 2330,
+      "w": 420,
+      "text": "SECOND STEP, SAME POPOVER. A list with two or more such lines asks in place of the list rows, and its name above the question goes back to the lists. Drawn as C. D fits this step the same way."
+    },
+    {
+      "id": "bdone",
+      "x": 2350,
+      "y": 2330,
+      "w": 420,
+      "text": "AFTER IT, ONE LINE. The popover closes, the field clears, and the basket row takes the units with the same amber edge. Announced as Huevos, 3, on Compra semanal."
+    }
+  ]
+}

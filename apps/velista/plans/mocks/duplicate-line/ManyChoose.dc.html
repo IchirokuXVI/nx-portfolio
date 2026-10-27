@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zone list, two lines hold it: the plus asks which line, or a new one</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+/* Day tokens copied from libs/velista/ui/src/lib/styles, drawn to match staging on 2026-10-27. */
+body { margin: 0; }
+.vel {
+  --ground: #f7f8fc; --raised: #ffffff; --sunken: #eef0f7; --found: #f1f3f9;
+  --ink: #111420; --ink-2: #525a78; --ink-3: #616a8a;
+  --line: #dde1ed; --line-strong: #6f7899;
+  --amber: #ffb454; --amber-ink: #0a0c14; --amber-text: #8a5a12; --amber-edge: #e89a35;
+  --mark: rgba(255, 180, 84, 0.16); --focus: #2563eb;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; color: var(--ink);
+}
+.vel button { font-family: inherit; cursor: pointer; }
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--ground); }
+
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--ground); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-act { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); }
+.ph-lead { margin-left: -10px; color: var(--ink); }
+.ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.ph-end { margin-right: -10px; display: flex; }
+
+.lh { flex: none; padding: 12px 16px 14px; }
+.lh p { margin: 0; font-size: 13px; line-height: 18px; color: var(--ink-3); }
+.lh p + p { margin: 4px 0 8px; color: var(--ink-2); }
+.track { height: 4px; border-radius: 2px; background: var(--line); }
+.tb { flex: none; display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.tb h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.tx { height: 44px; padding: 0; border: 0; background: none; color: var(--amber-text); font-size: 14px; font-weight: 500; }
+.bt { flex: none; display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--ink-3); }
+
+.rows { flex: 1; min-height: 0; overflow: hidden; }
+.sec { flex: none; margin: 0; padding: 14px 16px 6px; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.sec span { font-weight: 400; letter-spacing: 0; }
+.found { background: var(--found); border-bottom: 1px solid var(--line); }
+.found .sec { border-bottom: 1px solid var(--line); margin: 0 0 0 0; }
+
+.lb { display: flex; align-items: center; gap: 12px; height: 68px; box-sizing: border-box; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.lb:last-child { border-bottom: 0; }
+.th { flex: none; width: 44px; height: 44px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--sunken); display: flex; align-items: center; justify-content: center; color: var(--ink-3); }
+.th.empty { border: 1.5px dashed var(--line-strong); background: transparent; color: var(--amber-text); }
+.settle { flex: none; width: 24px; height: 24px; box-sizing: border-box; border: 1.5px solid var(--line-strong); border-radius: 999px; }
+.lt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.l1 { display: flex; align-items: baseline; gap: 8px; font-size: 16px; line-height: 22px; }
+.l1 .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l1 .nm.lbl { font-weight: 550; }
+.l1 .np { flex: none; margin-left: auto; font-size: 13px; color: var(--ink-3); }
+.l2 { font-size: 13px; line-height: 18px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l2.ask { color: var(--amber-text); font-weight: 550; }
+mark { background: var(--mark); color: inherit; border-radius: 4px; padding: 0 1px; }
+.qw { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.qty { flex: none; width: 52px; height: 40px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.qty.took { border: 1.5px solid var(--amber-edge); color: var(--amber-text); }
+.times { font-size: 11px; line-height: 12px; color: var(--ink-3); }
+.plus1 { flex: none; font-size: 14px; font-weight: 650; color: var(--amber-text); font-variant-numeric: tabular-nums; }
+
+.card { padding: 12px 16px 0; border-bottom: 1px solid var(--line); }
+.ct { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
+.ct .th { width: 52px; height: 52px; border-radius: 12px; }
+.round { flex: none; width: 44px; height: 44px; box-sizing: border-box; border: 1.5px solid var(--line-strong); border-radius: 999px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.held { margin-left: 64px; padding: 8px 0 12px; border-top: 1px solid var(--line); }
+.held p { margin: 0 0 6px; font-size: 12px; color: var(--ink-3); }
+.hr { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+.stp { display: flex; align-items: center; gap: 14px; height: 40px; padding: 0 12px; border: 1.5px solid var(--amber); border-radius: 999px; background: rgba(255, 180, 84, 0.1); color: var(--ink-2); }
+.stp b { color: var(--amber-text); font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.composer { flex: none; display: flex; align-items: center; gap: 8px; height: 72px; box-sizing: border-box; padding: 0 12px 0 8px; border-top: 1px solid var(--line); background: var(--ground); }
+.field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; border-radius: 14px; background: var(--sunken); font-size: 16px; color: var(--ink-3); }
+.field.typed { color: var(--ink); outline: 2px solid var(--focus); outline-offset: 0; justify-content: space-between; }
+.field .x { display: flex; color: var(--ink-2); }
+.qstep { flex: none; display: flex; align-items: center; gap: 18px; height: 46px; padding: 0 16px; border-radius: 999px; background: var(--sunken); color: var(--ink-2); font-size: 15px; }
+.qstep b { color: var(--ink); font-weight: 500; }
+.send { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: var(--amber); color: var(--amber-ink); }
+.send.open { outline: 2px solid var(--focus); outline-offset: 2px; }
+.send.idle { background: rgba(255, 180, 84, 0.45); }
+.hint { flex: none; display: flex; align-items: baseline; gap: 6px; height: 30px; box-sizing: border-box; padding: 6px 16px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); background: var(--ground); }
+.hint b { font-weight: 600; color: var(--ink); }
+.hint .n { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+
+.nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--line); background: var(--ground); }
+.tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+.tab.on { background: rgba(255, 180, 84, 0.18); color: var(--amber-text); }
+.badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--amber-text); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+/* the popover, held against the plus as the basket's list picker is (anchored-popover) */
+.pop { position: absolute; right: 12px; bottom: 80px; width: 318px; box-sizing: border-box; padding: 14px 0 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); box-shadow: 0 2px 4px rgba(17, 20, 31, 0.05), 0 14px 32px rgba(17, 20, 31, 0.14); }
+.pop h3 { margin: 0; padding: 0 16px; font-size: 16px; line-height: 22px; font-weight: 600; }
+.pop .sub { margin: 4px 0 0; padding: 0 16px; font-size: 14px; line-height: 20px; color: var(--ink-2); }
+.pop .acts { display: flex; justify-content: flex-end; gap: 4px; padding: 10px 8px 4px; }
+.pb { height: 44px; padding: 0 14px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-2); font-size: 15px; font-weight: 500; }
+.pb.go { background: var(--amber); color: var(--amber-ink); font-weight: 600; }
+.pr { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; box-sizing: border-box; padding: 8px 16px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; color: var(--ink); }
+.pr:first-of-type { margin-top: 10px; }
+.pr .th { width: 36px; height: 36px; border-radius: 9px; }
+.pr .lt { gap: 1px; }
+.pr .l1 { font-size: 15px; line-height: 20px; }
+.pr .to { flex: none; font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pr .to b { color: var(--ink); font-weight: 650; }
+.pr.new .l1 { color: var(--amber-text); font-weight: 600; }
+.pr.list { min-height: 64px; }
+.pr.list .l1 { font-size: 18px; line-height: 24px; }
+.pr .has { flex: none; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.back { display: flex; align-items: center; gap: 2px; height: 32px; margin: -6px 0 4px 6px; padding: 0 8px 0 4px; border: 0; background: none; color: var(--ink-2); font-size: 13px; }
+.dim { position: absolute; inset: 0; background: rgba(17, 20, 31, 0.06); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</helmet>
+<div class="vel phone"><header class="ph"><button class="ph-act ph-lead" type="button" aria-label="Back to Casa"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button><h1 class="ph-title">Compra semanal</h1><div class="ph-end"><button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2.6"></circle><circle cx="12" cy="12" r="6.4"></circle><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"></path></svg></button></div></header><div class="rows"><div class="found"><h2 class="sec">On your list <span>· 2</span></h2><div class="lb"><span class="th" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><div class="lt"><div class="l1"><span class="nm lbl"><mark>Leche entera</mark></span><span class="np">No price</span></div><div class="l2">Hacendado · 9000 ml</div></div><span class="qty">2</span></div><div class="lb"><span class="th" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><div class="lt"><div class="l1"><span class="nm"><mark>Leche entera</mark></span><span class="np">No price</span></div><div class="l2">La Vaquera · 1000 ml</div></div><span class="qty">1</span></div></div><h2 class="sec">From the catalog</h2><div class="card"><div class="ct"><span class="th" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><div class="lt"><div class="l1"><span class="nm">Leche entera</span><span class="np">no price</span></div><div class="l2">Hacendado · 9000 ml</div></div><button class="round" type="button" aria-label="Add Leche entera, Hacendado · 9000 ml"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><div class="held"><p>On Compra semanal</p><div class="hr"><span>Leche entera</span><span class="stp">−<b>2</b>+</span></div></div></div><div class="card"><div class="ct"><span class="th" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><div class="lt"><div class="l1"><span class="nm">Leche entera</span><span class="np">no price</span></div><div class="l2">La Vaquera · 1000 ml</div></div><button class="round" type="button" aria-label="Add Leche entera, La Vaquera · 1000 ml"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><div class="held"><p>On Compra semanal</p><div class="hr"><span>Leche entera</span><span class="stp">−<b>1</b>+</span></div></div></div></div><div class="composer"><span class="field typed">Leche entera<span class="x"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></span><span class="qstep" aria-label="Quantity">−<b>1</b>+</span><button class="send open" type="button" aria-label="Add"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button></div><div class="dim"></div><div class="pop" role="dialog" aria-labelledby="mc-t"><h3 id="mc-t">Leche entera is already on your list</h3><button class="pr" type="button"><span class="th" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><span class="lt"><span class="l1"><span class="nm">Leche entera</span></span><span class="l2">Hacendado · 9000 ml</span></span><span class="to" aria-label="from 2 to 3">2 → <b>3</b></span></button><button class="pr" type="button"><span class="th" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><span class="lt"><span class="l1"><span class="nm">Leche entera</span></span><span class="l2">La Vaquera · 1000 ml</span></span><span class="to" aria-label="from 1 to 2">1 → <b>2</b></span></button><button class="pr new" type="button"><span class="th empty" aria-hidden="true" style="border-width:1.5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span><span class="lt"><span class="l1">A new line</span></span></button></div></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
