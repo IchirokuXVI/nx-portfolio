@@ -21,8 +21,8 @@ const VERIFIER_BYTES = 32;
  * somebody else made lands on that page in a browser that holds no verifier, so it signs
  * nobody in and replaces nobody's session.
  *
- * Nothing calls {@link start} yet. Offering the button is a separate decision, and this
- * class is what makes it one line on each page that offers it.
+ * The Google button on sign in, register and the front door calls {@link start}, and
+ * each page shows a refused start in its own way.
  *
  * Installed by `VELISTA_DATA_ACCESS_PROVIDERS` and not at the root (rule D5): it reaches
  * `ApiUrl` and `AuthApi`, which only the app injector holds.

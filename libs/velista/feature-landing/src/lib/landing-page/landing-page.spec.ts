@@ -5,11 +5,18 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { AccountNotice } from '@portfolio/velista/data-access';
+import {
+  AccountNotice,
+  GatewayError,
+  GoogleSignIn,
+  NetworkError,
+} from '@portfolio/velista/data-access';
 import { APP_KEY } from '@portfolio/velista/models';
 import {
+  APP_RUNTIME,
   BackendReadiness,
   provideVelistaTesting,
+  type AppRuntime,
 } from '@portfolio/velista/platform';
 import { LandingPage } from './landing-page';
 
@@ -53,6 +60,8 @@ interface Options {
    * gate's own specs pass false and assert that they are held.
    */
   readonly backendReady?: boolean;
+  readonly google?: { readonly start: jest.Mock };
+  readonly runtime?: AppRuntime;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -60,6 +69,7 @@ async function render(options: Options = {}): Promise<{
   store: FakeLocaleStore;
   router: { navigate: jest.Mock };
   notice: AccountNotice;
+  google: { readonly start: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -75,6 +85,9 @@ async function render(options: Options = {}): Promise<{
   // lives in `feature-shell`, which this library must not import, so a real router
   // here could only be given an empty table and would answer "no route matched".
   const router = { navigate: jest.fn().mockResolvedValue(true) };
+  const google = options.google ?? {
+    start: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [LandingPage, RokuTranslatorTestingModule.forTesting()],
@@ -87,6 +100,8 @@ async function render(options: Options = {}): Promise<{
       AccountNotice,
       { provide: RokuLocaleStore, useValue: store },
       { provide: Router, useValue: router },
+      { provide: GoogleSignIn, useValue: google },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
       {
         provide: ActivatedRoute,
         useValue: { parent: options.withParent === false ? null : parent },
@@ -110,7 +125,7 @@ async function render(options: Options = {}): Promise<{
   const fixture = TestBed.createComponent(LandingPage);
   fixture.detectChanges();
 
-  return { fixture, store, router, notice };
+  return { fixture, store, router, notice, google };
 }
 
 function query(fixture: ComponentFixture<LandingPage>, selector: string) {
@@ -276,22 +291,105 @@ describe('LandingPage', () => {
       );
     });
 
-    it('still only records where Google is meant to go', async () => {
-      // The one control here that plan 0009 deliberately left unwired, and not for a
-      // frontend reason: the gateway's callback answers JSON rather than redirecting
-      // into the app, and it never passes `linkUserId` (section 5.6). The recording is
-      // what will make connecting it one line.
-      const { fixture } = await render();
+    describe('Google (velista 0171)', () => {
+      function googleButton(fixture: ComponentFixture<LandingPage>) {
+        return query(
+          fixture,
+          'lib-auth-actions button.google'
+        ) as HTMLButtonElement | null;
+      }
 
-      const buttons = queryAll(
-        fixture,
-        'lib-auth-actions button'
-      ) as HTMLButtonElement[];
-      buttons[2]?.click();
+      it('starts the sign in, which sends the document to the gateway', async () => {
+        const { fixture, google, router } = await render();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'auth.google',
-      ]);
+        googleButton(fixture)?.click();
+        await fixture.whenStable();
+
+        expect(google.start).toHaveBeenCalledTimes(1);
+        expect(router.navigate).not.toHaveBeenCalled();
+      });
+
+      it('starts once however many times it is tapped while starting', async () => {
+        const { fixture, google } = await render({
+          google: { start: jest.fn(() => new Promise<void>(() => undefined)) },
+        });
+
+        googleButton(fixture)?.click();
+        googleButton(fixture)?.click();
+        fixture.detectChanges();
+
+        expect(google.start).toHaveBeenCalledTimes(1);
+        expect(googleButton(fixture)?.getAttribute('aria-busy')).toBe('true');
+      });
+
+      it('says a refused start under the buttons', async () => {
+        const { fixture } = await render({
+          google: {
+            start: jest.fn().mockRejectedValue(
+              new GatewayError({
+                code: 'not_configured',
+                status: 503,
+                correlationId: 'c1',
+              })
+            ),
+          },
+        });
+
+        googleButton(fixture)?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.googleError()).toBe(
+          'entry.error.failed'
+        );
+        expect(fixture.componentInstance.googleStarting()).toBe(false);
+        expect(
+          query(fixture, 'lib-auth-actions [role="status"]')
+        ).not.toBeNull();
+      });
+
+      it('names a support session as the reason it was refused', async () => {
+        const { fixture } = await render({
+          google: {
+            start: jest.fn().mockRejectedValue(
+              new GatewayError({
+                code: 'impersonation_not_allowed',
+                status: 403,
+                correlationId: 'c1',
+              })
+            ),
+          },
+        });
+
+        await fixture.componentInstance.continueWithGoogle();
+
+        expect(fixture.componentInstance.googleError()).toBe('support.refused');
+      });
+
+      it('answers a lost connection with the general sentence', async () => {
+        const { fixture } = await render({
+          google: {
+            start: jest
+              .fn()
+              .mockRejectedValue(new NetworkError('c1', 'auth.google')),
+          },
+        });
+
+        await fixture.componentInstance.continueWithGoogle();
+
+        expect(fixture.componentInstance.googleError()).toBe(
+          'entry.error.failed'
+        );
+      });
+
+      /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
+      it('is not drawn in the native shell, divider included', async () => {
+        const { fixture } = await render({ runtime: 'native' });
+
+        expect(googleButton(fixture)).toBeNull();
+        expect(query(fixture, 'lib-auth-actions .divider')).toBeNull();
+        expect(queryAll(fixture, 'lib-auth-actions button')).toHaveLength(3);
+      });
     });
 
     /**
@@ -301,7 +399,9 @@ describe('LandingPage', () => {
      */
     describe('while the backend has not answered', () => {
       it('holds the four ways in without disabling them', async () => {
-        const { fixture, router } = await render({ backendReady: false });
+        const { fixture, router, google } = await render({
+          backendReady: false,
+        });
 
         const buttons = queryAll(
           fixture,
@@ -317,7 +417,7 @@ describe('LandingPage', () => {
         }
 
         expect(router.navigate).not.toHaveBeenCalled();
-        expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
+        expect(google.start).not.toHaveBeenCalled();
       });
 
       // `!== 'ready'`, so an answered probe that could not reach the backend holds

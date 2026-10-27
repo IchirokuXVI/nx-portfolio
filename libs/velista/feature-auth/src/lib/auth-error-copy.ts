@@ -18,7 +18,9 @@ export type AuthOperation =
   // what reaches this table is a 400 on the address, too many tries, or a failure.
   | 'auth.forgotPassword'
   | 'auth.resetPassword'
-  | 'auth.recoverySignIn';
+  | 'auth.recoverySignIn'
+  // Starting a Google sign in, which only mints a state before the document leaves.
+  | 'auth.google';
 
 /** Where a message belongs, which is the only thing the three screens differ on. */
 export type AuthErrorPlacement = 'pair' | 'email' | 'password';
@@ -104,6 +106,13 @@ export function authErrorCopy(
     case 'auth.forgotPassword':
     case 'auth.resetPassword':
     case 'auth.recoverySignIn':
+      return GENERIC;
+
+    case 'auth.google':
+      // Nothing the person typed is involved, so nothing here is about a field. An
+      // `unauthorized` is a guest token the interceptor could not refresh, and
+      // `not_configured` is a gateway with no Google client: neither is something to
+      // explain, and both are worth one more tap (velista `0171`).
       return GENERIC;
   }
 }

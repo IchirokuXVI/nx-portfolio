@@ -56,10 +56,10 @@ const ERROR_ID = 'upgrade-error';
  * than hiding it, because the alternative is a form with no visible reason to fill it
  * in.
  *
- * There is no Google button here, and that is deliberate: until the gateway reads the
- * bearer token and passes `linkUserId`, Continue with Google would mint a fresh
- * registered user and lose exactly the groups this screen is promising to keep
- * (section 5.6).
+ * There is no Google button here. Since backend `0230` a guest who continues with
+ * Google from sign in, register or the front door is linked in place and keeps every
+ * group, so losing them is no longer the reason. Offering it on this screen as well is
+ * a separate decision that nobody has taken.
  */
 @Component({
   selector: 'lib-upgrade-page',

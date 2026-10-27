@@ -65,8 +65,19 @@
     </button>
   </div>
 
-  @if (googleOffered()) {
-    <lib-google-option (continueWithGoogle)="continueWithGoogle()" />
+  @if (googleOffered) {
+    <lib-google-option
+      (continueWithGoogle)="continueWithGoogle()"
+      [busy]="googleStarting()"
+      [describedBy]="googleError() === null ? null : googleErrorId"
+    />
+
+    @if (googleError(); as rejection) {
+      <lib-form-error
+        [message]="rejection.key | rokuT"
+        [messageId]="googleErrorId"
+      />
+    }
   }
 
   <p authFooter class="footer">

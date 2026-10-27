@@ -14,11 +14,15 @@ import {
 import {
   AccountNotice,
   AUTH_SERVICE,
-  SessionStore,
+  GoogleSignIn,
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import {
+  APP_RUNTIME,
+  appPath,
+  PageNavigation,
+} from '@portfolio/velista/platform';
 import {
   AuthScreen,
   EmailField,
@@ -32,6 +36,7 @@ import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
 import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 
 const ERROR_ID = 'register-error';
+const GOOGLE_ERROR_ID = 'register-google-error';
 
 /**
  * Something, an @, something, a dot, something, with no spaces (velista `0160`).
@@ -100,7 +105,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 })
 export class RegisterPage {
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
-  private readonly _session = inject(SessionStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _notice = inject(AccountNotice);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
@@ -114,6 +119,7 @@ export class RegisterPage {
   );
 
   readonly errorId = ERROR_ID;
+  readonly googleErrorId = GOOGLE_ERROR_ID;
   readonly minPasswordLength = PASSWORD_MIN_LENGTH;
 
   readonly email = signal('');
@@ -144,8 +150,14 @@ export class RegisterPage {
       !this.submitting()
   );
 
-  /** Never to a guest. See the same computed on `SignInPage` for why it matters. */
-  readonly googleOffered = computed(() => !this._session.isGuest());
+  /** Everywhere but the native shell. See the same field on `SignInPage`. */
+  readonly googleOffered = inject(APP_RUNTIME) !== 'native';
+
+  /** See `SignInPage.googleStarting`. */
+  readonly googleStarting = signal(false);
+
+  /** See `SignInPage.googleError`. */
+  readonly googleError = signal<AuthErrorCopy | null>(null);
 
   /** See `SignInPage.onSubmit` for why this is `(submit)` and not `(ngSubmit)`. */
   onSubmit(event: Event): void {
@@ -238,10 +250,21 @@ export class RegisterPage {
     );
   }
 
-  readonly pendingRoutes = signal<readonly string[]>([]);
+  /** See `SignInPage.continueWithGoogle`, which this is the same as. */
+  async continueWithGoogle(): Promise<void> {
+    if (this.googleStarting()) {
+      return;
+    }
 
-  continueWithGoogle(): void {
-    this.pendingRoutes.update((current) => [...current, 'auth.google']);
+    this.googleStarting.set(true);
+    this.googleError.set(null);
+
+    try {
+      await this._google.start();
+    } catch (error) {
+      this.googleStarting.set(false);
+      this.googleError.set(authErrorCopy(error, 'auth.google'));
+    }
   }
 
   private _focusFirstField(): void {
