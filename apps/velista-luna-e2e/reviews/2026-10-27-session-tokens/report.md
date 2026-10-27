@@ -9,7 +9,7 @@ How to read this file as a builder: each finding in section 5 names the files an
 - Reviewed on the `fix/velista-basket-search-duplicates` checkout, 240 commits behind `origin/dev`. Both reviewers compared the two: every auth, token, gateway auth, interceptor and realtime server file is identical on both. Files that differ were read from `origin/dev`. All line numbers below are for those files.
 - Two reviewers read the whole system in parallel, one for correctness, concurrency and failure handling, one for security and abuse. Neither saw the other's work. The lead merged the reports, checked each finding against the code, and did the cross-boundary trace in section 4.
 - One test writer chose and ran eleven checks against a live local stack: a worktree reset to `origin/dev` at 83f982bd1, an ephemeral Luna slot 4 (gateway on 43300) and velista on slot 1 (42005). A second round settled one question with a script and no stack. Both slots were taken down afterwards.
-- No production or staging access was used. No pull request was opened.
+- No production or staging access was used. The work landed as pull request [#844](https://github.com/IchirokuXVI/nx-portfolio/pull/844) into `dev`.
 - Anything marked [unverified] was inferred and not observed.
 
 ## 2. The lifecycle as the code implements it
@@ -232,7 +232,7 @@ Each finding names its reviewer: A (correctness), B (security), both, or lead (t
 
 ## 7. Test battery
 
-Branch `worktree-review-session-tokens`, based on `origin/dev` at 83f982bd1, pushed. The spec is `apps/velista-luna-e2e/reviews/2026-10-27-session-tokens/session-tokens.spec.ts`, beside this report and a `playwright.config.ts` that runs the folder on its own, outside the staging gate. No pull request was opened. Refreshes were forced by rewriting the `exp` of the stored access token to the past. Pages were signed in through `storageState` on `session:velista`.
+Branch `worktree-review-session-tokens`, based on `origin/dev` at 83f982bd1, pushed. The spec is `apps/velista-luna-e2e/reviews/2026-10-27-session-tokens/session-tokens.spec.ts`, beside this report and a `playwright.config.ts` that runs the folder on its own, outside the staging gate. The pull request is [#844](https://github.com/IchirokuXVI/nx-portfolio/pull/844). Refreshes were forced by rewriting the `exp` of the stored access token to the past. Pages were signed in through `storageState` on `session:velista`.
 
 | Test | Invariant | Result | What the failure shows |
 |---|---|---|---|
