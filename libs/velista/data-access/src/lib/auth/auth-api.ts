@@ -257,6 +257,61 @@ export class AuthApi implements AuthServiceI {
   }
 
   /**
+   * `POST /v1/auth/google/state` (backend `0230`): mint the state of a Google sign in
+   * for this challenge, and answer it.
+   *
+   * The ordinary context, so the interceptor decides: a held bearer goes out and the
+   * state carries the guest it would link, and with no session the request goes out
+   * bare. A 401 refreshes and retries as on any other route. An answer with no string
+   * `state` rejects (rule D4).
+   */
+  async mintGoogleState(codeChallenge: string): Promise<string> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/state'),
+        { codeChallenge },
+        { context: operation('auth.googleState') }
+      )
+    );
+
+    const state = str(isRecord(body) ? body['state'] : null);
+    if (state === null) {
+      throw new Error('auth.googleState returned no state');
+    }
+
+    return state;
+  }
+
+  /**
+   * `POST /v1/auth/google/exchange` (backend `0230`): trade the code the callback
+   * carried and the verifier this tab kept for the pair.
+   *
+   * **Never anonymous.** A guest who links presents their bearer, and the server refuses
+   * the link without it, so the interceptor sends it and refreshes first when it has
+   * expired. The pair is mapped with `toSessionTokens` and handed back, not stored: the
+   * callback page stores it, because the page is what decides that the flow ended here.
+   */
+  async exchangeGoogleCode(
+    code: string,
+    codeVerifier: string
+  ): Promise<SessionTokens> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/exchange'),
+        { code, codeVerifier },
+        { context: operation('auth.googleExchange') }
+      )
+    );
+
+    const tokens = toSessionTokens(body);
+    if (tokens === null) {
+      throw new Error('auth.googleExchange returned an unusable token pair');
+    }
+
+    return tokens;
+  }
+
+  /**
    * Rule D4: the answer is `unknown` until it is read here.
    *
    * A pair is stored only with `SIGNED_IN`, and an answer this app cannot read is a

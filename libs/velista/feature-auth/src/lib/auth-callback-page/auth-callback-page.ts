@@ -1,42 +1,58 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
-import { TokenStore, toSessionTokens } from '@portfolio/velista/data-access';
+import {
+  AuthApi,
+  GOOGLE_VERIFIER_KEY,
+  TokenStore,
+} from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, BrowserFacade } from '@portfolio/velista/platform';
 import { SpinnerIcon } from '@portfolio/velista/ui';
 
 /**
- * Where the Google exchange will land, once the gateway redirects instead of
- * answering JSON.
+ * Where a Google sign in comes back (velista `0171`, backend `0230`).
  *
- * ## It is built now and does nothing yet
+ * The gateway's callback redirects here with `#code=…` on success and `#error=…` on a
+ * failure. The code is worth nothing alone: this page trades it, with the verifier that
+ * `GoogleSignIn.start()` kept in this tab's session storage, through
+ * `POST /v1/auth/google/exchange`, stores the pair from the **body** of that answer,
+ * and goes home. Anything else goes to the front door: no fragment, an error, no code,
+ * no verifier, or an exchange the server refused.
  *
- * `GoogleController.callback` returns `Promise<AuthTokens>`, so a browser that followed
- * the OAuth redirect lands on a page of JSON with no way back into the app. It needs to
- * **302 to this route with the pair in the URL fragment**. That is a gateway change and
- * the only one this page is waiting on (plan 0009, section 5.6, item 1).
+ * ## It stores nothing from the URL
  *
- * Without a fragment it is inert: it reads nothing, stores nothing, and sends the
- * visitor to the front door, which is where somebody who arrived here by accident
- * belongs. Building it now costs one file and means wiring Google later is this page
- * plus removing one condition from a button.
+ * A pair in a fragment is not read, mapped or written, whatever its shape. That is the
+ * point of the code and the verifier: a link that somebody else made carries a code
+ * their browser was given, lands in a browser that holds no verifier for it, posts
+ * nothing, and leaves the session held here as it was. Without that, a link was enough
+ * to sign a guest into another account and lose their groups (finding F8 of the session
+ * token review of 2026-10-27).
+ *
+ * ## The verifier is spent before the request
+ *
+ * It is removed from session storage as soon as it is read, so a reload of this page
+ * cannot post the same verifier twice, and it is gone whether the exchange succeeds or
+ * fails. The server burns the code on a wrong verifier, so a second try would fail
+ * anyway.
  *
  * ## Why the fragment and not a query string
  *
- * A query string is sent to the server and written into its logs, and these are live
- * credentials. A fragment never leaves the browser. That is also why this page consumes
- * it and navigates away immediately rather than leaving it in the address bar.
+ * A query string is sent to the server and written into its logs. A fragment never
+ * leaves the browser. The code is short lived and single use, and it is still read from
+ * the fragment and replaced at once: both navigations out of this page replace its
+ * history entry, so no back step returns to a URL that held it.
  *
- * ## The other half is not this page's problem, and is the dangerous half
- *
- * The callback sends `{ ...profile }` and nothing else, while
- * `GoogleLoginRequest.linkUserId` is what makes `googleLogin` call `upgrade()` and
- * convert the caller in place. Without it a guest tapping Continue with Google is
- * handed a **fresh registered user** and loses every group, exactly as rule C2
- * describes for register. Until that lands the button is not offered to a guest at all,
- * which is a condition on the button and an acceptance criterion of its own.
+ * The exchange goes out in the ordinary context: a guest who links presents their
+ * bearer, and the interceptor sends it, refreshing first when it has expired.
  */
+/**
+ * Both ways out replace the callback's entry in the history, so no back step returns
+ * to a URL that carried a fragment. Without it, the front door's own redirect left the
+ * callback URL one step behind home (test 7 of the review battery, on a slot).
+ */
+const LEAVE = { replaceUrl: true } as const;
+
 @Component({
   selector: 'lib-auth-callback-page',
   imports: [SpinnerIcon],
@@ -46,6 +62,8 @@ import { SpinnerIcon } from '@portfolio/velista/ui';
 })
 export class AuthCallbackPage {
   private readonly _tokens = inject(TokenStore);
+  private readonly _api = inject(AuthApi);
+  private readonly _browser = inject(BrowserFacade);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -56,38 +74,62 @@ export class AuthCallbackPage {
   }
 
   private async _consume(): Promise<void> {
-    const tokens = this._fragmentTokens();
+    const code = this._fragmentCode();
+    if (code === null) {
+      await this._toFrontDoor();
+      return;
+    }
 
-    if (tokens === null) {
-      await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+    const verifier = this._browser.readSessionStorage(GOOGLE_VERIFIER_KEY);
+    this._browser.removeSessionStorage(GOOGLE_VERIFIER_KEY);
+    if (verifier === null || verifier === '') {
+      await this._toFrontDoor();
+      return;
+    }
+
+    let tokens;
+    try {
+      tokens = await this._api.exchangeGoogleCode(code, verifier);
+    } catch {
+      // A refusal, `not_configured` or a network error. The front door is the floor; a
+      // later plan can say why.
+      await this._toFrontDoor();
       return;
     }
 
     this._tokens.set(tokens);
     await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
+      appPath(this._locale(), this._basePath, 'home'),
+      LEAVE
     );
   }
 
   /**
-   * The pair out of the fragment, or null.
+   * The `code` of the fragment, or null when there is none or the fragment names an
+   * `error`. Reads nothing else.
    *
-   * Read through `ActivatedRoute.fragment` rather than `location.hash`, so no browser
-   * global is touched (rule D2) and the value is whatever the router parsed.
-   *
-   * Rule D4 applies with full force: this is an unauthenticated redirect target, so
-   * the fragment is attacker-controllable in the sense that anybody can put anything in
-   * it. `toSessionTokens` is what stops a half-formed pair being written, and a pair
-   * that cannot be mapped is treated as no pair at all rather than as an error worth a
-   * screen.
+   * Through `ActivatedRoute` rather than `location.hash`, so no browser global is
+   * touched (rule D2).
    */
-  private _fragmentTokens() {
+  private _fragmentCode(): string | null {
     const fragment = this._route.snapshot.fragment;
     if (fragment === null || fragment === '') {
       return null;
     }
 
     const params = new URLSearchParams(fragment);
-    return toSessionTokens(Object.fromEntries(params.entries()));
+    if (params.has('error')) {
+      return null;
+    }
+
+    const code = params.get('code');
+    return code === null || code === '' ? null : code;
+  }
+
+  private async _toFrontDoor(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath),
+      LEAVE
+    );
   }
 }

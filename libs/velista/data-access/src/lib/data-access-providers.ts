@@ -4,7 +4,9 @@ import { ProfileStore } from './account/profile-store';
 import { ApiUrl } from './api-url';
 import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
+import { AuthApi } from './auth/auth-api';
 import { AuthMemory } from './auth/auth-memory';
+import { GoogleSignIn } from './auth/google-sign-in';
 import { ImpersonationSession } from './auth/impersonation-session';
 import { PendingRecoveryLink } from './auth/pending-recovery-link';
 import { SessionStore } from './auth/session-store';
@@ -210,7 +212,15 @@ import { ZoneStore } from './zones/zone-store';
  *
  * `CatalogBrowseMemory` (velista `0100`) joins for `ShopMemory`'s reason exactly. The
  * catalog tab holds its query, chain and pages on the page itself, so there is no store
- * to list here, and `CatalogBrowseApi` stays out like every other real transport.
+ * to list here, and `CatalogBrowseApi` stays out like every other real transport. *
+ * `GoogleSignIn` (velista `0171`) joins for `ApiUrl`'s reason: it reaches `ApiUrl`. It
+ * reaches `AuthApi` by class too, for the two Google calls that are not on
+ * `AuthServiceI`, and `appProviders` binds `AUTH_SERVICE` with `useClass`, which
+ * provides the class only behind the token. So `AuthApi` is listed here as well. That
+ * chooses no transport: `AUTH_SERVICE` is still bound by the app alone, and the instance
+ * here is a second one beside the token's, which costs nothing because `AuthApi` holds
+ * no state of its own. The Google flow has no in-memory twin, because a redirect to
+ * Google has nothing to fake.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -268,4 +278,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   StartupProbe,
   SessionValidation,
   ImpersonationSession,
+  AuthApi,
+  GoogleSignIn,
 ];
