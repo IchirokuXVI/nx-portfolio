@@ -10,6 +10,7 @@ export * from './lib/auth/account-notice';
 export * from './lib/auth/auth-api';
 export * from './lib/auth/auth-memory';
 export * from './lib/auth/auth-service';
+export * from './lib/auth/google-sign-in';
 export * from './lib/auth/http-context';
 export * from './lib/auth/impersonation-session';
 export * from './lib/auth/pending-recovery-link';

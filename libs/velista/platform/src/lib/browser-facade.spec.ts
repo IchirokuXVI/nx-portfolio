@@ -276,6 +276,57 @@ describe('BrowserFacade', () => {
     });
   });
 
+  describe('the Google sign in primitives', () => {
+    let facade: BrowserFacade;
+
+    beforeEach(() => {
+      TestBed.configureTestingModule({});
+      facade = TestBed.inject(BrowserFacade);
+    });
+
+    it('answers the number of random bytes asked for', () => {
+      const getRandomValues = jest.fn((array: Uint8Array) => array.fill(7));
+      jest
+        .spyOn(facade, 'window', 'get')
+        .mockReturnValue({ crypto: { getRandomValues } } as unknown as Window &
+          typeof globalThis);
+
+      expect(facade.randomBytes(32)).toEqual(new Uint8Array(32).fill(7));
+      expect(getRandomValues).toHaveBeenCalledTimes(1);
+    });
+
+    it('digests through the browser, and rejects without crypto.subtle', async () => {
+      const digest = jest.fn().mockResolvedValue(new ArrayBuffer(32));
+      const spy = jest.spyOn(facade, 'window', 'get').mockReturnValue({
+        crypto: { subtle: { digest } },
+      } as unknown as Window & typeof globalThis);
+      const bytes = new Uint8Array([1, 2, 3]);
+
+      await expect(facade.sha256(bytes)).resolves.toBeInstanceOf(ArrayBuffer);
+      expect(digest).toHaveBeenCalledWith('SHA-256', bytes);
+
+      spy.mockReturnValue({ crypto: {} } as unknown as Window &
+        typeof globalThis);
+      await expect(facade.sha256(bytes)).rejects.toThrow();
+    });
+
+    // Unlike `replaceDocument`, the tab's session storage stays open: the start of a
+    // Google sign in has just written its verifier there.
+    it('assigns the document and keeps session storage writable', () => {
+      const assign = jest.fn();
+      jest
+        .spyOn(facade, 'location', 'get')
+        .mockReturnValue({ assign } as unknown as Location);
+
+      facade.assignDocument('/v1/auth/google?state=s');
+      facade.writeSessionStorage('after-assign:velista', '1');
+
+      expect(assign).toHaveBeenCalledWith('/v1/auth/google?state=s');
+      expect(sessionStorage.getItem('after-assign:velista')).toBe('1');
+      sessionStorage.removeItem('after-assign:velista');
+    });
+  });
+
   describe('on the server', () => {
     let facade: BrowserFacade;
 
@@ -300,6 +351,14 @@ describe('BrowserFacade', () => {
 
     it('never reports offline during a server render', () => {
       expect(facade.onLine()).toBe(true);
+    });
+
+    // Velista `0171`: a verifier that is not random is not a verifier, so the server
+    // path refuses rather than answering an empty array.
+    it('refuses random bytes and a digest, and assigns nothing', async () => {
+      expect(() => facade.randomBytes(32)).toThrow();
+      await expect(facade.sha256(new Uint8Array([1]))).rejects.toThrow();
+      expect(() => facade.assignDocument('/v1/auth/google')).not.toThrow();
     });
   });
 });

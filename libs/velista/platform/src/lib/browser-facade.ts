@@ -393,6 +393,51 @@ export class BrowserFacade {
   }
 
   /**
+   * `length` random bytes from the browser's cryptographic generator (velista `0171`).
+   *
+   * **Throws on the server.** A Google sign in verifier is the one caller, and a
+   * verifier that is not random is not a verifier: an empty or predictable array would
+   * make one quietly, so the absence of a generator is an error the caller sees.
+   */
+  randomBytes(length: number): Uint8Array<ArrayBuffer> {
+    const crypto = this.window?.crypto;
+    if (!crypto) {
+      throw new Error('randomBytes needs a browser');
+    }
+    return crypto.getRandomValues(new Uint8Array(length));
+  }
+
+  /**
+   * The SHA-256 digest of `bytes` (velista `0171`), for the challenge of a Google sign
+   * in. Rejects on the server, and where the page is not a secure context and the
+   * browser offers no `crypto.subtle`.
+   */
+  async sha256(bytes: Uint8Array<ArrayBuffer>): Promise<ArrayBuffer> {
+    const subtle = this.window?.crypto?.subtle;
+    if (!subtle) {
+      throw new Error('sha256 needs a browser');
+    }
+    return subtle.digest('SHA-256', bytes);
+  }
+
+  /**
+   * Leave this document for a new one at `url`, and keep this one in the history
+   * (velista `0171`).
+   *
+   * Two differences from {@link replaceDocument}, and each is why it exists. The back
+   * button on the page it goes to returns here: from Google's consent screen that is
+   * the sign in page somebody tapped. And the session storage of this tab stays open,
+   * because the start of a Google sign in has just written its verifier there and the
+   * callback page reads it in the next document. A no-op on the server.
+   */
+  assignDocument(url: string): void {
+    if (this._leaving) {
+      return;
+    }
+    this.location?.assign(url);
+  }
+
+  /**
    * Leave this document for a new one at `url`, with no entry left behind in the
    * history.
    *

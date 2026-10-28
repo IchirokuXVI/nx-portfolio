@@ -1,3 +1,5 @@
+> **PR:** [#849](https://github.com/IchirokuXVI/nx-portfolio/pull/849)
+
 # 0171: the callback page trades a code for the pair
 
 > Backend plan `0230` closes finding F2 of the session token review of 2026-10-27
