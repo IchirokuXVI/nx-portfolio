@@ -1,3 +1,5 @@
+> **PR:** [#853](https://github.com/IchirokuXVI/nx-portfolio/pull/853)
+
 # 0229: a refresh whose answer was lost keeps the session
 
 > The session token review of 2026-10-27
