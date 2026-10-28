@@ -97,6 +97,8 @@ function build(users: Row[] = []) {
       accessToken: 'a',
       refreshToken: 'r',
     })),
+    // An upgrade ends the other sessions of the account (plan 0230).
+    revokeAllForUser: jest.fn(async () => undefined),
   };
   const events = {
     userRegistered: jest.fn(),

@@ -426,6 +426,14 @@ export type CreateZoneDto = {
 };
 
 /**
+ * `ExchangeGoogleSignInDto` in the gateway's OpenAPI document.
+ */
+export type ExchangeGoogleSignInDto = {
+  code: string;
+  codeVerifier: string;
+};
+
+/**
  * `ExchangeImpersonationDto` in the gateway's OpenAPI document.
  */
 export type ExchangeImpersonationDto = {
@@ -566,6 +574,13 @@ export type LookupItemsDto = {
  */
 export type MapSourceLocationDto = {
   supermarketLocationId: string;
+};
+
+/**
+ * `MintOAuthStateDto` in the gateway's OpenAPI document.
+ */
+export type MintOAuthStateDto = {
+  codeChallenge: string;
 };
 
 /**

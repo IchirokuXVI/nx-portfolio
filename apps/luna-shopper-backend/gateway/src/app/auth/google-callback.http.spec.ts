@@ -34,6 +34,9 @@ const profile: GoogleProfile = {
   displayName: 'A Person',
 };
 
+/** The single use code the callback puts in the fragment (plan 0230). */
+const STAGED_CODE = 'staged-code';
+
 const pair = {
   userId: 'u1',
   kind: UserKind.REGISTERED,
@@ -56,8 +59,14 @@ async function boot(withProfile: boolean) {
         useValue: {
           send: jest.fn(async (subject: string) =>
             subject === AUTH_PATTERNS.consumeOAuthState
-              ? { userId: 'guest-1', locale: 'en' }
-              : pair
+              ? {
+                  userId: 'guest-1',
+                  locale: 'en',
+                  codeChallenge: 'lgghW2CGVJuIAQbifjAcK_8CsFoeysR6G6EYjaO0E8c',
+                }
+              : subject === AUTH_PATTERNS.stageGoogleSignIn
+                ? { code: STAGED_CODE }
+                : pair
           ),
         },
       },
@@ -110,10 +119,10 @@ describe('GET /auth/google/callback over HTTP', () => {
     }
   });
 
-  it('puts the token pair in the header and nowhere else', async () => {
-    // The assertion with something to lose. Express writes `Found. Redirecting
-    // to <url>` as the body of a redirect, url and all, so the courtesy body was
-    // a copy of the refresh token in a response body on this origin.
+  it('puts the code in the header and nowhere else', async () => {
+    // Express writes `Found. Redirecting to <url>` as the body of a redirect,
+    // url and all, so a courtesy body would be a copy of the code in a
+    // response body on this origin.
     const { nest, origin } = await boot(true);
     try {
       const res = await fetch(`${origin}/auth/google/callback?code=c&state=s`, {
@@ -122,10 +131,30 @@ describe('GET /auth/google/callback over HTTP', () => {
       const body = await res.text();
 
       expect(res.status).toBe(302);
-      expect(res.headers.get('location')).toContain(pair.refreshToken);
       expect(body).toBe('');
-      expect(body).not.toContain(pair.refreshToken);
-      expect(body).not.toContain(pair.accessToken);
+      expect(body).not.toContain(STAGED_CODE);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('carries the code in the fragment and no pair (plan 0230)', async () => {
+    // The pair leaves the URL. The app trades the code for it at the exchange,
+    // with the verifier only the minting browser holds.
+    const { nest, origin } = await boot(true);
+    try {
+      const res = await fetch(`${origin}/auth/google/callback?code=c&state=s`, {
+        redirect: 'manual',
+      });
+      const location = res.headers.get('location') ?? '';
+      const fragment = Object.fromEntries(
+        new URLSearchParams(location.split('#')[1] ?? '')
+      );
+
+      expect(fragment).toEqual({ code: STAGED_CODE });
+      expect(location).not.toContain('accessToken');
+      expect(location).not.toContain(pair.accessToken);
+      expect(location).not.toContain(pair.refreshToken);
     } finally {
       await nest.close();
     }

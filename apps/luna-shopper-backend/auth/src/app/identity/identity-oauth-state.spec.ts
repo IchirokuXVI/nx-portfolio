@@ -24,6 +24,9 @@ import { IdentityService } from './identity.service';
  * **your** account, and unlike a stolen access token that is permanent.
  */
 
+/** The S256 challenge of a fixed verifier. */
+const CHALLENGE = 'lgghW2CGVJuIAQbifjAcK_8CsFoeysR6G6EYjaO0E8c';
+
 type Row = Record<string, unknown>;
 
 /** An in memory repository double, one per entity. */
@@ -117,31 +120,39 @@ describe('minting an OAuth state', () => {
     const { state } = await service.mintOAuthState({
       userId: 'u1',
       locale: 'es',
+      codeChallenge: CHALLENGE,
     });
 
     await expect(service.consumeOAuthState({ state })).resolves.toEqual({
       userId: 'u1',
       locale: 'es',
+      codeChallenge: CHALLENGE,
     });
   });
 
   it('mints a state carrying nobody for a sign in from scratch', async () => {
     const { service } = build();
 
-    const { state } = await service.mintOAuthState({ locale: 'en' });
+    const { state } = await service.mintOAuthState({
+      locale: 'en',
+      codeChallenge: CHALLENGE,
+    });
 
     // Absent, not null: `OAuthStatePayload` says absent, and a `userId` of null
     // arriving at `googleLogin` as `linkUserId` would read as a link request for
     // nobody rather than as no link request at all.
     const payload = await service.consumeOAuthState({ state });
-    expect(payload).toEqual({ locale: 'en' });
+    expect(payload).toEqual({ locale: 'en', codeChallenge: CHALLENGE });
     expect('userId' in payload).toBe(false);
   });
 
   it('never stores the raw value', async () => {
     const { service, stores } = build();
 
-    const { state } = await service.mintOAuthState({ userId: 'u1' });
+    const { state } = await service.mintOAuthState({
+      userId: 'u1',
+      codeChallenge: CHALLENGE,
+    });
 
     // A database read must not yield a usable state. Only the hash is kept, so a
     // dump of this table is a list of values nobody can spend.
@@ -156,7 +167,10 @@ describe('minting an OAuth state', () => {
     const { service, stores } = build();
     const before = Date.now();
 
-    await service.mintOAuthState({ userId: 'u1' });
+    await service.mintOAuthState({
+      userId: 'u1',
+      codeChallenge: CHALLENGE,
+    });
     const after = Date.now();
 
     const expiresAt = (stores.states[0]['expiresAt'] as Date).getTime();
@@ -168,10 +182,14 @@ describe('minting an OAuth state', () => {
 describe('spending an OAuth state', () => {
   it('refuses the second attempt', async () => {
     const { service } = build();
-    const { state } = await service.mintOAuthState({ userId: 'u1' });
+    const { state } = await service.mintOAuthState({
+      userId: 'u1',
+      codeChallenge: CHALLENGE,
+    });
 
     await expect(service.consumeOAuthState({ state })).resolves.toEqual({
       userId: 'u1',
+      codeChallenge: CHALLENGE,
     });
 
     // The property the store exists to provide. A replayable state is a standing
@@ -183,7 +201,10 @@ describe('spending an OAuth state', () => {
 
   it('refuses one that has expired', async () => {
     const { service, stores } = build();
-    const { state } = await service.mintOAuthState({ userId: 'u1' });
+    const { state } = await service.mintOAuthState({
+      userId: 'u1',
+      codeChallenge: CHALLENGE,
+    });
 
     stores.states[0]['expiresAt'] = new Date(Date.now() - 1000);
 
@@ -212,7 +233,10 @@ describe('spending an OAuth state', () => {
 
   it('answers the same way whichever of those it was', async () => {
     const { service, stores } = build();
-    const { state } = await service.mintOAuthState({ userId: 'u1' });
+    const { state } = await service.mintOAuthState({
+      userId: 'u1',
+      codeChallenge: CHALLENGE,
+    });
     stores.states[0]['expiresAt'] = new Date(Date.now() - 1000);
 
     const expired = await service
@@ -243,7 +267,10 @@ describe('what a state is for', () => {
     // The gateway mints this holding the guest's token, and reads it back after
     // Google hands the browser over. Everything between the two is a redirect,
     // and nothing in a redirect can carry an Authorization header.
-    const { state } = await service.mintOAuthState({ userId: 'guest-1' });
+    const { state } = await service.mintOAuthState({
+      userId: 'guest-1',
+      codeChallenge: CHALLENGE,
+    });
     const payload = await service.consumeOAuthState({ state });
 
     expect(payload.userId).toBe('guest-1');

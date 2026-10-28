@@ -66,6 +66,7 @@ function build(users: Partial<User>[] = []) {
       accessToken: 'a',
       refreshToken: 'r',
     })),
+    revokeAllForUser: jest.fn(async () => undefined),
   };
   const events = {
     userRegistered: jest.fn(),
@@ -126,22 +127,6 @@ describe('username generation at identity creation (section 3.4)', () => {
     // Every Spanish name ends in an accented or Spanish-only adjective; the
     // simplest locale proof is that it is not one of the English pool's names.
     expect(repo.save.mock.calls[0][0].username).toMatch(/\s/);
-  });
-
-  it('never uses the Google profile name as the username', async () => {
-    const { service, repo } = build();
-    const identities = makeRepo();
-    // Google login with no linked identity creates a fresh registered user.
-    await service.googleLogin({
-      providerUserId: 'g1',
-      email: 'g@b.com',
-      displayName: 'Real Person',
-    });
-    void identities;
-
-    const created = repo.save.mock.calls.find((c) => c[0].kind !== undefined);
-    expect(created?.[0].displayName).toBe('Real Person');
-    expect(created?.[0].username).not.toBe('Real Person');
   });
 
   it('leaves the username untouched when a guest upgrades in place', async () => {

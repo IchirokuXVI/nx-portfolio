@@ -39,6 +39,15 @@ export class OAuthState extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   locale!: string | null;
 
+  /**
+   * base64url of SHA-256 of a verifier only the minting browser holds (plan
+   * 0230, section 2). The callback copies it onto the handoff, and only that
+   * browser can then redeem the code. Nullable only because rows existed at the
+   * moment of the deploy; a consume refuses a row without one.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  codeChallenge!: string | null;
+
   @Index('uq_oauth_state_token', { unique: true })
   @Column({ type: 'varchar' })
   tokenHash!: string;

@@ -102,11 +102,27 @@ describe('IdentityService with a feature unconfigured', () => {
   describe('with no Google credentials', () => {
     const config = { google: { enabled: false }, smtp: { enabled: true } };
 
-    it('refuses a Google login', async () => {
+    it('refuses to stage a Google sign in', async () => {
       const { service } = makeService(config);
 
       await expect(
-        service.googleLogin({ providerUserId: 'g1', email: 'a@example.com' })
+        service.stageGoogleSignIn({
+          providerUserId: 'g1',
+          email: 'a@example.com',
+          codeChallenge: 'lgghW2CGVJuIAQbifjAcK_8CsFoeysR6G6EYjaO0E8c',
+        })
+      ).rejects.toBeInstanceOf(NotConfiguredException);
+    });
+
+    it('refuses a Google exchange', async () => {
+      // The exchange is where a Google login now runs (plan 0230).
+      const { service } = makeService(config);
+
+      await expect(
+        service.exchangeGoogleSignIn({
+          code: 'c',
+          codeVerifier: 'dBjftJeZ4CVP-mJ92K1ifhZ-dDyiYZUiYvyCxt3zbJs',
+        })
       ).rejects.toBeInstanceOf(NotConfiguredException);
     });
 

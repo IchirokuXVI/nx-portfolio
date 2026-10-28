@@ -7,10 +7,10 @@ import {
   type ConsumeOAuthStateRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ExchangeGoogleSignInRequest,
   type ForgotPasswordRequest,
   type GetProfileRequest,
   type GetUsernamesRequest,
-  type GoogleLoginRequest,
   type IdentityStats,
   type LoginRequest,
   type MintOAuthStateRequest,
@@ -27,6 +27,8 @@ import {
   type ResetPasswordRequest,
   type RetryAfterResult,
   type SetUsernameRequest,
+  type StageGoogleSignInRequest,
+  type StageGoogleSignInResult,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -113,11 +115,6 @@ export class IdentityController {
     return this.identity.upgrade(req);
   }
 
-  @MessagePattern(AUTH_PATTERNS.googleLogin)
-  googleLogin(@Payload() req: GoogleLoginRequest): Promise<AuthTokens> {
-    return this.identity.googleLogin(req);
-  }
-
   @MessagePattern(AUTH_PATTERNS.mintOAuthState)
   mintOAuthState(
     @Payload() req: MintOAuthStateRequest
@@ -130,6 +127,22 @@ export class IdentityController {
     @Payload() req: ConsumeOAuthStateRequest
   ): Promise<OAuthStatePayload> {
     return this.identity.consumeOAuthState(req);
+  }
+
+  // The callback stages and the app exchanges (plan 0230). The exchange is the
+  // one way a Google sign in reaches an account.
+  @MessagePattern(AUTH_PATTERNS.stageGoogleSignIn)
+  stageGoogleSignIn(
+    @Payload() req: StageGoogleSignInRequest
+  ): Promise<StageGoogleSignInResult> {
+    return this.identity.stageGoogleSignIn(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.exchangeGoogleSignIn)
+  exchangeGoogleSignIn(
+    @Payload() req: ExchangeGoogleSignInRequest
+  ): Promise<AuthTokens> {
+    return this.identity.exchangeGoogleSignIn(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.deleteAccount)
