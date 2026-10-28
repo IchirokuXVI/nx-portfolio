@@ -40,6 +40,7 @@ import {
 import {
   ConflictException,
   GuestHasNoRolesException,
+  ImpersonationEndedException,
   ImpersonationNotAllowedException,
   NotConfiguredException,
   NotFoundException,
@@ -75,7 +76,7 @@ import { ImpersonationService } from '../impersonation/impersonation.service';
 import { MailService, recoveryLinks } from '../mail/mail.service';
 import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
-import { TokenService } from '../tokens/token.service';
+import { TokenService, type RecordedTokens } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 
 /** Hours an email verification link stays valid. */
@@ -964,22 +965,65 @@ export class IdentityService {
     return { email: user.email, raw, grant: record };
   }
 
-  /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */
+  /**
+   * Exchange a refresh token for a fresh pair (plan 0005, section 3).
+   *
+   * **One rotation is one transaction** (plan 0229, section 3). The spend, the
+   * user load, the insert of the successor and the pointer from the spent row
+   * to it all run on one manager. A failure anywhere after the spend rolls the
+   * spend back, so the presented row stays live and the client's retry works.
+   * Before, a failure after the spend left a revoked row and nothing live.
+   *
+   * A support session that is over is a refusal and not a failure. It is
+   * returned out of the transaction rather than thrown inside it, so the end
+   * of the session and the revoke of its rows commit, as they did before the
+   * rotation had a transaction.
+   */
   async refresh(rawRefreshToken: string): Promise<AuthTokens> {
-    const { userId, impersonationSessionId } =
-      await this.tokens.rotate(rawRefreshToken);
-    const user = await this.dataSource
-      .getRepository(User)
-      .findOne({ where: { id: userId } });
-    if (!user) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+    const outcome = await this.dataSource.transaction(
+      async (
+        manager
+      ): Promise<
+        { tokens: AuthTokens } | { ended: ImpersonationEndedException }
+      > => {
+        const spent = await this.tokens.rotate(rawRefreshToken, manager);
+        const user = await manager
+          .getRepository(User)
+          .findOne({ where: { id: spent.userId } });
+        if (!user) {
+          throw new UnauthorizedException('Invalid or expired refresh token');
+        }
+        // The row of a support session renews under that session's deadline
+        // (plan 0194). Every other row takes the ordinary pair.
+        let issued: RecordedTokens;
+        if (spent.impersonationSessionId) {
+          try {
+            issued = await this.impersonation.refresh(
+              spent.impersonationSessionId,
+              user,
+              manager
+            );
+          } catch (error) {
+            if (error instanceof ImpersonationEndedException) {
+              return { ended: error };
+            }
+            throw error;
+          }
+        } else {
+          issued = await this.tokens.issueTokensRecorded(user, manager);
+        }
+        await this.tokens.recordSuccessor(
+          spent.id,
+          issued.refreshRowId,
+          manager
+        );
+        return { tokens: issued.tokens };
+      }
+    );
+    if ('ended' in outcome) {
+      throw outcome.ended;
     }
-    // The row of a support session renews under that session's deadline (plan
-    // 0194). Every other row takes the line below, exactly as before.
-    if (impersonationSessionId) {
-      return this.impersonation.refresh(impersonationSessionId, user);
-    }
-    return this.tokens.issueTokens(user);
+    return outcome.tokens;
   }
 
   /**

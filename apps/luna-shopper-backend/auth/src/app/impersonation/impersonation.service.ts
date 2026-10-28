@@ -24,13 +24,21 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
-import { DataSource, IsNull, MoreThan } from 'typeorm';
+import {
+  DataSource,
+  IsNull,
+  MoreThan,
+  type EntityManager,
+  type EntityTarget,
+  type ObjectLiteral,
+  type Repository,
+} from 'typeorm';
 import { AuthPlatformAdminService } from '../admin/platform-admin.service';
 import { AuthAuditService } from '../audit/auth-audit.service';
 import type { AuthConfig } from '../config/app-config';
 import { AdminUser, ImpersonationSession, User } from '../entities';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
-import { TokenService } from '../tokens/token.service';
+import { TokenService, type RecordedTokens } from '../tokens/token.service';
 
 /**
  * How long a support session lasts, from its start. A constant and not
@@ -224,13 +232,17 @@ export class ImpersonationService {
 
   /**
    * The next pair of a session, for a refresh row that names it. Called by
-   * `IdentityService.refresh` after the rotation revoked the presented row.
+   * `IdentityService.refresh` after the rotation spent the presented row, on
+   * the manager of that rotation (plan 0229), so the session read, the end of
+   * a session that is over and the new refresh row all join its transaction.
+   * The id of the new row comes back for the rotation to record.
    */
   refresh(
     sessionId: string,
-    user: Pick<User, 'id' | 'kind' | 'username' | 'roles'>
-  ): Promise<AuthTokens> {
-    return this.issue(sessionId, user);
+    user: Pick<User, 'id' | 'kind' | 'username' | 'roles'>,
+    manager: EntityManager
+  ): Promise<RecordedTokens> {
+    return this.issueRecorded(sessionId, user, manager);
   }
 
   /**
@@ -292,25 +304,36 @@ export class ImpersonationService {
    * One function for the exchange and for a refresh, so the two cannot
    * disagree on what a live session is.
    */
-  private async issue(
+  private async issue(sessionId: string): Promise<AuthTokens> {
+    return (await this.issueRecorded(sessionId)).tokens;
+  }
+
+  /**
+   * {@link issue}, and the id of the refresh row it wrote. A `manager` joins
+   * the caller's transaction: the rotation of a refresh row passes one, and
+   * the exchange of a code does not.
+   */
+  private async issueRecorded(
     sessionId: string,
-    known?: Pick<User, 'id' | 'kind' | 'username' | 'roles'>
-  ): Promise<AuthTokens> {
-    const session = await this.dataSource
-      .getRepository(ImpersonationSession)
-      .findOne({ where: { id: sessionId } });
-    if (!session || !(await this.isLive(session))) {
+    known?: Pick<User, 'id' | 'kind' | 'username' | 'roles'>,
+    manager?: EntityManager
+  ): Promise<RecordedTokens> {
+    const session = await this.repositoryOf(
+      ImpersonationSession,
+      manager
+    ).findOne({ where: { id: sessionId } });
+    if (!session || !(await this.isLive(session, manager))) {
       throw new ImpersonationEndedException('The support session is over');
     }
     const user =
       known ??
-      (await this.dataSource
-        .getRepository(User)
-        .findOne({ where: { id: session.userId } }));
+      (await this.repositoryOf(User, manager).findOne({
+        where: { id: session.userId },
+      }));
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return this.tokens.issueTokensForSession(user, session);
+    return this.tokens.issueTokensForSessionRecorded(user, session, manager);
   }
 
   /**
@@ -321,8 +344,15 @@ export class ImpersonationService {
    * call that found it. That write has no audit record: no operator made it,
    * and the trail names an operator on every row. The disabling of the
    * operator is itself done on the server, by the person who has the server.
+   *
+   * A `manager` runs the reads and that end on the caller's transaction. The
+   * rotation of a refresh row passes one: it holds the lock of the presented
+   * row, which a revoke on another connection would wait on for ever.
    */
-  private async isLive(session: ImpersonationSession): Promise<boolean> {
+  private async isLive(
+    session: ImpersonationSession,
+    manager?: EntityManager
+  ): Promise<boolean> {
     if (
       !this.enabled ||
       session.endedAt ||
@@ -330,7 +360,7 @@ export class ImpersonationService {
     ) {
       return false;
     }
-    const admin = await this.dataSource.getRepository(AdminUser).findOne({
+    const admin = await this.repositoryOf(AdminUser, manager).findOne({
       where: { id: session.adminId },
       select: { id: true, disabledAt: true },
     });
@@ -338,10 +368,11 @@ export class ImpersonationService {
       return true;
     }
 
-    const ended = await this.dataSource
-      .getRepository(ImpersonationSession)
-      .update({ id: session.id, endedAt: IsNull() }, { endedAt: new Date() });
-    await this.tokens.revokeAllForSession(session.id);
+    const ended = await this.repositoryOf(ImpersonationSession, manager).update(
+      { id: session.id, endedAt: IsNull() },
+      { endedAt: new Date() }
+    );
+    await this.tokens.revokeAllForSession(session.id, manager);
     if (ended.affected) {
       this.events.impersonationEnded({
         sessionId: session.id,
@@ -349,6 +380,16 @@ export class ImpersonationService {
       });
     }
     return false;
+  }
+
+  /** The repository of the caller's transaction, or of the data source. */
+  private repositoryOf<T extends ObjectLiteral>(
+    entity: EntityTarget<T>,
+    manager?: EntityManager
+  ): Repository<T> {
+    return manager
+      ? manager.getRepository(entity)
+      : this.dataSource.getRepository(entity);
   }
 
   /**

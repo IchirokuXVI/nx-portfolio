@@ -112,8 +112,9 @@ with an integration spec against Postgres and with tests 1 and 2 of the review b
 ### Acceptance criteria
 
 - [ ] `refresh_tokens` has `replacedById uuid NULL` with a foreign key to
-      `refresh_tokens(id) ON DELETE SET NULL`, added by `RefreshTokenSuccessor1772900000000`,
-      listed last in `index.ts`, and `migrations.spec.ts` passes.
+      `refresh_tokens(id) ON DELETE SET NULL`, added by `RefreshTokenSuccessor1773000000000`
+      (plan 0230 took 1772900000000 first), listed last in `index.ts`, and
+      `migrations.spec.ts` passes.
 - [ ] `TokenService.rotate(raw, manager)` spends the row with one conditional update as
       section 3.1 states, and never with a read followed by a save.
 - [ ] A spend that updates nothing takes the grace path of section 3.2 under a row lock,
