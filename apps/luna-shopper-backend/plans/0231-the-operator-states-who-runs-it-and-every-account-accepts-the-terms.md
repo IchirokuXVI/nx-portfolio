@@ -1,3 +1,5 @@
+> **PR:** [#852](https://github.com/IchirokuXVI/nx-portfolio/pull/852)
+
 # 0231: the operator states who runs it, and every account accepts the terms
 
 > Luna Shopper is open source and anybody may deploy it. Velista is one deployment of it. A
