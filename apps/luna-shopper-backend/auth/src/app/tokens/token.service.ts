@@ -101,11 +101,11 @@ interface LockedRefreshRow {
   userId: string;
   impersonationSessionId: string | null;
   replacedById: string | null;
+  replacedAt: Date | null;
   revokedAt: Date | null;
   expired: boolean;
   graceOver: boolean | null;
   inFlight: boolean | null;
-  reissuedBefore: boolean | null;
 }
 
 /**
@@ -455,11 +455,12 @@ export class TokenService {
    * in the transaction of the rotation. After a reissue inside the grace this
    * moves the pointer to the newest successor.
    *
-   * It is the last write of a rotation, and `updatedAt` takes the wall clock of
-   * the database (`clock_timestamp()`, not the start of the transaction). So
-   * `updatedAt` of a spent row is the moment its rotation finished, and a later
-   * presentation can tell whether it began before that moment
-   * ({@link spendWithinGrace}, `in_flight`).
+   * It is the last write of a rotation, and `replacedAt` takes the wall clock
+   * of the database (`clock_timestamp()`, not the start of the transaction). So
+   * `replacedAt` of a spent row is the moment its rotation finished, and a
+   * later presentation can tell whether it began before that moment
+   * ({@link spendWithinGrace}, `in_flight`). One statement writes the pointer
+   * and the moment, so a row never has one without the other.
    */
   async recordSuccessor(
     spentId: string,
@@ -469,7 +470,10 @@ export class TokenService {
     await manager
       .createQueryBuilder()
       .update(RefreshToken)
-      .set({ replacedById: successorId, updatedAt: () => 'clock_timestamp()' })
+      .set({
+        replacedById: successorId,
+        replacedAt: () => 'clock_timestamp()',
+      })
       .where('"id" = :id', { id: spentId })
       .execute();
   }
@@ -506,22 +510,30 @@ export class TokenService {
    *   its `createdAt` equals the row's `revokedAt` (both are `now()` of that
    *   transaction). A successor created later is a reissue, and the row has
    *   had its one.
+   *
+   * **The successor is read in a second statement, after the lock is held.**
+   * A statement that waited on the lock sees the presented row in its newest
+   * version, but every other row in the snapshot it took before it waited. A
+   * successor that the lock holder inserted is not in that snapshot, so a
+   * subquery in the locking statement would read no successor and let a
+   * second reissue through. The second statement takes a new snapshot, which
+   * holds everything the lock holder committed. A pointer whose successor even
+   * that statement cannot find counts as reissued: with `ON DELETE SET NULL`
+   * the pointer would be gone with the row, so only a write that is not yet
+   * visible can leave it dangling.
    */
   private async spendWithinGrace(
     tokenHash: string,
     manager: EntityManager
   ): Promise<SpentRefreshToken> {
     const [locked] = (await manager.query(
-      `SELECT p."id", p."userId", p."impersonationSessionId", p."replacedById", p."revokedAt",
-              p."expiresAt" <= now() AS "expired",
-              p."revokedAt" < now() - ($2::integer * interval '1 millisecond') AS "graceOver",
-              now() < p."updatedAt" + ($3::integer * interval '1 millisecond') AS "inFlight",
-              (SELECT s."createdAt" > p."revokedAt"
-                 FROM "refresh_tokens" s
-                WHERE s."id" = p."replacedById") AS "reissuedBefore"
-         FROM "refresh_tokens" p
-        WHERE p."tokenHash" = $1
-        FOR UPDATE OF p`,
+      `SELECT "id", "userId", "impersonationSessionId", "replacedById", "replacedAt", "revokedAt",
+              "expiresAt" <= now() AS "expired",
+              "revokedAt" < now() - ($2::integer * interval '1 millisecond') AS "graceOver",
+              now() < "replacedAt" + ($3::integer * interval '1 millisecond') AS "inFlight"
+         FROM "refresh_tokens"
+        WHERE "tokenHash" = $1
+        FOR UPDATE`,
       [tokenHash, REFRESH_REUSE_GRACE_MS, REFRESH_RETRY_FLOOR_MS]
     )) as LockedRefreshRow[];
     if (!locked) {
@@ -532,8 +544,9 @@ export class TokenService {
       return this.refuse('expired', row);
     }
     // A live row has no successor either. It cannot reach this line, because
-    // the spend before it would have spent it.
-    if (!locked.revokedAt || !locked.replacedById) {
+    // the spend before it would have spent it. A pointer without its moment
+    // cannot be written (one statement writes both), and is refused the same.
+    if (!locked.revokedAt || !locked.replacedById || !locked.replacedAt) {
       return this.refuse('revoked', row);
     }
     if (locked.graceOver) {
@@ -542,7 +555,13 @@ export class TokenService {
     if (locked.inFlight) {
       return this.refuse('in_flight', row);
     }
-    if (locked.reissuedBefore) {
+    const [read] = (await manager.query(
+      `SELECT s."createdAt" > p."revokedAt" AS "reissuedBefore"
+         FROM "refresh_tokens" s, "refresh_tokens" p
+        WHERE s."id" = $1 AND p."id" = $2`,
+      [locked.replacedById, locked.id]
+    )) as Array<{ reissuedBefore: boolean | null }>;
+    if (!read || read.reissuedBefore !== false) {
       return this.refuse('reissued_before', row);
     }
     const successor = await manager

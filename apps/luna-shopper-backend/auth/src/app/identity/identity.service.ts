@@ -18,6 +18,7 @@ import {
   type GetProfileRequest,
   type GetUsernamesRequest,
   type GoogleLoginRequest,
+  type ImpersonationEndedEvent,
   type LoginRequest,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
@@ -977,14 +978,21 @@ export class IdentityService {
    * A support session that is over is a refusal and not a failure. It is
    * returned out of the transaction rather than thrown inside it, so the end
    * of the session and the revoke of its rows commit, as they did before the
-   * rotation had a transaction.
+   * rotation had a transaction. A session that this refresh ended (its
+   * operator is disabled or gone) is announced after the commit, never inside
+   * the transaction: an event for a rotation that then rolled back would drop
+   * the sockets of a live session.
    */
   async refresh(rawRefreshToken: string): Promise<AuthTokens> {
     const outcome = await this.dataSource.transaction(
       async (
         manager
       ): Promise<
-        { tokens: AuthTokens } | { ended: ImpersonationEndedException }
+        | { tokens: AuthTokens }
+        | {
+            ended: ImpersonationEndedException;
+            endedNow: ImpersonationEndedEvent | null;
+          }
       > => {
         const spent = await this.tokens.rotate(rawRefreshToken, manager);
         const user = await manager
@@ -997,18 +1005,15 @@ export class IdentityService {
         // (plan 0194). Every other row takes the ordinary pair.
         let issued: RecordedTokens;
         if (spent.impersonationSessionId) {
-          try {
-            issued = await this.impersonation.refresh(
-              spent.impersonationSessionId,
-              user,
-              manager
-            );
-          } catch (error) {
-            if (error instanceof ImpersonationEndedException) {
-              return { ended: error };
-            }
-            throw error;
+          const renewal = await this.impersonation.refresh(
+            spent.impersonationSessionId,
+            user,
+            manager
+          );
+          if ('over' in renewal) {
+            return { ended: renewal.over, endedNow: renewal.endedNow };
           }
+          issued = renewal.issued;
         } else {
           issued = await this.tokens.issueTokensRecorded(user, manager);
         }
@@ -1021,6 +1026,7 @@ export class IdentityService {
       }
     );
     if ('ended' in outcome) {
+      this.impersonation.announceEnded(outcome.endedNow);
       throw outcome.ended;
     }
     return outcome.tokens;

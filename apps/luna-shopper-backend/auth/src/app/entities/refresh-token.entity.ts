@@ -58,4 +58,13 @@ export class RefreshToken extends BaseEntity {
   @ManyToOne(() => RefreshToken, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'replacedById' })
   replacedBy!: RefreshToken | null;
+
+  /**
+   * When the rotation that wrote {@link replacedById} finished, on the wall
+   * clock of the database (plan 0229). The same statement writes both. The
+   * `in_flight` rule reads it, and not `updatedAt`, which TypeORM rewrites on
+   * every update of the row.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  replacedAt!: Date | null;
 }

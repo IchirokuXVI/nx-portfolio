@@ -9,8 +9,9 @@ import { TokenService, type RefreshRefusal } from './token.service';
  * The log line of each refused refresh (plan 0229, section 3.4).
  *
  * The manager is a fake that answers the statements of one case: the spend
- * updates nothing, the locked read returns the row of the case, and the update
- * of the successor spends it or not. What the `WHERE` clauses decide is
+ * updates nothing, the locked read returns the row of the case, the read of
+ * the successor after the lock finds it or not, and the update of the
+ * successor spends it or not. What the `WHERE` clauses decide is
  * asserted against real Postgres in `token-rotation.integration.spec.ts`. Here
  * the subject is the line: one per refusal, its reason, its row, and never
  * the token or its hash.
@@ -28,14 +29,21 @@ const GRACE_ROW = {
   userId: USER_ID,
   impersonationSessionId: null,
   replacedById: SUCCESSOR_ID,
+  replacedAt: new Date(),
   revokedAt: new Date(),
   expired: false,
   graceOver: false,
   inFlight: false,
-  reissuedBefore: false,
 };
 
-function build(locked: Record<string, unknown> | null, successorSpent = 0) {
+/** The successor of {@link GRACE_ROW}: the first one, never reissued. */
+const FIRST_SUCCESSOR = { reissuedBefore: false };
+
+function build(
+  locked: Record<string, unknown> | null,
+  successor: Record<string, unknown> | null = FIRST_SUCCESSOR,
+  successorSpent = 0
+) {
   const untouched = () => {
     throw new Error('the default repository was reached');
   };
@@ -54,9 +62,15 @@ function build(locked: Record<string, unknown> | null, successorSpent = 0) {
     returning: () => builder,
     execute: async () => results.shift(),
   };
+  // The locked read answers the row of the case, and the read after the lock
+  // answers its successor.
+  const reads = [locked, successor];
   const manager = {
     createQueryBuilder: () => builder,
-    query: async () => (locked ? [{ ...locked }] : []),
+    query: async () => {
+      const next = reads.shift();
+      return next ? [{ ...next }] : [];
+    },
   } as unknown as EntityManager;
 
   const lines: Array<{ level: string; args: unknown[] }> = [];
@@ -76,27 +90,74 @@ describe('a refused refresh', () => {
   });
 
   const cases: Array<{
+    name: string;
     reason: RefreshRefusal;
     locked: Record<string, unknown> | null;
+    successor?: Record<string, unknown> | null;
   }> = [
-    { reason: 'unknown', locked: null },
-    { reason: 'expired', locked: { ...GRACE_ROW, expired: true } },
+    { name: 'an unknown token', reason: 'unknown', locked: null },
     {
+      name: 'an expired row',
+      reason: 'expired',
+      locked: { ...GRACE_ROW, expired: true },
+    },
+    {
+      name: 'a row with no successor',
       reason: 'revoked',
-      locked: { ...GRACE_ROW, replacedById: null, graceOver: null },
+      locked: {
+        ...GRACE_ROW,
+        replacedById: null,
+        replacedAt: null,
+        graceOver: null,
+        inFlight: null,
+      },
     },
-    { reason: 'grace_over', locked: { ...GRACE_ROW, graceOver: true } },
-    { reason: 'in_flight', locked: { ...GRACE_ROW, inFlight: true } },
     {
-      reason: 'reissued_before',
-      locked: { ...GRACE_ROW, reissuedBefore: true },
+      name: 'a pointer without its moment',
+      reason: 'revoked',
+      locked: { ...GRACE_ROW, replacedAt: null, inFlight: null },
     },
-    { reason: 'successor_spent', locked: GRACE_ROW },
+    {
+      name: 'a row outside the grace',
+      reason: 'grace_over',
+      locked: { ...GRACE_ROW, graceOver: true },
+    },
+    {
+      name: 'a copy of the request',
+      reason: 'in_flight',
+      locked: { ...GRACE_ROW, inFlight: true },
+    },
+    {
+      name: 'a row that was reissued before',
+      reason: 'reissued_before',
+      locked: GRACE_ROW,
+      successor: { reissuedBefore: true },
+    },
+    {
+      name: 'a pointer to a successor the read cannot see',
+      reason: 'reissued_before',
+      locked: GRACE_ROW,
+      successor: null,
+    },
+    {
+      name: 'a pointer whose comparison reads null',
+      reason: 'reissued_before',
+      locked: GRACE_ROW,
+      successor: { reissuedBefore: null },
+    },
+    {
+      name: 'a row whose successor was spent',
+      reason: 'successor_spent',
+      locked: GRACE_ROW,
+    },
   ];
 
-  for (const { reason, locked } of cases) {
-    it(`writes one warn line with the reason ${reason}`, async () => {
-      const { tokens, manager, lines } = build(locked);
+  for (const { name, reason, locked, successor } of cases) {
+    it(`writes one warn line with the reason ${reason} for ${name}`, async () => {
+      const { tokens, manager, lines } = build(
+        locked,
+        successor === undefined ? FIRST_SUCCESSOR : successor
+      );
 
       await expect(tokens.rotate(RAW, manager)).rejects.toMatchObject({
         code: ERROR_CODES.UNAUTHORIZED,
@@ -118,7 +179,7 @@ describe('a refused refresh', () => {
   }
 
   it('writes one info line when the grace reissues, and no warn', async () => {
-    const { tokens, manager, lines } = build(GRACE_ROW, 1);
+    const { tokens, manager, lines } = build(GRACE_ROW, FIRST_SUCCESSOR, 1);
 
     await expect(tokens.rotate(RAW, manager)).resolves.toEqual({
       id: ROW_ID,

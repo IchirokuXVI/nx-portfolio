@@ -64,6 +64,16 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
   /** The reason of each warn and info line of the rotation, in order. */
   const reasons: string[] = [];
 
+  /**
+   * Each announced end of a support session, with the `endedAt` that another
+   * connection read at the moment of the emit. That read sees only committed
+   * rows, so it proves that the emit came after the commit.
+   */
+  const ended: Array<{
+    event: { sessionId: string; userId: string };
+    committed: Promise<Array<{ endedAt: Date | null }>>;
+  }> = [];
+
   beforeAll(async () => {
     const url = requiredEnv('AUTH_DB_URL');
 
@@ -113,7 +123,16 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
       tokens,
       { requireAdmin: async () => operatorId } as never,
       audit,
-      { impersonationEnded: () => undefined } as never,
+      {
+        impersonationEnded: (event: { sessionId: string; userId: string }) =>
+          ended.push({
+            event,
+            committed: dataSource.query(
+              `SELECT "endedAt" FROM "impersonation_sessions" WHERE "id" = $1`,
+              [event.sessionId]
+            ),
+          }),
+      } as never,
       config
     );
     identity = new IdentityService(
@@ -139,6 +158,7 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
 
   beforeEach(() => {
     reasons.length = 0;
+    ended.length = 0;
     const record = (message: unknown) => {
       const reason = (message as { reason?: unknown } | null)?.reason;
       if (typeof reason === 'string') {
@@ -181,14 +201,26 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     new Promise((resolve) => setTimeout(resolve, REFRESH_RETRY_FLOOR_MS + 50));
 
   describe('the migration', () => {
-    it('adds a nullable replacedById that points at another row and is cleared when that row goes', async () => {
-      const [column] = (await dataSource.query(
-        `SELECT data_type, is_nullable FROM information_schema.columns
+    it('adds a nullable replacedById that points at another row and is cleared when that row goes, and a nullable replacedAt', async () => {
+      const columns = (await dataSource.query(
+        `SELECT column_name, data_type, is_nullable FROM information_schema.columns
           WHERE table_schema = $1 AND table_name = 'refresh_tokens'
-            AND column_name = 'replacedById'`,
+            AND column_name IN ('replacedById', 'replacedAt')
+          ORDER BY column_name`,
         [SCHEMA]
-      )) as Array<{ data_type: string; is_nullable: string }>;
-      expect(column).toEqual({ data_type: 'uuid', is_nullable: 'YES' });
+      )) as Array<{
+        column_name: string;
+        data_type: string;
+        is_nullable: string;
+      }>;
+      expect(columns).toEqual([
+        {
+          column_name: 'replacedAt',
+          data_type: 'timestamp with time zone',
+          is_nullable: 'YES',
+        },
+        { column_name: 'replacedById', data_type: 'uuid', is_nullable: 'YES' },
+      ]);
 
       const { pair } = await person();
       const first = await rowOf(pair.refreshToken);
@@ -207,16 +239,18 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     it('comes down and goes up again, and keeps every refresh row', async () => {
       const { user } = await person();
       const before = await refreshTokens.countBy({ userId: user.id });
+      // Down through this migration, whatever is added after it later.
       const index = AUTH_MIGRATIONS.findIndex(
         (migration) => migration.name === 'RefreshTokenSuccessor1773000000000'
       );
-      expect(index).toBe(AUTH_MIGRATIONS.length - 1);
-
-      await dataSource.undoLastMigration();
+      expect(index).toBeGreaterThanOrEqual(0);
+      for (let step = AUTH_MIGRATIONS.length; step > index; step -= 1) {
+        await dataSource.undoLastMigration();
+      }
       const gone = await dataSource.query(
         `SELECT column_name FROM information_schema.columns
           WHERE table_schema = $1 AND table_name = 'refresh_tokens'
-            AND column_name = 'replacedById'`,
+            AND column_name IN ('replacedById', 'replacedAt')`,
         [SCHEMA]
       );
       expect(gone).toHaveLength(0);
@@ -247,6 +281,9 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     for (const result of failed) {
       expect(result.reason).toMatchObject(refused);
     }
+    // Each of the nine began before the winner's rotation finished: copies of
+    // one request, and not retries of a lost answer.
+    expect(reasons).toEqual(Array.from({ length: 9 }, () => 'in_flight'));
     const live = await refreshTokens.findBy({
       userId: user.id,
       revokedAt: IsNull(),
@@ -281,6 +318,13 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
   it('refuses a copy of the request that comes right after the rotation', async () => {
     const { pair: r1 } = await person();
     const r2 = await identity.refresh(r1.refreshToken);
+    // The rotation finishes on the clock of the database now, so the copy
+    // begins one statement after it and not after whatever the test runner
+    // spent between the two awaits.
+    await dataSource.query(
+      `UPDATE "refresh_tokens" SET "replacedAt" = clock_timestamp() WHERE "tokenHash" = $1`,
+      [hashOf(r1.refreshToken)]
+    );
 
     await expect(identity.refresh(r1.refreshToken)).rejects.toMatchObject(
       refused
@@ -299,8 +343,32 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     const successor = await rowOf(r2.refreshToken);
     expect(spent.revokedAt).toBeInstanceOf(Date);
     expect(spent.replacedById).toBe(successor.id);
+    expect(spent.replacedAt).toBeInstanceOf(Date);
+    expect(spent.replacedAt?.getTime()).toBeGreaterThanOrEqual(
+      spent.revokedAt?.getTime() ?? Infinity
+    );
     expect(successor.revokedAt).toBeNull();
     expect(successor.replacedById).toBeNull();
+    expect(successor.replacedAt).toBeNull();
+  });
+
+  it('keeps the moment of the rotation when the spent row is written again', async () => {
+    const { pair: r1 } = await person();
+    await identity.refresh(r1.refreshToken);
+    const before = await rowOf(r1.refreshToken);
+
+    // An ordinary entity update moves updatedAt, and must not move the moment
+    // that the in_flight rule reads.
+    await refreshTokens.update(
+      { id: before.id },
+      { expiresAt: before.expiresAt }
+    );
+
+    const after = await rowOf(r1.refreshToken);
+    expect(after.updatedAt.getTime()).toBeGreaterThanOrEqual(
+      before.updatedAt.getTime()
+    );
+    expect(after.replacedAt).toEqual(before.replacedAt);
   });
 
   it('refuses a third presentation after the one reissue', async () => {
@@ -318,6 +386,74 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     expect(reasons).toEqual(['reissued_before']);
     // The pair the retry got is untouched.
     expect((await rowOf(r3.refreshToken)).revokedAt).toBeNull();
+  });
+
+  it('refuses a retry that waited on the lock of a reissue whose successor it took no snapshot of', async () => {
+    const { user, pair: r1 } = await person();
+    const r2 = await identity.refresh(r1.refreshToken);
+    const spent = await rowOf(r1.refreshToken);
+
+    // A reissue that holds the lock of the presented row and commits late:
+    // the second successor is inserted and the pointer moved, and the moment
+    // is set far enough back that in_flight does not decide.
+    const holder = dataSource.createQueryRunner();
+    await holder.connect();
+    await holder.startTransaction();
+    try {
+      await holder.query(
+        `SELECT 1 FROM "refresh_tokens" WHERE "id" = $1 FOR UPDATE`,
+        [spent.id]
+      );
+      await holder.query(
+        `UPDATE "refresh_tokens" SET "revokedAt" = now() WHERE "tokenHash" = $1`,
+        [hashOf(r2.refreshToken)]
+      );
+      const [inserted] = (await holder.query(
+        `INSERT INTO "refresh_tokens" ("userId", "tokenHash", "expiresAt")
+         VALUES ($1, $2, now() + interval '1 day') RETURNING "id"`,
+        [user.id, hashOf(`${r1.refreshToken}-reissued`)]
+      )) as Array<{ id: string }>;
+      await holder.query(
+        `UPDATE "refresh_tokens"
+            SET "replacedById" = $2, "replacedAt" = clock_timestamp() - interval '1 second'
+          WHERE "id" = $1`,
+        [spent.id, inserted.id]
+      );
+
+      // The retry takes the snapshot of its locking read now, before the
+      // commit, and waits on the lock.
+      const retry = identity.refresh(r1.refreshToken).then(
+        () => 'passed',
+        (error: unknown) => error
+      );
+      for (let waited = 0; ; waited += 10) {
+        const [waiting] = (await dataSource.query(
+          `SELECT count(*)::int AS "n" FROM pg_stat_activity
+            WHERE wait_event_type = 'Lock' AND query LIKE '%FOR UPDATE%'
+              AND query LIKE '%refresh_tokens%'`
+        )) as Array<{ n: number }>;
+        if (waiting.n > 0) {
+          break;
+        }
+        if (waited > 5_000) {
+          throw new Error('the retry never waited on the lock');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await holder.commitTransaction();
+
+      expect(await retry).toMatchObject(refused);
+    } finally {
+      if (holder.isTransactionActive) {
+        await holder.rollbackTransaction();
+      }
+      await holder.release();
+    }
+
+    expect(reasons).toEqual(['reissued_before']);
+    expect(
+      await refreshTokens.countBy({ userId: user.id, revokedAt: IsNull() })
+    ).toBe(1);
   });
 
   it('3. refuses a token whose successor was spent', async () => {
@@ -424,6 +560,34 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
     expect(reasons).toEqual([]);
   });
 
+  it('6b. leaves the presented row live when the rotation fails after it recorded the successor', async () => {
+    const { user, pair: r1 } = await person();
+    const record = tokens.recordSuccessor.bind(tokens);
+    jest
+      .spyOn(tokens, 'recordSuccessor')
+      .mockImplementationOnce(async (spentId, successorId, manager) => {
+        // The successor row is inserted and the pointer is written, both on
+        // the rotation's manager. Then the rotation fails.
+        await record(spentId, successorId, manager);
+        throw new Error('connection lost');
+      });
+
+    await expect(identity.refresh(r1.refreshToken)).rejects.toThrow(
+      'connection lost'
+    );
+
+    const row = await rowOf(r1.refreshToken);
+    expect(row.revokedAt).toBeNull();
+    expect(row.replacedById).toBeNull();
+    expect(row.replacedAt).toBeNull();
+    // No successor row survived the rollback.
+    expect(await refreshTokens.countBy({ userId: user.id })).toBe(1);
+    await expect(identity.refresh(r1.refreshToken)).resolves.toMatchObject({
+      userId: user.id,
+    });
+    expect(reasons).toEqual([]);
+  });
+
   describe('7. a support row', () => {
     async function supportPair() {
       serial += 1;
@@ -490,6 +654,30 @@ describeIntegration('refresh token rotation (real Postgres)', () => {
         [start.sessionId]
       )) as Array<{ endedAt: Date | null }>;
       expect(session.endedAt).toBeInstanceOf(Date);
+
+      // Announced one time, and after the commit: another connection already
+      // read the end at the moment of the emit.
+      expect(ended.map(({ event }) => event)).toEqual([
+        { sessionId: start.sessionId, userId: rows[0].userId },
+      ]);
+      const [seen] = await ended[0].committed;
+      expect(seen.endedAt).toBeInstanceOf(Date);
+    });
+
+    it('announces nothing when the rotation of a support row rolls back', async () => {
+      const { pair: s1 } = await supportPair();
+      await admins.update({ id: operatorId }, { disabledAt: new Date() });
+      // The end is written, and then the transaction fails before it commits.
+      jest
+        .spyOn(tokens, 'revokeAllForSession')
+        .mockRejectedValueOnce(new Error('connection lost'));
+
+      await expect(identity.refresh(s1.refreshToken)).rejects.toThrow(
+        'connection lost'
+      );
+
+      expect(ended).toEqual([]);
+      expect((await rowOf(s1.refreshToken)).revokedAt).toBeNull();
     });
   });
 });

@@ -42,7 +42,7 @@ export const AUTH_MIGRATIONS = [
   // One nullable column on `oauth_states` and one new table (plan 0230). It
   // only adds, and a state minted before it is refused at consume.
   OAuthHandoffs1772900000000,
-  // One nullable column on `refresh_tokens` (plan 0229). It only adds, and
+  // Two nullable columns on `refresh_tokens` (plan 0229). It only adds, and
   // every existing revoked row reads as revoked with no successor.
   RefreshTokenSuccessor1773000000000,
 ];
