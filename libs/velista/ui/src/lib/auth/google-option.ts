@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { GoogleIcon } from '../icons/icons';
 
@@ -23,13 +28,16 @@ import { GoogleIcon } from '../icons/icons';
  * frame; it is drawn with the design system's tokens instead, so that the app has one
  * Google button rather than two that differ by screen.
  *
- * ## It records rather than navigates
+ * ## It starts the sign in, and the container says when to draw it
  *
- * Section 5.6: the callback answers JSON rather than redirecting into the app, and it
- * never passes `linkUserId`, so a guest who tapped it would be given a **fresh
- * registered user** and lose every group. Both are gateway changes. Until they land the
- * button reports its tap and goes nowhere, and it is not offered to a guest at all,
- * which the container decides.
+ * A tap is an output. The container calls `GoogleSignIn.start()`, which sends the
+ * document to the gateway, and shows the failure when the start is refused (velista
+ * `0171`). A guest is offered it like anybody else: backend `0230` links the guest
+ * account in place, so the groups it holds stay.
+ *
+ * It is never drawn inside the native shell, where Google refuses to sign anybody in
+ * from an embedded WebView. The container asks `APP_RUNTIME` and leaves this out, divider
+ * and all.
  */
 @Component({
   selector: 'lib-google-option',
@@ -41,7 +49,13 @@ import { GoogleIcon } from '../icons/icons';
       <span class="rule"></span>
     </div>
 
-    <button (click)="continueWithGoogle.emit()" class="google" type="button">
+    <button
+      (click)="continueWithGoogle.emit()"
+      [attr.aria-busy]="busy()"
+      [attr.aria-describedby]="describedBy()"
+      class="google"
+      type="button"
+    >
       <lib-google-icon class="glyph" />
       {{ 'home.action.google' | rokuT }}
     </button>
@@ -51,4 +65,10 @@ import { GoogleIcon } from '../icons/icons';
 })
 export class GoogleOption {
   readonly continueWithGoogle = output<void>();
+
+  /** True while a start is on its way, until the document leaves for the gateway. */
+  readonly busy = input(false);
+
+  /** The id of the message a refused start shows, or null when there is none. */
+  readonly describedBy = input<string | null>(null);
 }

@@ -20,8 +20,11 @@ import { GoogleIcon, JoinCodeIcon, PlusIcon } from '../icons/icons';
  * handed on a phone (plan 0003, section 7).
  *
  * The Google button is drawn here rather than by Google's own script: the exchange is
- * owned entirely by the backend, which redirects back with the token pair, and no
- * Google library is loaded into this app (user decision, 2026-08-26).
+ * owned entirely by the backend, and no Google library is loaded into this app (user
+ * decision, 2026-08-26). A tap is an output, and the container starts the sign in
+ * (velista `0171`). The container also says whether to draw it at all: inside the
+ * native shell it is left out with its divider, because Google refuses to sign anybody
+ * in from an embedded WebView.
  *
  * ## Held, while the app cannot reach the backend
  *
@@ -50,19 +53,32 @@ export class AuthActions {
   /** Whether the wait has gone on long enough to say what is wrong, per D8. */
   readonly slow = input(false);
 
+  /** False in the native shell, where Google and its divider are not drawn. */
+  readonly googleOffered = input(true);
+
+  /** True while a Google start is on its way, until the document leaves. */
+  readonly googleBusy = input(false);
+
+  /**
+   * The sentence a refused Google start answers with, or the empty string. Shown in the
+   * same place as the held sentence, which outranks it.
+   */
+  readonly failureMessage = input('');
+
   /** The two sentences a held press answers with, chosen by {@link slow}. */
   readonly connectingMessage = input('');
   readonly slowMessage = input('');
 
   /**
-   * What a held press says, or the empty string when nothing is held.
+   * What a held press says, a refused Google start when nothing is held, or the empty
+   * string.
    *
    * The second sentence says what is wrong rather than asking for more patience,
    * which is the whole reason there are two.
    */
   readonly message = computed(() => {
     if (!this.held()) {
-      return '';
+      return this.failureMessage();
     }
 
     return this.slow() ? this.slowMessage() : this.connectingMessage();

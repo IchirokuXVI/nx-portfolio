@@ -4,6 +4,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   fakeAuthService,
   GatewayError,
+  GoogleSignIn,
   NetworkError,
   provideAccountNotice,
   provideFakeAuthService,
@@ -11,7 +12,11 @@ import {
   type FakeAuthService,
   type FakeIdentity,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  APP_RUNTIME,
+  provideVelistaTesting,
+  type AppRuntime,
+} from '@portfolio/velista/platform';
 import { SignInPage } from './sign-in-page';
 
 interface Options {
@@ -21,12 +26,17 @@ interface Options {
   readonly email?: string;
   /** `?returnUrl=`, which the share link page and the basket page carry. */
   readonly returnUrl?: string;
+  readonly google?: { readonly start: jest.Mock };
+  readonly runtime?: AppRuntime;
 }
 
 async function render(options: Options = {}) {
   TestBed.resetTestingModule();
 
   const auth = options.auth ?? fakeAuthService();
+  const google = options.google ?? {
+    start: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [SignInPage, RokuTranslatorTestingModule.forTesting()],
@@ -36,6 +46,8 @@ async function render(options: Options = {}) {
       provideFakeAuthService(auth),
       provideFakeSessionStore(options.identity ?? 'anonymous'),
       provideAccountNotice(),
+      { provide: GoogleSignIn, useValue: google },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
       {
         provide: ActivatedRoute,
         useValue: {
@@ -60,7 +72,7 @@ async function render(options: Options = {}) {
   const fixture = TestBed.createComponent(SignInPage);
   fixture.detectChanges();
 
-  return { fixture, auth, router };
+  return { fixture, auth, router, google };
 }
 
 function fill(
@@ -328,34 +340,123 @@ describe('SignInPage', () => {
     });
   });
 
-  describe('Google', () => {
-    it('records rather than navigating, until the gateway redirects', async () => {
-      const { fixture, router } = await render();
+  describe('Google (velista 0171)', () => {
+    it('starts the sign in, which sends the document to the gateway', async () => {
+      const { fixture, google, router } = await render();
 
       (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'auth.google',
-      ]);
+      expect(google.start).toHaveBeenCalledTimes(1);
       expect(router.navigateByUrl).not.toHaveBeenCalled();
     });
 
-    /**
-     * The acceptance criterion, and it is not defensive tidiness: until the gateway
-     * passes `linkUserId`, `googleLogin` takes the create branch and mints a **fresh
-     * registered user**, so a guest who tapped this would lose every group exactly as
-     * rule C2 describes for register (section 5.6).
-     */
-    it('is not rendered at all for a guest', async () => {
-      const { fixture } = await render({ identity: 'TEMPORARY' });
+    it('starts once however many times it is tapped while starting', async () => {
+      const { fixture, google } = await render({
+        google: { start: jest.fn(() => new Promise<void>(() => undefined)) },
+      });
+      const button = query(
+        fixture,
+        'lib-google-option button'
+      ) as HTMLButtonElement;
 
-      expect(query(fixture, 'lib-google-option')).toBeNull();
+      button.click();
+      button.click();
+      fixture.detectChanges();
+
+      expect(google.start).toHaveBeenCalledTimes(1);
+      expect(button.getAttribute('aria-busy')).toBe('true');
     });
 
-    it('is rendered for somebody with no account, who is who it is for', async () => {
+    it('says a refused start beside the button, and leaves the fields alone', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'not_configured',
+              status: 503,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+      expect(fixture.componentInstance.error()).toBeNull();
+      expect(fixture.componentInstance.googleStarting()).toBe(false);
+      const message = query(fixture, '#sign-in-google-error');
+      expect(message).not.toBeNull();
+      expect(
+        query(fixture, 'lib-google-option button')?.getAttribute(
+          'aria-describedby'
+        )
+      ).toBe('sign-in-google-error');
+    });
+
+    it('names a support session as the reason it was refused', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'impersonation_not_allowed',
+              status: 403,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'support.refused'
+      );
+    });
+
+    it('answers a lost connection with the general sentence', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest
+            .fn()
+            .mockRejectedValue(new NetworkError('c1', 'auth.google')),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+    });
+
+    /**
+     * Backend 0230 links a guest in place, so the groups a guest holds stay and there is
+     * no longer a reason to turn one away.
+     */
+    it('is offered to a guest', async () => {
+      const { fixture } = await render({ identity: 'TEMPORARY' });
+
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    it('is offered to somebody with no account', async () => {
       const { fixture } = await render({ identity: 'anonymous' });
 
       expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
+    it('is not drawn at all in the native shell, divider included', async () => {
+      const { fixture } = await render({ runtime: 'native' });
+
+      expect(query(fixture, 'lib-google-option')).toBeNull();
+      expect(query(fixture, '.divider')).toBeNull();
     });
   });
 

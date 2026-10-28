@@ -12,9 +12,17 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { AccountNotice } from '@portfolio/velista/data-access';
+import {
+  AccountNotice,
+  GatewayError,
+  GoogleSignIn,
+} from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
-import { BackendReadiness, sheetSegments } from '@portfolio/velista/platform';
+import {
+  APP_RUNTIME,
+  BackendReadiness,
+  sheetSegments,
+} from '@portfolio/velista/platform';
 import {
   AppBar,
   AppVersion,
@@ -63,6 +71,19 @@ export class LandingPage {
   private readonly _t = inject(RokuTranslatorService);
   private readonly _notice = inject(AccountNotice);
   private readonly _readiness = inject(BackendReadiness);
+  private readonly _google = inject(GoogleSignIn);
+
+  /**
+   * Whether to offer Google: everywhere but the native shell, where Google refuses to
+   * sign anybody in from an embedded WebView (velista `0166`).
+   */
+  readonly googleOffered = inject(APP_RUNTIME) !== 'native';
+
+  /** True from a tap on Google until the document leaves, or until the start fails. */
+  readonly googleStarting = signal(false);
+
+  /** The translation key of a refused Google start, or null. */
+  readonly googleError = signal<string | null>(null);
 
   /**
    * Whether the four ways in may act yet (plan 0071, section 5.1).
@@ -233,31 +254,26 @@ export class LandingPage {
   }
 
   /**
-   * Google, which is the one control on this page still recorded rather than routed.
+   * Google, which sends the document to the gateway (velista `0171`).
    *
-   * Not a frontend limitation: `GoogleController.callback` answers JSON rather than
-   * redirecting into the app, and it never passes `linkUserId`, so it would mint a
-   * fresh registered user for a caller who already has one. Both are gateway changes
-   * (plan 0009, section 5.6). `auth/callback` is built and waiting for the first.
-   *
-   * Recorded rather than left unbound so the control is real, focusable and testable
-   * now, and so that connecting it later is a single line here.
+   * Offered to whoever is on this page. Since backend `0230` a guest is linked in place
+   * and keeps every group, so nobody is turned away from it. On success the page is
+   * leaving, so the busy state stays on; a refusal is a sentence under the buttons.
    */
-  readonly pendingRoutes = signal<readonly string[]>([]);
+  async continueWithGoogle(): Promise<void> {
+    if (this.googleStarting()) {
+      return;
+    }
 
-  continueWithGoogle(): void {
-    this._notYetRouted('auth.google');
-  }
+    this.googleStarting.set(true);
+    this.googleError.set(null);
 
-  /**
-   * Records an action whose destination has not been built.
-   *
-   * Deliberately observable rather than an empty body: a test can assert that a button
-   * is wired to the right destination, which is the half of this that will still be
-   * true once the routes exist.
-   */
-  private _notYetRouted(destination: string): void {
-    this.pendingRoutes.update((current) => [...current, destination]);
+    try {
+      await this._google.start();
+    } catch (error) {
+      this.googleStarting.set(false);
+      this.googleError.set(googleFailureKey(error));
+    }
   }
 
   /** See {@link accountDeleted}. Reads the one-shot notice and consumes it. */
@@ -269,4 +285,22 @@ export class LandingPage {
 
     return deleted;
   }
+}
+
+/**
+ * The sentence a refused Google start gets here, with the keys `authErrorCopy` in
+ * `feature-auth` gives the same failure on sign in. Not imported from there, because
+ * this page would then load every auth page with it.
+ */
+function googleFailureKey(error: unknown): string {
+  if (error instanceof GatewayError) {
+    if (error.code === 'impersonation_not_allowed') {
+      return 'support.refused';
+    }
+    if (error.code === 'rate_limited') {
+      return 'auth.error.tooMany';
+    }
+  }
+
+  return 'entry.error.failed';
 }

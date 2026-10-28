@@ -5,24 +5,35 @@ import {
   AccountNotice,
   fakeAuthService,
   GatewayError,
+  GoogleSignIn,
+  NetworkError,
   provideAccountNotice,
   provideFakeAuthService,
   provideFakeSessionStore,
   type FakeAuthService,
   type FakeIdentity,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  APP_RUNTIME,
+  provideVelistaTesting,
+  type AppRuntime,
+} from '@portfolio/velista/platform';
 import { RegisterPage } from './register-page';
 
 interface Options {
   readonly auth?: FakeAuthService;
   readonly identity?: FakeIdentity;
+  readonly google?: { readonly start: jest.Mock };
+  readonly runtime?: AppRuntime;
 }
 
 async function render(options: Options = {}) {
   TestBed.resetTestingModule();
 
   const auth = options.auth ?? fakeAuthService();
+  const google = options.google ?? {
+    start: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [RegisterPage, RokuTranslatorTestingModule.forTesting()],
@@ -32,6 +43,8 @@ async function render(options: Options = {}) {
       provideFakeAuthService(auth),
       provideFakeSessionStore(options.identity ?? 'anonymous'),
       provideAccountNotice(),
+      { provide: GoogleSignIn, useValue: google },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
     ],
   }).compileComponents();
 
@@ -42,7 +55,13 @@ async function render(options: Options = {}) {
   const fixture = TestBed.createComponent(RegisterPage);
   fixture.detectChanges();
 
-  return { fixture, auth, router, notice: TestBed.inject(AccountNotice) };
+  return {
+    fixture,
+    auth,
+    router,
+    google,
+    notice: TestBed.inject(AccountNotice),
+  };
 }
 
 /**
@@ -450,21 +469,123 @@ describe('RegisterPage', () => {
     });
   });
 
-  describe('Google', () => {
-    it('is not rendered at all for a guest', async () => {
-      const { fixture } = await render({ identity: 'TEMPORARY' });
-
-      expect(query(fixture, 'lib-google-option')).toBeNull();
-    });
-
-    it('records rather than navigating', async () => {
-      const { fixture } = await render();
+  describe('Google (velista 0171)', () => {
+    it('starts the sign in, which sends the document to the gateway', async () => {
+      const { fixture, google, router } = await render();
 
       (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'auth.google',
-      ]);
+      expect(google.start).toHaveBeenCalledTimes(1);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('starts once however many times it is tapped while starting', async () => {
+      const { fixture, google } = await render({
+        google: { start: jest.fn(() => new Promise<void>(() => undefined)) },
+      });
+      const button = query(
+        fixture,
+        'lib-google-option button'
+      ) as HTMLButtonElement;
+
+      button.click();
+      button.click();
+      fixture.detectChanges();
+
+      expect(google.start).toHaveBeenCalledTimes(1);
+      expect(button.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('says a refused start beside the button, and leaves the fields alone', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'not_configured',
+              status: 503,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+      expect(fixture.componentInstance.error()).toBeNull();
+      expect(fixture.componentInstance.googleStarting()).toBe(false);
+      const message = query(fixture, '#register-google-error');
+      expect(message).not.toBeNull();
+      expect(
+        query(fixture, 'lib-google-option button')?.getAttribute(
+          'aria-describedby'
+        )
+      ).toBe('register-google-error');
+    });
+
+    it('names a support session as the reason it was refused', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'impersonation_not_allowed',
+              status: 403,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'support.refused'
+      );
+    });
+
+    it('answers a lost connection with the general sentence', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest
+            .fn()
+            .mockRejectedValue(new NetworkError('c1', 'auth.google')),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+    });
+
+    /**
+     * Backend 0230 links a guest in place, so the groups a guest holds stay and there is
+     * no longer a reason to turn one away.
+     */
+    it('is offered to a guest', async () => {
+      const { fixture } = await render({ identity: 'TEMPORARY' });
+
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    it('is offered to somebody with no account', async () => {
+      const { fixture } = await render({ identity: 'anonymous' });
+
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
+    it('is not drawn at all in the native shell, divider included', async () => {
+      const { fixture } = await render({ runtime: 'native' });
+
+      expect(query(fixture, 'lib-google-option')).toBeNull();
+      expect(query(fixture, '.divider')).toBeNull();
     });
   });
 });

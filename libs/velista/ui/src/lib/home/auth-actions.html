@@ -28,22 +28,27 @@
 
   <p class="explainer">{{ 'home.zoneExplainer' | rokuT }}</p>
 
-  <div aria-hidden="true" class="divider">
-    <span class="rule"></span>
-    <span class="or">{{ 'home.or' | rokuT }}</span>
-    <span class="rule"></span>
-  </div>
+  <!-- Not drawn in the native shell, divider and all: Google refuses to sign anybody
+       in from an embedded WebView (velista 0166). -->
+  @if (googleOffered()) {
+    <div aria-hidden="true" class="divider">
+      <span class="rule"></span>
+      <span class="or">{{ 'home.or' | rokuT }}</span>
+      <span class="rule"></span>
+    </div>
 
-  <button
-    (click)="act('google')"
-    [attr.aria-disabled]="held() ? 'true' : null"
-    [class.held]="held()"
-    class="button google"
-    type="button"
-  >
-    <lib-google-icon class="glyph" />
-    {{ 'home.action.google' | rokuT }}
-  </button>
+    <button
+      (click)="act('google')"
+      [attr.aria-busy]="googleBusy()"
+      [attr.aria-disabled]="held() ? 'true' : null"
+      [class.held]="held()"
+      class="button google"
+      type="button"
+    >
+      <lib-google-icon class="glyph" />
+      {{ 'home.action.google' | rokuT }}
+    </button>
+  }
 
   <button
     (click)="act('email')"
