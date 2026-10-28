@@ -11,6 +11,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -19,11 +20,13 @@ import {
   AUTH_PATTERNS,
   PROFILE_PATTERNS,
   type AccountMeView,
+  type AccountTermsView,
   type DeleteAccountResult,
   type ResolvedPostalCodeView,
   type ShoppingProfileListResult,
   type ShoppingProfileView,
   type SuggestUsernameResult,
+  type TermsAcceptanceView,
   type UserAppStateView,
   type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
@@ -38,13 +41,18 @@ import type { CurrentUser } from '../auth/jwt.strategy';
 import { RefuseImpersonation } from '../auth/refuse-impersonation.decorator';
 import { asRejectedCredentials } from '../auth/remote-problem';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
+import type { GatewayConfig } from '../config/app-config';
 import {
   ApiComposedResponse,
   ApiContractResponse,
   ApiProblemResponses,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
-import { UpdateAppStateDto, UpdateProfileDto } from './account.dto';
+import {
+  AcceptTermsDto,
+  UpdateAppStateDto,
+  UpdateProfileDto,
+} from './account.dto';
 import {
   AddPostalCodeDto,
   CreateShoppingProfileDto,
@@ -82,8 +90,15 @@ export class AccountController {
     // Every profile edit passes through here, so this is where the gateway's
     // resolved scope cache is dropped (plan 0049, section 2.1): the same instant
     // core emits `profiles.changed` for the user's other devices.
-    private readonly scopes: ScopeResolutionService
-  ) {}
+    private readonly scopes: ScopeResolutionService,
+    // The Terms this deployment publishes (plan 0231, section 4.4), for the
+    // `terms` block of `me`.
+    configService: ConfigService
+  ) {
+    this.terms = configService.getOrThrow<GatewayConfig>('gateway').legal.terms;
+  }
+
+  private readonly terms: GatewayConfig['legal']['terms'];
 
   /** Every call this controller makes, under the rule in the class comment. */
   private aboutTheCaller<T>(subject: string, payload: object): Promise<T> {
@@ -123,7 +138,57 @@ export class AccountController {
     // From the token rather than from auth (plan 0175): the permissions a
     // screen is drawn from must be the ones this gateway enforces on the same
     // token, or velista would offer a control whose route still refuses.
-    return { ...profile, appState, permissions: [...user.permissions] };
+    return {
+      ...profile,
+      appState,
+      permissions: [...user.permissions],
+      terms: this.termsOf(profile),
+    };
+  }
+
+  /**
+   * Whether this account must accept the Terms now (plan 0231, section 4.4).
+   * A guest is an account and reads the same way. Only the prompt of the app
+   * acts on it: no route here refuses an account that has not accepted.
+   */
+  private termsOf(profile: UserProfileView): AccountTermsView {
+    const acceptedVersion = profile.termsAcceptedVersion ?? null;
+    return {
+      currentVersion: this.terms.version,
+      acceptedVersion,
+      acceptanceRequired:
+        this.terms.acceptanceRequired && acceptedVersion !== this.terms.version,
+    };
+  }
+
+  /**
+   * Accept the current Terms (plan 0231, section 4.4). The one way to accept
+   * outside the paths that create an account.
+   *
+   * Idempotent: a repeat answers the row already recorded, with 201. A support
+   * session is refused, because an operator must not accept on somebody's
+   * behalf.
+   */
+  @Post('terms-acceptances')
+  @RefuseImpersonation()
+  @Throttle(THROTTLE_LIMITS.termsAccept)
+  @ApiContractResponse(AUTH_PATTERNS.acceptTerms, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    terms: true,
+    impersonation: 'refused',
+  })
+  acceptTerms(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: AcceptTermsDto
+  ): Promise<TermsAcceptanceView> {
+    return this.aboutTheCaller<TermsAcceptanceView>(AUTH_PATTERNS.acceptTerms, {
+      userId: user.userId,
+      version: dto.version,
+    });
   }
 
   /** Core's half of {@link me}, degrading to two nulls rather than failing. */

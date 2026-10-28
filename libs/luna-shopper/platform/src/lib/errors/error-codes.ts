@@ -474,6 +474,19 @@ export const ERROR_CODES = {
    * The reset half would give it a first password, which nobody asked for.
    */
   RECOVERY_NEEDS_PASSWORD: 'recovery_needs_password',
+  /**
+   * A request carried an `acceptedTermsVersion` that is not the current
+   * effective version of the Terms (plan 0231, section 4.3). The person read
+   * a text that is no longer the text. `details.currentVersion` names the one
+   * to draw instead. Refused whether or not acceptance is required.
+   */
+  TERMS_VERSION_STALE: 'terms_version_stale',
+  /**
+   * A path that creates an account carried no `acceptedTermsVersion`, and
+   * this deployment requires acceptance (plan 0231, section 4.3).
+   * `details.currentVersion` names the version to accept.
+   */
+  TERMS_ACCEPTANCE_MISSING: 'terms_acceptance_missing',
   INTERNAL: 'internal',
 } as const;
 
@@ -641,5 +654,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.RECOVERY_OTHER_ACCOUNT]: HttpStatus.CONFLICT,
   [ERROR_CODES.RECOVERY_NEEDS_EMAIL]: HttpStatus.CONFLICT,
   [ERROR_CODES.RECOVERY_NEEDS_PASSWORD]: HttpStatus.CONFLICT,
+  // 409: the text moved under the person, as a stale quantity does. 400: the
+  // request is incomplete for this deployment (plan 0231, section 4.3).
+  [ERROR_CODES.TERMS_VERSION_STALE]: HttpStatus.CONFLICT,
+  [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

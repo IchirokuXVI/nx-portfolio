@@ -3,6 +3,7 @@ import { fakeAudit } from '../audit/auth-audit.testing';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * What auth does when Google or SMTP is unset (plan 0026).
@@ -48,7 +49,9 @@ describe('IdentityService with a feature unconfigured', () => {
       {} as never,
       new UsernameGenerator(),
       fakeAudit([]).service,
-      { getOrThrow: () => config } as never
+      { getOrThrow: () => config } as never,
+      undefined as never,
+      new InMemoryTermsService()
     );
 
     return { service, dataSource, mail };

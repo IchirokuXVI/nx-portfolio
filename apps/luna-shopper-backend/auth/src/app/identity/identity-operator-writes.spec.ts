@@ -7,6 +7,7 @@ import { EmailVerification, User } from '../entities';
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * What an operator may do to somebody else's identity, and what it leaves behind
@@ -113,7 +114,9 @@ function build(users: Partial<User>[] = []) {
         smtp: { verifyBaseUrl: 'https://x', enabled: true },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
   return { service, userRepo, verifications, events, mail, audit };
 }

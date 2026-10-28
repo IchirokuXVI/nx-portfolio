@@ -15,6 +15,7 @@ import {
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * Confirming an email (plan 0021): resending one, consuming a link that a resend
@@ -122,7 +123,9 @@ function build(users: Row[] = []) {
         smtp: { verifyBaseUrl: 'https://x', enabled: true },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
   return { service, stores, events, mail };
 }

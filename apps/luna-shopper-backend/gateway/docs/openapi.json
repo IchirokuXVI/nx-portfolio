@@ -27,7 +27,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37,7 +37,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -509,7 +509,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -539,7 +539,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -605,7 +605,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -626,6 +626,16 @@
           },
           "403": {
             "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5262,7 +5272,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5273,6 +5283,16 @@
           },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5401,7 +5421,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5441,7 +5461,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23273,6 +23293,102 @@
         ]
       }
     },
+    "/v1/account/terms-acceptances": {
+      "post": {
+        "operationId": "AccountController_acceptTerms_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptTermsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.acceptTerms` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.TermsAcceptanceView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/account/app-state": {
       "patch": {
         "operationId": "AccountController_setAppState_v1",
@@ -29407,6 +29523,47 @@
           "assistant"
         ]
       }
+    },
+    "/v1/legal/settings": {
+      "get": {
+        "operationId": "LegalController_settings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Composed by the gateway from its configuration and the assistant. Public, no token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/gateway.LegalSettingsView"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "legal"
+        ]
+      }
     }
   },
   "info": {
@@ -29446,6 +29603,11 @@
           "displayName": {
             "type": "string",
             "maxLength": 80
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29535,6 +29697,11 @@
           "displayName": {
             "type": "string",
             "maxLength": 80
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29549,6 +29716,11 @@
             "type": "string",
             "description": "base64url of the SHA-256 of a verifier the client made and keeps, 43 characters. The verifier is sent only to `POST /v1/auth/google/exchange`.",
             "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29807,6 +29979,11 @@
             "type": "string",
             "maxLength": 40,
             "description": "Your display name in this zone. Omit it to be called by your global username."
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29823,6 +30000,11 @@
             "type": "string",
             "maxLength": 40,
             "description": "Your display name in this zone. Omit it to be called by your global username."
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -31896,6 +32078,19 @@
         "required": [
           "sourceUserId",
           "targetUserId"
+        ]
+      },
+      "AcceptTermsDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person accepted. Any other answers `terms_version_stale`."
+          }
+        },
+        "required": [
+          "version"
         ]
       },
       "UpdateAppStateDto": {
@@ -35041,6 +35236,24 @@
         ],
         "additionalProperties": false
       },
+      "auth.TermsAcceptanceView": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acceptedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "version",
+          "acceptedAt"
+        ],
+        "additionalProperties": false
+      },
       "auth.UserProfileView": {
         "type": "object",
         "properties": {
@@ -35069,6 +35282,18 @@
               "string",
               "null"
             ]
+          },
+          "termsAcceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -35077,7 +35302,9 @@
           "username",
           "email",
           "emailVerified",
-          "displayName"
+          "displayName",
+          "termsAcceptedVersion",
+          "termsAcceptedAt"
         ],
         "additionalProperties": false
       },
@@ -40810,6 +41037,13 @@
           "manual"
         ]
       },
+      "enums.AiTextProvider": {
+        "type": "string",
+        "enum": [
+          "anthropic",
+          "google"
+        ]
+      },
       "enums.AuthProvider": {
         "type": "string",
         "enum": [
@@ -41366,6 +41600,18 @@
               "null"
             ]
           },
+          "termsAcceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "appState": {
             "$ref": "#/components/schemas/core.UserAppStateView"
           },
@@ -41374,6 +41620,9 @@
             "items": {
               "$ref": "#/components/schemas/enums.Permission"
             }
+          },
+          "terms": {
+            "$ref": "#/components/schemas/gateway.AccountTermsView"
           }
         },
         "required": [
@@ -41383,8 +41632,215 @@
           "email",
           "emailVerified",
           "displayName",
+          "termsAcceptedVersion",
+          "termsAcceptedAt",
           "appState",
-          "permissions"
+          "permissions",
+          "terms"
+        ],
+        "additionalProperties": false
+      },
+      "gateway.AccountTermsView": {
+        "type": "object",
+        "properties": {
+          "currentVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acceptanceRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currentVersion",
+          "acceptedVersion",
+          "acceptanceRequired"
+        ],
+        "additionalProperties": false
+      },
+      "gateway.LegalSettingsView": {
+        "type": "object",
+        "properties": {
+          "appName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "controllerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contactEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "terms": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "updatedOn": {
+                "type": "string",
+                "minLength": 1
+              },
+              "acceptanceRequired": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "version",
+              "updatedOn",
+              "acceptanceRequired"
+            ],
+            "additionalProperties": false
+          },
+          "privacy": {
+            "type": "object",
+            "properties": {
+              "updatedOn": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "updatedOn"
+            ],
+            "additionalProperties": false
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "googleSignIn": {
+                "type": "boolean"
+              },
+              "assistant": {
+                "type": "boolean"
+              },
+              "transcription": {
+                "type": "boolean"
+              },
+              "offsiteBackups": {
+                "type": "boolean"
+              },
+              "supportAccess": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "googleSignIn",
+              "assistant",
+              "transcription",
+              "offsiteBackups",
+              "supportAccess"
+            ],
+            "additionalProperties": false
+          },
+          "processors": {
+            "type": "object",
+            "properties": {
+              "hosting": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "aiText": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/enums.AiTextProvider"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offsiteBackups": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "hosting",
+              "email",
+              "aiText",
+              "offsiteBackups"
+            ],
+            "additionalProperties": false
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "auditTrailDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "adminLoginFailureDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "expiredGrantDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "applicationLogDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "assistantLogDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "backupDays": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            },
+            "required": [
+              "auditTrailDays",
+              "adminLoginFailureDays",
+              "expiredGrantDays",
+              "applicationLogDays",
+              "assistantLogDays",
+              "backupDays"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "appName",
+          "controllerName",
+          "contactEmail",
+          "published",
+          "terms",
+          "privacy",
+          "features",
+          "processors",
+          "retention"
         ],
         "additionalProperties": false
       },
@@ -45877,6 +46333,8 @@
               "recovery_other_account",
               "recovery_needs_email",
               "recovery_needs_password",
+              "terms_version_stale",
+              "terms_acceptance_missing",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

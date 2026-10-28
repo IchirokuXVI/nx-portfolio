@@ -8,6 +8,7 @@ import type { User } from '../entities';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * The username half of the identity domain (plan 0018, sections 3.4 and 4): a
@@ -93,7 +94,9 @@ function build(users: Partial<User>[] = []) {
     events as never,
     new UsernameGenerator(),
     fakeAudit([]).service,
-    config as never
+    config as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
   return { service, repo, events, tokens };
 }
@@ -225,6 +228,9 @@ describe('IdentityService.setUsername (section 4)', () => {
       email: 'a@b.com',
       emailVerified: true,
       displayName: 'Alice',
+      // No acceptance recorded yet (plan 0231, section 4.4).
+      termsAcceptedVersion: null,
+      termsAcceptedAt: null,
     });
   });
 });

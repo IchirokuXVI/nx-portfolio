@@ -117,6 +117,7 @@ export class GoogleController {
     auth: true,
     notConfigured: true,
     impersonation: 'refused',
+    terms: true,
   })
   mintState(
     @Body() dto: MintOAuthStateDto,
@@ -127,9 +128,14 @@ export class GoogleController {
       // and linking a Google identity onto an account is permanent.
       userId: user?.userId,
       locale: getRequestContext()?.locale,
-      // The one field the body carries (plan 0230, section 2). The verifier
+      // The one field the body requires (plan 0230, section 2). The verifier
       // behind it stays in the browser until the exchange.
       codeChallenge: dto.codeChallenge,
+      // Checked by auth now, at the start, and recorded at the exchange (plan
+      // 0231, section 4.2).
+      ...(dto.acceptedTermsVersion
+        ? { acceptedTermsVersion: dto.acceptedTermsVersion }
+        : {}),
     };
     return this.nats.send(AUTH_PATTERNS.mintOAuthState, request);
   }
@@ -249,6 +255,9 @@ export class GoogleController {
         linkUserId: payload.userId,
         codeChallenge: payload.codeChallenge,
         locale: payload.locale,
+        // Carried, never checked here (plan 0231, section 4.2): a refusal at
+        // a redirect costs the person the whole sign in.
+        acceptedTermsVersion: payload.acceptedTermsVersion,
       };
       const { code } = await this.nats.send<StageGoogleSignInResult>(
         AUTH_PATTERNS.stageGoogleSignIn,

@@ -23,6 +23,7 @@ import {
   User,
 } from '../entities';
 import { IdentityService } from '../identity/identity.service';
+import { InMemoryTermsService } from '../identity/terms.testing';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
@@ -156,7 +157,8 @@ describeIntegration('support sessions (real Postgres)', () => {
       new UsernameGenerator(),
       audit,
       config(true),
-      impersonation
+      impersonation,
+      new InMemoryTermsService()
     );
   }, 120_000);
 

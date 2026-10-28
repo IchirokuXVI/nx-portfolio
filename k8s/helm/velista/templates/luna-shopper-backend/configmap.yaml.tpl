@@ -39,11 +39,27 @@ data:
   # guarded against is believing you are in staging when you are in production.
   ENVIRONMENT_NAME: {{ $cfg.environmentName | quote }}
   # Support sessions (plan 0194): an operator opens the app as a user. Auth
-  # reads it and no other service does, so the gateway cannot disagree with
-  # it. False unless the values file of the environment says true. Staging
-  # says true. Production does not name it, and stays off until the owner
-  # turns it on, after the privacy policy names support access.
+  # alone enforces it. The gateway reads the same key only to report it to the
+  # privacy policy (plan 0231), so the two cannot disagree. False unless the
+  # values file of the environment says true. Staging says true. Production
+  # does not name it, and stays off until the owner turns it on, after the
+  # privacy policy names support access.
   IMPERSONATION_ENABLED: {{ $cfg.impersonationEnabled | default false | quote }}
+  # --- The legal documents (plan 0231, section 5.3) --------------------------
+  #
+  # The shape of this deployment, fine to commit. Who runs it is NOT here: the
+  # operator's values come from lunaShopperBackend.legal or the operator
+  # Secret, per key, in _env.tpl. Auth and the gateway both read the switch.
+  TERMS_ACCEPTANCE_REQUIRED: {{ $cfg.termsAcceptanceRequired | default false | quote }}
+  # True exactly where the backup CronJobs run nightly.
+  LEGAL_OFFSITE_BACKUPS: {{ and .Values.lunaShopperBackend.backups.enabled (not .Values.lunaShopperBackend.backups.suspend) | quote }}
+  LEGAL_BACKUP_RETENTION_DAYS: {{ .Values.lunaShopperBackend.backups.retentionDays | default 14 | quote }}
+  LEGAL_APPLICATION_LOG_DAYS: {{ ($cfg.legal | default dict).applicationLogDays | default 30 | quote }}
+  LEGAL_ASSISTANT_LOG_DAYS: {{ ($cfg.legal | default dict).assistantLogDays | default 7 | quote }}
+  # The retention periods (plan 0233), given to the gateway to report.
+  RETENTION_AUDIT: {{ ($cfg.retention | default dict).audit | default "180d" | quote }}
+  RETENTION_ADMIN_LOGIN_FAILURES: {{ ($cfg.retention | default dict).adminLoginFailures | default "90d" | quote }}
+  RETENTION_EXPIRED_GRANTS: {{ ($cfg.retention | default dict).expiredGrants | default "14d" | quote }}
 {{- /*
 The development autologin is deliberately ABSENT from this ConfigMap, in every
 environment. It signs an operator in with no password; auth refuses to boot with

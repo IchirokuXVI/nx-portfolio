@@ -171,6 +171,12 @@ export const THROTTLE_LIMITS = {
    */
   usernameSuggestion: bucket(minutes(1), 20),
   /**
+   * Accepting the Terms from the prompt (plan 0231, section 4.4). One write per
+   * version in an account's life, and idempotent, so ten a minute only stops a
+   * loop and leaves room for the retry of a lost answer.
+   */
+  termsAccept: bucket(minutes(1), 10),
+  /**
    * Uploading a voice comment (plan 0045, section 6).
    *
    * Stricter than the default bucket because an upload is orders of magnitude

@@ -5,9 +5,14 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
 import { AccountController } from '../account/account.controller';
+import { legalConfig } from '../config/legal-config';
 import { ZoneController } from '../zones/zone.controller';
 import type { CurrentUser } from './jwt.strategy';
 import { asRejectedCredentials, errorCodeOf } from './remote-problem';
+
+/** The gateway configuration the account controller reads its Terms from. */
+const config = () =>
+  ({ getOrThrow: () => ({ legal: legalConfig({}) }) }) as never;
 
 /**
  * A token whose account no longer exists is an invalid token, not a missing
@@ -185,7 +190,7 @@ describe('a token whose account is gone', () => {
       const { send } = build();
 
       await expect(
-        call(new AccountController({ send } as never))
+        call(new AccountController({ send } as never, {} as never, config()))
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });

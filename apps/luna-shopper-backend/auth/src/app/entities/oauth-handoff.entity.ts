@@ -45,6 +45,13 @@ export class OAuthHandoff extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   locale!: string | null;
 
+  /**
+   * Copied from the state (plan 0231, section 4.2). The exchange records it
+   * when it is still the current version, and records nothing otherwise.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  termsVersion!: string | null;
+
   @Index('uq_oauth_handoff_token', { unique: true })
   @Column({ type: 'varchar' })
   tokenHash!: string;

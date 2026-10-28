@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ASSISTANT_PATTERNS,
+  type AssistantCapabilities,
   type AssistantTranscribeRequest,
   type AssistantTranscribeResponse,
   type AssistantTurnRequest,
@@ -11,7 +12,8 @@ import {
 import { AssistantService } from './assistant.service';
 
 /**
- * The assistant's whole broker surface: three subjects (plans 0039, 0041, 0045).
+ * The assistant's whole broker surface: three subjects (plans 0039, 0041, 0045),
+ * and a fourth that says what the other three can do here (plan 0231).
  *
  * It takes a question in ordinary language and answers it, and the three things it
  * can do on the caller's behalf all happen over HTTP against the gateway with the
@@ -47,6 +49,12 @@ export class AssistantController {
     @Payload() request: AssistantVoiceRequest
   ): Promise<AssistantTurnResponse> {
     return this.assistant.voice(request);
+  }
+
+  /** What this deployment can do, for the published policy (plan 0231). */
+  @MessagePattern(ASSISTANT_PATTERNS.capabilities)
+  capabilities(): AssistantCapabilities {
+    return this.assistant.capabilities();
   }
 
   @MessagePattern(ASSISTANT_PATTERNS.transcribe)

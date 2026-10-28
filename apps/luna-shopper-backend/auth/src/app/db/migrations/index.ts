@@ -5,6 +5,7 @@ import { UserRoles1772600000000 } from './1772600000000-UserRoles';
 import { ImpersonationSessions1772700000000 } from './1772700000000-ImpersonationSessions';
 import { RecoveryGrants1772800000000 } from './1772800000000-RecoveryGrants';
 import { OAuthHandoffs1772900000000 } from './1772900000000-OAuthHandoffs';
+import { TermsAcceptances1773000000000 } from './1773000000000-TermsAcceptances';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -41,4 +42,7 @@ export const AUTH_MIGRATIONS = [
   // One nullable column on `oauth_states` and one new table (plan 0230). It
   // only adds, and a state minted before it is refused at consume.
   OAuthHandoffs1772900000000,
+  // One new table and a nullable column on each Google grant (plan 0231). It
+  // only adds, and a grant from before it carries no version.
+  TermsAcceptances1773000000000,
 ];

@@ -35,6 +35,11 @@ export * from './lib/enums/profile.enums';
 export * from './lib/enums/realtime.enums';
 export * from './lib/enums/zone.enums';
 
+// The legal documents and what a deployment states about itself (plan 0231).
+// Browser reachable: velista reads the version functions too.
+export * from './lib/legal/legal-documents';
+export * from './lib/legal/legal-settings';
+
 // Messages
 export * from './lib/messages/admin-auth.messages';
 export * from './lib/messages/admin-core.messages';
