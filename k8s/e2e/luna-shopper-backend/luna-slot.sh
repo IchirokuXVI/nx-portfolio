@@ -2053,6 +2053,11 @@ up() {
   local -a wanted=()
   resolve_services "$services_csv" wanted || return $?
 
+  # What the slot's assistant was started with, read before this run rewrites
+  # the descriptor (plan 0235).
+  local had_voice
+  had_voice="$(recorded_voice)"
+
   # An ephemeral slot takes nothing that somebody else holds: not a number a
   # worktree claims, not the databases a lock keeps, and not a slot another
   # ephemeral run holds. The ordinary mode takes a locked slot when it is named,
@@ -2148,15 +2153,28 @@ up() {
     "${stack[@]}" up
   fi
 
-  # Before the services, so the assistant boots with a transcriber that answers.
+  # The transcriber follows the services, and only once they started: a slot
+  # that already runs refuses them, and its assistant keeps the TRANSCRIBER_URL
+  # it booted with, so starting or stopping the container then would leave the
+  # two disagreeing. The .env already says what --voice asked for, and one
+  # restart of the assistant applies it (plan 0235).
+  local -a ports=()
+  if ! serve_services wanted ports; then
+    if [[ "$VOICE" != "$had_voice" ]]; then
+      echo "voice did not change: the running assistant keeps its TRANSCRIBER_URL. Apply it with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services assistant${VOICE:+ --voice}" >&2
+    fi
+    return 1
+  fi
+
   if [[ -n "$VOICE" ]]; then
     start_transcriber || return 1
   else
     stop_transcriber
   fi
-
-  local -a ports=()
-  serve_services wanted ports || return 1
+  if [[ "$VOICE" != "$had_voice" && " ${wanted[*]} " != *" assistant "* ]]; then
+    echo "==> --services did not name the assistant, so a running one keeps its old TRANSCRIBER_URL."
+    echo "    Apply it with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services assistant${VOICE:+ --voice}"
+  fi
 
   echo "==> waiting up to ${timeout}s for the services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
@@ -2439,7 +2457,14 @@ restart_services() {
 
   echo "==> restarting on Luna slot $LUNA_SLOT: ${wanted[*]}"
   echo "    (the compose stack and its volumes are left alone)"
-  [[ -n "$VOICE" ]] && { start_transcriber || return 1; }
+  if [[ -n "$VOICE" ]]; then
+    start_transcriber || return 1
+  elif [[ " ${wanted[*]} " == *" assistant "* ]]; then
+    # The assistant restarts without voice, so a transcriber left from before
+    # (an --up without --voice that a running slot refused) has nobody to
+    # answer. Quiet, and nothing to do on a slot that never had one.
+    stop_transcriber
+  fi
   local -a stopping=()
   for svc in "${wanted[@]}"; do
     port="$(service_port "$svc")"

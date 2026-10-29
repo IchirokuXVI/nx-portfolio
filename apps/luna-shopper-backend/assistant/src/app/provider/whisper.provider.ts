@@ -73,33 +73,46 @@ export class WhisperProvider implements ModelProvider {
     form.append('purpose', request.purpose);
     form.append('language', languageOf(request.locale));
 
+    // One deadline over the whole exchange, the body included: the headers can
+    // arrive in time and the body never end, and a read with no deadline would
+    // hold the caller past its own timeout.
     const abort = new AbortController();
     const deadline = setTimeout(() => abort.abort(), timeoutMs);
-
-    let response: Response;
-    try {
-      response = await fetch(`${this.config.transcriberUrl}/v1/transcribe`, {
-        method: 'POST',
-        signal: abort.signal,
-        headers: { 'x-deadline-ms': String(timeoutMs) },
-        body: form,
-      });
-    } catch (error) {
-      throw new ProviderUnavailableError(
+    const unavailable = (error: unknown, otherwise: string) =>
+      new ProviderUnavailableError(
         abort.signal.aborted
           ? `the transcriber did not answer within ${timeoutMs}ms`
-          : 'the transcriber could not be reached',
+          : otherwise,
         { cause: error }
       );
+
+    try {
+      let response: Response;
+      try {
+        response = await fetch(`${this.config.transcriberUrl}/v1/transcribe`, {
+          method: 'POST',
+          signal: abort.signal,
+          headers: { 'x-deadline-ms': String(timeoutMs) },
+          body: form,
+        });
+      } catch (error) {
+        throw unavailable(error, 'the transcriber could not be reached');
+      }
+
+      if (!response.ok) {
+        throw await this.readError(response);
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        throw unavailable(error, 'the transcriber answered no JSON');
+      }
+      return readTranscription(payload);
     } finally {
       clearTimeout(deadline);
     }
-
-    if (!response.ok) {
-      throw await this.readError(response);
-    }
-
-    return readTranscription(await response.json());
   }
 
   /**

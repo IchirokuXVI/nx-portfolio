@@ -16,7 +16,7 @@ The main parts:
 - `shell` is the host application. It owns the router and mounts the remotes at runtime.
 - `odontogram`, `damoclesSword` and `landingV2` are remote micro-frontend apps. Each one exposes its routes through `./Routes` (module federation).
 - `velista` is a standalone Angular app in the monorepo, not a remote. It is served on its own origin. In the clusters, the Gateway also serves it under the `/velista` path of the portfolio (plan 0165).
-- `apps/luna-shopper-backend/*` is the backend of velista. It has seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS. It uses four Postgres instances and Redis. See "Luna Shopper backend" below.
+- `apps/luna-shopper-backend/*` is the backend of velista. It has seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS, and a Python transcriber (`transcriber`) on HTTP, plan 0235. It uses four Postgres instances and Redis. See "Luna Shopper backend" below.
 - `apps/docker/*` holds Nx "app" projects that are not Angular (builder, local-http-server). Each one only wraps a Dockerfile. Each has the tag `type:static-docker` or `type:dynamic-docker`, and CI drives it (see "Docker & CI/CD").
 - `tools/docker` is a custom Nx plugin (`@portfolio/docker`). It provides the `build` and `push` executors that the `build:docker` target of each app uses. It also provides an `application` generator that adds a Dockerfile to a new app.
 - `libs/<scope>/*` holds the Nx libraries, one group for each scope. The scopes are `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin` and `shared`. The library names follow the `data-access` / `feature-*` / `ui` / `models` convention.
@@ -294,7 +294,7 @@ Import through the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.
   - A `deploy:<unit>` tag, and one entry in the `apps` of that unit's chart values (`k8s/helm/<unit>/values.yaml`: `name`, `image`, `hostPrefix`, `path`). Add no environment and no second staging entry.
   - Its e2e project, if it has one, in the `TRIGGERS` of exactly one gate. `units.mjs check` fails otherwise.
   - For a new unit: `k8s/units/<unit>/unit.env`, a chart, the two callers `staging-<unit>.yml` and `release-<unit>.yml`, the environments `<unit>-staging`, `<unit>-production` and `<unit>-production-redeploy` (`k8s/bootstrap/github-environments.sh`), a `TAG_PREFIX` that no other unit's prefix starts with, and the unit in the `unit` choices of `redeploy.yml`.
-  - For a plain static or dynamic docker wrapper that is not an Angular app, the `type:static-docker` / `type:dynamic-docker` tag. CI needs it to pick the app up correctly.
+  - For a plain static or dynamic docker wrapper under `apps/docker` only, the `type:static-docker` / `type:dynamic-docker` tag. CI needs it to pick the app up correctly. A unit image must not carry it, even one with no Angular or Node build (the transcriber): `tools/deploy/units.mjs` reads the tag as "workspace artifact, in no unit", which drops the image from the image scan and the redeploy check.
 
 ## Code style
 

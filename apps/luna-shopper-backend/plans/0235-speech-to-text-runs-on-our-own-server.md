@@ -346,10 +346,13 @@ already says as a failed transcription.
 | Assistant, `comment` | `TRANSCRIBER_COMMENT_TIMEOUT_MS`, 110,000 | A full queue of turns ahead of it, then 90 s of audio on turbo. |
 | Gateway, voice comment | `VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS`, raised from 45,000 to 120,000 | It must outlast the assistant's own deadline, or the gateway gives up on an answer that is still coming. |
 
-The assistant sends its remaining time as `X-Deadline-Ms`. A transcriber `503` or `504`
-is a `ProviderUnavailableError`, which the gateway's existing second attempt
-(`comment-transcription.service.ts:27`) already covers for a comment, and which a spoken
-turn answers with the sentence it already has for an unavailable provider.
+The assistant sends its remaining time as `X-Deadline-Ms`. A transcriber `503` (the
+queue is full) is a `ProviderRateLimitedError` with its `retryAfterSeconds`, as
+section 7 says, and a `504` is a `ProviderUnavailableError`. The gateway's existing
+second attempt (`comment-transcription.service.ts:27`) covers both for a comment, and
+after a rate limit it waits the seconds the limit named (section 16). A spoken turn
+answers a rate limit with its `rate_limited` problem and an unavailable transcriber
+with the sentence it already has for an unavailable provider.
 
 The NATS request from the gateway carries no timeout of its own: `NatsClient.send`
 adds an rxjs `timeout` only when a caller passes `timeoutMs`, the comment path passes
@@ -561,9 +564,12 @@ choice is the owner's to change.
 
 1. **The project has the tag `deploy:velista` and no `type:dynamic-docker`** (section 2.1).
    `tools/deploy/units.mjs` reads the `type:*-docker` tags as "workspace artifact, in no
-   unit", so the transcriber would have left `units.mjs images`: the image scan would not
-   scan it and `redeploy.yml` would not check that its image exists. No workflow reads the
-   tag for anything else. `units.mjs check` passes with the velista unit at ten projects.
+   unit" (`WORKSPACE_ARTIFACT_TAGS` at `:88`, skipped at `:120`), so the transcriber
+   would have left `units.mjs images`: the image scan would not scan it and
+   `redeploy.yml` would not check that its image exists. No workflow reads the tag for
+   anything else. `units.mjs check` passes with the velista unit at ten projects. The
+   review kept this, and `CLAUDE.md` now says the tag is for the `apps/docker` wrappers
+   only.
 2. **The queue is `src/clip_queue.py`, not `src/queue.py`.** `app.py` runs with its own
    directory first on the import path, and a local `queue.py` replaces the standard
    library module that `concurrent.futures` imports.
@@ -666,9 +672,48 @@ choice is the owner's to change.
     - the first production deploy waits for `/health/ready` inside
       `deploy-release.sh`'s `--wait --timeout 10m`, so a 2 GB download slower than about
       nine minutes fails that deploy while the pod goes on downloading. Seeding the claim
-      first (README) or running the deploy again avoids it;
-    - the staging and release pipelines run `assert-runtime-manifest.mjs` on every
-      affected image whose name starts with `luna-shopper-backend-`, and the transcriber
-      has no `dist` directory, so that step fails with `ENOENT` for it. The fix is in
-      `.github/workflows/stage-unit.yml` and `release-unit.yml`, outside this plan's
-      scope, and is not in this build.
+      first (README) or running the deploy again avoids it.
+
+The review added the rest. Items 23 and 24 change `.github/workflows`, which is
+**outside this plan's scope** (section "Scope" of the brief). They are in this build
+because without them the plan cannot deploy: every velista staging deploy and every
+velista release that names the transcriber would fail. The owner can reject the
+widening, and then the plan waits for a separate change to both files.
+
+23. **The pipelines check the Node bundles by target, not by name.** `stage-unit.yml` and
+    `release-unit.yml` built the list for `assert-runtime-manifest.mjs` with
+    `grep -E '^luna-shopper-backend-'` over the images, and the transcriber has no
+    `dist`, so the step failed with `ENOENT`. Both now ask Nx for the unit's projects
+    with a `manifest-check` target (`list --with-target manifest-check --projects
+    "tag:deploy:$UNIT"`, the affected scope included on staging), which names the seven
+    Node services and nothing else.
+24. **The transcriber's tests run on the runner in both pipelines.** The lint and test
+    job runs `nx run-many -t lint test` inside `BUILD_IMAGE`, which has no `docker`, and
+    the transcriber's `test` is a `docker build`. The in container run now passes
+    `--exclude luna-shopper-backend-transcriber`, and a step on the runner runs
+    `nx run luna-shopper-backend-transcriber:test` when the testable list names it, as
+    `pr.yml` already does. A failure of either half fails the job, so the deploy waits
+    on both as before.
+25. **A comment's second attempt waits as long as a rate limit says.** A full
+    transcriber queue answers `503` with `retryAfterSeconds: 10`, the assistant turns it
+    into `rate_limited` with that number, and the gateway waited a fixed 1.5 s, so the
+    second attempt found the queue full too and the comment settled `FAILED`. The
+    gateway now waits the larger of 1.5 s and the named seconds, at most 30 s
+    (`MAX_RETRY_DELAY_MS`). Each attempt keeps its own
+    `VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS`. Section 6.2 said a `503` was a
+    `ProviderUnavailableError`; it is a `ProviderRateLimitedError`, as section 7 and the
+    code have it, and 6.2 now says so.
+26. **The transcriber's deadline covers the body.** The abort timer was cleared when the
+    headers arrived, so a body that never ended had no deadline. It is now cleared after
+    the body is read, and a body cut by the deadline is a `ProviderUnavailableError`
+    that names the timeout.
+27. **`--voice` on a running slot leaves the slot consistent.** The transcriber starts or
+    stops only after the services started. A slot that already runs refuses them, so
+    `--up` then changes no container and prints the one command that applies the new
+    `TRANSCRIBER_URL`: `--restart --services assistant`, with `--voice` to turn voice
+    on. A `--restart` that restarts the assistant without voice also stops a transcriber
+    left from before.
+28. **`TRANSCRIBER_THREADS` reads a Kubernetes CPU quantity.** The chart passes the CPU
+    limit as written, and `int()` refused `1500m`. `cpu_threads` rounds up (`1500m` and
+    `1.5` are 2, `2` is 2) and refuses anything else with a message that names the
+    value, so a self hoster's `cpu: '1500m'` boots.

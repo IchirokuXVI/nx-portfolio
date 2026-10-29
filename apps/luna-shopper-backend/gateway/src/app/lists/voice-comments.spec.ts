@@ -13,7 +13,9 @@ import {
 import type { NatsClient } from '../messaging/nats-client';
 import {
   CommentTranscriptionService,
+  MAX_RETRY_DELAY_MS,
   RETRY_DELAY_MS,
+  retryDelayMs,
 } from './comment-transcription.service';
 
 /**
@@ -127,6 +129,19 @@ function remoteError(code: string): unknown {
   return { error: { code, status: 501, message: 'no', correlationId: 'x' } };
 }
 
+/** The assistant's rate limit as it crosses the broker, with its wait (rule A5). */
+function rateLimited(retryAfterSeconds: number): unknown {
+  return {
+    error: {
+      code: ERROR_CODES.RATE_LIMITED,
+      status: 429,
+      message: 'busy',
+      correlationId: 'x',
+      retryAfterSeconds,
+    },
+  };
+}
+
 describe('a transcript is asked for after the comment is stored', () => {
   it('sends the recording, its type and the locale to the assistant', async () => {
     const b = broker({
@@ -234,6 +249,56 @@ describe('a transcript is asked for after the comment is stored', () => {
     expect(b.settled()).toMatchObject({
       body: 'the sourdough one',
       transcription: CommentTranscription.READY,
+    });
+  });
+
+  describe('a full transcriber queue', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('waits as long as the rate limit says before the second attempt', async () => {
+      // The transcriber's busy answer says ten seconds (plan 0235). A second
+      // attempt after the fixed pause would find the queue still full.
+      jest.useFakeTimers();
+      const b = broker({
+        transcribe: async (attempt) => {
+          if (attempt === 1) {
+            throw rateLimited(10);
+          }
+          return { text: 'the sourdough one' };
+        },
+      });
+      const attempts = () =>
+        b.subjects().filter((s) => s === ASSISTANT_PATTERNS.transcribe);
+
+      b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+      await jest.advanceTimersByTimeAsync(9_000);
+
+      expect(attempts()).toHaveLength(1);
+
+      await jest.advanceTimersByTimeAsync(1_100);
+
+      expect(attempts()).toHaveLength(2);
+      expect(b.settled()).toMatchObject({
+        body: 'the sourdough one',
+        transcription: CommentTranscription.READY,
+      });
+    });
+
+    it('never waits less than the fixed pause, nor more than the cap', () => {
+      expect(retryDelayMs(rateLimited(10))).toBe(10_000);
+      expect(retryDelayMs(rateLimited(0.2))).toBe(RETRY_DELAY_MS);
+      expect(retryDelayMs(rateLimited(3600))).toBe(MAX_RETRY_DELAY_MS);
+      // The envelope also arrives unnested.
+      expect(
+        retryDelayMs({ code: ERROR_CODES.RATE_LIMITED, retryAfterSeconds: 4 })
+      ).toBe(4_000);
+      // Anything that is not a rate limit with a number keeps the fixed pause.
+      expect(retryDelayMs(new Error('briefly unavailable'))).toBe(
+        RETRY_DELAY_MS
+      );
+      expect(retryDelayMs(remoteError(ERROR_CODES.INTERNAL))).toBe(
+        RETRY_DELAY_MS
+      );
     });
   });
 

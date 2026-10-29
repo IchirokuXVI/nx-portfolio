@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -109,7 +110,7 @@ class Settings:
         return Settings(
             turn_model=text('TRANSCRIBER_TURN_MODEL', 'small'),
             comment_model=text('TRANSCRIBER_COMMENT_MODEL', 'large-v3-turbo'),
-            threads=int(text('TRANSCRIBER_THREADS', '2')),
+            threads=cpu_threads(text('TRANSCRIBER_THREADS', '2')),
             preload=flag('TRANSCRIBER_PRELOAD', True),
             max_seconds_turn=float(text('TRANSCRIBER_MAX_SECONDS_TURN', '300')),
             max_seconds_comment=float(text('TRANSCRIBER_MAX_SECONDS_COMMENT', '90')),
@@ -119,6 +120,28 @@ class Settings:
             beam_size=int(text('TRANSCRIBER_BEAM_SIZE', '1')),
             revisions=revisions,
         )
+
+
+CPU_QUANTITY = re.compile(r'^(\d+(?:\.\d+)?)(m?)$')
+
+
+def cpu_threads(value: str) -> int:
+    """A Kubernetes CPU quantity as whole threads, rounded up.
+
+    The chart passes the pod's CPU limit as it is written, so `2` is 2 and a
+    self hoster's `1500m` is 2 as well. Anything else stops the boot with a
+    message that names the value.
+    """
+    match = CPU_QUANTITY.match(value.strip())
+    if match is None:
+        raise ValueError(
+            f'TRANSCRIBER_THREADS must be a CPU count such as 2 or 1500m, not {value!r}'
+        )
+    amount = float(match.group(1)) / (1000 if match.group(2) else 1)
+    threads = math.ceil(amount)
+    if threads < 1:
+        raise ValueError(f'TRANSCRIBER_THREADS must be more than 0, not {value!r}')
+    return threads
 
 
 def load_whisper(name: str, settings: Settings) -> WhisperLike:

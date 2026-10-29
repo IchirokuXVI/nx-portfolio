@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 import time
 import wave
@@ -18,7 +19,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from app import Settings, create_app
+from app import Settings, cpu_threads, create_app
 
 TRANSCRIPT = 'el secreto de la lista de la compra'
 
@@ -287,3 +288,23 @@ def test_settings_read_the_environment():
     assert settings.revisions['base'] == 'abc'
     assert settings.revisions['small'] == 'def'
     assert settings.revisions['large-v3-turbo'] == '0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf'
+
+
+@pytest.mark.parametrize(('quantity', 'threads'), [
+    ('2', 2),
+    ('1500m', 2),
+    ('1000m', 1),
+    ('250m', 1),
+    ('1.5', 2),
+    (' 4 ', 4),
+])
+def test_threads_read_a_kubernetes_cpu_quantity(quantity, threads):
+    # The chart passes the pod's CPU limit as written, and a self hoster may
+    # write millicores.
+    assert Settings.from_env({'TRANSCRIBER_THREADS': quantity}).threads == threads
+
+
+@pytest.mark.parametrize('quantity', ['two', '2 cpu', '0', '0m', '-1', '1.5m.'])
+def test_threads_refuse_anything_else_by_name(quantity):
+    with pytest.raises(ValueError, match=re.escape(repr(quantity))):
+        cpu_threads(quantity)

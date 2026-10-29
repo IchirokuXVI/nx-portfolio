@@ -17,10 +17,13 @@ import { languageOf, WhisperProvider } from './whisper.provider';
 
 const URL_BASE = 'http://transcriber.invalid:3007';
 
-function provider(transcriberUrl = URL_BASE): WhisperProvider {
+function provider(
+  transcriberUrl = URL_BASE,
+  turnTimeoutMs = 45000
+): WhisperProvider {
   const config = {
     transcriberUrl,
-    transcriberTurnTimeoutMs: 45000,
+    transcriberTurnTimeoutMs: turnTimeoutMs,
     transcriberCommentTimeoutMs: 110000,
   } as AssistantConfig;
   return new WhisperProvider({
@@ -40,15 +43,35 @@ interface Sent {
   init: RequestInit;
 }
 
-function stubFetch(answer: () => Promise<Response>): Sent[] {
+function stubFetch(answer: (init: RequestInit) => Promise<Response>): Sent[] {
   const sent: Sent[] = [];
   jest
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (url: string | URL | Request, init) => {
       sent.push({ url: String(url), init: init ?? {} });
-      return answer();
+      return answer(init ?? {});
     });
   return sent;
+}
+
+/**
+ * Headers in time and a body that never ends, as a stalled transcriber sends
+ * it. The stream errors when the request's signal aborts, which is what
+ * `fetch` does to a body still being read.
+ */
+function endless(status: number, init: RequestInit): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"text":'));
+      init.signal?.addEventListener('abort', () =>
+        controller.error(new DOMException('aborted', 'AbortError'))
+      );
+    },
+  });
+  return new Response(body, {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 function json(status: number, body: unknown): Response {
@@ -162,6 +185,27 @@ describe('WhisperProvider', () => {
     await expect(provider().transcribe(RECORDING)).rejects.toThrow(
       'the transcriber could not be reached'
     );
+  });
+
+  it('aborts a body that never ends at the deadline', async () => {
+    stubFetch(async (init) => endless(200, init));
+
+    const error = await provider(URL_BASE, 50)
+      .transcribe(RECORDING)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(ProviderUnavailableError);
+    expect((error as Error).message).toBe(
+      'the transcriber did not answer within 50ms'
+    );
+  });
+
+  it('aborts an error body that never ends, and still maps the status', async () => {
+    stubFetch(async (init) => endless(503, init));
+
+    await expect(
+      provider(URL_BASE, 50).transcribe(RECORDING)
+    ).rejects.toBeInstanceOf(ProviderRateLimitedError);
   });
 
   it('refuses a 200 that carries no text', async () => {
