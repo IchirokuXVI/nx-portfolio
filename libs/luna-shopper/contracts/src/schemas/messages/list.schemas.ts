@@ -559,6 +559,11 @@ const addLineRequest = object(
     productGroupId: nonEmptyString(),
     // Whether a person typed the name (plan 0207, section 1.3). Absent is true.
     named: boolean(),
+    // The question a typed name can raise, and its two answers (plan 0228).
+    // Read on a free text add alone.
+    askIfAmbiguous: boolean(),
+    intoLineId: nonEmptyString(),
+    newLine: boolean(),
   },
   ['userId', 'listId', 'content']
 );

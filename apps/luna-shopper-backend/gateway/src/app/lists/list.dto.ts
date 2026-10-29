@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_CEILING,
   LINE_ITEM_SET_MAX,
@@ -30,7 +31,9 @@ import {
   Min,
   MinLength,
   NotEquals,
+  registerDecorator,
   ValidateNested,
+  type ValidationArguments,
 } from 'class-validator';
 
 export class CreateListDto {
@@ -180,6 +183,43 @@ export class AddLinesItemDto {
 }
 
 /**
+ * What the three fields of plan 0228 mean, written once for the list's add and
+ * the basket's add, which take them alike because both are `LineService.add`.
+ */
+export const ADD_CHOICE_DOCS = {
+  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId.`,
+  intoLineId:
+    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+  newLine:
+    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId.',
+} as const;
+
+/**
+ * `intoLineId` and `newLine: true` are two answers to one question (plan
+ * 0228), so a body that sends both is refused. Applied beside `@IsOptional()`
+ * on `intoLineId`, which is fine here: an absent id cannot contradict
+ * anything.
+ */
+export function NotBesideNewLine(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'notBesideNewLine',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const body = args.object as { newLine?: unknown };
+          return value === undefined || body.newLine !== true;
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} cannot be sent beside newLine true`;
+        },
+      },
+    });
+  };
+}
+
+/**
  * Add one line to a list (plan 0007, section 2).
  *
  * A batched line plus the one thing only a single add can say: which group the
@@ -194,6 +234,34 @@ export class AddLineDto extends AddLinesItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string;
+
+  @ApiPropertyOptional({
+    description: ADD_CHOICE_DOCS.askIfAmbiguous,
+  })
+  // Only a JSON true or false passes, as on `named`.
+  @Transform(
+    ({ obj }: { obj: Record<string, unknown> }) => obj?.['askIfAmbiguous']
+  )
+  @IsOptional()
+  @IsBoolean()
+  askIfAmbiguous?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: ADD_CHOICE_DOCS.intoLineId,
+  })
+  @IsOptional()
+  @IsUUID()
+  @NotBesideNewLine()
+  intoLineId?: string;
+
+  @ApiPropertyOptional({
+    description: ADD_CHOICE_DOCS.newLine,
+  })
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
+  @IsOptional()
+  @IsBoolean()
+  newLine?: boolean;
 }
 
 /**

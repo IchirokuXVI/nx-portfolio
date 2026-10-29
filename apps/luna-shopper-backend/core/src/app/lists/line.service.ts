@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
@@ -18,6 +19,7 @@ import {
   type AddLinesItem,
   type AddLinesRequest,
   type DeleteLineRequest,
+  type LineAddNeedsChoiceDetails,
   type LineClaim,
   type LineMergeRequiredDetails,
   type LineOrder,
@@ -36,6 +38,7 @@ import {
   encodeCursor,
   ForbiddenException,
   isUuid,
+  LineAddNeedsChoiceException,
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
   LineMergeTooManyProductsException,
@@ -902,6 +905,18 @@ export class LineService {
    * lands on is {@link findAddTarget}. The answer says which of the two
    * happened, because a caller reading it back to a person cannot tell from the
    * line alone.
+   *
+   * ## A typed name meets the line that holds that product (plan 0228)
+   *
+   * A free text add, with no product and no group, is resolved in this order:
+   * the line the person chose in `intoLineId`; the free text line of the name,
+   * even beside `newLine`; a new line when `newLine` is true; and then the lines
+   * that hold a product or a group under the typed name
+   * ({@link findNamedProductLines}). One such line is raised, with no question
+   * and whatever the caller can ask, so an old client gets the merge too. Two or
+   * more refuse the add with `line_add_needs_choice` when the caller set
+   * `askIfAmbiguous`, and otherwise the add creates a line, as before. The
+   * three fields are ignored on an add that carries a product or a group.
    */
   async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -937,8 +952,27 @@ export class LineService {
     // A basket's add sets `via`, and then the actor is the participant who typed
     // it rather than the account the write was checked against.
     const actor = actorOf(req);
+    // The three fields of plan 0228 are read on a free text add alone. An add
+    // of a product or a group lands where plans 0091 and 0214 put it.
+    const freeText = itemIds.length === 0 && productGroupId === null;
+    const choice = this.validateAddChoice(req);
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
+      const raise = async (line: ListLine) => ({
+        merged: true as const,
+        written: await this.raiseForAdd(manager, line, quantity, {
+          list: this.listRef(list),
+          actor,
+        }),
+      });
+
+      // The person chose a line (plan 0228, target 1.1). It is raised or the
+      // add is refused, and the add never falls back to a new line.
+      if (freeText && choice.intoLineId !== undefined) {
+        return raise(
+          await this.lockChosenLine(manager, req.listId, choice.intoLineId)
+        );
+      }
 
       // The flag the new line would carry, so an add that is not named meets
       // a line that is not named by its products alone (plan 0214, section 1).
@@ -951,18 +985,30 @@ export class LineService {
       const targets = await this.findAddTarget(manager, req.listId, identities);
       // The earliest line met in either way, which is the rule for two lines of
       // one name (plan 0091, section 3.1) asked of two ways to be the same thing.
+      // For a free text add this is the free text line of the name, which takes
+      // the add even beside `newLine` (plan 0228, target 1.2).
       const existing = identities
         .map((identity) => targets.get(identity))
         .filter((line): line is ListLine => line !== undefined)
         .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
       if (existing !== undefined) {
-        return {
-          merged: true as const,
-          written: await this.raiseForAdd(manager, existing, quantity, {
-            list: this.listRef(list),
-            actor,
-          }),
-        };
+        return raise(existing);
+      }
+
+      // A typed name meets the lines that hold a product under it (plan 0228,
+      // target 1.4), unless the person already chose a new line.
+      if (freeText && !choice.newLine) {
+        const candidates = await this.findNamedProductLines(
+          manager,
+          req.listId,
+          req.content
+        );
+        if (candidates.length === 1) {
+          return raise(await this.lockLine(manager, candidates[0].id));
+        }
+        if (candidates.length > 1 && choice.askIfAmbiguous) {
+          throw await this.needsChoice(manager, req.content, candidates);
+        }
       }
 
       const repo = manager.getRepository(ListLine);
@@ -1329,6 +1375,141 @@ export class LineService {
   }
 
   /**
+   * The answer an add carries to the question of plan 0228, as core reads it.
+   *
+   * Only a JSON `true` turns a flag on, as the gateway's DTO already insists,
+   * so a message that names a flag by any other value asks for nothing.
+   * `intoLineId` beside `newLine: true` is two answers to one question and is
+   * refused on every add, a product add included: the request is malformed
+   * whatever it carries.
+   */
+  private validateAddChoice(req: AddLineRequest): {
+    askIfAmbiguous: boolean;
+    intoLineId: string | undefined;
+    newLine: boolean;
+  } {
+    const newLine = req.newLine === true;
+    const intoLineId = req.intoLineId ?? undefined;
+    if (intoLineId !== undefined && newLine) {
+      throw new ValidationException(
+        'intoLineId cannot be sent beside newLine true',
+        { messageArgs: { field: 'intoLineId' } }
+      );
+    }
+    return { askIfAmbiguous: req.askIfAmbiguous === true, intoLineId, newLine };
+  }
+
+  /**
+   * The line a person chose for a free text add, locked (plan 0228, target 4).
+   *
+   * A line of the same list that is not `REJECTED`, and nothing else: an id of
+   * another list, a deleted line and a rejected line are all the one line not
+   * found refusal, so the route says nothing about lines the list does not
+   * hold. The line need not carry the typed name, because the person picked
+   * it. The gateway refuses a value that is not a uuid before it gets here.
+   */
+  private async lockChosenLine(
+    manager: EntityManager,
+    listId: string,
+    lineId: string
+  ): Promise<ListLine> {
+    const line = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId, listId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (
+      !line ||
+      line.listId !== listId ||
+      line.approvalStatus === LineApprovalStatus.REJECTED
+    ) {
+      throw new NotFoundException('Line not found');
+    }
+    return line;
+  }
+
+  /**
+   * The lines of a list that hold a product or a group under a typed name
+   * (plan 0228, target 1.4), in list position order.
+   *
+   * The name is compared as {@link normalizeContent} folds it, against
+   * `content` as the row holds it, whatever `named` says: for a line that is
+   * not named that is the product's name in the adder's locale (section 2).
+   * Every quantity counts, so a bought line at zero is a candidate (D2). A
+   * `REJECTED` line is not, for the reason {@link findMergeTarget} gives, and a
+   * deleted one is kept out by the repository read.
+   *
+   * The same rows {@link findEarliestLines} reads, read under the list lock the
+   * add already holds, so no other add to this list can change the answer
+   * before the add writes.
+   */
+  private async findNamedProductLines(
+    manager: EntityManager,
+    listId: string,
+    content: string
+  ): Promise<ListLine[]> {
+    const folded = normalizeContent(content);
+    const rows = await manager.getRepository(ListLine).find({
+      where: { listId },
+      select: {
+        id: true,
+        listId: true,
+        content: true,
+        named: true,
+        quantity: true,
+        itemSetHash: true,
+        productGroupId: true,
+        approvalStatus: true,
+        position: true,
+      },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    return rows
+      .filter(
+        (row) =>
+          row.listId === listId &&
+          row.approvalStatus !== LineApprovalStatus.REJECTED &&
+          (row.itemSetHash !== null || row.productGroupId !== null) &&
+          normalizeContent(row.content) === folded
+      )
+      .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1));
+  }
+
+  /**
+   * The refusal that asks which line a typed name means (plan 0228, section 3).
+   *
+   * The first {@link LINE_ADD_CHOICE_MAX} candidates, each with its products,
+   * read in one query. Nothing has been written when this is thrown, so the
+   * transaction rolls back an add that changed nothing.
+   */
+  private async needsChoice(
+    manager: EntityManager,
+    content: string,
+    candidates: readonly ListLine[]
+  ): Promise<LineAddNeedsChoiceException> {
+    const shown = candidates.slice(0, LINE_ADD_CHOICE_MAX);
+    const rows = await manager.getRepository(ListLineItem).find({
+      where: { lineId: In(shown.map((line) => line.id)) },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    const details: LineAddNeedsChoiceDetails = {
+      lines: shown.map((line) => ({
+        lineId: line.id,
+        content: line.content,
+        named: line.named,
+        quantity: line.quantity,
+        itemIds: toLineItemSet(rows.filter((row) => row.lineId === line.id))
+          .itemIds,
+        productGroupId: line.productGroupId ?? null,
+        approvalStatus: line.approvalStatus,
+      })),
+    };
+    return new LineAddNeedsChoiceException(
+      `${candidates.length} lines of this list that hold a product are called "${content}"`,
+      { details: { ...details }, messageArgs: { content } }
+    );
+  }
+
+  /**
    * The line each of these names would merge into, locked and ready to be
    * raised (plan 0091, sections 1 and 3.1).
    *
@@ -1483,6 +1664,9 @@ export class LineService {
    * is nothing of the request's to write: a free text add met a free text line,
    * and an add of a product met the line holding that product. Nothing is put
    * in a household's list on the strength of a name (plan 0065, section 3).
+   * A free text add can also reach a line that holds a product (plan 0228):
+   * the one line of that name, or the line the person chose. It carries no
+   * product, so there is still nothing of the request's to write.
    *
    * ## The ceiling clamps rather than refuses
    *

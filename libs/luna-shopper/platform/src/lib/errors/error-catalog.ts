@@ -120,6 +120,12 @@ export const ERROR_CATALOG: Record<
     en: 'Together these two lines would hold more than {max} products, so they cannot be merged.',
     es: 'Juntas, estas dos líneas tendrían más de {max} productos, así que no se pueden unir.',
   },
+  // An add of a name that two or more product lines hold (plan 0228). It says
+  // what to do next, because the person is being asked to choose.
+  [ERROR_CODES.LINE_ADD_NEEDS_CHOICE]: {
+    en: 'This list already has more than one line called "{content}". Choose the line to add to, or add a new line.',
+    es: 'Esta lista ya tiene más de una línea llamada "{content}". Elige la línea a la que sumar, o añade una línea nueva.',
+  },
   // The brand registry's two refusals (plan 0115, section 5.3). Both name what
   // to do rather than what failed: type a real word, or open the brand that
   // already holds the key.

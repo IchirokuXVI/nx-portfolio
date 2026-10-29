@@ -197,4 +197,40 @@ free text line of that name added meanwhile takes a `newLine` answer (target 1.2
 
 ## 6. What the build decided
 
-_Filled in by the builder._
+- **B1. `intoLineId` beside `newLine: true` is refused on every add**, a product add
+  included, at the gateway (`NotBesideNewLine` on both DTOs, a 400 under `intoLineId`) and
+  again in core (`ValidationException`). The pair is malformed whatever else the body
+  carries, so "ignored on a product add" covers each field alone and not the pair.
+- **B2. Only a JSON `true` turns a flag on.** Both DTOs read `askIfAmbiguous` and
+  `newLine` as the body spelled them, as `named` already is, so `"false"` is a 400 and
+  never a true. Core reads `=== true` as well.
+- **B3. A chosen line is read by id and list, locked.** A line of another list, a
+  deleted line, a `REJECTED` line and an id that matches nothing are the one
+  `NotFoundException('Line not found')`. Core does not check that the id is a uuid: the
+  gateway refuses one that is not, and the Postgres backstop answers any other caller with
+  a 400.
+- **B4. The candidate read is its own `SELECT`** (`findNamedProductLines`) after the
+  identity read, not a widening of `findEarliestLines`, so the `lineIdentities` keys and
+  the rename's lookup are untouched. It runs only for a free text add that missed the free
+  text line of its name and did not say `newLine`. "Holds a product set" is
+  `itemSetHash !== null`; a line that follows a group with no product is a candidate.
+- **B5. The refusal reads the products of the shown lines in one `In` query**, only when
+  it refuses. `details.lines[].itemIds` is the set in attachment order, `productGroupId`
+  is null when absent, and `content` is the row's own spelling. The cap applies to the
+  details only: twelve candidates still refuse, and name the first ten by position.
+- **B6. `messageArgs.content` is the typed name**, so the server's sentence reads "This
+  list already has more than one line called "{content}"". The client writes its own
+  question from `details`.
+- **B7. Two existing unit cases changed meaning on purpose.** "keeps free text apart from
+  a line that names a product" and "never takes a group line with no product for free
+  text" in `line-add-merge.spec.ts` now assert the raise of target 1.4.
+- **B8. Documentation.** The list add route documents 409 `line_add_needs_choice`
+  through a new `lineAddChoice` option of `ApiProblemResponses`; the basket add route lists
+  it beside `basket_finished`. The 404 for `intoLineId` is the class level membership 404
+  on the list route and the existing `notFound` on the basket route. The problem schema's
+  `details` text names the bag, with the cap read from `LINE_ADD_CHOICE_MAX`.
+- **B9. The NATS message schemas** (`list.schemas.ts`, `basket.schemas.ts` in contracts)
+  gained the three fields, since they refuse unknown properties.
+- **B10. Who else gets the one candidate merge.** Every caller of `line.add` with no
+  flags: old velista builds, as the plan intends, and the basket add. `addMany` is
+  unchanged, which a unit case asserts.

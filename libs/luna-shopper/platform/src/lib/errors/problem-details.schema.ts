@@ -1,3 +1,4 @@
+import { LINE_ADD_CHOICE_MAX } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from './error-codes';
 import { PROBLEM_JSON_CONTENT_TYPE } from './problem-details';
 
@@ -62,8 +63,7 @@ export const PROBLEM_DETAILS_SCHEMA = {
     details: {
       type: 'object',
       additionalProperties: true,
-      description:
-        'Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null.',
+      description: `Machine readable facts about this occurrence. Present only when \`code\` is \`line_merge_required\` or \`line_add_needs_choice\`. For a zone line rename it carries \`otherLineId\`, \`otherContent\` and \`otherQuantity\`: the line the rename collided with. For a basket line rename it carries \`lists\`, one entry per list where the new name is taken (\`listId\`, \`listName\`, \`zoneName\`, \`otherContent\`, \`otherQuantity\`), and \`basket\`, the basket line it collided with (\`otherLineId\`, \`otherContent\`, \`otherQuantity\`) or null. For \`line_add_needs_choice\` it carries \`lines\`, the lines of the list that hold a product under the typed name, in list position order and at most ${LINE_ADD_CHOICE_MAX} of them (\`lineId\`, \`content\`, \`named\`, \`quantity\`, \`itemIds\`, \`productGroupId\`, \`approvalStatus\`): send the add again with \`intoLineId\` set to one of them, or with \`newLine\` true.`,
     },
   },
 } as const;
