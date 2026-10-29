@@ -1,3 +1,5 @@
+> **PR:** [#862](https://github.com/IchirokuXVI/nx-portfolio/pull/862)
+
 # 0172: the privacy policy and the terms are public pages
 
 > Asked for by the owner on 2026-10-27. Google will not publish the OAuth consent screen of
