@@ -78,6 +78,13 @@ export interface ProblemResponseOptions {
    */
   lineMerge?: boolean;
   /**
+   * The route adds a line, so a typed name that two or more lines hold with a
+   * product can answer 409 with a code of its own when the body set
+   * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
+   * because the client asks the person which line, from `details.lines`.
+   */
+  lineAddChoice?: boolean;
+  /**
    * The route reads the catalog at one shop (plan 0170): `locationId` beside
    * another selector is a 400 of its own code, and an unknown shop a 404 of
    * its own code.
@@ -226,6 +233,9 @@ export function ApiProblemResponses(
       ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL,
       ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS
     );
+  }
+  if (options.lineAddChoice) {
+    codes.push(ERROR_CODES.LINE_ADD_NEEDS_CHOICE);
   }
   if (options.atLocation) {
     codes.push(

@@ -102,7 +102,18 @@
   // short, eased, and on the thing that moved rather than on the row around it.
   transition:
     transform var(--app-motion-fast) var(--app-motion-ease),
-    color var(--app-motion-fast) var(--app-motion-ease);
+    color var(--app-motion-fast) var(--app-motion-ease),
+    border-color var(--app-motion-fast) var(--app-motion-ease),
+    box-shadow var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// The units of an add went here (velista 0170, target 4): the held stepper's amber
+// border, a little heavier than a rule, and the number in the same amber. The
+// border's own width stays the same, so the row does not move when it comes and goes.
+:host(.took) .pill {
+  border-color: var(--app-action-bg);
+  box-shadow: 0 0 0 calc(var(--app-took-edge-width) - 1px) var(--app-action-bg);
+  color: var(--app-action-quiet-fg);
 }
 
 // A line the household does not currently want. Quiet, present, and emphatically not

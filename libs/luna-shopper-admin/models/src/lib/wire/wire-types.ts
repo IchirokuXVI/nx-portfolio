@@ -38,6 +38,9 @@ export type AddBasketLineDto = {
   quantity?: number;
   itemIds?: string[];
   named?: boolean;
+  askIfAmbiguous?: boolean;
+  intoLineId?: string;
+  newLine?: boolean;
 };
 
 /**
@@ -93,6 +96,9 @@ export type AddLineDto = {
   itemIds?: string[];
   named?: boolean;
   productGroupId?: string;
+  askIfAmbiguous?: boolean;
+  intoLineId?: string;
+  newLine?: boolean;
 };
 
 /**
@@ -640,6 +646,7 @@ export type ProblemDetails = {
     | 'line_merge_required'
     | 'line_merge_needs_approval'
     | 'line_merge_too_many_products'
+    | 'line_add_needs_choice'
     | 'brand_label_empty'
     | 'brand_key_taken'
     | 'brand_link_to_self'

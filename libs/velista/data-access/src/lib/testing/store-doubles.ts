@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  AddLineOptions,
   AddPostalCodeRequest,
   BasketSummary,
   CatalogItem,
@@ -33,6 +34,7 @@ import type {
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
 import {
+  addMayMeetLine,
   buildCategoryTree,
   EMPTY_CATEGORY_TREE,
   isOpenBasket,
@@ -746,6 +748,8 @@ export type LineWriteCall =
        */
       readonly itemIds?: readonly string[]; /** `false` for a line made from a card (velista `0144`), absent for typed text. */
       readonly named?: false;
+      /** What a free text add said about a name the list holds (velista `0170`). */
+      readonly options?: AddLineOptions;
     }
   /**
    * A quantity adjustment, as the **delta** that was sent.
@@ -897,6 +901,17 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   /** Holds every edit in flight until released, for the states a save passes through. */
   let updateHeld: Promise<void> | null = null;
   let releaseUpdate: (() => void) | null = null;
+  /**
+   * The answers the next adds give, in order, before an add makes a line (velista
+   * `0170`): a refusal with its error, or a raise of a line this double holds.
+   */
+  const addAnswers: (
+    | { readonly state: 'failed'; readonly error: unknown }
+    | { readonly state: 'raised'; readonly lineId: string }
+  )[] = [];
+  /** Holds every add in flight until released. */
+  let addHeld: Promise<void> | null = null;
+  let releaseAdd: (() => void) | null = null;
 
   return {
     loadCount: loads.asReadonly(),
@@ -950,15 +965,47 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       createdByUserId: string,
       _approval: unknown,
       itemIds?: readonly string[],
-      named?: false
-    ) => {
+      named?: false,
+      options?: AddLineOptions
+    ): Promise<
+      | {
+          readonly state: 'added';
+          readonly line: Line;
+          readonly merged: boolean;
+        }
+      | { readonly state: 'failed'; readonly error: unknown }
+    > => {
       calls.push({
         kind: 'add',
         content,
         quantity,
         itemIds,
         ...(named === undefined ? {} : { named }),
+        ...(options === undefined ? {} : { options }),
       });
+
+      if (addHeld !== null) {
+        await addHeld;
+      }
+
+      const next = addAnswers.shift();
+      if (next?.state === 'failed') {
+        return { state: 'failed' as const, error: next.error };
+      }
+      if (next?.state === 'raised') {
+        const held = lines().find((each) => each.id === next.lineId);
+        if (held !== undefined) {
+          const raised: Line = {
+            ...held,
+            quantity: held.quantity + quantity,
+            version: held.version + 1,
+          };
+          lines.update((current) =>
+            current.map((each) => (each.id === raised.id ? raised : each))
+          );
+          return { state: 'added' as const, line: raised, merged: true };
+        }
+      }
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -989,7 +1036,37 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         version: 1,
       };
       lines.update((current) => [...current, added]);
-      return { state: 'added' as const, line: added };
+      return { state: 'added' as const, line: added, merged: false };
+    },
+
+    /** As the real store reads it: whether the loaded lines carry the typed name. */
+    drawsBeforeAnswer: (
+      _listId: string,
+      content: string,
+      itemIds?: readonly string[],
+      options?: AddLineOptions
+    ) =>
+      (itemIds ?? []).length > 0 ||
+      (options?.intoLineId === undefined && !addMayMeetLine(lines(), content)),
+
+    /** The next add answers this, before any add makes a line (velista `0170`). */
+    answerAddWith: (
+      answer:
+        | { readonly state: 'failed'; readonly error: unknown }
+        | { readonly state: 'raised'; readonly lineId: string }
+    ) => {
+      addAnswers.push(answer);
+    },
+    /** Every add waits until {@link releaseAdds}. */
+    holdAdds: () => {
+      addHeld = new Promise<void>((resolve) => {
+        releaseAdd = resolve;
+      });
+    },
+    releaseAdds: () => {
+      addHeld = null;
+      releaseAdd?.();
+      releaseAdd = null;
     },
 
     /**

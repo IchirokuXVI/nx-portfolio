@@ -50,13 +50,14 @@ const CONFIG: RetentionConfig = {
   },
 };
 
-/** The seven indexes of `1773300000000-RetentionIndexes`. */
+/** The eight indexes of `1773300000000-RetentionIndexes`. */
 const INDEXES = [
   'ix_refresh_tokens_replaced_by',
   'ix_refresh_tokens_expires_at',
   'ix_password_resets_expires_at',
   'ix_email_verifications_expires_at',
   'ix_oauth_states_expires_at',
+  'ix_oauth_handoffs_expires_at',
   'ix_impersonation_sessions_expires_at',
   'ix_admin_login_failures_created',
 ];
@@ -159,7 +160,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
 
   beforeEach(async () => {
     await dataSource.query(
-      `TRUNCATE "auth_audit", "admin_login_failures", "refresh_tokens", "password_resets", "email_verifications", "oauth_states", "impersonation_sessions"`
+      `TRUNCATE "auth_audit", "admin_login_failures", "refresh_tokens", "password_resets", "email_verifications", "oauth_states", "oauth_handoffs", "impersonation_sessions"`
     );
     logger.log.mockClear();
     logger.error.mockClear();
@@ -173,14 +174,14 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
     expect(rows.map((r) => r.indexname).sort()).toEqual([...INDEXES].sort());
 
     // TypeORM would add or drop an index the entities and the schema
-    // disagree on. None of these six may be in what it would do.
+    // disagree on. None of these may be in what it would do.
     const pending = await dataSource.driver.createSchemaBuilder().log();
     const statements = pending.upQueries.map((q) => q.query).join('\n');
     for (const name of INDEXES) {
       expect(statements).not.toContain(name);
     }
 
-    // Only a rotated row has a successor, so the seventh is partial.
+    // Only a rotated row has a successor, so the successor's index is partial.
     const [successor] = (await dataSource.query(
       `SELECT "indexdef" FROM pg_indexes WHERE "schemaname" = $1 AND "indexname" = 'ix_refresh_tokens_replaced_by'`,
       [SCHEMA]
@@ -250,6 +251,20 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
     await grant('oauth_states', grants.old);
     const stateYoung = await grant('oauth_states', grants.young);
 
+    // A Google sign in from scratch: no user, so no cascade would ever take it,
+    // and a redeemed one keeps its row with `consumedAt` set.
+    const handoff = (expiresAt: Date) =>
+      one(
+        `INSERT INTO "oauth_handoffs"
+           ("userId", "providerUserId", "email", "displayName", "codeChallenge", "tokenHash", "expiresAt", "consumedAt")
+         VALUES (NULL, gen_random_uuid()::text, 'person@example.org', 'Example Person',
+                 gen_random_uuid()::text, gen_random_uuid()::text, $1, $1)
+         RETURNING "id"`,
+        [expiresAt]
+      );
+    await handoff(grants.old);
+    const handoffYoung = await handoff(grants.young);
+
     const results = await sweeper(CONFIG).sweep(NOW);
 
     expect(results).toEqual([
@@ -260,6 +275,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
       { table: 'password_resets', deleted: 1, failed: false },
       { table: 'email_verifications', deleted: 1, failed: false },
       { table: 'oauth_states', deleted: 1, failed: false },
+      { table: 'oauth_handoffs', deleted: 1, failed: false },
     ]);
     expect(await ids('auth_audit')).toEqual([auditYoung]);
     expect(await ids('impersonation_sessions')).toEqual([sessionYoung]);
@@ -270,6 +286,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
     expect(await ids('password_resets')).toEqual([resetYoung]);
     expect(await ids('email_verifications')).toEqual([verificationYoung]);
     expect(await ids('oauth_states')).toEqual([stateYoung]);
+    expect(await ids('oauth_handoffs')).toEqual([handoffYoung]);
     expect(logger.error).not.toHaveBeenCalled();
 
     // A second sweep at the same instant finds nothing.

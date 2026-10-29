@@ -86,7 +86,8 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
        VALUES ($1, $2, 'ACTIVE', $3, '{}')`,
       [
         name,
-        `DEL${Date.now()}${Math.floor(Math.random() * 1e6)}`.slice(0, 16),
+        // No timestamp: "DEL" plus 13 digits already fills 16 characters, so the random part was cut off.
+        `DEL${(Math.random().toString(36).slice(2) + '0000000000000').slice(0, 13)}`,
         ownerUserId,
       ]
     );

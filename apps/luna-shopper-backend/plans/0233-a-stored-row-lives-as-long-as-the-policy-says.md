@@ -114,6 +114,7 @@ Report after each service's integration spec passes. Ground each claim in a comm
 | `password_resets` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
 | `email_verifications` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
 | `oauth_states` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
+| `oauth_handoffs` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` (review follow up, section 10) | `RETENTION_EXPIRED_GRANTS` |
 
 Notes on the rows that are not obvious:
 
@@ -232,13 +233,14 @@ CREATE INDEX "ix_refresh_tokens_expires_at" ON "refresh_tokens" ("expiresAt");
 CREATE INDEX "ix_password_resets_expires_at" ON "password_resets" ("expiresAt");
 CREATE INDEX "ix_email_verifications_expires_at" ON "email_verifications" ("expiresAt");
 CREATE INDEX "ix_oauth_states_expires_at" ON "oauth_states" ("expiresAt");
+CREATE INDEX "ix_oauth_handoffs_expires_at" ON "oauth_handoffs" ("expiresAt");
 CREATE INDEX "ix_impersonation_sessions_expires_at" ON "impersonation_sessions" ("expiresAt");
 CREATE INDEX "ix_admin_login_failures_created" ON "admin_login_failures" ("createdAt");
 CREATE INDEX "ix_refresh_tokens_replaced_by" ON "refresh_tokens" ("replacedById")
   WHERE "replacedById" IS NOT NULL;
 ```
 
-The seventh is not about finding rows to delete. `fk_refresh_tokens_replaced_by` (plan `0229`,
+The last one (`ix_refresh_tokens_replaced_by`) is not about finding rows to delete. `fk_refresh_tokens_replaced_by` (plan `0229`,
 `1773000000000-RefreshTokenSuccessor.ts`) is `ON DELETE SET NULL` onto the same table, so for
 each deleted token Postgres runs `UPDATE "refresh_tokens" SET "replacedById" = NULL WHERE
 "replacedById" = $1`. Plan `0229` left the column without an index on purpose, when nothing
@@ -357,7 +359,8 @@ The builder's choices where the plan left room. Each is the owner's to change.
    7d`). The policy still prints whole days rounded down, which is the contract of plan `0231`:
    `36h` prints one day while auth keeps a day and a half.
 10. **Order of the auth walk**: `auth_audit`, `impersonation_sessions`, `admin_login_failures`,
-    `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states`. Sessions go
+    `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states`,
+    `oauth_handoffs` (item 17). Sessions go
     before refresh tokens, so the tokens a session takes by cascade are gone before the token
     batch runs.
 11. **`tick()` is public**, unlike the reaper's, so a spec can prove that a second tick while
@@ -383,3 +386,12 @@ The builder's choices where the plan left room. Each is the owner's to change.
     (1713 ms against 12 ms for one batch of 1000 on 50,000 rows). The comment in
     `1773000000000-RefreshTokenSuccessor.ts` that said "no index" now points here. The owner
     can drop it only together with a sweep that never deletes tokens in bulk.
+17. **`oauth_handoffs` is swept with the other grants** (a review follow up from velista plan
+    `0172`, whose privacy policy states its period). A Google sign in staged at the callback
+    (plan `0230`) keeps the Google id, email and name for two minutes. Redeeming it only sets
+    `consumedAt`, and a sign in from scratch has `userId` null, so neither a redemption nor an
+    account deletion removes the row; before this, nothing did. It is deleted by `expiresAt`
+    under `RETENTION_EXPIRED_GRANTS`, last in the auth walk, with the index
+    `ix_oauth_handoffs_expires_at` added to the same migration (the plan's migration was not
+    yet deployed anywhere) and named in the `OAuthHandoff` entity. The integration spec adds a
+    handoff with no user either side of the cutoff.
